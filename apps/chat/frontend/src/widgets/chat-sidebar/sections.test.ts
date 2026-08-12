@@ -142,14 +142,16 @@ describe("chat sidebar runtime status", () => {
     expect(isThreadHot(recentThread, referenceTime)).toBe(true);
     expect(isThreadHot(boundaryThread, referenceTime)).toBe(true);
     expect(isThreadHot(oldThread, referenceTime)).toBe(false);
-    expect(isThreadHot(futureThread, referenceTime)).toBe(false);
+    expect(isThreadHot(futureThread, referenceTime)).toBe(true);
     expect(filterThreads(threads, "hot", new Set(), referenceTime).map((item) => item.thread_id)).toEqual([
       "recent-thread",
       "boundary-thread",
+      "future-thread",
     ]);
     expect(buildSections([], threads, "hot", new Set(), null, referenceTime)[0].items.map((item) => item.thread_id)).toEqual([
       "recent-thread",
       "boundary-thread",
+      "future-thread",
     ]);
   });
 

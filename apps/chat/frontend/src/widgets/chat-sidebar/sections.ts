@@ -171,8 +171,7 @@ export function isThreadTitlePending(thread: ChatThread | null | undefined): boo
 
 export function isThreadHot(thread: ChatThread, referenceTime: number = Date.now()): boolean {
   const activityTime = threadLastMessageTimestamp(thread);
-  const age = referenceTime - activityTime;
-  return activityTime > 0 && age >= 0 && age <= HOT_THREAD_WINDOW_MS;
+  return activityTime > 0 && activityTime >= referenceTime - HOT_THREAD_WINDOW_MS;
 }
 
 export function isThreadUnread(thread: ChatThread): boolean {

@@ -240,7 +240,7 @@ describe("useChatSidebarState search persistence", () => {
     expect(button?.textContent).toBe("OpenDesign chat");
   });
 
-  it("shows a newly active chat in Hot as soon as the live catalog changes", async () => {
+  it("keeps a live chat in Hot across active and completed updates from an ahead server clock", async () => {
     const initialTime = Date.parse("2026-08-12T12:00:00.000Z");
     vi.setSystemTime(initialTime);
     const initialHotThread = thread({
@@ -271,11 +271,25 @@ describe("useChatSidebarState search persistence", () => {
       thread_id: "thread-live-hot",
       runtime_session_id: "session-live-hot",
       title: "Live hot chat",
-      updated_at: "2026-08-12T12:00:01.000Z",
+      availability: "active",
+      updated_at: "2026-08-12T12:01:00.000Z",
     });
     vi.setSystemTime(initialTime + 1_000);
     await act(async () => {
       setLiveThreads?.((current) => [liveThread, ...current]);
+    });
+
+    expect(button?.textContent).toBe("Live hot chat,Initial hot chat");
+
+    const completedLiveThread = {
+      ...liveThread,
+      availability: "free",
+      has_unread_completed_response: true,
+      last_completed_response_at: "2026-08-12T12:02:00.000Z",
+      updated_at: "2026-08-12T12:02:00.000Z",
+    };
+    await act(async () => {
+      setLiveThreads?.((current) => [completedLiveThread, ...current.filter((item) => item.thread_id !== liveThread.thread_id)]);
     });
 
     expect(button?.textContent).toBe("Live hot chat,Initial hot chat");

@@ -197,8 +197,25 @@ def recover_web_activation(
                 verified_overlays=verified_overlays,
             )
             return WebActivationOutcome(control, journal.web_activation_id, True, False, readiness)
-        if state == "rollback_committed_journal_pending":
-            readiness = _restart(restart_sidecars)
+        if state in {"rollback_committed_journal_pending", "rollback_restart_pending"}:
+            try:
+                readiness = _restart(restart_sidecars)
+            except Exception as rollback_error:
+                safe_error = f"rollback_restart_failed:{type(rollback_error).__name__}:recovery"
+                pending = _journal_state(
+                    journal,
+                    "rollback_restart_pending",
+                    readiness={"rollback": {"ready": False}},
+                    error=safe_error,
+                    updated_at=timestamp(),
+                )
+                write_web_activation_journal(
+                    root,
+                    pending,
+                    verified_artifacts=verified_artifacts,
+                    verified_overlays=verified_overlays,
+                )
+                raise WebActivationError(safe_error) from rollback_error
             rolled_back = _journal_state(
                 journal,
                 "rolled_back",
@@ -249,16 +266,16 @@ def _rollback_after_failed_restart(
             f"candidate_restart_failed:{type(candidate_error).__name__};"
             f"rollback_restart_failed:{type(rollback_error).__name__}"
         )
-        rolled_back = _journal_state(
+        pending = _journal_state(
             journal,
-            "rolled_back",
+            "rollback_restart_pending",
             readiness={"candidate": {"ready": False}, "rollback": {"ready": False}},
             error=safe_error,
             updated_at=timestamp(),
         )
         write_web_activation_journal(
             root,
-            rolled_back,
+            pending,
             verified_artifacts=verified_artifacts,
             verified_overlays=verified_overlays,
         )
@@ -288,11 +305,14 @@ def _restart(restart_sidecars: Restart) -> dict[str, object]:
     if not ready:
         raise WebActivationError("sidecar readiness failed")
     service_count = result.get("service_count")
-    return {
+    readiness = {
         "ready": True,
         "duration_seconds": round(time.monotonic() - started, 6),
         "service_count": service_count if isinstance(service_count, int) and service_count >= 0 else 0,
     }
+    if result.get("browser_remount_event_emitted") is True:
+        readiness["browser_remount_event_emitted"] = True
+    return readiness
 
 
 def _journal_state(

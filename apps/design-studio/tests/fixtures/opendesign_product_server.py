@@ -40,6 +40,7 @@ def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--web-overlay-sha256", required=True)
     return parser.parse_args()
 
 
@@ -99,7 +100,7 @@ def _install_app(state, root: Path, workspace_id: str, app_id: str) -> None:
     )
 
 
-def _bootstrap_generation(root: Path, workspace_id: str) -> None:
+def _bootstrap_generation(root: Path, workspace_id: str, web_overlay_sha256: str) -> None:
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
     validate_bundle_manifest(manifest, require_artifact_digest=True)
     asset = selected_asset(manifest, require_artifact_digest=True)
@@ -109,6 +110,7 @@ def _bootstrap_generation(root: Path, workspace_id: str) -> None:
         runtime_artifact_sha256=asset["sha256"],
         od_version=manifest["upstream"]["release_version"],
         upstream_commit=manifest["upstream"]["commit"],
+        expected_web_overlay_sha256=web_overlay_sha256,
     )
     generation_root = root / "workspaces" / workspace_id / "data" / "design-studio" / "opendesign"
     bootstrap_empty_generation(
@@ -121,7 +123,7 @@ def _bootstrap_generation(root: Path, workspace_id: str) -> None:
     )
 
 
-def _initial_setup(state, root: Path) -> None:
+def _initial_setup(state, root: Path, web_overlay_sha256: str) -> None:
     admin = state.identity_store.get_user_by_username("admin")
     workspace_b = create_workspace(
         state.workspace_store,
@@ -145,7 +147,7 @@ def _initial_setup(state, root: Path) -> None:
                 start_path=root,
             )
         configure_workspace_provider(state.provider_store, workspace_id=workspace_id, provider_id="codex")
-        _bootstrap_generation(root, workspace_id)
+        _bootstrap_generation(root, workspace_id, web_overlay_sha256)
     set_active_workspace_for_user(state.workspace_store, user_id=admin.user_id, workspace_id="default")
     (root / SETUP_MARKER).write_text(
         json.dumps({"schema_version": 1, "workspaces": list(WORKSPACES)}, sort_keys=True) + "\n",
@@ -168,7 +170,7 @@ def main() -> None:
         register_builtin_provider_definitions=True,
     )
     if not (root / SETUP_MARKER).is_file():
-        _initial_setup(state, root)
+        _initial_setup(state, root, arguments.web_overlay_sha256)
     start_backend_restart_recovery(state)
     app = PlatformAsgiHost(state)
     import uvicorn

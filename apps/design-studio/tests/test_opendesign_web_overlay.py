@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -14,9 +16,20 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_archive import write_deterministic_archive  # noqa: E402
 from opendesign_artifact import sha256_file, write_canonical_json  # noqa: E402
-from opendesign_web_builder import _dependency_cache_paths, compute_web_cache_keys  # noqa: E402
+from opendesign_web_builder import (  # noqa: E402
+    WebCacheKeys,
+    _dependency_cache_paths,
+    _restore_dependency_cache,
+    _restore_source_cache,
+    _restore_workspace_build_cache,
+    _write_dependency_cache,
+    _write_source_cache,
+    _write_workspace_build_cache,
+    compute_web_cache_keys,
+)
 from opendesign_web_materialization import publish_web_overlay  # noqa: E402
 from opendesign_web_overlay import WebOverlayError, verify_web_overlay  # noqa: E402
+import opendesign_web_builder as web_builder  # noqa: E402
 
 
 RUNTIME_DIGEST = "a" * 64
@@ -163,6 +176,18 @@ class OpenDesignWebOverlayTests(unittest.TestCase):
         self.assertEqual(react_changed.next, baseline.next)
         self.assertNotEqual(react_changed.source_build, baseline.source_build)
 
+        parallel_build = compute_web_cache_keys(
+            source,
+            manifest=manifest,
+            service_root=service,
+            node_version="v24.11.0",
+            pnpm_version="10.33.2",
+            build_cpus=2,
+        )
+        self.assertEqual(parallel_build.dependency, react_changed.dependency)
+        self.assertEqual(parallel_build.next, react_changed.next)
+        self.assertNotEqual(parallel_build.source_build, react_changed.source_build)
+
         (source / "pnpm-lock.yaml").write_text("lockfileVersion: '9.1'\n", encoding="utf-8")
         lock_changed = compute_web_cache_keys(
             source,
@@ -187,6 +212,108 @@ class OpenDesignWebOverlayTests(unittest.TestCase):
         paths = _dependency_cache_paths(source)
 
         self.assertEqual(paths, ["apps/daemon/node_modules", "apps/web/node_modules", "node_modules"])
+
+    def test_cache_content_manifest_rejects_altered_source_and_dependency_payloads(self) -> None:
+        keys = WebCacheKeys("1" * 64, "2" * 64, "3" * 64, "4" * 64, "5" * 64, "6" * 64)
+        cache = self.root / "cache"
+        cache.mkdir()
+
+        static = self.root / "static-cache-input"
+        static.mkdir()
+        (static / "index.html").write_text("verified\n", encoding="utf-8")
+        source_root = cache / "source-build" / keys.source_build
+        _write_source_cache(static, source_root, keys)
+        (source_root / "static/index.html").write_text("altered\n", encoding="utf-8")
+        self.assertFalse(_restore_source_cache(source_root, self.root / "static-restore", keys))
+
+        dependencies = self.root / "dependency-input"
+        (dependencies / "node_modules/example").mkdir(parents=True)
+        (dependencies / "node_modules/example/index.js").write_text("verified\n", encoding="utf-8")
+        dependency_root = cache / "dependencies" / keys.dependency
+        _write_dependency_cache(dependencies, dependency_root, keys)
+        archive = dependency_root / "payload.tar"
+        archive.write_bytes(archive.read_bytes() + b"altered\n")
+        restore_source = self.root / "dependency-restore"
+        restore_source.mkdir()
+        self.assertFalse(_restore_dependency_cache(restore_source, dependency_root, keys))
+        self.assertFalse((restore_source / "node_modules").exists())
+
+    def test_same_key_cache_publication_is_locked_and_immutable(self) -> None:
+        keys = WebCacheKeys("a" * 64, "b" * 64, "c" * 64, "d" * 64, "e" * 64, "f" * 64)
+        cache = self.root / "concurrent-cache"
+        cache.mkdir()
+        first = self.root / "first-static"
+        second = self.root / "second-static"
+        first.mkdir()
+        second.mkdir()
+        (first / "index.html").write_text("first\n", encoding="utf-8")
+        (second / "index.html").write_text("second\n", encoding="utf-8")
+        root = cache / "source-build" / keys.source_build
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(lambda source: _write_source_cache(source, root, keys), (first, second)))
+
+        self.assertEqual(results, [None, None])
+        destination = self.root / "concurrent-restore"
+        self.assertTrue(_restore_source_cache(root, destination, keys))
+        self.assertIn((destination / "index.html").read_text(encoding="utf-8"), {"first\n", "second\n"})
+        marker = __import__("json").loads((root / "complete.json").read_text(encoding="utf-8"))
+        self.assertEqual(marker["schema_version"], "3")
+        self.assertEqual(len(marker["content_manifest_sha256"]), 64)
+
+    def test_workspace_build_cache_restores_verified_outputs_only(self) -> None:
+        keys = WebCacheKeys("1" * 64, "2" * 64, "3" * 64, "4" * 64, "5" * 64, "6" * 64)
+        source = self.root / "workspace-source"
+        output = source / "packages/components/dist"
+        output.mkdir(parents=True)
+        (output / "index.js").write_text("verified\n", encoding="utf-8")
+        root = self.root / "cache/workspace-build" / keys.next
+
+        _write_workspace_build_cache(source, root, keys)
+        shutil.rmtree(output)
+        self.assertTrue(_restore_workspace_build_cache(source, root, keys))
+        self.assertEqual((output / "index.js").read_text(encoding="utf-8"), "verified\n")
+
+        (root / "payload/packages/components/dist/index.js").write_text("altered\n", encoding="utf-8")
+        shutil.rmtree(output)
+        self.assertFalse(_restore_workspace_build_cache(source, root, keys))
+        self.assertFalse(output.exists())
+
+    def test_release_derivations_do_not_share_dependency_or_compiled_caches(self) -> None:
+        keys = WebCacheKeys("1" * 64, "2" * 64, "3" * 64, "4" * 64, "5" * 64, "6" * 64)
+        metric = web_builder.WebBuildMetrics(1.0, False, False, False, False)
+        observed: list[dict] = []
+
+        def derive(_repository, result_root, **kwargs):
+            observed.append(kwargs)
+            result_root.mkdir(parents=True)
+            (result_root / "static.tar.gz").write_bytes(b"release")
+            return result_root, keys, metric
+
+        overlay = Mock(web_overlay_sha256="7" * 64)
+        work = self.root / "release-work"
+        work.mkdir()
+        with patch.object(web_builder, "_derive_once", side_effect=derive):
+            with patch.object(web_builder, "_assert_byte_reproducible"):
+                with patch.object(web_builder, "sha256_file", return_value="7" * 64):
+                    with patch.object(web_builder, "publish_web_overlay", return_value=(overlay, False)):
+                        result = web_builder.build_release_overlay(
+                            self.root,
+                            manifest={},
+                            service_root=self.root,
+                            cache_root=self.root / "cache",
+                            registry_root=self.registry,
+                            signing_key=self.key,
+                            trust_contract=self.trust,
+                            work_parent=work,
+                        )
+
+        self.assertEqual(result.derivations, 2)
+        self.assertTrue(result.reproducible)
+        self.assertEqual(len(observed), 2)
+        self.assertTrue(all(call["allow_dependency_cache"] is False for call in observed))
+        self.assertTrue(all(call["allow_source_cache"] is False for call in observed))
+        self.assertTrue(all(call["allow_next_cache"] is False for call in observed))
 
     def _overlay(self, signing_key: Path, *, compatible_runtime: str = RUNTIME_DIGEST) -> tuple[Path, str]:
         root = self.root / f"source-{len(list(self.root.glob('source-*')))}"

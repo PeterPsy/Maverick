@@ -9,7 +9,7 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -39,13 +39,22 @@ def main() -> int:
     parser.add_argument("--area", help="Root area name, 'apps', or an app id with apps/<app_id>/tests.")
     parser.add_argument("--app", help="Run tests for one app id from apps/<app_id>/tests.")
     parser.add_argument("--changed", action="store_true", help="Run the smallest suites implied by changed paths.")
+    parser.add_argument(
+        "--changed-path",
+        action="append",
+        default=[],
+        help="Repository-relative path from an explicit immutable changeset; repeat for multiple paths.",
+    )
     parser.add_argument("--jobs", default="auto", help="App test parallelism: 'auto' or a positive integer.")
     args = parser.parse_args()
 
     jobs = parse_jobs(args.jobs)
 
+    if args.changed_path and not args.changed:
+        parser.error("--changed-path requires --changed")
     if args.changed:
-        return run_changed(level=args.level, jobs=jobs)
+        explicit_paths = normalize_changed_paths(args.changed_path) if args.changed_path else None
+        return run_changed(level=args.level, jobs=jobs, changed=explicit_paths)
     if args.app:
         return run_app(args.app, level=args.level)
     if args.area:
@@ -127,8 +136,8 @@ def run_app(app_id: str, *, level: str) -> int:
     return run_discover_dir(str(app_directory.relative_to(REPO_ROOT)), level=level)
 
 
-def run_changed(*, level: str, jobs: int) -> int:
-    changed = changed_paths()
+def run_changed(*, level: str, jobs: int, changed: list[Path] | None = None) -> int:
+    changed = changed_paths() if changed is None else changed
     if not changed:
         print("No changed paths detected; running fast suite.", flush=True)
         return run_level("fast", jobs=jobs)
@@ -325,6 +334,22 @@ def changed_paths() -> list[Path]:
         for line in completed.stdout.splitlines():
             if line.strip():
                 paths.add(Path(line.strip()))
+    return sorted(paths)
+
+
+def normalize_changed_paths(values: list[str]) -> list[Path]:
+    """Validate caller-owned changed paths without consulting the shared working tree."""
+    paths: set[Path] = set()
+    for raw in values:
+        value = str(raw).strip().replace("\\", "/")
+        while value.startswith("./"):
+            value = value[2:]
+        candidate = PurePosixPath(value)
+        if candidate.is_absolute() or not candidate.parts or any(part in {"", ".", ".."} for part in candidate.parts):
+            raise SystemExit(f"Invalid --changed-path value: {raw}")
+        paths.add(Path(*candidate.parts))
+    if not paths:
+        raise SystemExit("At least one --changed-path is required when explicit paths are selected.")
     return sorted(paths)
 
 

@@ -50,6 +50,9 @@ generation, or modify any migration journal. The app requests the generic
 scoped sidecar restart capability after cutover. Failed restart or readiness
 atomically restores the source selection, restarts it, and records the failed
 candidate as `previous_web` for evidence; failure to restore is fail-closed.
+If both candidate and rollback restarts fail, the journal remains in the
+non-terminal `rollback_restart_pending` state. Recovery retries the rollback
+restart and only then records terminal `rolled_back` state.
 
 The daemon is patched once to require `OD_STATIC_DIR`. The launcher resolves
 that directory only from a verified overlay under the immutable registry and
@@ -73,9 +76,21 @@ authorize that artifact.
 
 Development uses one derivation. A release overlay uses two clean independent
 derivations whose canonical file manifests and bytes must match. Persistent
-cache keys separate dependency inputs from web source/patch inputs. A valid
-dependency cache skips `pnpm install --frozen-lockfile`; a compatible Next
-cache may be reused without becoming an artifact input or trust root.
+cache keys separate dependency, invariant workspace-output, compatible Next,
+and web source/build inputs. Every entry has a content manifest, is protected
+by a per-key lock, and is published from staging with atomic rename. A valid
+dependency cache skips `pnpm install --frozen-lockfile`; invariant workspace
+outputs avoid rebuilding packages unaffected by a React patch. Release
+derivations disable dependency and compiled caches independently, so neither
+derivation can inherit corrupted or shared cache bytes.
+
+The development command never discovers the shared working tree implicitly.
+It requires either explicit repository-relative paths whose bytes are
+snapshotted for the run, or an immutable `base_sha`/current-`head_sha` range.
+The exact same path set is propagated into the repository changed-suite gate.
+Gate selection is compositional but not duplicative: frontend, backend,
+runtime, hosting, documentation, and release-only paths select only their
+owned gates, and `changed_suite` is reserved for relevant core paths.
 
 ## Generic core boundary
 
@@ -94,6 +109,13 @@ profiles accelerate development; the final release still requires two clean
 derivations, all fourteen product scenarios in two workspaces, restart and
 isolation coverage, independent web rollback, a separate migration/rollback
 smoke, and one final redaction-safe evidence aggregation.
+`npm run test:e2e` aliases the final release profile, never the quick profile.
+Release evidence also requires an automatically generated change-to-live
+benchmark that mutates a reviewed React patch in isolation, proves different
+patch/source/overlay digests with no source/build cache hit, activates through
+readiness and the scoped browser-remount event, restores the complete initial
+selection, and records separate mutation, build, activation, and restoration
+timings. The canonical ceiling is 180 seconds.
 
 ## Consequences
 

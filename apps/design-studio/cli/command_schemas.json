@@ -63,13 +63,16 @@
       "argument_schema": {
         "type": "object",
         "properties": {
-          "operation": {"type": "string", "enum": ["apply"]},
+          "operation": {"type": "string", "enum": ["apply", "benchmark"]},
           "profile": {"type": "string", "enum": ["dev", "release"]},
-          "changed_files": {"type": "array", "items": {"type": "string"}},
+          "changed_files": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "base_sha": {"type": "string"},
+          "head_sha": {"type": "string"},
           "source_repository": {"type": "string"},
           "web_signing_key": {"type": "string"},
           "runtime_signing_key": {"type": "string"},
           "cache_root": {"type": "string"},
+          "work_parent": {"type": "string"},
           "repo_root": {"type": "string"},
           "workspace_id": {"type": "string"},
           "dry_run": {"type": "boolean"}

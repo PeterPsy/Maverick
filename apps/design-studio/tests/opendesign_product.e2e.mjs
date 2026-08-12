@@ -22,7 +22,8 @@ if (!['quick', 'affected', 'release'].includes(profile)) {
   throw new Error('E2E profile must be quick, affected, or release');
 }
 const changedFiles = argumentsAll('--changed-file');
-const overlayContract = await canonicalOverlayContract();
+const requestedOverlayDigest = argument('--web-overlay-sha256') || await releasedOverlayDigest();
+const overlayContract = await canonicalOverlayContract(requestedOverlayDigest);
 const evidenceOutput = argument('--evidence-output');
 const evidenceOutputPath = evidenceOutput
   ? (path.isAbsolute(evidenceOutput)
@@ -340,7 +341,12 @@ async function freePort() {
 
 
 async function startServer() {
-  const child = spawn(python, [serverFixture, '--root', installationRoot, '--port', String(port)], {
+  const child = spawn(python, [
+    serverFixture,
+    '--root', installationRoot,
+    '--port', String(port),
+    '--web-overlay-sha256', overlayContract.web_overlay_sha256,
+  ], {
     cwd: repoRoot,
     detached: true,
     env: { ...process.env, PYTHONUNBUFFERED: '1' },
@@ -844,28 +850,42 @@ function affectedCategories(paths) {
     if (changed.startsWith('apps/design-studio/backend/')) categories.add('design-studio-backend');
     if (changed.startsWith('apps/design-studio/frontend/')) categories.add('design-studio-wrapper');
     if (/000[23]-maverick-web/.test(changed)) categories.add('opendesign-web');
-    if (changed.startsWith('apps/design-studio/service/') && !/000[23]-maverick-web/.test(changed)) categories.add('opendesign-runtime');
+    if (
+      changed.startsWith('apps/design-studio/service/')
+      && !/000[23]-maverick-web/.test(changed)
+      && !/\.(md|txt)$/.test(changed)
+      && !/_acceptance_0_16_1\.json$/.test(changed)
+    ) categories.add('opendesign-runtime');
   }
   return [...categories].sort();
 }
 
 
-async function canonicalOverlayContract() {
+async function releasedOverlayDigest() {
+  const evidence = JSON.parse(
+    await readFile(path.join(appRoot, 'service', 'opendesign_release_acceptance_0_16_1.json'), 'utf8'),
+  );
+  const digest = evidence.opendesign?.web_overlay_sha256;
+  if (!/^[a-f0-9]{64}$/.test(digest || '')) throw new Error('Canonical release web overlay digest is invalid');
+  return digest;
+}
+
+
+async function canonicalOverlayContract(digest) {
+  if (!/^[a-f0-9]{64}$/.test(digest || '')) throw new Error('Requested web overlay digest is invalid');
   const root = path.join(appRoot, 'service', 'vendor', 'open-design-web');
   const entries = await readdir(root, { withFileTypes: true });
-  const compatible = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !/^[a-f0-9]{64}$/.test(entry.name)) continue;
-    const manifest = JSON.parse(await readFile(path.join(root, entry.name, 'manifest.json'), 'utf8'));
-    if (
-      manifest.web_overlay_sha256 === entry.name
-      && manifest.compatibility?.od_version === bundleContract.upstream.release_version
-      && manifest.compatibility?.upstream_commit === bundleContract.upstream.commit
-      && manifest.compatibility?.runtime_artifact_sha256?.includes(bundleContract.artifact.assets['linux-x86_64'].sha256)
-    ) compatible.push(manifest);
+  if (!entries.some((entry) => entry.isDirectory() && entry.name === digest)) {
+    throw new Error('Requested canonical OpenDesign web overlay is not materialized');
   }
-  if (compatible.length !== 1) throw new Error('Expected exactly one canonical compatible OpenDesign web overlay');
-  return compatible[0];
+  const manifest = JSON.parse(await readFile(path.join(root, digest, 'manifest.json'), 'utf8'));
+  if (
+    manifest.web_overlay_sha256 !== digest
+    || manifest.compatibility?.od_version !== bundleContract.upstream.release_version
+    || manifest.compatibility?.upstream_commit !== bundleContract.upstream.commit
+    || !manifest.compatibility?.runtime_artifact_sha256?.includes(bundleContract.artifact.assets['linux-x86_64'].sha256)
+  ) throw new Error('Requested canonical OpenDesign web overlay is incompatible');
+  return manifest;
 }
 
 

@@ -251,13 +251,18 @@ data and never changes runtime selection or the migration journal. It atomically
 updates the overlay selection, restarts through the generic
 `app.<id>.sidecars.restart` capability, waits for declared readiness, and rolls
 back automatically on failure.
+If both candidate and rollback restarts fail, the activation journal remains
+`rollback_restart_pending`; recovery retries readiness/restart and only then
+transitions to terminal `rolled_back`.
 
-`opendesign_web_builder.py` persists dependency, source/build, and compatible
-Next caches. Lockfile, package graph, Node, pnpm, and platform form the
-dependency key; a verified hit skips `pnpm install --frozen-lockfile`. The
-upstream pin and web patch digests form the source/build key. Development uses
-one derivation; release uses two independent derivations and compares every
-byte before signing and publishing.
+`opendesign_web_builder.py` persists dependency, invariant workspace-output,
+source/build, and compatible Next caches. Every cache is file/content-manifest
+verified, locked per key, and published from staging by atomic rename.
+Lockfile, package graph, Node, pnpm, and platform form the dependency key; a
+verified hit skips `pnpm install --frozen-lockfile`. The upstream pin, build
+profile, CPU bound, and web patch digests form compiled keys. Development uses
+one bounded Turbopack derivation; release disables all caches for two clean
+independent derivations and compares every byte before signing and publishing.
 
 Controlled migration is split by responsibility: `opendesign_migration.py`
 coordinates freeze, drain, staging, cutover, rollback and recovery;
@@ -363,10 +368,19 @@ PYTHONDONTWRITEBYTECODE=1 python3 -B \
 
 ## Incremental development and release acceptance
 
-The app-owned `dev apply` command classifies multiple changed paths
-compositionally, reuses `scripts/test_suite.py --changed` and official frontend
-builds, and emits JSON actions, durations, selected digests, cache state,
-readiness, and rollback outcome. Unknown paths elevate to the complete gate set.
+The app-owned `dev apply` command accepts no implicit worktree diff. Callers
+must provide explicit repository-relative `changed_files`, or immutable
+`base_sha`/current-`head_sha`; path bytes are snapshotted and the exact set is
+propagated to `scripts/test_suite.py --changed-path`. Classification avoids
+duplicate backend/full-suite runs and does not elevate docs to OCI. The command
+emits JSON actions, durations, selected digests, cache state, readiness, and
+rollback outcome, with an error status code on every failed result.
+
+`dev benchmark` mutates the reviewed React patch in an isolated service copy,
+requires changed patch/source/overlay digests and a real compile, activates the
+candidate through restart/readiness/remount, restores the exact initial
+selection, and records separate timings. Static performance booleans are not
+accepted as release evidence.
 
 The release path is exercised by `tests/opendesign_product.e2e.mjs`. It creates
 a new temporary Maverick installation with two synthetic workspaces, boots the
@@ -391,14 +405,16 @@ npm run test:e2e:migration --prefix apps/design-studio \
 python3 apps/design-studio/service/aggregate_opendesign_release_evidence.py \
   --ui /owned/evidence/opendesign-ui-release.json \
   --migration /owned/evidence/opendesign-migration.json \
+  --benchmark /owned/evidence/opendesign-change-to-live.json \
   --output /owned/evidence/opendesign-release.json
 python3 -m unittest apps.design-studio.tests.test_production_acceptance
 ```
 
+`npm run test:e2e` is an alias for `test:e2e:release`, not the quick profile.
 The release UI record contains thirteen browser scenarios and the complete
 correlation join. The independently run migration/rollback smoke supplies the
-fourteenth scenario to `aggregate_opendesign_release_evidence.py`. The final
-The canonical record is `opendesign_release_acceptance_0_16_1.json` and
+fourteenth scenario to `aggregate_opendesign_release_evidence.py`. The
+canonical record is `opendesign_release_acceptance_0_16_1.json` and
 contains no prompt, cookie, bearer, provider payload, environment, host path,
 or secret value.
 `opendesign_production_acceptance_0_16_1.json` maps every global acceptance

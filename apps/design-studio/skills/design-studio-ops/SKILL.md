@@ -38,8 +38,9 @@ Common operations:
   governed app surface; canonical output is `od_project_id`, optionally with
   `legacy_project_id` for traceability. Never edit the sealed `state.json`.
 - Treat `service/opendesign_launcher.py` as the sidecar entrypoint. It resolves
-  only the bundle digest and data generation named together by the validated
-  `control.json`; it never builds, migrates, or selects a "latest" directory.
+  only the runtime artifact, web overlay, version, and data generation named
+  together by the validated `control.json`; it never builds, migrates, or
+  selects a "latest" directory.
 - Treat the pinned `ghcr.io/nexu-io/od:0.16.1` OCI image as the primary
   distribution. `service/import_opendesign_oci.py` performs two verified
   derivations without Docker or a local Next build; the launcher uses only the
@@ -72,6 +73,29 @@ Sandbox policy:
 - Keep full source-build certification separate from OCI import. Do not resume a
   per-file checkpoint or create shards/retries when the host lacks capacity.
 
+Incremental development:
+
+- Invoke app CLI command `dev` with `operation=apply`. Exactly one immutable
+  changeset form is required: explicit repository-relative `changed_files`, or
+  `base_sha` plus `head_sha`. Never omit it or infer the shared working tree.
+- Run `dev apply` before committing when using explicit paths. For committed
+  work, use a full commit range whose `head_sha` is the current `HEAD`.
+- The command snapshots explicit path bytes and propagates the same paths to
+  `scripts/test_suite.py`; concurrent staged, unstaged, and untracked files are
+  outside the run.
+- React/CSS overlay work runs frontend gates, a bounded Turbopack development
+  build, quick E2E, activation, readiness, and browser remount. Backend work
+  runs the backend suite plus affected E2E. Only runtime/supply-chain work
+  elevates to OCI gates; documentation does not trigger an OCI rebuild.
+- Dependency, invariant workspace-output, compatible Next, and source/build
+  caches are content-manifest verified, locked per key, and published by atomic
+  rename. A release disables all build caches for both clean derivations.
+- Run `dev` with `operation=benchmark` for the automated React-patch-to-live
+  proof. It changes real patch bytes in an isolated copy, requires new
+  source/build and overlay digests with no source-cache hit, activates through
+  readiness/remount, restores the exact initial selection, and emits phase
+  timings.
+
 The exact upstream release, commit, patch set, artifact digest, and file
 manifest come only from `service/opendesign_bundle.json`. Materialized bundles
 live in immutable `service/vendor/open-design/<artifact-sha256>/` directories.
@@ -83,7 +107,9 @@ imported daemon and `service/smoke_opendesign_sidecar.py` for launcher/core
 proxy behavior. The redaction-safe evidence record is
 `service/opendesign_oci_acceptance_0_16_1.json`.
 
-Final product acceptance uses the official OCI daemon, Chromium, Maverick core,
+`npm run test:e2e` is the full release profile. `test:e2e:quick` and
+`test:e2e:affected` are development profiles only. Final product acceptance
+uses the official OCI daemon, Chromium, Maverick core,
 the isolated sidecar broker, Storage, and two temporary workspaces:
 
 ```bash
@@ -94,7 +120,8 @@ python3 -m unittest apps.design-studio.tests.test_production_acceptance
 
 Do not replace this gate with an in-process runtime mock. The suite's external
 compiled app-server fixture must still cross the normal runtime sandbox and
-process protocol. The product evidence contains all fourteen WP10 scenarios;
+process protocol. Product evidence contains thirteen browser scenarios plus
+the independent migration/rollback scenario;
 `service/opendesign_production_acceptance_0_16_1.json` maps the 24 global
 criteria to stable evidence. Both records must remain free of prompts, cookies,
 bearers, provider payloads, environment values, host paths, and secrets.

@@ -72,12 +72,14 @@ inside an overlay cannot authorize it. Materialization rejects traversal,
 symlinks, path escape, incompatible selections, signature failure, or any
 file-level mismatch before an atomic publish.
 
-`service/opendesign_web_builder.py` keeps persistent dependency, source/build,
-and compatible Next caches. Dependency identity includes the lockfile, package
-graph, Node, pnpm, and platform; a valid entry skips
-`pnpm install --frozen-lockfile`. Development uses one derivation and may reuse
-source/Next cache. A release always performs two independent derivations and a
-byte-for-byte comparison.
+`service/opendesign_web_builder.py` keeps persistent dependency, invariant
+workspace-output, source/build, and compatible Next caches. Entries carry
+content manifests, use per-key locks, and publish by atomic rename. Dependency
+identity includes the lockfile, package graph, Node, pnpm, and platform; a
+valid entry skips `pnpm install --frozen-lockfile`. Development uses one
+bounded Turbopack derivation and may reuse verified caches. A release disables
+all of them for two clean independent derivations and a byte-for-byte
+comparison.
 
 Fresh checkouts will not include the materialized OCI bundle. Import the pinned
 release assets before declaring the release complete:
@@ -376,14 +378,20 @@ maverick app design-studio mcp list --json
 maverick app design-studio cli list --json
 ```
 
-The app-owned `dev apply` command classifies a diff compositionally and emits
-bounded JSON containing selected actions, durations, digests, cache state,
-readiness, and rollback. Wrapper changes run focused frontend tests plus the
-official frontend build; backend changes run the app backend suite; OpenDesign
-React/CSS patches build and activate only an overlay; daemon/runtime and supply
-chain changes elevate to the complete OCI pipeline. Core/app-contract and
-multi-component changes union their gates, while unknown files elevate
-conservatively.
+The app-owned `dev apply` command requires exactly one isolated changeset:
+explicit repository-relative `changed_files`, or immutable `base_sha` plus the
+current `head_sha`. It snapshots and propagates that set to every changed-suite
+gate, so unrelated shared-worktree changes cannot enter the run. It emits
+bounded JSON containing actions, durations, digests, cache state, readiness,
+and rollback. Frontend, backend, overlay, runtime, hosting, docs, and
+release-only changes select only their owned gates; documentation does not
+trigger OCI, backend is not run twice, and `changed_suite` is not unconditional.
+
+`dev benchmark` performs the automatic real React-patch-to-live proof. It
+changes patch bytes in an isolated copy, forces new source/build and overlay
+digests without a source-cache hit, activates through readiness and the scoped
+browser-remount event, restores the exact initial selection, and records phase
+timings. The canonical ceiling is 180 seconds.
 
 Production-path acceptance runs the official materialized OCI daemon, the
 real Maverick ASGI host and sidecar broker, the real Storage app, and headless
@@ -402,6 +410,7 @@ npm run test:e2e:migration --prefix apps/design-studio \
 python3 apps/design-studio/service/aggregate_opendesign_release_evidence.py \
   --ui /owned/evidence/opendesign-ui-release.json \
   --migration /owned/evidence/opendesign-migration.json \
+  --benchmark /owned/evidence/opendesign-change-to-live.json \
   --output /owned/evidence/opendesign-release.json
 python3 -m unittest apps.design-studio.tests.test_production_acceptance
 ```
@@ -428,7 +437,8 @@ The optional evidence file contains only public origins and bounded acceptance
 booleans. It never records the selected platform session, bootstrap cookie,
 browser headers, prompts, provider payloads, or environment values.
 
-The quick profile covers changed UI behavior, and affected composes integration
+`npm run test:e2e` aliases the complete release profile. The quick profile
+covers changed UI behavior, and affected composes integration
 coverage from the diff. The final browser release profile covers thirteen UI
 scenarios: login/open with the
 fixed Maverick sidebar, project creation and navigation through that sidebar,

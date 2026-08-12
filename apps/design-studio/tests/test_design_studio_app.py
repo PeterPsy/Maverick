@@ -398,6 +398,28 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertEqual(cli["opendesign"]["version"], "0.16.1")
             self.assertEqual(mcp["opendesign"]["version"], "0.16.1")
 
+    def test_dev_cli_failure_returns_an_error_status_for_the_outer_wrapper(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            result = self._run_entrypoint(
+                APP_ROOT / "cli" / "app_cli.py",
+                {
+                    "surface": "cli",
+                    "command_id": "app.design-studio.dev",
+                    "app_id": "design-studio",
+                    "workspace_id": "default",
+                    "data_root": str(Path(temp_dir) / "data/design-studio"),
+                    "arguments": {"operation": "invalid"},
+                },
+            )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["status_code"], 400)
+
+    def test_default_e2e_command_is_the_complete_release_profile(self) -> None:
+        package = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(package["scripts"]["test:e2e"], "npm run test:e2e:release")
+
     def test_backend_cli_mcp_and_reference_resolve_same_opendesign_id_through_sdk(self) -> None:
         project_response = self._fixture_json("project_create_response.json")
         project_id = project_response["project"]["id"]

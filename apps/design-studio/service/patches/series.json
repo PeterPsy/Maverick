@@ -27,13 +27,13 @@
     {
       "component": "web-build",
       "path": "0002-maverick-web-build.patch",
-      "sha256": "a2f00c24375fb1b29d20bc7e8824b3604ef767dda988e8c92434b62d06b0e897",
-      "reason": "Pin the static Next build id and single-worker release concurrency without changing daemon or runtime inputs.",
+      "sha256": "e597736341dda49cf9d71cf30e38171b15fd4c7b87348d799428d4c8facff997",
+      "reason": "Pin the static Next build id, keep release derivations single-worker and fully typechecked, and allow an explicitly bounded Turbopack development profile whose acceptance is covered by frontend tests and affected E2E.",
       "files": [
         {
           "path": "apps/web/next.config.ts",
           "pre_sha256": "fe650d8b584313d110249088fd867ff57edfc09e7caad40f86ff961ca249e16b",
-          "post_sha256": "6dc8d14a1006cff5a1c14968904974d7821ed48be3932100855f1f8a9270c195"
+          "post_sha256": "8865953e61a5c309e0c0f441bb53edb8390337257f8aae22fab94d7aea8cccff"
         }
       ]
     },

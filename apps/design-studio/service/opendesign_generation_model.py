@@ -47,7 +47,12 @@ _WEB_JOURNAL_FIELDS = {
     "updated_at",
 }
 _JOURNAL_STATES = {"prepared", "cutover_committed", "aborted"}
-_WEB_JOURNAL_STATES = {"prepared", "ready_committed", "rolled_back"}
+_WEB_JOURNAL_STATES = {
+    "prepared",
+    "ready_committed",
+    "rollback_restart_pending",
+    "rolled_back",
+}
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
 _GENERATION_RE = re.compile(r"^gen_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
@@ -256,8 +261,8 @@ class WebActivationJournal:
             raise GenerationControlError("web activation error exceeds the size limit")
         if state == "ready_committed" and error is not None:
             raise GenerationControlError("ready web activation cannot contain an error")
-        if state == "rolled_back" and error is None:
-            raise GenerationControlError("rolled-back web activation requires a bounded error")
+        if state in {"rollback_restart_pending", "rolled_back"} and error is None:
+            raise GenerationControlError("rollback web activation state requires a bounded error")
         created_at, updated_at = _journal_timestamps(payload)
         return cls(activation_id, state, source, target, readiness, error, created_at, updated_at)
 
@@ -321,13 +326,13 @@ def reconcile_web_activation(control: GenerationControl, journal: WebActivationJ
             and identifier_matches
         ):
             return "ready_committed"
-    elif journal.state == "rolled_back":
+    elif journal.state in {"rollback_restart_pending", "rolled_back"}:
         if (
             control.active == journal.source
             and control.previous_web == journal.target
             and identifier_matches
         ):
-            return "rolled_back"
+            return journal.state
     raise GenerationControlError("web activation journal is inconsistent with active control")
 
 

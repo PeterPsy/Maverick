@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
+import fcntl
 import hashlib
 import json
+import os
 from pathlib import Path
 import platform
 import shutil
+import stat
 import subprocess
+import tarfile
 import tempfile
 import time
 from typing import Any
+import uuid
 
 from opendesign_archive import write_deterministic_archive
 from opendesign_artifact import platform_key, sha256_file, write_canonical_json
@@ -24,7 +31,10 @@ from opendesign_web_materialization import publish_web_overlay
 from opendesign_web_overlay import VerifiedWebOverlay
 
 
-CACHE_SCHEMA_VERSION = "1"
+CACHE_SCHEMA_VERSION = "3"
+CACHE_MANIFEST_SCHEMA_VERSION = "1"
+DEV_BUILD_PROFILE = "turbopack-no-next-typecheck-v1"
+RELEASE_BUILD_PROFILE = "webpack-release-v1"
 
 
 class WebBuildError(RuntimeError):
@@ -48,6 +58,7 @@ class WebBuildMetrics:
     source_build_cache_hit: bool
     next_cache_hit: bool
     install_skipped: bool
+    workspace_build_cache_hit: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,6 +93,10 @@ def build_dev_overlay(
             cache_root=cache_root,
             signing_key=signing_key,
             runtime_session_id=runtime_session_id,
+            build_cpus=2,
+            build_profile=DEV_BUILD_PROFILE,
+            fast_dev_build=True,
+            allow_dependency_cache=True,
             allow_source_cache=True,
             allow_next_cache=True,
             compatible_runtime_artifact_sha256=compatible_runtime_artifact_sha256,
@@ -123,6 +138,10 @@ def build_release_overlay(
                 cache_root=cache_root,
                 signing_key=signing_key,
                 runtime_session_id=runtime_session_id,
+                build_cpus=1,
+                build_profile=RELEASE_BUILD_PROFILE,
+                fast_dev_build=False,
+                allow_dependency_cache=False,
                 allow_source_cache=False,
                 allow_next_cache=False,
                 compatible_runtime_artifact_sha256=compatible_runtime_artifact_sha256,
@@ -151,6 +170,8 @@ def compute_web_cache_keys(
     service_root: Path,
     node_version: str,
     pnpm_version: str,
+    build_cpus: int = 1,
+    build_profile: str = RELEASE_BUILD_PROFILE,
 ) -> WebCacheKeys:
     lockfile = source / "pnpm-lock.yaml"
     lockfile_sha256 = sha256_file(lockfile)
@@ -180,6 +201,8 @@ def compute_web_cache_keys(
             "upstream_commit": manifest["upstream"]["commit"],
             "dependency": dependency,
             "web_patches": web_patches,
+            "build_cpus": build_cpus,
+            "build_profile": build_profile,
         }
     )
     next_key = _payload_sha256(
@@ -187,6 +210,8 @@ def compute_web_cache_keys(
             "dependency": dependency,
             "next_major": _next_major(source),
             "toolchain_sha256": toolchain_sha256,
+            "build_profile": build_profile,
+            "web_build_patch_sha256": web_patches.get("web-build"),
         }
     )
     return WebCacheKeys(
@@ -208,11 +233,17 @@ def _derive_once(
     cache_root: Path,
     signing_key: Path,
     runtime_session_id: str | None,
+    build_cpus: int,
+    build_profile: str,
+    fast_dev_build: bool,
+    allow_dependency_cache: bool,
     allow_source_cache: bool,
     allow_next_cache: bool,
     compatible_runtime_artifact_sha256: frozenset[str] | None,
 ) -> tuple[Path, WebCacheKeys, WebBuildMetrics]:
     started = time.monotonic()
+    if build_cpus < 1 or build_cpus > 4:
+        raise WebBuildError("OpenDesign web build CPUs must be from 1 through 4")
     result_root.mkdir(parents=True)
     source = result_root / "source"
     logs = result_root / "logs"
@@ -246,13 +277,16 @@ def _derive_once(
         service_root=service_root,
         node_version=node_version,
         pnpm_version=pnpm_version,
+        build_cpus=build_cpus,
+        build_profile=build_profile,
     )
     cache = _real_cache_directory(cache_root)
     dependency_root = cache / "dependencies" / keys.dependency
     source_root = cache / "source-build" / keys.source_build
     next_root = cache / "next" / keys.next
+    workspace_root = cache / "workspace-build" / keys.next
 
-    dependency_hit = _restore_dependency_cache(source, dependency_root, keys)
+    dependency_hit = allow_dependency_cache and _restore_dependency_cache(source, dependency_root, keys)
     if not dependency_hit:
         build = manifest["fallback_build"]["build"]
         run_command(
@@ -265,23 +299,40 @@ def _derive_once(
         )
         if sha256_file(source / "pnpm-lock.yaml") != keys.lockfile:
             raise WebBuildError("OpenDesign web install modified pnpm-lock.yaml")
-        _write_dependency_cache(source, dependency_root, keys)
+        if allow_dependency_cache:
+            _write_dependency_cache(source, dependency_root, keys)
 
     static_output = result_root / "static"
     source_hit = allow_source_cache and _restore_source_cache(source_root, static_output, keys)
     next_hit = False
+    workspace_hit = False
     if not source_hit:
         if allow_next_cache:
             next_hit = _restore_next_cache(source, next_root, keys)
-        command = _web_build_command(manifest)
-        run_command(
-            command,
-            cwd=source,
-            env={**environment, **manifest["fallback_build"]["build"]["compile_environment"]},
-            log_path=logs / "web-build.log",
-            heavy=True,
-            runtime_session_id=runtime_session_id,
+        compile_environment = {
+            **environment,
+            **manifest["fallback_build"]["build"]["compile_environment"],
+            "OD_WEB_BUILD_CPUS": str(build_cpus),
+            "OD_WEB_FAST_BUILD": "1" if fast_dev_build else "0",
+        }
+        if fast_dev_build and allow_next_cache:
+            workspace_hit = _restore_workspace_build_cache(source, workspace_root, keys)
+        commands = _web_build_commands(
+            manifest,
+            fast_dev_build=fast_dev_build,
+            workspace_build_cache_hit=workspace_hit,
         )
+        for sequence, command in enumerate(commands, start=1):
+            run_command(
+                command,
+                cwd=source,
+                env=compile_environment,
+                log_path=logs / f"web-build-{sequence}.log",
+                heavy=True,
+                runtime_session_id=runtime_session_id,
+            )
+            if fast_dev_build and not workspace_hit and sequence == 1 and allow_next_cache:
+                _write_workspace_build_cache(source, workspace_root, keys)
         if sha256_file(source / "pnpm-lock.yaml") != keys.lockfile:
             raise WebBuildError("OpenDesign web build modified pnpm-lock.yaml")
         built = _real_directory(source / manifest["web_patch"]["source_output_path"])
@@ -305,6 +356,7 @@ def _derive_once(
         node_version=node_version,
         pnpm_version=pnpm_version,
         compatible_runtime_artifact_sha256=compatible_runtime_artifact_sha256,
+        service_root=service_root,
     )
     metrics = WebBuildMetrics(
         round(time.monotonic() - started, 6),
@@ -312,6 +364,7 @@ def _derive_once(
         source_hit,
         next_hit,
         dependency_hit,
+        workspace_hit,
     )
     return overlay_root, keys, metrics
 
@@ -328,6 +381,7 @@ def _assemble_overlay(
     node_version: str,
     pnpm_version: str,
     compatible_runtime_artifact_sha256: frozenset[str] | None,
+    service_root: Path,
 ) -> None:
     root.mkdir()
     static = root / "static"
@@ -381,7 +435,7 @@ def _assemble_overlay(
             "provenance": "provenance.json",
         }.items()
     }
-    series = read_json(Path(__file__).resolve().parent / manifest["fallback_build"]["patch_series"])
+    series = read_json(service_root / manifest["fallback_build"]["patch_series"])
     patch_digest = {entry["component"]: entry["sha256"] for entry in series["patches"]}
     runtime_digest = manifest["artifact"]["assets"][platform_key()]["sha256"]
     compatible_runtime_digests = sorted(
@@ -415,37 +469,41 @@ def _assemble_overlay(
 
 
 def _restore_dependency_cache(source: Path, root: Path, keys: WebCacheKeys) -> bool:
-    if not _valid_cache_marker(root, "dependency", keys.dependency):
-        return False
-    inventory = read_json(root / "node-modules.json")
-    paths = inventory.get("paths")
-    if not isinstance(paths, list) or not paths:
-        return False
-    for relative in paths:
-        if not isinstance(relative, str) or ".." in Path(relative).parts:
+    with _cache_key_lock(root, "dependency", keys.dependency):
+        if not _valid_cache_entry(root, "dependency", keys.dependency):
             return False
-        cached = root / "payload" / relative
-        if not cached.is_dir() or cached.is_symlink():
+        inventory = read_json(root / "node-modules.json")
+        paths = inventory.get("paths")
+        if not isinstance(paths, list) or not paths:
             return False
-    for relative in paths:
-        destination = source / str(relative)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        _copy_tree_cached(root / "payload" / str(relative), destination)
-    return True
+        if not all(isinstance(relative, str) and _safe_relative_path(relative) for relative in paths):
+            return False
+        archive = root / "payload.tar"
+        if archive.is_symlink() or not archive.is_file():
+            return False
+        try:
+            _validate_dependency_archive(archive, paths)
+            _extract_dependency_archive(archive, source)
+        except (OSError, tarfile.TarError, WebBuildError):
+            return False
+        return True
 
 
 def _write_dependency_cache(source: Path, root: Path, keys: WebCacheKeys) -> None:
     paths = _dependency_cache_paths(source)
     if not paths:
         raise WebBuildError("dependency install produced no node_modules cache inputs")
-    _replace_cache_root(root)
-    payload = root / "payload"
-    for relative in paths:
-        destination = payload / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        _copy_tree_cached(source / relative, destination)
-    write_canonical_json(root / "node-modules.json", {"schema_version": "1", "paths": paths})
-    _write_cache_marker(root, "dependency", keys.dependency)
+    with _cache_key_lock(root, "dependency", keys.dependency):
+        if _valid_cache_entry(root, "dependency", keys.dependency):
+            return
+        staging = _cache_staging_root(root)
+        try:
+            _write_dependency_archive(source, staging / "payload.tar", paths)
+            write_canonical_json(staging / "node-modules.json", {"schema_version": "1", "paths": paths})
+            _seal_cache(staging, "dependency", keys.dependency)
+            _publish_cache_root(staging, root)
+        finally:
+            _discard_cache_tree(staging)
 
 
 def _dependency_cache_paths(source: Path) -> list[str]:
@@ -458,49 +516,180 @@ def _dependency_cache_paths(source: Path) -> list[str]:
     )
 
 
+def _write_dependency_archive(source: Path, archive: Path, paths: list[str]) -> None:
+    completed = subprocess.run(
+        [
+            "tar",
+            "--create",
+            "--file",
+            str(archive),
+            "--sort=name",
+            "--mtime=@0",
+            "--owner=0",
+            "--group=0",
+            "--numeric-owner",
+            "--",
+            *paths,
+        ],
+        cwd=source,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise WebBuildError("OpenDesign dependency cache archive creation failed")
+
+
+def _validate_dependency_archive(archive: Path, paths: list[str]) -> None:
+    allowed = tuple(Path(relative).parts for relative in paths)
+    with tarfile.open(archive, mode="r:") as payload:
+        for member in payload:
+            name = Path(member.name)
+            if not _safe_relative_path(member.name) or not any(name.parts[: len(root)] == root for root in allowed):
+                raise WebBuildError("OpenDesign dependency cache archive contains an unexpected path")
+            if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
+                raise WebBuildError("OpenDesign dependency cache archive contains an unsafe object")
+            if member.issym():
+                target = _normalized_relative_parts(member.linkname, base=name.parent.parts)
+                if target is None or not any(target[: len(root)] == root for root in allowed):
+                    raise WebBuildError("OpenDesign dependency cache archive symlink escapes its root")
+            elif member.islnk():
+                target = _normalized_relative_parts(member.linkname)
+                if target is None or not any(target[: len(root)] == root for root in allowed):
+                    raise WebBuildError("OpenDesign dependency cache archive hardlink escapes its root")
+
+
+def _extract_dependency_archive(archive: Path, source: Path) -> None:
+    completed = subprocess.run(
+        ["tar", "--extract", "--file", str(archive), "--no-same-owner", "--no-same-permissions"],
+        cwd=source,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise WebBuildError("OpenDesign dependency cache archive extraction failed")
+
+
+def _safe_relative_path(value: str) -> bool:
+    return _normalized_relative_parts(value) is not None
+
+
+def _normalized_relative_parts(value: str, *, base: tuple[str, ...] = ()) -> tuple[str, ...] | None:
+    path = Path(value)
+    if not value or path.is_absolute():
+        return None
+    parts = list(base)
+    for part in path.parts:
+        if part in {"", "."}:
+            continue
+        if part == "..":
+            if not parts:
+                return None
+            parts.pop()
+        else:
+            parts.append(part)
+    return tuple(parts) or None
+
+
 def _restore_source_cache(root: Path, destination: Path, keys: WebCacheKeys) -> bool:
-    if not _valid_cache_marker(root, "source-build", keys.source_build):
-        return False
-    static = root / "static"
-    if not static.is_dir() or static.is_symlink():
-        return False
-    _copy_tree_cached(static, destination)
-    return True
+    with _cache_key_lock(root, "source-build", keys.source_build):
+        if not _valid_cache_entry(root, "source-build", keys.source_build):
+            return False
+        static = root / "static"
+        if not static.is_dir() or static.is_symlink():
+            return False
+        _copy_tree_cached(static, destination)
+        return True
 
 
 def _write_source_cache(static: Path, root: Path, keys: WebCacheKeys) -> None:
-    _replace_cache_root(root)
-    _copy_tree_cached(static, root / "static")
-    _write_cache_marker(root, "source-build", keys.source_build)
+    with _cache_key_lock(root, "source-build", keys.source_build):
+        if _valid_cache_entry(root, "source-build", keys.source_build):
+            return
+        staging = _cache_staging_root(root)
+        try:
+            _copy_tree_cached(static, staging / "static")
+            _seal_cache(staging, "source-build", keys.source_build)
+            _publish_cache_root(staging, root)
+        finally:
+            _discard_cache_tree(staging)
 
 
 def _restore_next_cache(source: Path, root: Path, keys: WebCacheKeys) -> bool:
-    if not _valid_cache_marker(root, "next", keys.next):
-        return False
-    cached = root / "cache"
-    if not cached.is_dir() or cached.is_symlink():
-        return False
-    destination = source / "apps/web/.next/cache"
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    _copy_tree_cached(cached, destination)
-    return True
+    with _cache_key_lock(root, "next", keys.next):
+        if not _valid_cache_entry(root, "next", keys.next):
+            return False
+        cached = root / "cache"
+        if not cached.is_dir() or cached.is_symlink():
+            return False
+        destination = source / "apps/web/.next/cache"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        _copy_tree_cached(cached, destination)
+        return True
 
 
 def _write_next_cache(source: Path, root: Path, keys: WebCacheKeys) -> None:
     cache = source / "apps/web/.next/cache"
     if not cache.is_dir() or cache.is_symlink():
         return
-    _replace_cache_root(root)
-    _copy_tree_cached(cache, root / "cache")
-    _write_cache_marker(root, "next", keys.next)
+    with _cache_key_lock(root, "next", keys.next):
+        if _valid_cache_entry(root, "next", keys.next):
+            return
+        staging = _cache_staging_root(root)
+        try:
+            _copy_tree_cached(cache, staging / "cache")
+            _seal_cache(staging, "next", keys.next)
+            _publish_cache_root(staging, root)
+        finally:
+            _discard_cache_tree(staging)
 
 
-def _replace_cache_root(path: Path) -> None:
-    if path.exists() and not path.is_symlink():
-        shutil.rmtree(path)
-    elif path.is_symlink():
-        raise WebBuildError("OpenDesign web cache path must not be a symlink")
-    path.mkdir(parents=True)
+def _restore_workspace_build_cache(source: Path, root: Path, keys: WebCacheKeys) -> bool:
+    with _cache_key_lock(root, "workspace-build", keys.next):
+        if not _valid_cache_entry(root, "workspace-build", keys.next):
+            return False
+        inventory = read_json(root / "outputs.json")
+        paths = inventory.get("paths")
+        if not isinstance(paths, list) or not paths:
+            return False
+        for relative in paths:
+            if not isinstance(relative, str) or not _safe_relative_path(relative):
+                return False
+            cached = root / "payload" / relative
+            if not cached.is_dir() or cached.is_symlink():
+                return False
+        for relative in paths:
+            destination = source / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            _copy_tree_cached(root / "payload" / relative, destination)
+        return True
+
+
+def _write_workspace_build_cache(source: Path, root: Path, keys: WebCacheKeys) -> None:
+    paths = sorted(
+        path.relative_to(source).as_posix()
+        for path in (source / "packages").glob("*/dist")
+        if path.is_dir() and not path.is_symlink()
+    )
+    if not paths:
+        raise WebBuildError("OpenDesign workspace build produced no cacheable outputs")
+    with _cache_key_lock(root, "workspace-build", keys.next):
+        if _valid_cache_entry(root, "workspace-build", keys.next):
+            return
+        staging = _cache_staging_root(root)
+        try:
+            for relative in paths:
+                destination = staging / "payload" / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                _copy_tree_cached(source / relative, destination)
+            write_canonical_json(staging / "outputs.json", {"schema_version": "1", "paths": paths})
+            _seal_cache(staging, "workspace-build", keys.next)
+            _publish_cache_root(staging, root)
+        finally:
+            _discard_cache_tree(staging)
 
 
 def _copy_tree_cached(source: Path, destination: Path) -> None:
@@ -508,8 +697,15 @@ def _copy_tree_cached(source: Path, destination: Path) -> None:
     if source.is_symlink() or not source.is_dir() or destination.exists() or destination.is_symlink():
         raise WebBuildError("OpenDesign cache copy endpoints are unsafe")
     destination.mkdir(parents=True)
+    command = [
+        "cp",
+        "-a",
+        "--reflink=auto",
+        f"{source}/.",
+        str(destination),
+    ]
     completed = subprocess.run(
-        ["cp", "-a", "--reflink=auto", f"{source}/.", str(destination)],
+        command,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
@@ -520,7 +716,7 @@ def _copy_tree_cached(source: Path, destination: Path) -> None:
         raise WebBuildError("OpenDesign cache tree copy failed")
 
 
-def _valid_cache_marker(root: Path, kind: str, key: str) -> bool:
+def _valid_cache_entry(root: Path, kind: str, key: str) -> bool:
     marker = root / "complete.json"
     if root.is_symlink() or not root.is_dir() or marker.is_symlink() or not marker.is_file():
         return False
@@ -528,14 +724,145 @@ def _valid_cache_marker(root: Path, kind: str, key: str) -> bool:
         value = read_json(marker)
     except Exception:
         return False
-    return value == {"schema_version": CACHE_SCHEMA_VERSION, "kind": kind, "key": key}
+    manifest = root / "content-manifest.json"
+    expected_fields = {"schema_version", "kind", "key", "content_manifest_sha256"}
+    if set(value) != expected_fields or value.get("schema_version") != CACHE_SCHEMA_VERSION:
+        return False
+    if value.get("kind") != kind or value.get("key") != key:
+        return False
+    if manifest.is_symlink() or not manifest.is_file():
+        return False
+    if value.get("content_manifest_sha256") != sha256_file(manifest):
+        return False
+    try:
+        recorded = read_json(manifest)
+        observed = _cache_content_manifest(root)
+    except Exception:
+        return False
+    return recorded == observed
 
 
-def _write_cache_marker(root: Path, kind: str, key: str) -> None:
+def _seal_cache(root: Path, kind: str, key: str) -> None:
+    manifest = root / "content-manifest.json"
+    write_canonical_json(manifest, _cache_content_manifest(root))
     write_canonical_json(
         root / "complete.json",
-        {"schema_version": CACHE_SCHEMA_VERSION, "kind": kind, "key": key},
+        {
+            "schema_version": CACHE_SCHEMA_VERSION,
+            "kind": kind,
+            "key": key,
+            "content_manifest_sha256": sha256_file(manifest),
+        },
     )
+
+
+def _cache_content_manifest(root: Path) -> dict[str, object]:
+    root = _real_directory(root)
+    entries: list[dict[str, object]] = []
+    files: list[Path] = []
+    excluded = {"complete.json", "content-manifest.json"}
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if relative in excluded:
+            continue
+        mode = path.lstat().st_mode
+        if stat.S_ISDIR(mode):
+            if path.is_symlink():
+                raise WebBuildError("OpenDesign cache contains an unsafe directory symlink")
+            entries.append({"path": relative, "type": "directory"})
+            continue
+        if stat.S_ISREG(mode):
+            files.append(path)
+            continue
+        if stat.S_ISLNK(mode):
+            target = os.readlink(path)
+            if os.path.isabs(target):
+                raise WebBuildError("OpenDesign cache contains an absolute symlink")
+            try:
+                (path.parent / target).resolve(strict=False).relative_to(root)
+            except ValueError as error:
+                raise WebBuildError("OpenDesign cache symlink escapes its root") from error
+            entries.append({"path": relative, "type": "symlink", "target": target})
+            continue
+        raise WebBuildError("OpenDesign cache contains an unsupported filesystem object")
+    with ThreadPoolExecutor(max_workers=min(8, max(1, os.cpu_count() or 1))) as executor:
+        entries.extend(executor.map(lambda path: _cache_file_entry(root, path), files))
+    return {
+        "schema_version": CACHE_MANIFEST_SCHEMA_VERSION,
+        "entries": sorted(entries, key=lambda entry: str(entry["path"])),
+    }
+
+
+def _cache_file_entry(root: Path, path: Path) -> dict[str, object]:
+    return {
+        "path": path.relative_to(root).as_posix(),
+        "type": "file",
+        "size_bytes": path.stat().st_size,
+        "sha256": sha256_file(path),
+    }
+
+
+def _cache_staging_root(root: Path) -> Path:
+    parent = _real_cache_directory(root.parent)
+    staging = Path(tempfile.mkdtemp(prefix=f".{root.name}.publishing-", dir=parent))
+    return _real_directory(staging)
+
+
+def _publish_cache_root(staging: Path, root: Path) -> None:
+    parent = _real_directory(root.parent)
+    retired: Path | None = None
+    if root.is_symlink():
+        raise WebBuildError("OpenDesign web cache path must not be a symlink")
+    if root.exists():
+        if not root.is_dir():
+            raise WebBuildError("OpenDesign web cache path must be a directory")
+        retired = parent / f".{root.name}.retired-{uuid.uuid4().hex}"
+        os.replace(root, retired)
+    try:
+        os.replace(staging, root)
+        _fsync_directory(parent)
+    except Exception:
+        if retired is not None and retired.exists() and not root.exists():
+            os.replace(retired, root)
+        raise
+    if retired is not None:
+        shutil.rmtree(retired)
+
+
+def _discard_cache_tree(path: Path) -> None:
+    if path.exists() and not path.is_symlink():
+        shutil.rmtree(path)
+
+
+@contextmanager
+def _cache_key_lock(root: Path, kind: str, key: str):
+    cache_root = _real_cache_directory(root.parents[1])
+    locks = cache_root / "locks"
+    locks.mkdir(exist_ok=True)
+    locks = _real_directory(locks)
+    lock_path = locks / f"{kind}-{key}.lock"
+    if lock_path.is_symlink():
+        raise WebBuildError("OpenDesign web cache lock must not be a symlink")
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(lock_path, flags, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise WebBuildError("OpenDesign web cache lock must be a regular file")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def _fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _assert_byte_reproducible(first: Path, second: Path) -> None:
@@ -548,7 +875,9 @@ def _assert_byte_reproducible(first: Path, second: Path) -> None:
             raise WebBuildError(f"release web derivations differ byte-for-byte: {relative}")
 
 
-def _web_build_command(manifest: dict[str, Any]) -> list[str]:
+def _web_build_commands(
+    manifest: dict[str, Any], *, fast_dev_build: bool, workspace_build_cache_hit: bool = False
+) -> list[list[str]]:
     command = manifest.get("web_patch", {}).get("build_command")
     if (
         not isinstance(command, list)
@@ -565,7 +894,21 @@ def _web_build_command(manifest: dict[str, Any]) -> list[str]:
         ]
     ):
         raise WebBuildError("OpenDesign web build command is missing or ambiguous")
-    return list(command)
+    if not fast_dev_build:
+        return [list(command)]
+    dependencies = list(command)
+    dependencies[3] = "@open-design/web^..."
+    frontend = [
+        "corepack",
+        "pnpm",
+        "--filter",
+        "@open-design/web",
+        "exec",
+        "next",
+        "build",
+        "--turbopack",
+    ]
+    return [frontend] if workspace_build_cache_hit else [dependencies, frontend]
 
 
 def _package_graph_sha256(source: Path) -> str:

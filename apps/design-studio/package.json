@@ -11,7 +11,7 @@
     "dev": "vite --host 0.0.0.0",
     "pretest": "node ../../scripts/check-node-runtime.mjs",
     "test": "vitest run",
-    "test:e2e": "npm run test:e2e:quick",
+    "test:e2e": "npm run test:e2e:release",
     "test:e2e:quick": "node tests/opendesign_product.e2e.mjs --profile quick",
     "test:e2e:affected": "node tests/opendesign_product.e2e.mjs --profile affected",
     "test:e2e:release": "node tests/opendesign_product.e2e.mjs --profile release",

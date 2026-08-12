@@ -24,6 +24,7 @@ def canonical_web_overlay(
     runtime_artifact_sha256: str,
     od_version: str,
     upstream_commit: str,
+    expected_web_overlay_sha256: str | None = None,
 ) -> tuple[VerifiedWebOverlay, dict[str, VerifiedWebOverlay]]:
     overlays = discover_verified_overlays(registry_root, trust_contract=trust_contract)
     compatible = [
@@ -32,6 +33,10 @@ def canonical_web_overlay(
         if overlay.od_version == od_version
         and overlay.upstream_commit == upstream_commit
         and runtime_artifact_sha256 in overlay.compatible_runtime_artifact_sha256
+        and (
+            expected_web_overlay_sha256 is None
+            or overlay.web_overlay_sha256 == expected_web_overlay_sha256
+        )
     ]
     if len(compatible) != 1:
         raise RuntimeError("OpenDesign bootstrap requires exactly one canonical compatible web overlay")

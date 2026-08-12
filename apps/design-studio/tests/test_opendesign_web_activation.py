@@ -183,6 +183,61 @@ class WebActivationTests(unittest.TestCase):
         )
         self.assertEqual(committed.state, "ready_committed")
 
+    def test_double_restart_failure_remains_recoverable_until_rollback_is_ready(self) -> None:
+        attempts = iter(
+            (
+                {"ready": False, "service_count": 1},
+                {"ready": False, "service_count": 1},
+            )
+        )
+        with self.assertRaisesRegex(self.activation.WebActivationError, "rollback_restart_failed"):
+            self.activation.activate_web_overlay(
+                self.root,
+                target_web_overlay_sha256=WEB_B,
+                web_activation_id="web_rollback_pending_001",
+                verified_artifacts=VERIFIED_ARTIFACTS,
+                verified_overlays=VERIFIED_OVERLAYS,
+                restart_sidecars=lambda: next(attempts),
+                now=lambda: "2026-08-12T10:00:05Z",
+            )
+
+        pending = self.control.load_web_activation_journal(
+            self.root,
+            "web_rollback_pending_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+        self.assertEqual(pending.state, "rollback_restart_pending")
+        self.assertEqual(
+            self.model.reconcile_web_activation(
+                self.control.load_generation_control(
+                    self.root,
+                    verified_artifacts=VERIFIED_ARTIFACTS,
+                    verified_overlays=VERIFIED_OVERLAYS,
+                ),
+                pending,
+            ),
+            "rollback_restart_pending",
+        )
+
+        recovered = self.activation.recover_web_activation(
+            self.root,
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+            restart_sidecars=lambda: {"ready": True, "service_count": 1},
+            now=lambda: "2026-08-12T10:00:06Z",
+        )
+
+        self.assertIsNotNone(recovered)
+        self.assertTrue(recovered.rolled_back)
+        terminal = self.control.load_web_activation_journal(
+            self.root,
+            "web_rollback_pending_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+        self.assertEqual(terminal.state, "rolled_back")
+
 
 if __name__ == "__main__":
     unittest.main()

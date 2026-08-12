@@ -393,6 +393,7 @@ const settings = {
     active_provider: {
       provider_id: 'codex',
       label: 'Codex',
+      capabilities: { supports_subscription_usage: true },
       default_model_family: 'gpt-5.5',
       model_options: [{
         model_id: 'gpt-5.5',
@@ -538,6 +539,29 @@ const settings = {
 
 const state = createSettingsPanelState();
 syncSettingsPanelDraft(state, settings);
+state.providerUsageItems = [{
+  provider_id: 'codex',
+  provider_label: 'Codex',
+  available: true,
+  fetched_at: '2026-08-12T16:30:00Z',
+  plan_type: 'pro',
+  unavailable_reason: null,
+  credits_balance: 0,
+  credits_unlimited: false,
+  limits: [{
+    limit_id: 'codex',
+    label: 'Codex',
+    metered_feature: null,
+    limit_reached: false,
+    primary_window: {
+      used_percent: 11,
+      limit_window_seconds: 604800,
+      reset_after_seconds: 86400,
+      reset_at_epoch_seconds: null
+    },
+    secondary_window: null
+  }]
+}];
 const html = settingsPanelHtml(settings, state);
 
 assert.ok(html.includes('settings-user-settings-card'));
@@ -554,6 +578,11 @@ assert.ok(html.includes('Agentic provider'));
 assert.ok(html.includes('data-agentic-provider-accordion'));
 assert.ok(!html.includes('data-settings-model-accordion="agentic-provider" data-agentic-provider-accordion open'));
 assert.ok(html.includes('Codex tools/filesystem/MCP'));
+assert.ok(html.includes('Subscription usage'));
+assert.ok(html.includes('data-provider-usage-gauge="11"'));
+assert.ok(html.includes('11%'));
+assert.ok(html.includes('7-day window'));
+assert.ok(html.includes('settings-refresh-provider-usage'));
 assert.ok(html.includes('Hosted chat / fast model'));
 assert.ok(!html.includes('Hosted text models'));
 assert.ok(!html.includes('Chat only uses text-output fast models'));
@@ -843,7 +872,7 @@ function makeController() {
         app_root = Path(__file__).resolve().parents[1]
         main_source = (app_root / "frontend" / "src" / "main.ts").read_text(encoding="utf-8")
 
-        for module_name in ("userPages.ts", "workspaceAppsPage.ts", "persistencePage.ts", "adminActions.ts", "persistenceController.ts", "providerSettingsActions.ts", "bindEvents.ts"):
+        for module_name in ("userPages.ts", "workspaceAppsPage.ts", "persistencePage.ts", "adminActions.ts", "persistenceController.ts", "providerSettingsActions.ts", "providerUsageController.ts", "notice.ts", "bindEvents.ts"):
             self.assertTrue((app_root / "frontend" / "src" / module_name).is_file())
         self.assertLess(len(main_source.splitlines()), 600)
         self.assertNotIn("function persistenceHtml(", main_source)
@@ -862,6 +891,23 @@ function makeController() {
         self.assertIn('role="status"', skeleton_source)
         self.assertIn('aria-hidden="true"', skeleton_source)
         self.assertIn("@keyframes settings-loading-skeleton-shimmer", skeleton_css)
+
+    def test_platform_settings_renders_themed_subscription_usage_gauges(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        gauge_source = (app_root / "frontend" / "src" / "components" / "ui" / "gauge-1.tsx").read_text(encoding="utf-8")
+        usage_source = (app_root / "frontend" / "src" / "components" / "usageLimitGauges.tsx").read_text(encoding="utf-8")
+        panel_source = (app_root / "frontend" / "src" / "settingsPanel.ts").read_text(encoding="utf-8")
+        styles_source = (app_root / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+        components = json.loads((app_root / "components.json").read_text(encoding="utf-8"))
+
+        self.assertIn('export const Gauge', gauge_source)
+        self.assertIn('role="progressbar"', gauge_source)
+        self.assertIn("var(--maverick-accent)", usage_source)
+        self.assertIn("data-provider-usage-gauge", panel_source)
+        self.assertIn("Subscription usage", panel_source)
+        self.assertIn("settings-refresh-provider-usage", panel_source)
+        self.assertIn('@import "tailwindcss"', styles_source)
+        self.assertEqual(components["aliases"]["ui"], "@/components/ui")
 
 
 @slow_test_class("slow settings app integration suite; run with scripts/test_suite.py --level slow")

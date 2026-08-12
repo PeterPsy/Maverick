@@ -30,6 +30,9 @@ import { persistenceMigrationModalHtml, persistencePageHtml } from './persistenc
 import { saveActiveProviderSettings, saveHostedProviderSettings, saveSpeechProviderSettings } from './providerSettingsActions';
 import { usersPageHtml, workspaceAccessPageHtml } from './userPages';
 import { workspaceAppsPageHtml } from './workspaceAppsPage';
+import { mountUsageLimitGauges, unmountUsageLimitGauges } from './components/usageLimitGauges';
+import { createProviderUsageController } from './providerUsageController';
+import { noticeHtml, type SettingsNotice } from './notice';
 
 let users: User[] = [];
 let workspaces: Workspace[] = [];
@@ -42,7 +45,7 @@ let selectedPageId: SettingsPageId = settingsPageIdFromParams(initialNavigationP
 let selectedUserId = userIdFromNavigationParams(initialNavigationParams);
 let isLoading = true;
 let pendingDeleteUserId = '';
-let notice: { tone: 'info' | 'success' | 'error'; message: string } | null = null;
+let notice: SettingsNotice | null = null;
 let lastPublishedPageId = '';
 let lastPublishedUserId = '';
 let runtimeInventoryWorkspaceId = '';
@@ -66,6 +69,12 @@ const appLinksController = createAppLinksController({
   setNotice: (nextNotice) => {
     notice = nextNotice;
   },
+});
+
+const providerUsageController = createProviderUsageController({
+  getSettings: () => platformSettings,
+  render: () => render(),
+  state: settingsPanelState
 });
 
 function selectedUser(): User | undefined {
@@ -117,6 +126,7 @@ function applyNavigationParams(params: Record<string, unknown>) {
   }
   if (pageId === 'platform-settings') {
     void ensureRuntimeInventoryLoaded();
+    void providerUsageController.ensureLoaded();
   }
 }
 
@@ -211,6 +221,7 @@ async function refresh() {
     if (previousWorkspaceId !== nextWorkspaceId) {
       appLinksController.reset();
       runtimeInventoryWorkspaceId = '';
+      providerUsageController.reset();
     }
     syncSettingsPanelDraft(settingsPanelState, platformSettings);
     if (!selectedUserId || !users.some((user) => user.user_id === selectedUserId)) {
@@ -225,6 +236,7 @@ async function refresh() {
   }
   if (selectedPageId === 'platform-settings') {
     void ensureRuntimeInventoryLoaded();
+    void providerUsageController.ensureLoaded();
   }
 }
 
@@ -461,6 +473,7 @@ function render() {
   const user = isLoading ? undefined : selectedUser();
   const page = settingsPageById(selectedPageId);
   if (!root) return;
+  unmountUsageLimitGauges();
   root.innerHTML = `<main class="settings-shell">
     <section class="settings-main">
       <div class="settings-content">
@@ -474,7 +487,7 @@ function render() {
             <p>${escapeHtml(page.summary)}</p>
           </div>
         </header>
-        ${noticeHtml()}
+        ${noticeHtml(notice)}
         ${activePageHtml(page, user)}`
         }
       </div>
@@ -482,6 +495,7 @@ function render() {
     ${persistenceMigrationModalHtml(persistenceController.viewState())}
   </main>`;
   bindEvents();
+  mountUsageLimitGauges();
   publishSelectedPage(page);
   if (!isLoading) {
     publishSelectedUser(user);
@@ -521,6 +535,7 @@ function bindEvents() {
       render();
     },
     persistenceController,
+    refreshProviderUsageFromPanel: providerUsageController.refresh,
     render,
     resetSelectedUserPassword,
     saveDependencySelection,
@@ -566,17 +581,6 @@ function showError(error: unknown) {
   const message = error instanceof Error ? error.message : 'Unexpected error';
   notice = { tone: 'error', message };
   render();
-}
-
-function noticeHtml() {
-  if (!notice) return '';
-  return `<div class="settings-notice settings-notice-${notice.tone}">
-    <span class="material-symbols-rounded" aria-hidden="true">${notice.tone === 'error' ? 'error' : notice.tone === 'success' ? 'task_alt' : 'info'}</span>
-    <span>${escapeHtml(notice.message)}</span>
-    <button type="button" class="settings-icon-button" id="dismiss-notice" aria-label="Close">
-      <span class="material-symbols-rounded" aria-hidden="true">close</span>
-    </button>
-  </div>`;
 }
 
 window.addEventListener('message', (event) => {

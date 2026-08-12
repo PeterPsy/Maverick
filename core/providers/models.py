@@ -77,6 +77,7 @@ class ProviderCapabilitySet:
     supports_turn_detection: bool = False
     supports_barge_in: bool = False
     supports_same_turn_input: bool = False
+    supports_subscription_usage: bool = False
     latency_class: str | None = None
     future_only_supports_local_execution: bool = False
     future_only_supports_offline_mode: bool = False
@@ -152,6 +153,43 @@ class ProviderDefinition:
     execution_contract: ProviderExecutionContract | None = None
     cost_metadata: dict[str, object] = field(default_factory=dict)
     latency_metadata: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ProviderUsageWindow:
+    """One provider-reported subscription limit window."""
+
+    used_percent: float
+    limit_window_seconds: int | None = None
+    reset_after_seconds: int | None = None
+    reset_at_epoch_seconds: int | None = None
+
+
+@dataclass(frozen=True)
+class ProviderUsageLimit:
+    """One account or model-specific subscription usage limit."""
+
+    limit_id: str
+    label: str
+    limit_reached: bool
+    metered_feature: str | None = None
+    primary_window: ProviderUsageWindow | None = None
+    secondary_window: ProviderUsageWindow | None = None
+
+
+@dataclass(frozen=True)
+class ProviderSubscriptionUsage:
+    """Redaction-safe subscription usage reported by one provider adapter."""
+
+    provider_id: str
+    provider_label: str
+    available: bool
+    fetched_at: datetime
+    plan_type: str | None = None
+    limits: list[ProviderUsageLimit] = field(default_factory=list)
+    unavailable_reason: str | None = None
+    credits_balance: float | None = None
+    credits_unlimited: bool = False
 
 
 @dataclass(frozen=True)

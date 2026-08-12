@@ -1,4 +1,12 @@
-import type { OpenRouterProviderRouting, PlatformSettings, ProviderModelOption, RuntimeSessionItem } from './adminApi';
+import type {
+  OpenRouterProviderRouting,
+  PlatformSettings,
+  ProviderModelOption,
+  ProviderSubscriptionUsage,
+  ProviderUsageLimit,
+  ProviderUsageWindow,
+  RuntimeSessionItem
+} from './adminApi';
 import {
   defaultReasoningForOption,
   hostedModelOptionsForSettings,
@@ -39,7 +47,10 @@ export type SettingsPanelState = {
   isSavingHostedProvider: boolean;
   isSavingProvider: boolean;
   isSavingSpeechProvider: boolean;
+  isLoadingProviderUsage: boolean;
   providerError: string;
+  providerUsageError: string;
+  providerUsageItems: ProviderSubscriptionUsage[];
   speechAudioModelId: string;
   speechConversationModelId: string;
   speechProviderError: string;
@@ -53,6 +64,7 @@ export type SettingsPanelActions = {
   onSaveHostedProviderSettings: (modelId?: string) => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
+  onRefreshProviderUsage: () => void;
   onSaveProviderSettings: () => void;
   onSaveSpeechProviderSettings: () => void;
   onSpeechAudioModelChanged: (modelId: string) => void;
@@ -73,7 +85,10 @@ export function createSettingsPanelState(): SettingsPanelState {
     isSavingHostedProvider: false,
     isSavingProvider: false,
     isSavingSpeechProvider: false,
+    isLoadingProviderUsage: false,
     providerError: '',
+    providerUsageError: '',
+    providerUsageItems: [],
     speechAudioModelId: '',
     speechConversationModelId: '',
     speechProviderError: ''
@@ -318,6 +333,7 @@ function agenticModelSettingsCardHtml(
     ${modelSettingsHeadingHtml('memory', 'Agentic model settings')}
     <div class="settings-platform-provider-forms">
       ${providerSettingsFormHtml(provider, modelOptions, reasoningOptions, canSaveProvider, activeRuntimeSessionCount, runtimeSessionCount, isOpen, state)}
+      ${providerSubscriptionUsageHtml(provider, state)}
     </div>
   </section>`;
 }
@@ -393,6 +409,7 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
     });
   });
   document.getElementById('settings-save-provider')?.addEventListener('click', actions.onSaveProviderSettings);
+  document.getElementById('settings-refresh-provider-usage')?.addEventListener('click', actions.onRefreshProviderUsage);
   document.querySelectorAll<HTMLButtonElement>('[data-hosted-provider-save]').forEach((button) => {
     button.addEventListener('click', () => actions.onSaveHostedProviderSettings(button.dataset.hostedProviderSave || ''));
   });
@@ -445,6 +462,127 @@ function providerSettingsFormHtml(
     ${state.providerError ? `<p class="settings-platform-error">${escapeHtml(state.providerError)}</p>` : ''}
     </div>
   </details>`;
+}
+
+function providerSubscriptionUsageHtml(
+  provider: PlatformSettings['provider']['active_provider'] | null,
+  state: SettingsPanelState
+) {
+  if (!provider?.capabilities?.supports_subscription_usage) {
+    return '';
+  }
+  const usage = state.providerUsageItems.find((item) => item.provider_id === provider.provider_id) || null;
+  const plan = usage?.plan_type ? usage.plan_type.replace(/[_-]+/g, ' ') : '';
+  const refreshIcon = state.isLoadingProviderUsage ? 'sync' : 'refresh';
+  let content = '';
+  if (state.isLoadingProviderUsage && !usage) {
+    content = `<div class="settings-provider-usage-loading" role="status">
+      <div data-provider-usage-gauge="0" data-provider-usage-indeterminate="true"></div>
+      <span><strong>Reading subscription limits</strong><small>Refreshing usage directly from ${escapeHtml(provider.label)}.</small></span>
+    </div>`;
+  } else if (state.providerUsageError) {
+    content = providerUsageUnavailableHtml('The current subscription usage could not be refreshed.');
+  } else if (usage && !usage.available) {
+    content = providerUsageUnavailableHtml(providerUsageUnavailableMessage(usage.unavailable_reason));
+  } else if (!usage) {
+    content = providerUsageUnavailableHtml('Usage has not been loaded yet.');
+  } else if (!usage.limits.length) {
+    content = providerUsageUnavailableHtml('This subscription did not report any active usage windows.');
+  } else {
+    content = `<div class="settings-provider-usage-limits">
+      ${usage.limits.map(providerUsageLimitHtml).join('')}
+    </div>`;
+  }
+  return `<section class="settings-provider-usage" aria-labelledby="settings-provider-usage-title">
+    <div class="settings-provider-usage-heading">
+      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">speed</span>
+      <span class="settings-provider-usage-title">
+        <span class="settings-model-kicker">
+          <span class="settings-kicker">Subscription usage</span>
+          ${plan ? `<span class="settings-provider-usage-plan">${escapeHtml(plan)}</span>` : ''}
+        </span>
+        <strong id="settings-provider-usage-title">Usage limits</strong>
+        <small>${usage?.available ? `Updated ${escapeHtml(formatUsageTimestamp(usage.fetched_at))}` : 'Account-level usage, read securely by Maverick Core'}</small>
+      </span>
+      <button type="button" class="settings-secondary settings-provider-usage-refresh" id="settings-refresh-provider-usage" ${state.isLoadingProviderUsage ? 'disabled' : ''}>
+        <span class="material-symbols-rounded ${state.isLoadingProviderUsage ? 'is-spinning' : ''}" aria-hidden="true">${refreshIcon}</span>
+        Refresh
+      </button>
+    </div>
+    ${content}
+  </section>`;
+}
+
+function providerUsageLimitHtml(limit: ProviderUsageLimit) {
+  const windows = [
+    { label: limit.secondary_window ? 'Primary window' : '', window: limit.primary_window },
+    { label: 'Secondary window', window: limit.secondary_window }
+  ].filter((item): item is { label: string; window: ProviderUsageWindow } => Boolean(item.window));
+  return windows.map(({ label, window }) => {
+    const value = Math.round(Math.max(0, Math.min(100, window.used_percent)));
+    const detail = [label, formatUsageWindow(window.limit_window_seconds), formatUsageReset(window)].filter(Boolean).join(' · ');
+    return `<article class="settings-provider-usage-limit ${limit.limit_reached ? 'is-reached' : ''}">
+      <div class="settings-provider-usage-gauge" data-provider-usage-gauge="${escapeAttr(String(value))}"></div>
+      <span class="settings-provider-usage-limit-copy">
+        <strong>${escapeHtml(limit.label)}</strong>
+        <small>${escapeHtml(detail)}</small>
+      </span>
+      <span class="settings-provider-usage-value">
+        <strong>${value}%</strong>
+        <small>${limit.limit_reached ? 'limit reached' : 'used'}</small>
+      </span>
+    </article>`;
+  }).join('');
+}
+
+function providerUsageUnavailableHtml(message: string) {
+  return `<div class="settings-provider-usage-unavailable">
+    <span class="material-symbols-rounded" aria-hidden="true">info</span>
+    <span><strong>Usage unavailable</strong><small>${escapeHtml(message)}</small></span>
+  </div>`;
+}
+
+function providerUsageUnavailableMessage(reason: string | null) {
+  if (reason === 'authentication_required') {
+    return 'Sign in to Codex on the Maverick host to read subscription usage.';
+  }
+  if (reason === 'usage_not_reported') {
+    return 'The provider did not report a subscription usage window.';
+  }
+  return 'The provider usage service is temporarily unavailable.';
+}
+
+function formatUsageWindow(seconds: number | null) {
+  if (!seconds || seconds <= 0) return '';
+  if (seconds % 86400 === 0) {
+    const days = seconds / 86400;
+    return `${days}-day window`;
+  }
+  if (seconds % 3600 === 0) {
+    const hours = seconds / 3600;
+    return `${hours}-hour window`;
+  }
+  return 'rolling window';
+}
+
+function formatUsageReset(window: ProviderUsageWindow) {
+  const seconds = window.reset_after_seconds;
+  if (seconds !== null && seconds >= 0) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    if (days > 0) return `resets in ${days}d ${hours}h`;
+    const minutes = Math.max(1, Math.floor((seconds % 3600) / 60));
+    return hours > 0 ? `resets in ${hours}h ${minutes}m` : `resets in ${minutes}m`;
+  }
+  if (window.reset_at_epoch_seconds) {
+    return `resets ${new Date(window.reset_at_epoch_seconds * 1000).toLocaleString()}`;
+  }
+  return '';
+}
+
+function formatUsageTimestamp(value: string) {
+  const timestamp = new Date(value);
+  return Number.isNaN(timestamp.getTime()) ? 'recently' : timestamp.toLocaleString();
 }
 
 function hostedProviderSettingsListHtml({

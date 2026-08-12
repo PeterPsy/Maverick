@@ -14,6 +14,7 @@ export function bindSettingsEvents(context: {
   onHostedProviderRoutingChanged: (modelId: string, field: string, value: string | boolean) => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
+  refreshProviderUsageFromPanel: () => Promise<void>;
   onSpeechAudioModelChanged: (modelId: string) => void;
   onSpeechConversationModelChanged: (modelId: string) => void;
   persistenceController: PersistenceController;
@@ -74,6 +75,9 @@ export function bindSettingsEvents(context: {
     onHostedProviderRoutingChanged: context.onHostedProviderRoutingChanged,
     onProviderModelChanged: context.onProviderModelChanged,
     onProviderReasoningChanged: context.onProviderReasoningChanged,
+    onRefreshProviderUsage: () => {
+      context.refreshProviderUsageFromPanel().catch(context.showError);
+    },
     onSpeechAudioModelChanged: context.onSpeechAudioModelChanged,
     onSpeechConversationModelChanged: context.onSpeechConversationModelChanged,
     onSaveHostedProviderSettings: (modelId) => {

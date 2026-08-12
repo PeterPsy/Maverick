@@ -8,6 +8,7 @@ Admin-only platform settings app for provider/runtime settings, users, workspace
 - `settings` intentionally does not declare an app-owned backend or lifecycle hooks yet; authoritative admin state remains core-owned.
 - Persistence adapter status, platform settings, provider/model selection, runtime-session cleanup, and backend restarts are core-owned admin surfaces. Settings presents those surfaces in the UI.
 - The platform settings panel shows Codex runtime model selection separately from hosted text model selection. Codex remains the agentic provider for tools, filesystem, MCP, and skills; hosted text providers such as OpenRouter and Google AI Studio govern only `plain_hosted_chat` and `fast_model`. Speech-to-text settings expose Deepgram audio transcription and conversation models as separate choices because file/one-shot transcription uses Nova-3 over `/v1/listen`, while realtime conversation uses Flux models over the WebSocket v2 Listen API.
+- Agentic providers that declare `supports_subscription_usage` expose redaction-safe account limits in the same provider card. Settings loads those limits independently through the admin-only `GET /api/providers/usage` surface, supports manual refresh, and keeps the rest of the platform settings usable when the upstream usage service is unavailable. Codex credentials remain server-side; the browser receives only plan, percentage, reset-window, availability, and credit summary fields.
 - Persistence migration UI must call the core dry-run endpoint before apply. The confirmation dialog exposes target JSON/Mongo connection fields, including Mongo username and password secret ref, and source cleanup is an explicit operator opt-in rather than the default migration behavior.
 - The main app iframe owns the settings work surface and renders one page at a time: platform settings, users, workspace access, workspace apps, app links, or persistence.
 - The app links page presents generic core app dependency selections for the active workspace, including intra-app provider catalogs such as `agent.catalog`. It calls `/api/apps/dependencies` and does not read another app's private storage.
@@ -15,6 +16,10 @@ Admin-only platform settings app for provider/runtime settings, users, workspace
 - The platform settings panel is rendered inside the main app work surface rather than as a shell modal or app-local overlay. It calls generic core settings/provider/runtime APIs and keeps the shell boundary app-agnostic.
 - The app stores only admin UI preferences under `data/settings/preferences.json`.
 - `reference_entities`, `data_events`, and persisted `view_surfaces` remain intentionally empty until the app grows app-owned administrative state instead of acting as a shell over core-managed records.
+
+## Frontend Structure
+
+The app remains a TypeScript/Vite work surface, with React mounted only for reusable UI components. Tailwind CSS 4 and the shadcn alias contract are configured in `components.json`; because Vite's source root is `frontend/src`, the canonical shadcn UI path for this app is `frontend/src/components/ui`. The subscription usage view uses `components/ui/gauge-1.tsx` with Maverick font and monochrome design tokens supplied by the surrounding app.
 
 ## SDK Flow
 

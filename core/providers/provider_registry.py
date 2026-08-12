@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from core.providers.errors import ProviderNotFoundError
-from core.providers.models import ProviderDefinition, RuntimeBackendLaunchSpec, RuntimeSteerResult
+from core.providers.models import ProviderDefinition, ProviderSubscriptionUsage, RuntimeBackendLaunchSpec, RuntimeSteerResult
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 if TYPE_CHECKING:
@@ -86,6 +86,13 @@ class RuntimeBackendAdapter(Protocol):
         ...
 
 
+class SubscriptionUsageAdapter(Protocol):
+    """Optional contract for providers backed by subscription usage limits."""
+
+    def read_subscription_usage(self) -> ProviderSubscriptionUsage:
+        ...
+
+
 class ProviderRegistry:
     """In-memory registry for provider definitions and runtime adapters."""
 
@@ -120,3 +127,11 @@ class ProviderRegistry:
         if provider_id not in self._runtime_adapters:
             raise ProviderNotFoundError(f"Runtime backend adapter `{provider_id}` is not registered.")
         return self._runtime_adapters[provider_id]
+
+    def get_subscription_usage_adapter(self, provider_id: str) -> SubscriptionUsageAdapter:
+        """Return a provider adapter that implements subscription usage reads."""
+        adapter = self.get_runtime_adapter(provider_id)
+        reader = getattr(adapter, "read_subscription_usage", None)
+        if not callable(reader):
+            raise ProviderNotFoundError(f"Subscription usage adapter `{provider_id}` is not registered.")
+        return adapter  # type: ignore[return-value]

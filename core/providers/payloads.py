@@ -11,6 +11,9 @@ from core.providers.models import (
     ProviderReasoningOption,
     ProviderSelection,
     ProviderSpeechSelection,
+    ProviderSubscriptionUsage,
+    ProviderUsageLimit,
+    ProviderUsageWindow,
     RoutingDecision,
 )
 
@@ -82,6 +85,45 @@ def provider_selection_payload(selection: ProviderSelection | None) -> dict[str,
         "updated_at": selection.updated_at,
         "model_id": selection.model_id,
         "model_reasoning_effort": selection.model_reasoning_effort,
+    }
+
+
+def provider_subscription_usage_payload(usage: ProviderSubscriptionUsage) -> dict[str, object]:
+    """Return subscription usage without account identifiers or credentials."""
+    return {
+        "provider_id": usage.provider_id,
+        "provider_label": usage.provider_label,
+        "available": usage.available,
+        "fetched_at": usage.fetched_at.isoformat(),
+        "plan_type": usage.plan_type,
+        "limits": [provider_usage_limit_payload(limit) for limit in usage.limits],
+        "unavailable_reason": usage.unavailable_reason,
+        "credits_balance": usage.credits_balance,
+        "credits_unlimited": usage.credits_unlimited,
+    }
+
+
+def provider_usage_limit_payload(limit: ProviderUsageLimit) -> dict[str, object]:
+    """Return one redaction-safe usage limit."""
+    return {
+        "limit_id": limit.limit_id,
+        "label": limit.label,
+        "metered_feature": limit.metered_feature,
+        "limit_reached": limit.limit_reached,
+        "primary_window": provider_usage_window_payload(limit.primary_window),
+        "secondary_window": provider_usage_window_payload(limit.secondary_window),
+    }
+
+
+def provider_usage_window_payload(window: ProviderUsageWindow | None) -> dict[str, object] | None:
+    """Return one redaction-safe usage window."""
+    if window is None:
+        return None
+    return {
+        "used_percent": window.used_percent,
+        "limit_window_seconds": window.limit_window_seconds,
+        "reset_after_seconds": window.reset_after_seconds,
+        "reset_at_epoch_seconds": window.reset_at_epoch_seconds,
     }
 
 

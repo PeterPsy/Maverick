@@ -29,3 +29,11 @@ class ProviderCapabilityError(ProviderError):
 
 class ProviderLaunchError(ProviderError):
     """Raised when one runtime backend cannot be prepared for launch."""
+
+
+class ProviderUsageUnavailableError(ProviderError):
+    """Raised when a provider cannot return redaction-safe subscription usage."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = str(reason or "provider_unavailable")
+        super().__init__(self.reason)

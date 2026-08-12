@@ -215,6 +215,39 @@ export type ProviderItem = {
   capabilities: Record<string, boolean>;
 };
 
+export type ProviderUsageWindow = {
+  used_percent: number;
+  limit_window_seconds: number | null;
+  reset_after_seconds: number | null;
+  reset_at_epoch_seconds: number | null;
+};
+
+export type ProviderUsageLimit = {
+  limit_id: string;
+  label: string;
+  metered_feature: string | null;
+  limit_reached: boolean;
+  primary_window: ProviderUsageWindow | null;
+  secondary_window: ProviderUsageWindow | null;
+};
+
+export type ProviderSubscriptionUsage = {
+  provider_id: string;
+  provider_label: string;
+  available: boolean;
+  fetched_at: string;
+  plan_type: string | null;
+  limits: ProviderUsageLimit[];
+  unavailable_reason: string | null;
+  credits_balance: number | null;
+  credits_unlimited: boolean;
+};
+
+export type ProviderSubscriptionUsagePayload = {
+  workspace_id: string;
+  items: ProviderSubscriptionUsage[];
+};
+
 export type HostedProviderSelection = {
   workspace_id: string;
   profile: string;
@@ -425,6 +458,10 @@ export function saveAppDependencySelection(
 
 export function getPlatformSettings(): Promise<PlatformSettings> {
   return requestJson<PlatformSettings>('/api/settings/platform');
+}
+
+export function getProviderSubscriptionUsage(): Promise<ProviderSubscriptionUsagePayload> {
+  return requestJson<ProviderSubscriptionUsagePayload>('/api/providers/usage');
 }
 
 export function getRuntimeSessionInventory(): Promise<RuntimeSessionInventoryPayload> {

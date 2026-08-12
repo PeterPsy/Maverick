@@ -15,6 +15,7 @@ from core.providers.payloads import (
     provider_model_option_payload,
     provider_payload,
     provider_selection_payload,
+    provider_subscription_usage_payload,
     routing_decision_payload,
     sort_provider_definitions,
     speech_provider_selection_payload,
@@ -29,6 +30,7 @@ from core.providers.service import (
     configure_speech_provider,
     configure_workspace_provider,
     effective_provider_registry,
+    read_workspace_provider_subscription_usage,
     resolve_workspace_provider_status,
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -402,6 +404,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         "/api/providers/speech/active",
         "/api/providers/speech/selection",
         "/api/providers/route",
+        "/api/providers/usage",
         "/api/runtime/status",
     }:
         return None
@@ -566,6 +569,20 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         return json_response(start_response, workspace_provider_status(state, workspace_id=context.workspace_id))
     if method != "GET":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+    if path == "/api/providers/usage":
+        if getattr(context.user, "platform_role", None) != "admin":
+            return json_response(start_response, {"error": "provider_usage_forbidden"}, status="403 Forbidden")
+        usages = read_workspace_provider_subscription_usage(
+            state.provider_store,
+            workspace_id=context.workspace_id,
+        )
+        return json_response(
+            start_response,
+            {
+                "workspace_id": context.workspace_id,
+                "items": [provider_subscription_usage_payload(usage) for usage in usages],
+            },
+        )
     if path == "/api/providers":
         provider_status = workspace_provider_status(state, workspace_id=context.workspace_id, refresh_model_catalog=True)
         return json_response(

@@ -38,6 +38,8 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertIn("text", definition.capabilities.input_modalities)
         self.assertIn("events", definition.capabilities.output_modalities)
         self.assertTrue(definition.capabilities.supports_tool_calling)
+        self.assertTrue(definition.capabilities.supports_subscription_usage)
+        self.assertIn("chatgpt.com", definition.network_requirements[0].allowed_hosts)
 
     def test_store_hydrates_legacy_provider_definition_with_inferred_role(self) -> None:
         store = self.make_store()

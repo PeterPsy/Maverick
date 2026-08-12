@@ -7,13 +7,20 @@ from datetime import UTC, datetime
 from inspect import signature
 
 from core.observability.service import record_platform_audit, record_platform_event
-from core.providers.errors import ProviderCapabilityError, ProviderError, ProviderNotFoundError, ProviderSelectionError
+from core.providers.errors import (
+    ProviderCapabilityError,
+    ProviderError,
+    ProviderNotFoundError,
+    ProviderSelectionError,
+    ProviderUsageUnavailableError,
+)
 from core.providers.models import (
     ProviderCredentialBinding,
     ProviderDefinition,
     ProviderHostedSelection,
     ProviderSelection,
     ProviderSpeechSelection,
+    ProviderSubscriptionUsage,
     RoutingDecision,
     RuntimeBackendLaunchSpec,
     WorkspaceProviderStatus,
@@ -844,6 +851,52 @@ def resolve_workspace_provider_status(
         selection=resolved_selection,
         available_providers=available_providers,
     )
+
+
+def read_workspace_provider_subscription_usage(
+    store: ProviderStore,
+    *,
+    workspace_id: str,
+    registry: ProviderRegistry | None = None,
+    codex_command: str | None = None,
+    now: datetime | None = None,
+) -> list[ProviderSubscriptionUsage]:
+    """Read supported subscription limits for the active workspace provider."""
+    active_registry = effective_provider_registry(
+        store,
+        registry=registry,
+        codex_command=codex_command,
+    )
+    status = resolve_workspace_provider_status(
+        store,
+        workspace_id=workspace_id,
+        registry=active_registry,
+        codex_command=codex_command,
+    )
+    definition = status.active_provider
+    if definition is None or not definition.capabilities.supports_subscription_usage:
+        return []
+    fetched_at = now or utcnow()
+    try:
+        adapter = active_registry.get_subscription_usage_adapter(definition.provider_id)
+        usage = adapter.read_subscription_usage()
+    except ProviderUsageUnavailableError as error:
+        usage = ProviderSubscriptionUsage(
+            provider_id=definition.provider_id,
+            provider_label=definition.label,
+            available=False,
+            fetched_at=fetched_at,
+            unavailable_reason=error.reason,
+        )
+    except ProviderError:
+        usage = ProviderSubscriptionUsage(
+            provider_id=definition.provider_id,
+            provider_label=definition.label,
+            available=False,
+            fetched_at=fetched_at,
+            unavailable_reason="provider_unavailable",
+        )
+    return [usage]
 
 
 def build_resolved_runtime_backend_launch_spec(

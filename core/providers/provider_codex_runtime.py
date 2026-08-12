@@ -8,7 +8,14 @@ from pathlib import Path
 import shutil
 from typing import TYPE_CHECKING
 
-from core.providers.models import ProviderCapabilitySet, ProviderDefinition, ProviderModelOption, ProviderReasoningOption
+from core.providers.models import (
+    ProviderCapabilitySet,
+    ProviderDefinition,
+    ProviderModelOption,
+    ProviderNetworkRequirement,
+    ProviderReasoningOption,
+    ProviderSubscriptionUsage,
+)
 from core.providers.provider_codex_command_paths import CodexCommandPathMixin
 from core.providers.provider_codex_commands import CodexCommandMixin
 from core.providers.provider_codex_config import CodexRuntimeConfigMixin
@@ -16,6 +23,7 @@ from core.providers.provider_codex_launch import CodexLaunchMixin
 from core.providers.provider_codex_models import CodexModelMixin
 from core.providers.provider_codex_runtime_home import CodexRuntimeHomeMixin
 from core.providers.provider_codex_steering import CodexSteeringMixin
+from core.providers.provider_codex_usage import CodexUsageTransport, read_codex_subscription_usage
 from core.providers.provider_codex_wrappers import refresh_workspace_maverick_wrappers
 
 if TYPE_CHECKING:
@@ -95,6 +103,7 @@ def build_codex_definition(
             supports_streaming_output=True,
             supports_tool_calling=True,
             supports_same_turn_input=True,
+            supports_subscription_usage=True,
             latency_class="interactive_runtime",
         ),
         default_model_family=default_model_id or _default_model_id(options),
@@ -103,6 +112,14 @@ def build_codex_definition(
         created_at=timestamp,
         updated_at=timestamp,
         model_options=options,
+        network_requirements=[
+            ProviderNetworkRequirement(
+                outbound_required=True,
+                allowed_hosts=["chatgpt.com"],
+                transport="https",
+                description="Read redaction-safe Codex subscription usage for Settings.",
+            )
+        ],
     )
 
 
@@ -160,14 +177,23 @@ class CodexProviderAdapter(
         *,
         codex_command: str | None = None,
         server_args: list[str] | None = None,
+        subscription_usage_transport: CodexUsageTransport | None = None,
     ) -> None:
         self.codex_command = str(codex_command or os.environ.get("MAVERICK_CODEX_COMMAND") or "").strip() or "codex"
         self.server_args = list(server_args or ["app-server", "--listen", "stdio://"])
+        self.subscription_usage_transport = subscription_usage_transport
 
 
     def provider_definition(self) -> ProviderDefinition:
         """Return the canonical definition exposed by this adapter."""
         return build_codex_definition()
+
+    def read_subscription_usage(self) -> ProviderSubscriptionUsage:
+        """Read redaction-safe account usage using the operator Codex login."""
+        return read_codex_subscription_usage(
+            self._source_codex_home(),
+            transport=self.subscription_usage_transport,
+        )
 
 
 def remove_codex_system_skills(runtime_home: Path) -> None:

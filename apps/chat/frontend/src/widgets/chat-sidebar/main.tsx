@@ -42,6 +42,33 @@ function ChatSidebarWidget() {
           <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.all}</span>
         </button>
         <button
+          aria-label="Hot chats from the last 24 hours"
+          aria-pressed={sidebar.threadFilter === "hot"}
+          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "hot" ? "is-active" : ""}`}
+          onClick={() => sidebar.setThreadFilter("hot")}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">
+            local_fire_department
+          </span>
+          <span className="bs-chat-sidebar-source-filter__label">Hot</span>
+          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.hot}</span>
+        </button>
+        <button
+          aria-label="Unread or active chats"
+          aria-pressed={sidebar.threadFilter === "unread"}
+          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "unread" ? "is-active" : ""}`}
+          onClick={() => sidebar.setThreadFilter("unread")}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">
+            mark_chat_unread
+          </span>
+          <span className="bs-chat-sidebar-source-filter__label">Unread</span>
+          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.unread}</span>
+        </button>
+        <span aria-hidden="true" className="bs-chat-sidebar-source-filter__separator" />
+        <button
           aria-label="OpenDesign chats"
           aria-pressed={sidebar.threadFilter === "opendesign"}
           className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "opendesign" ? "is-active" : ""}`}
@@ -79,19 +106,6 @@ function ChatSidebarWidget() {
           </span>
           <span className="bs-chat-sidebar-source-filter__label">Multi</span>
           <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.multi_agent}</span>
-        </button>
-        <button
-          aria-label="Unread or active chats"
-          aria-pressed={sidebar.threadFilter === "unread"}
-          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "unread" ? "is-active" : ""}`}
-          onClick={() => sidebar.setThreadFilter("unread")}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            mark_chat_unread
-          </span>
-          <span className="bs-chat-sidebar-source-filter__label">Unread</span>
-          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.unread}</span>
         </button>
       </div>
 

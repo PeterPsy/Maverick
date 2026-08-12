@@ -48,6 +48,24 @@ describe("chat sidebar search", () => {
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*-webkit-backdrop-filter:\s*blur\(26px\);/);
   });
 
+  it("separates the primary chat filters from feature filters", () => {
+    const source = readStyle("main.tsx");
+    const allIndex = source.indexOf('sidebar.setThreadFilter("all")');
+    const hotIndex = source.indexOf('sidebar.setThreadFilter("hot")');
+    const unreadIndex = source.indexOf('sidebar.setThreadFilter("unread")');
+    const separatorIndex = source.indexOf("bs-chat-sidebar-source-filter__separator");
+    const openDesignIndex = source.indexOf('sidebar.setThreadFilter("opendesign")');
+    const styles = readStyle("styles.css");
+
+    expect(source).toContain("local_fire_department");
+    expect(allIndex).toBeGreaterThan(-1);
+    expect(hotIndex).toBeGreaterThan(allIndex);
+    expect(unreadIndex).toBeGreaterThan(hotIndex);
+    expect(separatorIndex).toBeGreaterThan(unreadIndex);
+    expect(openDesignIndex).toBeGreaterThan(separatorIndex);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__separator\s*{[\s\S]*flex:\s*0 0 1px;/);
+  });
+
   it("collapses non-All filter labels when the sidebar iframe is narrow", () => {
     const styles = readStyle("styles.css");
 

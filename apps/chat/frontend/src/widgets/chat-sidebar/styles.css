@@ -244,6 +244,15 @@ input {
   height: 0;
 }
 
+.bs-chat-sidebar-source-filter__separator {
+  flex: 0 0 1px;
+  width: 1px;
+  height: 1.35rem;
+  margin: 0 0.08rem;
+  border-radius: 999px;
+  background: var(--chat-sidebar-soft-border);
+}
+
 .bs-chat-sidebar-source-filter__button {
   display: inline-flex;
   align-items: center;

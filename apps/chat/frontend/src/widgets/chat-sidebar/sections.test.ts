@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { ChatProject, ChatThread } from "../../api/client";
-import { buildSections, filterThreads, filterThreadsForSidebar, isThreadBusy, isThreadUnread, threadSourceBadges } from "./sections";
+import {
+  HOT_THREAD_WINDOW_MS,
+  buildSections,
+  filterThreads,
+  filterThreadsForSidebar,
+  isThreadBusy,
+  isThreadHot,
+  isThreadUnread,
+  threadSourceBadges,
+} from "./sections";
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -93,6 +102,29 @@ describe("chat sidebar runtime status", () => {
     ]);
     expect(buildSections([], [chatThread, multiThread], "multi_agent", multiAgentThreadIds)[0].items.map((item) => item.thread_id)).toEqual([
       "multi-thread",
+    ]);
+  });
+
+  it("filters chats with activity in the last 24 hours for the Hot view", () => {
+    const referenceTime = Date.parse("2026-08-12T18:00:00.000Z");
+    const recentThread = thread({ thread_id: "recent-thread", updated_at: "2026-08-12T17:00:00.000Z" });
+    const boundaryThread = thread({ thread_id: "boundary-thread", updated_at: "2026-08-11T18:00:00.000Z" });
+    const oldThread = thread({ thread_id: "old-thread", updated_at: "2026-08-11T17:59:59.999Z" });
+    const futureThread = thread({ thread_id: "future-thread", updated_at: "2026-08-12T18:00:00.001Z" });
+    const threads = [recentThread, boundaryThread, oldThread, futureThread];
+
+    expect(HOT_THREAD_WINDOW_MS).toBe(86_400_000);
+    expect(isThreadHot(recentThread, referenceTime)).toBe(true);
+    expect(isThreadHot(boundaryThread, referenceTime)).toBe(true);
+    expect(isThreadHot(oldThread, referenceTime)).toBe(false);
+    expect(isThreadHot(futureThread, referenceTime)).toBe(false);
+    expect(filterThreads(threads, "hot", new Set(), referenceTime).map((item) => item.thread_id)).toEqual([
+      "recent-thread",
+      "boundary-thread",
+    ]);
+    expect(buildSections([], threads, "hot", new Set(), null, referenceTime)[0].items.map((item) => item.thread_id)).toEqual([
+      "recent-thread",
+      "boundary-thread",
     ]);
   });
 

@@ -1,5 +1,8 @@
 import { ChatProject, ChatThread } from "../../api/client";
 import { isOpenDesignSourceApp, sourceAppPresentation } from "../../lib/sourceAppPresentation";
+import { threadLastMessageTimestamp } from "./threadTimestamps";
+
+export const HOT_THREAD_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export type FolderSection = {
   id: string;
@@ -12,7 +15,7 @@ export type FolderSection = {
   emptyLabel: string;
 };
 
-export type ThreadFilter = "all" | "opendesign" | "senses" | "multi_agent" | "unread";
+export type ThreadFilter = "all" | "hot" | "unread" | "opendesign" | "senses" | "multi_agent";
 
 export type ThreadSourceBadge = {
   icon: string;
@@ -26,8 +29,9 @@ export function buildSections(
   threadFilter: ThreadFilter = "all",
   multiAgentThreadIds: ReadonlySet<string> = new Set(),
   retainedUnreadThreadId: string | null = null,
+  referenceTime: number = Date.now(),
 ): FolderSection[] {
-  const visibleThreads = filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId);
+  const visibleThreads = filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId, referenceTime);
   const projectSections: FolderSection[] = projects
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }))
@@ -90,7 +94,11 @@ export function filterThreads(
   threads: ChatThread[],
   threadFilter: ThreadFilter,
   multiAgentThreadIds: ReadonlySet<string> = new Set(),
+  referenceTime: number = Date.now(),
 ): ChatThread[] {
+  if (threadFilter === "hot") {
+    return threads.filter((thread) => isThreadHot(thread, referenceTime));
+  }
   if (threadFilter === "senses") {
     return threads.filter(isSensesThread);
   }
@@ -111,11 +119,12 @@ export function filterThreadsForSidebar(
   threadFilter: ThreadFilter,
   multiAgentThreadIds: ReadonlySet<string> = new Set(),
   retainedUnreadThreadId: string | null = null,
+  referenceTime: number = Date.now(),
 ): ChatThread[] {
   if (threadFilter === "unread" && retainedUnreadThreadId) {
     return threads.filter((thread) => thread.thread_id === retainedUnreadThreadId || isThreadUnreadOrInProgress(thread));
   }
-  return filterThreads(threads, threadFilter, multiAgentThreadIds);
+  return filterThreads(threads, threadFilter, multiAgentThreadIds, referenceTime);
 }
 
 export function isSensesThread(thread: ChatThread): boolean {
@@ -148,6 +157,12 @@ export function isThreadBusy(thread: ChatThread): boolean {
 
 export function isThreadTitlePending(thread: ChatThread | null | undefined): boolean {
   return Boolean(thread?.title_pending);
+}
+
+export function isThreadHot(thread: ChatThread, referenceTime: number = Date.now()): boolean {
+  const activityTime = threadLastMessageTimestamp(thread);
+  const age = referenceTime - activityTime;
+  return activityTime > 0 && age >= 0 && age <= HOT_THREAD_WINDOW_MS;
 }
 
 export function isThreadUnread(thread: ChatThread): boolean {

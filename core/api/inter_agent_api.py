@@ -54,6 +54,7 @@ from core.inter_agent.surfaces import (
 from core.providers.errors import ProviderError
 from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeTurnNotFoundError
 from core.runtime.runtime_session import runtime_session_allows_user_thread
+from core.runtime.transcript_service import read_runtime_event_history
 from core.skills.runtime_catalog import (
     selected_runtime_skill_catalog_app_id_for_source_app,
     validate_runtime_skill_catalog_provider_app_id,
@@ -692,7 +693,7 @@ def _runtime_participant_transcript_items(state: PlatformState, participant, *, 
     if session.workspace_id != participant.workspace_id:
         return [], set()
     turns = sorted(state.runtime_store.list_turns(session_id), key=lambda item: (item.created_at, item.turn_id))
-    events = sorted(state.runtime_store.list_events(session_id), key=lambda item: (item.created_at, item.event_id))
+    events = read_runtime_event_history(state.runtime_store, session_id).events
     events_by_turn: dict[str, list] = {}
     for event in events:
         if event.turn_id:

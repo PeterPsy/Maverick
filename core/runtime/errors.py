@@ -31,5 +31,18 @@ class RuntimeSessionHiddenError(RuntimeDomainError):
     """Raised when a hidden runtime session is used as a user-visible thread."""
 
 
+class RuntimeTranscriptAccessError(RuntimeDomainError):
+    """Raised when a transcript read cannot be authorized or resolved safely."""
+
+    def __init__(self, reason: str, *, status_code: int) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.status_code = status_code
+
+
+class RuntimeTranscriptValidationError(RuntimeDomainError):
+    """Raised when transcript pagination or window arguments are invalid."""
+
+
 class RuntimeTransitionError(RuntimeDomainError):
     """Raised when one runtime lifecycle transition is invalid."""

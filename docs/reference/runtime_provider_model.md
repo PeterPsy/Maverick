@@ -222,3 +222,19 @@ Large tool-call event payloads are compacted in the runtime recorder before pers
 Runtime-token CLI responses can request provider-oriented compaction for controlled Maverick CLI calls, and Maverick-managed Codex sessions install a Maverick-owned `PostToolUse` hook plus matching Codex `hooks.state` trusted hash to replace large `Bash` shell tool results before those results enter Codex provider history when Codex runs the hook. Maverick disables Codex `unified_exec` in these managed sessions because Codex hook coverage for that richer shell path is currently incomplete. Automated Maverick tests cover the bridge/config/trust-state/fallback/diagnostic behavior; deployments that need a hard provider-token guarantee must verify an actual trusted Codex hook execution.
 
 See `docs/reference/runtime_output_compaction.md` for the event contract, provider hook contract, operational flag, and Phase 1/2/3 status.
+
+## Agent-Facing Transcript Reads
+
+The runtime owns the official read-only conversation projection exposed as
+`core.runtime.threads.list`, `core.runtime.transcript.read`, and
+`core.runtime.transcript.message.read` over both CLI and MCP. The projection
+pages the append-only event history through `RuntimeStore.list_event_page()`;
+it never reconstructs a complete chat from the 500-event recent tail.
+
+The `messages` profile includes queued and steered user messages, canonical
+final assistant output (falling back to deltas when necessary), visible
+structured output, and failed/cancelled/timed-out states. It omits prompts,
+provider-private payloads and ids, runtime filesystem/environment values, and
+raw technical tool output. Long text is exposed through explicit character
+windows, and provider-oriented CLI compaction recognizes those already-bounded
+message windows so it does not silently summarize them.

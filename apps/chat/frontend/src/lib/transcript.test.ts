@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { RuntimeEvent } from "../api/client";
 import { clearTranscriptProjectionCache, eventsToMessages } from "./transcript";
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
 
 function event(overrides: Partial<RuntimeEvent>): RuntimeEvent {
   return {
@@ -17,6 +22,23 @@ function event(overrides: Partial<RuntimeEvent>): RuntimeEvent {
 describe("runtime event transcript projection", () => {
   beforeEach(() => {
     clearTranscriptProjectionCache();
+  });
+
+  it("matches the shared core/frontend golden projection fixture", () => {
+    const fixturePath = resolve(currentDir, "../../../../../tests/fixtures/runtime_transcript_projection.json");
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8")) as {
+      cases: Array<{
+        name: string;
+        events: RuntimeEvent[];
+        expected_messages: Array<{ id: string; role: string; content: string }>;
+      }>;
+    };
+    for (const testCase of fixture.cases) {
+      expect(
+        eventsToMessages(testCase.events).map(({ id, role, content }) => ({ id, role, content })),
+        testCase.name,
+      ).toEqual(testCase.expected_messages);
+    }
   });
 
   it("reuses projections for equivalent event lists with the same last event", () => {

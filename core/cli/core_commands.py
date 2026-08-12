@@ -15,6 +15,7 @@ from core.cli.persistence_commands import persistence_command_specs
 from core.cli.models import CliCommandDefinition
 from core.cli.recovery_commands import recovery_command_specs
 from core.cli.runtime_provider_commands import runtime_provider_command_specs
+from core.cli.runtime_transcript_commands import runtime_transcript_command_specs
 from core.cli.secret_commands import secret_command_specs
 from core.cli.workspace_commands import workspace_command_specs
 from core.identity.store import IdentityStore
@@ -73,6 +74,12 @@ def _core_command_specs(
             runtime_store=runtime_store,
             provider_registry=provider_registry,
             secret_store=secret_store,
+            observability_store=observability_store,
+        )
+    )
+    specs.extend(
+        runtime_transcript_command_specs(
+            runtime_store=runtime_store,
             observability_store=observability_store,
         )
     )

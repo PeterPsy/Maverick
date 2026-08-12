@@ -200,7 +200,7 @@ def _preserve_document_body_field(root: Any, path: JsonPath, *, argv: Sequence[s
         return False
     field_name = path[0]
     if field_name == "content":
-        return _is_developer_context_read_result(root, argv=argv)
+        return _is_developer_context_read_result(root, argv=argv) or _is_runtime_transcript_message_read_result(root)
     if field_name == "text":
         return _is_storage_text_read_result(root)
     if field_name == "preview_text":
@@ -227,6 +227,19 @@ def _is_storage_text_read_result(root: Mapping[str, Any]) -> bool:
         and isinstance(root.get("offset"), int)
         and isinstance(root.get("range_end"), int)
         and isinstance(root.get("has_more"), bool)
+    )
+
+
+def _is_runtime_transcript_message_read_result(root: Mapping[str, Any]) -> bool:
+    return (
+        isinstance(root.get("thread_id"), str)
+        and isinstance(root.get("message_id"), str)
+        and isinstance(root.get("content"), str)
+        and isinstance(root.get("content_char_count"), int)
+        and isinstance(root.get("offset"), int)
+        and isinstance(root.get("range_end"), int)
+        and isinstance(root.get("has_more"), bool)
+        and root.get("content_trust") == "untrusted_conversation_data"
     )
 
 

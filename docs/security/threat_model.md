@@ -246,6 +246,17 @@ remains a production blocker outside this transport boundary.
 
 Cookies, bearer tokens, or websocket channels are reused to perform privileged operations.
 
+Agent-facing historical transcript reads use the already lifecycle-validated
+runtime bearer context but authorize the target separately. Same-workspace
+membership and full-access execution are insufficient: only the target owner,
+a workspace/platform admin, or a platform-minted `read_transcript` grant may
+read it. Hidden inter-agent participant sessions and cross-workspace targets
+fail closed as not found, and thread catalog filtering happens before search
+and pagination so titles and counts do not leak. Transcript payloads are a
+bounded allowlisted projection marked as untrusted conversation data. Read
+audits exclude message content, prompts, tool output, paths, provider ids, and
+credentials.
+
 ### Supply-chain compromise
 
 Dependencies, app artifacts, or release artifacts are replaced or tampered with.

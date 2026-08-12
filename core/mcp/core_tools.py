@@ -14,6 +14,7 @@ from core.mcp.persistence_tools import persistence_tool_specs
 from core.mcp.models import McpToolDefinition
 from core.mcp.recovery_tools import recovery_tool_specs
 from core.mcp.runtime_provider_tools import runtime_provider_tool_specs
+from core.mcp.runtime_transcript_tools import runtime_transcript_tool_specs
 from core.mcp.secret_tools import secret_tool_specs
 from core.mcp.workspace_tools import workspace_tool_specs
 from core.inter_agent.store import InterAgentStore
@@ -57,6 +58,12 @@ def _core_tool_specs(
             runtime_store=runtime_store,
             provider_registry=provider_registry,
             secret_store=secret_store,
+            observability_store=observability_store,
+        )
+    )
+    specs.extend(
+        runtime_transcript_tool_specs(
+            runtime_store=runtime_store,
             observability_store=observability_store,
         )
     )

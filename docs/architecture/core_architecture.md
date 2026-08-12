@@ -582,6 +582,29 @@ A chat thread is the user-visible runtime conversation record. It stores the thr
 
 The runtime thread catalog is a bounded transport contract. `GET /api/runtime/threads` and the initial `runtime.thread.snapshot` WebSocket frame return the first recency-sorted page, currently limited to 50 user-visible threads, with `threads_page` metadata for limit, cursor, query, and `has_more`. The REST list accepts a bounded metadata query so shell search surfaces can backfill matching older threads without loading the full catalog. Mutating thread APIs return only the changed thread or removed ids plus a page hint; they must not reattach a full thread catalog to create, rename, read-receipt, delete, or clear responses.
 
+Agents read completed or active user-visible conversations through the core-owned
+read-only CLI/MCP surfaces `core.runtime.threads.list`,
+`core.runtime.transcript.read`, and
+`core.runtime.transcript.message.read`. These surfaces are a safe message
+projection, not access to raw runtime events or session files. The catalog
+filters authorization before metadata search and pagination. Transcript reads
+use only the paged append-only event-history contract, capture a newest-event
+watermark, return stable message ids and explicit projection warnings, and use
+character-window continuation for long messages. Returned conversation content
+is labeled `untrusted_conversation_data`; system/developer prompts, provider
+payloads and thread ids, runtime paths, environments, and raw tool output are
+not part of the default `messages` profile.
+
+Transcript authority is independent from execution mode. The target must remain
+a `thread_visibility=user` session in the caller's workspace, and the caller
+must be its owner, a workspace/platform admin, or hold a platform-minted
+`read_transcript` grant as the user or calling runtime session. Hidden
+`inter_agent_participant` sessions remain available only through their existing
+participant-transcript projection. Every allowed or denied transcript read is
+audited without conversation text; audit payloads contain only caller/target
+identifiers, authorization relation, profile, page/window counts, redaction
+state, and outcome.
+
 ### 7. Execution policy
 
 The core owns:
@@ -856,6 +879,13 @@ The same visibility policy applies to App Store read surfaces.
 Workspace-local app projects without a workspace binding are management material and should be visible only to platform admins or workspace admins.
 
 Runtime sessions carry ownership metadata such as `owner_user_id`, `created_by_user_id`, `creator_runtime_session_id`, source app id, and a small platform-minted structured grant list. Destructive runtime operations such as cleanup, interrupt, and restart must authorize against that record: the owner may operate their own session, a workspace admin may operate sessions in that workspace, platform admin authority is a separate explicit override, and any non-owner grant must identify the operation plus a concrete grantee principal. Workspace membership alone is not enough to delete or interrupt another user's runtime session, and client-submitted runtime creation payloads must not mint cleanup, interrupt, or restart grants.
+
+The same ownership rule protects agent-facing transcript reads. Full-access
+execution is not transcript authority, and ordinary workspace membership does
+not reveal another member's thread titles, counts, or messages. A non-owner
+requires workspace/platform admin authority or a platform-minted
+`read_transcript` grant; cross-workspace and hidden-session targets fail closed
+as not found.
 
 Workspace-wide selections such as provider/model choice and app dependency bindings are governance state. They require workspace admin or platform admin authority; ordinary workspace members may read the resulting status needed to use the workspace, but they must not change the setting for everyone.
 

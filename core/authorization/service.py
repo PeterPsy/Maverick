@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Iterable
 
 from core.authorization.errors import AuthorizationError
 from core.identity.models import UserRecord
-from core.runtime.runtime_session import RuntimeSessionGrantRecord, RuntimeSessionRecord
+from core.runtime.runtime_session import RuntimeSessionGrantRecord, RuntimeSessionRecord, runtime_session_allows_user_thread
+from core.runtime.transcript_models import RuntimeTranscriptAuthorizationRelation
 from core.workspaces.errors import WorkspaceMembershipError, WorkspaceNotFoundError
 from core.workspaces.models import WorkspaceMembershipRecord, WorkspaceQuotaRecord
 
@@ -252,6 +253,38 @@ def require_runtime_session_operation(
     if _session_grants_operation_to_user(session, operation=operation, user_id=user.user_id):
         return
     raise AuthorizationError(f"runtime_session_{operation}_forbidden")
+
+
+def require_runtime_transcript_read_context(
+    *,
+    session: RuntimeSessionRecord,
+    workspace_id: str,
+    user_id: str | None,
+    platform_role: str | None,
+    workspace_role: str | None,
+    caller_runtime_session_id: str | None,
+) -> RuntimeTranscriptAuthorizationRelation:
+    """Authorize a safe transcript read independently from execution mode."""
+    if session.workspace_id != workspace_id or not runtime_session_allows_user_thread(session):
+        raise AuthorizationError("runtime_thread_not_found")
+    if platform_role == "admin" or workspace_role == "admin":
+        return "admin"
+    if user_id and session.owner_user_id == user_id:
+        return "owner"
+    if user_id and _session_grants_operation_to_user(
+        session,
+        operation="read_transcript",
+        user_id=user_id,
+    ):
+        return "grant"
+    if caller_runtime_session_id and _session_grants_operation_to_principal(
+        session,
+        operation="read_transcript",
+        grantee_kind="runtime_session",
+        grantee_id=caller_runtime_session_id,
+    ):
+        return "grant"
+    raise AuthorizationError("transcript_read_forbidden")
 
 
 def _session_grants_operation_to_user(session: RuntimeSessionRecord, *, operation: str, user_id: str) -> bool:

@@ -165,6 +165,30 @@ class RuntimeCliResultCompactionTest(unittest.TestCase):
         self.assertEqual(compacted["text"], document)
         self.assertNotIn("output_compaction", compacted)
 
+    def test_provider_compact_preserves_explicit_transcript_message_window(self) -> None:
+        content = "😀" * 12_000
+        compacted = compact_runtime_cli_result(
+            {
+                "status_code": 200,
+                "thread_id": "thread-1",
+                "message_id": "turn-1:agent",
+                "content": content,
+                "content_char_count": 24_000,
+                "offset": 0,
+                "range_end": 12_000,
+                "has_more": True,
+                "next_offset": 12_000,
+                "complete": False,
+                "content_trust": "untrusted_conversation_data",
+            },
+            argv=["core", "runtime", "transcript", "message", "read"],
+            runtime_session_id="sess-1",
+            policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+        )
+
+        self.assertEqual(compacted["content"], content)
+        self.assertNotIn("output_compaction", compacted)
+
     def test_provider_compact_preserves_storage_preview_text_for_handoffs(self) -> None:
         preview = "Memory-ready preview\n" + ("preview line\n" * 3000)
         compacted = compact_runtime_cli_result(

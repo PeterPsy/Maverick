@@ -166,6 +166,63 @@
           "content": "Seconda."
         }
       ]
+    },
+    {
+      "name": "final_suffix_preserves_leading_separator",
+      "turn": {
+        "turn_id": "turn-spacing",
+        "session_id": "session-golden",
+        "workspace_id": "default",
+        "status": "completed",
+        "input_text": null,
+        "client_message_id": null,
+        "created_at": "2026-08-12T12:02:00+00:00",
+        "updated_at": "2026-08-12T12:02:02+00:00",
+        "started_at": "2026-08-12T12:02:00+00:00",
+        "completed_at": "2026-08-12T12:02:02+00:00",
+        "failure_reason": null
+      },
+      "events": [
+        {
+          "event_id": "spacing-delta",
+          "workspace_id": "default",
+          "session_id": "session-golden",
+          "plane": "turn",
+          "event_type": "runtime.output.delta",
+          "turn_id": "turn-spacing",
+          "process_id": null,
+          "payload": {
+            "text": "Hello"
+          },
+          "created_at": "2026-08-12T12:02:01+00:00"
+        },
+        {
+          "event_id": "spacing-final",
+          "workspace_id": "default",
+          "session_id": "session-golden",
+          "plane": "turn",
+          "event_type": "runtime.output.final",
+          "turn_id": "turn-spacing",
+          "process_id": null,
+          "payload": {
+            "text": "Hello world",
+            "complete_text": "Hello world"
+          },
+          "created_at": "2026-08-12T12:02:02+00:00"
+        }
+      ],
+      "expected_messages": [
+        {
+          "id": "turn-spacing:agent:stream:0",
+          "role": "agent",
+          "content": "Hello"
+        },
+        {
+          "id": "turn-spacing:agent",
+          "role": "agent",
+          "content": " world"
+        }
+      ]
     }
   ]
 }

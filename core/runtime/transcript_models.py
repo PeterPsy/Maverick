@@ -36,6 +36,7 @@ class RuntimeTranscriptMessage:
     attachments: list[dict[str, Any]] = field(default_factory=list)
     app_references: list[dict[str, Any]] = field(default_factory=list)
     structured_content: dict[str, Any] | None = None
+    structured_content_truncated: bool = False
     redactions_applied: bool = False
 
 
@@ -54,5 +55,6 @@ class RuntimeEventHistoryRead:
 
     events: list
     snapshot_newest_event_id: str | None
+    snapshot_newest_event_created_at: datetime | None
     warnings: list[str]
     complete: bool

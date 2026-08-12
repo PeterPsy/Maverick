@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from core.runtime.errors import RuntimeTranscriptAccessError, RuntimeTranscriptValidationError
@@ -10,7 +11,11 @@ from core.runtime.transcript_access import resolve_authorized_transcript_thread
 from core.runtime.transcript_audit import record_runtime_transcript_audit
 from core.runtime.transcript_catalog import list_runtime_transcript_threads
 from core.runtime.transcript_history import read_runtime_event_history
-from core.runtime.transcript_models import RuntimeTranscriptReadContext
+from core.runtime.transcript_models import (
+    RuntimeEventHistoryRead,
+    RuntimeTranscriptProjection,
+    RuntimeTranscriptReadContext,
+)
 from core.runtime.transcript_payloads import (
     TRANSCRIPT_CONTENT_TRUST,
     bounded_int,
@@ -76,7 +81,7 @@ def read_runtime_transcript(
         session.session_id,
         snapshot_newest_event_id=snapshot_newest_event_id,
     )
-    projection = project_runtime_transcript(history.events, store.list_turns(session.session_id))
+    projection = _project_history(store, session.session_id, history)
     messages, page = message_page(
         projection.messages,
         limit=bounded_limit,
@@ -153,7 +158,7 @@ def read_runtime_transcript_message(
         session.session_id,
         snapshot_newest_event_id=snapshot_newest_event_id,
     )
-    projection = project_runtime_transcript(history.events, store.list_turns(session.session_id))
+    projection = _project_history(store, session.session_id, history)
     message = next((item for item in projection.messages if item.message_id == message_id), None)
     if message is None:
         error = RuntimeTranscriptAccessError("transcript_message_not_found", status_code=404)
@@ -236,3 +241,29 @@ def _audit_denied_read(
         profile=profile,
         page_limit=limit,
     )
+
+
+def _project_history(
+    store: RuntimeStore,
+    session_id: str,
+    history: RuntimeEventHistoryRead,
+) -> RuntimeTranscriptProjection:
+    """Project events and turn fallbacks from the same event watermark."""
+    turns = store.list_turns(session_id)
+    cutoff = history.snapshot_newest_event_created_at
+    if cutoff is None:
+        return project_runtime_transcript(history.events, turns if history.complete else [])
+    snapshot_turns = []
+    for turn in turns:
+        if turn.created_at > cutoff:
+            continue
+        if turn.updated_at > cutoff:
+            turn = replace(
+                turn,
+                status="active",
+                updated_at=cutoff,
+                completed_at=None,
+                failure_reason=None,
+            )
+        snapshot_turns.append(turn)
+    return project_runtime_transcript(history.events, snapshot_turns)

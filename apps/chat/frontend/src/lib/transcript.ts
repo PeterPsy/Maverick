@@ -637,11 +637,11 @@ function finalTextRemainder(finalText: string, renderedText: string): string {
     return finalText;
   }
   if (finalText.startsWith(renderedText)) {
-    return finalText.slice(renderedText.length).trimStart();
+    return finalText.slice(renderedText.length);
   }
   const whitespaceInsensitivePrefixEnd = prefixEndIgnoringWhitespace(finalText, renderedText);
   if (whitespaceInsensitivePrefixEnd !== null) {
-    return finalText.slice(whitespaceInsensitivePrefixEnd).trimStart();
+    return finalText.slice(whitespaceInsensitivePrefixEnd);
   }
   if (normalizedText(finalText) === normalizedText(renderedText)) {
     return "";

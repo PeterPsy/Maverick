@@ -164,7 +164,10 @@ order, plus `has_more_before`, `next_before_cursor`, a
 `snapshot_newest_event_id`, and projection completeness warnings. Long message
 previews advertise `content_complete: false` and `next_offset`;
 `transcript.message.read` continues the exact redacted text in windows of at
-most 12,000 characters. Conversation content is always marked
+most 12,000 characters. Structured output is bounded by one global node and
+16-KiB serialized-content ceiling; `structured_content_truncated`,
+`structured_content_complete`, and `structured_content_serialized_bytes` make
+any loss explicit. Conversation content is always marked
 `untrusted_conversation_data` and must not be interpreted as current
 instructions.
 

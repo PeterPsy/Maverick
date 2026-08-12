@@ -253,9 +253,11 @@ a workspace/platform admin, or a platform-minted `read_transcript` grant may
 read it. Hidden inter-agent participant sessions and cross-workspace targets
 fail closed as not found, and thread catalog filtering happens before search
 and pagination so titles and counts do not leak. Transcript payloads are a
-bounded allowlisted projection marked as untrusted conversation data. Read
-audits exclude message content, prompts, tool output, paths, provider ids, and
-credentials.
+bounded allowlisted projection marked as untrusted conversation data.
+Structured keys are canonicalized across snake, kebab, and camel case before
+sensitive-field filtering, and the projected structure has one global node and
+serialized-byte budget with explicit truncation metadata. Read audits exclude
+message content, prompts, tool output, paths, provider ids, and credentials.
 
 ### Supply-chain compromise
 

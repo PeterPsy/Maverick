@@ -600,10 +600,14 @@ projection, not access to raw runtime events or session files. The catalog
 filters authorization before metadata search and pagination. Transcript reads
 use only the paged append-only event-history contract, capture a newest-event
 watermark, return stable message ids and explicit projection warnings, and use
-character-window continuation for long messages. Returned conversation content
-is labeled `untrusted_conversation_data`; system/developer prompts, provider
-payloads and thread ids, runtime paths, environments, and raw tool output are
-not part of the default `messages` profile.
+character-window continuation for long messages. Turn-record fallbacks are cut
+to the same event-watermark timestamp so later turns or later mutable status do
+not enter an earlier snapshot. Returned conversation content is labeled
+`untrusted_conversation_data`; system/developer prompts, provider payloads and
+thread ids, runtime paths, environments, and raw tool output are not part of
+the default `messages` profile. Structured payload keys are canonicalized
+before sensitive-field filtering and share one global node/serialized-byte
+budget; truncation is explicit through structured-content completeness fields.
 
 Transcript authority is independent from execution mode. The target must remain
 a `thread_visibility=user` session in the caller's workspace, and the caller

@@ -60,9 +60,14 @@ def read_runtime_event_history(
         else:
             events = events[: snapshot_index + 1]
             captured_newest_event_id = requested_snapshot
+    snapshot_event = next(
+        (event for event in reversed(events) if event.event_id == captured_newest_event_id),
+        None,
+    )
     return RuntimeEventHistoryRead(
         events=events,
         snapshot_newest_event_id=captured_newest_event_id,
+        snapshot_newest_event_created_at=snapshot_event.created_at if snapshot_event is not None else None,
         warnings=warnings,
         complete=complete,
     )

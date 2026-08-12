@@ -140,7 +140,7 @@ def project_runtime_transcript(
             continue
         if event.event_type == "runtime.output.structured":
             flush_output(turn_id, complete=turn_id in latest_final_by_turn)
-            structured, redacted = _structured_from_event(payload)
+            structured, redacted, truncated = _structured_from_event(payload)
             if structured is not None:
                 push(
                     RuntimeTranscriptMessage(
@@ -152,6 +152,7 @@ def project_runtime_transcript(
                         created_at=event.created_at,
                         source_event_ids=[event.event_id],
                         structured_content=structured,
+                        structured_content_truncated=truncated,
                         redactions_applied=redacted,
                     ),
                     order_event_id=event.event_id,
@@ -243,19 +244,19 @@ def _latest_final_events(events: list[RuntimeEventRecord]) -> dict[str, RuntimeE
     return result
 
 
-def _structured_from_event(payload: dict) -> tuple[dict | None, bool]:
+def _structured_from_event(payload: dict) -> tuple[dict | None, bool, bool]:
     for key in ("structured_content", "structuredContent", "content"):
-        structured, redacted = safe_structured_content(payload.get(key))
+        structured, redacted, truncated = safe_structured_content(payload.get(key))
         if structured is not None:
-            return structured, redacted
-    return None, False
+            return structured, redacted, truncated
+    return None, False, False
 
 
 def _project_final_output(event, *, turn_id: str, entries: list[_OrderedMessage], rendered_text: str, push) -> None:
     payload = event.payload if isinstance(event.payload, dict) else {}
     complete_text = payload.get("complete_text") if isinstance(payload.get("complete_text"), str) else ""
     final_text = payload.get("text") if isinstance(payload.get("text"), str) else ""
-    authoritative = complete_text.strip() or final_text.strip()
+    authoritative = complete_text if complete_text else final_text
     source_event_ids = [event.event_id]
     if complete_text and rendered_text:
         prefix_end = _prefix_end_ignoring_whitespace(complete_text, rendered_text)
@@ -267,7 +268,7 @@ def _project_final_output(event, *, turn_id: str, entries: list[_OrderedMessage]
             source_event_ids = [source for entry in removed for source in entry.message.source_event_ids] + source_event_ids
             entries[:] = [entry for entry in entries if entry not in removed]
         else:
-            authoritative = complete_text[prefix_end:].lstrip()
+            authoritative = complete_text[prefix_end:]
             if not authoritative:
                 stream_entries = [
                     entry for entry in entries
@@ -277,8 +278,8 @@ def _project_final_output(event, *, turn_id: str, entries: list[_OrderedMessage]
                     stream_entries[-1].message.source_event_ids.append(event.event_id)
     elif rendered_text:
         prefix_end = _prefix_end_ignoring_whitespace(final_text, rendered_text)
-        authoritative = final_text[prefix_end:].lstrip() if prefix_end is not None else final_text.strip()
-    structured, structured_redacted = _structured_from_event(payload)
+        authoritative = final_text[prefix_end:] if prefix_end is not None else final_text
+    structured, structured_redacted, structured_truncated = _structured_from_event(payload)
     if structured is not None:
         push(
             RuntimeTranscriptMessage(
@@ -290,6 +291,7 @@ def _project_final_output(event, *, turn_id: str, entries: list[_OrderedMessage]
                 created_at=event.created_at,
                 source_event_ids=[event.event_id],
                 structured_content=structured,
+                structured_content_truncated=structured_truncated,
                 redactions_applied=structured_redacted,
             ),
             order_event_id=event.event_id,

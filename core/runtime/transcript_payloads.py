@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from core.runtime.errors import RuntimeTranscriptValidationError
@@ -60,6 +61,11 @@ def message_payload(message: RuntimeTranscriptMessage, *, max_chars: int) -> dic
         payload["app_references"] = message.app_references
     if message.structured_content is not None:
         payload["structured_content"] = message.structured_content
+        payload["structured_content_truncated"] = message.structured_content_truncated
+        payload["structured_content_complete"] = not message.structured_content_truncated
+        payload["structured_content_serialized_bytes"] = len(
+            json.dumps(message.structured_content, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        )
     return payload
 
 

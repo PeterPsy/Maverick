@@ -2,6 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { act, useEffect } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -73,6 +74,15 @@ function SidebarOpenDesignFilterProbe() {
   const sidebar = useChatSidebarState();
   return (
     <button data-filter={sidebar.threadFilter} onClick={() => sidebar.setThreadFilter("opendesign")} type="button">
+      {sidebar.sections.flatMap((section) => section.items.map((item) => item.title)).join(",")}
+    </button>
+  );
+}
+
+function SidebarHotFilterProbe() {
+  const sidebar = useChatSidebarState();
+  return (
+    <button data-filter={sidebar.threadFilter} onClick={() => sidebar.setThreadFilter("hot")} type="button">
       {sidebar.sections.flatMap((section) => section.items.map((item) => item.title)).join(",")}
     </button>
   );
@@ -228,6 +238,47 @@ describe("useChatSidebarState search persistence", () => {
 
     expect(button?.dataset.filter).toBe("opendesign");
     expect(button?.textContent).toBe("OpenDesign chat");
+  });
+
+  it("shows a newly active chat in Hot as soon as the live catalog changes", async () => {
+    const initialTime = Date.parse("2026-08-12T12:00:00.000Z");
+    vi.setSystemTime(initialTime);
+    const initialHotThread = thread({
+      thread_id: "thread-initial-hot",
+      runtime_session_id: "session-initial-hot",
+      title: "Initial hot chat",
+      updated_at: "2026-08-12T11:00:00.000Z",
+    });
+    let setLiveThreads: Dispatch<SetStateAction<ChatThread[]>> | null = null;
+    mocks.useRuntimeThreads.mockImplementation(({ setThreads }: { setThreads: Dispatch<SetStateAction<ChatThread[]>> }) => {
+      setLiveThreads = setThreads;
+      useEffect(() => {
+        setThreads([initialHotThread]);
+      }, []);
+    });
+
+    await act(async () => {
+      root.render(<SidebarHotFilterProbe />);
+    });
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(button?.dataset.filter).toBe("hot");
+    expect(button?.textContent).toBe("Initial hot chat");
+
+    const liveThread = thread({
+      thread_id: "thread-live-hot",
+      runtime_session_id: "session-live-hot",
+      title: "Live hot chat",
+      updated_at: "2026-08-12T12:00:01.000Z",
+    });
+    vi.setSystemTime(initialTime + 1_000);
+    await act(async () => {
+      setLiveThreads?.((current) => [liveThread, ...current]);
+    });
+
+    expect(button?.textContent).toBe("Live hot chat,Initial hot chat");
   });
 });
 

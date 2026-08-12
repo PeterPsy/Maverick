@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatProject, ChatThread } from "../../api/client";
 import {
   applyThreadCatalogPayload,
@@ -54,7 +54,7 @@ const THREAD_FILTERS: ThreadFilter[] = ["all", "hot", "unread", "opendesign", "s
 
 export function useChatSidebarState() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
-  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [threads, setThreadCatalog] = useState<ChatThread[]>([]);
   const [multiAgentThreadIds, setMultiAgentThreadIds] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
@@ -77,6 +77,10 @@ export function useChatSidebarState() {
   const [isPending, setIsPending] = useState(false);
   const [isBulkDeletePending, setIsBulkDeletePending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const setThreads = useCallback<typeof setThreadCatalog>((nextThreads) => {
+    setThreadFilterReferenceTime(Date.now());
+    setThreadCatalog(nextThreads);
+  }, []);
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const transcriptSearchCacheRef = useRef<Map<string, TranscriptSearchCacheEntry>>(new Map());
   const lastPersistedSearchQueryRef = useRef("");

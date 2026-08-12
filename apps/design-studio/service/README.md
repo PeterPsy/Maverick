@@ -8,6 +8,18 @@ registry:
 service/vendor/open-design/<artifact-sha256>/
 ```
 
+and an independently verified web overlay below:
+
+```text
+service/vendor/open-design-web/<web-sha256>/
+```
+
+Control schema v2 selects both digests plus the OpenDesign version and data
+generation. The daemon requires `OD_STATIC_DIR` and
+`OD_STATIC_REGISTRY_ROOT`; both resolve to real, non-symlinked paths contained
+in the verified overlay registry. There is no fallback to web files embedded in
+the runtime closure.
+
 The primary distribution is the upstream image
 `ghcr.io/nexu-io/od:0.16.1`, pinned to OCI index
 `sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1`
@@ -37,14 +49,14 @@ and streams layers through owned temporary files. Layer extraction rejects path
 escape, unsafe links and special files and implements OCI whiteouts without
 following filesystem links.
 
-`opendesign_bundle.json` is the single distribution contract. Two independent
-pulls reconstruct and inventory the root filesystem, apply the one exact
-preimage-bound compiled boundary patch, export the exact upstream Git pin,
-apply the reviewed source patch series, and independently build the React web
-overlay with the frozen lockfile. They then stage the image's own musl loader,
-Node runtime, daemon and native dependency closure with that rebuilt web output,
-and generate the
-archive, file manifest, SBOM, licenses, NOTICE and signed provenance. Every
+`opendesign_bundle.json` is the single distribution contract. Runtime,
+web-build, and web-react patches are declared as separate components. Two
+independent pulls reconstruct and inventory the root filesystem, apply the one
+exact preimage-bound compiled boundary patch, export the exact upstream Git pin,
+apply only the reviewed runtime patches, and stage the image's own musl loader,
+Node runtime, daemon, and native dependency closure without static web output.
+They generate the archive, file manifest, SBOM, licenses, NOTICE and signed
+provenance. Every
 output must match byte-for-byte before publication. The launcher invokes only
 that imported loader and Node binary; the app contract deliberately declares no
 package manager and core therefore does not mount a host Node runtime.
@@ -61,10 +73,10 @@ A later browser launch must start a new process cleanly; no half-started relay o
 browser session is reused.
 
 The complete daemon/source runtime build remains under `fallback_build` only as
-a separately reviewed fallback. The primary artifact still requires a verified
-OCI daemon/runtime; only its web output is rebuilt from the same pinned source
-so component removal is performed at the React boundary. Runtime startup never
-contains a source tree, package manager or build step.
+a separately reviewed fallback. The primary artifact requires the verified OCI
+daemon/runtime, while its independently signed web overlay is rebuilt from the
+same pinned source. Runtime startup never contains a source tree, package
+manager, static web copy, or build step.
 
 The complete source-suite baseline is not part of OCI import and does not gate
 the pinned image verification. It remains a separate fallback-build acceptance
@@ -90,7 +102,15 @@ atomically installs it into its digest-named directory below ignored
 `service/vendor/open-design/`. An existing digest directory is immutable: it is
 accepted only when every file still verifies and is never overwritten after a
 mismatch. The launcher verifies the registry, the current manifest pin, and the
-active bundle/data triple before start.
+active runtime/overlay/version/data selection before start.
+
+Web overlays have their own archive and file-level manifest, compatible runtime
+digests, upstream/version pin, lockfile and toolchain digests, CycloneDX SBOM,
+license inventory, provenance, and signature. Publication and every launch
+verify them fail-closed against `opendesign_web_trust.json`, whose public-key
+digest is reviewed outside the overlay. An artifact-supplied key alone is never
+trusted. Traversal, symlinks, path escape, compatibility mismatch, signature
+failure, or a changed file prevents materialization and execution.
 
 Repository-wide Python bytecode checks must exclude `service/vendor/**`. Running
 `compileall` across the imported closure creates `__pycache__` files inside the
@@ -213,14 +233,31 @@ load proof, deterministic build metadata, and signed provenance.
 ## Versioned data generations
 
 `opendesign_generation_model.py` owns the strict value objects, while
-`opendesign_generation_control.py` owns atomic `control.json` and journal I/O.
+`opendesign_generation_control.py` owns atomic schema-v2 `control.json`, release
+journal, and independent web-activation journal I/O.
 Together they validate verified artifact digests and real
 `instances/<generation>/data/` directories, reject unknown fields and symlinks,
 and write with same-directory temp, file `fsync`, atomic replace, and directory
-`fsync`. The launcher uses only the exact active triple: its digest selects one
-verified immutable bundle directory and its generation selects the only
-directory exported as `OD_DATA_DIR`. It never selects a bundle or data directory
-by name, timestamp, symlink, or fallback.
+`fsync`. The launcher uses only the exact active four-field selection: its
+runtime digest selects one verified immutable runtime, its overlay digest
+selects the only directory exported as `OD_STATIC_DIR`, and its generation
+selects the only directory exported as `OD_DATA_DIR`. It never selects a bundle,
+overlay, or data directory by name, timestamp, symlink, or fallback.
+
+`previous_release` retains the complete former runtime/version/data/overlay
+selection. `previous_web` retains only a compatible former overlay for the
+current runtime/version/data tuple. Web activation never clones or migrates
+data and never changes runtime selection or the migration journal. It atomically
+updates the overlay selection, restarts through the generic
+`app.<id>.sidecars.restart` capability, waits for declared readiness, and rolls
+back automatically on failure.
+
+`opendesign_web_builder.py` persists dependency, source/build, and compatible
+Next caches. Lockfile, package graph, Node, pnpm, and platform form the
+dependency key; a verified hit skips `pnpm install --frozen-lockfile`. The
+upstream pin and web patch digests form the source/build key. Development uses
+one derivation; release uses two independent derivations and compares every
+byte before signing and publishing.
 
 Controlled migration is split by responsibility: `opendesign_migration.py`
 coordinates freeze, drain, staging, cutover, rollback and recovery;
@@ -324,14 +361,19 @@ PYTHONDONTWRITEBYTECODE=1 python3 -B \
   apps/design-studio/service/smoke_opendesign_sidecar.py
 ```
 
-## Production-path acceptance
+## Incremental development and release acceptance
 
-WP10 is exercised by `tests/opendesign_product.e2e.mjs`. It creates a new
-temporary Maverick installation with two synthetic workspaces, boots the
+The app-owned `dev apply` command classifies multiple changed paths
+compositionally, reuses `scripts/test_suite.py --changed` and official frontend
+builds, and emits JSON actions, durations, selected digests, cache state,
+readiness, and rollback outcome. Unknown paths elevate to the complete gate set.
+
+The release path is exercised by `tests/opendesign_product.e2e.mjs`. It creates
+a new temporary Maverick installation with two synthetic workspaces, boots the
 materialized official `ghcr.io/nexu-io/od:0.16.1` closure through the declared
 launcher, and drives the isolated UI with real Chromium. Core, the Unix sidecar
-relay, Storage import/export, restart recovery, route policy, browser sessions,
-and migration smoke all use their production code paths. A statically compiled
+relay, Storage import/export, restart recovery, route policy, and browser
+sessions use their production code paths. A statically compiled
 external Codex app-server protocol fixture supplies deterministic model output
 without entering the OpenDesign or core process and without logging prompts.
 The browser asserts the isolated `/api/ready` response before onboarding and
@@ -340,14 +382,25 @@ again after the core/sidecar restart, then verifies the persisted project.
 Run and validate the committed redaction-safe records with:
 
 ```bash
-npm run test:e2e --prefix apps/design-studio -- \
-  --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
+npm run test:e2e:quick --prefix apps/design-studio
+npm run test:e2e:affected --prefix apps/design-studio
+npm run test:e2e:release --prefix apps/design-studio -- \
+  --evidence-output /owned/evidence/opendesign-ui-release.json
+npm run test:e2e:migration --prefix apps/design-studio \
+  > /owned/evidence/opendesign-migration.json
+python3 apps/design-studio/service/aggregate_opendesign_release_evidence.py \
+  --ui /owned/evidence/opendesign-ui-release.json \
+  --migration /owned/evidence/opendesign-migration.json \
+  --output /owned/evidence/opendesign-release.json
 python3 -m unittest apps.design-studio.tests.test_production_acceptance
 ```
 
-`opendesign_product_acceptance_0_16_1.json` contains the fourteen browser
-scenario results and nine-key correlation join. It contains no prompt, cookie,
-bearer, provider payload, environment, host path, or secret value.
+The release UI record contains thirteen browser scenarios and the complete
+correlation join. The independently run migration/rollback smoke supplies the
+fourteenth scenario to `aggregate_opendesign_release_evidence.py`. The final
+The canonical record is `opendesign_release_acceptance_0_16_1.json` and
+contains no prompt, cookie, bearer, provider payload, environment, host path,
+or secret value.
 `opendesign_production_acceptance_0_16_1.json` maps every global acceptance
 criterion to a stable test, proof, or canonical document. Neither record
 authorizes migration of an existing workspace data root.

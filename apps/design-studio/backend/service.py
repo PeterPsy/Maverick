@@ -515,6 +515,7 @@ def export_to_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> dic
         for name, content, media_type, role in artifacts
     ]
     bundle = _opendesign_bundle_summary()
+    runtime_status = _opendesign_runtime_status(data_root)
     manifest = {
         "schema_version": "1",
         "app_id": "design-studio",
@@ -539,6 +540,8 @@ def export_to_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> dic
             "oci_reference": str(bundle.get("oci_reference") or ""),
             "oci_index_digest": str(bundle.get("oci_index_digest") or ""),
             "materialized_artifact_sha256": str(bundle.get("artifact_sha256") or ""),
+            "runtime_artifact_sha256": str(runtime_status.get("runtime_artifact_sha256") or ""),
+            "web_overlay_sha256": str(runtime_status.get("web_overlay_sha256") or ""),
             "storage_imports": [
                 {
                     key: item.get(key)
@@ -1600,17 +1603,25 @@ def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
         return {"bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
     active = payload.get("active")
     bundle = payload.get("bundle")
+    web_overlay = payload.get("web_overlay")
     valid = (
         payload.get("schema_version") == "2"
         and payload.get("opendesign_version") == OPENDESIGN_VERSION
         and payload.get("opendesign_commit") == OPENDESIGN_COMMIT
         and isinstance(active, dict)
         and active.get("od_version") == OPENDESIGN_VERSION
-        and isinstance(active.get("bundle_artifact_sha256"), str)
-        and re.fullmatch(r"[0-9a-f]{64}", active["bundle_artifact_sha256"]) is not None
+        and isinstance(active.get("runtime_artifact_sha256"), str)
+        and re.fullmatch(r"[0-9a-f]{64}", active["runtime_artifact_sha256"]) is not None
+        and isinstance(active.get("web_overlay_sha256"), str)
+        and re.fullmatch(r"[0-9a-f]{64}", active["web_overlay_sha256"]) is not None
+        and payload.get("runtime_artifact_sha256") == active["runtime_artifact_sha256"]
+        and payload.get("web_overlay_sha256") == active["web_overlay_sha256"]
         and isinstance(bundle, dict)
         and bundle.get("location") == "verified_registry"
-        and bundle.get("relative_path") == active["bundle_artifact_sha256"]
+        and bundle.get("relative_path") == active["runtime_artifact_sha256"]
+        and isinstance(web_overlay, dict)
+        and web_overlay.get("location") == "verified_registry"
+        and web_overlay.get("relative_path") == active["web_overlay_sha256"]
     )
     if not valid:
         return {"bundle_configured": False, "mode": "invalid-status", "detail": "", "active": {}}
@@ -1618,8 +1629,11 @@ def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
         "bundle_configured": bool(payload.get("bundle_configured")),
         "mode": str(payload.get("mode") or "unknown"),
         "detail": str(payload.get("detail") or ""),
+        "runtime_artifact_sha256": active["runtime_artifact_sha256"],
+        "web_overlay_sha256": active["web_overlay_sha256"],
         "active": {
-            "bundle_artifact_sha256": active["bundle_artifact_sha256"],
+            "runtime_artifact_sha256": active["runtime_artifact_sha256"],
+            "web_overlay_sha256": active["web_overlay_sha256"],
             "od_version": active["od_version"],
             "data_generation": str(active.get("data_generation") or ""),
         },

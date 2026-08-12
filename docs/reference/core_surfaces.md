@@ -123,6 +123,14 @@ Important current core commands include:
 - `core.jobs.get`
 - `core.jobs.cancel`
 
+Core discovery also exposes dynamic per-app lifecycle commands when their
+preconditions hold. In particular, `app.<app_id>.sidecars.restart` appears only
+for an enabled workspace binding with declared HTTP sidecars. It is full-access,
+revokes only that app/workspace's isolated-browser tickets and sessions,
+restarts only the declared sidecars, waits for declared readiness, and emits
+`maverick.app.runtime-changed` so Base Shell remounts only that app's iframe and
+widgets.
+
 ## Core MCP
 
 Discover core MCP tools with:

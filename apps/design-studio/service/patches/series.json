@@ -1,25 +1,21 @@
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "patches": [
     {
-      "path": "0001-maverick-host-boundary.patch",
-      "sha256": "cd673311145a6b074ab7409db363a43d5589f49aa29c35c6ac045c67ba4a38a4",
-      "reason": "Require the technical bearer on loopback for the Maverick relay, exercise that boundary upstream, build node-pty for the declared Linux runtime closure, and pin the static web build id plus single-worker build concurrency for deterministic release artifacts.",
+      "component": "runtime",
+      "path": "0001-maverick-runtime-boundary.patch",
+      "sha256": "cdab3706aa4535f6eeb27c242b12ddb8f463e0a3b4e6b87abb788a176b4ef544",
+      "reason": "Require OD_STATIC_DIR inside the externally verified OD_STATIC_REGISTRY_ROOT with no embedded-web fallback, require the technical bearer on the hosted loopback relay, test both boundaries, and include node-pty in the reviewed runtime build graph.",
       "files": [
         {
           "path": "apps/daemon/src/server.ts",
           "pre_sha256": "3fee60a6afde66056419bb6618ac8a6ce6ade7e54b5285720a6838735bc73b44",
-          "post_sha256": "4d645443e6e2cb5548c1309b0068f1533509715324e06cc7157f03ab118abeac"
+          "post_sha256": "40799f41b07799055bb2d95a42a98c8a1f0e9a14646f078ca4016df0808684f1"
         },
         {
           "path": "apps/daemon/tests/api-token-guard.test.ts",
           "pre_sha256": "08bdab2ed1ebd4216954c35490c09f89e6207e9613b8f7bf7f11036aff652f24",
-          "post_sha256": "c79afc10d426348bc6e3c52d38a9c465b1480cec5ccaf51c225dd647c232e676"
-        },
-        {
-          "path": "apps/web/next.config.ts",
-          "pre_sha256": "fe650d8b584313d110249088fd867ff57edfc09e7caad40f86ff961ca249e16b",
-          "post_sha256": "6dc8d14a1006cff5a1c14968904974d7821ed48be3932100855f1f8a9270c195"
+          "post_sha256": "4f8dad941055fa1724695f342a48caeb6cae400491b9ef2280e264d9cbe3e462"
         },
         {
           "path": "package.json",
@@ -29,7 +25,21 @@
       ]
     },
     {
-      "path": "0002-maverick-native-shell.patch",
+      "component": "web-build",
+      "path": "0002-maverick-web-build.patch",
+      "sha256": "a2f00c24375fb1b29d20bc7e8824b3604ef767dda988e8c92434b62d06b0e897",
+      "reason": "Pin the static Next build id and single-worker release concurrency without changing daemon or runtime inputs.",
+      "files": [
+        {
+          "path": "apps/web/next.config.ts",
+          "pre_sha256": "fe650d8b584313d110249088fd867ff57edfc09e7caad40f86ff961ca249e16b",
+          "post_sha256": "6dc8d14a1006cff5a1c14968904974d7821ed48be3932100855f1f8a9270c195"
+        }
+      ]
+    },
+    {
+      "component": "web-react",
+      "path": "0003-maverick-web-react.patch",
       "sha256": "0114433a2793771d733661a36078e9ee1163a3c4a57e2791bfd9d186e6d1f4d2",
       "reason": "Delegate OpenDesign navigation and chat to Maverick at the React component boundary, expose the native settings dialog through a typed host command, and map the isolated web UI to Maverick dark and light palette tokens.",
       "files": [

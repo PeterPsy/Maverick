@@ -29,7 +29,7 @@ def mark_controlled_copy(root: Path) -> None:
     root = Path(root)
     if root.is_symlink() or not root.is_dir():
         raise MigrationError("controlled-copy root must be a real directory")
-    allowed = {"instances", "backups", "migrations"}
+    allowed = {"instances", "backups", "migrations", "web-activations"}
     children = {child.name for child in root.iterdir()}
     if not children.issubset(allowed):
         raise MigrationError("controlled-copy root contains unowned content")
@@ -56,7 +56,7 @@ def controlled_root(root: Path) -> Path:
         raise MigrationError("controlled-copy marker is invalid") from exc
     if payload != _CONTROLLED_COPY_PAYLOAD:
         raise MigrationError("controlled-copy marker is not authorized")
-    for child in ("instances", "backups", "migrations"):
+    for child in ("instances", "backups", "migrations", "web-activations"):
         require_real_directory(root / child, root=root, label=child)
     return root
 

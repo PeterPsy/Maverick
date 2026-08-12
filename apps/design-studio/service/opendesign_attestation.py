@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -166,9 +168,8 @@ def oci_provenance_payload(
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
     distribution = manifest["distribution"]
-    web_patch = patch_evidence.get("web_patch") if isinstance(patch_evidence.get("web_patch"), dict) else {}
     invocation = hashlib.sha256(
-        f"{artifact_sha256}:{distribution['index']['digest']}:{patch_evidence['post_sha256']}:{web_patch.get('output_manifest_sha256', '')}".encode("utf-8")
+        f"{artifact_sha256}:{distribution['index']['digest']}:{patch_evidence['post_sha256']}:".encode("utf-8")
     ).hexdigest()
     dependencies = [
         {
@@ -266,14 +267,126 @@ def verify_signature(
     *,
     run: Runner = subprocess.run,
 ) -> None:
-    _run_checked(
-        run,
-        [
-            "openssl", "pkeyutl", "-verify", "-pubin", "-rawin", "-inkey", str(public_key),
-            "-in", str(provenance), "-sigfile", str(signature),
-        ],
-        label="provenance signature verification",
-    )
+    del run
+    for label, path in (
+        ("signed document", provenance),
+        ("signature", signature),
+        ("public key", public_key),
+    ):
+        if path.is_symlink() or not path.is_file():
+            raise ArtifactError(f"OpenDesign {label} must be a real file")
+    try:
+        key_bytes = _ed25519_spki_public_key(public_key.read_bytes())
+        if not _verify_ed25519_raw(key_bytes, signature.read_bytes(), provenance.read_bytes()):
+            raise ValueError("invalid Ed25519 signature")
+    except (OSError, ValueError) as exc:
+        raise ArtifactError("OpenDesign provenance signature verification failed") from exc
+
+
+_ED25519_Q = 2**255 - 19
+_ED25519_L = 2**252 + 27742317777372353535851937790883648493
+_ED25519_D = (-121665 * pow(121666, _ED25519_Q - 2, _ED25519_Q)) % _ED25519_Q
+_ED25519_I = pow(2, (_ED25519_Q - 1) // 4, _ED25519_Q)
+_ED25519_IDENTITY = (0, 1)
+_ED25519_SPKI_PREFIX = bytes.fromhex("302a300506032b6570032100")
+
+
+def _ed25519_spki_public_key(pem: bytes) -> bytes:
+    try:
+        lines = pem.decode("ascii").strip().splitlines()
+    except UnicodeDecodeError as exc:
+        raise ValueError("public key is not ASCII PEM") from exc
+    if lines[:1] != ["-----BEGIN PUBLIC KEY-----"] or lines[-1:] != ["-----END PUBLIC KEY-----"]:
+        raise ValueError("public key PEM boundary is invalid")
+    try:
+        der = base64.b64decode("".join(lines[1:-1]), validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("public key PEM payload is invalid") from exc
+    if len(der) != len(_ED25519_SPKI_PREFIX) + 32 or not der.startswith(_ED25519_SPKI_PREFIX):
+        raise ValueError("public key is not a canonical Ed25519 SPKI key")
+    return der[len(_ED25519_SPKI_PREFIX) :]
+
+
+def _verify_ed25519_raw(public_key: bytes, signature: bytes, message: bytes) -> bool:
+    if len(public_key) != 32 or len(signature) != 64:
+        return False
+    try:
+        public_point = _ed25519_decode_point(public_key)
+        r_point = _ed25519_decode_point(signature[:32])
+    except ValueError:
+        return False
+    scalar = int.from_bytes(signature[32:], "little")
+    if scalar >= _ED25519_L or public_point == _ED25519_IDENTITY:
+        return False
+    if _ed25519_scalar_mult(public_point, _ED25519_L) != _ED25519_IDENTITY:
+        return False
+    if _ed25519_scalar_mult(r_point, _ED25519_L) != _ED25519_IDENTITY:
+        return False
+    challenge = int.from_bytes(
+        hashlib.sha512(signature[:32] + public_key + message).digest(),
+        "little",
+    ) % _ED25519_L
+    left = _ed25519_scalar_mult(_ed25519_base_point(), scalar)
+    right = _ed25519_add(r_point, _ed25519_scalar_mult(public_point, challenge))
+    return left == right
+
+
+def _ed25519_base_point() -> tuple[int, int]:
+    y = (4 * pow(5, _ED25519_Q - 2, _ED25519_Q)) % _ED25519_Q
+    return _ed25519_recover_x(y, 0), y
+
+
+def _ed25519_recover_x(y: int, sign: int) -> int:
+    numerator = (y * y - 1) % _ED25519_Q
+    denominator = (_ED25519_D * y * y + 1) % _ED25519_Q
+    x_squared = numerator * pow(denominator, _ED25519_Q - 2, _ED25519_Q) % _ED25519_Q
+    x = pow(x_squared, (_ED25519_Q + 3) // 8, _ED25519_Q)
+    if (x * x - x_squared) % _ED25519_Q:
+        x = x * _ED25519_I % _ED25519_Q
+    if (x * x - x_squared) % _ED25519_Q:
+        raise ValueError("point is not on Ed25519")
+    if (x & 1) != sign:
+        x = _ED25519_Q - x
+    return x
+
+
+def _ed25519_decode_point(encoded: bytes) -> tuple[int, int]:
+    if len(encoded) != 32:
+        raise ValueError("Ed25519 point length is invalid")
+    value = int.from_bytes(encoded, "little")
+    sign = value >> 255
+    y = value & ((1 << 255) - 1)
+    if y >= _ED25519_Q:
+        raise ValueError("Ed25519 point is not canonical")
+    point = (_ed25519_recover_x(y, sign), y)
+    if _ed25519_encode_point(point) != encoded:
+        raise ValueError("Ed25519 point encoding is not canonical")
+    return point
+
+
+def _ed25519_encode_point(point: tuple[int, int]) -> bytes:
+    x, y = point
+    return int(y | ((x & 1) << 255)).to_bytes(32, "little")
+
+
+def _ed25519_add(first: tuple[int, int], second: tuple[int, int]) -> tuple[int, int]:
+    x1, y1 = first
+    x2, y2 = second
+    product = _ED25519_D * x1 * x2 * y1 * y2 % _ED25519_Q
+    x = (x1 * y2 + x2 * y1) * pow(1 + product, _ED25519_Q - 2, _ED25519_Q)
+    y = (y1 * y2 + x1 * x2) * pow(1 - product, _ED25519_Q - 2, _ED25519_Q)
+    return x % _ED25519_Q, y % _ED25519_Q
+
+
+def _ed25519_scalar_mult(point: tuple[int, int], scalar: int) -> tuple[int, int]:
+    result = _ED25519_IDENTITY
+    addend = point
+    while scalar:
+        if scalar & 1:
+            result = _ed25519_add(result, addend)
+        addend = _ed25519_add(addend, addend)
+        scalar >>= 1
+    return result
 
 
 def verify_artifact_set(manifest: dict[str, Any], artifact_directory: Path) -> dict[str, Any]:

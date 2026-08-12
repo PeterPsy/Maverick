@@ -11,7 +11,8 @@ from typing import Callable
 
 
 MANIFEST_SCHEMA_VERSION = "5"
-PATCH_SCHEMA_VERSION = "1"
+PATCH_SCHEMA_VERSION = "2"
+PATCH_COMPONENTS = {"runtime", "web-build", "web-react"}
 CERTIFICATION_SCHEMA_VERSION = "4"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -88,8 +89,15 @@ def validate_patch_series(
     if not isinstance(patches, list) or not patches:
         raise SupplyChainError("patch inventory must not be empty")
     declared_files: set[str] = set()
+    observed_components: set[str] = set()
     for item in patches:
         patch = _mapping(item, "patch")
+        component = patch.get("component")
+        if component not in PATCH_COMPONENTS:
+            raise SupplyChainError("patch component is missing or unsupported")
+        if component in observed_components:
+            raise SupplyChainError(f"duplicate patch component: {component}")
+        observed_components.add(str(component))
         relative_patch = _safe_relative_text(patch.get("path"), "patch.path")
         patch_path = _safe_child(series_path.parent, relative_patch)
         _digest_matches(patch_path, patch.get("sha256"), "patch")
@@ -125,6 +133,14 @@ def validate_patch_series(
         }
         if patch_headers != patch_files:
             raise SupplyChainError("patch headers do not match the declared file inventory")
+        if component == "runtime" and any(path.startswith("apps/web/") for path in patch_files):
+            raise SupplyChainError("runtime patches must not include web files")
+        if component in {"web-build", "web-react"} and any(
+            not path.startswith("apps/web/") for path in patch_files
+        ):
+            raise SupplyChainError("web patches must not include runtime or root files")
+    if observed_components != PATCH_COMPONENTS:
+        raise SupplyChainError("patch inventory must declare every component exactly once")
     return series
 
 

@@ -5,7 +5,7 @@
     "before_replace": "passed",
     "selection_uses_control_not_newest_generation": "passed"
   },
-  "executed_at": "2026-08-11",
+  "executed_at": "2026-08-12",
   "forward_fixture_migration": {
     "api_import_read_back": "byte_identical",
     "legacy_mapping_sha256": "ff2512252fb1fa4bec7a8652d009ac8947eb81da96d542a3bc9c1c6ec13b7e65",
@@ -19,14 +19,15 @@
       "tree_sha256_before": "977ae1faaced8b94da2ab22932732a1ea85795f25b1fc5f09bfb197f1575d00a"
     },
     "target": {
-      "artifact_sha256": "9ab929264888b981e4205f0c596ee1128d04bc1cc7573266c15c1ad14e9a8d68",
+      "artifact_sha256": "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
       "data_generation": "gen_oci_0161",
       "database_integrity": {
         "app.sqlite": "ok",
         "legacy-0.10.1.sqlite": "ok"
       },
       "od_version": "0.16.1",
-      "real_materialized_daemon": true
+      "real_materialized_daemon": true,
+      "web_overlay_sha256": "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2"
     }
   },
   "rollback": {
@@ -37,7 +38,8 @@
     },
     "previous_generation_reactivated": "gen_real_previous",
     "real_daemon_health_database_and_project_smoke": "passed",
-    "real_round_trip_artifact_sha256": "9ab929264888b981e4205f0c596ee1128d04bc1cc7573266c15c1ad14e9a8d68"
+    "real_round_trip_artifact_sha256": "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
+    "real_round_trip_web_overlay_sha256": "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2"
   },
   "schema_version": "1",
   "workspace_data_migrated": false

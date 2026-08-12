@@ -14,9 +14,26 @@ ROOT = Path(__file__).resolve().parents[3]
 MODULE_PATH = ROOT / "apps/design-studio/service/opendesign_generation_control.py"
 MODEL_PATH = ROOT / "apps/design-studio/service/opendesign_generation_model.py"
 ADR_PATH = ROOT / "docs/architecture/design_studio_data_generations.md"
-OLD_DIGEST = "a" * 64
-NEW_DIGEST = "b" * 64
-VERIFIED = {OLD_DIGEST: "0.10.1", NEW_DIGEST: "0.16.1"}
+OLD_RUNTIME = "a" * 64
+NEW_RUNTIME = "b" * 64
+OLD_WEB = "c" * 64
+NEW_WEB = "d" * 64
+ALT_WEB = "e" * 64
+VERIFIED_RUNTIME = {OLD_RUNTIME: "0.10.1", NEW_RUNTIME: "0.16.1"}
+VERIFIED_WEB = {
+    OLD_WEB: {
+        "od_version": "0.10.1",
+        "compatible_runtime_artifact_sha256": [OLD_RUNTIME],
+    },
+    NEW_WEB: {
+        "od_version": "0.16.1",
+        "compatible_runtime_artifact_sha256": [NEW_RUNTIME],
+    },
+    ALT_WEB: {
+        "od_version": "0.16.1",
+        "compatible_runtime_artifact_sha256": [NEW_RUNTIME],
+    },
+}
 
 
 def _generation_modules():
@@ -35,269 +52,290 @@ def _generation_modules():
 
 class DesignStudioDataGenerationProofTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(prefix="maverick-g4-")
+        self.temp = tempfile.TemporaryDirectory(prefix="maverick-control-v2-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / "opendesign"
         self.root.mkdir()
-        (self.root / "migrations").mkdir()
-        (self.root / "backups").mkdir()
+        for name in ("migrations", "backups", "web-activations"):
+            (self.root / name).mkdir()
         self.model, self.module = _generation_modules()
-        self.old = self.model.GenerationTriple(OLD_DIGEST, "0.10.1", "gen_old")
-        self.new = self.model.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_new")
+        self.old = self.model.LaunchSelection(OLD_RUNTIME, OLD_WEB, "0.10.1", "gen_old")
+        self.new = self.model.LaunchSelection(NEW_RUNTIME, NEW_WEB, "0.16.1", "gen_new")
+        self.alt_web = self.model.LaunchSelection(NEW_RUNTIME, ALT_WEB, "0.16.1", "gen_new")
         self._make_generation(self.old, "old bytes")
         self._make_generation(self.new, "forward migrated bytes")
 
-    def test_atomic_cutover_and_rollback_keep_bundle_data_pairs(self) -> None:
-        initial = self._initial_control()
-        self.module.write_generation_control(self.root, initial, verified_artifacts=VERIFIED)
-        self.assertEqual((self.root / "control.json").stat().st_mode & 0o777, 0o600)
-        old_marker = self._marker(self.old).read_bytes()
-
-        self._write_journal("migration_001", self.old, self.new, "prepared")
-        cutover = self._cutover_control()
-        self.module.write_generation_control(self.root, cutover, verified_artifacts=VERIFIED)
-        self._write_journal("migration_001", self.old, self.new, "cutover_committed")
-        loaded = self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
+    def test_release_cutover_and_rollback_keep_complete_selections(self) -> None:
+        self._write_control(self._initial_control())
+        old_bytes = self._marker(self.old).read_bytes()
+        self._write_migration("migration_001", self.old, self.new, "prepared")
+        cutover = self._release_control(self.new, self.old, "migration_001")
+        self._write_control(cutover)
+        self._write_migration("migration_001", self.old, self.new, "cutover_committed")
+        loaded = self._load()
         self.assertEqual(loaded.active, self.new)
-        self.assertEqual(loaded.previous, self.old)
-        self.assertEqual(self._marker(self.old).read_bytes(), old_marker)
+        self.assertEqual(loaded.previous_release, self.old)
+        self.assertIsNone(loaded.previous_web)
+        self.assertEqual(self._marker(self.old).read_bytes(), old_bytes)
 
-        rollback = self.model.GenerationControl(
-            active=self.old,
-            previous=self.new,
-            migration_id="migration_rollback_001",
-            updated_at="2026-08-03T17:20:00Z",
-        )
-        self._write_journal("migration_rollback_001", self.new, self.old, "prepared")
-        self.module.write_generation_control(self.root, rollback, verified_artifacts=VERIFIED)
-        self._write_journal("migration_rollback_001", self.new, self.old, "cutover_committed")
-        recovered = self.module.recover_generation_control(self.root, verified_artifacts=VERIFIED)
+        self._write_migration("migration_rollback_001", self.new, self.old, "prepared")
+        rollback = self._release_control(self.old, self.new, "migration_rollback_001")
+        self._write_control(rollback)
+        self._write_migration("migration_rollback_001", self.new, self.old, "cutover_committed")
+        recovered = self._recover()
         self.assertEqual(recovered.control.active, self.old)
-        self.assertEqual(recovered.active_data_dir, self._marker(self.old).parent)
+        self.assertEqual(recovered.control.previous_release, self.new)
         self.assertEqual(self._marker(self.new).read_text(encoding="utf-8"), "forward migrated bytes")
-        self.assertFalse(any(path.is_symlink() for path in self.root.rglob("*")))
-        self.assertIn("migration_001:historical_cutover_committed", recovered.migration_reconciliations)
-        self.assertIn("migration_rollback_001:committed", recovered.migration_reconciliations)
 
-    def test_crash_before_replace_keeps_old_control(self) -> None:
-        self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        self._write_journal("migration_001", self.old, self.new, "prepared")
-        with patch.object(self.module.os, "replace", side_effect=OSError("injected before replace")):
-            with self.assertRaisesRegex(OSError, "injected before replace"):
-                self.module.write_generation_control(
-                    self.root,
-                    self._cutover_control(),
-                    verified_artifacts=VERIFIED,
-                )
+    def test_web_only_cutover_and_rollback_do_not_mutate_runtime_data_or_migration_journal(self) -> None:
+        self._write_migration("migration_001", self.old, self.new, "cutover_committed")
+        release_control = self._release_control(self.new, self.old, "migration_001")
+        self._write_control(release_control)
+        data_before = self._marker(self.new).read_bytes()
+        migration_before = (self.root / "migrations/migration_001.json").read_bytes()
+        generation_inventory = sorted(path.relative_to(self.root).as_posix() for path in self.root.rglob("*"))
 
-        recovered = self.module.recover_generation_control(self.root, verified_artifacts=VERIFIED)
+        self._write_web("web_001", self.new, self.alt_web, "prepared")
+        cutover = self.model.GenerationControl(
+            active=self.alt_web,
+            previous_release=self.old,
+            previous_web=self.new,
+            migration_id="migration_001",
+            web_activation_id="web_001",
+            updated_at="2026-08-12T15:00:00Z",
+        )
+        self._write_control(cutover)
+        self._write_web("web_001", self.new, self.alt_web, "ready_committed")
+        loaded = self._load()
+        self.assertEqual(loaded.active.web_overlay_sha256, ALT_WEB)
+        self.assertEqual(loaded.previous_web.web_overlay_sha256, NEW_WEB)
+
+        self._write_web("web_rollback_001", self.alt_web, self.new, "prepared")
+        rollback = self.model.GenerationControl(
+            active=self.new,
+            previous_release=self.old,
+            previous_web=self.alt_web,
+            migration_id="migration_001",
+            web_activation_id="web_rollback_001",
+            updated_at="2026-08-12T15:01:00Z",
+        )
+        self._write_control(rollback)
+        self._write_web(
+            "web_rollback_001",
+            self.alt_web,
+            self.new,
+            "ready_committed",
+        )
+        self.assertEqual(self._load().active, self.new)
+        self.assertEqual(self._marker(self.new).read_bytes(), data_before)
+        self.assertEqual((self.root / "migrations/migration_001.json").read_bytes(), migration_before)
+        after_inventory = sorted(
+            path.relative_to(self.root).as_posix()
+            for path in self.root.rglob("*")
+            if not path.as_posix().startswith((self.root / "web-activations").as_posix())
+        )
+        before_without_web = [path for path in generation_inventory if not path.startswith("web-activations")]
+        self.assertEqual(after_inventory, before_without_web)
+
+    def test_web_crash_recovery_reports_readiness_pending_without_guessing(self) -> None:
+        self._write_control(self.model.GenerationControl(
+            active=self.new,
+            previous_release=None,
+            previous_web=None,
+            migration_id=None,
+            web_activation_id=None,
+            updated_at="2026-08-12T15:00:00Z",
+        ))
+        self._write_web("web_crash", self.new, self.alt_web, "prepared")
+        cutover = self.model.GenerationControl(
+            active=self.alt_web,
+            previous_release=None,
+            previous_web=self.new,
+            migration_id=None,
+            web_activation_id="web_crash",
+            updated_at="2026-08-12T15:01:00Z",
+        )
+        with patch.object(self.module, "_fsync_directory", side_effect=OSError("after replace")):
+            with self.assertRaisesRegex(OSError, "after replace"):
+                self._write_control(cutover)
+        recovered = self._recover()
+        self.assertEqual(recovered.control.active, self.alt_web)
+        self.assertIn(
+            "web_crash:activation_committed_readiness_pending",
+            recovered.web_reconciliations,
+        )
+
+    def test_crash_before_release_replace_keeps_old_selection(self) -> None:
+        self._write_control(self._initial_control())
+        self._write_migration("migration_001", self.old, self.new, "prepared")
+        with patch.object(self.module.os, "replace", side_effect=OSError("before replace")):
+            with self.assertRaisesRegex(OSError, "before replace"):
+                self._write_control(self._release_control(self.new, self.old, "migration_001"))
+        recovered = self._recover()
         self.assertEqual(recovered.control.active, self.old)
         self.assertIn("migration_001:prepared_before_cutover", recovered.migration_reconciliations)
-        self.assertFalse(any(path.name.endswith(".tmp") for path in self.root.iterdir()))
 
-    def test_crash_after_replace_recovers_new_control_without_guessing(self) -> None:
-        self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        self._write_journal("migration_001", self.old, self.new, "prepared")
-        with patch.object(self.module, "_fsync_directory", side_effect=OSError("injected after replace")):
-            with self.assertRaisesRegex(OSError, "injected after replace"):
-                self.module.write_generation_control(
-                    self.root,
-                    self._cutover_control(),
-                    verified_artifacts=VERIFIED,
-                )
+    def test_strict_schema_rejects_v1_unknown_duplicate_and_incompatible_overlay(self) -> None:
+        self._write_control(self._initial_control())
+        path = self.root / "control.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["schema_version"] = "1"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        with self.assertRaisesRegex(self.model.GenerationControlError, "unsupported"):
+            self._load()
 
-        newest = self.model.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_newest_but_inactive")
-        self._make_generation(newest, "must not be selected")
-        recovered = self.module.recover_generation_control(self.root, verified_artifacts=VERIFIED)
-        self.assertEqual(recovered.control.active, self.new)
-        self.assertNotEqual(recovered.control.active, newest)
-        self.assertIn("migration_001:replace_committed_journal_pending", recovered.migration_reconciliations)
+        self._write_control(self._initial_control())
+        raw = path.read_text(encoding="utf-8")
+        path.write_text(raw.replace('"schema_version":"2"', '"schema_version":"2","schema_version":"2"'), encoding="utf-8")
+        with self.assertRaisesRegex(self.model.GenerationControlError, "duplicate"):
+            self._load()
 
-    def test_recovery_removes_only_strict_stale_temp_and_uses_control(self) -> None:
-        self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        stale = self.root / ".control.json.0123456789abcdef.tmp"
-        stale.write_text("partial", encoding="utf-8")
-        unrelated = self.root / "control.json.notes.tmp"
-        unrelated.write_text("keep", encoding="utf-8")
-        journal_stale = self.root / "migrations" / ".migration_ghost.json.0123456789abcdef.tmp"
-        journal_stale.write_text("partial", encoding="utf-8")
+        bad = self.model.LaunchSelection(OLD_RUNTIME, NEW_WEB, "0.10.1", "gen_old")
+        control = self.model.GenerationControl(bad, None, None, None, None, "2026-08-12T15:00:00Z")
+        with self.assertRaisesRegex(self.model.GenerationControlError, "version|incompatible"):
+            self._write_control(control)
 
-        recovered = self.module.recover_generation_control(self.root, verified_artifacts=VERIFIED)
-
-        self.assertEqual(recovered.control.active, self.old)
-        self.assertEqual(
-            recovered.removed_stale_temps,
-            (stale.name, f"migrations/{journal_stale.name}"),
-        )
-        self.assertFalse(stale.exists())
-        self.assertFalse(journal_stale.exists())
-        self.assertTrue(unrelated.exists())
-
-    def test_parser_rejects_unknown_fields_unverified_artifacts_and_missing_generation(self) -> None:
-        self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        control_path = self.root / "control.json"
-        payload = json.loads(control_path.read_text(encoding="utf-8"))
-        payload["unexpected"] = True
-        control_path.write_text(json.dumps(payload), encoding="utf-8")
-        with self.assertRaisesRegex(self.model.GenerationControlError, "unknown or missing"):
-            self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
-
-        self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        with self.assertRaisesRegex(self.model.GenerationControlError, "not verified"):
-            self.module.load_generation_control(
-                self.root,
-                verified_artifacts={NEW_DIGEST: "0.16.1"},
-            )
-
-        with self.assertRaisesRegex(self.model.GenerationControlError, "version does not match"):
-            self.module.load_generation_control(
-                self.root,
-                verified_artifacts={OLD_DIGEST: "0.16.1", NEW_DIGEST: "0.16.1"},
-            )
-
-        raw = control_path.read_text(encoding="utf-8")
-        control_path.write_text(
-            raw.replace('"schema_version":"1"', '"schema_version":"1","schema_version":"1"', 1),
-            encoding="utf-8",
-        )
-        with self.assertRaisesRegex(self.model.GenerationControlError, "duplicate JSON field"):
-            self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
-
-        self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        self._marker(self.old).unlink()
-        self._marker(self.old).parent.rmdir()
-        with self.assertRaisesRegex(self.model.GenerationControlError, "generation data directory is missing"):
-            self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
-
-    def test_control_and_generation_symlinks_fail_closed(self) -> None:
+    def test_control_generation_and_web_journal_symlinks_fail_closed(self) -> None:
         outside = Path(self.temp.name) / "outside.json"
         outside.write_text("{}", encoding="utf-8")
         (self.root / "control.json").symlink_to(outside)
         with self.assertRaisesRegex(self.model.GenerationControlError, "regular file"):
-            self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
-
+            self._load()
         (self.root / "control.json").unlink()
-        generation_root = self.root / "instances" / self.old.data_generation
+
+        self._write_control(self._initial_control())
+        generation = self._marker(self.old).parent.parent
         self._marker(self.old).unlink()
         self._marker(self.old).parent.rmdir()
-        generation_root.rmdir()
-        generation_root.symlink_to(Path(self.temp.name))
+        generation.rmdir()
+        generation.symlink_to(Path(self.temp.name))
         with self.assertRaisesRegex(self.model.GenerationControlError, "real directory"):
-            self.module.write_generation_control(
-                self.root,
-                self._initial_control(),
-                verified_artifacts=VERIFIED,
-            )
+            self._load()
 
-    def test_journal_and_control_must_describe_the_same_atomic_transition(self) -> None:
-        self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        unrelated = self.model.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_unrelated")
-        self._make_generation(unrelated, "unrelated")
-        self._write_journal("migration_001", self.old, unrelated, "prepared")
-
-        with self.assertRaisesRegex(self.model.GenerationControlError, "inconsistent"):
-            self.module.write_generation_control(
-                self.root,
-                self._cutover_control(),
-                verified_artifacts=VERIFIED,
-            )
-        loaded = self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
-        self.assertEqual(loaded.active, self.old)
-
-    def test_concurrent_readers_observe_only_complete_control_documents(self) -> None:
-        self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        self._write_journal("migration_001", self.old, self.new, "prepared")
-        self._write_journal("migration_rollback_001", self.new, self.old, "prepared")
-        cutover = self._cutover_control()
-        rollback = self.model.GenerationControl(
-            active=self.old,
-            previous=self.new,
-            migration_id="migration_rollback_001",
-            updated_at="2026-08-03T17:20:00Z",
-        )
+    def test_concurrent_readers_observe_only_complete_v2_documents(self) -> None:
+        self._write_control(self.model.GenerationControl(self.new, None, None, None, None, "2026-08-12T15:00:00Z"))
+        self._write_web("web_one", self.new, self.alt_web, "prepared")
+        self._write_web("web_two", self.alt_web, self.new, "prepared")
+        first = self.model.GenerationControl(self.alt_web, None, self.new, None, "web_one", "2026-08-12T15:01:00Z")
+        second = self.model.GenerationControl(self.new, None, self.alt_web, None, "web_two", "2026-08-12T15:02:00Z")
         failures: list[BaseException] = []
 
         def writer() -> None:
             try:
-                for index in range(40):
-                    control = cutover if index % 2 == 0 else rollback
-                    self.module.write_generation_control(
-                        self.root,
-                        control,
-                        verified_artifacts=VERIFIED,
-                    )
-            except BaseException as exc:  # pragma: no cover - asserted in parent thread
+                for index in range(30):
+                    self._write_control(first if index % 2 == 0 else second)
+            except BaseException as exc:
                 failures.append(exc)
 
         thread = threading.Thread(target=writer)
         thread.start()
         while thread.is_alive():
             try:
-                observed = self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
-                self.assertIn(observed.active, {self.old, self.new})
-                if observed.previous is None:
-                    self.assertEqual(observed.active, self.old)
-                else:
-                    self.assertIn(observed.previous, {self.old, self.new})
-                    self.assertNotEqual(observed.active, observed.previous)
-            except BaseException as exc:  # pragma: no cover - asserted after join
+                observed = self._load()
+                self.assertIn(observed.active, {self.new, self.alt_web})
+                if observed.previous_web is not None:
+                    self.assertTrue(observed.active.same_runtime_and_data(observed.previous_web))
+            except BaseException as exc:
                 failures.append(exc)
                 break
         thread.join()
         self.assertEqual(failures, [])
 
-    def test_adr_freezes_schema_journal_crash_matrix_retention_and_rollback(self) -> None:
+    def test_adr_freezes_v2_web_journal_crash_retention_and_rollbacks(self) -> None:
         adr = ADR_PATH.read_text(encoding="utf-8")
+        for text in (
+            "## Control schema v2",
+            "## Migration journal",
+            "## Cutover protocol",
+            "## Web-only activation journal and protocol",
+            "## Crash recovery",
+            "After directory fsync, before journal commit",
+            "## Rollback",
+            "## Retention",
+            "previous_release",
+            "previous_web",
+            "OD_STATIC_DIR",
+        ):
+            self.assertIn(text, adr)
 
-        self.assertIn("## Control schema", adr)
-        self.assertIn("## Migration journal", adr)
-        self.assertIn("## Cutover protocol", adr)
-        self.assertIn("## Crash recovery", adr)
-        self.assertIn("After directory fsync, before journal commit", adr)
-        self.assertIn("## Rollback", adr)
-        self.assertIn("## Retention", adr)
-        self.assertIn("default minimum retention is one complete previous", adr)
-        self.assertIn("never opened by the older bundle", adr)
+    def _make_generation(self, selection, marker: str) -> None:
+        data = self.root / "instances" / selection.data_generation / "data"
+        data.mkdir(parents=True)
+        (data / "marker.txt").write_text(marker, encoding="utf-8")
 
-    def _make_generation(self, triple, marker: str) -> None:
-        data_root = self.root / "instances" / triple.data_generation / "data"
-        data_root.mkdir(parents=True)
-        (data_root / "marker.txt").write_text(marker, encoding="utf-8")
-
-    def _marker(self, triple) -> Path:
-        return self.root / "instances" / triple.data_generation / "data" / "marker.txt"
+    def _marker(self, selection) -> Path:
+        return self.root / "instances" / selection.data_generation / "data/marker.txt"
 
     def _initial_control(self):
+        return self.model.GenerationControl(self.old, None, None, None, None, "2026-08-12T14:00:00Z")
+
+    def _release_control(self, active, previous, migration_id: str):
         return self.model.GenerationControl(
-            active=self.old,
-            previous=None,
-            migration_id=None,
-            updated_at="2026-08-03T17:00:00Z",
+            active,
+            previous,
+            None,
+            migration_id,
+            None,
+            "2026-08-12T14:10:00Z",
         )
 
-    def _cutover_control(self):
-        return self.model.GenerationControl(
-            active=self.new,
-            previous=self.old,
-            migration_id="migration_001",
-            updated_at="2026-08-03T17:10:00Z",
+    def _write_control(self, control) -> None:
+        self.module.write_generation_control(
+            self.root,
+            control,
+            verified_artifacts=VERIFIED_RUNTIME,
+            verified_overlays=VERIFIED_WEB,
         )
 
-    def _write_journal(self, migration_id, source, target, state: str):
+    def _load(self):
+        return self.module.load_generation_control(
+            self.root,
+            verified_artifacts=VERIFIED_RUNTIME,
+            verified_overlays=VERIFIED_WEB,
+        )
+
+    def _recover(self):
+        return self.module.recover_generation_control(
+            self.root,
+            verified_artifacts=VERIFIED_RUNTIME,
+            verified_overlays=VERIFIED_WEB,
+        )
+
+    def _write_migration(self, migration_id, source, target, state: str) -> None:
         snapshot = self.root / "backups" / migration_id
         snapshot.mkdir(exist_ok=True)
-        journal = self.model.MigrationJournal(
-            migration_id=migration_id,
-            state=state,
-            source=source,
-            target=target,
-            source_snapshot=f"backups/{migration_id}",
-            checks={"fixture": "pass"},
-            created_at="2026-08-03T17:05:00Z",
-            updated_at="2026-08-03T17:06:00Z",
+        self.module.write_migration_journal(
+            self.root,
+            self.model.MigrationJournal(
+                migration_id,
+                state,
+                source,
+                target,
+                f"backups/{migration_id}",
+                {},
+                "2026-08-12T14:00:00Z",
+                "2026-08-12T14:00:00Z",
+            ),
+            verified_artifacts=VERIFIED_RUNTIME,
+            verified_overlays=VERIFIED_WEB,
         )
-        self.module.write_migration_journal(self.root, journal, verified_artifacts=VERIFIED)
-        return journal
+
+    def _write_web(self, activation_id, source, target, state: str, error: str | None = None) -> None:
+        self.module.write_web_activation_journal(
+            self.root,
+            self.model.WebActivationJournal(
+                activation_id,
+                state,
+                source,
+                target,
+                {"ready": state == "ready_committed"},
+                error,
+                "2026-08-12T14:00:00Z",
+                "2026-08-12T14:00:00Z",
+            ),
+            verified_artifacts=VERIFIED_RUNTIME,
+            verified_overlays=VERIFIED_WEB,
+        )
 
 
 if __name__ == "__main__":

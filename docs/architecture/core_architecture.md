@@ -192,6 +192,16 @@ The core owns:
 
 The core does not own app business data.
 
+App hosting also exposes one generic sidecar lifecycle capability named from
+the local binding, `app.<id>.sidecars.restart`. It is valid only for an enabled
+workspace binding whose contract declares at least one HTTP sidecar. The core
+revokes browser tickets and sessions scoped to that workspace and app, stops
+only that binding's declared sidecar processes, starts them again, waits for
+their declared readiness, writes redaction-safe audit evidence, and publishes
+a workspace/app-scoped `maverick.app.runtime-changed` event. The capability
+does not know why a sidecar is restarting and must not contain app-specific
+artifact, migration, or protocol logic.
+
 The app-hosting domain should keep at least these concepts distinct:
 
 - app source or project material
@@ -2244,7 +2254,7 @@ Canonical coding guidance for workspace agents must also be exposed through read
 
 MCP follows the same scoped discovery rule. Core tools use `maverick core mcp list --json`, `maverick core mcp inspect <tool_name> --json`, and `maverick core mcp call <tool_name> ...`. App tools use `maverick app <app_id> mcp list --json`, `maverick app <app_id> mcp inspect <tool_name> --json`, and `maverick app <app_id> mcp call <tool_name> ...`. The core developer-context tools `developer-context.list` and `developer-context.read` expose the same canonical document catalog and one-document read contract over MCP. `--help` remains human-oriented parser help; `list` and `inspect` are the machine-readable discovery contract for agents.
 
-Per-app lifecycle CLI commands use the app namespace but remain core-owned operations. They do not require each app to implement its own install or uninstall script. `app.<app_id>.install` is available when a platform app source or workspace-local project exists. `app.<app_id>.uninstall` is available when the app has a workspace binding. `app.<app_id>.frontend.build` is available when the enabled app declares a frontend entrypoint and has a real frontend build script. `app.<app_id>.remove` is available only for workspace-local app projects, because complete removal deletes workspace-owned source and data rather than merely detaching a binding.
+Per-app lifecycle CLI commands use the app namespace but remain core-owned operations. They do not require each app to implement its own install or uninstall script. `app.<app_id>.install` is available when a platform app source or workspace-local project exists. `app.<app_id>.uninstall` is available when the app has a workspace binding. `app.<app_id>.frontend.build` is available when the enabled app declares a frontend entrypoint and has a real frontend build script. `app.<app_id>.sidecars.restart` is available only for an enabled binding with declared sidecars; it revokes browser authority for that app/workspace, restarts only its declared processes, waits for readiness, audits safely, and emits the scoped runtime/frontend-changed event. `app.<app_id>.remove` is available only for workspace-local app projects, because complete removal deletes workspace-owned source and data rather than merely detaching a binding.
 
 In the first local implementation, app-owned CLI entrypoints follow the same deterministic subprocess contract:
 

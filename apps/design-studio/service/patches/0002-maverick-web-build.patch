@@ -1,0 +1,13 @@
+diff --git a/apps/web/next.config.ts b/apps/web/next.config.ts
+index 062b86a662dbf7c5491909972ead83fa3b5a17ee..e24946df69f996f4d63e346b591438c952c50a65 100644
+--- a/apps/web/next.config.ts
++++ b/apps/web/next.config.ts
+@@ -156,6 +156,8 @@ function configuredAllowedDevHosts(): string[] {
+ }
+ 
+ const nextConfig: NextConfig = {
++  generateBuildId: async () => process.env.OD_REPRODUCIBLE_BUILD_ID || 'open-design-v0.16.1',
++  ...(process.env.OD_REPRODUCIBLE_BUILD_CPUS === '1' ? { experimental: { cpus: 1 } } : {}),
+   allowedDevOrigins: configuredAllowedDevHosts(),
+   outputFileTracingRoot: WORKSPACE_ROOT,
+   reactStrictMode: true,

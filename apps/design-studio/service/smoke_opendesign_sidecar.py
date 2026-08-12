@@ -37,12 +37,14 @@ from opendesign_artifact import (  # noqa: E402
 )
 from opendesign_bootstrap import bootstrap_empty_generation  # noqa: E402
 from opendesign_materialization import discover_verified_bundles  # noqa: E402
+from opendesign_web_release import canonical_web_overlay  # noqa: E402
 from runtime_bridge import build_result_package, reserve_run, store_for_payload  # noqa: E402
 
 
 def main() -> None:
-    bundle_summary, bundle_dir = _assert_bundle_materialized()
-    with TemporaryDirectory() as temp_dir:
+    bundle_summary, bundle_dir, web_static_dir = _assert_bundle_materialized()
+    keep_temporary = os.environ.get("MAVERICK_KEEP_SIDECAR_SMOKE_TEMP") == "1"
+    with TemporaryDirectory(delete=not keep_temporary) as temp_dir:
         repo_root = Path(temp_dir) / "maverick"
         _prepare_temporary_repo(repo_root)
         with _test_platform_env():
@@ -63,7 +65,7 @@ def main() -> None:
                     app,
                     cookie=cookie,
                     expected_version=bundle_summary["runtime_reported_version"],
-                    bundle_dir=bundle_dir,
+                    web_static_dir=web_static_dir,
                 )
                 adapter_result = _smoke_adapter(app, cookie=cookie, repo_root=repo_root)
                 launcher_status = _launcher_status(
@@ -72,6 +74,8 @@ def main() -> None:
                 )
             finally:
                 shutdown.begin_shutdown()
+        if keep_temporary:
+            print(f"Retained sidecar smoke root: {repo_root}", file=sys.stderr)
     print(
         json.dumps(
             {
@@ -91,7 +95,7 @@ def main() -> None:
     )
 
 
-def _assert_bundle_materialized() -> tuple[dict[str, Any], Path]:
+def _assert_bundle_materialized() -> tuple[dict[str, Any], Path, Path]:
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
     try:
         validate_bundle_manifest(manifest, require_artifact_digest=True)
@@ -121,13 +125,13 @@ def _assert_bundle_materialized() -> tuple[dict[str, Any], Path]:
         "app/apps/daemon/package.json",
         "app/apps/daemon/node_modules",
         "app/apps/daemon/dist/cli.js",
-        "app/apps/web/out/index.html",
     ]
     missing = [relative for relative in required if not (bundle.path / relative).exists()]
     forbidden = [
         "app/apps/desktop",
         "app/apps/landing-page",
         "app/apps/packaged",
+        "app/apps/web/out",
         "app/apps/telemetry-worker",
         "charts",
         "deploy",
@@ -147,6 +151,13 @@ def _assert_bundle_materialized() -> tuple[dict[str, Any], Path]:
                 indent=2,
             )
         )
+    overlay, _overlays = canonical_web_overlay(
+        SERVICE_ROOT / "vendor/open-design-web",
+        trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
+        runtime_artifact_sha256=bundle.artifact_sha256,
+        od_version=bundle.opendesign_version,
+        upstream_commit=bundle.upstream_commit,
+    )
     return {
         "path": str(bundle.path.relative_to(REPO_ROOT)),
         "mode": "verified-materialized-artifact",
@@ -154,8 +165,9 @@ def _assert_bundle_materialized() -> tuple[dict[str, Any], Path]:
         "runtime_reported_version": manifest["upstream"]["root_package_version"],
         "upstream_commit": manifest["upstream"]["commit"],
         "artifact_sha256": bundle.artifact_sha256,
+        "web_overlay_sha256": overlay.web_overlay_sha256,
         "file_manifest_sha256": bundle.file_manifest_sha256,
-    }, bundle.path
+    }, bundle.path, overlay.static_dir
 
 
 def _prepare_smoke_generation(repo_root: Path, bundle_summary: dict[str, Any]) -> None:
@@ -163,8 +175,15 @@ def _prepare_smoke_generation(repo_root: Path, bundle_summary: dict[str, Any]) -
     bootstrap_empty_generation(
         generation_root,
         artifact_sha256=bundle_summary["artifact_sha256"],
+        web_overlay_sha256=bundle_summary["web_overlay_sha256"],
         opendesign_version=bundle_summary["release_version"],
         verified_artifacts={bundle_summary["artifact_sha256"]: bundle_summary["release_version"]},
+        verified_overlays={
+            bundle_summary["web_overlay_sha256"]: {
+                "od_version": bundle_summary["release_version"],
+                "compatible_runtime_artifact_sha256": [bundle_summary["artifact_sha256"]],
+            }
+        },
     )
 
 
@@ -240,9 +259,9 @@ def _smoke_proxy_routes(
     *,
     cookie: str,
     expected_version: str,
-    bundle_dir: Path,
+    web_static_dir: Path,
 ) -> list[dict[str, Any]]:
-    next_asset = _next_asset_path(bundle_dir)
+    next_asset = _next_asset_path(web_static_dir)
     checks = [
         ("/api/apps/design-studio/sidecars/opendesign/index.html", "GET", 200),
         (f"/api/apps/design-studio/sidecars/opendesign/{next_asset}", "GET", 200),
@@ -427,12 +446,12 @@ def _backend_state(app: PlatformHost, *, cookie: str) -> dict[str, Any]:
     return state
 
 
-def _next_asset_path(bundle_dir: Path) -> str:
-    static_root = bundle_dir / "app" / "apps" / "web" / "out" / "_next"
+def _next_asset_path(web_static_dir: Path) -> str:
+    static_root = web_static_dir / "_next"
     for path in sorted(static_root.rglob("*")):
         if path.is_file() and path.suffix in {".js", ".css"}:
-            return path.relative_to(bundle_dir / "app" / "apps" / "web" / "out").as_posix()
-    raise SystemExit("OpenDesign web bundle has no _next JavaScript or CSS asset to smoke.")
+            return path.relative_to(web_static_dir).as_posix()
+    raise SystemExit("OpenDesign web overlay has no _next JavaScript or CSS asset to smoke.")
 
 
 def _launcher_status(repo_root: Path, *, expected_artifact_sha256: str) -> dict[str, Any]:
@@ -443,7 +462,7 @@ def _launcher_status(repo_root: Path, *, expected_artifact_sha256: str) -> dict[
     if not payload.get("bundle_configured"):
         raise SystemExit(f"Launcher did not report bundle_configured=true: {payload}")
     active = payload.get("active")
-    if not isinstance(active, dict) or active.get("bundle_artifact_sha256") != expected_artifact_sha256:
+    if not isinstance(active, dict) or active.get("runtime_artifact_sha256") != expected_artifact_sha256:
         raise SystemExit(f"Launcher did not bind the expected artifact generation: {payload}")
     return payload
 

@@ -20,10 +20,13 @@ from urllib.request import Request, urlopen
 from opendesign_artifact import read_bundle_manifest, selected_asset, validate_bundle_manifest
 from opendesign_bootstrap import bootstrap_empty_generation
 from opendesign_materialization import discover_verified_bundles
+from opendesign_web_release import canonical_web_overlay
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent
 REGISTRY_ROOT = SERVICE_ROOT / "vendor/open-design"
+WEB_REGISTRY_ROOT = SERVICE_ROOT / "vendor/open-design-web"
+WEB_TRUST_CONTRACT = SERVICE_ROOT / "opendesign_web_trust.json"
 TOKEN = "a" * 64
 
 
@@ -34,17 +37,26 @@ def main() -> None:
     bundle = discover_verified_bundles(REGISTRY_ROOT).get(asset["sha256"])
     if bundle is None:
         raise SystemExit("Pinned OpenDesign artifact is not materialized")
+    overlay, overlays = canonical_web_overlay(
+        WEB_REGISTRY_ROOT,
+        trust_contract=WEB_TRUST_CONTRACT,
+        runtime_artifact_sha256=bundle.artifact_sha256,
+        od_version=bundle.opendesign_version,
+        upstream_commit=bundle.upstream_commit,
+    )
     with TemporaryDirectory(prefix="maverick-od-runtime-smoke-") as temporary:
         temporary_root = Path(temporary)
         generation_root = temporary_root / "opendesign"
         generation_root.mkdir()
-        for name in ("instances", "backups", "migrations"):
+        for name in ("instances", "backups", "migrations", "web-activations"):
             (generation_root / name).mkdir()
         control, data_dir = bootstrap_empty_generation(
             generation_root,
             artifact_sha256=bundle.artifact_sha256,
+            web_overlay_sha256=overlay.web_overlay_sha256,
             opendesign_version=bundle.opendesign_version,
             verified_artifacts={bundle.artifact_sha256: bundle.opendesign_version},
+            verified_overlays=overlays,
         )
         port = _available_port()
         log_path = temporary_root / "daemon.log"

@@ -257,7 +257,10 @@ export function AppFrameHost({
         window.postMessage(event, window.location.origin);
         return;
       }
-      if (event.type !== "maverick.app.frontend-changed" || !event.owner_app_id) {
+      if (
+        !["maverick.app.frontend-changed", "maverick.app.runtime-changed"].includes(event.type || "") ||
+        !event.owner_app_id
+      ) {
         return;
       }
       window.postMessage(event, window.location.origin);

@@ -272,7 +272,7 @@ export function WidgetSlot({
       }
       const payload = event.data as WidgetMessagePayload;
       if (
-        payload.type === "maverick.app.frontend-changed" &&
+        ["maverick.app.frontend-changed", "maverick.app.runtime-changed"].includes(payload.type || "") &&
         payload.owner_app_id === widget?.owner_app_id &&
         (!payload.workspace_id || payload.workspace_id === activeWorkspaceId)
       ) {

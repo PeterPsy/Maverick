@@ -30,6 +30,40 @@ _PATCHED_LOOPBACK_BYPASS = (
     b"            if (!requireApiTokenOnLoopback && isLoopbackPeerAddress(req.socket?.remoteAddress))\n"
     b"                return next();\n"
 )
+_STATIC_DIR_DECLARATION = b"const STATIC_DIR = path.join(PROJECT_ROOT, 'apps', 'web', 'out');\n"
+_PATCHED_STATIC_DIR_DECLARATION = b"""function resolveRequiredStaticDir() {
+    const configuredStaticDir = process.env.OD_STATIC_DIR;
+    const configuredRegistryRoot = process.env.OD_STATIC_REGISTRY_ROOT;
+    if (!configuredStaticDir || configuredStaticDir.trim() !== configuredStaticDir ||
+        !configuredRegistryRoot || configuredRegistryRoot.trim() !== configuredRegistryRoot) {
+        throw new Error('OD_STATIC_DIR and OD_STATIC_REGISTRY_ROOT are required.');
+    }
+    if (!path.isAbsolute(configuredStaticDir) || !path.isAbsolute(configuredRegistryRoot)) {
+        throw new Error('OpenDesign static overlay paths must be absolute.');
+    }
+    const staticMetadata = fs.lstatSync(configuredStaticDir);
+    const registryMetadata = fs.lstatSync(configuredRegistryRoot);
+    if (staticMetadata.isSymbolicLink() || !staticMetadata.isDirectory() ||
+        registryMetadata.isSymbolicLink() || !registryMetadata.isDirectory()) {
+        throw new Error('OpenDesign static overlay paths must be real directories.');
+    }
+    const staticDir = fs.realpathSync(configuredStaticDir);
+    const registryRoot = fs.realpathSync(configuredRegistryRoot);
+    const relative = path.relative(registryRoot, staticDir);
+    if (!relative || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+        throw new Error('OD_STATIC_DIR must stay inside OD_STATIC_REGISTRY_ROOT.');
+    }
+    return staticDir;
+}
+"""
+_START_SERVER_HOST = b"    host = normalizeDaemonBindHost(host);\n"
+_PATCHED_START_SERVER_HOST = _START_SERVER_HOST + b"    const STATIC_DIR = resolveRequiredStaticDir();\n"
+_STATIC_MOUNT = (
+    b"    if (fs.existsSync(STATIC_DIR)) {\n"
+    b"        app.use(express.static(STATIC_DIR));\n"
+    b"    }\n"
+)
+_PATCHED_STATIC_MOUNT = b"    app.use(express.static(STATIC_DIR));\n"
 
 def apply_boundary_patch(stage: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     policy = manifest["boundary_patch"]
@@ -44,10 +78,22 @@ def apply_boundary_patch(stage: Path, manifest: dict[str, Any]) -> dict[str, Any
     pre_sha256 = hashlib.sha256(source).hexdigest()
     if pre_sha256 != policy["pre_sha256"]:
         raise BoundaryPatchError("OpenDesign boundary patch preimage does not match the authorized release")
-    if source.count(_TOKEN_DECLARATIONS) != 1 or source.count(_LOOPBACK_BYPASS) != 1:
+    if any(
+        source.count(fragment) != 1
+        for fragment in (
+            _TOKEN_DECLARATIONS,
+            _LOOPBACK_BYPASS,
+            _STATIC_DIR_DECLARATION,
+            _START_SERVER_HOST,
+            _STATIC_MOUNT,
+        )
+    ):
         raise BoundaryPatchError("OpenDesign boundary patch semantic preimage is missing or ambiguous")
     patched = source.replace(_TOKEN_DECLARATIONS, _PATCHED_TOKEN_DECLARATIONS, 1)
     patched = patched.replace(_LOOPBACK_BYPASS, _PATCHED_LOOPBACK_BYPASS, 1)
+    patched = patched.replace(_STATIC_DIR_DECLARATION, _PATCHED_STATIC_DIR_DECLARATION, 1)
+    patched = patched.replace(_START_SERVER_HOST, _PATCHED_START_SERVER_HOST, 1)
+    patched = patched.replace(_STATIC_MOUNT, _PATCHED_STATIC_MOUNT, 1)
     if patched == source or patched.count(_PATCHED_LOOPBACK_BYPASS) != 1:
         raise BoundaryPatchError("OpenDesign boundary patch did not produce the authorized transformation")
     post_sha256 = hashlib.sha256(patched).hexdigest()

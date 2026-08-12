@@ -21,11 +21,12 @@ from urllib.request import Request, urlopen
 
 from opendesign_artifact import selected_asset, validate_bundle_manifest
 from opendesign_generation_control import load_generation_control
-from opendesign_generation_model import GenerationTriple
+from opendesign_generation_model import LaunchSelection
 from opendesign_materialization import MaterializedBundle, discover_verified_bundles
 from opendesign_migration_files import controlled_root, require_real_directory
 from opendesign_migration_runtime import MigrationError
 from opendesign_oci_stage import runtime_command
+from opendesign_web_overlay import VerifiedWebOverlay, discover_verified_overlays
 
 
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
@@ -35,7 +36,14 @@ START_TIMEOUT_SECONDS = 60
 class OciMigrationRuntime:
     """Drive a materialized daemon against one marked controlled-copy root."""
 
-    def __init__(self, root: Path, registry_root: Path, manifest: Mapping[str, Any]) -> None:
+    def __init__(
+        self,
+        root: Path,
+        registry_root: Path,
+        web_registry_root: Path,
+        web_trust_contract: Path,
+        manifest: Mapping[str, Any],
+    ) -> None:
         self.root = controlled_root(root)
         self.registry_root = require_real_directory(
             registry_root,
@@ -45,6 +53,15 @@ class OciMigrationRuntime:
         self.manifest = dict(manifest)
         validate_bundle_manifest(self.manifest, require_artifact_digest=True)
         self.bundles = discover_verified_bundles(self.registry_root)
+        self.web_registry_root = require_real_directory(
+            web_registry_root,
+            root=web_registry_root,
+            label="OpenDesign verified web overlay registry",
+        )
+        self.overlays = discover_verified_overlays(
+            self.web_registry_root,
+            trust_contract=web_trust_contract,
+        )
         selected = selected_asset(self.manifest, require_artifact_digest=True)
         if selected["sha256"] not in self.bundles:
             raise MigrationError("pinned OpenDesign migration artifact is not materialized")
@@ -52,6 +69,7 @@ class OciMigrationRuntime:
         self.verified_artifacts = {
             digest: bundle.opendesign_version for digest, bundle in self.bundles.items()
         }
+        self.verified_overlays = dict(self.overlays)
         self._frozen = False
         self._process: subprocess.Popen[bytes] | None = None
         self._log_handle: BinaryIO | None = None
@@ -128,16 +146,20 @@ class OciMigrationRuntime:
                 raise MigrationError("OpenDesign database still has an active owner") from exc
         self.events.append("sidecar_stop_proved")
 
-    def start_sidecar(self, triple: GenerationTriple, data_dir: Path, *, staging: bool) -> None:
+    def start_sidecar(self, triple: LaunchSelection, data_dir: Path, *, staging: bool) -> None:
         self._require_frozen()
         if self._process is not None:
             raise MigrationError("OpenDesign migration runtime already owns a daemon")
-        bundle = self._bundle_for(triple)
+        bundle, overlay = self._bundle_for(triple)
         data_dir = self._controlled_data_dir(data_dir)
         if data_dir.parent.name != triple.data_generation:
             raise MigrationError("OpenDesign target triple does not own the staging data directory")
         if not staging:
-            control = load_generation_control(self.root, verified_artifacts=self.verified_artifacts)
+            control = load_generation_control(
+                self.root,
+                verified_artifacts=self.verified_artifacts,
+                verified_overlays=self.verified_overlays,
+            )
             if control.active != triple:
                 raise MigrationError("OpenDesign production start does not match active control")
 
@@ -162,6 +184,8 @@ class OciMigrationRuntime:
             "OD_PORT": str(port),
             "OD_REQUIRE_API_TOKEN_ON_LOOPBACK": "1",
             "OD_SANDBOX_MODE": "1",
+            "OD_STATIC_DIR": str(overlay.static_dir),
+            "OD_STATIC_REGISTRY_ROOT": str(self.web_registry_root),
             "PATH": "/usr/bin:/bin",
             "TMPDIR": str(runtime_temp),
         }
@@ -302,13 +326,23 @@ class OciMigrationRuntime:
             "database_integrity": dict(self._database_integrity),
         }
 
-    def _bundle_for(self, triple: GenerationTriple) -> MaterializedBundle:
-        if triple.bundle_artifact_sha256 != self._selected_artifact_sha256:
+    def _bundle_for(
+        self,
+        triple: LaunchSelection,
+    ) -> tuple[MaterializedBundle, VerifiedWebOverlay]:
+        if triple.runtime_artifact_sha256 != self._selected_artifact_sha256:
             raise MigrationError("OpenDesign migration runtime received a non-current artifact")
-        bundle = self.bundles.get(triple.bundle_artifact_sha256)
+        bundle = self.bundles.get(triple.runtime_artifact_sha256)
         if bundle is None or bundle.opendesign_version != triple.od_version:
-            raise MigrationError("OpenDesign migration triple has no verified materialized bundle")
-        return bundle
+            raise MigrationError("OpenDesign migration selection has no verified materialized runtime")
+        overlay = self.overlays.get(triple.web_overlay_sha256)
+        if (
+            overlay is None
+            or overlay.od_version != triple.od_version
+            or triple.runtime_artifact_sha256 not in overlay.compatible_runtime_artifact_sha256
+        ):
+            raise MigrationError("OpenDesign migration selection has no compatible verified web overlay")
+        return bundle, overlay
 
     def _controlled_data_dir(self, data_dir: Path) -> Path:
         resolved = require_real_directory(data_dir, root=self.root, label="OpenDesign generation data")

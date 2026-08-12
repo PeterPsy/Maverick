@@ -19,7 +19,19 @@ _BUNDLE_MANIFEST = json.loads(
     (SERVICE_ROOT / "opendesign_bundle.json").read_text(encoding="utf-8")
 )
 NEW_DIGEST = _BUNDLE_MANIFEST["artifact"]["assets"]["linux-x86_64"]["sha256"]
+OLD_WEB = "d" * 64
+NEW_WEB = "e" * 64
 VERIFIED = {OLD_DIGEST: "0.10.1", NEW_DIGEST: "0.16.1"}
+VERIFIED_OVERLAYS = {
+    OLD_WEB: {
+        "od_version": "0.10.1",
+        "compatible_runtime_artifact_sha256": [OLD_DIGEST],
+    },
+    NEW_WEB: {
+        "od_version": "0.16.1",
+        "compatible_runtime_artifact_sha256": [NEW_DIGEST],
+    },
+}
 LEGACY_ID = "design_0123456789ab"
 
 
@@ -135,21 +147,29 @@ class OpenDesignMigrationTests(unittest.TestCase):
             self.root / "instances",
             self.root / "backups",
             self.root / "migrations",
+            self.root / "web-activations",
         ):
             path.mkdir(parents=True, exist_ok=True)
         self.files.mark_controlled_copy(self.root)
-        self.old = self.model.GenerationTriple(OLD_DIGEST, "0.10.1", "gen_old")
-        self.new = self.model.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_new")
+        self.old = self.model.LaunchSelection(OLD_DIGEST, OLD_WEB, "0.10.1", "gen_old")
+        self.new = self.model.LaunchSelection(NEW_DIGEST, NEW_WEB, "0.16.1", "gen_new")
         old_data = self.root / "instances" / "gen_old" / "data"
         old_data.mkdir(parents=True)
         (old_data / "legacy.db").write_bytes(b"old generation bytes")
         initial = self.model.GenerationControl(
             active=self.old,
-            previous=None,
+            previous_release=None,
+            previous_web=None,
             migration_id=None,
+            web_activation_id=None,
             updated_at="2026-08-04T12:00:00Z",
         )
-        self.control_module.write_generation_control(self.root, initial, verified_artifacts=VERIFIED)
+        self.control_module.write_generation_control(
+            self.root,
+            initial,
+            verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
         imported = self.app_data / "imports" / LEGACY_ID / "import_001" / "brief.txt"
         imported.parent.mkdir(parents=True)
         imported.write_bytes(b"legacy import bytes")
@@ -192,6 +212,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
             target=self.new,
             migration_id="migration_fixture_001",
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
             runtime=self.runtime,
             now=self._now,
             minimum_free_bytes=0,
@@ -203,7 +224,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
         outcome = self._migrate()
 
         self.assertEqual(outcome.control.active, self.new)
-        self.assertEqual(outcome.control.previous, self.old)
+        self.assertEqual(outcome.control.previous_release, self.old)
         self.assertEqual(outcome.migrated_projects, 1)
         self.assertEqual(outcome.migrated_imports, 1)
         self.assertEqual(
@@ -223,6 +244,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
             self.root,
             "migration_fixture_001",
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
         )
         self.assertEqual(journal.state, "cutover_committed")
         self.assertEqual(journal.checks["pre_migration_health"], "pass")
@@ -241,7 +263,11 @@ class OpenDesignMigrationTests(unittest.TestCase):
             self._migrate()
 
         self.assertNotIn("private/path", str(raised.exception))
-        control = self.control_module.load_generation_control(self.root, verified_artifacts=VERIFIED)
+        control = self.control_module.load_generation_control(
+            self.root,
+            verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
         self.assertEqual(control.active, self.old)
         self.assertFalse((self.root / "legacy-project-map.json").exists())
         self.assertFalse((self.root / "instances" / "gen_new").exists())
@@ -254,13 +280,14 @@ class OpenDesignMigrationTests(unittest.TestCase):
             target=self.new,
             migration_id="migration_bundle_upgrade_001",
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
             runtime=self.runtime,
             now=self._now,
             minimum_free_bytes=0,
         )
 
         self.assertEqual(outcome.control.active, self.new)
-        self.assertEqual(outcome.control.previous, self.old)
+        self.assertEqual(outcome.control.previous_release, self.old)
         self.assertEqual(outcome.project_count, 1)
         self.assertEqual(
             (self.root / "instances/gen_new/data/legacy.db").read_bytes(),
@@ -270,6 +297,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
             self.root,
             "migration_bundle_upgrade_001",
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
         )
         self.assertEqual(journal.state, "cutover_committed")
         self.assertEqual(journal.checks["upgrade_kind"], "bundle_controlled_copy")
@@ -288,12 +316,17 @@ class OpenDesignMigrationTests(unittest.TestCase):
                 target=self.new,
                 migration_id="migration_bundle_upgrade_failure",
                 verified_artifacts=VERIFIED,
+                verified_overlays=VERIFIED_OVERLAYS,
                 runtime=self.runtime,
                 now=self._now,
                 minimum_free_bytes=0,
             )
 
-        control = self.control_module.load_generation_control(self.root, verified_artifacts=VERIFIED)
+        control = self.control_module.load_generation_control(
+            self.root,
+            verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
         self.assertEqual(control.active, self.old)
         self.assertFalse((self.root / "instances/gen_new").exists())
         self.assertFalse((self.root / "backups/migration_bundle_upgrade_failure").exists())
@@ -308,13 +341,21 @@ class OpenDesignMigrationTests(unittest.TestCase):
             target=self.new,
             migration_id="migration_bundle_upgrade_first",
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
             runtime=self.runtime,
             now=self._now,
             minimum_free_bytes=0,
         )
         next_digest = "c" * 64
-        next_target = self.model.GenerationTriple(next_digest, "0.16.1", "gen_next")
+        next_target = self.model.LaunchSelection(next_digest, NEW_WEB, "0.16.1", "gen_next")
         verified = {**VERIFIED, next_digest: "0.16.1"}
+        verified_overlays = {
+            **VERIFIED_OVERLAYS,
+            NEW_WEB: {
+                "od_version": "0.16.1",
+                "compatible_runtime_artifact_sha256": [NEW_DIGEST, next_digest],
+            },
+        }
 
         with self.assertRaisesRegex(self.runtime_module.MigrationError, "controlled OpenDesign bundle upgrade failed"):
             self.module.upgrade_controlled_copy(
@@ -322,18 +363,24 @@ class OpenDesignMigrationTests(unittest.TestCase):
                 target=next_target,
                 migration_id="migration_bundle_upgrade_second",
                 verified_artifacts=verified,
+                verified_overlays=verified_overlays,
                 runtime=self.runtime,
                 now=self._now,
                 minimum_free_bytes=0,
             )
 
-        retained = self.control_module.load_generation_control(self.root, verified_artifacts=verified)
+        retained = self.control_module.load_generation_control(
+            self.root,
+            verified_artifacts=verified,
+            verified_overlays=verified_overlays,
+        )
         self.assertEqual(retained, first.control)
         second = self.module.upgrade_controlled_copy(
             self.root,
             target=next_target,
             migration_id="migration_bundle_upgrade_second",
             verified_artifacts=verified,
+            verified_overlays=verified_overlays,
             runtime=self.runtime,
             now=self._now,
             minimum_free_bytes=0,
@@ -341,12 +388,13 @@ class OpenDesignMigrationTests(unittest.TestCase):
         )
 
         self.assertEqual(second.control.active, next_target)
-        self.assertEqual(second.control.previous, self.new)
+        self.assertEqual(second.control.previous_release, self.new)
         self.assertTrue((self.root / "instances/gen_old/data/legacy.db").is_file())
         journal = self.control_module.load_migration_journal(
             self.root,
             "migration_bundle_upgrade_second",
             verified_artifacts=verified,
+            verified_overlays=verified_overlays,
         )
         self.assertTrue(journal.checks["replaced_retained_previous"])
 
@@ -365,12 +413,17 @@ class OpenDesignMigrationTests(unittest.TestCase):
             with self.assertRaisesRegex(self.runtime_module.MigrationError, "OSError"):
                 self._migrate()
 
-        cutover = self.control_module.load_generation_control(self.root, verified_artifacts=VERIFIED)
+        cutover = self.control_module.load_generation_control(
+            self.root,
+            verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
         self.assertEqual(cutover.active, self.new)
         pending = self.control_module.load_migration_journal(
             self.root,
             "migration_fixture_001",
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
         )
         self.assertEqual(pending.state, "prepared")
 
@@ -378,6 +431,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
         recovered = self.module.recover_controlled_copy(
             self.root,
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
             runtime=recovery_runtime,
             now=self._now,
         )
@@ -387,6 +441,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
             self.root,
             "migration_fixture_001",
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
         )
         self.assertEqual(committed.state, "cutover_committed")
         self.assertEqual(self.state_path.stat().st_mode & 0o777, stat.S_IRUSR)
@@ -402,12 +457,13 @@ class OpenDesignMigrationTests(unittest.TestCase):
             self.root,
             rollback_id="migration_rollback_001",
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
             runtime=rollback_runtime,
             now=self._now,
         )
 
         self.assertEqual(rollback.active, self.old)
-        self.assertEqual(rollback.previous, self.new)
+        self.assertEqual(rollback.previous_release, self.new)
         self.assertEqual(forward.read_bytes(), b"forward-only bytes")
         self.assertIn(("start", "gen_old", "data", False), rollback_runtime.events)
         self.assertIn("health", rollback_runtime.events)
@@ -440,6 +496,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
                 self.root,
                 generation_id="gen_old",
                 verified_artifacts=VERIFIED,
+                verified_overlays=VERIFIED_OVERLAYS,
                 runtime=self.runtime,
                 retention_expired=True,
             )
@@ -448,6 +505,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
                 self.root,
                 generation_id="gen_orphan",
                 verified_artifacts=VERIFIED,
+                verified_overlays=VERIFIED_OVERLAYS,
                 runtime=self.runtime,
                 retention_expired=False,
             )
@@ -456,6 +514,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
             self.root,
             generation_id="gen_orphan",
             verified_artifacts=VERIFIED,
+            verified_overlays=VERIFIED_OVERLAYS,
             runtime=self.runtime,
             retention_expired=True,
         )

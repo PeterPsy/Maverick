@@ -39,12 +39,6 @@ def stage_runtime_closure(
         heavy=True,
         runtime_session_id=runtime_session_id,
     )
-    web_source = _safe_source(source, stage["web_static_source"])
-    if web_source.is_symlink() or not web_source.is_dir():
-        raise StageError("OpenDesign web static export is missing after build")
-    web_destination = staging.joinpath(*PurePosixPath(stage["web_static_dir"]).parts)
-    web_destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(web_source, web_destination, symlinks=True)
     for relative in stage["resource_paths"]:
         source_path = _safe_source(source, relative)
         destination = staging.joinpath(*PurePosixPath(relative).parts)
@@ -69,10 +63,11 @@ def stage_runtime_closure(
     normalized = _normalize_bin_shims(staging, daemon_root)
     required = [
         staging.joinpath(*PurePosixPath(stage["built_entrypoint"]).parts),
-        web_destination,
     ]
     if any(not path.exists() for path in required):
-        raise StageError("OpenDesign staged closure is missing daemon or web output")
+        raise StageError("OpenDesign staged closure is missing daemon output")
+    if (staging / "apps/web/out").exists():
+        raise StageError("OpenDesign runtime closure must not contain embedded web output")
     create_file_manifest(staging)
     _reject_build_path_leaks(staging, markers=(str(source), str(staging.parent)))
     return normalized

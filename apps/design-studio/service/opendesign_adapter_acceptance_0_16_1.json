@@ -8,8 +8,9 @@
     "commit": "276b4d8e970bc143d7ad060181a89a834e3d9caf",
     "oci_reference": "ghcr.io/nexu-io/od:0.16.1",
     "oci_index_digest": "sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1",
-    "materialized_artifact_sha256": "9ab929264888b981e4205f0c596ee1128d04bc1cc7573266c15c1ad14e9a8d68",
-    "file_manifest_sha256": "64cca85fc901c484837a3a759a56dab200e4b5c8f383798681cd505333765608"
+    "runtime_artifact_sha256": "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
+    "web_overlay_sha256": "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2",
+    "file_manifest_sha256": "647cba762cd629e447cd6c72fd893b9b0c85eaea6abfadb3a21821448f500183"
   },
   "adapter": {
     "catalog_owner": "opendesign-api",

@@ -57,6 +57,27 @@
       },
       "required_secrets": [],
       "secret_selectors": []
+    },
+    "dev": {
+      "description": "Classify and apply an incremental Design Studio development diff.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "operation": {"type": "string", "enum": ["apply"]},
+          "profile": {"type": "string", "enum": ["dev", "release"]},
+          "changed_files": {"type": "array", "items": {"type": "string"}},
+          "source_repository": {"type": "string"},
+          "web_signing_key": {"type": "string"},
+          "runtime_signing_key": {"type": "string"},
+          "cache_root": {"type": "string"},
+          "repo_root": {"type": "string"},
+          "workspace_id": {"type": "string"},
+          "dry_run": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      },
+      "required_secrets": [],
+      "secret_selectors": []
     }
   }
 }

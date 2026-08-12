@@ -1,0 +1,211 @@
+diff --git a/apps/daemon/src/server.ts b/apps/daemon/src/server.ts
+index 496efdc039a10ce5eee7e8400f8d474192388d22..efd42321793812466067305b2ddab5466191e0b9 100644
+--- a/apps/daemon/src/server.ts
++++ b/apps/daemon/src/server.ts
+@@ -683,7 +683,12 @@ import {
+   seedLibraryExtensionOrigins,
+ } from './library-tokens.js';
+ import { listLibraryTokenOrigins } from './library-store.js';
+-import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
++import {
++  apiTokenFromEnv,
++  isApiAuthDisabled,
++  isApiTokenMiddlewareEnabled,
++  isTruthyEnvFlag,
++} from './api-token-auth.js';
+ import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
+ import { createWhatsNewService } from './services/whats-new.js';
+ import { execCommandViaLoginShell } from './services/login-shell.js';
+@@ -735,11 +740,38 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
+     process.env.OD_INSTALLATION_DIR,
+   ],
+ });
+-// Built web app lives in `out/` — that's where Next.js writes the static
+-// export configured in next.config.ts. The folder name used to be `dist/`
+-// when this project shipped with Vite; the daemon serves whatever the
+-// frontend toolchain emits, no further config needed.
+-const STATIC_DIR = path.join(PROJECT_ROOT, 'apps', 'web', 'out');
++function resolveRequiredStaticDir(): string {
++  const configuredStaticDir = process.env.OD_STATIC_DIR;
++  const configuredRegistryRoot = process.env.OD_STATIC_REGISTRY_ROOT;
++  if (
++    !configuredStaticDir ||
++    configuredStaticDir.trim() !== configuredStaticDir ||
++    !configuredRegistryRoot ||
++    configuredRegistryRoot.trim() !== configuredRegistryRoot
++  ) {
++    throw new Error('OD_STATIC_DIR and OD_STATIC_REGISTRY_ROOT are required.');
++  }
++  if (!path.isAbsolute(configuredStaticDir) || !path.isAbsolute(configuredRegistryRoot)) {
++    throw new Error('OpenDesign static overlay paths must be absolute.');
++  }
++  const staticDirMetadata = fs.lstatSync(configuredStaticDir);
++  const registryMetadata = fs.lstatSync(configuredRegistryRoot);
++  if (
++    staticDirMetadata.isSymbolicLink() ||
++    !staticDirMetadata.isDirectory() ||
++    registryMetadata.isSymbolicLink() ||
++    !registryMetadata.isDirectory()
++  ) {
++    throw new Error('OpenDesign static overlay paths must identify real directories.');
++  }
++  const staticDir = fs.realpathSync(configuredStaticDir);
++  const registryRoot = fs.realpathSync(configuredRegistryRoot);
++  const relative = path.relative(registryRoot, staticDir);
++  if (!relative || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
++    throw new Error('OD_STATIC_DIR must stay inside OD_STATIC_REGISTRY_ROOT.');
++  }
++  return staticDir;
++}
+ // Baked plugin preview clips (scripts/bake-plugin-previews.mjs). Served at
+ // PLUGIN_PREVIEWS_ROUTE; their manifest rewrites html plugins' previews to a
+ // cheap poster + hover-play video in the home gallery.
+@@ -2024,6 +2056,7 @@ export async function startServer({
+   runtime = null,
+ }: StartServerOptions = {}) {
+   host = normalizeDaemonBindHost(host);
++  const STATIC_DIR = resolveRequiredStaticDir();
+   let resolvedPort = port;
+   let daemonShuttingDown = false;
+   const extraAllowedOrigins = configuredAllowedOrigins();
+@@ -2042,6 +2075,7 @@ export async function startServer({
+   // are exempted so the desktop UI keeps working).
+   const apiToken = apiTokenFromEnv();
+   const apiAuthDisabled = isApiAuthDisabled();
++  const requireApiTokenOnLoopback = isTruthyEnvFlag(process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK);
+   if (!isLoopbackHostname(host) && apiToken.length === 0 && !apiAuthDisabled) {
+     throw new Error(
+       `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
+@@ -2101,11 +2135,11 @@ export async function startServer({
+           return next();
+         }
+       }
+-      // Loopback short-circuit. We ignore the proxied X-Forwarded-For
+-      // header here because a reverse proxy MUST always forward the
+-      // bearer; the loopback bypass exists for the localhost desktop
+-      // UI which has no proxy in the path.
+-      if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
++      // Loopback short-circuit. Hosted embeddings can disable this bypass
++      // with OD_REQUIRE_API_TOKEN_ON_LOOPBACK=1 so a network-isolated relay
++      // remains the only authenticated caller. We ignore X-Forwarded-For:
++      // reverse proxies must always forward the bearer.
++      if (!requireApiTokenOnLoopback && isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+       const auth = req.get('authorization') ?? '';
+       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
+       if (!match || match[1] !== apiToken) {
+@@ -2477,9 +2511,7 @@ export async function startServer({
+     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
+   });
+ 
+-  if (fs.existsSync(STATIC_DIR)) {
+-    app.use(express.static(STATIC_DIR));
+-  }
++  app.use(express.static(STATIC_DIR));
+ 
+   // ---- Projects (DB-backed) -------------------------------------------------
+ 
+diff --git a/apps/daemon/tests/api-token-guard.test.ts b/apps/daemon/tests/api-token-guard.test.ts
+index 23eb90cacd3abfacf791292dfac4aacae74500ea..024ad956bbd93e36bc7de9090ab4f9a78569a328 100644
+--- a/apps/daemon/tests/api-token-guard.test.ts
++++ b/apps/daemon/tests/api-token-guard.test.ts
+@@ -13,6 +13,7 @@
+ // negative case that constructs the start call directly).
+ 
+ import type http from 'node:http';
++import path from 'node:path';
+ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+ import { isApiAuthDisabled, isApiTokenMiddlewareEnabled } from '../src/api-token-auth.js';
+ import { startServer } from '../src/server.js';
+@@ -20,11 +21,19 @@ import { startServer } from '../src/server.js';
+ const PREVIOUS_TOKEN = process.env.OD_API_TOKEN;
+ const PREVIOUS_HOST  = process.env.OD_BIND_HOST;
+ const PREVIOUS_DISABLE_API_AUTH = process.env.OD_DISABLE_API_AUTH;
++const PREVIOUS_REQUIRE_TOKEN_ON_LOOPBACK = process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK;
++const PREVIOUS_STATIC_DIR = process.env.OD_STATIC_DIR;
++const PREVIOUS_STATIC_REGISTRY_ROOT = process.env.OD_STATIC_REGISTRY_ROOT;
+ 
+ let server: http.Server | undefined;
+ let baseUrl = '';
+ let shutdown: (() => Promise<void> | void) | undefined;
+ 
++beforeEach(() => {
++  process.env.OD_STATIC_DIR = path.resolve(process.cwd(), '../web/public');
++  process.env.OD_STATIC_REGISTRY_ROOT = path.resolve(process.cwd(), '..');
++});
++
+ afterEach(async () => {
+   if (shutdown) await Promise.resolve(shutdown());
+   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
+@@ -36,9 +45,29 @@ afterEach(async () => {
+   else process.env.OD_BIND_HOST = PREVIOUS_HOST;
+   if (PREVIOUS_DISABLE_API_AUTH === undefined) delete process.env.OD_DISABLE_API_AUTH;
+   else process.env.OD_DISABLE_API_AUTH = PREVIOUS_DISABLE_API_AUTH;
++  if (PREVIOUS_REQUIRE_TOKEN_ON_LOOPBACK === undefined) delete process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK;
++  else process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK = PREVIOUS_REQUIRE_TOKEN_ON_LOOPBACK;
++  if (PREVIOUS_STATIC_DIR === undefined) delete process.env.OD_STATIC_DIR;
++  else process.env.OD_STATIC_DIR = PREVIOUS_STATIC_DIR;
++  if (PREVIOUS_STATIC_REGISTRY_ROOT === undefined) delete process.env.OD_STATIC_REGISTRY_ROOT;
++  else process.env.OD_STATIC_REGISTRY_ROOT = PREVIOUS_STATIC_REGISTRY_ROOT;
+ });
+ 
+ describe('bound-API-token guard', () => {
++  it('refuses to start without an explicit static overlay directory', async () => {
++    delete process.env.OD_STATIC_DIR;
++    delete process.env.OD_STATIC_REGISTRY_ROOT;
++    await expect(startServer({ port: 0, host: '127.0.0.1', returnServer: true }))
++      .rejects.toThrow(/OD_STATIC_DIR/);
++  });
++
++  it('refuses a static overlay outside the verified registry root', async () => {
++    process.env.OD_STATIC_REGISTRY_ROOT = path.resolve(process.cwd(), '../web/public');
++    process.env.OD_STATIC_DIR = path.resolve(process.cwd(), '..');
++    await expect(startServer({ port: 0, host: '127.0.0.1', returnServer: true }))
++      .rejects.toThrow(/OD_STATIC_DIR/);
++  });
++
+   it('refuses to start with OD_BIND_HOST=0.0.0.0 when OD_API_TOKEN is unset', async () => {
+     delete process.env.OD_API_TOKEN;
+     await expect(startServer({ port: 0, host: '0.0.0.0', returnServer: true }))
+@@ -92,6 +121,30 @@ describe('bearer middleware', () => {
+     expect(resp.status).toBe(200);
+   });
+ 
++  it('requires the bearer from loopback when the hosted boundary flag is enabled', async () => {
++    if (shutdown) await Promise.resolve(shutdown());
++    if (server?.listening) await new Promise<void>((resolve) => server!.close(() => resolve()));
++    server = undefined;
++    shutdown = undefined;
++    process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK = '1';
++    const started = (await startServer({ port: 0, host: '127.0.0.1', returnServer: true })) as {
++      url: string;
++      server: http.Server;
++      shutdown?: () => Promise<void> | void;
++    };
++    baseUrl = started.url;
++    server = started.server;
++    shutdown = started.shutdown;
++
++    const unauthenticated = await fetch(`${baseUrl}/api/plugins`);
++    const authenticated = await fetch(`${baseUrl}/api/plugins`, {
++      headers: { authorization: 'Bearer secret-test-token' },
++    });
++
++    expect(unauthenticated.status).toBe(401);
++    expect(authenticated.status).toBe(200);
++  });
++
+   it('keeps health / readiness / version probes open without a bearer', async () => {
+     for (const path of ['/api/health', '/api/ready', '/api/version']) {
+       const resp = await fetch(`${baseUrl}${path}`);
+diff --git a/package.json b/package.json
+index 412abc12af1234cc401ca2d651187e8567951afe..1cfa55a2f5351223c543a37971f8e057f50559df 100644
+--- a/package.json
++++ b/package.json
+@@ -62,6 +62,7 @@
+       "electron",
+       "electron-winstaller",
+       "esbuild",
++      "node-pty",
+       "protobufjs",
+       "sharp"
+     ]

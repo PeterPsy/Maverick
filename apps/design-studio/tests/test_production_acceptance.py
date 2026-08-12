@@ -51,8 +51,12 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertEqual(evidence["opendesign"]["version"], "0.16.1")
         self.assertEqual(evidence["opendesign"]["oci_reference"], "ghcr.io/nexu-io/od:0.16.1")
         self.assertEqual(
-            evidence["opendesign"]["artifact_sha256"],
-            "9ab929264888b981e4205f0c596ee1128d04bc1cc7573266c15c1ad14e9a8d68",
+            evidence["opendesign"]["runtime_artifact_sha256"],
+            "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
+        )
+        self.assertEqual(
+            evidence["opendesign"]["web_overlay_sha256"],
+            "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2",
         )
         product_path = evidence["product_path"]
         for key in (

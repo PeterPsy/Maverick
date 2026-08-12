@@ -99,6 +99,8 @@ def apply_patch_series(
     source: Path,
     service_root: Path,
     manifest: dict[str, Any],
+    *,
+    components: set[str] | frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
     series = validate_patch_series(service_root, manifest, source_root=source)
     series_path = _safe_file(service_root, manifest["fallback_build"]["patch_series"])
@@ -107,6 +109,9 @@ def apply_patch_series(
         if not isinstance(entry_value, dict):
             raise SourceError("OpenDesign patch entry is invalid")
         entry = entry_value
+        component = str(entry["component"])
+        if components is not None and component not in components:
+            continue
         patch_path = _safe_file(series_path.parent, entry["path"])
         patch_command = [
             "patch",
@@ -132,6 +137,7 @@ def apply_patch_series(
         evidence.append(
             {
                 "path": entry["path"],
+                "component": component,
                 "sha256": entry["sha256"],
                 "reason": entry["reason"],
                 "files": sorted(declared_files),

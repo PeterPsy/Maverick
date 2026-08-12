@@ -9,6 +9,7 @@ from core.apps.errors import AppHostingError
 from core.apps.dependencies import resolve_app_dependencies, save_app_dependency_selection
 from core.apps.frontend_build import app_supports_frontend_build, build_workspace_app_frontend
 from core.apps.models import AppSourceRecord, WorkspaceLocalAppProjectRecord
+from core.apps.sidecar_restart import app_supports_sidecar_restart, restart_workspace_app_sidecars
 from core.apps.service import delete_workspace_local_app_project, install_store_app, install_workspace_local_app, uninstall_workspace_app
 from core.apps.store import AppStore
 from core.apps.workspace_local_discovery import sync_workspace_local_app_projects
@@ -54,6 +55,14 @@ APP_DEPENDENCY_MANAGEMENT = CliInvocationPolicy(
     requires_full_access=False,
 )
 
+APP_SIDECAR_RESTART = CliInvocationPolicy(
+    operator_only=False,
+    required_platform_role=None,
+    sandbox_agent_allowed=False,
+    requires_workspace_context=True,
+    requires_full_access=True,
+)
+
 
 def app_lifecycle_command_specs(
     *,
@@ -64,6 +73,8 @@ def app_lifecycle_command_specs(
     start_path: Path | None = None,
     observability_store=None,
     app_event_bus=None,
+    sidecar_browser_sessions=None,
+    shutdown_controller=None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     """Build per-app lifecycle CLI commands for known app sources and workspace-local projects."""
     if app_store is None or workspace_id is None:
@@ -135,6 +146,22 @@ def app_lifecycle_command_specs(
                         start_path=start_path,
                     )
                 )
+            if (
+                sidecar_browser_sessions is not None
+                and app_supports_sidecar_restart(app_store, binding=binding, start_path=start_path)
+            ):
+                specs.append(
+                    _sidecar_restart_command(
+                        app_store,
+                        app_id=app_id,
+                        app_event_bus=app_event_bus,
+                        observability_store=observability_store,
+                        sidecar_browser_sessions=sidecar_browser_sessions,
+                        shutdown_controller=shutdown_controller,
+                        workspace_id=workspace_id,
+                        start_path=start_path,
+                    )
+                )
         if app_id in projects_by_app:
             specs.append(
                 _remove_command(
@@ -183,6 +210,26 @@ def _frontend_build_command_definition(*, app_id: str, description: str, workspa
         workspace_id=workspace_id,
         exposure_scope="core_global",
         invocation_policy=APP_FRONTEND_BUILD,
+        entrypoint_path=None,
+    )
+
+
+def _sidecar_restart_command_definition(
+    *,
+    app_id: str,
+    description: str,
+    workspace_id: str,
+) -> CliCommandDefinition:
+    return CliCommandDefinition(
+        command_id=f"app.{app_id}.sidecars.restart",
+        path_segments=["app", app_id, "sidecars.restart"],
+        description=description,
+        argument_schema={"type": "object", "additionalProperties": False},
+        owner_kind="app",
+        owner_id=app_id,
+        workspace_id=workspace_id,
+        exposure_scope="core_global",
+        invocation_policy=APP_SIDECAR_RESTART,
         entrypoint_path=None,
     )
 
@@ -512,6 +559,44 @@ def _frontend_build_command(
         _frontend_build_command_definition(
             app_id=app_id,
             description=f"Build the declared frontend artifact for app `{app_id}` and refresh mounted clients.",
+            workspace_id=workspace_id,
+        ),
+        _handler,
+    )
+
+
+def _sidecar_restart_command(
+    app_store: AppStore,
+    *,
+    app_id: str,
+    app_event_bus,
+    observability_store,
+    sidecar_browser_sessions,
+    shutdown_controller,
+    workspace_id: str,
+    start_path: Path | None,
+) -> tuple[CliCommandDefinition, Any]:
+    def _handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        target_workspace_id = _target_workspace_id(arguments, context, workspace_id)
+        return restart_workspace_app_sidecars(
+            app_store,
+            workspace_id=target_workspace_id,
+            app_id=app_id,
+            sidecar_browser_sessions=sidecar_browser_sessions,
+            start_path=(start_path or Path.cwd()).resolve(),
+            app_event_bus=app_event_bus,
+            observability_store=observability_store,
+            runtime_session_id=context.runtime_session_id,
+            shutdown_controller=shutdown_controller,
+        )
+
+    return (
+        _sidecar_restart_command_definition(
+            app_id=app_id,
+            description=(
+                f"Revoke browser authority and restart only app `{app_id}` sidecars, "
+                "waiting for declared readiness."
+            ),
             workspace_id=workspace_id,
         ),
         _handler,

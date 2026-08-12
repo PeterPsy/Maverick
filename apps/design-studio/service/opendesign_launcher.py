@@ -21,6 +21,8 @@ LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 SERVICE_ROOT = Path(__file__).resolve().parent
 APP_ROOT = SERVICE_ROOT.parent
 DEFAULT_BUNDLE_ROOT = SERVICE_ROOT / "vendor" / "open-design"
+DEFAULT_WEB_ROOT = SERVICE_ROOT / "vendor" / "open-design-web"
+WEB_TRUST_CONTRACT = SERVICE_ROOT / "opendesign_web_trust.json"
 MANIFEST_PATH = SERVICE_ROOT / "opendesign_bundle.json"
 
 
@@ -39,9 +41,11 @@ def main() -> None:
     _required_env("OD_API_TOKEN")
     generation_root = _required_dir("MAVERICK_OPENDESIGN_DATA_ROOT")
     registry_root = _registry_root()
+    web_registry_root = _web_registry_root()
     manifest = _manifest()
     binding = _runtime_binding(
         registry_root=registry_root,
+        web_registry_root=web_registry_root,
         generation_root=generation_root,
         manifest=manifest,
     )
@@ -55,9 +59,18 @@ def main() -> None:
         plan,
         binding,
         registry_root,
+        web_registry_root,
         manifest=manifest,
     )
-    _exec(plan, _daemon_env(data_dir=data_dir, media_config_dir=media_config_dir))
+    _exec(
+        plan,
+        _daemon_env(
+            data_dir=data_dir,
+            media_config_dir=media_config_dir,
+            static_dir=binding.overlay.static_dir,
+            static_registry_root=web_registry_root,
+        ),
+    )
 
 
 def _registry_root() -> Path:
@@ -69,6 +82,18 @@ def _registry_root() -> Path:
     app_root = APP_ROOT.resolve()
     if app_root != resolved and app_root not in resolved.parents:
         raise SystemExit("MAVERICK_OPENDESIGN_BUNDLE_ROOT must stay inside the Design Studio app source.")
+    return resolved
+
+
+def _web_registry_root() -> Path:
+    raw = os.environ.get("MAVERICK_OPENDESIGN_WEB_ROOT")
+    path = Path(raw).expanduser() if raw else DEFAULT_WEB_ROOT
+    resolved = path.resolve()
+    if os.environ.get("MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE") == "1":
+        return resolved
+    app_root = APP_ROOT.resolve()
+    if app_root != resolved and app_root not in resolved.parents:
+        raise SystemExit("MAVERICK_OPENDESIGN_WEB_ROOT must stay inside the Design Studio app source.")
     return resolved
 
 
@@ -91,7 +116,13 @@ def _resolve_launch_plan(binding: RuntimeBinding, manifest: dict[str, Any]) -> L
     )
 
 
-def _daemon_env(*, data_dir: Path, media_config_dir: Path) -> dict[str, str]:
+def _daemon_env(
+    *,
+    data_dir: Path,
+    media_config_dir: Path,
+    static_dir: Path,
+    static_registry_root: Path,
+) -> dict[str, str]:
     allowed = {
         "CI",
         "DO_NOT_TRACK",
@@ -110,6 +141,8 @@ def _daemon_env(*, data_dir: Path, media_config_dir: Path) -> dict[str, str]:
     env = {key: value for key, value in os.environ.items() if key in allowed}
     env["OD_DATA_DIR"] = str(data_dir)
     env["OD_MEDIA_CONFIG_DIR"] = str(media_config_dir)
+    env["OD_STATIC_DIR"] = str(static_dir)
+    env["OD_STATIC_REGISTRY_ROOT"] = str(static_registry_root)
     env["OD_SANDBOX_MODE"] = "1"
     env["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"] = "1"
     env["DO_NOT_TRACK"] = "1"
@@ -153,6 +186,7 @@ def _write_launcher_status(
     plan: LaunchPlan,
     binding: RuntimeBinding,
     registry_root: Path,
+    web_registry_root: Path,
     *,
     manifest: dict[str, Any],
 ) -> None:
@@ -162,7 +196,10 @@ def _write_launcher_status(
         "opendesign_version": binding.active.od_version,
         "opendesign_commit": binding.bundle.upstream_commit,
         "active": binding.active.to_dict(),
+        "runtime_artifact_sha256": binding.active.runtime_artifact_sha256,
+        "web_overlay_sha256": binding.active.web_overlay_sha256,
         "bundle": _bundle_status(binding.bundle.path, registry_root),
+        "web_overlay": _bundle_status(binding.overlay.path, web_registry_root),
         "bundle_configured": True,
         "mode": plan.mode,
         "detail": plan.detail,
@@ -192,12 +229,15 @@ def _manifest() -> dict[str, Any]:
 def _runtime_binding(
     *,
     registry_root: Path,
+    web_registry_root: Path,
     generation_root: Path,
     manifest: dict[str, Any],
 ) -> RuntimeBinding:
     try:
         return resolve_runtime_binding(
             registry_root=registry_root,
+            web_registry_root=web_registry_root,
+            web_trust_contract=WEB_TRUST_CONTRACT,
             generation_root=generation_root,
             manifest=manifest,
         )

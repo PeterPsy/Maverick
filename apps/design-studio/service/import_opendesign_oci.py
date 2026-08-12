@@ -43,7 +43,6 @@ from opendesign_oci_registry import OciRegistryError, RegistryClient
 from opendesign_oci_stage import OciStageError, runtime_node_command, stage_runtime_closure
 from opendesign_process import activate_runtime_attachment, signal_guard
 from opendesign_source import SourceError
-from opendesign_web_patch import WebPatchError, build_and_overlay_web
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent
@@ -106,7 +105,6 @@ def import_reproducible_artifact(
         pinned_manifest = _with_artifact_pins(
             manifest,
             pins,
-            web_output_manifest_sha256=str(first.patch_evidence["web_patch"]["output_manifest_sha256"]),
         )
         verify_artifact_set(pinned_manifest, output_directory)
     return {
@@ -117,7 +115,6 @@ def import_reproducible_artifact(
         "file_manifest_sha256": pins["file_manifest_sha256"],
         "rootfs_inventory_sha256": results[0].rootfs_inventory_sha256,
         "boundary_patch": results[0].patch_evidence,
-        "web_patch": results[0].patch_evidence["web_patch"],
         "oci_index_digest": manifest["distribution"]["index"]["digest"],
         "oci_manifest_digest": manifest["distribution"]["manifest"]["digest"],
         "reproducible_imports": 2,
@@ -142,15 +139,6 @@ def derive_once(
     rootfs_inventory = create_file_manifest(rootfs)
     rootfs_inventory_sha256 = _canonical_payload_sha256(rootfs_inventory)
     patch_evidence = apply_boundary_patch(rootfs, manifest)
-    patch_evidence["web_patch"] = build_and_overlay_web(
-        source_repository,
-        rootfs,
-        result_root / "web-build",
-        manifest=manifest,
-        service_root=SERVICE_ROOT,
-        pnpm_store=pnpm_store,
-        runtime_session_id=runtime_session_id,
-    )
     staging = result_root / "staging"
     stage_runtime_closure(rootfs, staging, manifest=manifest, service_root=SERVICE_ROOT)
     native_probe = _probe_native_runtime(staging, manifest)
@@ -175,7 +163,7 @@ def derive_once(
     notice = notice_text(licenses) + (
         "\nMaverick derived patch notice:\n"
         f"- {patch_evidence['path']} was modified to require the technical bearer on loopback.\n"
-        f"- {patch_evidence['web_patch']['output_path']} was replaced by the reproducible web build from the reviewed React patch series.\n"
+        "- Embedded apps/web/out was excluded; signed static web overlays are released independently.\n"
     )
     write_canonical_json(metadata_root / "sbom.cdx.json", sbom)
     write_canonical_json(metadata_root / "licenses.json", licenses)
@@ -315,8 +303,6 @@ def _artifact_pins(output_directory: Path, asset: dict[str, Any]) -> dict[str, A
 def _with_artifact_pins(
     manifest: dict[str, Any],
     pins: dict[str, Any],
-    *,
-    web_output_manifest_sha256: str,
 ) -> dict[str, Any]:
     pinned = copy.deepcopy(manifest)
     selected = pinned["artifact"]["assets"][platform_key()]
@@ -324,7 +310,6 @@ def _with_artifact_pins(
     if set(pins) != expected:
         raise OciImportError("OpenDesign OCI artifact pin set is incomplete")
     selected.update(pins)
-    pinned["web_patch"]["output_manifest_sha256"] = web_output_manifest_sha256
     validate_bundle_manifest(pinned, require_artifact_digest=True)
     return pinned
 
@@ -385,7 +370,6 @@ def main() -> int:
         OciRegistryError,
         OciStageError,
         SourceError,
-        WebPatchError,
         OSError,
         subprocess.SubprocessError,
     ) as exc:

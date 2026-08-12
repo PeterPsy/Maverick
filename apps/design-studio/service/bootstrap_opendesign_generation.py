@@ -9,6 +9,7 @@ from pathlib import Path
 from opendesign_artifact import read_bundle_manifest, selected_asset, validate_bundle_manifest
 from opendesign_bootstrap import BootstrapError, bootstrap_empty_generation
 from opendesign_materialization import discover_verified_bundles
+from opendesign_web_overlay import discover_verified_overlays
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent
@@ -18,6 +19,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--registry-root", type=Path, default=SERVICE_ROOT / "vendor" / "open-design")
+    parser.add_argument("--web-registry-root", type=Path, default=SERVICE_ROOT / "vendor" / "open-design-web")
+    parser.add_argument("--web-trust-contract", type=Path, default=SERVICE_ROOT / "opendesign_web_trust.json")
+    parser.add_argument("--web-overlay-sha256", required=True)
     args = parser.parse_args()
 
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
@@ -34,11 +38,18 @@ def main() -> None:
     ):
         raise BootstrapError("Pinned OpenDesign artifact metadata does not match its materialization")
     verified = {digest: bundle.opendesign_version for digest, bundle in bundles.items()}
+    overlays = discover_verified_overlays(
+        args.web_registry_root.resolve(),
+        trust_contract=args.web_trust_contract.resolve(),
+        required_digests={args.web_overlay_sha256},
+    )
     control, data_dir = bootstrap_empty_generation(
         args.data_root.resolve(),
         artifact_sha256=asset["sha256"],
+        web_overlay_sha256=args.web_overlay_sha256,
         opendesign_version=manifest["upstream"]["release_version"],
         verified_artifacts=verified,
+        verified_overlays=overlays,
     )
     print(
         json.dumps(

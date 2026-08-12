@@ -306,13 +306,14 @@ class HttpSidecarManager:
             raise
         return running
 
-    def stop_app(self, *, workspace_id: str, app_id: str) -> None:
+    def stop_app(self, *, workspace_id: str, app_id: str) -> int:
         """Stop every running sidecar owned by one workspace app."""
         with self._lock:
             keys = [key for key in self._running if key[:2] == (workspace_id, app_id)]
             running_sidecars = [self._running.pop(key) for key in keys]
             for running in running_sidecars:
                 self._cleanup_sidecar(running)
+            return len(running_sidecars)
 
     def current_instance_id(
         self,
@@ -351,11 +352,57 @@ class HttpSidecarManager:
             running.cleaned = True
 
 
-def stop_app_sidecars(*, workspace_id: str, app_id: str) -> None:
+def stop_app_sidecars(*, workspace_id: str, app_id: str) -> int:
     """Stop an app's live sidecars without creating a manager as a side effect."""
     manager = _SIDECAR_MANAGER
     if manager is not None:
+        return manager.stop_app(workspace_id=workspace_id, app_id=app_id)
+    return 0
+
+
+def restart_declared_app_sidecars(
+    *,
+    workspace_id: str,
+    app_id: str,
+    source_root: Path,
+    data_root: str,
+    sidecars: Iterable[HttpSidecarSpec],
+    start_path: Path,
+    shutdown_controller: EntrypointShutdownController | None = None,
+) -> dict[str, object]:
+    """Restart exactly one app's declared sidecars and wait for declared health checks."""
+    declared = tuple(sidecars)
+    if not declared:
+        raise AppHostingError(f"App `{app_id}` does not declare HTTP sidecars.")
+    manager = _sidecar_manager()
+    stopped = manager.stop_app(workspace_id=workspace_id, app_id=app_id)
+    started: list[dict[str, str]] = []
+    try:
+        for sidecar in declared:
+            running = manager.ensure_running(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                source_root=source_root,
+                data_root=data_root,
+                sidecar=sidecar,
+                start_path=start_path,
+                shutdown_controller=shutdown_controller,
+            )
+            started.append(
+                {
+                    "service_id": sidecar.service_id,
+                    "instance_id": running.instance_id,
+                }
+            )
+    except Exception:
         manager.stop_app(workspace_id=workspace_id, app_id=app_id)
+        raise
+    return {
+        "ready": True,
+        "stopped_service_count": stopped,
+        "service_count": len(started),
+        "services": started,
+    }
 
 
 def handle_app_sidecar_proxy(

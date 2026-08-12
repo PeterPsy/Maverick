@@ -166,9 +166,13 @@ class OpenDesignOciImportTests(unittest.TestCase):
 
     def test_compiled_boundary_patch_requires_single_exact_preimage(self) -> None:
         source = (
-            self.boundary._TOKEN_DECLARATIONS
+            self.boundary._STATIC_DIR_DECLARATION
+            + b"static-middle\n"
+            + self.boundary._START_SERVER_HOST
+            + self.boundary._TOKEN_DECLARATIONS
             + b"middle\n"
             + self.boundary._LOOPBACK_BYPASS
+            + self.boundary._STATIC_MOUNT
         )
         with tempfile.TemporaryDirectory(prefix="maverick-od-oci-patch-") as temporary:
             stage = Path(temporary)
@@ -181,13 +185,14 @@ class OpenDesignOciImportTests(unittest.TestCase):
             evidence = self.boundary.apply_boundary_patch(stage, manifest)
             self.assertEqual(evidence["path"], "app/apps/daemon/dist/server.js")
             self.assertIn(b"!requireApiTokenOnLoopback", target.read_bytes())
+            self.assertIn(b"OD_STATIC_REGISTRY_ROOT", target.read_bytes())
             self.assertNotIn("web_patch", evidence)
             with self.assertRaisesRegex(self.boundary.BoundaryPatchError, "preimage"):
                 self.boundary.apply_boundary_patch(stage, manifest)
 
     def test_web_patch_is_a_rebuilt_react_boundary_without_dom_pruning(self) -> None:
         compiled_patch = (SERVICE_ROOT / "opendesign_oci_patch.py").read_text(encoding="utf-8")
-        react_patch = (SERVICE_ROOT / "patches/0002-maverick-native-shell.patch").read_text(encoding="utf-8")
+        react_patch = (SERVICE_ROOT / "patches/0003-maverick-web-react.patch").read_text(encoding="utf-8")
         self.assertNotIn("MutationObserver", compiled_patch)
         self.assertNotIn("querySelectorAll", compiled_patch)
         for marker in (
@@ -228,7 +233,7 @@ class OpenDesignOciImportTests(unittest.TestCase):
             self.assertEqual(command[-2:], [str(root / "app/apps/daemon/dist/cli.js"), "--no-open"])
             self.assertNotEqual(command[3], "node")
 
-    def test_primary_import_has_no_docker_socket_and_uses_reviewed_web_builder(self) -> None:
+    def test_primary_import_has_no_docker_socket_or_embedded_web_builder(self) -> None:
         sources = "\n".join(
             (SERVICE_ROOT / name).read_text(encoding="utf-8")
             for name in (
@@ -240,7 +245,8 @@ class OpenDesignOciImportTests(unittest.TestCase):
         )
         for forbidden in ("docker run", "/var/run/docker.sock"):
             self.assertNotIn(forbidden, sources.lower())
-        self.assertIn("build_and_overlay_web", sources)
+        self.assertNotIn("build_and_overlay_web", sources)
+        self.assertIn("runtime closure must not contain embedded web output", sources)
 
     def test_real_acceptance_record_matches_canonical_manifest(self) -> None:
         acceptance = json.loads(ACCEPTANCE_PATH.read_text(encoding="utf-8"))
@@ -255,8 +261,13 @@ class OpenDesignOciImportTests(unittest.TestCase):
         for field in ("path", "pre_sha256", "post_sha256"):
             self.assertEqual(acceptance["boundary_patch"][field], self.manifest["boundary_patch"][field])
         self.assertEqual(
-            acceptance["web_patch"]["output_manifest_sha256"],
-            self.manifest["web_patch"]["output_manifest_sha256"],
+            acceptance["runtime_smoke"]["web_overlay_sha256"],
+            acceptance["web_overlay"]["web_overlay_sha256"],
+        )
+        self.assertFalse(acceptance["runtime_smoke"]["embedded_static_web"])
+        self.assertEqual(
+            acceptance["web_overlay"]["trust_root_public_key_sha256"],
+            self.manifest["artifact"]["assets"]["linux-x86_64"]["public_key_sha256"],
         )
         self.assertEqual(acceptance["import"]["independent_derivations"], 2)
         self.assertTrue(acceptance["import"]["reproducible"])

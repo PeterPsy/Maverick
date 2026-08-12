@@ -31,6 +31,8 @@ def _cli_commands(
         runtime_event_bus=getattr(state, "runtime_event_bus", None),
         runtime_thread_event_bus=getattr(state, "runtime_thread_event_bus", None),
         app_event_bus=state.app_event_bus,
+        sidecar_browser_sessions=getattr(state, "sidecar_browser_sessions", None),
+        shutdown_controller=getattr(state, "shutdown_controller", None),
         workspace_id=workspace_id,
         context=_cli_context(options, workspace_id, trusted_context=trusted_context),
         start_path=state.repository_root,

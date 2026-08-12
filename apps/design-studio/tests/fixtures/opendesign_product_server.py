@@ -28,6 +28,7 @@ from core.providers.service import configure_workspace_provider  # noqa: E402
 from core.workspaces.service import create_workspace, set_active_workspace_for_user  # noqa: E402
 from opendesign_artifact import read_bundle_manifest, selected_asset, validate_bundle_manifest  # noqa: E402
 from opendesign_bootstrap import bootstrap_empty_generation  # noqa: E402
+from opendesign_web_release import canonical_web_overlay  # noqa: E402
 
 
 WORKSPACES = ("default", "workspace-b")
@@ -102,12 +103,21 @@ def _bootstrap_generation(root: Path, workspace_id: str) -> None:
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
     validate_bundle_manifest(manifest, require_artifact_digest=True)
     asset = selected_asset(manifest, require_artifact_digest=True)
+    overlay, overlays = canonical_web_overlay(
+        SERVICE_ROOT / "vendor/open-design-web",
+        trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
+        runtime_artifact_sha256=asset["sha256"],
+        od_version=manifest["upstream"]["release_version"],
+        upstream_commit=manifest["upstream"]["commit"],
+    )
     generation_root = root / "workspaces" / workspace_id / "data" / "design-studio" / "opendesign"
     bootstrap_empty_generation(
         generation_root,
         artifact_sha256=asset["sha256"],
+        web_overlay_sha256=overlay.web_overlay_sha256,
         opendesign_version=manifest["upstream"]["release_version"],
         verified_artifacts={asset["sha256"]: manifest["upstream"]["release_version"]},
+        verified_overlays=overlays,
     )
 
 

@@ -17,7 +17,7 @@ from opendesign_generation_control import (
 from opendesign_generation_model import (
     GenerationControl,
     GenerationControlError,
-    GenerationTriple,
+    LaunchSelection,
     MigrationJournal,
 )
 from opendesign_migration_files import (
@@ -56,9 +56,10 @@ def migrate_controlled_copy(
     root: Path,
     *,
     legacy_state_path: Path,
-    target: GenerationTriple,
+    target: LaunchSelection,
     migration_id: str,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
     runtime: MigrationRuntime,
     now: Callable[[], str] | None = None,
     minimum_free_bytes: int = 64 * 1024 * 1024,
@@ -76,11 +77,15 @@ def migrate_controlled_copy(
         mapping_path: Path | None = None
         try:
             runtime.drain_or_cancel_runs()
-            control = load_generation_control(root, verified_artifacts=verified_artifacts)
+            control = load_generation_control(
+                root,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             source = control.active
             if target == source or target.data_generation == source.data_generation:
                 raise MigrationError("migration target must use a new bundle/data triple")
-            _verify_target_artifact(target, verified_artifacts)
+            _verify_target_selection(target, verified_artifacts, verified_overlays)
             source_data = resolve_generation_data_dir(root, source)
             runtime.stop_sidecar()
             runtime.prove_sidecar_stopped(source_data)
@@ -144,19 +149,32 @@ def migrate_controlled_copy(
                 created_at=timestamp(),
                 updated_at=timestamp(),
             )
-            write_migration_journal(root, prepared, verified_artifacts=verified_artifacts)
+            write_migration_journal(
+                root,
+                prepared,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             cutover = GenerationControl(
                 active=target,
-                previous=source,
+                previous_release=source,
+                previous_web=None,
                 migration_id=migration_id,
+                web_activation_id=None,
                 updated_at=timestamp(),
             )
-            write_generation_control(root, cutover, verified_artifacts=verified_artifacts)
+            write_generation_control(
+                root,
+                cutover,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             control_switched = True
             write_migration_journal(
                 root,
                 _journal_with_state(prepared, "cutover_committed", updated_at=timestamp()),
                 verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
             )
             seal_legacy_state(legacy_state_path, migration_root=root)
             runtime.start_sidecar(target, target_data, staging=False)
@@ -170,7 +188,12 @@ def migrate_controlled_copy(
                     updated_at=timestamp(),
                     checks={**prepared.checks, "error_code": type(exc).__name__},
                 )
-                write_migration_journal(root, aborted, verified_artifacts=verified_artifacts)
+                write_migration_journal(
+                    root,
+                    aborted,
+                    verified_artifacts=verified_artifacts,
+                    verified_overlays=verified_overlays,
+                )
             elif prepared is None:
                 clean_unjournaled_failure(root, created_generation, created_snapshot, mapping_path)
             raise MigrationError(f"controlled OpenDesign migration failed: {type(exc).__name__}") from exc
@@ -181,9 +204,10 @@ def migrate_controlled_copy(
 def upgrade_controlled_copy(
     root: Path,
     *,
-    target: GenerationTriple,
+    target: LaunchSelection,
     migration_id: str,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
     runtime: MigrationRuntime,
     now: Callable[[], str] | None = None,
     minimum_free_bytes: int = 64 * 1024 * 1024,
@@ -201,25 +225,30 @@ def upgrade_controlled_copy(
         created_generation: Path | None = None
         try:
             runtime.drain_or_cancel_runs()
-            control = load_generation_control(root, verified_artifacts=verified_artifacts)
+            control = load_generation_control(
+                root,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             source = control.active
             replaced_retained_previous = False
-            if control.previous is not None or control.migration_id is not None:
+            if control.previous_release is not None or control.migration_id is not None:
                 if not replace_retained_previous:
                     raise MigrationError("bundle upgrade requires resolved retention metadata")
-                if control.previous is None or control.migration_id is None:
+                if control.previous_release is None or control.migration_id is None:
                     raise MigrationError("bundle upgrade retention metadata is incomplete")
                 retained_journal = load_migration_journal(
                     root,
                     control.migration_id,
                     verified_artifacts=verified_artifacts,
+                    verified_overlays=verified_overlays,
                 )
                 if retained_journal.state != "cutover_committed":
                     raise MigrationError("bundle upgrade cannot replace uncommitted retention metadata")
                 replaced_retained_previous = True
             if target == source or target.data_generation == source.data_generation:
                 raise MigrationError("bundle upgrade target must use a new bundle/data triple")
-            _verify_target_artifact(target, verified_artifacts)
+            _verify_target_selection(target, verified_artifacts, verified_overlays)
             source_data = resolve_generation_data_dir(root, source)
             runtime.stop_sidecar()
             runtime.prove_sidecar_stopped(source_data)
@@ -256,19 +285,32 @@ def upgrade_controlled_copy(
                 created_at=timestamp(),
                 updated_at=timestamp(),
             )
-            write_migration_journal(root, prepared, verified_artifacts=verified_artifacts)
+            write_migration_journal(
+                root,
+                prepared,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             cutover = GenerationControl(
                 active=target,
-                previous=source,
+                previous_release=source,
+                previous_web=None,
                 migration_id=migration_id,
+                web_activation_id=None,
                 updated_at=timestamp(),
             )
-            write_generation_control(root, cutover, verified_artifacts=verified_artifacts)
+            write_generation_control(
+                root,
+                cutover,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             control_switched = True
             write_migration_journal(
                 root,
                 _journal_with_state(prepared, "cutover_committed", updated_at=timestamp()),
                 verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
             )
             runtime.start_sidecar(target, target_data, staging=False)
             _validate_staging(runtime)
@@ -282,7 +324,12 @@ def upgrade_controlled_copy(
                     updated_at=timestamp(),
                     checks={**prepared.checks, "error_code": type(exc).__name__},
                 )
-                write_migration_journal(root, aborted, verified_artifacts=verified_artifacts)
+                write_migration_journal(
+                    root,
+                    aborted,
+                    verified_artifacts=verified_artifacts,
+                    verified_overlays=verified_overlays,
+                )
             elif prepared is None:
                 clean_unjournaled_failure(root, created_generation, created_snapshot, None)
             raise MigrationError(f"controlled OpenDesign bundle upgrade failed: {type(exc).__name__}") from exc
@@ -295,6 +342,7 @@ def rollback_controlled_copy(
     *,
     rollback_id: str,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
     runtime: MigrationRuntime,
     now: Callable[[], str] | None = None,
 ) -> GenerationControl:
@@ -308,8 +356,12 @@ def rollback_controlled_copy(
         journal_written = False
         try:
             runtime.drain_or_cancel_runs()
-            control = load_generation_control(root, verified_artifacts=verified_artifacts)
-            if control.previous is None or control.migration_id is None:
+            control = load_generation_control(
+                root,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
+            if control.previous_release is None or control.migration_id is None:
                 raise MigrationError("rollback requires one retained previous triple")
             require_real_directory(
                 root / "backups" / control.migration_id,
@@ -317,7 +369,7 @@ def rollback_controlled_copy(
                 label="retained migration snapshot",
             )
             active_data = resolve_generation_data_dir(root, control.active)
-            target_data = resolve_generation_data_dir(root, control.previous)
+            target_data = resolve_generation_data_dir(root, control.previous_release)
             runtime.stop_sidecar()
             runtime.prove_sidecar_stopped(active_data)
             backup = create_snapshot(
@@ -331,7 +383,7 @@ def rollback_controlled_copy(
                 migration_id=rollback_id,
                 state="prepared",
                 source=control.active,
-                target=control.previous,
+                target=control.previous_release,
                 source_snapshot=f"backups/{rollback_id}",
                 checks={
                     "retained_snapshot_verified": True,
@@ -340,19 +392,32 @@ def rollback_controlled_copy(
                 created_at=timestamp(),
                 updated_at=timestamp(),
             )
-            write_migration_journal(root, prepared, verified_artifacts=verified_artifacts)
+            write_migration_journal(
+                root,
+                prepared,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             journal_written = True
             rollback = GenerationControl(
-                active=control.previous,
-                previous=control.active,
+                active=control.previous_release,
+                previous_release=control.active,
+                previous_web=None,
                 migration_id=rollback_id,
+                web_activation_id=None,
                 updated_at=timestamp(),
             )
-            write_generation_control(root, rollback, verified_artifacts=verified_artifacts)
+            write_generation_control(
+                root,
+                rollback,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             write_migration_journal(
                 root,
                 _journal_with_state(prepared, "cutover_committed", updated_at=timestamp()),
                 verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
             )
             runtime.start_sidecar(rollback.active, target_data, staging=False)
             _validate_staging(runtime)
@@ -374,6 +439,7 @@ def recover_controlled_copy(
     root: Path,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
     runtime: MigrationRuntime,
     now: Callable[[], str] | None = None,
 ) -> RecoveryOutcome:
@@ -384,12 +450,17 @@ def recover_controlled_copy(
         runtime.freeze_mutations()
         try:
             runtime.stop_sidecar()
-            recovery = recover_generation_control(root, verified_artifacts=verified_artifacts)
+            recovery = recover_generation_control(
+                root,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             runtime.prove_sidecar_stopped(recovery.active_data_dir)
             completed = _finish_pending_journal(
                 root,
                 recovery.control,
                 verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
                 updated_at=timestamp(),
             )
             runtime.start_sidecar(recovery.control.active, recovery.active_data_dir, staging=False)
@@ -407,6 +478,7 @@ def cleanup_unreferenced_generation(
     *,
     generation_id: str,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
     runtime: MigrationRuntime,
     retention_expired: bool,
 ) -> None:
@@ -416,12 +488,21 @@ def cleanup_unreferenced_generation(
     if not retention_expired:
         raise MigrationError("generation retention has not expired")
     with migration_lock(root):
-        control = load_generation_control(root, verified_artifacts=verified_artifacts)
+        control = load_generation_control(
+            root,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
         referenced = {control.active.data_generation}
-        if control.previous is not None:
-            referenced.add(control.previous.data_generation)
+        if control.previous_release is not None:
+            referenced.add(control.previous_release.data_generation)
         for journal_path in sorted((root / "migrations").glob("migration_*.json")):
-            journal = load_migration_journal(root, journal_path.stem, verified_artifacts=verified_artifacts)
+            journal = load_migration_journal(
+                root,
+                journal_path.stem,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
             if journal.state == "prepared" or journal.migration_id == control.migration_id:
                 referenced.update((journal.source.data_generation, journal.target.data_generation))
         if generation_id in referenced:
@@ -437,17 +518,24 @@ def _finish_pending_journal(
     control: GenerationControl,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
     updated_at: str,
 ) -> bool:
     if control.migration_id is None:
         return False
-    journal = load_migration_journal(root, control.migration_id, verified_artifacts=verified_artifacts)
+    journal = load_migration_journal(
+        root,
+        control.migration_id,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+    )
     completed = journal.state == "prepared" and control.active == journal.target
     if completed:
         write_migration_journal(
             root,
             _journal_with_state(journal, "cutover_committed", updated_at=updated_at),
             verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
         )
     if journal.state == "cutover_committed" or completed:
         legacy_state = root.parent / "state.json"
@@ -493,9 +581,24 @@ def _journal_with_state(
     )
 
 
-def _verify_target_artifact(target: GenerationTriple, verified_artifacts: Mapping[str, str]) -> None:
-    if verified_artifacts.get(target.bundle_artifact_sha256) != target.od_version:
-        raise MigrationError("migration target artifact is not verified")
+def _verify_target_selection(
+    target: LaunchSelection,
+    verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
+) -> None:
+    if verified_artifacts.get(target.runtime_artifact_sha256) != target.od_version:
+        raise MigrationError("migration target runtime is not verified")
+    overlay = verified_overlays.get(target.web_overlay_sha256)
+    if overlay is None:
+        raise MigrationError("migration target overlay is not verified")
+    if isinstance(overlay, Mapping):
+        version = overlay.get("od_version")
+        compatible = overlay.get("compatible_runtime_artifact_sha256")
+    else:
+        version = getattr(overlay, "od_version", None)
+        compatible = getattr(overlay, "compatible_runtime_artifact_sha256", None)
+    if version != target.od_version or target.runtime_artifact_sha256 not in (compatible or ()):
+        raise MigrationError("migration target overlay is incompatible with its runtime")
 
 
 def _stop_after_failure(runtime: MigrationRuntime) -> None:

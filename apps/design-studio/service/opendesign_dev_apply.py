@@ -1,0 +1,382 @@
+"""App-owned incremental Design Studio development orchestrator."""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+from typing import Any, Iterable
+
+from opendesign_artifact import read_bundle_manifest
+from opendesign_generation_control import load_generation_control
+from opendesign_materialization import discover_verified_bundles
+from opendesign_web_activation import activate_web_overlay
+from opendesign_web_builder import build_dev_overlay, build_release_overlay
+from opendesign_web_overlay import discover_verified_overlays
+
+
+ACTION_ORDER = (
+    "design_studio_frontend_tests",
+    "design_studio_frontend_build",
+    "design_studio_backend_tests",
+    "opendesign_web_overlay",
+    "opendesign_oci_pipeline",
+    "app_hosting_core_tests",
+    "changed_suite",
+)
+
+
+class DevApplyError(RuntimeError):
+    """Raised when an incremental apply action fails."""
+
+    def __init__(self, message: str, *, report: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.report = report
+
+
+@dataclass(frozen=True)
+class DiffClassification:
+    changed_files: tuple[str, ...]
+    categories: tuple[str, ...]
+    actions: tuple[str, ...]
+    conservative_elevation: bool
+    unknown_files: tuple[str, ...]
+
+
+def classify_diff(paths: Iterable[str]) -> DiffClassification:
+    """Classify a multi-file diff compositionally and fail upward for unknown paths."""
+    changed = tuple(sorted({_normalize_path(path) for path in paths if str(path).strip()}))
+    categories: set[str] = set()
+    actions: set[str] = set()
+    unknown: list[str] = []
+    for path in changed:
+        category, implied = _classify_path(path)
+        if category is None:
+            unknown.append(path)
+            continue
+        categories.add(category)
+        actions.update(implied)
+    if changed:
+        actions.add("changed_suite")
+    if unknown:
+        categories.add("unknown")
+        actions.update(ACTION_ORDER)
+    return DiffClassification(
+        changed_files=changed,
+        categories=tuple(sorted(categories)),
+        actions=tuple(action for action in ACTION_ORDER if action in actions),
+        conservative_elevation=bool(unknown),
+        unknown_files=tuple(unknown),
+    )
+
+
+def apply_incremental(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Execute the selected gates and return bounded JSON evidence."""
+    repo_root = _repo_root(arguments)
+    changed_files = arguments.get("changed_files")
+    if changed_files is None:
+        changed_files = _working_tree_paths(repo_root)
+    if not isinstance(changed_files, list) or not all(isinstance(item, str) for item in changed_files):
+        raise DevApplyError("changed_files must be an array of repository-relative paths", report={})
+    classification = classify_diff(changed_files)
+    profile = str(arguments.get("profile") or "dev")
+    if profile not in {"dev", "release"}:
+        raise DevApplyError("profile must be dev or release", report={})
+    report: dict[str, Any] = {
+        "schema_version": "1",
+        "app_id": "design-studio",
+        "profile": profile,
+        "classification": asdict(classification),
+        "actions": [],
+        "digests": {},
+        "cache": {},
+        "readiness": {},
+        "rollback": {"performed": False},
+        "duration_seconds": 0.0,
+        "ok": False,
+    }
+    started = time.monotonic()
+    dry_run = bool(arguments.get("dry_run", False))
+    try:
+        for action in classification.actions:
+            action_started = time.monotonic()
+            if dry_run:
+                result: dict[str, Any] = {"status": "planned"}
+            elif action == "opendesign_web_overlay":
+                result = _build_and_activate_overlay(
+                    payload,
+                    arguments,
+                    repo_root=repo_root,
+                    release=profile == "release",
+                )
+                report["digests"].update(result.pop("digests"))
+                report["cache"] = result.pop("cache")
+                report["readiness"] = result.pop("readiness")
+                report["rollback"] = result.pop("rollback")
+            else:
+                result = _run_gate(action, arguments, repo_root=repo_root)
+            report["actions"].append(
+                {
+                    "name": action,
+                    "duration_seconds": round(time.monotonic() - action_started, 6),
+                    **result,
+                }
+            )
+        report["ok"] = True
+        return report
+    except Exception as error:
+        report["actions"].append(
+            {
+                "name": classification.actions[len(report["actions"])]
+                if len(report["actions"]) < len(classification.actions)
+                else "unknown",
+                "status": "failed",
+                "error_code": type(error).__name__,
+            }
+        )
+        raise DevApplyError(
+            f"Design Studio incremental apply failed: {type(error).__name__}",
+            report=report,
+        ) from error
+    finally:
+        report["duration_seconds"] = round(time.monotonic() - started, 6)
+
+
+def _classify_path(path: str) -> tuple[str | None, set[str]]:
+    if path.startswith("apps/design-studio/frontend/") or path in {
+        "apps/design-studio/package.json",
+        "apps/design-studio/package-lock.json",
+        "apps/design-studio/tsconfig.json",
+        "apps/design-studio/vite.config.ts",
+    }:
+        return "design-studio-wrapper", {
+            "design_studio_frontend_tests",
+            "design_studio_frontend_build",
+        }
+    if path.startswith(("apps/design-studio/backend/", "apps/design-studio/mcp/", "apps/design-studio/cli/")):
+        return "design-studio-backend", {"design_studio_backend_tests"}
+    if path.endswith(("patches/0002-maverick-web-build.patch", "patches/0003-maverick-web-react.patch")):
+        return "opendesign-web", {"opendesign_web_overlay"}
+    if path.startswith("apps/design-studio/service/"):
+        return "opendesign-runtime-supply-chain", {"opendesign_oci_pipeline"}
+    if path == "apps/design-studio/app_contract.json" or path.startswith(("core/", "tests/")):
+        return "core-app-contract", {"app_hosting_core_tests"}
+    if path.startswith("apps/"):
+        return "other-app", {
+            "design_studio_frontend_tests",
+            "design_studio_backend_tests",
+            "app_hosting_core_tests",
+        }
+    if path.startswith(("docs/", "scripts/")) or path in {
+        ".gitignore",
+        "AGENTS.md",
+        "README.md",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
+    }:
+        return "repository-support", set()
+    return None, set()
+
+
+def _run_gate(action: str, arguments: dict[str, Any], *, repo_root: Path) -> dict[str, Any]:
+    if action == "design_studio_frontend_tests":
+        command = ["npm", "test"]
+        cwd = repo_root / "apps/design-studio"
+    elif action == "design_studio_frontend_build":
+        command = _maverick_command(
+            "app",
+            "design-studio",
+            "frontend",
+            "build",
+            "--workspace",
+            str(arguments.get("workspace_id") or "default"),
+            "--json",
+        )
+        cwd = repo_root
+    elif action == "design_studio_backend_tests":
+        command = [sys.executable, "scripts/test_suite.py", "--level", "app-backend", "--app", "design-studio"]
+        cwd = repo_root
+    elif action == "app_hosting_core_tests":
+        command = [sys.executable, "scripts/test_suite.py", "--area", "app-hosting"]
+        cwd = repo_root
+    elif action == "changed_suite":
+        command = [sys.executable, "scripts/test_suite.py", "--changed"]
+        cwd = repo_root
+    elif action == "opendesign_oci_pipeline":
+        source = _required_path(arguments, "source_repository")
+        signing_key = _required_path(arguments, "runtime_signing_key")
+        command = [
+            sys.executable,
+            "apps/design-studio/service/import_opendesign_oci.py",
+            "--source-repository",
+            str(source),
+            "--signing-key",
+            str(signing_key),
+            "--output-directory",
+            str(repo_root / "apps/design-studio/service/artifacts"),
+            "--work-parent",
+            str(_cache_root(arguments, repo_root) / "work"),
+            "--pnpm-store",
+            str(_cache_root(arguments, repo_root) / "pnpm-store"),
+        ]
+        cwd = repo_root
+    else:
+        raise RuntimeError(f"unsupported dev apply gate: {action}")
+    completed = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
+    if completed.returncode != 0:
+        raise RuntimeError(f"gate {action} exited with status {completed.returncode}")
+    result: dict[str, Any] = {"status": "passed", "exit_code": completed.returncode}
+    if completed.stdout.strip().startswith("{"):
+        try:
+            result["result"] = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            pass
+    return result
+
+
+def _build_and_activate_overlay(
+    payload: dict[str, Any],
+    arguments: dict[str, Any],
+    *,
+    repo_root: Path,
+    release: bool,
+) -> dict[str, Any]:
+    service_root = repo_root / "apps/design-studio/service"
+    source_repository = _required_path(arguments, "source_repository")
+    signing_key = _required_path(arguments, "web_signing_key")
+    cache_root = _cache_root(arguments, repo_root)
+    for child in (cache_root, cache_root / "work"):
+        child.mkdir(parents=True, exist_ok=True)
+    registry_root = service_root / "vendor/open-design-web"
+    registry_root.mkdir(parents=True, exist_ok=True)
+    manifest = read_bundle_manifest(service_root / "opendesign_bundle.json")
+    builder = build_release_overlay if release else build_dev_overlay
+    result = builder(
+        source_repository,
+        manifest=manifest,
+        service_root=service_root,
+        cache_root=cache_root,
+        registry_root=registry_root,
+        signing_key=signing_key,
+        trust_contract=service_root / "opendesign_web_trust.json",
+        work_parent=cache_root / "work",
+        runtime_session_id=str(payload.get("runtime_session_id") or "") or None,
+    )
+    generation_root = Path(str(payload.get("data_root") or "")) / "opendesign"
+    bundles = discover_verified_bundles(service_root / "vendor/open-design")
+    verified_artifacts = {digest: bundle.opendesign_version for digest, bundle in bundles.items()}
+    overlays = discover_verified_overlays(
+        registry_root,
+        trust_contract=service_root / "opendesign_web_trust.json",
+    )
+    control = load_generation_control(
+        generation_root,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=overlays,
+    )
+    if control.active.web_overlay_sha256 == result.overlay.web_overlay_sha256:
+        readiness = {"ready": True, "service_count": 1, "restart_skipped": True}
+        rollback = {"performed": False}
+    else:
+        activation_id = f"web_dev_{result.overlay.web_overlay_sha256[:16]}"
+        outcome = activate_web_overlay(
+            generation_root,
+            target_web_overlay_sha256=result.overlay.web_overlay_sha256,
+            web_activation_id=activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=overlays,
+            restart_sidecars=lambda: _restart_sidecars(arguments, repo_root=repo_root),
+        )
+        readiness = outcome.readiness
+        rollback = {"performed": outcome.rolled_back, "web_activation_id": activation_id}
+    metrics = [asdict(metric) for metric in result.metrics]
+    return {
+        "status": "passed",
+        "derivations": result.derivations,
+        "reproducible": result.reproducible,
+        "digests": {
+            "runtime_artifact_sha256": control.active.runtime_artifact_sha256,
+            "web_overlay_sha256": result.overlay.web_overlay_sha256,
+        },
+        "cache": {
+            "materialization_hit": result.cache_hit,
+            "derivations": metrics,
+        },
+        "readiness": readiness,
+        "rollback": rollback,
+    }
+
+
+def _restart_sidecars(arguments: dict[str, Any], *, repo_root: Path) -> dict[str, object]:
+    command = _maverick_command(
+        "core",
+        "cli",
+        "run",
+        "app.design-studio.sidecars.restart",
+        "--workspace",
+        str(arguments.get("workspace_id") or "default"),
+        "--operator",
+        "--json",
+    )
+    completed = subprocess.run(command, cwd=repo_root, text=True, capture_output=True, check=False)
+    if completed.returncode != 0:
+        raise RuntimeError("app sidecar restart capability failed")
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("app sidecar restart returned invalid JSON") from error
+    readiness = payload.get("readiness") if isinstance(payload, dict) else None
+    if not isinstance(readiness, dict) or readiness.get("ready") is not True:
+        raise RuntimeError("app sidecar restart readiness failed")
+    return readiness
+
+
+def _working_tree_paths(repo_root: Path) -> list[str]:
+    commands = (
+        ["git", "diff", "--name-only"],
+        ["git", "diff", "--cached", "--name-only"],
+        ["git", "ls-files", "--others", "--exclude-standard"],
+    )
+    paths: set[str] = set()
+    for command in commands:
+        completed = subprocess.run(command, cwd=repo_root, text=True, capture_output=True, check=True)
+        paths.update(line.strip() for line in completed.stdout.splitlines() if line.strip())
+    return sorted(paths)
+
+
+def _maverick_command(*tokens: str) -> list[str]:
+    return [sys.executable, "-m", "core.app_sdk.cli", *tokens]
+
+
+def _repo_root(arguments: dict[str, Any]) -> Path:
+    value = arguments.get("repo_root")
+    root = Path(str(value)).resolve() if value else Path(__file__).resolve().parents[3]
+    if not (root / "AGENTS.md").is_file() or not (root / "apps/design-studio").is_dir():
+        raise DevApplyError("repo_root is not the Maverick v3 repository", report={})
+    return root
+
+
+def _cache_root(arguments: dict[str, Any], repo_root: Path) -> Path:
+    raw = arguments.get("cache_root") or os.environ.get("MAVERICK_OPENDESIGN_WEB_CACHE")
+    return Path(str(raw)).resolve() if raw else repo_root / "tmp/opendesign-web-cache"
+
+
+def _required_path(arguments: dict[str, Any], key: str) -> Path:
+    value = arguments.get(key) or os.environ.get(f"MAVERICK_{key.upper()}")
+    if not isinstance(value, str) or not value.strip():
+        raise RuntimeError(f"{key} is required for this change profile")
+    path = Path(value).resolve()
+    if not path.exists() or path.is_symlink():
+        raise RuntimeError(f"{key} must identify a real path")
+    return path
+
+
+def _normalize_path(path: str) -> str:
+    value = str(path).strip().replace("\\", "/")
+    while value.startswith("./"):
+        value = value[2:]
+    return value

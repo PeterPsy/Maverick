@@ -117,6 +117,7 @@ def _ensure_layout(data_root: str | Path) -> None:
         "opendesign/instances",
         "opendesign/backups",
         "opendesign/migrations",
+        "opendesign/web-activations",
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
 

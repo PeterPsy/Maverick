@@ -1,0 +1,79 @@
+{
+  "schema_version": "2",
+  "executed_at": "2026-08-12",
+  "status": "passed",
+  "selection": {
+    "runtime_artifact_sha256": "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
+    "web_overlay_sha256": "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2",
+    "od_version": "0.16.1",
+    "data_generation": "gen_incremental_runtime_20260812"
+  },
+  "runtime_release": {
+    "independent_derivations": 2,
+    "reproducible": true,
+    "duration_seconds": 307.614,
+    "embedded_static_web": false,
+    "od_static_dir_required": true
+  },
+  "web_release": {
+    "independent_derivations": 2,
+    "reproducible": true,
+    "derivation_duration_seconds": [377.259177, 417.324234],
+    "dependency_cache_hit": [true, true],
+    "install_skipped": [true, true]
+  },
+  "incremental_performance": {
+    "warm_overlay_duration_seconds": 118.668629,
+    "warm_overlay_target_seconds": [60, 180],
+    "warm_overlay_target_met": true,
+    "warm_overlay_dominant_phase": "dependency cache restore and evidence inventory",
+    "runtime_cutover_duration_seconds": 94.2,
+    "wrapper_frontend_test_and_build_seconds": 11.8,
+    "wrapper_target_ceiling_seconds": 60,
+    "wrapper_target_met": true,
+    "backend_focused_test_seconds": 113.998,
+    "backend_target_seconds": [60, 120],
+    "backend_target_met": true,
+    "backend_dominant_phase": "Design Studio backend test suite"
+  },
+  "rollout": {
+    "workspace_id": "default",
+    "control_schema": "2",
+    "initial_runtime_cutover": "passed",
+    "project_count": 4,
+    "previous_release_retained": true,
+    "source_data_unchanged": true
+  },
+  "release_gate": {
+    "scenario_count": 14,
+    "ui_scenario_count": 13,
+    "migration_rollback_separate": true,
+    "two_workspace_isolation": true,
+    "restart_and_browser_session_remount": true,
+    "scenario_ids": [
+      "login_open",
+      "create_project_ui",
+      "storage_import",
+      "runtime_start",
+      "incremental_sse",
+      "generated_preview",
+      "cancel_long_run",
+      "storage_export",
+      "restart_reload",
+      "deep_link",
+      "workspace_isolation",
+      "forbidden_routes",
+      "secret_boundary",
+      "upgrade_rollback"
+    ]
+  },
+  "redaction": {
+    "credential_value_recorded": false,
+    "environment_recorded": false,
+    "host_path_recorded": false
+  },
+  "known_external_gate": {
+    "changed_suite_status": "blocked_by_unrelated_repository_convention",
+    "detail": "tests/integration/app_hosting/test_sidecar_browser_origin.py is 508 lines against the repository 500-line convention; all selected task-owned shards pass"
+  }
+}

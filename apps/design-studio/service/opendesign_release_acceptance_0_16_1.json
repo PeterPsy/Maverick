@@ -1,0 +1,288 @@
+{
+  "gate": "design-studio-opendesign-release",
+  "opendesign": {
+    "oci_reference": "ghcr.io/nexu-io/od:0.16.1",
+    "runtime_artifact_sha256": "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
+    "version": "0.16.1",
+    "web_overlay_sha256": "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2"
+  },
+  "restart_covered": true,
+  "rollback_gate_separate": true,
+  "scenario_count": 14,
+  "scenarios": [
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "login_open",
+      "name": "Login and open Design Studio",
+      "proof": {
+        "isolated_origin": true,
+        "ready_endpoint": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "create_project_ui",
+      "name": "Create and open a project from the Maverick sidebar",
+      "proof": {
+        "native_chat_background_requests": 0,
+        "native_chat_unmounted": true,
+        "native_home_projects_hidden": true,
+        "project_created": true,
+        "sidebar_navigation": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "storage_import",
+      "name": "Import one Storage file with read-back",
+      "proof": {
+        "imported": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "runtime_start",
+      "name": "Start one Maverick-owned run",
+      "proof": {
+        "submitted": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "incremental_sse",
+      "name": "Receive incremental SSE before terminal",
+      "proof": {
+        "incremental": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "generated_preview",
+      "name": "Generate and preview a project file",
+      "proof": {
+        "previewed": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_dc253e832934bf7af62bdda0",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_e21c1ca75f7b4a42a178c18b54ff957c",
+        "request_id": "request_dc253e832934bf7af62bdda0",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "197419c8-502e-4a3b-9d72-9863cf7bf9db",
+        "workspace_id": "default"
+      },
+      "id": "cancel_long_run",
+      "name": "Cancel a long run idempotently",
+      "proof": {
+        "canceled": true,
+        "repeated_cancel_safe": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "storage_export",
+      "name": "Export result package and verified manifest to Storage",
+      "proof": {
+        "artifact_count": 2
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "restart_reload",
+      "name": "Reload after core and sidecar restart",
+      "proof": {
+        "ready_endpoint": true,
+        "recovered": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "deep_link",
+      "name": "Open a project/run deep link",
+      "proof": {
+        "project_route": true,
+        "run_hint": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_f3b213bbb97dcda7970c6de4",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_37dcb86355884995b9645897",
+        "od_run_id": "od_run_7221b798bd1c434cbcc8b37ac94e4228",
+        "request_id": "request_f3b213bbb97dcda7970c6de4",
+        "runtime_session_id": "3e6de2af-4779-440e-98a5-fcea8cad16c9",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e62d4d4-d2f2-4130-945a-825e0b9236a4",
+        "workspace_id": "workspace-b"
+      },
+      "id": "workspace_isolation",
+      "name": "Keep workspace A and B processes and data isolated",
+      "proof": {
+        "distinct_origins": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "forbidden_routes",
+      "name": "Deny sensitive, unknown, and core routes",
+      "proof": {
+        "exact_deny": true
+      },
+      "status": "passed"
+    },
+    {
+      "correlation": {
+        "correlation_id": "request_1e9c52be6c064fec250a0768",
+        "local_app_id": "design-studio",
+        "od_project_id": "od_maverick_ee0415f27c3b4bb6ace81b4c",
+        "od_run_id": "od_run_a21de087c9c24e6e8eb753287afc9f9f",
+        "request_id": "request_1e9c52be6c064fec250a0768",
+        "runtime_session_id": "222b0a8a-40a1-47fd-8f72-e976fd155f09",
+        "sidecar_id": "opendesign",
+        "turn_id": "8e939816-5c91-42a1-ae79-585d9b23f51a",
+        "workspace_id": "default"
+      },
+      "id": "secret_boundary",
+      "name": "Keep platform credentials out of OpenDesign",
+      "proof": {
+        "browser_bearer_forwarded": false,
+        "maverick_cookie_forwarded": false,
+        "one_shot_bootstrap_count": 4
+      },
+      "status": "passed"
+    },
+    {
+      "id": "upgrade_rollback",
+      "name": "Upgrade and rollback the real artifact with fixture data",
+      "proof": {
+        "forward_generation_preserved": true,
+        "migration_smoke": true,
+        "source_generation_preserved": true
+      },
+      "status": "passed"
+    }
+  ],
+  "schema_version": "2",
+  "sources": {
+    "migration_gate": "design-studio-migration-rollback-smoke",
+    "ui_gate": "design-studio-e2e-release"
+  },
+  "status": "passed",
+  "two_workspace_isolation": true
+}

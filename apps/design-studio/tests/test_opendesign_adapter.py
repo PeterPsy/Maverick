@@ -80,6 +80,14 @@ class OpenDesignAdapterTests(unittest.TestCase):
                 patch.object(service, "_opendesign_bytes_post", return_value=archive_buffer.getvalue()),
                 patch.object(service, "store_for_payload", return_value=_CorrelationStore()),
                 patch.object(service, "_opendesign_bundle_summary", return_value=bundle),
+                patch.object(
+                    service,
+                    "_opendesign_runtime_status",
+                    return_value={
+                        "runtime_artifact_sha256": "b" * 64,
+                        "web_overlay_sha256": "c" * 64,
+                    },
+                ),
             ):
                 result = service.export_to_storage(
                     payload,
@@ -90,6 +98,8 @@ class OpenDesignAdapterTests(unittest.TestCase):
             self.assertEqual(result["manifest"]["od_run_id"], "od_run_export_1")
             self.assertEqual(result["manifest"]["provenance"]["runtime_session_id"], "runtime-session-1")
             self.assertEqual(result["manifest"]["provenance"]["oci_reference"], bundle["oci_reference"])
+            self.assertEqual(result["manifest"]["provenance"]["runtime_artifact_sha256"], "b" * 64)
+            self.assertEqual(result["manifest"]["provenance"]["web_overlay_sha256"], "c" * 64)
             requests = result["dependency_backend_requests"]
             self.assertEqual(len(requests), 3)
             expected_root = "storage/generated/design-studio/od_adapter_export/od_run_export_1"

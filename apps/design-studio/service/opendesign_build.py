@@ -54,7 +54,12 @@ def build_once(
     exported_metadata = result_root / "metadata"
     artifact = result_root / artifact_name
     source_evidence = export_source(repository, source, manifest)
-    patch_evidence = apply_patch_series(source, service_root, manifest)
+    patch_evidence = apply_patch_series(
+        source,
+        service_root,
+        manifest,
+        components={"runtime"},
+    )
     build = manifest["fallback_build"]["build"]
     lockfile = source / "pnpm-lock.yaml"
     lockfile_sha256 = sha256_file(lockfile)

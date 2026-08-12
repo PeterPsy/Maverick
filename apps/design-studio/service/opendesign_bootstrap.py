@@ -8,7 +8,7 @@ import stat
 from typing import Callable, Mapping
 
 from opendesign_generation_control import load_generation_control, write_generation_control
-from opendesign_generation_model import GenerationControl, GenerationControlError, GenerationTriple
+from opendesign_generation_model import GenerationControl, GenerationControlError, LaunchSelection
 from opendesign_migration_files import fsync_directory, remove_owned_directory
 
 
@@ -20,25 +20,36 @@ def bootstrap_empty_generation(
     root: Path,
     *,
     artifact_sha256: str,
+    web_overlay_sha256: str,
     opendesign_version: str,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
     now: Callable[[], str] | None = None,
 ) -> tuple[GenerationControl, Path]:
     """Create one first generation only when no legacy or unknown data exists."""
     root = _validated_root(root)
     generation_id = f"gen_{artifact_sha256[:16]}"
-    triple = GenerationTriple(artifact_sha256, opendesign_version, generation_id)
+    selection = LaunchSelection(
+        artifact_sha256,
+        web_overlay_sha256,
+        opendesign_version,
+        generation_id,
+    )
     control_path = root / "control.json"
     if control_path.exists() or control_path.is_symlink():
         try:
-            control = load_generation_control(root, verified_artifacts=verified_artifacts)
+            control = load_generation_control(
+                root,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
         except GenerationControlError as exc:
             raise BootstrapError(f"existing OpenDesign generation control is invalid: {exc}") from exc
-        if control.active != triple:
+        if control.active != selection:
             raise BootstrapError("existing OpenDesign control selects a different generation")
         return control, root / "instances" / generation_id / "data"
 
-    allowed = {"instances", "backups", "migrations"}
+    allowed = {"instances", "backups", "migrations", "web-activations"}
     existing = {child.name for child in root.iterdir()}
     if not existing.issubset(allowed):
         raise BootstrapError("OpenDesign root contains legacy or unknown data; controlled migration is required")
@@ -54,13 +65,20 @@ def bootstrap_empty_generation(
     fsync_directory(generation)
     fsync_directory(generation.parent)
     control = GenerationControl(
-        active=triple,
-        previous=None,
+        active=selection,
+        previous_release=None,
+        previous_web=None,
         migration_id=None,
+        web_activation_id=None,
         updated_at=(now or _utc_now)(),
     )
     try:
-        write_generation_control(root, control, verified_artifacts=verified_artifacts)
+        write_generation_control(
+            root,
+            control,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
     except Exception:
         remove_owned_directory(generation, parent=root / "instances", label="incomplete bootstrap generation")
         raise

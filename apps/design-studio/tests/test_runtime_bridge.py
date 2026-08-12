@@ -224,6 +224,7 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
             (generation_root / "instances").mkdir(parents=True)
             (generation_root / "backups").mkdir()
             (generation_root / "migrations").mkdir()
+            (generation_root / "web-activations").mkdir()
             payload = self._payload(root)
 
             self.assertIsNone(runtime_bridge.cleanup_data_directory(payload))
@@ -235,13 +236,16 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                 json.dumps(
                     {
                         "active": {
-                            "bundle_artifact_sha256": "a" * 64,
+                            "runtime_artifact_sha256": "a" * 64,
+                            "web_overlay_sha256": "b" * 64,
                             "data_generation": "gen_cleanup_fixture",
                             "od_version": "0.16.1",
                         },
                         "migration_id": None,
-                        "previous": None,
-                        "schema_version": "1",
+                        "previous_release": None,
+                        "previous_web": None,
+                        "web_activation_id": None,
+                        "schema_version": "2",
                         "updated_at": "2026-08-06T15:00:00Z",
                     }
                 )

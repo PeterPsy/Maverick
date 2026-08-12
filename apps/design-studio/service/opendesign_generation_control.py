@@ -14,17 +14,21 @@ from typing import Mapping
 from opendesign_generation_model import (
     GenerationControl,
     GenerationControlError,
-    GenerationTriple,
+    LaunchSelection,
     MigrationJournal,
+    WebActivationJournal,
     reconcile_migration_control,
+    reconcile_web_activation,
 )
 
 
 CONTROL_FILE_NAME = "control.json"
 MAX_CONTROL_BYTES = 64 * 1024
 _MIGRATION_RE = re.compile(r"^migration_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
+_WEB_ACTIVATION_RE = re.compile(r"^web_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
 _TEMP_RE = re.compile(r"^\.control\.json\.[0-9a-f]{16}\.tmp$")
 _JOURNAL_TEMP_RE = re.compile(r"^\.migration_[0-9A-Za-z][0-9A-Za-z._-]{0,79}\.json\.[0-9a-f]{16}\.tmp$")
+_WEB_JOURNAL_TEMP_RE = re.compile(r"^\.web_[0-9A-Za-z][0-9A-Za-z._-]{0,79}\.json\.[0-9a-f]{16}\.tmp$")
 
 
 @dataclass(frozen=True)
@@ -33,23 +37,39 @@ class RecoveryResult:
     active_data_dir: Path
     removed_stale_temps: tuple[str, ...]
     migration_reconciliations: tuple[str, ...]
+    web_reconciliations: tuple[str, ...]
 
 
 def load_generation_control(
     root: Path,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
 ) -> GenerationControl:
     root = _validated_root(root)
     control = load_generation_control_metadata(root)
-    _validate_references(root, control, verified_artifacts=verified_artifacts)
+    _validate_references(
+        root,
+        control,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+    )
     if control.migration_id is not None:
         journal = load_migration_journal(
             root,
             control.migration_id,
             verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
         )
         reconcile_migration_control(control, journal)
+    if control.web_activation_id is not None:
+        journal = load_web_activation_journal(
+            root,
+            control.web_activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        reconcile_web_activation(control, journal)
     return control
 
 
@@ -57,6 +77,7 @@ def load_runtime_generation_control(
     root: Path,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
 ) -> GenerationControl:
     """Load launch metadata while requiring full verification of the active artifact.
 
@@ -67,14 +88,24 @@ def load_runtime_generation_control(
     """
     root = _validated_root(root)
     control = load_generation_control_metadata(root)
-    _verify_artifact(control.active, verified_artifacts, label="active")
+    _verify_selection(
+        control.active,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+        label="active",
+    )
     resolve_generation_data_dir(root, control.active)
-    if control.previous is not None:
-        resolve_generation_data_dir(root, control.previous)
+    if control.previous_release is not None:
+        resolve_generation_data_dir(root, control.previous_release)
+    if control.previous_web is not None:
+        _verify_overlay(control.previous_web, verified_overlays, label="previous_web")
     if control.migration_id is not None:
         journal = load_migration_journal_metadata(root, control.migration_id)
         _validate_journal_paths(root, journal)
         reconcile_migration_control(control, journal)
+    if control.web_activation_id is not None:
+        journal = load_web_activation_journal_metadata(root, control.web_activation_id)
+        reconcile_web_activation(control, journal)
     return control
 
 
@@ -89,17 +120,32 @@ def write_generation_control(
     control: GenerationControl,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
 ) -> None:
     root = _validated_root(root)
     normalized = GenerationControl.from_dict(control.to_dict())
-    _validate_references(root, normalized, verified_artifacts=verified_artifacts)
+    _validate_references(
+        root,
+        normalized,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+    )
     if normalized.migration_id is not None:
         journal = load_migration_journal(
             root,
             normalized.migration_id,
             verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
         )
         reconcile_migration_control(normalized, journal)
+    if normalized.web_activation_id is not None:
+        journal = load_web_activation_journal(
+            root,
+            normalized.web_activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        reconcile_web_activation(normalized, journal)
     destination = root / CONTROL_FILE_NAME
     _atomic_write_json(destination, normalized.to_dict())
 
@@ -109,6 +155,7 @@ def load_migration_journal(
     migration_id: str,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
 ) -> MigrationJournal:
     root = _validated_root(root)
     if not _MIGRATION_RE.fullmatch(migration_id):
@@ -118,7 +165,12 @@ def load_migration_journal(
     journal = MigrationJournal.from_dict(_read_strict_json_file(journal_path))
     if journal.migration_id != migration_id:
         raise GenerationControlError("migration journal id does not match its file")
-    _validate_journal_references(root, journal, verified_artifacts=verified_artifacts)
+    _validate_journal_references(
+        root,
+        journal,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+    )
     return journal
 
 
@@ -140,18 +192,90 @@ def write_migration_journal(
     journal: MigrationJournal,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
 ) -> None:
     root = _validated_root(root)
     normalized = MigrationJournal.from_dict(journal.to_dict())
-    _validate_journal_references(root, normalized, verified_artifacts=verified_artifacts)
+    _validate_journal_references(
+        root,
+        normalized,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+    )
     migrations_root = _validated_child_directory(root, "migrations")
     _atomic_write_json(migrations_root / f"{normalized.migration_id}.json", normalized.to_dict())
+
+
+def load_web_activation_journal(
+    root: Path,
+    web_activation_id: str,
+    *,
+    verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
+) -> WebActivationJournal:
+    root = _validated_root(root)
+    journal = load_web_activation_journal_metadata(root, web_activation_id)
+    _verify_selection(
+        journal.source,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+        label="web activation source",
+    )
+    _verify_selection(
+        journal.target,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+        label="web activation target",
+    )
+    resolve_generation_data_dir(root, journal.source)
+    return journal
+
+
+def load_web_activation_journal_metadata(
+    root: Path,
+    web_activation_id: str,
+) -> WebActivationJournal:
+    root = _validated_root(root)
+    if not _WEB_ACTIVATION_RE.fullmatch(web_activation_id):
+        raise GenerationControlError("web_activation_id is invalid")
+    journals_root = _validated_child_directory(root, "web-activations")
+    journal = WebActivationJournal.from_dict(
+        _read_strict_json_file(journals_root / f"{web_activation_id}.json")
+    )
+    if journal.web_activation_id != web_activation_id:
+        raise GenerationControlError("web activation journal id does not match its file")
+    return journal
+
+
+def write_web_activation_journal(
+    root: Path,
+    journal: WebActivationJournal,
+    *,
+    verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
+) -> None:
+    root = _validated_root(root)
+    normalized = WebActivationJournal.from_dict(journal.to_dict())
+    for label, selection in (("source", normalized.source), ("target", normalized.target)):
+        _verify_selection(
+            selection,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+            label=f"web activation {label}",
+        )
+        resolve_generation_data_dir(root, selection)
+    journals_root = _validated_child_directory(root, "web-activations")
+    _atomic_write_json(
+        journals_root / f"{normalized.web_activation_id}.json",
+        normalized.to_dict(),
+    )
 
 
 def recover_generation_control(
     root: Path,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
 ) -> RecoveryResult:
     root = _validated_root(root)
     removed: list[str] = []
@@ -177,24 +301,66 @@ def recover_generation_control(
         journal_temp_removed = True
     if journal_temp_removed:
         _fsync_directory(migrations_root)
-    control = load_generation_control(root, verified_artifacts=verified_artifacts)
+    web_root = _validated_child_directory(root, "web-activations")
+    web_temp_removed = False
+    for candidate in sorted(web_root.iterdir(), key=lambda item: item.name):
+        if not _WEB_JOURNAL_TEMP_RE.fullmatch(candidate.name):
+            continue
+        mode = candidate.lstat().st_mode
+        if not stat.S_ISREG(mode):
+            raise GenerationControlError(f"unsafe stale web activation temp: {candidate.name}")
+        candidate.unlink()
+        removed.append(f"web-activations/{candidate.name}")
+        web_temp_removed = True
+    if web_temp_removed:
+        _fsync_directory(web_root)
+    control = load_generation_control(
+        root,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+    )
     active_data_dir = resolve_generation_data_dir(root, control.active)
     reconciliations: list[str] = []
     for journal_path in sorted(migrations_root.glob("migration_*.json"), key=lambda item: item.name):
         migration_id = journal_path.stem
-        journal = load_migration_journal(root, migration_id, verified_artifacts=verified_artifacts)
+        journal = load_migration_journal(
+            root,
+            migration_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
         if migration_id == control.migration_id or journal.state == "prepared":
             reconciliation = reconcile_migration_control(control, journal)
         else:
             reconciliation = f"historical_{journal.state}"
         reconciliations.append(f"{migration_id}:{reconciliation}")
-    return RecoveryResult(control, active_data_dir, tuple(removed), tuple(reconciliations))
+    web_reconciliations: list[str] = []
+    for journal_path in sorted(web_root.glob("web_*.json"), key=lambda item: item.name):
+        activation_id = journal_path.stem
+        journal = load_web_activation_journal(
+            root,
+            activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        if activation_id == control.web_activation_id or journal.state == "prepared":
+            reconciliation = reconcile_web_activation(control, journal)
+        else:
+            reconciliation = f"historical_{journal.state}"
+        web_reconciliations.append(f"{activation_id}:{reconciliation}")
+    return RecoveryResult(
+        control,
+        active_data_dir,
+        tuple(removed),
+        tuple(reconciliations),
+        tuple(web_reconciliations),
+    )
 
 
-def resolve_generation_data_dir(root: Path, triple: GenerationTriple) -> Path:
+def resolve_generation_data_dir(root: Path, selection: LaunchSelection) -> Path:
     root = _validated_root(root)
     instance_root = root / "instances"
-    generation_root = instance_root / triple.data_generation
+    generation_root = instance_root / selection.data_generation
     data_root = generation_root / "data"
     for label, candidate in (
         ("instances", instance_root),
@@ -219,12 +385,22 @@ def _validate_references(
     control: GenerationControl,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
 ) -> None:
-    for label, triple in (("active", control.active), ("previous", control.previous)):
-        if triple is None:
+    for label, selection in (
+        ("active", control.active),
+        ("previous_release", control.previous_release),
+        ("previous_web", control.previous_web),
+    ):
+        if selection is None:
             continue
-        _verify_artifact(triple, verified_artifacts, label=label)
-        resolve_generation_data_dir(root, triple)
+        _verify_selection(
+            selection,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+            label=label,
+        )
+        resolve_generation_data_dir(root, selection)
 
 
 def _validate_journal_references(
@@ -232,9 +408,15 @@ def _validate_journal_references(
     journal: MigrationJournal,
     *,
     verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
 ) -> None:
-    for label, triple in (("source", journal.source), ("target", journal.target)):
-        _verify_artifact(triple, verified_artifacts, label=f"migration {label}")
+    for label, selection in (("source", journal.source), ("target", journal.target)):
+        _verify_selection(
+            selection,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+            label=f"migration {label}",
+        )
     _validate_journal_paths(root, journal)
 
 
@@ -283,17 +465,51 @@ def _atomic_write_json(destination: Path, payload: dict[str, object]) -> None:
             pass
 
 
+def _verify_selection(
+    selection: LaunchSelection,
+    *,
+    verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
+    label: str,
+) -> None:
+    _verify_artifact(selection, verified_artifacts, label=label)
+    _verify_overlay(selection, verified_overlays, label=label)
+
+
 def _verify_artifact(
-    triple: GenerationTriple,
+    selection: LaunchSelection,
     verified_artifacts: Mapping[str, str],
     *,
     label: str,
 ) -> None:
-    verified_version = verified_artifacts.get(triple.bundle_artifact_sha256)
+    verified_version = verified_artifacts.get(selection.runtime_artifact_sha256)
     if verified_version is None:
-        raise GenerationControlError(f"{label} bundle artifact is not verified")
-    if verified_version != triple.od_version:
+        raise GenerationControlError(f"{label} runtime artifact is not verified")
+    if verified_version != selection.od_version:
         raise GenerationControlError(f"{label} artifact version does not match the triple")
+
+
+def _verify_overlay(
+    selection: LaunchSelection,
+    verified_overlays: Mapping[str, object],
+    *,
+    label: str,
+) -> None:
+    reference = verified_overlays.get(selection.web_overlay_sha256)
+    if reference is None:
+        raise GenerationControlError(f"{label} web overlay is not verified")
+    if isinstance(reference, Mapping):
+        version = reference.get("od_version")
+        compatible = reference.get("compatible_runtime_artifact_sha256")
+    else:
+        version = getattr(reference, "od_version", None)
+        compatible = getattr(reference, "compatible_runtime_artifact_sha256", None)
+    if version != selection.od_version:
+        raise GenerationControlError(f"{label} web overlay version is incompatible")
+    if not isinstance(compatible, (list, tuple, set, frozenset)):
+        raise GenerationControlError(f"{label} web overlay compatibility record is invalid")
+    if selection.runtime_artifact_sha256 not in compatible:
+        raise GenerationControlError(f"{label} web overlay is incompatible with the runtime artifact")
 
 
 def _validated_root(root: Path) -> Path:

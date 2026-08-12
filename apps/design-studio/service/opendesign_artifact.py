@@ -124,7 +124,11 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
         raise ArtifactError("OpenDesign boundary patch path is not authorized")
     if required_string(boundary, "pre_sha256") != "61c966b4a3a99e7098e37a943436e8b5d52563d1bace24a0e398b200ac0135e8":
         raise ArtifactError("OpenDesign boundary patch preimage is not authorized")
-    if boundary.get("required_environment") != "OD_REQUIRE_API_TOKEN_ON_LOOPBACK":
+    if boundary.get("required_environment") != [
+        "OD_REQUIRE_API_TOKEN_ON_LOOPBACK",
+        "OD_STATIC_DIR",
+        "OD_STATIC_REGISTRY_ROOT",
+    ]:
         raise ArtifactError("OpenDesign boundary patch environment is not authorized")
     post_sha256 = boundary.get("post_sha256")
     if require_artifact_digest and not is_sha256(post_sha256):
@@ -132,17 +136,28 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
     if post_sha256 is not None and not is_sha256(post_sha256):
         raise ArtifactError("OpenDesign boundary patch postimage must be null or lowercase SHA-256")
     web_patch = mapping(manifest, "web_patch")
-    if set(web_patch) != {"patch_series", "output_path", "output_manifest_sha256", "capabilities"}:
+    if set(web_patch) != {
+        "patch_series",
+        "build_command",
+        "source_output_path",
+        "capabilities",
+    }:
         raise ArtifactError("OpenDesign web patch fields are unsupported")
     if required_string(web_patch, "patch_series") != manifest["fallback_build"]["patch_series"]:
         raise ArtifactError("OpenDesign web patch series is not authorized")
-    if required_string(web_patch, "output_path") != "app/apps/web/out":
-        raise ArtifactError("OpenDesign web patch output path is not authorized")
-    web_output_sha256 = web_patch.get("output_manifest_sha256")
-    if require_artifact_digest and not is_sha256(web_output_sha256):
-        raise ArtifactError("OpenDesign web patch output is not pinned")
-    if web_output_sha256 is not None and not is_sha256(web_output_sha256):
-        raise ArtifactError("OpenDesign web patch output must be null or lowercase SHA-256")
+    if required_string(web_patch, "source_output_path") != "apps/web/out":
+        raise ArtifactError("OpenDesign web overlay source output path is not authorized")
+    if web_patch.get("build_command") != [
+        "corepack",
+        "pnpm",
+        "--filter",
+        "@open-design/web...",
+        "--workspace-concurrency=4",
+        "--if-present",
+        "run",
+        "build",
+    ]:
+        raise ArtifactError("OpenDesign web patch build command changed")
     if web_patch.get("capabilities") != [
         "react_hosted_project_view",
         "native_chat_unmounted",

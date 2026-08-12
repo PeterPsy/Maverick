@@ -8,6 +8,7 @@ import shutil
 import sys
 import tarfile
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SERVICE_ROOT = ROOT / "apps/design-studio/service"
 MANIFEST_PATH = SERVICE_ROOT / "opendesign_bundle.json"
 UPSTREAM_COMMIT = "276b4d8e970bc143d7ad060181a89a834e3d9caf"
+WEB_DIGEST = "e" * 64
 
 
 def _load_module(name: str, path: Path):
@@ -129,23 +131,44 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         installed = self._materialize(registry)
         generation_root = self.root / "data-root"
         generation_root.mkdir()
-        for name in ("instances", "migrations", "backups"):
+        for name in ("instances", "migrations", "backups", "web-activations"):
             (generation_root / name).mkdir()
+        overlay_root = self.root / "web-registry" / WEB_DIGEST
+        (overlay_root / "static").mkdir(parents=True)
+        overlay = SimpleNamespace(
+            web_overlay_sha256=WEB_DIGEST,
+            path=overlay_root,
+            static_dir=overlay_root / "static",
+            od_version="0.16.1",
+            upstream_commit=UPSTREAM_COMMIT,
+            compatible_runtime_artifact_sha256=frozenset({self.archive_sha256}),
+        )
         control, data_dir = self.bootstrap.bootstrap_empty_generation(
             generation_root,
             artifact_sha256=self.archive_sha256,
+            web_overlay_sha256=WEB_DIGEST,
             opendesign_version="0.16.1",
             verified_artifacts={self.archive_sha256: "0.16.1"},
+            verified_overlays={WEB_DIGEST: overlay},
             now=lambda: "2026-08-04T00:00:00Z",
         )
 
-        with patch.object(
-            self.runtime,
-            "discover_verified_bundles",
-            wraps=self.materialization.discover_verified_bundles,
-        ) as discovery:
+        with (
+            patch.object(
+                self.runtime,
+                "discover_verified_bundles",
+                wraps=self.materialization.discover_verified_bundles,
+            ) as discovery,
+            patch.object(
+                self.runtime,
+                "discover_verified_overlays",
+                return_value={WEB_DIGEST: overlay},
+            ),
+        ):
             binding = self.runtime.resolve_runtime_binding(
                 registry_root=registry,
+                web_registry_root=self.root / "web-registry",
+                web_trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
                 generation_root=generation_root,
                 manifest=self._pinned_manifest(),
             )
@@ -153,6 +176,8 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         daemon_env = self.launcher._daemon_env(
             data_dir=binding.data_dir,
             media_config_dir=binding.data_dir / "media-config",
+            static_dir=binding.overlay.static_dir,
+            static_registry_root=self.root / "web-registry",
         )
 
         self.assertEqual(binding.bundle, installed)
@@ -163,6 +188,8 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         self.assertEqual(plan.command[0], str(installed.path / "runtime/lib/ld-musl-x86_64.so.1"))
         self.assertEqual(plan.command[3], str(installed.path / "runtime/bin/node"))
         self.assertEqual(daemon_env["OD_DATA_DIR"], str(data_dir))
+        self.assertEqual(daemon_env["OD_STATIC_DIR"], str(binding.overlay.static_dir))
+        self.assertEqual(daemon_env["OD_STATIC_REGISTRY_ROOT"], str(self.root / "web-registry"))
         self.assertEqual(daemon_env["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"], "1")
         self.assertEqual(daemon_env["DO_NOT_TRACK"], "1")
         self.assertEqual(daemon_env["NEXT_TELEMETRY_DISABLED"], "1")
@@ -178,6 +205,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         (generation_root / "instances/gen_current/data").mkdir(parents=True)
         (generation_root / "migrations").mkdir()
         (generation_root / "backups").mkdir()
+        (generation_root / "web-activations").mkdir()
         (generation_root / "control.json").write_text(
             json.dumps(
                 {
@@ -194,9 +222,11 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        with self.assertRaisesRegex(self.artifact.ArtifactError, "not materialized|not verified"):
+        with self.assertRaisesRegex(self.artifact.ArtifactError, "invalid|not materialized|not verified"):
             self.runtime.resolve_runtime_binding(
                 registry_root=registry,
+                web_registry_root=self.root / "web-registry",
+                web_trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
                 generation_root=generation_root,
                 manifest=self._pinned_manifest(),
             )
@@ -224,6 +254,8 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             environment = self.launcher._daemon_env(
                 data_dir=self.root / "data",
                 media_config_dir=self.root / "data/media-config",
+                static_dir=self.root / "static",
+                static_registry_root=self.root,
             )
         self.assertEqual(environment["OD_API_TOKEN"], "technical-token")
         self.assertEqual(environment["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"], "1")
@@ -243,7 +275,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
     def test_empty_bootstrap_refuses_legacy_or_unknown_data(self) -> None:
         generation_root = self.root / "data-root"
         generation_root.mkdir()
-        for name in ("instances", "migrations", "backups"):
+        for name in ("instances", "migrations", "backups", "web-activations"):
             (generation_root / name).mkdir()
         (generation_root / "app.sqlite").write_bytes(b"legacy")
 
@@ -251,8 +283,15 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             self.bootstrap.bootstrap_empty_generation(
                 generation_root,
                 artifact_sha256=self.archive_sha256,
+                web_overlay_sha256=WEB_DIGEST,
                 opendesign_version="0.16.1",
                 verified_artifacts={self.archive_sha256: "0.16.1"},
+                verified_overlays={
+                    WEB_DIGEST: {
+                        "od_version": "0.16.1",
+                        "compatible_runtime_artifact_sha256": [self.archive_sha256],
+                    }
+                },
             )
 
         self.assertEqual(list((generation_root / "instances").iterdir()), [])

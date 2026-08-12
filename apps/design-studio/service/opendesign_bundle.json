@@ -123,14 +123,6 @@
         "--if-present",
         "run",
         "build"
-      ],
-      [
-        "corepack",
-        "pnpm",
-        "--filter",
-        "@open-design/web",
-        "run",
-        "build"
       ]
     ],
     "environment": {
@@ -201,13 +193,26 @@
   "boundary_patch": {
     "path": "app/apps/daemon/dist/server.js",
     "pre_sha256": "61c966b4a3a99e7098e37a943436e8b5d52563d1bace24a0e398b200ac0135e8",
-    "post_sha256": "ca107003e03b55d8fa3291e39a51810ce361e09e61e68d2122e05795e1431e1d",
-    "required_environment": "OD_REQUIRE_API_TOKEN_ON_LOOPBACK"
+    "post_sha256": "21bd1a29b45114647b00171e3f60d5ca708a20329e902f2bd7fff1b2d3a45601",
+    "required_environment": [
+      "OD_REQUIRE_API_TOKEN_ON_LOOPBACK",
+      "OD_STATIC_DIR",
+      "OD_STATIC_REGISTRY_ROOT"
+    ]
   },
   "web_patch": {
     "patch_series": "patches/series.json",
-    "output_path": "app/apps/web/out",
-    "output_manifest_sha256": "f4676f5d70634b88b46818acfc6ba332f3e09a1f035bbae26860cbdfb3922303",
+    "build_command": [
+      "corepack",
+      "pnpm",
+      "--filter",
+      "@open-design/web...",
+      "--workspace-concurrency=4",
+      "--if-present",
+      "run",
+      "build"
+    ],
+    "source_output_path": "apps/web/out",
     "capabilities": [
       "react_hosted_project_view",
       "native_chat_unmounted",
@@ -225,22 +230,22 @@
     "assets": {
       "linux-x86_64": {
         "file": "open-design-v0.16.1-linux-x86_64.tar.gz",
-        "sha256": "9ab929264888b981e4205f0c596ee1128d04bc1cc7573266c15c1ad14e9a8d68",
-        "size_bytes": 170320842,
+        "sha256": "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
+        "size_bytes": 161594149,
         "file_manifest": "open-design-v0.16.1-linux-x86_64.manifest.json",
-        "file_manifest_sha256": "64cca85fc901c484837a3a759a56dab200e4b5c8f383798681cd505333765608",
+        "file_manifest_sha256": "647cba762cd629e447cd6c72fd893b9b0c85eaea6abfadb3a21821448f500183",
         "sbom": "open-design-v0.16.1-linux-x86_64.sbom.cdx.json",
         "sbom_sha256": "a1a28df1527e9208153fd036d0005364ec062c10078af6f5708b3bc9c1c1ded5",
         "license_inventory": "open-design-v0.16.1-linux-x86_64.licenses.json",
         "license_inventory_sha256": "1b717abf64b5bf6b7faac15b941acf5e95ceebc66dcdf14bc107279cb7b36750",
         "notice": "open-design-v0.16.1-linux-x86_64.NOTICE",
-        "notice_sha256": "92347539979dfded5da331a7ee8381b5f8f996b17e377660c0409296cfa147a8",
+        "notice_sha256": "57ca338011b9071ab4eed5cfdf25d1a62ff7774a762cd00c9537402f16116ef1",
         "provenance": "open-design-v0.16.1-linux-x86_64.provenance.json",
-        "provenance_sha256": "99b7392707e7537339404f36330997ee9d1344ceedfc8df5d08431e6d64aa02a",
+        "provenance_sha256": "b62f9b9fb3772be403e4ee2949a73f818b50967d8ea1ea322e4a7edcc82d1cda",
         "signature": "open-design-v0.16.1-linux-x86_64.provenance.sig",
-        "signature_sha256": "e465b610a38d6571b4b1f7e489c554f4c8f51d2c24ba7d0283e5bbcd75972c7b",
+        "signature_sha256": "ee70883d4911033493056a5aa8807d55013f0318405d0eb0b5ce035b6df5d6a3",
         "public_key": "open-design-v0.16.1-linux-x86_64.provenance.pub.pem",
-        "public_key_sha256": "27649e3904f6e6507c145608039dfc0f17d10d0a44539e3989bbea1b79289f06"
+        "public_key_sha256": "418381a4da415837dd5d07b9585fbb958ef20f5c89de35f89b038c3a85f09b1b"
       }
     }
   },

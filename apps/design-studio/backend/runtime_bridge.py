@@ -72,10 +72,13 @@ def active_data_directory(payload: dict[str, Any]) -> Path:
             return _real_directory(Path(cached_path), label="cached active OpenDesign data generation")
     app_data_root = _real_directory(Path(data_root_value), label="Design Studio data root")
     generation_root = _real_directory(app_data_root / "opendesign", label="OpenDesign generation root")
-    registry_root = _real_directory(SERVICE_ROOT / "vendor" / "open-design", label="OpenDesign registry root")
+    registry_root = SERVICE_ROOT / "vendor" / "open-design"
+    web_registry_root = SERVICE_ROOT / "vendor" / "open-design-web"
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
     binding = resolve_runtime_binding(
         registry_root=registry_root,
+        web_registry_root=web_registry_root,
+        web_trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
         generation_root=generation_root,
         manifest=manifest,
     )

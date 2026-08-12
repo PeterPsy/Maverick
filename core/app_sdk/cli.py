@@ -336,6 +336,8 @@ def _run_app_frontend(
         job_service=getattr(state, "job_service", None),
         observability_store=state.observability_store,
         app_event_bus=state.app_event_bus,
+        sidecar_browser_sessions=getattr(state, "sidecar_browser_sessions", None),
+        shutdown_controller=getattr(state, "shutdown_controller", None),
         workspace_id=workspace_id,
         start_path=state.repository_root,
         arguments={"workspace_id": workspace_id},

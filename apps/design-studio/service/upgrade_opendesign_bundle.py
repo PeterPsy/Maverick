@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from opendesign_artifact import read_bundle_manifest, selected_asset, validate_bundle_manifest
-from opendesign_generation_model import GenerationTriple
+from opendesign_generation_model import LaunchSelection
 from opendesign_migration import upgrade_controlled_copy
 from opendesign_migration_oci_runtime import OciMigrationRuntime
 
@@ -20,6 +20,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--registry-root", type=Path, required=True)
+    parser.add_argument("--web-registry-root", type=Path, required=True)
+    parser.add_argument("--web-trust-contract", type=Path, default=SERVICE_ROOT / "opendesign_web_trust.json")
+    parser.add_argument("--web-overlay-sha256", required=True)
     parser.add_argument("--migration-id", required=True)
     parser.add_argument("--target-generation", required=True)
     parser.add_argument("--minimum-free-bytes", type=int, default=64 * 1024 * 1024)
@@ -29,14 +32,17 @@ def main() -> None:
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
     validate_bundle_manifest(manifest, require_artifact_digest=True)
     asset = selected_asset(manifest, require_artifact_digest=True)
-    target = GenerationTriple(
-        bundle_artifact_sha256=str(asset["sha256"]),
+    target = LaunchSelection(
+        runtime_artifact_sha256=str(asset["sha256"]),
+        web_overlay_sha256=args.web_overlay_sha256,
         od_version=str(manifest["upstream"]["release_version"]),
         data_generation=args.target_generation,
     )
     runtime = OciMigrationRuntime(
         args.data_root.resolve(),
         args.registry_root.resolve(),
+        args.web_registry_root.resolve(),
+        args.web_trust_contract.resolve(),
         manifest,
     )
     try:
@@ -45,6 +51,7 @@ def main() -> None:
             target=target,
             migration_id=args.migration_id,
             verified_artifacts=runtime.verified_artifacts,
+            verified_overlays=runtime.verified_overlays,
             runtime=runtime,
             minimum_free_bytes=args.minimum_free_bytes,
             replace_retained_previous=args.replace_retained_previous,
@@ -58,7 +65,11 @@ def main() -> None:
                 "schema_version": "1",
                 "migration_id": outcome.migration_id,
                 "active": outcome.control.active.to_dict(),
-                "previous": outcome.control.previous.to_dict() if outcome.control.previous else None,
+                "previous_release": (
+                    outcome.control.previous_release.to_dict()
+                    if outcome.control.previous_release
+                    else None
+                ),
                 "project_count": outcome.project_count,
                 "evidence": evidence,
             },

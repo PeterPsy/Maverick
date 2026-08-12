@@ -4,7 +4,7 @@
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,12 @@ const serverFixture = path.join(scriptDir, 'fixtures', 'opendesign_product_serve
 const migrationSmoke = path.join(appRoot, 'service', 'smoke_opendesign_migration.py');
 const python = path.join(repoRoot, '.venv', 'bin', 'python');
 const bundleContract = JSON.parse(await readFile(path.join(appRoot, 'service', 'opendesign_bundle.json'), 'utf8'));
+const profile = argument('--profile') || 'release';
+if (!['quick', 'affected', 'release'].includes(profile)) {
+  throw new Error('E2E profile must be quick, affected, or release');
+}
+const changedFiles = argumentsAll('--changed-file');
+const overlayContract = await canonicalOverlayContract();
 const evidenceOutput = argument('--evidence-output');
 const evidenceOutputPath = evidenceOutput
   ? (path.isAbsolute(evidenceOutput)
@@ -33,6 +39,14 @@ process.env.PLAYWRIGHT_BROWSERS_PATH ||= process.env.MAVERICK_PLAYWRIGHT_BROWSER
 const { chromium } = await import('playwright');
 let server = null;
 let browser = null;
+
+
+class ProfileComplete extends Error {
+  constructor(evidence) {
+    super('profile complete');
+    this.evidence = evidence;
+  }
+}
 
 
 try {
@@ -94,6 +108,21 @@ try {
   assert(originA !== platformOrigin, 'OpenDesign did not use an isolated origin');
 
   const projectA = await createProjectFromUi(page, sidecar, 'Maverick WP10 browser project', networkProof);
+  if (profile === 'quick') {
+    throw new ProfileComplete(buildProfileEvidence({
+      profile,
+      scenarios: [
+        scenario('login_open', 'Login and open Design Studio', { isolated_origin: true, ready_endpoint: true }),
+        scenario('create_project_ui', 'Create and open a project from the Maverick sidebar', {
+          project_created: true,
+          sidebar_navigation: true,
+          native_home_projects_hidden: true,
+          native_chat_unmounted: true,
+        }),
+      ],
+      canonicalEntity: { od_project_id: projectA.projectId, od_run_id: '' },
+    }));
+  }
   const uploaded = await platformRequest(page, '/api/workspace-files/uploads', {
     method: 'POST',
     body: {
@@ -181,11 +210,25 @@ try {
   const cleanSidecarUrl = new URL(browserStorage.href);
   assert(cleanSidecarUrl.search === '' && cleanSidecarUrl.hash === '', 'OpenDesign retained bootstrap material in its URL');
 
+  if (profile === 'affected') {
+    const scenarios = buildFirstWorkspaceScenarios({
+      correlationA,
+      correlationCanceled,
+      manifest,
+      networkProof,
+    });
+    throw new ProfileComplete(buildProfileEvidence({
+      profile,
+      scenarios,
+      canonicalEntity: { od_project_id: projectA.projectId, od_run_id: successful.runId },
+    }));
+  }
+
   const bootstrapCountBeforeRestart = networkProof.bootstrapPosts;
   await stopServer(server);
   server = await startServer();
   await page.goto(`${platformOrigin}/app/design-studio`, { waitUntil: 'domcontentloaded' });
-  sidecar = await waitForSidecarFrame(page);
+  sidecar = await waitForSidecarFrame(page, '', networkProof, true);
   const restartedReady = await frameRequest(sidecar, '/api/ready');
   assert(
     restartedReady.status === 200 && restartedReady.body?.ok === true && restartedReady.body?.ready === true,
@@ -226,7 +269,6 @@ try {
   assert(!networkProof.maverickCookieForwarded, 'A Maverick session cookie reached the sidecar origin');
   assert(!networkProof.browserBearerForwarded, 'A browser bearer reached the sidecar origin');
 
-  await runMigrationSmoke();
   const evidence = buildEvidence({
     correlationA,
     correlationB,
@@ -237,6 +279,7 @@ try {
     originB,
     projectA,
     successful,
+    profile,
   });
   if (evidenceOutputPath) {
     await mkdir(path.dirname(evidenceOutputPath), { recursive: true });
@@ -244,9 +287,17 @@ try {
   }
   process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
 } catch (error) {
+  if (error instanceof ProfileComplete) {
+    if (evidenceOutputPath) {
+      await mkdir(path.dirname(evidenceOutputPath), { recursive: true });
+      await writeFile(evidenceOutputPath, `${JSON.stringify(error.evidence, null, 2)}\n`, 'utf8');
+    }
+    process.stdout.write(`${JSON.stringify(error.evidence, null, 2)}\n`);
+  } else {
   const diagnostic = typeof server?.wp10Diagnostic === 'function' ? server.wp10Diagnostic() : '';
   if (diagnostic) process.stderr.write(`\nSynthetic server diagnostic:\n${redactedDiagnostic(diagnostic)}\n`);
   throw error;
+  }
 } finally {
   if (browser) await browser.close().catch(() => {});
   await stopServer(server);
@@ -261,6 +312,11 @@ try {
 function argument(name) {
   const index = process.argv.indexOf(name);
   return index >= 0 ? process.argv[index + 1] : '';
+}
+
+
+function argumentsAll(name) {
+  return process.argv.flatMap((value, index) => value === name && process.argv[index + 1] ? [process.argv[index + 1]] : []);
 }
 
 
@@ -347,7 +403,7 @@ async function loginAndOpen(page) {
 }
 
 
-async function waitForSidecarFrame(page, expectedPath = '', networkProof = null) {
+async function waitForSidecarFrame(page, expectedPath = '', networkProof = null, requireReady = false) {
   let lastRetryAt = 0;
   for (let attempt = 0; attempt < 600; attempt += 1) {
     const frame = page.frames().find((candidate) => {
@@ -358,7 +414,11 @@ async function waitForSidecarFrame(page, expectedPath = '', networkProof = null)
     });
     if (frame) {
       await frame.waitForLoadState('domcontentloaded').catch(() => {});
-      return frame;
+      if (!requireReady) return frame;
+      const ready = await frameRequest(frame, '/api/ready').catch(() => ({ status: 0, body: null }));
+      if (ready.status === 200 && ready.body?.ok === true && ready.body?.ready === true) {
+        return frame;
+      }
     }
     const retry = page.getByRole('button', { name: 'Retry securely' });
     if (Date.now() - lastRetryAt >= 2_000 && await retry.isVisible().catch(() => false)) {
@@ -678,7 +738,7 @@ async function runMigrationSmoke() {
 }
 
 
-function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful }) {
+function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful, profile }) {
   const scenarios = [
     ['login_open', 'Login and open Design Studio', correlationA, { isolated_origin: true, ready_endpoint: true }],
     ['create_project_ui', 'Create and open a project from the Maverick sidebar', correlationA, {
@@ -703,16 +763,56 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
       browser_bearer_forwarded: networkProof.browserBearerForwarded,
       one_shot_bootstrap_count: networkProof.bootstrapPosts,
     }],
-    ['upgrade_rollback', 'Upgrade and rollback the real artifact with fixture data', correlationA, { migration_smoke: true }],
   ].map(([id, name, correlation, proof]) => ({ id, name, status: 'passed', correlation, proof }));
+  return buildProfileEvidence({
+    profile,
+    scenarios,
+    canonicalEntity: {
+      od_project_id: projectA.projectId,
+      od_run_id: successful.runId,
+    },
+  });
+}
+
+
+function buildFirstWorkspaceScenarios({ correlationA, correlationCanceled, manifest, networkProof }) {
+  return [
+    scenario('login_open', 'Login and open Design Studio', { isolated_origin: true, ready_endpoint: true }, correlationA),
+    scenario('create_project_ui', 'Create and open a project from the Maverick sidebar', { project_created: true }, correlationA),
+    scenario('storage_import', 'Import one Storage file with read-back', { imported: true }, correlationA),
+    scenario('runtime_start', 'Start one Maverick-owned run', { submitted: true }, correlationA),
+    scenario('incremental_sse', 'Receive incremental SSE before terminal', { incremental: true }, correlationA),
+    scenario('generated_preview', 'Generate and preview a project file', { previewed: true }, correlationA),
+    scenario('cancel_long_run', 'Cancel a long run idempotently', { canceled: true, repeated_cancel_safe: true }, correlationCanceled),
+    scenario('storage_export', 'Export result package and verified manifest to Storage', { artifact_count: manifest.artifacts.length }, correlationA),
+    scenario('forbidden_routes', 'Deny sensitive, unknown, and core routes', { exact_deny: true }, correlationA),
+    scenario('secret_boundary', 'Keep platform credentials out of OpenDesign', {
+      maverick_cookie_forwarded: networkProof.maverickCookieForwarded,
+      browser_bearer_forwarded: networkProof.browserBearerForwarded,
+      one_shot_bootstrap_count: networkProof.bootstrapPosts,
+    }, correlationA),
+  ];
+}
+
+
+function scenario(id, name, proof, correlation = null) {
+  return { id, name, status: 'passed', ...(correlation ? { correlation } : {}), proof };
+}
+
+
+function buildProfileEvidence({ profile, scenarios, canonicalEntity }) {
   return {
     schema_version: '1',
-    gate: 'WP10',
+    gate: `design-studio-e2e-${profile}`,
+    profile,
     status: 'passed',
+    changed_files: changedFiles,
+    affected_categories: profile === 'affected' ? affectedCategories(changedFiles) : [],
     opendesign: {
       version: bundleContract.upstream.release_version,
       oci_reference: `${bundleContract.distribution.registry}/${bundleContract.distribution.repository}:${bundleContract.distribution.reference}`,
-      artifact_sha256: bundleContract.artifact.assets['linux-x86_64'].sha256,
+      runtime_artifact_sha256: bundleContract.artifact.assets['linux-x86_64'].sha256,
+      web_overlay_sha256: overlayContract.web_overlay_sha256,
     },
     product_path: {
       official_oci_daemon: true,
@@ -725,10 +825,7 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
       docker_socket: false,
       remote_iframe: false,
     },
-    canonical_entity: {
-      od_project_id: projectA.projectId,
-      od_run_id: successful.runId,
-    },
+    canonical_entity: canonicalEntity,
     scenarios,
     redaction: {
       full_prompt_recorded: false,
@@ -737,6 +834,38 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
       host_path_recorded: false,
     },
   };
+}
+
+
+function affectedCategories(paths) {
+  const categories = new Set();
+  for (const changed of paths) {
+    if (changed.startsWith('core/') || changed.includes('app_contract')) categories.add('core-app-contract');
+    if (changed.startsWith('apps/design-studio/backend/')) categories.add('design-studio-backend');
+    if (changed.startsWith('apps/design-studio/frontend/')) categories.add('design-studio-wrapper');
+    if (/000[23]-maverick-web/.test(changed)) categories.add('opendesign-web');
+    if (changed.startsWith('apps/design-studio/service/') && !/000[23]-maverick-web/.test(changed)) categories.add('opendesign-runtime');
+  }
+  return [...categories].sort();
+}
+
+
+async function canonicalOverlayContract() {
+  const root = path.join(appRoot, 'service', 'vendor', 'open-design-web');
+  const entries = await readdir(root, { withFileTypes: true });
+  const compatible = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^[a-f0-9]{64}$/.test(entry.name)) continue;
+    const manifest = JSON.parse(await readFile(path.join(root, entry.name, 'manifest.json'), 'utf8'));
+    if (
+      manifest.web_overlay_sha256 === entry.name
+      && manifest.compatibility?.od_version === bundleContract.upstream.release_version
+      && manifest.compatibility?.upstream_commit === bundleContract.upstream.commit
+      && manifest.compatibility?.runtime_artifact_sha256?.includes(bundleContract.artifact.assets['linux-x86_64'].sha256)
+    ) compatible.push(manifest);
+  }
+  if (compatible.length !== 1) throw new Error('Expected exactly one canonical compatible OpenDesign web overlay');
+  return compatible[0];
 }
 
 

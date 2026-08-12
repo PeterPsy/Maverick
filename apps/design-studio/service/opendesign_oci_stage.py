@@ -30,6 +30,11 @@ def stage_runtime_closure(
     staging.mkdir(parents=True, mode=0o755)
     try:
         _copy_tree(_required_rootfs_path(rootfs, "app", directory=True), staging / "app")
+        embedded_web = staging / "app/apps/web/out"
+        if embedded_web.is_symlink():
+            raise OciStageError("OpenDesign embedded web output must not be a symlink")
+        if embedded_web.exists():
+            shutil.rmtree(embedded_web)
         node = _required_rootfs_path(rootfs, "usr/local/bin/node", directory=False)
         node_destination = staging / "runtime/bin/node"
         node_destination.parent.mkdir(parents=True)
@@ -132,6 +137,8 @@ def _verify_closure(staging: Path, manifest: dict[str, Any]) -> None:
     server = staging.joinpath(*manifest["boundary_patch"]["path"].split("/"))
     if sha256_file(server) != manifest["boundary_patch"]["post_sha256"]:
         raise OciStageError("OpenDesign OCI closure does not contain the pinned boundary patch")
+    if (staging / "app/apps/web/out").exists():
+        raise OciStageError("OpenDesign runtime closure must not contain embedded web output")
 
 
 __all__ = ["OciStageError", "runtime_command", "runtime_node_command", "stage_runtime_closure"]

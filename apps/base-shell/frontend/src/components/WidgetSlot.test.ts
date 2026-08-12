@@ -24,3 +24,11 @@ describe("WidgetSlot shell theme bridge", () => {
     expect(source).toContain("urlWithShellThemeSearchParams");
   });
 });
+
+describe("WidgetSlot app-scoped runtime remount", () => {
+  it("remounts only widgets owned by the changed app", () => {
+    const source = readFileSync(resolve(currentDir, "WidgetSlot.tsx"), "utf8");
+    expect(source).toContain('"maverick.app.runtime-changed"');
+    expect(source).toContain("payload.owner_app_id === widget?.owner_app_id");
+  });
+});

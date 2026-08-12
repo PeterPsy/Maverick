@@ -113,10 +113,12 @@ does not imply entrypoint authority. This closes that transport path; app
 backend and lifecycle-hook sandboxing remain open production blockers.
 
 Design Studio's OpenDesign 0.16.1 integration has a narrower completed product
-gate. Its committed WP10 evidence runs the official materialized OCI daemon,
-real Chromium, isolated sidecar origins, the Unix broker, Storage, restart,
-workspace A/B isolation, exact route denial, and marked-fixture rollback. The
-evidence is checked for complete correlation and absence of prompt, cookie,
+gate. Its committed release evidence runs the official materialized OCI daemon,
+the independently signed static web overlay, real Chromium, isolated sidecar
+origins, the Unix broker, Storage, scoped restart, workspace A/B isolation, and
+exact route denial. Marked-fixture migration/rollback is an independent gate;
+the aggregate requires both it and all UI scenarios. The evidence is checked
+for complete correlation and absence of prompt, cookie,
 bearer, provider payload, environment, host path, and secret values. This does
 not close the launch blockers above or authorize production data, credentials,
 internet exposure, or migration of an existing workspace.

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Protocol
 
-from opendesign_generation_model import GenerationControl, GenerationTriple
+from opendesign_generation_model import GenerationControl, LaunchSelection
 
 
 class MigrationError(RuntimeError):
@@ -26,7 +26,7 @@ class MigrationRuntime(Protocol):
 
     def prove_sidecar_stopped(self, data_dir: Path) -> None: ...
 
-    def start_sidecar(self, triple: GenerationTriple, data_dir: Path, *, staging: bool) -> None: ...
+    def start_sidecar(self, selection: LaunchSelection, data_dir: Path, *, staging: bool) -> None: ...
 
     def health_check(self) -> None: ...
 

@@ -23,6 +23,19 @@ export type ThreadSourceBadge = {
   label: string;
 };
 
+function sectionLatestActivity(section: FolderSection): number {
+  return section.items.reduce((latest, thread) => Math.max(latest, threadLastMessageTimestamp(thread)), 0);
+}
+
+function compareProjectSections(left: FolderSection, right: FolderSection): number {
+  const activityDifference = sectionLatestActivity(right) - sectionLatestActivity(left);
+  if (activityDifference !== 0) {
+    return activityDifference;
+  }
+  const titleDifference = left.title.localeCompare(right.title, "en", { sensitivity: "base" });
+  return titleDifference || left.id.localeCompare(right.id);
+}
+
 export function buildSections(
   projects: ChatProject[],
   threads: ChatThread[],
@@ -32,19 +45,16 @@ export function buildSections(
   referenceTime: number = Date.now(),
 ): FolderSection[] {
   const visibleThreads = filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId, referenceTime);
-  const projectSections: FolderSection[] = projects
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }))
-    .map((project) => ({
-      id: project.project_id,
-      projectId: project.project_id,
-      title: project.name,
-      canManage: true,
-      canCreateProject: false,
-      canMoveThreads: true,
-      emptyLabel: "No chats in this project.",
-      items: [],
-    }));
+  const projectSections: FolderSection[] = projects.map((project) => ({
+    id: project.project_id,
+    projectId: project.project_id,
+    title: project.name,
+    canManage: true,
+    canCreateProject: false,
+    canMoveThreads: true,
+    emptyLabel: "No chats in this project.",
+    items: [],
+  }));
   const sectionsByProjectId = new Map(projectSections.map((section) => [section.projectId, section]));
   const placeholderSections: FolderSection[] = [];
   const unassigned: ChatThread[] = [];
@@ -72,9 +82,9 @@ export function buildSections(
     section.items.push(thread);
   }
 
-  const sections = [...projectSections, ...placeholderSections].filter(
-    (section) => threadFilter === "all" || section.items.length > 0,
-  );
+  const sections = [...projectSections, ...placeholderSections]
+    .filter((section) => threadFilter === "all" || section.items.length > 0)
+    .sort(compareProjectSections);
   if (unassigned.length || (threadFilter === "all" && !sections.length)) {
     sections.unshift({
       id: "unassigned",

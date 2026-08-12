@@ -73,6 +73,31 @@ describe("chat sidebar runtime status", () => {
     expect(sections[0].items.map((item) => item.thread_id)).toEqual(["assigned"]);
   });
 
+  it("keeps No project first and orders projects by their newest chat", () => {
+    const sections = buildSections(
+      [
+        project({ project_id: "old-project", name: "Alpha" }),
+        project({ project_id: "recent-project", name: "Zulu" }),
+        project({ project_id: "empty-zulu", name: "Zulu empty" }),
+        project({ project_id: "empty-alpha", name: "Alpha empty" }),
+      ],
+      [
+        thread({ thread_id: "unassigned", project_id: null, updated_at: "2026-08-10T12:00:00.000Z" }),
+        thread({ thread_id: "recent-project-old-chat", project_id: "recent-project", updated_at: "2026-08-09T12:00:00.000Z" }),
+        thread({ thread_id: "old-project-chat", project_id: "old-project", updated_at: "2026-08-11T12:00:00.000Z" }),
+        thread({ thread_id: "recent-project-new-chat", project_id: "recent-project", updated_at: "2026-08-12T12:00:00.000Z" }),
+      ],
+    );
+
+    expect(sections.map((section) => section.id)).toEqual([
+      "unassigned",
+      "recent-project",
+      "old-project",
+      "empty-alpha",
+      "empty-zulu",
+    ]);
+  });
+
   it("filters Senses threads for the Senses view", () => {
     const chatThread = thread({ thread_id: "chat-thread", source_app_id: "chat" });
     const sensesThread = thread({ thread_id: "senses-thread", source_app_id: "senses" });

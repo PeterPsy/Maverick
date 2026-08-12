@@ -986,6 +986,17 @@ workspace, binding, technical listener, or host. Logout, workspace switch,
 disable/uninstall, sidecar restart, generation change, and core restart revoke
 the corresponding in-memory authority.
 
+The core-owned lifecycle command `app.<local_app_id>.sidecars.restart` is the
+only general hot-restart surface. It resolves the enabled binding and declared
+services rather than accepting process ids or ports. Before stopping anything,
+it revokes only the isolated-origin launch tickets and sessions bound to the
+current workspace/app. It then stops only those declared sidecars, starts them,
+waits for each declared readiness contract, emits redaction-safe audit records,
+and publishes `maverick.app.runtime-changed` with the owner app and workspace.
+Apps may orchestrate this capability after changing app-owned selection state,
+but cannot expand its process or browser-session scope. The core must remain
+unaware of app-specific runtime artifacts, data migrations, or rollback rules.
+
 App-owned backend, CLI, MCP, and reference entrypoints do not receive the
 sidecar listener, technical token, or sidecar filesystem. A sidecar may declare
 a separate synchronous `entrypoint_access` profile. The declaration names an
@@ -1762,6 +1773,9 @@ For apps that expose content in the `base-shell` sidebar:
 - shell-hosted widget slots must include the active workspace id in the signed widget context and remount the widget iframe when the active workspace changes
 - a widget must never keep showing app-owned data loaded under a previous workspace after the host has switched workspace context
 - host apps should hide iframe widget slots without unmounting them when a temporary shell panel closes, unless a widget explicitly asks to be reset
+- `maverick.app.runtime-changed` and `maverick.app.frontend-changed` remount
+  only the mounted app iframe and shell-hosted widget iframes whose owner id
+  matches the event; unrelated app and widget frames retain their state
 
 This preserves the visual layout while moving ownership to the app boundary:
 

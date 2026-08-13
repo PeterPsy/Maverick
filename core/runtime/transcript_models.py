@@ -55,6 +55,5 @@ class RuntimeEventHistoryRead:
 
     events: list
     snapshot_newest_event_id: str | None
-    snapshot_newest_event_created_at: datetime | None
     warnings: list[str]
     complete: bool

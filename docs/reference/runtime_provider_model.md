@@ -239,9 +239,9 @@ raw technical tool output. Long text is exposed through explicit character
 windows, and provider-oriented CLI compaction recognizes those already-bounded
 message windows so it does not silently summarize them.
 
-The event watermark also bounds turn-record fallbacks: turns created after the
-watermark are excluded, and mutable turn state updated later is not used as
-terminal evidence for the earlier snapshot. Structured visible output applies
-case/separator-insensitive sensitive-key filtering and one global node and JSON
-byte budget. Its response metadata states whether the structured payload is
-complete or truncated.
+Historical transcript reads project only the events bounded by the opaque event
+snapshot; they do not use mutable turn-record fallbacks. The opaque snapshot has
+an explicit empty-archive value so later first events cannot change an earlier
+empty replay. Structured visible output applies case/separator-insensitive
+sensitive-key filtering and one global node and JSON byte budget. Its response
+metadata states whether the structured payload is complete or truncated.

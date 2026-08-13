@@ -600,9 +600,11 @@ projection, not access to raw runtime events or session files. The catalog
 filters authorization before metadata search and pagination. Transcript reads
 use only the paged append-only event-history contract, capture a newest-event
 watermark, return stable message ids and explicit projection warnings, and use
-character-window continuation for long messages. Turn-record fallbacks are cut
-to the same event-watermark timestamp so later turns or later mutable status do
-not enter an earlier snapshot. Returned conversation content is labeled
+character-window continuation for long messages. Historical agent-facing reads
+derive their messages exclusively from events inside that watermark and never
+mix in current mutable turn records. An initially empty archive receives an
+opaque empty-snapshot sentinel, so its replay stays empty after later events or
+turns are written. Returned conversation content is labeled
 `untrusted_conversation_data`; system/developer prompts, provider payloads and
 thread ids, runtime paths, environments, and raw tool output are not part of
 the default `messages` profile. Structured payload keys are canonicalized

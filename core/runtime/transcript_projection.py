@@ -256,9 +256,11 @@ def _project_final_output(event, *, turn_id: str, entries: list[_OrderedMessage]
     payload = event.payload if isinstance(event.payload, dict) else {}
     complete_text = payload.get("complete_text") if isinstance(payload.get("complete_text"), str) else ""
     final_text = payload.get("text") if isinstance(payload.get("text"), str) else ""
-    authoritative = complete_text if complete_text else final_text
+    has_complete_text = bool(complete_text.strip())
+    has_final_text = bool(final_text.strip())
+    authoritative = complete_text if has_complete_text else final_text if has_final_text else ""
     source_event_ids = [event.event_id]
-    if complete_text and rendered_text:
+    if has_complete_text and rendered_text:
         prefix_end = _prefix_end_ignoring_whitespace(complete_text, rendered_text)
         if prefix_end is None:
             removed = [
@@ -276,7 +278,7 @@ def _project_final_output(event, *, turn_id: str, entries: list[_OrderedMessage]
                 ]
                 if stream_entries:
                     stream_entries[-1].message.source_event_ids.append(event.event_id)
-    elif rendered_text:
+    elif rendered_text and has_final_text:
         prefix_end = _prefix_end_ignoring_whitespace(final_text, rendered_text)
         authoritative = final_text[prefix_end:] if prefix_end is not None else final_text
     structured, structured_redacted, structured_truncated = _structured_from_event(payload)

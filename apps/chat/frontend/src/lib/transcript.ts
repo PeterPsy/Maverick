@@ -19,17 +19,25 @@ export function clearTranscriptProjectionCache(): void {
 
 function textPayload(event: RuntimeEvent): string {
   const value = event.payload.text;
-  return typeof value === "string" ? removeNoisyRuntimeTextLines(value).trim() : "";
+  return meaningfulRuntimeText(value);
 }
 
 function completeTextPayload(event: RuntimeEvent): string {
   const value = event.payload.complete_text;
-  return typeof value === "string" ? removeNoisyRuntimeTextLines(value).trim() : "";
+  return meaningfulRuntimeText(value);
 }
 
 function deltaTextPayload(event: RuntimeEvent): string {
   const value = event.payload.text;
   return typeof value === "string" ? removeNoisyRuntimeTextLines(value) : "";
+}
+
+function meaningfulRuntimeText(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const filtered = removeNoisyRuntimeTextLines(value);
+  return filtered.trim() ? filtered : "";
 }
 
 function removeNoisyRuntimeTextLines(value: string): string {

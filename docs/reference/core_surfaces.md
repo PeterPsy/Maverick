@@ -161,8 +161,10 @@ sandboxed agents; full-access mode does not expand their data authority.
 `threads.list` searches metadata only after unauthorized threads are removed.
 `transcript.read` returns bounded newest-first pages presented in chronological
 order, plus `has_more_before`, `next_before_cursor`, a
-`snapshot_newest_event_id`, and projection completeness warnings. Long message
-previews advertise `content_complete: false` and `next_offset`;
+`snapshot_newest_event_id`, and projection completeness warnings. The snapshot
+id is opaque and also represents an empty event archive; historical projection
+does not consult mutable turn records. Long message previews advertise
+`content_complete: false` and `next_offset`;
 `transcript.message.read` continues the exact redacted text in windows of at
 most 12,000 characters. Structured output is bounded by one global node and
 16-KiB serialized-content ceiling; `structured_content_truncated`,

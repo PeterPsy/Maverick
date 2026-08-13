@@ -6,6 +6,9 @@ from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION, RuntimeStore
 from core.runtime.transcript_models import RuntimeEventHistoryRead
 
 
+EMPTY_RUNTIME_EVENT_SNAPSHOT_ID = "runtime.snapshot.empty.v1"
+
+
 def read_runtime_event_history(
     store: RuntimeStore,
     session_id: str,
@@ -13,6 +16,14 @@ def read_runtime_event_history(
     snapshot_newest_event_id: str | None = None,
 ) -> RuntimeEventHistoryRead:
     """Load complete ordered history using only ``list_event_page``."""
+    requested_snapshot = str(snapshot_newest_event_id or "").strip()
+    if requested_snapshot == EMPTY_RUNTIME_EVENT_SNAPSHOT_ID:
+        return RuntimeEventHistoryRead(
+            events=[],
+            snapshot_newest_event_id=EMPTY_RUNTIME_EVENT_SNAPSHOT_ID,
+            warnings=[],
+            complete=True,
+        )
     pages: list[list] = []
     warnings: list[str] = []
     seen_event_ids: set[str] = set()
@@ -50,7 +61,6 @@ def read_runtime_event_history(
         [event for page_events in pages for event in page_events],
         key=lambda item: (item.created_at, item.event_id),
     )
-    requested_snapshot = str(snapshot_newest_event_id or "").strip()
     if requested_snapshot:
         snapshot_index = next((index for index, event in enumerate(events) if event.event_id == requested_snapshot), None)
         if snapshot_index is None:
@@ -60,14 +70,11 @@ def read_runtime_event_history(
         else:
             events = events[: snapshot_index + 1]
             captured_newest_event_id = requested_snapshot
-    snapshot_event = next(
-        (event for event in reversed(events) if event.event_id == captured_newest_event_id),
-        None,
-    )
+    elif captured_newest_event_id is None:
+        captured_newest_event_id = EMPTY_RUNTIME_EVENT_SNAPSHOT_ID
     return RuntimeEventHistoryRead(
         events=events,
         snapshot_newest_event_id=captured_newest_event_id,
-        snapshot_newest_event_created_at=snapshot_event.created_at if snapshot_event is not None else None,
         warnings=warnings,
         complete=complete,
     )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import json
 import unittest
@@ -166,6 +167,86 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
                 snapshot_newest_event_id=first["snapshot_newest_event_id"],
             )
         self.assertEqual(missing.exception.reason, "transcript_message_not_found")
+
+    def test_event_watermark_excludes_late_turn_with_equal_timestamp(self) -> None:
+        store = self.store()
+        store.save_turn(self.turn("turn-1", "first"))
+        store.save_event(self.event("queued", "runtime.turn.queued", {"input_text": "first"}))
+        store.save_event(self.event("final", "runtime.output.final", {"complete_text": "answer"}, seconds=2))
+        first = read_runtime_transcript(store, context=self.context(), thread_id="session-1")
+        store.save_turn(self.turn("turn-equal", "equal timestamp fallback", seconds=2))
+
+        replay = read_runtime_transcript(
+            store,
+            context=self.context(),
+            thread_id="session-1",
+            snapshot_newest_event_id=first["snapshot_newest_event_id"],
+        )
+
+        self.assertNotIn("equal timestamp fallback", [message["content"] for message in replay["messages"]])
+        with self.assertRaises(RuntimeTranscriptAccessError):
+            read_runtime_transcript_message(
+                store,
+                context=self.context(),
+                thread_id="session-1",
+                message_id="client-turn-equal",
+                snapshot_newest_event_id=first["snapshot_newest_event_id"],
+            )
+
+    def test_event_watermark_ignores_equal_timestamp_terminal_turn_mutation(self) -> None:
+        store = self.store()
+        original = replace(
+            self.turn("turn-1", "first"),
+            status="active",
+            updated_at=NOW,
+            completed_at=None,
+        )
+        store.save_turn(original)
+        store.save_event(self.event("queued", "runtime.turn.queued", {"input_text": "first"}, seconds=2))
+        first = read_runtime_transcript(store, context=self.context(), thread_id="session-1")
+        store.save_turn(
+            replace(
+                original,
+                status="failed",
+                updated_at=NOW + timedelta(seconds=2),
+                completed_at=NOW + timedelta(seconds=2),
+                failure_reason="retroactive failure",
+            )
+        )
+
+        replay = read_runtime_transcript(
+            store,
+            context=self.context(),
+            thread_id="session-1",
+            snapshot_newest_event_id=first["snapshot_newest_event_id"],
+        )
+
+        self.assertTrue(replay["projection_complete"])
+        self.assertNotIn("retroactive failure", [message["content"] for message in replay["messages"]])
+
+    def test_empty_event_snapshot_never_projects_mutable_turn_records(self) -> None:
+        store = self.store()
+        store.save_turn(self.turn("turn-1", "first fallback"))
+
+        first = read_runtime_transcript(store, context=self.context(), thread_id="session-1")
+        store.save_turn(self.turn("turn-2", "second fallback"))
+        store.save_event(
+            replace(
+                self.event("late-queued", "runtime.turn.queued", {"input_text": "late event"}, seconds=1),
+                turn_id="turn-2",
+            )
+        )
+        replay = read_runtime_transcript(
+            store,
+            context=self.context(),
+            thread_id="session-1",
+            snapshot_newest_event_id=first["snapshot_newest_event_id"],
+        )
+
+        self.assertEqual(first["snapshot_newest_event_id"], "runtime.snapshot.empty.v1")
+        self.assertEqual(first["messages"], [])
+        self.assertEqual(replay["messages"], [])
+        self.assertTrue(replay["projection_complete"])
 
     def test_structured_projection_has_one_global_size_and_depth_budget(self) -> None:
         deep: dict = {"leaf": "visible"}

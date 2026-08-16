@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from threading import Barrier, Thread
+from threading import Barrier, Event, Thread, current_thread
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -151,6 +151,69 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
         self.assertEqual(result["status"], "cancelled")
         self.assertEqual(len(cancelled_events), 1)
 
+    def test_concurrent_app_interrupts_report_only_intent_owner_successful(self) -> None:
+        runtime_store, session = self._active_turn(
+            session_id="app-split-ownership",
+            turn_id="app-split-ownership-turn",
+        )
+        state = SimpleNamespace(
+            runtime_store=runtime_store,
+            provider_store=object(),
+            runtime_event_bus=None,
+        )
+        intent_owner_paused = Event()
+        outbox_owner_done = Event()
+        results: dict[str, dict[str, object]] = {}
+        errors: list[BaseException] = []
+
+        def interrupt_provider(*_args, **kwargs) -> bool:
+            if current_thread().name == "intent-owner" and not kwargs.get("wait_for_termination", False):
+                intent_owner_paused.set()
+                if not outbox_owner_done.wait(timeout=2):
+                    raise AssertionError("Outbox owner did not finish while intent owner was paused.")
+            return False
+
+        def invoke(owner: str) -> None:
+            try:
+                results[owner] = runtime_requests._apply_one_runtime_interrupt_request(
+                    state,
+                    request={"turn_id": "app-split-ownership-turn"},
+                    workspace_id="default",
+                    app_id="video-studio",
+                )
+            except BaseException as error:  # pragma: no cover - asserted below
+                errors.append(error)
+            finally:
+                if owner == "outbox-owner":
+                    outbox_owner_done.set()
+
+        with (
+            patch.object(runtime_requests, "_resolved_provider_id", return_value="codex"),
+            patch.object(runtime_requests, "interrupt_runtime_provider_turn", side_effect=interrupt_provider),
+            patch.object(runtime_requests, "release_idle_runtime_processes"),
+            patch.object(runtime_requests, "dispatch_source_app_runtime_event") as dispatch,
+        ):
+            intent_owner = Thread(target=invoke, args=("intent-owner",), name="intent-owner")
+            intent_owner.start()
+            self.assertTrue(intent_owner_paused.wait(timeout=2))
+            outbox_owner = Thread(target=invoke, args=("outbox-owner",), name="outbox-owner")
+            outbox_owner.start()
+            outbox_owner.join(timeout=3)
+            intent_owner.join(timeout=3)
+
+        self.assertEqual(errors, [])
+        self.assertFalse(intent_owner.is_alive())
+        self.assertFalse(outbox_owner.is_alive())
+        self.assertTrue(results["intent-owner"]["interrupted"])
+        self.assertFalse(results["outbox-owner"]["interrupted"])
+        cancelled_events = [
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.cancelled"
+        ]
+        self.assertEqual(len(cancelled_events), 1)
+        dispatch.assert_called_once()
+
     def test_app_retry_repairs_callback_after_terminal_event_was_already_persisted(self) -> None:
         runtime_store, session = self._active_turn(
             session_id="app-crashed-callback",
@@ -202,7 +265,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
         ]
         self.assertEqual(len(cancelled_events), 1)
         self.assertEqual(cancelled_events[0].event_id, existing_event.event_id)
-        self.assertTrue(result["interrupted"])
+        self.assertFalse(result["interrupted"])
         dispatch.assert_called_once()
         self.assertEqual(dispatch.call_args.kwargs["runtime_event_id"], existing_event.event_id)
 
@@ -296,7 +359,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(sorted(intent_claims), [False, True])
-        self.assertTrue(any(bool(result["interrupted"]) for result in results))
+        self.assertEqual(sorted(bool(result["interrupted"]) for result in results), [False, True])
         cancelled_events = [
             event
             for event in runtime_store.list_events(session.session_id)

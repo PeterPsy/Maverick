@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import json
-from threading import Barrier, Thread
+from threading import Barrier, Event, Thread, current_thread
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -97,6 +97,93 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
         self.assertEqual(payload["turn"]["status"], "cancelled")
         self.assertEqual(len(cancelled_events), 1)
 
+    def test_concurrent_api_interrupts_report_only_intent_owner_successful(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        runtime_store = _runtime_json_store(repo_root)
+        session = create_runtime_session(
+            runtime_store,
+            session_id="api-split-ownership",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        now = datetime(2026, 8, 16, 9, 0, tzinfo=UTC)
+        runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="api-split-ownership-turn",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="separate public and outbox ownership",
+                created_at=now,
+                updated_at=now,
+                started_at=now,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        state = SimpleNamespace(
+            runtime_store=runtime_store,
+            runtime_event_bus=None,
+            workspace_store=object(),
+        )
+        intent_owner_paused = Event()
+        outbox_owner_done = Event()
+        payloads: dict[str, dict[str, object]] = {}
+        errors: list[BaseException] = []
+
+        def interrupt_provider(*_args, **kwargs) -> bool:
+            if current_thread().name == "intent-owner" and not kwargs.get("wait_for_termination", False):
+                intent_owner_paused.set()
+                if not outbox_owner_done.wait(timeout=2):
+                    raise AssertionError("Outbox owner did not finish while intent owner was paused.")
+            return False
+
+        def invoke(owner: str) -> None:
+            try:
+                response = runtime_api._handle_turn_interrupt(
+                    state,
+                    SimpleNamespace(workspace_id="default", user=SimpleNamespace()),
+                    "api-split-ownership-turn",
+                    lambda _status, _headers: None,
+                    start_path=repo_root,
+                )
+                payloads[owner] = json.loads(b"".join(response).decode("utf-8"))
+            except BaseException as error:  # pragma: no cover - asserted below
+                errors.append(error)
+            finally:
+                if owner == "outbox-owner":
+                    outbox_owner_done.set()
+
+        with (
+            patch.object(runtime_api, "require_runtime_session_operation"),
+            patch.object(runtime_api, "_resolved_provider_id", return_value="codex"),
+            patch.object(runtime_api, "interrupt_runtime_provider_turn", side_effect=interrupt_provider),
+            patch.object(runtime_api, "release_idle_runtime_processes"),
+            patch.object(runtime_api, "dispatch_source_app_runtime_event") as dispatch,
+        ):
+            intent_owner = Thread(target=invoke, args=("intent-owner",), name="intent-owner")
+            intent_owner.start()
+            self.assertTrue(intent_owner_paused.wait(timeout=2))
+            outbox_owner = Thread(target=invoke, args=("outbox-owner",), name="outbox-owner")
+            outbox_owner.start()
+            outbox_owner.join(timeout=3)
+            intent_owner.join(timeout=3)
+
+        self.assertEqual(errors, [])
+        self.assertFalse(intent_owner.is_alive())
+        self.assertFalse(outbox_owner.is_alive())
+        self.assertTrue(payloads["intent-owner"]["interrupted"])
+        self.assertFalse(payloads["outbox-owner"]["interrupted"])
+        cancelled_events = [
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.cancelled"
+        ]
+        self.assertEqual(len(cancelled_events), 1)
+        dispatch.assert_called_once()
+
     def test_api_retry_repairs_cancelled_turn_without_terminal_event_or_callback(self) -> None:
         repo_root = make_temp_repo_root(self)
         runtime_store = _runtime_json_store(repo_root)
@@ -163,7 +250,7 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
             for event in runtime_store.list_events(session.session_id)
             if event.event_type == "runtime.turn.cancelled"
         ]
-        self.assertTrue(payload["interrupted"])
+        self.assertFalse(payload["interrupted"])
         self.assertEqual(len(cancelled_events), 1)
         dispatch.assert_called_once()
         self.assertEqual(dispatch.call_args.kwargs["runtime_event_id"], cancelled_events[0].event_id)
@@ -318,7 +405,7 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertEqual(sorted(intent_claims), [False, True])
-        self.assertTrue(any(bool(payload["interrupted"]) for payload in payloads))
+        self.assertEqual(sorted(bool(payload["interrupted"]) for payload in payloads), [False, True])
         cancelled_events = [
             event
             for event in runtime_store.list_events(session.session_id)

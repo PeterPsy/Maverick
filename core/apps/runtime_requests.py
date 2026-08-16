@@ -736,7 +736,7 @@ def _apply_one_runtime_interrupt_request(
         event_bus=state.runtime_event_bus,
         request_intent=False,
     )
-    interrupted = intent_claimed or terminalization.claimed
+    interrupted = intent_claimed
     updated = terminalization.turn
     if updated.status != "cancelled":
         return {

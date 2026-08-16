@@ -202,9 +202,11 @@ dead; identity mismatch alone never declares a live sidecar dead, while
 unverifiable or foreign-host owners fail closed. App, HTTP, and inter-agent
 callers retry provider interruption after the lifecycle handoff, and publish
 cancellation evidence only when the authoritative transition actually returns
-`cancelled`. Concurrent HTTP or app interrupts atomically claim the single
-turn/status event; only that claimant invokes the source-app callback and
-reports successful interruption.
+`cancelled`. Concurrent HTTP or app interrupts atomically claim one durable
+cancellation intent, and only that claimant reports successful interruption.
+Terminal-outbox ownership is independent and technical: a worker or another
+caller may drain the single event, thread-release, and source-app callback
+phases without creating a second public success.
 The same fence covers the complete scheduler mutation path. Each scheduler
 captures one recovery generation, and every run transition, recovery-ledger
 write, task claim/finalization, and completion commit validates that generation

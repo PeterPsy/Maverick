@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("StructuredContentMessage", () => {
-  it("uses the canonical Maverick spinner while widget discovery is pending", async () => {
+  it("shows the canonical Maverick spinner and loading label while widget discovery is pending", async () => {
     apiMocks.listWidgets.mockReturnValue(new Promise(() => undefined));
     container = document.createElement("div");
     document.body.append(container);
@@ -40,8 +40,9 @@ describe("StructuredContentMessage", () => {
       );
     });
 
-    const loader = container.querySelector('[role="status"][aria-label="Loading widget"]');
+    const loader = container.querySelector('[role="status"][aria-live="polite"]');
     expect(loader?.querySelector(".chatapp-morphing-spinner")).toBeInstanceOf(HTMLSpanElement);
+    expect(loader?.textContent).toBe("Caricamento widget…");
     expect(container.querySelector(".chatapp-structured-card")).toBeNull();
     expect(container.textContent).not.toContain("check_123");
     expect(container.textContent).not.toContain("Ricerca widget compatibile");

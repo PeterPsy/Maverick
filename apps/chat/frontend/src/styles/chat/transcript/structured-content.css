@@ -20,11 +20,15 @@
 }
 
 .chatapp-structured-widget-loader {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   width: min(100%, 54rem);
   min-height: 3.5rem;
   color: rgba(var(--maverick-contrast-rgb), 0.58);
+  font-size: 0.78rem;
+  line-height: 1.2;
 }
 
 .chatapp-structured-widget {

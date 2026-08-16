@@ -18,8 +18,9 @@ export function StructuredContentMessage({
       fallback={(state) => {
         if (state.status === "loading") {
           return (
-            <div className="chatapp-structured-widget-loader" role="status" aria-label="Loading widget">
+            <div className="chatapp-structured-widget-loader" role="status" aria-live="polite">
               <MorphingSpinner size="sm" />
+              <span>Caricamento widget…</span>
             </div>
           );
         }

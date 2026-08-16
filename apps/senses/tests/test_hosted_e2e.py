@@ -543,6 +543,7 @@ class SensesHostedE2ETest(unittest.TestCase):
             client_message_id=None,
             attachments=None,
             app_references=None,
+            invoked_skill_ids=None,
             on_queued=None,
         ):
             captured.append(
@@ -552,6 +553,7 @@ class SensesHostedE2ETest(unittest.TestCase):
                     "client_message_id": client_message_id,
                     "attachments": attachments or [],
                     "app_references": app_references or [],
+                    "invoked_skill_ids": invoked_skill_ids or [],
                 }
             )
             turn, events = _queue_turn_with_event(

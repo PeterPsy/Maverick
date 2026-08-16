@@ -30,7 +30,11 @@ def transition_runtime_turn(
     """Compare and transition one persisted turn under its session handoff."""
     timestamp = now or utcnow()
     location = store.get_turn(turn_id)
-    if target_status == "cancelled" and location.status in {"queued", "active"}:
+    if target_status == "cancelled" and location.status in {
+        "queued",
+        "active",
+        "waiting_for_tool_confirmation",
+    }:
         location = request_runtime_turn_cancellation(
             store,
             turn_id=turn_id,
@@ -44,7 +48,14 @@ def transition_runtime_turn(
         turn = store.get_turn(turn_id)
         allowed: dict[RuntimeTurnStatus, set[RuntimeTurnStatus]] = {
             "queued": {"active", "failed", "cancelled", "timed-out"},
-            "active": {"completed", "failed", "cancelled", "timed-out"},
+            "active": {
+                "waiting_for_tool_confirmation",
+                "completed",
+                "failed",
+                "cancelled",
+                "timed-out",
+            },
+            "waiting_for_tool_confirmation": {"active", "failed", "cancelled", "timed-out"},
             "completed": set(),
             "failed": set(),
             "cancelled": set(),
@@ -102,8 +113,16 @@ def transition_runtime_turn(
         store.save_state(
             replace(
                 state,
-                current_turn_id=turn.turn_id if saved.status == "active" else None,
-                turn_status=saved.status if saved.status == "active" else None,
+                current_turn_id=(
+                    turn.turn_id
+                    if saved.status in {"active", "waiting_for_tool_confirmation"}
+                    else None
+                ),
+                turn_status=(
+                    saved.status
+                    if saved.status in {"active", "waiting_for_tool_confirmation"}
+                    else None
+                ),
                 last_progress_at=timestamp,
                 last_error_detail=(
                     saved.failure_reason
@@ -142,7 +161,13 @@ def _update_thread_for_turn_transition(store: RuntimeStore, turn: RuntimeTurnRec
             now=turn.completed_at or turn.updated_at,
         )
         return
-    availability = "active" if turn.status == "active" else "queued" if turn.status == "queued" else "free"
+    availability = (
+        "active"
+        if turn.status in {"active", "waiting_for_tool_confirmation"}
+        else "queued"
+        if turn.status == "queued"
+        else "free"
+    )
     update_runtime_thread_availability(
         store,
         workspace_id=turn.workspace_id,

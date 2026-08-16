@@ -11,6 +11,7 @@ from core.execution_policy.models import ExecutionMode
 McpOwnerKind = Literal["core", "app"]
 McpExposureScope = Literal["core_global", "workspace_enabled_app"]
 McpCallerKind = Literal["operator", "sandbox_agent", "full_access_agent"]
+McpEffectClass = Literal["read", "mutating", "destructive", "unclassified"]
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class McpInvocationContext:
     runtime_session_id: str | None = None
     app_mcp_timeout_seconds: float | None = None
     entrypoint_surface: Literal["mcp", "reference"] = "mcp"
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +55,9 @@ class McpToolDefinition:
     exposure_scope: McpExposureScope
     invocation_policy: McpInvocationPolicy
     entrypoint_path: str | None
+    effect_class: McpEffectClass = "unclassified"
+    supports_idempotency: bool = False
+    safe_to_retry: bool = False
 
 
 @dataclass(frozen=True)

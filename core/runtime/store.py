@@ -39,6 +39,7 @@ from core.runtime.runtime_session import RuntimeApiTokenRecord, RuntimeSessionRe
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.tool_models import ToolConfirmationGrant, ToolInvocationRecord
 from core.shared.in_memory_collection import InMemoryCollection
 
 
@@ -156,6 +157,8 @@ class RuntimeCollections:
     app_streams: DocumentCollection | None = None
     app_stream_events: DocumentCollection | None = None
     provider_states: DocumentCollection | None = None
+    tool_invocations: DocumentCollection | None = None
+    tool_confirmation_grants: DocumentCollection | None = None
 
 
 class RuntimeStore(Protocol):
@@ -388,6 +391,39 @@ class RuntimeStore(Protocol):
     ) -> RuntimeProviderState:
         ...
 
+    def initialize_tool_invocation(self, record: ToolInvocationRecord) -> ToolInvocationRecord:
+        ...
+
+    def get_tool_invocation(self, invocation_id: str) -> ToolInvocationRecord:
+        ...
+
+    def find_tool_invocation_by_provider_call(
+        self, *, session_id: str, turn_id: str, provider_tool_call_id: str
+    ) -> ToolInvocationRecord | None:
+        ...
+
+    def list_tool_invocations(self, *, session_id: str, turn_id: str | None = None) -> list[ToolInvocationRecord]:
+        ...
+
+    def update_tool_invocation(
+        self, record: ToolInvocationRecord, *, expected_revision: int
+    ) -> ToolInvocationRecord:
+        ...
+
+    def initialize_tool_confirmation_grant(self, record: ToolConfirmationGrant) -> ToolConfirmationGrant:
+        ...
+
+    def get_tool_confirmation_grant(self, grant_id: str) -> ToolConfirmationGrant:
+        ...
+
+    def list_tool_confirmation_grants(self, *, invocation_id: str) -> list[ToolConfirmationGrant]:
+        ...
+
+    def update_tool_confirmation_grant(
+        self, record: ToolConfirmationGrant, *, expected_revision: int
+    ) -> ToolConfirmationGrant:
+        ...
+
     def delete_session_records(self, session_id: str) -> dict[str, int]:
         ...
 
@@ -530,6 +566,8 @@ class RuntimeDocumentStore:
     def __init__(self, collections: RuntimeCollections) -> None:
         self.collections = collections
         self._provider_states = collections.provider_states or InMemoryCollection()
+        self._tool_invocations = collections.tool_invocations or InMemoryCollection()
+        self._tool_confirmation_grants = collections.tool_confirmation_grants or InMemoryCollection()
         self._fallback_lock = RLock()
         self._partition_index_lock = RLock()
         self._session_workspace_index: dict[str, str] = {}
@@ -573,6 +611,126 @@ class RuntimeDocumentStore:
             upsert=True,
         )
         self._remember_session_partition(record.session_id, record.workspace_id)
+        return record
+
+    def initialize_tool_invocation(self, record: ToolInvocationRecord) -> ToolInvocationRecord:
+        if record.revision != 0 or record.state != "proposed":
+            raise RuntimeProviderStateError("Initial tool invocation must be proposed at revision zero.")
+        existing, inserted = self._insert_one_if_absent(
+            self._tool_invocations,
+            {"invocation_id": record.invocation_id},
+            asdict(record),
+        )
+        if not inserted:
+            raise RuntimeProviderStateError(f"Tool invocation `{record.invocation_id}` already exists.")
+        return ToolInvocationRecord(**existing)
+
+    def get_tool_invocation(self, invocation_id: str) -> ToolInvocationRecord:
+        document = self._tool_invocations.find_one({"invocation_id": invocation_id})
+        if document is None:
+            raise RuntimeProviderStateError(f"Tool invocation `{invocation_id}` was not found.")
+        return ToolInvocationRecord(**document)
+
+    def find_tool_invocation_by_provider_call(
+        self, *, session_id: str, turn_id: str, provider_tool_call_id: str
+    ) -> ToolInvocationRecord | None:
+        document = self._tool_invocations.find_one(
+            {
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "provider_tool_call_id": provider_tool_call_id,
+            }
+        )
+        return None if document is None else ToolInvocationRecord(**document)
+
+    def list_tool_invocations(
+        self, *, session_id: str, turn_id: str | None = None
+    ) -> list[ToolInvocationRecord]:
+        query = {"session_id": session_id}
+        if turn_id is not None:
+            query["turn_id"] = turn_id
+        return [ToolInvocationRecord(**document) for document in self._tool_invocations.find(query)]
+
+    def update_tool_invocation(
+        self, record: ToolInvocationRecord, *, expected_revision: int
+    ) -> ToolInvocationRecord:
+        if record.revision != expected_revision + 1:
+            raise RuntimeProviderStateError("Tool invocation revision must advance by one.")
+        current = self.get_tool_invocation(record.invocation_id)
+        permitted = replace(
+            current,
+            state=record.state,
+            confirmation_grant_id=record.confirmation_grant_id,
+            result_private_ref=record.result_private_ref,
+            result_summary=record.result_summary,
+            failure_reason=record.failure_reason,
+            revision=record.revision,
+            updated_at=record.updated_at,
+        )
+        if permitted != record:
+            raise RuntimeProviderStateError("Tool invocation identity fields are immutable.")
+        applied = self._tool_invocations.compare_and_set(
+            {
+                "invocation_id": record.invocation_id,
+                "workspace_id": record.workspace_id,
+                "session_id": record.session_id,
+                "revision": expected_revision,
+            },
+            {"$set": asdict(record)},
+        )
+        if not applied:
+            raise RuntimeProviderStateError("tool_invocation_revision_conflict")
+        return record
+
+    def initialize_tool_confirmation_grant(self, record: ToolConfirmationGrant) -> ToolConfirmationGrant:
+        if record.revision != 0:
+            raise RuntimeProviderStateError("Initial tool confirmation grant must use revision zero.")
+        existing, inserted = self._insert_one_if_absent(
+            self._tool_confirmation_grants,
+            {"grant_id": record.grant_id},
+            asdict(record),
+        )
+        if not inserted:
+            raise RuntimeProviderStateError(f"Tool confirmation grant `{record.grant_id}` already exists.")
+        return ToolConfirmationGrant(**existing)
+
+    def get_tool_confirmation_grant(self, grant_id: str) -> ToolConfirmationGrant:
+        document = self._tool_confirmation_grants.find_one({"grant_id": grant_id})
+        if document is None:
+            raise RuntimeProviderStateError(f"Tool confirmation grant `{grant_id}` was not found.")
+        return ToolConfirmationGrant(**document)
+
+    def list_tool_confirmation_grants(self, *, invocation_id: str) -> list[ToolConfirmationGrant]:
+        return [
+            ToolConfirmationGrant(**document)
+            for document in self._tool_confirmation_grants.find({"invocation_id": invocation_id})
+        ]
+
+    def update_tool_confirmation_grant(
+        self, record: ToolConfirmationGrant, *, expected_revision: int
+    ) -> ToolConfirmationGrant:
+        if record.revision != expected_revision + 1:
+            raise RuntimeProviderStateError("Tool confirmation revision must advance by one.")
+        current = self.get_tool_confirmation_grant(record.grant_id)
+        permitted = replace(
+            current,
+            state=record.state,
+            revision=record.revision,
+            updated_at=record.updated_at,
+        )
+        if permitted != record:
+            raise RuntimeProviderStateError("Tool confirmation grant identity fields are immutable.")
+        applied = self._tool_confirmation_grants.compare_and_set(
+            {
+                "grant_id": record.grant_id,
+                "workspace_id": record.workspace_id,
+                "session_id": record.session_id,
+                "revision": expected_revision,
+            },
+            {"$set": asdict(record)},
+        )
+        if not applied:
+            raise RuntimeProviderStateError("tool_confirmation_revision_conflict")
         return record
 
     def insert_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
@@ -698,6 +856,8 @@ class RuntimeDocumentStore:
             "client_messages": 0,
             "app_streams": 0,
             "app_stream_events": 0,
+            "tool_invocations": 0,
+            "tool_confirmation_grants": 0,
         }
         deleted["turns"] = _delete_session_records(
             self.collections.turns,
@@ -728,6 +888,18 @@ class RuntimeDocumentStore:
             session_id=session_id,
             workspace_id=workspace_id,
             identity_field="session_id",
+        )
+        deleted["tool_invocations"] = _delete_session_records(
+            self._tool_invocations,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            identity_field="invocation_id",
+        )
+        deleted["tool_confirmation_grants"] = _delete_session_records(
+            self._tool_confirmation_grants,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            identity_field="grant_id",
         )
         if self.collections.api_tokens is not None:
             deleted["api_tokens"] = _delete_session_records(
@@ -821,7 +993,11 @@ class RuntimeDocumentStore:
         timestamp = now or datetime.now(tz=UTC)
         while True:
             current = self.get_turn(turn_id)
-            if current.status not in {"queued", "active"} or current.cancellation_requested_at is not None:
+            if current.status not in {
+                "queued",
+                "active",
+                "waiting_for_tool_confirmation",
+            } or current.cancellation_requested_at is not None:
                 return current, False
             update_result = self.collections.turns.update_one(
                 {
@@ -843,7 +1019,11 @@ class RuntimeDocumentStore:
             applied = update_result is True or bool(getattr(update_result, "modified_count", 0))
             if applied:
                 return refreshed, True
-            if refreshed.cancellation_requested_at is not None or refreshed.status not in {"queued", "active"}:
+            if refreshed.cancellation_requested_at is not None or refreshed.status not in {
+                "queued",
+                "active",
+                "waiting_for_tool_confirmation",
+            }:
                 return refreshed, False
 
     def mark_turn_provider_request_started(

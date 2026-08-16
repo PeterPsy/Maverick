@@ -85,7 +85,17 @@ def cleanup_runtime_session(
         observability_store=state.observability_store,
         start_path=start_path or state.repository_root,
     )
+    tool_ledger = getattr(state, "runtime_tool_ledger", None)
+    deleted_private_payloads = (
+        tool_ledger.delete_session_private_payloads(
+            workspace_id=session.workspace_id,
+            session_id=session.session_id,
+        )
+        if tool_ledger is not None
+        else 0
+    )
     deleted = state.runtime_store.delete_session_records(session.session_id)
+    deleted["tool_private_payloads"] = deleted_private_payloads
     deleted_threads = _delete_runtime_threads_for_session(
         state,
         workspace_id=session.workspace_id,

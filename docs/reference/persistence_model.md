@@ -54,6 +54,15 @@ This includes:
 
 Runtime client message ids are also persisted as workspace-scoped admission records. They cover both ordinary queued turns and messages steered into an existing active turn. A steered message persists `runtime.message.steered` with its client message id and terminal admission status. Before the provider call, the admission is durably marked delivery-uncertain; an explicit provider rejection removes that reservation before the message is queued normally, while a missing acknowledgement remains terminal so a retry cannot duplicate a message that may already have crossed the provider boundary.
 
+Agentic tool state is session-partitioned in `tool_invocations.json` and
+`tool_confirmation_grants.json`. Invocation and grant transitions use exact
+revision compare-and-set. Complete canonical arguments and results are kept
+behind Core-owned opaque private locators; the ledger contains only bounded
+shape summaries and a domain-separated HMAC. Confirmation grants are
+actor/session/turn/invocation/digest-bound, expire, and transition from active
+to consumed once. Deleting a runtime session also deletes both ledger
+partitions.
+
 ## JSON
 
 The default hosted control-plane persistence path uses JSON collections stored outside `.maverick`:

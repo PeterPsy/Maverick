@@ -19,6 +19,7 @@ from core.api.http import StartResponse, json_response, read_json_body, status_l
 from core.api.platform_state import PlatformState
 from core.api.provider_api import workspace_provider_status
 from core.api.runtime_cleanup import cleanup_runtime_session
+from core.api.runtime_tool_confirmation_api import handle_runtime_tool_confirmation
 from core.api.session_api import RequestSession, require_session
 from core.apps.errors import AppHostingError
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event, dispatch_source_app_runtime_event_async
@@ -2114,7 +2115,7 @@ def _handle_turn_interrupt(
         )
     except AuthorizationError as error:
         return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
-    if turn.status not in {"queued", "active", "cancelled"}:
+    if turn.status not in {"queued", "active", "waiting_for_tool_confirmation", "cancelled"}:
         return json_response(start_response, {"turn": _turn_payload(turn), "interrupted": False})
     cancellation_intent = (
         claim_runtime_turn_cancellation(
@@ -2122,7 +2123,7 @@ def _handle_turn_interrupt(
             turn_id=turn_id,
             reason="Interrupted by user.",
         )
-        if turn.status in {"queued", "active"}
+        if turn.status in {"queued", "active", "waiting_for_tool_confirmation"}
         else None
     )
     cancellation_request = cancellation_intent.turn if cancellation_intent is not None else turn
@@ -2286,4 +2287,14 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
         return _handle_turn_client_metrics(state, context, parts[1], method, body, start_response)
     if len(parts) == 3 and parts[0] == "turns" and parts[2] == "interrupt" and method == "POST":
         return _handle_turn_interrupt(state, context, parts[1], start_response, start_path=start_path)
+    if len(parts) == 4 and parts[0] == "turns" and parts[2] == "tool-confirmations":
+        return handle_runtime_tool_confirmation(
+            state,
+            context,
+            turn_id=parts[1],
+            invocation_id=parts[3],
+            method=method,
+            body=body,
+            start_response=start_response,
+        )
     return json_response(start_response, {"error": "runtime_route_not_found"}, status="404 Not Found")

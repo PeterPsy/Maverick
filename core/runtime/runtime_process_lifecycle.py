@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
 
 
-ACTIVE_TURN_STATUSES = frozenset({"queued", "active"})
+ACTIVE_TURN_STATUSES = frozenset({"queued", "active", "waiting_for_tool_confirmation"})
 IDLE_RUNTIME_REAP_TTL_SECONDS = 180.0
 _IDLE_REAP_TIMERS: dict[str, Timer] = {}
 _IDLE_REAP_TIMERS_LOCK = Lock()

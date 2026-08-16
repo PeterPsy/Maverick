@@ -30,7 +30,7 @@ def terminate_runtime_session(
     terminated_processes = terminate_runtime_processes(session_id)
     cancelled_turns = 0
     for turn in store.list_turns(session_id):
-        if turn.status in {"queued", "active"}:
+        if turn.status in {"queued", "active", "waiting_for_tool_confirmation"}:
             terminalization = terminalize_runtime_turn_cancellation(
                 store,
                 turn_id=turn.turn_id,

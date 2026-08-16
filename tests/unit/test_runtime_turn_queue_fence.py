@@ -43,7 +43,7 @@ class RuntimeTurnQueueFenceTest(unittest.TestCase):
         )
         with patch(queue_patch_target, side_effect=queue_turn):
             submit(
-                SimpleNamespace(),
+                SimpleNamespace(repository_root=None),
                 session=session,
                 input_text="fenced message",
                 queue_fence=queue_fence,

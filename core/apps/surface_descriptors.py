@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from core.secrets.app_delivery import AppSecretRequest
 
@@ -22,12 +22,24 @@ class AppSurfaceSecretSelector:
     when: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True)
+class AppSurfaceExecutionMetadata:
+    """Agentic effect and replay declarations owned by one app surface."""
+
+    effect_class: Literal["read", "mutating", "destructive", "unclassified"]
+    supports_idempotency: bool
+    safe_to_retry: bool
+
+
 CLI_COMMAND_DESCRIPTOR_FIELDS = {
     "description",
     "argument_schema",
     "required_secrets",
     "secret_selectors",
     "secret_resource_inventory",
+    "effect_class",
+    "supports_idempotency",
+    "safe_to_retry",
 }
 MCP_TOOL_DESCRIPTOR_FIELDS = {
     "description",
@@ -35,6 +47,9 @@ MCP_TOOL_DESCRIPTOR_FIELDS = {
     "output_schema",
     "required_secrets",
     "secret_selectors",
+    "effect_class",
+    "supports_idempotency",
+    "safe_to_retry",
 }
 
 
@@ -85,6 +100,30 @@ def app_mcp_tool_metadata(
         )
     except ValueError:
         return default_description, _object_schema(), _object_schema()
+
+
+def app_cli_command_execution_metadata(
+    source_root: Path, command_name: str
+) -> AppSurfaceExecutionMetadata:
+    """Return fail-closed agentic metadata for one app CLI descriptor."""
+    return _app_surface_execution_metadata(
+        source_root / "cli" / "command_schemas.json",
+        root_field="commands",
+        item_name=command_name,
+        allowed_fields=CLI_COMMAND_DESCRIPTOR_FIELDS,
+    )
+
+
+def app_mcp_tool_execution_metadata(
+    source_root: Path, tool_name: str
+) -> AppSurfaceExecutionMetadata:
+    """Return fail-closed agentic metadata for one app MCP descriptor."""
+    return _app_surface_execution_metadata(
+        source_root / "mcp" / "tool_schemas.json",
+        root_field="tools",
+        item_name=tool_name,
+        allowed_fields=MCP_TOOL_DESCRIPTOR_FIELDS,
+    )
 
 
 def app_cli_command_required_secrets(
@@ -220,6 +259,37 @@ def _app_surface_required_secrets(
         return names
     except ValueError:
         return []
+
+
+def _app_surface_execution_metadata(
+    path: Path,
+    *,
+    root_field: str,
+    item_name: str,
+    allowed_fields: set[str],
+) -> AppSurfaceExecutionMetadata:
+    default = AppSurfaceExecutionMetadata("unclassified", False, False)
+    try:
+        item = _descriptor_item(
+            path,
+            root_field=root_field,
+            item_name=item_name,
+            allowed_fields=allowed_fields,
+        )
+        if item is None:
+            return default
+        effect_class = item.get("effect_class", "unclassified")
+        if effect_class not in {"read", "mutating", "destructive", "unclassified"}:
+            raise ValueError("App surface descriptor field `effect_class` is invalid.")
+        supports_idempotency = item.get("supports_idempotency", False)
+        safe_to_retry = item.get("safe_to_retry", False)
+        if not isinstance(supports_idempotency, bool) or not isinstance(safe_to_retry, bool):
+            raise ValueError("App surface replay metadata must be boolean.")
+        if safe_to_retry and effect_class != "read":
+            raise ValueError("Only read app surfaces may be declared safe to retry.")
+        return AppSurfaceExecutionMetadata(effect_class, supports_idempotency, safe_to_retry)
+    except ValueError:
+        return default
 
 
 def _app_surface_secret_selectors(

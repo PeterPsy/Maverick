@@ -9,7 +9,15 @@ from typing import Literal
 from core.runtime.runtime_session import RuntimeMode
 
 
-RuntimeTurnStatus = Literal["queued", "active", "completed", "failed", "cancelled", "timed-out"]
+RuntimeTurnStatus = Literal[
+    "queued",
+    "active",
+    "waiting_for_tool_confirmation",
+    "completed",
+    "failed",
+    "cancelled",
+    "timed-out",
+]
 
 
 @dataclass(frozen=True)

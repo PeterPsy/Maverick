@@ -21,6 +21,7 @@ Primary control-plane routes include:
 - `/api/app-store/install-local`
 - `/api/app-store/uninstall`
 - `/api/runtime/status`
+- `/api/runtime/turns/<turn_id>/tool-confirmations/<invocation_id>`
 - `/api/providers/hosted/active`
 - `/api/inter-agent/runs`
 - `/api/inter-agent/runs/<run_id>/events`
@@ -83,6 +84,18 @@ runtime/model"; when `runtime.provider.turn_start_sent` is present, accepted
 latency is measured from that handoff point. First model text remains
 provider-dependent and is represented by later output events such as
 `runtime.output.delta`.
+
+Agentic tool calls use a Core-owned invocation ledger. CLI, MCP, selected app
+interfaces, and Core filesystem/shell capabilities are materialized from their
+authoritative registries into deterministic provider names. Unknown effect
+classifications are not exposed. A mutating or destructive invocation that
+requires confirmation moves its turn to `waiting_for_tool_confirmation` and
+must be approved or denied through the authenticated confirmation route with
+the exact arguments HMAC and invocation revision. Responses expose only the
+tool handle, effect class, bounded argument summary, state, revision, and TTL;
+they never expose raw arguments, private locators, idempotency keys, or grant
+ids. Ambiguous side effects after a crash become `execution_unknown` and are
+not replayed automatically.
 
 The runtime thread WebSocket sends a full catalog in `runtime.thread.snapshot`.
 Subsequent `runtime.thread.changed` frames may be deltas containing `thread`,
@@ -178,6 +191,13 @@ any loss explicit. Conversation content is always marked
 instructions.
 
 ## App-Owned CLI And MCP
+
+App `cli/command_schemas.json` and `mcp/tool_schemas.json` descriptors may add
+`effect_class` (`read`, `mutating`, or `destructive`),
+`supports_idempotency`, and `safe_to_retry`. The last flag is accepted only for
+read surfaces. Missing or invalid metadata is `unclassified` and therefore
+unavailable to the agentic tool catalog, while the ordinary CLI/MCP surface
+remains backward compatible.
 
 Do not infer app capabilities from the filesystem alone.
 

@@ -113,6 +113,8 @@ class TestSurfaceLifecycle(SurfaceTestBase):
                                     "action": {"type": "string", "enum": ["operations.manifest", "list"]}
                                 },
                             },
+                            "effect_class": "mutating",
+                            "supports_idempotency": True,
                         }
                     }
                 }
@@ -130,6 +132,8 @@ class TestSurfaceLifecycle(SurfaceTestBase):
                                 "properties": {"limit": {"type": "integer", "maximum": 100}},
                             },
                             "output_schema": {"type": "object", "properties": {"items": {"type": "array"}}},
+                            "effect_class": "read",
+                            "safe_to_retry": True,
                         }
                     }
                 }
@@ -155,9 +159,13 @@ class TestSurfaceLifecycle(SurfaceTestBase):
 
         self.assertEqual(command.description, "Manage checklist records through compact app-owned CLI operations.")
         self.assertEqual(command.argument_schema["properties"]["action"]["enum"], ["operations.manifest", "list"])
+        self.assertEqual(command.effect_class, "mutating")
+        self.assertTrue(command.supports_idempotency)
         self.assertEqual(tool.description, "List checklist records compactly.")
         self.assertEqual(tool.input_schema["properties"]["limit"]["maximum"], 100)
         self.assertEqual(tool.output_schema["properties"]["items"]["type"], "array")
+        self.assertEqual(tool.effect_class, "read")
+        self.assertTrue(tool.safe_to_retry)
 
     def test_invalid_app_surface_descriptors_fall_back_to_generic_metadata(self) -> None:
         store = self.make_app_store()

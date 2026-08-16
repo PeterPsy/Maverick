@@ -19,6 +19,7 @@ RuntimeSessionGrantOperation = Literal[
     "restart",
     "inter_agent_root",
     "turn_submit",
+    "tool_confirm",
     "read_transcript",
 ]
 RuntimeSessionGrantPrincipalKind = Literal["user", "app", "runtime_session"]

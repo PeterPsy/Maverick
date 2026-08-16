@@ -72,6 +72,9 @@ from core.skills.service import resolve_invoked_runtime_skills
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
 
+# Retained as a compatibility export through turn_submission_service's facade.
+_INTERRUPT_RUNTIME_PROVIDER_TURN_EXPORT = interrupt_runtime_provider_turn
+
 
 _SESSION_EXECUTION_LOCKS: dict[str, Lock] = {}
 _SESSION_EXECUTION_LOCKS_LOCK = Lock()
@@ -294,7 +297,10 @@ def schedule_runtime_session_prewarm(
 
 def _session_has_executing_turn(state: PlatformState, session_id: str) -> bool:
     with suppress(Exception):
-        return any(turn.status == "active" for turn in state.runtime_store.list_turns(session_id))
+        return any(
+            turn.status in {"active", "waiting_for_tool_confirmation"}
+            for turn in state.runtime_store.list_turns(session_id)
+        )
     return True
 
 

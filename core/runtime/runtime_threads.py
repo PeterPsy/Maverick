@@ -570,7 +570,7 @@ def _turn_facts_for_session(turns: list[RuntimeTurnRecord]) -> _ThreadTurnFacts:
 def runtime_thread_availability_for_session(store: RuntimeStore, *, runtime_session_id: str) -> str:
     has_turn_with_status = getattr(store, "has_turn_with_status", None)
     if callable(has_turn_with_status):
-        if has_turn_with_status(runtime_session_id, {"active"}):
+        if has_turn_with_status(runtime_session_id, {"active", "waiting_for_tool_confirmation"}):
             return "active"
         if has_turn_with_status(runtime_session_id, {"queued"}):
             return "queued"

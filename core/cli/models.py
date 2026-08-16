@@ -12,6 +12,7 @@ from core.identity.models import PlatformRole
 CliOwnerKind = Literal["core", "app"]
 CliExposureScope = Literal["core_global", "workspace_enabled_app"]
 CliCallerKind = Literal["operator", "sandbox_agent", "full_access_agent"]
+CliEffectClass = Literal["read", "mutating", "destructive", "unclassified"]
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,9 @@ class CliCommandDefinition:
     exposure_scope: CliExposureScope
     invocation_policy: CliInvocationPolicy
     entrypoint_path: str | None
+    effect_class: CliEffectClass = "unclassified"
+    supports_idempotency: bool = False
+    safe_to_retry: bool = False
 
 
 @dataclass(frozen=True)
@@ -53,3 +57,4 @@ class CliInvocationContext:
     user_id: str | None = None
     workspace_role: str | None = None
     runtime_session_id: str | None = None
+    idempotency_key: str | None = None

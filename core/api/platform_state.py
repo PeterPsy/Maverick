@@ -33,8 +33,11 @@ from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.thread_event_bus import RuntimeThreadEventBus
 from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.store import RuntimeDocumentStore, RuntimeCollections
+from core.runtime.tool_ledger import RuntimeToolLedger
+from core.runtime.tool_private_payloads import InMemoryRuntimeToolPrivatePayloadStore
 from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
 from core.secrets.bootstrap import resolve_bootstrap_secret
+from core.secrets.key_material import load_secret_store_key
 from core.secrets.store import SecretDocumentStore
 from core.shared.in_memory_collection import InMemoryCollection
 from core.shared.repository import discover_repository_root
@@ -65,6 +68,7 @@ class PlatformState:
     sidecar_browser_sessions: SidecarBrowserSessionStore
     runtime_root_capabilities: RuntimeRootCapabilityStore
     root_shell_app_id: str
+    runtime_tool_ledger: RuntimeToolLedger | None = None
 
 
 def bootstrap_platform_state(
@@ -96,6 +100,14 @@ def bootstrap_platform_state(
         start_path=repository_root,
         filename="provider_state.json",
     )
+    runtime_tool_invocations = RuntimeSessionJsonCollection(
+        start_path=repository_root,
+        filename="tool_invocations.json",
+    )
+    runtime_tool_confirmation_grants = RuntimeSessionJsonCollection(
+        start_path=repository_root,
+        filename="tool_confirmation_grants.json",
+    )
     runtime_threads = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="threads.json")
     runtime_client_messages = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="client_messages.json")
     runtime_app_streams = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="app_streams.json")
@@ -115,8 +127,15 @@ def bootstrap_platform_state(
             app_streams=runtime_app_streams,
             app_stream_events=runtime_app_stream_events,
             provider_states=runtime_provider_states,
+            tool_invocations=runtime_tool_invocations,
+            tool_confirmation_grants=runtime_tool_confirmation_grants,
             api_tokens=control_collections.runtime_api_tokens,
         )
+    )
+    runtime_tool_ledger = RuntimeToolLedger(
+        store=runtime_store,
+        private_payload_store=InMemoryRuntimeToolPrivatePayloadStore(),
+        digest_key=load_secret_store_key(),
     )
     inter_agent_store = build_inter_agent_document_store(start_path=repository_root)
     runtime_event_bus = RuntimeEventBus()
@@ -188,6 +207,7 @@ def bootstrap_platform_state(
         sidecar_browser_sessions=SidecarBrowserSessionStore(),
         runtime_root_capabilities=RuntimeRootCapabilityStore(),
         root_shell_app_id=os.environ.get("MAVERICK_ROOT_SHELL_APP_ID", "base-shell").strip() or "base-shell",
+        runtime_tool_ledger=runtime_tool_ledger,
     )
     if recover_backend_restart:
         recover_interrupted_runtime_turns_after_backend_restart(state)

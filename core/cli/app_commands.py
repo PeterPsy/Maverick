@@ -16,6 +16,7 @@ from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace
 from core.apps.store import AppStore
 from core.apps.surface_descriptors import (
     AppSurfaceSecretSelector,
+    app_cli_command_execution_metadata,
     app_cli_command_metadata,
     app_cli_command_secret_selectors,
     app_secret_requests_for_arguments,
@@ -161,6 +162,7 @@ def _workspace_app_command_specs(
                 command_name,
                 default_description=default_description,
             )
+            execution_metadata = app_cli_command_execution_metadata(source_root, command_name)
             secret_selectors = app_cli_command_secret_selectors(
                 source_root,
                 command_name,
@@ -313,6 +315,9 @@ def _workspace_app_command_specs(
                             app_requires_full_access=app_requires_full_access,
                         ),
                         entrypoint_path=entrypoint_path,
+                        effect_class=execution_metadata.effect_class,
+                        supports_idempotency=execution_metadata.supports_idempotency,
+                        safe_to_retry=execution_metadata.safe_to_retry,
                     ),
                     _handler,
                 )

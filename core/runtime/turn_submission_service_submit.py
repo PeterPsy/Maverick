@@ -60,7 +60,7 @@ if TYPE_CHECKING:
 
 _SESSION_EXECUTION_LOCKS: dict[str, Lock] = {}
 _SESSION_EXECUTION_LOCKS_LOCK = Lock()
-_ACTIVE_TURN_STATUSES = {"queued", "active"}
+_ACTIVE_TURN_STATUSES = {"queued", "active", "waiting_for_tool_confirmation"}
 
 
 def submit_runtime_turn(

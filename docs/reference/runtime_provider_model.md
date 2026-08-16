@@ -95,6 +95,23 @@ backed by the packaged adapter contract suite. A code change that changes the
 adapter source digest invalidates older session bindings; those sessions require
 a new chat rather than silently adopting the new artifact.
 
+## Runtime Tool Orchestration
+
+`RuntimeToolOrchestrator` is a facade over the existing CLI and MCP registries,
+workspace-selected app-interface providers, and separately governed Core
+filesystem/shell capabilities. It does not import app backends or maintain a
+shadow registry. Internal handles map deterministically to provider-safe names,
+while returned arguments are validated against the original bounded JSON
+schema. App-interface handles include the declared interface, selected local
+provider app, and official underlying surface.
+
+Every invocation is journaled before validation and before an effect boundary.
+Mutating/destructive confirmations are one-shot and consumed with CAS;
+idempotency keys are passed only to surfaces that declare support. After a
+worker crash, only a declared safe read may return to `authorized` for retry.
+An executing mutation, destructive operation, or other ambiguous outcome moves
+to `execution_unknown` and requires reconciliation instead of automatic replay.
+
 ## Current Provider Reality
 
 The current practical backend is Codex.

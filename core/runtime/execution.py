@@ -17,6 +17,7 @@ from core.skills.models import SkillDefinition
 if TYPE_CHECKING:
     from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter
     from core.runtime.provider_state import RuntimeProviderState
+    from core.runtime.authority import EffectiveRuntimeAuthority
 
 
 OUTPUT_DELTA_FLUSH_CHARS = 80
@@ -43,11 +44,13 @@ def execute_runtime_turn(
     agentic_adapter: AgenticRuntimeEngineAdapter | None = None,
     provider_state: RuntimeProviderState | None = None,
     correlation_id: str | None = None,
+    effective_authority: EffectiveRuntimeAuthority | None = None,
     on_provider_thread_id: Callable[[str], None] | None = None,
     on_provider_state_update: Callable[[dict[str, object]], RuntimeProviderState] | None = None,
     on_provider_startup_event: Callable[[str, dict[str, object]], None] | None = None,
     on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
     on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
+    on_provider_upstream_observed: Callable[[str], None] | None = None,
     command_runner=subprocess.Popen,
 ) -> RuntimeExecutionResult:
     """Execute one turn through the selected provider."""
@@ -73,6 +76,8 @@ def execute_runtime_turn(
     if agentic_adapter is not None and session.execution_binding is not None:
         if provider_state is None:
             raise ValueError("Agentic adapter execution requires runtime provider state.")
+        if effective_authority is None:
+            raise ValueError("Agentic adapter execution requires effective runtime authority.")
         from core.runtime.agentic_execution import execute_agentic_runtime_turn
         from core.runtime.async_runtime import run_runtime_coroutine
 
@@ -85,6 +90,7 @@ def execute_runtime_turn(
                     adapter=agentic_adapter,
                     input_text=input_text,
                     correlation_id=correlation_id or session.session_id,
+                    effective_authority=effective_authority,
                     invoked_skills=invoked_skills,
                     timeout_seconds=timeout_seconds,
                     event_sink=coalesced_sink.emit,
@@ -94,6 +100,7 @@ def execute_runtime_turn(
                     on_provider_startup_event=on_provider_startup_event,
                     on_provider_turn_start_sent=on_provider_turn_start_sent,
                     on_provider_accepted=on_provider_accepted,
+                    on_provider_upstream_observed=on_provider_upstream_observed,
                 )
             )
         finally:

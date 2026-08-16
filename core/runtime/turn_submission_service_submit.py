@@ -272,7 +272,7 @@ def submit_runtime_turn(
                         input_text=provider_input_text,
                         invoked_skills=invoked_skills,
                         launch_spec=launch_spec,
-                        **resolved_engine.execution_kwargs(state.runtime_store, provider_session, correlation_id=turn.turn_id),
+                        **resolved_engine.execution_kwargs(state, provider_session, correlation_id=turn.turn_id),
                         on_provider_thread_id=provider_thread_recorder(
                             state, session_id=provider_session.session_id, provider_id=provider_id
                         ),

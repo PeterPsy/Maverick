@@ -33,6 +33,7 @@ from core.runtime.turn_submission_service_output import (
 from core.runtime.agentic_runtime_service import (
     prepare_agentic_runtime,
 )
+from core.runtime.authority_service import resolve_and_record_runtime_authority
 from core.runtime.resolved_runtime_engine import (
     ResolvedRuntimeEngine,
     build_optional_local_launch_spec,
@@ -192,10 +193,18 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                                 provider_id=provider_id,
                             )(provider_thread_id)
                     else:
+                        authority = resolve_and_record_runtime_authority(
+                            state,
+                            session=provider_session,
+                            adapter=resolved_engine.agentic_adapter,
+                            turn_id=f"prewarm:{provider_session.session_id}",
+                            event_type="runtime.authority.prewarm_evaluated",
+                        )
                         prepared = prepare_agentic_runtime(
                             state.runtime_store,
                             session_id=provider_session.session_id,
                             adapter=resolved_engine.agentic_adapter,
+                            effective_authority=authority,
                             local_launch_spec=launch_spec,
                         )
                         if not prepared.ready:
@@ -974,9 +983,7 @@ def submit_runtime_turn_async(
                             invoked_skills=current_invoked_skills,
                             launch_spec=launch_spec,
                             **resolved_engine.execution_kwargs(
-                                state.runtime_store,
-                                provider_session,
-                                correlation_id=turn.turn_id,
+                                state, provider_session, correlation_id=turn.turn_id
                             ),
                             on_provider_thread_id=provider_thread_recorder(
                                 state,

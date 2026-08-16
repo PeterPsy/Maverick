@@ -173,7 +173,7 @@ class CodexProviderAdapter(
     CodexSteeringMixin,
 ):
     adapter_id = "codex-app-server"
-    adapter_version = "1"
+    adapter_version = "2"
     synchronizes_runtime_skills = True
 
     def __init__(

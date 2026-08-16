@@ -14,12 +14,18 @@ from core.providers.agentic_models import codex_routing_constraint, codex_runtim
 from core.providers.errors import ProviderNotFoundError
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.service import builtin_provider_registry
+from core.providers.certificate_service import runtime_adapter_artifact_digest
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.runtime_session import RuntimeSessionRecord
 from tests.support.fake_agentic_adapter import FakeHostedAgenticAdapter
+from tests.support.agentic_certification import (
+    certified_test_authority,
+    certified_test_provider_store,
+    fake_capability_evidence,
+)
 
 
 NOW = datetime(2026, 8, 16, tzinfo=UTC)
@@ -36,6 +42,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
             default_model_family="fake-model-v1",
         )
         self.adapter = FakeHostedAgenticAdapter()
+        self.evidence = fake_capability_evidence(self.adapter, now=NOW)
         self.registry.register_provider_definition(self.definition)
         self.registry.register_agentic_runtime_adapter(self.adapter)
         self.binding = build_runtime_execution_binding(
@@ -49,7 +56,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
             runtime_engine_id=self.adapter.runtime_engine_id,
             adapter_id=self.adapter.adapter_id,
             adapter_version=self.adapter.adapter_version,
-            adapter_artifact_digest="fake-artifact-digest",
+            adapter_artifact_digest=runtime_adapter_artifact_digest(self.adapter),
             model_provider_id="fake-model-provider",
             model_id="fake-model-v1",
             provider_protocol="fake-stream-v1",
@@ -63,6 +70,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
             egress_policy_id="fake-only",
             egress_policy_revision="1",
             created_at=NOW,
+            certificate_evidence_digest=self.evidence.evidence_digest,
         )
         self.session = RuntimeSessionRecord(
             session_id="session-fake",
@@ -94,6 +102,12 @@ class AgenticAdapterContractTest(unittest.TestCase):
             turn_generation=None,
             updated_at=NOW,
         )
+        self.provider_store = certified_test_provider_store(
+            self.binding,
+            self.adapter,
+            evidence=self.evidence,
+            now=NOW,
+        )
 
     def test_non_process_adapter_executes_without_legacy_adapter_or_launch_spec(self) -> None:
         events: list[RuntimeExecutionEvent] = []
@@ -106,6 +120,9 @@ class AgenticAdapterContractTest(unittest.TestCase):
             agentic_adapter=self.adapter,
             provider_state=self.provider_state,
             correlation_id="turn-fake",
+            effective_authority=certified_test_authority(
+                self.provider_store, self.binding, self.adapter, turn_id="turn-fake", now=NOW
+            ),
             event_sink=events.append,
             on_provider_accepted=accepted.append,
         )
@@ -121,6 +138,17 @@ class AgenticAdapterContractTest(unittest.TestCase):
         ])
         with self.assertRaises(ProviderNotFoundError):
             self.registry.get_runtime_adapter(self.adapter.runtime_engine_id)
+
+    def test_pinned_agentic_execution_requires_effective_authority(self) -> None:
+        with self.assertRaisesRegex(ValueError, "effective runtime authority"):
+            execute_runtime_turn(
+                session=self.session,
+                provider=self.definition,
+                input_text="hello",
+                agentic_adapter=self.adapter,
+                provider_state=self.provider_state,
+                correlation_id="turn-uncertified",
+            )
 
     def test_cancel_recover_and_close_are_async_and_process_independent(self) -> None:
         cancel = RuntimeCancelContext(self.session, self.binding, self.provider_state, "turn-fake")
@@ -138,17 +166,35 @@ class AgenticAdapterContractTest(unittest.TestCase):
         legacy = _LegacyAdapter(self.definition)
         self.registry.register_runtime_adapter(legacy)
         bridge = self.registry.get_agentic_runtime_adapter(self.definition.provider_id)
+        legacy_evidence = fake_capability_evidence(bridge, now=NOW)
+        legacy_binding = replace(
+            self.binding,
+            adapter_id=bridge.adapter_id,
+            adapter_version=bridge.adapter_version,
+            adapter_artifact_digest=runtime_adapter_artifact_digest(bridge),
+            certificate_evidence_digest=legacy_evidence.evidence_digest,
+            binding_digest="",
+        )
+        from core.runtime.execution_binding import canonical_digest
+        legacy_binding = replace(legacy_binding, binding_digest=canonical_digest(legacy_binding))
+        legacy_session = replace(self.session, execution_binding=legacy_binding)
+        legacy_store = certified_test_provider_store(
+            legacy_binding, bridge, evidence=legacy_evidence, now=NOW
+        )
         accepted: list[dict[str, object]] = []
         thread_ids: list[str] = []
 
         result = execute_runtime_turn(
-            session=self.session,
+            session=legacy_session,
             provider=self.definition,
             input_text="hello",
             runtime_adapter=legacy,
             agentic_adapter=bridge,
             provider_state=self.provider_state,
             correlation_id="turn-legacy",
+            effective_authority=certified_test_authority(
+                legacy_store, legacy_binding, bridge, turn_id="turn-legacy", now=NOW
+            ),
             launch_spec=_launch_spec(self.session),
             on_provider_accepted=accepted.append,
             on_provider_thread_id=thread_ids.append,

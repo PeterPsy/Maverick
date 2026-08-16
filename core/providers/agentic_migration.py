@@ -12,6 +12,7 @@ from core.providers.agentic_profiles import (
     build_pinned_execution_binding,
     ensure_codex_workspace_profile,
 )
+from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.errors import RuntimeProviderStateError
@@ -19,8 +20,8 @@ from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.store import RuntimeStore
 
 
-AGENTIC_SCHEMA_MIGRATION_ID = "agentic-runtime-schema-v1"
-AGENTIC_SCHEMA_VERSION = "1"
+AGENTIC_SCHEMA_MIGRATION_ID = "agentic-runtime-schema-v2"
+AGENTIC_SCHEMA_VERSION = "2"
 
 
 def migrate_agentic_runtime_schema(
@@ -58,6 +59,18 @@ def migrate_agentic_runtime_schema(
             selection=selection,
             now=timestamp,
         )
+
+    codex_adapter = registry.get_agentic_runtime_adapter("codex")
+    for definition in provider_store.list_agentic_profile_definitions():
+        if (
+            definition.runtime_engine_id == "codex"
+            and definition.adapter_version_constraint == f"=={codex_adapter.adapter_version}"
+        ):
+            ensure_codex_preview_certificate(
+                provider_store,
+                definition=definition,
+                adapter=codex_adapter,
+            )
 
     sessions = [session for session in runtime_store.list_all_sessions() if session.runtime_mode == "agentic"]
     inferred_session_count = 0
@@ -117,6 +130,9 @@ def migrate_agentic_runtime_schema(
         "bindings": sorted(f"{item.binding_id}:{item.revision}" for item in bindings),
         "sessions": sorted(session.session_id for session in sessions),
         "inferred_session_count": inferred_session_count,
+        "certificates": sorted(
+            item.certificate_id for item in provider_store.list_capability_certificates()
+        ),
     }
     completed = AgenticMigrationRecord(
         migration_id=AGENTIC_SCHEMA_MIGRATION_ID,

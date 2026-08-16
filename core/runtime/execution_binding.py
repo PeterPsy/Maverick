@@ -73,11 +73,17 @@ def build_runtime_execution_binding(
     workspace_policy_ceiling: AgenticRuntimePolicy,
     egress_policy_id: str,
     egress_policy_revision: str,
+    certificate_evidence_digest: str,
     created_at: datetime,
-    certificate_evidence_digest: str = "pending-phase-2",
     legacy_inferred: bool = False,
 ) -> RuntimeExecutionBinding:
     """Build one self-digesting immutable execution binding."""
+    for label, digest in (
+        ("certificate evidence", certificate_evidence_digest),
+        ("adapter artifact", adapter_artifact_digest),
+    ):
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest.lower()):
+            raise ValueError(f"Runtime execution binding {label} digest must be SHA-256.")
     policy_digest = canonical_digest(workspace_policy_ceiling)
     record = RuntimeExecutionBinding(
         execution_binding_id=f"runtime-binding-{uuid4().hex}",
@@ -151,7 +157,11 @@ def canonical_digest(value: object) -> str:
     """Return a stable SHA-256 over a domain model's canonical JSON form."""
     payload = _canonical_value(value)
     if isinstance(payload, dict):
-        payload = {key: item for key, item in payload.items() if key != "binding_digest"}
+        payload = {
+            key: item
+            for key, item in payload.items()
+            if key not in {"binding_digest", "authority_digest"}
+        }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 

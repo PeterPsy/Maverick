@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.execution_binding import RuntimeExecutionBinding
 from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.runtime_session import RuntimeSessionRecord
+
+if TYPE_CHECKING:
+    from core.runtime.authority import EffectiveRuntimeAuthority
 
 
 RuntimeProviderEventType = Literal[
@@ -82,7 +85,7 @@ class RuntimeTurnContext:
     invoked_skills: tuple[object, ...] = ()
     timeout_seconds: int | None = None
     prepared_handle: object | None = None
-    effective_authority: object | None = None
+    effective_authority: "EffectiveRuntimeAuthority | None" = None
 
 
 @dataclass(frozen=True)

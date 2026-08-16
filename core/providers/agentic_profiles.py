@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 import hashlib
-import inspect
-from pathlib import Path
 
 from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
@@ -17,7 +15,17 @@ from core.providers.agentic_models import (
     codex_runtime_policy,
     default_actor_selection_policy,
 )
-from core.providers.errors import AgenticProfileError, ProviderCredentialBindingError, ProviderNotFoundError
+from core.providers.errors import (
+    AgenticProfileError,
+    CapabilityCertificateError,
+    ProviderCredentialBindingError,
+    ProviderNotFoundError,
+)
+from core.providers.certificate_service import (
+    runtime_adapter_artifact_digest,
+    validate_certificate_for_binding,
+)
+from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.models import ProviderDefinition, ProviderSelection
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
@@ -25,10 +33,10 @@ from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, build_runtime_execution_binding
 
 
-CODEX_PROFILE_REVISION = "1"
+CODEX_PROFILE_REVISION = "2"
 CODEX_ADAPTER_ID = "codex-app-server"
-CODEX_ADAPTER_VERSION = "1"
-PHASE_0_CERTIFICATE_PREFIX = "pending-certificate"
+CODEX_ADAPTER_VERSION = "2"
+CAPABILITY_CERTIFICATE_PREFIX = "capability-certificate"
 DEFAULT_EGRESS_POLICY_ID = "local-runtime-no-remote-egress"
 DEFAULT_EGRESS_POLICY_REVISION = "1"
 
@@ -160,13 +168,23 @@ def build_pinned_execution_binding(
         binding_id=workspace_binding_id,
     )
     provider = registry.get_provider_definition(definition.runtime_engine_id)
-    adapter = registry.get_runtime_adapter(provider.provider_id)
+    adapter = registry.get_agentic_runtime_adapter(provider.provider_id)
+    adapter_version = str(getattr(adapter, "adapter_version", ""))
+    if definition.adapter_version_constraint != f"=={adapter_version}":
+        raise AgenticProfileError("adapter_version_mismatch")
+    if definition.runtime_engine_id == "codex":
+        certificate = ensure_codex_preview_certificate(store, definition=definition, adapter=adapter)
+    else:
+        try:
+            certificate = store.get_capability_certificate(definition.capability_certificate_id)
+        except ProviderNotFoundError as error:
+            raise CapabilityCertificateError("certificate_missing") from error
     selection = _selection_projection(definition, binding, reasoning_effort=None, now=timestamp)
     if provider.provider_id == "codex":
         legacy_selection = store.get_provider_selection(workspace_id)
         if legacy_selection is not None and legacy_selection.provider_id == "codex":
             selection = replace(selection, model_reasoning_effort=legacy_selection.model_reasoning_effort)
-    return build_runtime_execution_binding(
+    runtime_binding = build_runtime_execution_binding(
         session_id=session_id,
         workspace_id=workspace_id,
         profile_definition_id=definition.definition_id,
@@ -176,7 +194,7 @@ def build_pinned_execution_binding(
         capability_certificate_id=definition.capability_certificate_id,
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=definition.adapter_id,
-        adapter_version=CODEX_ADAPTER_VERSION,
+        adapter_version=adapter_version,
         adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
         model_provider_id=definition.model_provider_id,
         model_id=definition.model_id,
@@ -191,8 +209,16 @@ def build_pinned_execution_binding(
         egress_policy_id=binding.egress_policy_id,
         egress_policy_revision=binding.egress_policy_revision,
         created_at=timestamp,
+        certificate_evidence_digest=certificate.evidence_digest,
         legacy_inferred=legacy_inferred,
     )
+    validate_certificate_for_binding(
+        store,
+        binding=runtime_binding,
+        adapter=adapter,
+        now=timestamp,
+    )
+    return runtime_binding
 
 
 def provider_selection_from_execution_binding(
@@ -213,22 +239,15 @@ def provider_selection_from_execution_binding(
     )
 
 
-def runtime_adapter_artifact_digest(adapter: object) -> str:
-    """Hash the concrete adapter source module used for the pinned session."""
-    source_path = inspect.getsourcefile(type(adapter))
-    if not source_path:
-        raise AgenticProfileError("Unable to identify runtime adapter source artifact.")
-    path = Path(source_path)
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _codex_profile_definition(
     *,
     definition: ProviderDefinition,
     model_id: str,
     now: datetime,
 ) -> AgenticProfileDefinition:
-    identity = hashlib.sha256(f"codex\0{model_id}\0codex-app-server-v1".encode()).hexdigest()[:16]
+    identity = hashlib.sha256(
+        f"codex\0{model_id}\0codex-app-server-v{CODEX_ADAPTER_VERSION}".encode()
+    ).hexdigest()[:16]
     definition_id = f"agentic-profile-codex-{identity}"
     return AgenticProfileDefinition(
         definition_id=definition_id,
@@ -243,7 +262,7 @@ def _codex_profile_definition(
         adapter_version_constraint=f"=={CODEX_ADAPTER_VERSION}",
         routing_constraint=codex_routing_constraint(),
         policy_ceiling=codex_runtime_policy(),
-        capability_certificate_id=f"{PHASE_0_CERTIFICATE_PREFIX}:{definition_id}:{CODEX_PROFILE_REVISION}",
+        capability_certificate_id=f"{CAPABILITY_CERTIFICATE_PREFIX}:{definition_id}:{CODEX_PROFILE_REVISION}",
         created_at=now,
     )
 

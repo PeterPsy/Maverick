@@ -9,10 +9,13 @@ from core.providers.agentic_adapter import (
     RuntimePrepareContext,
     RuntimeProviderEvent,
     RuntimeTurnContext,
+    RuntimeValidationContext,
 )
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.execution_events import RuntimeExecutionEvent, RuntimeExecutionEventSink
 from core.runtime.provider_state import RuntimeProviderState
+from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.execution_binding import canonical_digest
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.skills.models import SkillDefinition
 
@@ -24,6 +27,7 @@ async def execute_agentic_runtime_turn(
     adapter: AgenticRuntimeEngineAdapter,
     input_text: str,
     correlation_id: str,
+    effective_authority: EffectiveRuntimeAuthority,
     invoked_skills: list[SkillDefinition] | None = None,
     timeout_seconds: int | None = None,
     event_sink: RuntimeExecutionEventSink | None = None,
@@ -33,6 +37,7 @@ async def execute_agentic_runtime_turn(
     on_provider_startup_event: Callable[[str, dict[str, object]], None] | None = None,
     on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
     on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
+    on_provider_upstream_observed: Callable[[str], None] | None = None,
 ):
     """Prepare and consume one typed event stream without assuming a process."""
     from core.runtime.execution import RuntimeExecutionResult
@@ -40,6 +45,15 @@ async def execute_agentic_runtime_turn(
     binding = session.execution_binding
     if binding is None:
         raise ValueError("Agentic adapter execution requires a pinned session binding.")
+    if (
+        effective_authority.execution_binding_id != binding.execution_binding_id
+        or effective_authority.turn_id != correlation_id
+        or effective_authority.authority_digest != canonical_digest(effective_authority)
+    ):
+        raise ValueError("Effective runtime authority does not match the active turn.")
+    health = await adapter.validate(RuntimeValidationContext(session=session, binding=binding))
+    if health.status == "unavailable":
+        raise RuntimeError("runtime_health_unavailable")
     prepared = await adapter.prepare(
         RuntimePrepareContext(
             session=session,
@@ -64,6 +78,7 @@ async def execute_agentic_runtime_turn(
         invoked_skills=tuple(invoked_skills or ()),
         timeout_seconds=timeout_seconds,
         prepared_handle=prepared.prepared_handle,
+        effective_authority=effective_authority,
     )
     output_text = ""
     delta_output = ""
@@ -80,6 +95,13 @@ async def execute_agentic_runtime_turn(
             )
             continue
         if event.event_type == "provider.accepted":
+            upstream_id = str(
+                event.payload.get("upstream_id")
+                or event.payload.get("provider_upstream_id")
+                or ""
+            ).strip()
+            if upstream_id and on_provider_upstream_observed is not None:
+                on_provider_upstream_observed(upstream_id)
             if on_provider_accepted is not None:
                 on_provider_accepted(event.payload)
             continue

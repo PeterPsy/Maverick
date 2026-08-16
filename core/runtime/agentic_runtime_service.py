@@ -13,11 +13,13 @@ from core.providers.agentic_adapter import (
     RuntimeCloseResult,
     RuntimePrepareContext,
     RuntimePrepareResult,
+    RuntimeValidationContext,
 )
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.async_runtime import run_runtime_coroutine
 from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.provider_state import RuntimeProviderState
+from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.store import RuntimeStore
 
 
@@ -37,6 +39,7 @@ def prepare_agentic_runtime(
     *,
     session_id: str,
     adapter: AgenticRuntimeEngineAdapter,
+    effective_authority: EffectiveRuntimeAuthority,
     local_launch_spec: RuntimeBackendLaunchSpec | None = None,
 ) -> RuntimePrepareResult:
     """Prepare any engine and persist its allowlisted provider-state update."""
@@ -44,7 +47,12 @@ def prepare_agentic_runtime(
     binding = session.execution_binding
     if binding is None:
         raise RuntimeProviderStateError("Agentic runtime preparation requires a pinned binding.")
+    if effective_authority.execution_binding_id != binding.execution_binding_id:
+        raise RuntimeProviderStateError("Runtime authority does not match the prepared binding.")
     provider_state = store.get_provider_state(session_id)
+    health = run_runtime_coroutine(adapter.validate(RuntimeValidationContext(session=session, binding=binding)))
+    if health.status == "unavailable":
+        raise RuntimeProviderStateError("runtime_health_unavailable")
     result = run_runtime_coroutine(
         adapter.prepare(
             RuntimePrepareContext(

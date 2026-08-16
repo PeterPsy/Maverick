@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.service import builtin_provider_registry
+from core.providers.certificate_service import runtime_adapter_artifact_digest
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.service import create_runtime_session, transition_runtime_session
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
@@ -18,6 +19,10 @@ from core.runtime.turn_submission import (
 )
 from tests.support.collections import FakeCollection
 from tests.support.fake_agentic_adapter import FakeHostedAgenticAdapter
+from tests.support.agentic_certification import (
+    certified_test_provider_store,
+    fake_capability_evidence,
+)
 from tests.support.repo import make_temp_repo_root
 
 
@@ -36,6 +41,8 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             )
         )
         timestamp = datetime(2026, 8, 16, tzinfo=UTC)
+        adapter = FakeHostedAgenticAdapter(output_text="common lifecycle answer")
+        evidence = fake_capability_evidence(adapter, now=timestamp)
         binding = build_runtime_execution_binding(
             session_id="session-fake-hosted",
             workspace_id="default",
@@ -47,7 +54,7 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             runtime_engine_id="fake-hosted-agentic",
             adapter_id="fake-hosted-agentic-adapter",
             adapter_version="1",
-            adapter_artifact_digest="fake-artifact",
+            adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
             model_provider_id="fake-model-provider",
             model_id="fake-model-v1",
             provider_protocol="fake-stream-v1",
@@ -61,6 +68,7 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             egress_policy_id="fake-only",
             egress_policy_revision="1",
             created_at=timestamp,
+            certificate_evidence_digest=evidence.evidence_digest,
         )
         session = create_runtime_session(
             runtime_store,
@@ -77,14 +85,16 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             target_status="running",
             now=timestamp,
         )
-        adapter = FakeHostedAgenticAdapter(output_text="common lifecycle answer")
+        provider_store = certified_test_provider_store(
+            binding, adapter, evidence=evidence, now=timestamp
+        )
         definition = replace(
             builtin_provider_registry().get_provider_definition("codex"),
             provider_id=adapter.runtime_engine_id,
             label="Fake hosted agentic",
         )
         state = SimpleNamespace(
-            provider_store=SimpleNamespace(),
+            provider_store=provider_store,
             runtime_store=runtime_store,
             runtime_event_bus=None,
             runtime_thread_event_bus=None,
@@ -121,6 +131,14 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
         )
         event_types = [event.event_type for event in runtime_store.list_events(session.session_id)]
         self.assertIn("runtime.output.final", event_types)
+        self.assertIn("runtime.authority.prewarm_evaluated", event_types)
+        self.assertIn("runtime.authority.evaluated", event_types)
+        authority_event = next(
+            event for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.authority.evaluated"
+        )
+        self.assertEqual(len(authority_event.payload["authority_digest"]), 64)
+        self.assertNotIn("allowed_tool_handles", authority_event.payload)
 
 
 class _ImmediateThread:

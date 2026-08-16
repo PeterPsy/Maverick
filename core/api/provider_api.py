@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
+from datetime import UTC, datetime
 
 from core.api.http import StartResponse, json_response, query_params
 from core.api.platform_state import PlatformState
@@ -11,6 +12,8 @@ from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_provider_selection_authority
 from core.providers.models import ProviderDefinition, ProviderHostedSelection, ProviderSelection, ProviderSpeechSelection
 from core.providers.errors import ProviderNotFoundError
+from core.providers.capability_models import CapabilityCertificate
+from core.providers.certificate_projection import certificate_profile_status
 from core.providers.payloads import (
     hosted_provider_selection_payload,
     provider_model_option_payload,
@@ -372,6 +375,7 @@ def workspace_provider_status(
 def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
     """Return selectable workspace profiles without credential or authority details."""
     items: list[dict[str, object]] = []
+    registry = effective_provider_registry(state.provider_store)
     for binding in state.provider_store.list_workspace_agentic_profile_bindings(workspace_id):
         try:
             definition = state.provider_store.get_agentic_profile_definition(
@@ -384,6 +388,29 @@ def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str)
             definition.definition_id,
             definition.revision,
         )
+        certificate_payload = None
+        try:
+            certificate = state.provider_store.get_capability_certificate(
+                definition.capability_certificate_id
+            )
+            certificate_status = state.provider_store.get_capability_certificate_status(
+                certificate.certificate_id
+            )
+            certificate_payload = capability_certificate_payload(
+                certificate,
+                certificate_status,
+            )
+            try:
+                certificate_payload["effective_status"] = certificate_profile_status(
+                    certificate,
+                    certificate_status,
+                    definition=definition,
+                    adapter=registry.get_agentic_runtime_adapter(definition.runtime_engine_id),
+                )
+            except ProviderNotFoundError:
+                certificate_payload["effective_status"] = "adapter_unavailable"
+        except ProviderNotFoundError:
+            pass
         items.append(
             {
                 "workspace_profile_binding_id": binding.binding_id,
@@ -399,6 +426,8 @@ def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str)
                 "is_default": binding.is_default,
                 "credential_binding_configured": bool(binding.credential_binding_id),
                 "capability_certificate_id": definition.capability_certificate_id,
+                "certificate": certificate_payload,
+                "certified": bool(certificate_payload and certificate_payload["effective_status"] == "active"),
                 "policy_ceiling_digest": canonical_digest(binding.workspace_policy_ceiling),
             }
         )
@@ -407,6 +436,39 @@ def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str)
     return {
         "default_binding_id": None if default is None else default["workspace_profile_binding_id"],
         "items": items,
+    }
+
+
+def capability_certificate_payload(certificate: CapabilityCertificate, status) -> dict[str, object]:
+    """Return redaction-safe certificate identity with live derived status."""
+    effective_status = "missing_status" if status is None else status.status
+    if effective_status == "active" and datetime.now(tz=UTC) >= certificate.expires_at:
+        effective_status = "expired"
+    return {
+        "certificate_id": certificate.certificate_id,
+        "schema_version": certificate.schema_version,
+        "runtime_engine_id": certificate.runtime_engine_id,
+        "adapter_id": certificate.adapter_id,
+        "adapter_version": certificate.adapter_version,
+        "adapter_artifact_digest": certificate.adapter_artifact_digest,
+        "model_provider_id": certificate.model_provider_id,
+        "model_id": certificate.model_id,
+        "provider_protocol": certificate.provider_protocol,
+        "provider_api_version": certificate.provider_api_version,
+        "certified_upstream_ids": certificate.certified_upstream_ids,
+        "routing_constraint_digest": certificate.routing_constraint_digest,
+        "certified_capabilities": asdict(certificate.certified_capabilities),
+        "suite_id": certificate.suite_id,
+        "suite_version": certificate.suite_version,
+        "test_run_id": certificate.test_run_id,
+        "evidence_digest": certificate.evidence_digest,
+        "evidence_refs": certificate.evidence_refs,
+        "issued_at": certificate.issued_at,
+        "expires_at": certificate.expires_at,
+        "effective_status": effective_status,
+        "status_revision": None if status is None else status.revision,
+        "revoked_at": None if status is None else status.revoked_at,
+        "revocation_reason": None if status is None else status.revocation_reason,
     }
 
 
@@ -449,6 +511,8 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         "/api/providers/speech/selection",
         "/api/providers/route",
         "/api/providers/usage",
+        "/api/providers/agentic/profile-definitions",
+        "/api/providers/agentic/certificates",
         "/api/runtime/status",
     }:
         return None
@@ -619,6 +683,45 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         usages = read_workspace_provider_subscription_usage(
             state.provider_store,
             workspace_id=context.workspace_id,
+        )
+    if path == "/api/providers/agentic/profile-definitions":
+        definitions = state.provider_store.list_agentic_profile_definitions()
+        return json_response(
+            start_response,
+            {
+                "items": [
+                    {
+                        "definition_id": item.definition_id,
+                        "revision": item.revision,
+                        "display_name": item.display_name,
+                        "runtime_engine_id": item.runtime_engine_id,
+                        "model_provider_id": item.model_provider_id,
+                        "model_id": item.model_id,
+                        "provider_protocol": item.provider_protocol,
+                        "provider_api_version": item.provider_api_version,
+                        "adapter_id": item.adapter_id,
+                        "adapter_version_constraint": item.adapter_version_constraint,
+                        "routing_constraint": asdict(item.routing_constraint),
+                        "capability_certificate_id": item.capability_certificate_id,
+                        "created_at": item.created_at,
+                    }
+                    for item in definitions
+                ]
+            },
+        )
+    if path == "/api/providers/agentic/certificates":
+        certificates = state.provider_store.list_capability_certificates()
+        return json_response(
+            start_response,
+            {
+                "items": [
+                    capability_certificate_payload(
+                        item,
+                        state.provider_store.get_capability_certificate_status(item.certificate_id),
+                    )
+                    for item in certificates
+                ]
+            },
         )
         return json_response(
             start_response,

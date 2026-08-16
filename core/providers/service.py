@@ -11,6 +11,7 @@ from core.providers.agentic_profiles import (
     ensure_codex_workspace_profile,
     provider_selection_from_execution_binding,
 )
+from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.errors import (
     ProviderCapabilityError,
     ProviderError,
@@ -722,11 +723,16 @@ def configure_workspace_provider(
         now=now,
     )
     if provider_id == "codex":
-        ensure_codex_workspace_profile(
+        profile, _binding = ensure_codex_workspace_profile(
             store,
             definition=active_registry.get_provider_definition(provider_id),
             selection=selection,
             now=now,
+        )
+        ensure_codex_preview_certificate(
+            store,
+            definition=profile,
+            adapter=active_registry.get_agentic_runtime_adapter(provider_id),
         )
     if observability_store is not None:
         record_platform_audit(

@@ -14,8 +14,15 @@ from core.providers.agentic_models import (
     RoutingConstraint,
     WorkspaceAgenticProfileBinding,
 )
+from core.providers.capability_models import (
+    CapabilityCertificate,
+    CapabilityCertificateStatus,
+    CapabilityEvidenceRecord,
+    RuntimeCapabilitySet,
+)
 from core.providers.errors import (
     AgenticProfileConflictError,
+    CapabilityCertificateConflictError,
     ProviderCredentialBindingError,
     ProviderNotFoundError,
 )
@@ -145,6 +152,35 @@ class ProviderStore(Protocol):
     def get_agentic_migration(self, migration_id: str) -> AgenticMigrationRecord | None:
         ...
 
+    def save_capability_evidence(self, record: CapabilityEvidenceRecord) -> CapabilityEvidenceRecord:
+        ...
+
+    def get_capability_evidence(self, evidence_digest: str) -> CapabilityEvidenceRecord:
+        ...
+
+    def save_capability_certificate(self, record: CapabilityCertificate) -> CapabilityCertificate:
+        ...
+
+    def get_capability_certificate(self, certificate_id: str) -> CapabilityCertificate:
+        ...
+
+    def list_capability_certificates(self) -> list[CapabilityCertificate]:
+        ...
+
+    def save_capability_certificate_status(
+        self,
+        record: CapabilityCertificateStatus,
+        *,
+        expected_revision: int | None,
+    ) -> CapabilityCertificateStatus:
+        ...
+
+    def get_capability_certificate_status(
+        self,
+        certificate_id: str,
+    ) -> CapabilityCertificateStatus | None:
+        ...
+
 
 @dataclass(frozen=True)
 class ProviderCollections:
@@ -159,6 +195,9 @@ class ProviderCollections:
     agentic_profile_definition_statuses: DocumentCollection | None = None
     workspace_agentic_profile_bindings: DocumentCollection | None = None
     agentic_migrations: DocumentCollection | None = None
+    capability_evidence: DocumentCollection | None = None
+    capability_certificates: DocumentCollection | None = None
+    capability_certificate_statuses: DocumentCollection | None = None
 
 
 class ProviderDocumentStore:
@@ -176,6 +215,11 @@ class ProviderDocumentStore:
             collections.workspace_agentic_profile_bindings or InMemoryCollection()
         )
         self._agentic_migrations = collections.agentic_migrations or InMemoryCollection()
+        self._capability_evidence = collections.capability_evidence or InMemoryCollection()
+        self._capability_certificates = collections.capability_certificates or InMemoryCollection()
+        self._capability_certificate_statuses = (
+            collections.capability_certificate_statuses or InMemoryCollection()
+        )
 
     def _provider_definition(self, document: dict[str, Any]) -> ProviderDefinition:
         payload = dict(document)
@@ -391,12 +435,91 @@ class ProviderDocumentStore:
         document = self._agentic_migrations.find_one({"migration_id": migration_id})
         return None if document is None else AgenticMigrationRecord(**document)
 
+    def save_capability_evidence(self, record: CapabilityEvidenceRecord) -> CapabilityEvidenceRecord:
+        existing, inserted = self._capability_evidence.insert_one_if_absent(
+            {"evidence_digest": record.evidence_digest},
+            asdict(record),
+        )
+        if not inserted and existing != asdict(record):
+            raise CapabilityCertificateConflictError("certificate_evidence_immutable_conflict")
+        return record
+
+    def get_capability_evidence(self, evidence_digest: str) -> CapabilityEvidenceRecord:
+        document = self._capability_evidence.find_one({"evidence_digest": evidence_digest})
+        if document is None:
+            raise ProviderNotFoundError(f"Capability evidence `{evidence_digest}` was not found.")
+        payload = dict(document)
+        payload["evidence_refs"] = tuple(payload.get("evidence_refs", ()))
+        return CapabilityEvidenceRecord(**payload)
+
+    def save_capability_certificate(self, record: CapabilityCertificate) -> CapabilityCertificate:
+        existing, inserted = self._capability_certificates.insert_one_if_absent(
+            {"certificate_id": record.certificate_id},
+            asdict(record),
+        )
+        if not inserted and existing != asdict(record):
+            raise CapabilityCertificateConflictError("certificate_immutable_conflict")
+        return record
+
+    def get_capability_certificate(self, certificate_id: str) -> CapabilityCertificate:
+        document = self._capability_certificates.find_one({"certificate_id": certificate_id})
+        if document is None:
+            raise ProviderNotFoundError(f"Capability certificate `{certificate_id}` was not found.")
+        return _capability_certificate(document)
+
+    def list_capability_certificates(self) -> list[CapabilityCertificate]:
+        return [_capability_certificate(item) for item in self._capability_certificates.find({})]
+
+    def save_capability_certificate_status(
+        self,
+        record: CapabilityCertificateStatus,
+        *,
+        expected_revision: int | None,
+    ) -> CapabilityCertificateStatus:
+        current_document = self._capability_certificate_statuses.find_one(
+            {"certificate_id": record.certificate_id}
+        )
+        if record.status == "active" and (record.revoked_at is not None or record.revocation_reason is not None):
+            raise CapabilityCertificateConflictError("certificate_status_invalid")
+        if record.status == "revoked" and (record.revoked_at is None or not record.revocation_reason):
+            raise CapabilityCertificateConflictError("certificate_status_invalid")
+        if current_document is not None and current_document.get("status") == "revoked" and record.status != "revoked":
+            raise CapabilityCertificateConflictError("certificate_revocation_is_permanent")
+        try:
+            _save_revisioned_record(
+                self._capability_certificate_statuses,
+                identity={"certificate_id": record.certificate_id},
+                payload=asdict(record),
+                expected_revision=expected_revision,
+                label="Capability certificate status",
+            )
+        except AgenticProfileConflictError as error:
+            raise CapabilityCertificateConflictError("certificate_status_revision_conflict") from error
+        return record
+
+    def get_capability_certificate_status(
+        self,
+        certificate_id: str,
+    ) -> CapabilityCertificateStatus | None:
+        document = self._capability_certificate_statuses.find_one({"certificate_id": certificate_id})
+        return None if document is None else CapabilityCertificateStatus(**document)
+
 
 def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefinition:
     payload = dict(document)
     payload["routing_constraint"] = _routing_constraint(payload["routing_constraint"])
     payload["policy_ceiling"] = _agentic_runtime_policy(payload["policy_ceiling"])
     return AgenticProfileDefinition(**payload)
+
+
+def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
+    payload = dict(document)
+    payload["certified_upstream_ids"] = tuple(payload.get("certified_upstream_ids", ()))
+    payload["evidence_refs"] = tuple(payload.get("evidence_refs", ()))
+    capabilities = dict(payload["certified_capabilities"])
+    capabilities["attachment_modalities"] = tuple(capabilities.get("attachment_modalities", ()))
+    payload["certified_capabilities"] = RuntimeCapabilitySet(**capabilities)
+    return CapabilityCertificate(**payload)
 
 
 def _workspace_agentic_profile_binding(document: dict[str, Any]) -> WorkspaceAgenticProfileBinding:

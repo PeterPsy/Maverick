@@ -46,6 +46,12 @@ data by Core egress policy. Capability certificates attest only to one exact
 engine/adapter/provider/model/protocol/upstream combination and evidence suite;
 they are not a platform production-safety certificate.
 
+Core now persists certificate evidence/certificates as immutable control-plane
+records, keeps revocation in a CAS status record, verifies live adapter and
+upstream identity before execution, and records only a redaction-safe effective
+authority digest. This closes the certificate-object implementation slice; it
+does not relax the fake-data-only preview gate or any platform launch blocker.
+
 ## Design Studio OpenDesign Gate
 
 Design Studio has completed its app-scoped OpenDesign 0.16.1 production-path

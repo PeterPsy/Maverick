@@ -71,6 +71,30 @@ provider-neutral `runtime_ready` prewarm result separately from the legacy
 `provider_thread_ready` projection, because a hosted engine can be ready
 without creating a provider thread.
 
+## Capability Certificates And Effective Authority
+
+Agentic execution is fail-closed behind an immutable
+`CapabilityCertificate`. The certificate identifies the exact engine, adapter
+id/version/source digest, model provider, model, protocol, routing digest,
+certified upstream set, capability set, evidence suite, and expiry. Evidence
+metadata and optional content-addressed blobs are installation-owned; neither
+workspace Storage nor an adapter controls their locators. Revocation lives in a
+separate revisioned status record and therefore takes effect without rewriting
+the certificate or a session binding.
+
+Before session binding, prewarm, and every pinned turn, Core verifies certificate
+identity, expiry/revocation, live adapter artifact, credential reference, profile
+status, workspace binding, and upstream constraint. It then intersects certified
+capability with the pinned profile/workspace ceilings and current live
+restrictions. The resulting `EffectiveRuntimeAuthority` is ephemeral and is not
+a bearer grant. Runtime events persist only its SHA-256 digest, revision set,
+capability names, and counts; tool handles and content are omitted.
+
+The migrated Codex profile is `preview` and receives an expiring certificate
+backed by the packaged adapter contract suite. A code change that changes the
+adapter source digest invalidates older session bindings; those sessions require
+a new chat rather than silently adopting the new artifact.
+
 ## Current Provider Reality
 
 The current practical backend is Codex.

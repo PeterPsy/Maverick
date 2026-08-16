@@ -8,7 +8,11 @@ from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.tool_ledger import RuntimeToolLedger
-from core.runtime.tool_private_payloads import InMemoryRuntimeToolPrivatePayloadStore
+from core.runtime.private_payload_store import EncryptedRuntimePrivatePayloadStore
+from core.runtime.tool_private_payloads import (
+    EncryptedRuntimeToolPrivatePayloadStore,
+    InMemoryRuntimeToolPrivatePayloadStore,
+)
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
 
@@ -88,6 +92,49 @@ class RuntimeToolStoreTest(unittest.TestCase):
         self.assertEqual(deleted["tool_invocations"], 1)
         self.assertEqual(deleted["tool_confirmation_grants"], 1)
         self.assertEqual(reloaded.list_tool_invocations(session_id="session-persist"), [])
+
+    def test_encrypted_arguments_survive_process_restart_without_plaintext_on_disk(self) -> None:
+        key = bytes(reversed(range(32)))
+
+        def private_store() -> EncryptedRuntimeToolPrivatePayloadStore:
+            return EncryptedRuntimeToolPrivatePayloadStore(
+                EncryptedRuntimePrivatePayloadStore(
+                    repository_root=self.root,
+                    key_loader=lambda: key,
+                )
+            )
+        ledger = RuntimeToolLedger(
+            store=self.store,
+            private_payload_store=private_store(),
+            digest_key=b"runtime-tool-store-test-key-value",
+        )
+        proposed, _ = ledger.propose(
+            workspace_id="default",
+            session_id="session-restart",
+            turn_id="turn-restart",
+            provider_tool_call_id="call-restart",
+            tool_handle="mcp:fixture_read",
+            arguments={"canary": "private-argument-never-public"},
+            effect_class="read",
+            policy_revision="policy:1",
+            authority_digest="authority:1",
+            now=NOW,
+        )
+
+        restarted = RuntimeToolLedger(
+            store=self._store(),
+            private_payload_store=private_store(),
+            digest_key=b"runtime-tool-store-test-key-value",
+        )
+
+        self.assertEqual(
+            restarted.load_arguments(proposed),
+            {"canary": "private-argument-never-public"},
+        )
+        private_file = next(
+            self.root.glob("workspaces/default/runtime/sessions/session-restart/private/**/*.json")
+        )
+        self.assertNotIn(b"private-argument-never-public", private_file.read_bytes())
 
 
 if __name__ == "__main__":

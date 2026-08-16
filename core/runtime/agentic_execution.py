@@ -149,6 +149,16 @@ def _apply_provider_state_update(
     thread_callback: Callable[[str], None] | None,
     state_callback: Callable[[dict[str, object]], RuntimeProviderState] | None,
 ) -> RuntimeProviderState | None:
+    forbidden_private_fields = {
+        "provider_private_envelope",
+        "thought_signature",
+        "thought_signatures",
+        "opaque_state",
+        "raw_provider_state",
+        "raw_payload",
+    }
+    if forbidden_private_fields.intersection(payload):
+        raise ValueError("Provider-private state requires the Core private state service.")
     if payload and state_callback is not None:
         return state_callback(payload)
     provider_thread_id = str(payload.get("provider_thread_id") or "").strip()

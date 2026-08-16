@@ -28,7 +28,6 @@ PROVIDER_STATE_UPDATE_FIELDS = frozenset(
         "continuation_id",
         "provider_thread_id",
         "provider_request_id",
-        "provider_private_envelope",
         "turn_generation",
     }
 )

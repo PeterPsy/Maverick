@@ -345,3 +345,38 @@ mutable current turn status. Structured visible output applies
 case/separator-insensitive sensitive-key filtering and one global node and JSON
 byte budget. Its response
 metadata states whether the structured payload is complete or truncated.
+
+## Agentic Provider-Private State
+
+Hosted agentic adapters do not place thought signatures, opaque continuation
+steps, or raw vendor protocol state in runtime events. They use the Core-owned
+`ProviderPrivateStateService`, which issues a non-path `provider-private:v1:*`
+locator and stores the exact bytes under authenticated AES-256-GCM encryption.
+Associated data binds the blob to workspace, session, runtime engine, pinned
+adapter id/version, codec id/version, and schema version. The envelope persisted
+in `provider_state.json` contains only codec/encryption metadata, SHA-256,
+plaintext size, timestamp, and the opaque locator.
+
+Writes are bounded to 2 MiB per blob and 8 MiB per session, serialized under a
+namespace file lock, and attached through provider-state revision CAS. A losing
+writer deletes its new blob; a winning replacement deletes the prior blob.
+Wrong adapter or codec identities, missing keys, ciphertext tamper, digest/size
+mismatch, and quota failures produce explicit provider-private recovery reasons.
+The ordinary provider-state patch path rejects private envelopes and raw thought
+fields. Tool arguments use the same restart-safe encrypted store with a separate
+namespace and integrity binding.
+
+## Hosted Agentic Egress Records
+
+`AgenticEgressEvaluator` evaluates every classified content block against its
+exact provider/upstream and policy revision before returning bytes to a request
+builder. Unknown data class, provenance, trust, provider, or upstream fails
+closed. The preview policy exports only `public` and
+`workspace_internal_fake`; secret, host-operational, and unclassified content
+is always denied. Workspace paths are rewritten to `workspace://` references,
+other host paths are denied, and recognizable sensitive text must be redacted.
+
+The complete decision metadata is inserted first into the session-owned
+`egress_decisions.json`; only then may transformed bytes be used. Its audit
+projection contains domain-separated HMAC digests and decision metadata, never
+the original or transformed content.

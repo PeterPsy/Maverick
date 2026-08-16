@@ -10,6 +10,11 @@ from threading import RLock
 from typing import Protocol
 from uuid import uuid4
 
+from core.runtime.private_payload_models import (
+    RuntimePrivatePayloadContext,
+    RuntimePrivatePayloadError,
+)
+from core.runtime.private_payload_store import EncryptedRuntimePrivatePayloadStore
 from core.runtime.tool_errors import RuntimeToolError
 
 
@@ -64,6 +69,45 @@ class InMemoryRuntimeToolPrivatePayloadStore:
                 return False
             del self._records[private_ref]
         return True
+
+
+class EncryptedRuntimeToolPrivatePayloadStore:
+    """Restart-safe encrypted implementation sharing the Core private blob model."""
+
+    def __init__(self, store: EncryptedRuntimePrivatePayloadStore) -> None:
+        self._store = store
+
+    def put(self, *, workspace_id: str, session_id: str, payload: bytes) -> str:
+        try:
+            return self._store.put(
+                context=_tool_context(workspace_id, session_id),
+                locator_prefix="tool-private",
+                payload=payload,
+                max_blob_bytes=MAX_TOOL_PRIVATE_PAYLOAD_BYTES,
+                max_session_bytes=16 * MAX_TOOL_PRIVATE_PAYLOAD_BYTES,
+            )
+        except RuntimePrivatePayloadError as error:
+            raise RuntimeToolError(error.reason_code) from error
+
+    def read(self, *, workspace_id: str, session_id: str, private_ref: str) -> bytes:
+        try:
+            return self._store.read(
+                context=_tool_context(workspace_id, session_id),
+                locator_prefix="tool-private",
+                private_ref=private_ref,
+            )
+        except RuntimePrivatePayloadError as error:
+            raise RuntimeToolError(error.reason_code) from error
+
+    def delete(self, *, workspace_id: str, session_id: str, private_ref: str) -> bool:
+        try:
+            return self._store.delete(
+                context=_tool_context(workspace_id, session_id),
+                locator_prefix="tool-private",
+                private_ref=private_ref,
+            )
+        except RuntimePrivatePayloadError as error:
+            raise RuntimeToolError(error.reason_code) from error
 
 
 def canonical_tool_arguments(arguments: dict[str, object]) -> bytes:
@@ -130,3 +174,12 @@ def _json_kind(value: object) -> str:
     if isinstance(value, dict):
         return "object"
     return "invalid"
+
+
+def _tool_context(workspace_id: str, session_id: str) -> RuntimePrivatePayloadContext:
+    return RuntimePrivatePayloadContext(
+        namespace="tool-payloads",
+        workspace_id=workspace_id,
+        session_id=session_id,
+        binding_fields=(("payload_schema", "tool-private-v1"),),
+    )

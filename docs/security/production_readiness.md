@@ -52,6 +52,14 @@ upstream identity before execution, and records only a redaction-safe effective
 authority digest. This closes the certificate-object implementation slice; it
 does not relax the fake-data-only preview gate or any platform launch blocker.
 
+The runtime now also persists per-block fail-closed egress decisions before
+export and keeps provider-private/tool payloads in restart-safe, integrity-bound
+encrypted session storage with explicit codec and quota failures. Audit records
+contain keyed digests but no content, and generic provider events cannot carry
+thought signatures. This completes the Phase-4 storage and policy primitives;
+remote profiles remain disabled until the hosted loop, provider-specific codecs,
+leakage review, and production key-management gates are completed.
+
 ## Design Studio OpenDesign Gate
 
 Design Studio has completed its app-scoped OpenDesign 0.16.1 production-path

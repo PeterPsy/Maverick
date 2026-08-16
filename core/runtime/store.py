@@ -34,12 +34,13 @@ from core.runtime.models import RuntimeLocation
 from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_process import RuntimeProcessRecord
-from core.runtime.provider_state import RuntimeProviderState
+from core.runtime.provider_state import RuntimeProviderState, runtime_provider_state_from_document
 from core.runtime.runtime_session import RuntimeApiTokenRecord, RuntimeSessionRecord, runtime_session_allows_user_thread, runtime_session_from_document
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.tool_models import ToolConfirmationGrant, ToolInvocationRecord
+from core.egress.agentic_models import AgenticEgressDecision
 from core.shared.in_memory_collection import InMemoryCollection
 
 
@@ -159,6 +160,7 @@ class RuntimeCollections:
     provider_states: DocumentCollection | None = None
     tool_invocations: DocumentCollection | None = None
     tool_confirmation_grants: DocumentCollection | None = None
+    egress_decisions: DocumentCollection | None = None
 
 
 class RuntimeStore(Protocol):
@@ -391,6 +393,17 @@ class RuntimeStore(Protocol):
     ) -> RuntimeProviderState:
         ...
 
+    def initialize_egress_decision(
+        self,
+        *,
+        workspace_id: str,
+        record: AgenticEgressDecision,
+    ) -> AgenticEgressDecision:
+        ...
+
+    def list_egress_decisions(self, *, session_id: str) -> list[AgenticEgressDecision]:
+        ...
+
     def initialize_tool_invocation(self, record: ToolInvocationRecord) -> ToolInvocationRecord:
         ...
 
@@ -568,6 +581,7 @@ class RuntimeDocumentStore:
         self._provider_states = collections.provider_states or InMemoryCollection()
         self._tool_invocations = collections.tool_invocations or InMemoryCollection()
         self._tool_confirmation_grants = collections.tool_confirmation_grants or InMemoryCollection()
+        self._egress_decisions = collections.egress_decisions or InMemoryCollection()
         self._fallback_lock = RLock()
         self._partition_index_lock = RLock()
         self._session_workspace_index: dict[str, str] = {}
@@ -624,6 +638,40 @@ class RuntimeDocumentStore:
         if not inserted:
             raise RuntimeProviderStateError(f"Tool invocation `{record.invocation_id}` already exists.")
         return ToolInvocationRecord(**existing)
+
+    def initialize_egress_decision(
+        self,
+        *,
+        workspace_id: str,
+        record: AgenticEgressDecision,
+    ) -> AgenticEgressDecision:
+        """Persist one content decision before export; exact retries are idempotent."""
+        payload = {**asdict(record), "workspace_id": workspace_id}
+        existing, inserted = self._insert_one_if_absent(
+            self._egress_decisions,
+            {
+                "decision_id": record.decision_id,
+                "session_id": record.session_id,
+                "workspace_id": workspace_id,
+            },
+            payload,
+        )
+        existing_payload = dict(existing)
+        existing_payload.pop("workspace_id", None)
+        persisted = AgenticEgressDecision(**existing_payload)
+        if not inserted and replace(persisted, decided_at=record.decided_at) != record:
+            raise RuntimeProviderStateError(
+                f"Egress decision `{record.decision_id}` identity conflict."
+            )
+        return persisted
+
+    def list_egress_decisions(self, *, session_id: str) -> list[AgenticEgressDecision]:
+        records: list[AgenticEgressDecision] = []
+        for document in self._egress_decisions.find({"session_id": session_id}):
+            payload = dict(document)
+            payload.pop("workspace_id", None)
+            records.append(AgenticEgressDecision(**payload))
+        return records
 
     def get_tool_invocation(self, invocation_id: str) -> ToolInvocationRecord:
         document = self._tool_invocations.find_one({"invocation_id": invocation_id})
@@ -858,6 +906,7 @@ class RuntimeDocumentStore:
             "app_stream_events": 0,
             "tool_invocations": 0,
             "tool_confirmation_grants": 0,
+            "egress_decisions": 0,
         }
         deleted["turns"] = _delete_session_records(
             self.collections.turns,
@@ -900,6 +949,12 @@ class RuntimeDocumentStore:
             session_id=session_id,
             workspace_id=workspace_id,
             identity_field="grant_id",
+        )
+        deleted["egress_decisions"] = _delete_session_records(
+            self._egress_decisions,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            identity_field="decision_id",
         )
         if self.collections.api_tokens is not None:
             deleted["api_tokens"] = _delete_session_records(
@@ -2104,7 +2159,7 @@ class RuntimeDocumentStore:
             {"session_id": record.session_id, "workspace_id": record.workspace_id},
             asdict(record),
         )
-        existing = RuntimeProviderState(**document)
+        existing = runtime_provider_state_from_document(document)
         if not inserted and existing != record:
             raise RuntimeProviderStateError(
                 f"Runtime provider state for session `{record.session_id}` already exists."
@@ -2122,7 +2177,7 @@ class RuntimeDocumentStore:
             raise RuntimeProviderStateError(
                 f"Runtime provider state for session `{session_id}` was not found."
             )
-        state = RuntimeProviderState(**document)
+        state = runtime_provider_state_from_document(document)
         self._remember_session_partition(state.session_id, state.workspace_id)
         return state
 

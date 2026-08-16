@@ -318,6 +318,20 @@ occurs only at execution time, and neither raw credentials nor credential
 bindings that could resolve them are serialized into prompts, public events,
 provider-private envelopes, tool results, or egress audit content.
 
+Each remotely exported agentic content block is classified by data class,
+provenance, and trust and matched to the exact provider/upstream policy. Unknown
+metadata and destinations fail closed. The fake-data preview permits only public
+or explicitly fake data; credentials, host metadata, unclassified content, and
+unmapped absolute host paths are denied. Persisted egress records use keyed,
+domain-separated digests so low-entropy prompts cannot be recovered by hashing
+guesses.
+
+Opaque provider protocol bytes are encrypted with integrity-bound binding and
+codec identities in a quota-bounded Core store. Their locators grant no read
+authority. Ordinary provider events and state patches reject thought signatures
+and raw private payloads, preventing accidental transcript, UI, app-hook, log,
+or telemetry propagation.
+
 ### App privilege escalation
 
 App frontend or backend code gains more authority than the app contract and workspace policy should allow.

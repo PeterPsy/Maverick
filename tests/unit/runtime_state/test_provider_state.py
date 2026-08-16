@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import unittest
 
 from core.runtime.errors import RuntimeProviderStateError
+from core.runtime.agentic_runtime_service import update_runtime_provider_state
 from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from tests.support.collections import FakeCollection
@@ -64,6 +65,14 @@ class RuntimeProviderStateTest(unittest.TestCase):
             self.store.update_provider_state(
                 replace(self.initial, runtime_engine_id="other", revision=1),
                 expected_revision=0,
+            )
+
+    def test_generic_patch_rejects_provider_private_envelope(self) -> None:
+        with self.assertRaisesRegex(RuntimeProviderStateError, "forbidden fields"):
+            update_runtime_provider_state(
+                self.store,
+                session_id="session-a",
+                updates={"provider_private_envelope": {"thought_signature": "private"}},
             )
 
 

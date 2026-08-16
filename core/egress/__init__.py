@@ -1,5 +1,13 @@
 """Network egress policy primitives owned by the Maverick core."""
 
+from core.egress.agentic_models import (
+    AgenticEgressContentBlock,
+    AgenticEgressDecision,
+    AgenticEgressPolicy,
+    AgenticEgressResult,
+)
+from core.egress.agentic_policy import AgenticEgressEvaluator, fake_data_preview_egress_policy
+
 from core.egress.models import (
     BrowserEgressPolicy,
     EgressDecision,
@@ -10,6 +18,11 @@ from core.egress.models import (
 from core.egress.policy import evaluate_browser_egress_url, evaluate_browser_redirect_chain, resolve_browser_egress_url_addresses
 
 __all__ = [
+    "AgenticEgressContentBlock",
+    "AgenticEgressDecision",
+    "AgenticEgressEvaluator",
+    "AgenticEgressPolicy",
+    "AgenticEgressResult",
     "BrowserEgressPolicy",
     "DEFAULT_BROWSER_EGRESS_POLICY",
     "EgressDecision",
@@ -17,5 +30,6 @@ __all__ = [
     "EgressTarget",
     "evaluate_browser_egress_url",
     "evaluate_browser_redirect_chain",
+    "fake_data_preview_egress_policy",
     "resolve_browser_egress_url_addresses",
 ]

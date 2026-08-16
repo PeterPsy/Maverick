@@ -12,6 +12,7 @@ from core.api.app_events import AppEventBus
 from core.api.application import create_application
 from core.api.control_store import ControlPlaneCollections, ControlStoreSettings, build_control_plane_collections
 from core.api.persistence_cleanup_worker import run_pending_cleanup_plans
+from core.egress.agentic_policy import AgenticEgressEvaluator
 from core.apps.store import AppDocumentStore
 from core.apps.runtime_root_capabilities import RuntimeRootCapabilityStore
 from core.apps.sidecar_browser_sessions import SidecarBrowserSessionStore
@@ -33,11 +34,13 @@ from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.thread_event_bus import RuntimeThreadEventBus
 from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.store import RuntimeDocumentStore, RuntimeCollections
+from core.runtime.private_payload_store import EncryptedRuntimePrivatePayloadStore
+from core.runtime.provider_private_state import ProviderPrivateStateService
 from core.runtime.tool_ledger import RuntimeToolLedger
-from core.runtime.tool_private_payloads import InMemoryRuntimeToolPrivatePayloadStore
+from core.runtime.tool_private_payloads import EncryptedRuntimeToolPrivatePayloadStore
 from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
 from core.secrets.bootstrap import resolve_bootstrap_secret
-from core.secrets.key_material import load_secret_store_key
+from core.secrets.key_material import load_secret_store_key, load_secret_store_keyring
 from core.secrets.store import SecretDocumentStore
 from core.shared.in_memory_collection import InMemoryCollection
 from core.shared.repository import discover_repository_root
@@ -69,6 +72,8 @@ class PlatformState:
     runtime_root_capabilities: RuntimeRootCapabilityStore
     root_shell_app_id: str
     runtime_tool_ledger: RuntimeToolLedger | None = None
+    provider_private_state_service: ProviderPrivateStateService | None = None
+    agentic_egress_evaluator: AgenticEgressEvaluator | None = None
 
 
 def bootstrap_platform_state(
@@ -108,6 +113,10 @@ def bootstrap_platform_state(
         start_path=repository_root,
         filename="tool_confirmation_grants.json",
     )
+    runtime_egress_decisions = RuntimeSessionJsonCollection(
+        start_path=repository_root,
+        filename="egress_decisions.json",
+    )
     runtime_threads = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="threads.json")
     runtime_client_messages = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="client_messages.json")
     runtime_app_streams = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="app_streams.json")
@@ -129,13 +138,23 @@ def bootstrap_platform_state(
             provider_states=runtime_provider_states,
             tool_invocations=runtime_tool_invocations,
             tool_confirmation_grants=runtime_tool_confirmation_grants,
+            egress_decisions=runtime_egress_decisions,
             api_tokens=control_collections.runtime_api_tokens,
         )
     )
+    private_payload_store = EncryptedRuntimePrivatePayloadStore(
+        repository_root=repository_root,
+        key_loader=load_secret_store_key,
+        keyring_loader=load_secret_store_keyring,
+    )
     runtime_tool_ledger = RuntimeToolLedger(
         store=runtime_store,
-        private_payload_store=InMemoryRuntimeToolPrivatePayloadStore(),
+        private_payload_store=EncryptedRuntimeToolPrivatePayloadStore(private_payload_store),
         digest_key=load_secret_store_key(),
+    )
+    provider_private_state_service = ProviderPrivateStateService(
+        store=runtime_store,
+        payload_store=private_payload_store,
     )
     inter_agent_store = build_inter_agent_document_store(start_path=repository_root)
     runtime_event_bus = RuntimeEventBus()
@@ -156,6 +175,11 @@ def bootstrap_platform_state(
             audit=InMemoryCollection(),
             metrics=InMemoryCollection(),
         )
+    )
+    agentic_egress_evaluator = AgenticEgressEvaluator(
+        digest_key=load_secret_store_key(),
+        observability_store=observability_store,
+        decision_store=runtime_store,
     )
     job_service = JobService(
         JobDocumentStore(control_collections.jobs),
@@ -208,6 +232,8 @@ def bootstrap_platform_state(
         runtime_root_capabilities=RuntimeRootCapabilityStore(),
         root_shell_app_id=os.environ.get("MAVERICK_ROOT_SHELL_APP_ID", "base-shell").strip() or "base-shell",
         runtime_tool_ledger=runtime_tool_ledger,
+        provider_private_state_service=provider_private_state_service,
+        agentic_egress_evaluator=agentic_egress_evaluator,
     )
     if recover_backend_restart:
         recover_interrupted_runtime_turns_after_backend_restart(state)

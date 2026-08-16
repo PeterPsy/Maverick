@@ -684,6 +684,13 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             state.provider_store,
             workspace_id=context.workspace_id,
         )
+        return json_response(
+            start_response,
+            {
+                "workspace_id": context.workspace_id,
+                "items": [provider_subscription_usage_payload(usage) for usage in usages],
+            },
+        )
     if path == "/api/providers/agentic/profile-definitions":
         definitions = state.provider_store.list_agentic_profile_definitions()
         return json_response(
@@ -721,13 +728,6 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                     )
                     for item in certificates
                 ]
-            },
-        )
-        return json_response(
-            start_response,
-            {
-                "workspace_id": context.workspace_id,
-                "items": [provider_subscription_usage_payload(usage) for usage in usages],
             },
         )
     if path == "/api/providers":

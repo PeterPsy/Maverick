@@ -53,7 +53,10 @@ class RuntimeStorePartitionIndexTestCase(unittest.TestCase):
         )
         turn = queue_runtime_turn(store, turn_id="turn-indexed", session_id=session.session_id, input_text="hello")
 
-        self.assertIn({"session_id": session.session_id, "workspace_id": "acme"}, sessions.update_one_queries)
+        self.assertIn(
+            {"session_id": session.session_id, "workspace_id": "acme"},
+            sessions.insert_one_if_absent_queries,
+        )
         self.assertIn({"session_id": session.session_id, "workspace_id": "acme"}, states.update_one_queries)
         self.assertEqual(
             turns.insert_one_if_absent_queries,

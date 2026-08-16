@@ -118,9 +118,11 @@ web activation. A web-only activation changes only
 digest, or touch the migration journal. Restart/readiness failure restores the
 previous compatible overlay automatically. A later selected gate failure also
 restores that overlay before `dev apply` reports failure. Every new cutover
-first completes any pending activation recovery; backend restart dispatches the
-app-owned `backend_recovery` hook so a rollback already committed before the
-restart reaches its terminal journal state.
+first completes any pending activation recovery. Backend restart dispatches the
+app-owned `backend_recovery` hook, which reports but does not terminalize pending
+readiness. The journal remains pending until the selected sidecar is launched
+and its real `/api/ready` response is verified; only then does the launcher
+record terminal recovery. Until that point another cutover fails closed.
 
 The upstream tag and official OCI image were inventoried before implementation.
 The source tree includes web,
@@ -388,8 +390,13 @@ current `head_sha`. It snapshots and propagates that set to every changed-suite
 gate, then materializes a committed checkout with only those declared path
 bytes overlaid. Builds and tests run from that checkout, so unrelated
 shared-worktree changes cannot enter the run. Signed immutable runtime/web
-registries are linked by digest, while installed Node dependencies are copied
-into the isolated checkout before execution. It emits
+registries are materialized as real hardlinked trees, while installed Node
+dependencies are copied into the isolated checkout before execution. A newly
+built candidate overlay is hardlinked into that checkout and signature-verified
+before the browser gate. The E2E process receives an executable Python path and
+Playwright browser cache resolved and verified from the publishing repository;
+the default web-build cache is likewise resolved there before the temporary
+checkout exists, so it survives cleanup. It emits
 bounded JSON containing actions, durations, digests, cache state, readiness,
 and rollback. Frontend, backend, overlay, runtime, hosting, docs, and
 release-only changes select only their owned gates; documentation does not
@@ -416,6 +423,8 @@ npm run test:e2e:quick --prefix apps/design-studio
 npm run test:e2e:affected --prefix apps/design-studio
 npm run test:e2e:release --prefix apps/design-studio -- \
   --evidence-output /owned/evidence/opendesign-ui-release.json
+python3 -m unittest \
+  apps/design-studio/tests/test_opendesign_dev_apply_integration.py
 npm run test:e2e:migration --prefix apps/design-studio \
   > /owned/evidence/opendesign-migration.json
 python3 apps/design-studio/service/aggregate_opendesign_release_evidence.py \

@@ -15,7 +15,8 @@ const appRoot = path.resolve(scriptDir, '..');
 const repoRoot = path.resolve(appRoot, '..', '..');
 const serverFixture = path.join(scriptDir, 'fixtures', 'opendesign_product_server.py');
 const migrationSmoke = path.join(appRoot, 'service', 'smoke_opendesign_migration.py');
-const python = path.join(repoRoot, '.venv', 'bin', 'python');
+const python = process.env.MAVERICK_OPENDESIGN_E2E_PYTHON
+  || path.join(repoRoot, '.venv', 'bin', 'python');
 const bundleContract = JSON.parse(await readFile(path.join(appRoot, 'service', 'opendesign_bundle.json'), 'utf8'));
 const profile = argument('--profile') || 'release';
 if (!['quick', 'affected', 'release'].includes(profile)) {

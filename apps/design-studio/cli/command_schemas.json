@@ -73,6 +73,8 @@
           "runtime_signing_key": {"type": "string"},
           "cache_root": {"type": "string"},
           "work_parent": {"type": "string"},
+          "e2e_python": {"type": "string"},
+          "playwright_browsers_path": {"type": "string"},
           "repo_root": {"type": "string"},
           "workspace_id": {"type": "string"},
           "dry_run": {"type": "boolean"}

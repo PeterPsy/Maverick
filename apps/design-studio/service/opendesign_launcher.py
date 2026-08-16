@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import http.client
+import json
 import os
 from pathlib import Path
 import stat
+import subprocess
+import time
 from typing import Any
 
 from opendesign_artifact import (
@@ -16,6 +20,8 @@ from opendesign_artifact import (
 )
 from opendesign_runtime import RuntimeBinding, resolve_runtime_binding
 from opendesign_oci_stage import OciStageError, runtime_command
+from opendesign_web_activation import finalize_web_activation_after_verified_sidecar_start
+from opendesign_web_overlay import discover_verified_overlays
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 SERVICE_ROOT = Path(__file__).resolve().parent
@@ -62,7 +68,7 @@ def main() -> None:
         web_registry_root,
         manifest=manifest,
     )
-    _exec(
+    _run_daemon(
         plan,
         _daemon_env(
             data_dir=data_dir,
@@ -70,30 +76,38 @@ def main() -> None:
             static_dir=binding.overlay.static_dir,
             static_registry_root=web_registry_root,
         ),
+        generation_root=generation_root,
+        binding=binding,
+        web_registry_root=web_registry_root,
     )
 
 
 def _registry_root() -> Path:
     raw = os.environ.get("MAVERICK_OPENDESIGN_BUNDLE_ROOT")
     path = Path(raw).expanduser() if raw else DEFAULT_BUNDLE_ROOT
-    resolved = path.resolve()
-    if os.environ.get("MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE") == "1":
-        return resolved
-    app_root = APP_ROOT.resolve()
-    if app_root != resolved and app_root not in resolved.parents:
-        raise SystemExit("MAVERICK_OPENDESIGN_BUNDLE_ROOT must stay inside the Design Studio app source.")
-    return resolved
+    return _verified_registry_path(
+        path,
+        variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
+    )
 
 
 def _web_registry_root() -> Path:
     raw = os.environ.get("MAVERICK_OPENDESIGN_WEB_ROOT")
     path = Path(raw).expanduser() if raw else DEFAULT_WEB_ROOT
+    return _verified_registry_path(
+        path,
+        variable="MAVERICK_OPENDESIGN_WEB_ROOT",
+    )
+
+
+def _verified_registry_path(path: Path, *, variable: str) -> Path:
+    lexical = Path(os.path.abspath(path))
     resolved = path.resolve()
     if os.environ.get("MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE") == "1":
         return resolved
     app_root = APP_ROOT.resolve()
-    if app_root != resolved and app_root not in resolved.parents:
-        raise SystemExit("MAVERICK_OPENDESIGN_WEB_ROOT must stay inside the Design Studio app source.")
+    if app_root != lexical and app_root not in lexical.parents:
+        raise SystemExit(f"{variable} must stay inside the Design Studio app source.")
     return resolved
 
 
@@ -254,9 +268,104 @@ def _manifest_summary(payload: dict[str, Any]) -> dict[str, object]:
     }
 
 
-def _exec(plan: LaunchPlan, env: dict[str, str]) -> None:
-    os.chdir(plan.cwd)
-    os.execvpe(plan.command[0], plan.command, env)
+def _run_daemon(
+    plan: LaunchPlan,
+    env: dict[str, str],
+    *,
+    generation_root: Path,
+    binding: RuntimeBinding,
+    web_registry_root: Path,
+) -> None:
+    daemon = subprocess.Popen(plan.command, cwd=plan.cwd, env=env)
+    try:
+        readiness = _wait_for_sidecar_readiness(daemon, env=env)
+        _finalize_pending_web_activation(
+            generation_root,
+            binding=binding,
+            web_registry_root=web_registry_root,
+            readiness=readiness,
+        )
+        return_code = daemon.wait()
+    except BaseException:
+        _terminate_daemon(daemon)
+        raise
+    raise SystemExit(return_code)
+
+
+def _wait_for_sidecar_readiness(
+    daemon: subprocess.Popen[bytes],
+    *,
+    env: dict[str, str],
+) -> dict[str, object]:
+    host = str(env.get("OD_BIND_HOST") or "127.0.0.1")
+    try:
+        port = int(str(env.get("OD_PORT") or ""))
+    except ValueError as error:
+        raise RuntimeError("OpenDesign sidecar port is invalid") from error
+    if not 1 <= port <= 65535:
+        raise RuntimeError("OpenDesign sidecar port is invalid")
+    token = str(env.get("OD_API_TOKEN") or "")
+    deadline = time.monotonic() + 120.0
+    while time.monotonic() < deadline:
+        if daemon.poll() is not None:
+            raise RuntimeError("OpenDesign daemon exited before verified readiness")
+        connection = http.client.HTTPConnection(host, port, timeout=1.5)
+        try:
+            connection.request(
+                "GET",
+                "/api/ready",
+                headers={"Authorization": f"Bearer {token}", "Connection": "close"},
+            )
+            response = connection.getresponse()
+            body = response.read(65_537)
+            if 200 <= response.status < 300 and len(body) <= 65_536:
+                payload = json.loads(body.decode("utf-8"))
+                if isinstance(payload, dict) and payload.get("ready") is True:
+                    return {"ready": True, "service_count": 1}
+        except (OSError, http.client.HTTPException, UnicodeDecodeError, json.JSONDecodeError):
+            pass
+        finally:
+            connection.close()
+        time.sleep(0.1)
+    raise RuntimeError("OpenDesign daemon did not reach verified readiness")
+
+
+def _finalize_pending_web_activation(
+    generation_root: Path,
+    *,
+    binding: RuntimeBinding,
+    web_registry_root: Path,
+    readiness: dict[str, object],
+) -> None:
+    if binding.control.web_activation_id is None:
+        return
+    required_overlays = {binding.active.web_overlay_sha256}
+    if binding.control.previous_web is not None:
+        required_overlays.add(binding.control.previous_web.web_overlay_sha256)
+    overlays = discover_verified_overlays(
+        web_registry_root,
+        trust_contract=WEB_TRUST_CONTRACT,
+        required_digests=required_overlays,
+    )
+    finalize_web_activation_after_verified_sidecar_start(
+        generation_root,
+        readiness=readiness,
+        verified_artifacts={
+            binding.active.runtime_artifact_sha256: binding.bundle.opendesign_version,
+        },
+        verified_overlays=overlays,
+    )
+
+
+def _terminate_daemon(daemon: subprocess.Popen[bytes]) -> None:
+    if daemon.poll() is not None:
+        return
+    daemon.terminate()
+    try:
+        daemon.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        daemon.kill()
+        daemon.wait(timeout=5)
 
 
 if __name__ == "__main__":

@@ -250,14 +250,40 @@ def recover_web_activation(
         return None
 
 
-def finalize_web_activation_after_host_restart(
+def web_activation_recovery_state(
     root: Path,
     *,
     verified_artifacts: Mapping[str, str],
     verified_overlays: Mapping[str, object],
+) -> str | None:
+    """Inspect recovery without claiming that the backend restart made a sidecar ready."""
+    with _web_activation_lock(root):
+        control = load_generation_control(
+            root,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        if control.web_activation_id is None:
+            return None
+        journal = load_web_activation_journal(
+            root,
+            control.web_activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        return reconcile_web_activation(control, journal)
+
+
+def finalize_web_activation_after_verified_sidecar_start(
+    root: Path,
+    *,
+    readiness: Mapping[str, object],
+    verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
     now: Callable[[], str] | None = None,
 ) -> WebActivationOutcome | None:
-    """Finalize a rollback whose process restart was supplied by backend restart recovery."""
+    """Finalize pending activation recovery only after the selected sidecar is healthy."""
+    verified_readiness = _verified_sidecar_readiness(readiness)
     timestamp = now or _utc_now
     with _web_activation_lock(root):
         control = load_generation_control(
@@ -282,29 +308,40 @@ def finalize_web_activation_after_host_restart(
                 state == "rolled_back",
                 journal.readiness,
             )
-        if state not in {"rollback_committed_journal_pending", "rollback_restart_pending"}:
-            raise WebActivationError("host restart cannot certify candidate activation readiness")
-        readiness = {
-            "rollback": {
-                "ready": True,
-                "service_count": 0,
-                "restart_reason": "backend_restart",
-            }
-        }
-        rolled_back = _journal_state(
+        if state == "activation_committed_readiness_pending":
+            completed_state = "ready_committed"
+            completed_readiness: dict[str, object] = verified_readiness
+            error = None
+            activated = True
+            rolled_back = False
+        elif state in {"rollback_committed_journal_pending", "rollback_restart_pending"}:
+            completed_state = "rolled_back"
+            completed_readiness = {"rollback": verified_readiness}
+            error = journal.error or "candidate_restart_failed:verified_sidecar_recovery"
+            activated = False
+            rolled_back = True
+        else:
+            raise WebActivationError("verified sidecar start cannot reconcile web activation")
+        completed = _journal_state(
             journal,
-            "rolled_back",
-            readiness=readiness,
-            error=journal.error or "candidate_restart_failed:host_restart_recovery",
+            completed_state,
+            readiness=completed_readiness,
+            error=error,
             updated_at=timestamp(),
         )
         write_web_activation_journal(
             root,
-            rolled_back,
+            completed,
             verified_artifacts=verified_artifacts,
             verified_overlays=verified_overlays,
         )
-        return WebActivationOutcome(control, journal.web_activation_id, False, True, readiness)
+        return WebActivationOutcome(
+            control,
+            journal.web_activation_id,
+            activated,
+            rolled_back,
+            completed_readiness,
+        )
 
 
 def _rollback_after_failed_restart(
@@ -387,6 +424,17 @@ def _restart(restart_sidecars: Restart) -> dict[str, object]:
     if result.get("browser_remount_event_emitted") is True:
         readiness["browser_remount_event_emitted"] = True
     return readiness
+
+
+def _verified_sidecar_readiness(readiness: Mapping[str, object]) -> dict[str, object]:
+    service_count = readiness.get("service_count")
+    if readiness.get("ready") is not True or not isinstance(service_count, int) or service_count < 1:
+        raise WebActivationError("verified sidecar readiness is required to finalize recovery")
+    return {
+        "ready": True,
+        "service_count": service_count,
+        "readiness_source": "sidecar_health",
+    }
 
 
 def _journal_state(

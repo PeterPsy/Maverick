@@ -10,7 +10,7 @@ import tarfile
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -70,6 +70,69 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             first,
         )
         self.assertFalse(any(path.name.startswith(".materialize-") for path in registry.iterdir()))
+
+    def test_launcher_accepts_verified_registry_symlink_inside_app_but_not_external_path(self) -> None:
+        app_root = self.root / "app"
+        vendor = app_root / "service/vendor"
+        external = self.root / "operational-registry"
+        vendor.mkdir(parents=True)
+        external.mkdir()
+        linked = vendor / "open-design"
+        linked.symlink_to(external, target_is_directory=True)
+
+        with (
+            patch.object(self.launcher, "APP_ROOT", app_root),
+            patch.dict("os.environ", {}, clear=True),
+        ):
+            self.assertEqual(
+                self.launcher._verified_registry_path(
+                    linked,
+                    variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
+                ),
+                external.resolve(),
+            )
+            with self.assertRaisesRegex(SystemExit, "must stay inside"):
+                self.launcher._verified_registry_path(
+                    external,
+                    variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
+                )
+
+    def test_launcher_finalizes_recovery_only_after_verified_readiness(self) -> None:
+        plan = self.launcher.LaunchPlan("test", ["daemon"], self.root, "test")
+        binding = SimpleNamespace()
+        daemon = Mock()
+        daemon.wait.return_value = 0
+        readiness = {"ready": True, "service_count": 1}
+
+        with (
+            patch.object(self.launcher.subprocess, "Popen", return_value=daemon),
+            patch.object(
+                self.launcher,
+                "_wait_for_sidecar_readiness",
+                return_value=readiness,
+            ) as wait_for_readiness,
+            patch.object(self.launcher, "_finalize_pending_web_activation") as finalize,
+            self.assertRaises(SystemExit) as exited,
+        ):
+            self.launcher._run_daemon(
+                plan,
+                {"OD_PORT": "1234", "OD_API_TOKEN": "token"},
+                generation_root=self.root / "generation",
+                binding=binding,
+                web_registry_root=self.root / "web-registry",
+            )
+
+        self.assertEqual(exited.exception.code, 0)
+        wait_for_readiness.assert_called_once_with(
+            daemon,
+            env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
+        )
+        finalize.assert_called_once_with(
+            self.root / "generation",
+            binding=binding,
+            web_registry_root=self.root / "web-registry",
+            readiness=readiness,
+        )
 
     def test_existing_digest_directory_is_never_replaced_after_tampering(self) -> None:
         registry = self.root / "registry"

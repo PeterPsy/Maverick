@@ -287,7 +287,7 @@ class WebActivationTests(unittest.TestCase):
         )
         self.assertEqual(control.web_activation_id, "web_new_cutover_001")
 
-    def test_backend_restart_hook_finalizes_pending_rollback_without_new_cutover(self) -> None:
+    def test_backend_restart_keeps_rollback_pending_until_verified_sidecar_readiness(self) -> None:
         failed_restarts = iter(
             (
                 {"ready": False, "service_count": 1},
@@ -304,12 +304,34 @@ class WebActivationTests(unittest.TestCase):
                 restart_sidecars=lambda: next(failed_restarts),
             )
 
-        outcome = self.activation.finalize_web_activation_after_host_restart(
+        state = self.activation.web_activation_recovery_state(
             self.root,
             verified_artifacts=VERIFIED_ARTIFACTS,
             verified_overlays=VERIFIED_OVERLAYS,
         )
+        self.assertEqual(state, "rollback_restart_pending")
+        pending = self.control.load_web_activation_journal(
+            self.root,
+            "web_host_restart_pending_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+        self.assertEqual(pending.state, "rollback_restart_pending")
 
+        with self.assertRaisesRegex(self.activation.WebActivationError, "verified sidecar readiness"):
+            self.activation.finalize_web_activation_after_verified_sidecar_start(
+                self.root,
+                readiness={"ready": True, "service_count": 0},
+                verified_artifacts=VERIFIED_ARTIFACTS,
+                verified_overlays=VERIFIED_OVERLAYS,
+            )
+
+        outcome = self.activation.finalize_web_activation_after_verified_sidecar_start(
+            self.root,
+            readiness={"ready": True, "service_count": 1},
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
         self.assertIsNotNone(outcome)
         self.assertTrue(outcome.rolled_back)
         journal = self.control.load_web_activation_journal(
@@ -319,7 +341,7 @@ class WebActivationTests(unittest.TestCase):
             verified_overlays=VERIFIED_OVERLAYS,
         )
         self.assertEqual(journal.state, "rolled_back")
-        self.assertEqual(journal.readiness["rollback"]["restart_reason"], "backend_restart")
+        self.assertEqual(journal.readiness["rollback"]["service_count"], 1)
 
 
 if __name__ == "__main__":

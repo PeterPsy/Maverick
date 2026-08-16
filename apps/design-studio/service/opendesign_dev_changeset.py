@@ -226,8 +226,30 @@ def _materialize_operational_inputs(repo_root: Path, snapshot_root: Path) -> Non
     vendor = repo_root / "apps/design-studio/service/vendor"
     snapshot_vendor = snapshot_root / "apps/design-studio/service/vendor"
     if vendor.is_dir() and not vendor.is_symlink() and not snapshot_vendor.exists():
-        snapshot_vendor.parent.mkdir(parents=True, exist_ok=True)
-        snapshot_vendor.symlink_to(vendor.resolve(), target_is_directory=True)
+        materialize_immutable_tree(vendor, snapshot_vendor)
+
+
+def materialize_immutable_tree(source: Path, destination: Path) -> None:
+    """Materialize an immutable operational tree as real paths, using hardlinks when possible."""
+    if not source.is_dir() or source.is_symlink():
+        raise DevApplyError("operational input must be a real directory", report={})
+    if destination.exists() or destination.is_symlink():
+        raise DevApplyError("operational input destination already exists", report={})
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(
+        source,
+        destination,
+        symlinks=True,
+        copy_function=_hardlink_or_copy,
+    )
+
+
+def _hardlink_or_copy(source: str, destination: str) -> str:
+    try:
+        Path(destination).hardlink_to(source)
+        return destination
+    except OSError:
+        return shutil.copy2(source, destination)
 
 
 def _directory_content_sha256(root: Path) -> str:

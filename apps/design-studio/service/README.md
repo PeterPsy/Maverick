@@ -256,8 +256,11 @@ If both candidate and rollback restarts fail, the activation journal remains
 `rollback_restart_pending`; recovery retries readiness/restart and only then
 transitions to terminal `rolled_back`. A new activation always completes that
 recovery before preparing another journal. The declared app-owned
-`backend_recovery` hook finalizes a rollback after a successful host restart,
-without allowing a new cutover to replace the pending activation id.
+`backend_recovery` hook only reports the pending state because a host restart
+does not prove lazy sidecar readiness. The launcher retains the sidecar process,
+verifies its real `/api/ready` response, and only then terminalizes candidate or
+rollback recovery. Until that verified start, the pending activation id blocks
+every new cutover.
 
 `opendesign_web_builder.py` persists dependency, invariant workspace-output,
 source/build, and compatible Next caches. Every cache is file/content-manifest
@@ -380,6 +383,13 @@ must provide explicit repository-relative `changed_files`, or immutable
 propagated to `scripts/test_suite.py --changed-path`. A Git archive of the
 selected commit is materialized and only explicit frozen path bytes are
 overlaid, so every source build and test runs outside the shared checkout.
+Installed Node dependencies are copied; signed runtime/web registries are
+materialized as real hardlinked trees visible inside the sidecar sandbox. A web
+candidate published after snapshot creation is added to that isolated registry
+and signature-verified before E2E. Python and the Playwright browser cache are
+explicit verified operational paths from the publishing repository, and the
+default build cache is resolved against that repository before snapshot entry,
+so it remains reusable after cleanup.
 Classification compares `patches/series.json` entries against the frozen base:
 web component updates stay on the overlay path, while runtime or malformed
 series changes fail upward to OCI. Classification avoids

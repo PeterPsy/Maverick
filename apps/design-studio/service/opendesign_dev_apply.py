@@ -20,6 +20,7 @@ from opendesign_dev_changeset import (
     PATCH_SERIES_PATH,
     assert_changeset_unchanged as _assert_changeset_unchanged,
     changed_patch_series_components as _changed_patch_series_components,
+    materialize_immutable_tree,
     materialize_changeset,
     normalize_path as _normalize_path,
     resolve_changeset,
@@ -172,6 +173,7 @@ def apply_incremental(payload: dict[str, Any], arguments: dict[str, Any]) -> dic
     }
     started = time.monotonic()
     dry_run = bool(arguments.get("dry_run", False))
+    persistent_cache_root = _cache_root(arguments, repo_root)
     try:
         with materialize_changeset(repo_root, changeset) as execution_root:
             for action in classification.actions:
@@ -184,6 +186,7 @@ def apply_incremental(payload: dict[str, Any], arguments: dict[str, Any]) -> dic
                         arguments,
                         repo_root=execution_root,
                         publish_repo_root=repo_root,
+                        cache_root=persistent_cache_root,
                         release=profile == "release",
                     )
                     report["digests"].update(result.pop("digests"))
@@ -199,6 +202,7 @@ def apply_incremental(payload: dict[str, Any], arguments: dict[str, Any]) -> dic
                         publish_repo_root=repo_root,
                         changed_files=changeset.changed_files,
                         web_overlay_sha256=report["digests"].get("web_overlay_sha256"),
+                        cache_root=persistent_cache_root,
                     )
                 report["actions"].append(
                     {
@@ -329,7 +333,9 @@ def _run_gate(
     publish_repo_root: Path | None = None,
     changed_files: tuple[str, ...],
     web_overlay_sha256: str | None = None,
+    cache_root: Path | None = None,
 ) -> dict[str, Any]:
+    environment: dict[str, str] | None = None
     if action == "design_studio_frontend_tests":
         command = ["npm", "test"]
         cwd = repo_root / "apps/design-studio"
@@ -355,6 +361,11 @@ def _run_gate(
         if web_overlay_sha256:
             command.extend(("--web-overlay-sha256", web_overlay_sha256))
         cwd = repo_root / "apps/design-studio"
+        environment = _e2e_environment(
+            arguments,
+            execution_repo_root=repo_root,
+            publish_repo_root=publish_repo_root or repo_root,
+        )
     elif action == "opendesign_oci_pipeline":
         source = _required_path(arguments, "source_repository")
         signing_key = _required_path(arguments, "runtime_signing_key")
@@ -368,14 +379,21 @@ def _run_gate(
             "--output-directory",
             str((publish_repo_root or repo_root) / "apps/design-studio/service/artifacts"),
             "--work-parent",
-            str(_cache_root(arguments, repo_root) / "work"),
+            str((cache_root or _cache_root(arguments, publish_repo_root or repo_root)) / "work"),
             "--pnpm-store",
-            str(_cache_root(arguments, repo_root) / "pnpm-store"),
+            str((cache_root or _cache_root(arguments, publish_repo_root or repo_root)) / "pnpm-store"),
         ]
         cwd = repo_root
     else:
         raise RuntimeError(f"unsupported dev apply gate: {action}")
-    completed = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False)
+    completed = subprocess.run(
+        command,
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+        check=False,
+        **({"env": environment} if environment is not None else {}),
+    )
     if completed.returncode != 0:
         raise RuntimeError(f"gate {action} exited with status {completed.returncode}")
     result: dict[str, Any] = {"status": "passed", "exit_code": completed.returncode}
@@ -393,13 +411,14 @@ def _build_and_activate_overlay(
     *,
     repo_root: Path,
     publish_repo_root: Path | None = None,
+    cache_root: Path | None = None,
     release: bool,
 ) -> dict[str, Any]:
     service_root = repo_root / "apps/design-studio/service"
     publish_service_root = (publish_repo_root or repo_root) / "apps/design-studio/service"
     source_repository = _required_path(arguments, "source_repository")
     signing_key = _required_path(arguments, "web_signing_key")
-    cache_root = _cache_root(arguments, repo_root)
+    cache_root = cache_root or _cache_root(arguments, publish_repo_root or repo_root)
     work_parent = _work_parent(arguments)
     for child in (cache_root, work_parent):
         child.mkdir(parents=True, exist_ok=True)
@@ -419,6 +438,15 @@ def _build_and_activate_overlay(
         work_parent=work_parent,
         runtime_session_id=str(payload.get("runtime_session_id") or "") or None,
     )
+    if publish_service_root != service_root:
+        execution_overlay = service_root / "vendor/open-design-web" / result.overlay.web_overlay_sha256
+        if not execution_overlay.exists() and not execution_overlay.is_symlink():
+            materialize_immutable_tree(result.overlay.path, execution_overlay)
+        discover_verified_overlays(
+            execution_overlay.parent,
+            trust_contract=service_root / "opendesign_web_trust.json",
+            required_digests={result.overlay.web_overlay_sha256},
+        )
     build_duration = round(time.monotonic() - build_started, 6)
     generation_root = Path(str(payload.get("data_root") or "")) / "opendesign"
     bundles = discover_verified_bundles(publish_service_root / "vendor/open-design")
@@ -607,6 +635,45 @@ def _repo_root(arguments: dict[str, Any]) -> Path:
 def _cache_root(arguments: dict[str, Any], repo_root: Path) -> Path:
     raw = arguments.get("cache_root") or os.environ.get("MAVERICK_OPENDESIGN_WEB_CACHE")
     return Path(str(raw)).resolve() if raw else repo_root / "tmp/opendesign-web-cache"
+
+
+def _e2e_environment(
+    arguments: dict[str, Any],
+    *,
+    execution_repo_root: Path,
+    publish_repo_root: Path,
+) -> dict[str, str]:
+    playwright_package = (
+        execution_repo_root / "apps/design-studio/node_modules/playwright/package.json"
+    )
+    if not playwright_package.is_file():
+        raise RuntimeError("isolated E2E checkout is missing the verified Playwright package")
+
+    raw_python = (
+        arguments.get("e2e_python")
+        or os.environ.get("MAVERICK_OPENDESIGN_E2E_PYTHON")
+        or publish_repo_root / ".venv/bin/python"
+    )
+    python = Path(str(raw_python)).absolute()
+    if not python.is_file() or not os.access(python, os.X_OK):
+        raise RuntimeError("OpenDesign E2E Python runtime is unavailable")
+
+    default_browsers = Path.home() / ".cache/ms-playwright"
+    raw_browsers = (
+        arguments.get("playwright_browsers_path")
+        or os.environ.get("MAVERICK_PLAYWRIGHT_BROWSERS_PATH")
+        or os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+        or default_browsers
+    )
+    browsers = Path(str(raw_browsers)).absolute()
+    if not browsers.is_dir():
+        raise RuntimeError("OpenDesign E2E Playwright browser cache is unavailable")
+
+    environment = dict(os.environ)
+    environment["MAVERICK_OPENDESIGN_E2E_PYTHON"] = str(python)
+    environment["MAVERICK_PLAYWRIGHT_BROWSERS_PATH"] = str(browsers)
+    environment["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers)
+    return environment
 
 
 def _work_parent(arguments: dict[str, Any]) -> Path:

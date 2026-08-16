@@ -1,4 +1,4 @@
-"""Finalize app-owned OpenDesign activation recovery after a backend restart."""
+"""Report pending app-owned OpenDesign activation recovery after a backend restart."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1] / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_materialization import discover_verified_bundles  # noqa: E402
-from opendesign_web_activation import finalize_web_activation_after_host_restart  # noqa: E402
+from opendesign_web_activation import web_activation_recovery_state  # noqa: E402
 from opendesign_web_overlay import discover_verified_overlays  # noqa: E402
 
 
@@ -28,16 +28,17 @@ def main() -> None:
         SERVICE_ROOT / "vendor/open-design-web",
         trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
     )
-    outcome = finalize_web_activation_after_host_restart(
+    state = web_activation_recovery_state(
         generation_root,
         verified_artifacts=artifacts,
         verified_overlays=overlays,
     )
+    pending = state not in {None, "ready_committed", "rolled_back"}
     emit_json(
         {
             "ok": True,
-            "web_activation_recovery": "not_required" if outcome is None else "completed",
-            "rolled_back": bool(outcome and outcome.rolled_back),
+            "web_activation_recovery": "pending" if pending else "not_required",
+            "web_activation_state": state or "none",
         }
     )
 

@@ -117,10 +117,9 @@ def _handle_generic_notification(runtime: _CodexAppServerRuntime, *, method: str
         return
     provider_type = method.replace("/", ".")
     event = parse_provider_json_event(json.dumps({"type": provider_type, "item": params}))
-    if event is not None:
-        _emit(runtime, event)
+    if event is None:
         return
-    _emit(runtime, RuntimeExecutionEvent(event_type="runtime.step.updated", payload={"label": provider_type.replace(".", " "), "provider_event_type": method, "raw": params}))
+    _emit(runtime, event)
 
 
 

@@ -23,6 +23,15 @@ class RuntimeEventJsonCollection(RuntimeEventArchivePaginationMixin, RuntimeSess
         self.history_directory_name = "events-history"
         self.legacy_history_filename = LEGACY_HISTORY_FILENAME
 
+    def append_bounded_upsert(self, query: dict[str, Any], update: dict[str, Any], *, max_documents: int) -> None:
+        """Append to the hot tail and compact once per bounded window."""
+        super().append_bounded_upsert(
+            query,
+            update,
+            max_documents=max_documents,
+            compaction_slack_documents=max_documents,
+        )
+
     def append_history_upsert(self, query: dict[str, Any], update: dict[str, Any]) -> None:
         """Append one event to the chunked history archive."""
         payload = dict(update.get("$set", {}))

@@ -1690,7 +1690,8 @@ class RuntimeDocumentStore:
         return projected
 
     def list_events(self, session_id: str) -> list[RuntimeEventRecord]:
-        return [RuntimeEventRecord(**document) for document in self.collections.events.find(self._session_query(session_id))]
+        documents = self.collections.events.find(self._session_query(session_id))
+        return [RuntimeEventRecord(**document) for document in documents[-MAX_RUNTIME_EVENTS_PER_SESSION:]]
 
     def list_recent_events(self, session_id: str, *, limit: int) -> list[RuntimeEventRecord]:
         find_recent = getattr(self.collections.events, "find_recent", None)

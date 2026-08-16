@@ -132,10 +132,19 @@ class RuntimeSessionJsonCollection:
                 self._partition_counts[path] = len(documents)
                 return deepcopy(payload), True
 
-    def append_bounded_upsert(self, query: dict[str, Any], update: dict[str, Any], *, max_documents: int) -> None:
+    def append_bounded_upsert(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        *,
+        max_documents: int,
+        compaction_slack_documents: int = 0,
+    ) -> None:
         """Append an upserted record while keeping a session partition bounded."""
         if max_documents < 1:
             raise ValueError("max_documents must be positive.")
+        if compaction_slack_documents < 0:
+            raise ValueError("compaction_slack_documents cannot be negative.")
         payload = deepcopy(update.get("$set", {}))
         workspace_id = str(payload.get("workspace_id") or query.get("workspace_id") or "").strip()
         session_id = str(payload.get("session_id") or query.get("session_id") or "").strip()
@@ -149,7 +158,7 @@ class RuntimeSessionJsonCollection:
                     count = self._partition_counts.get(path)
                     if count is None:
                         count = self._count_documents(path)
-                    if count < max_documents:
+                    if count < max_documents + compaction_slack_documents:
                         self._append_document(path, document)
                         self._partition_counts[path] = count + 1
                         return

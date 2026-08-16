@@ -116,7 +116,11 @@ web activation. A web-only activation changes only
 `active.web_overlay_sha256` and
 `previous_web`: it does not clone data, run migrations, change the runtime
 digest, or touch the migration journal. Restart/readiness failure restores the
-previous compatible overlay automatically.
+previous compatible overlay automatically. A later selected gate failure also
+restores that overlay before `dev apply` reports failure. Every new cutover
+first completes any pending activation recovery; backend restart dispatches the
+app-owned `backend_recovery` hook so a rollback already committed before the
+restart reaches its terminal journal state.
 
 The upstream tag and official OCI image were inventoried before implementation.
 The source tree includes web,
@@ -381,11 +385,18 @@ maverick app design-studio cli list --json
 The app-owned `dev apply` command requires exactly one isolated changeset:
 explicit repository-relative `changed_files`, or immutable `base_sha` plus the
 current `head_sha`. It snapshots and propagates that set to every changed-suite
-gate, so unrelated shared-worktree changes cannot enter the run. It emits
+gate, then materializes a committed checkout with only those declared path
+bytes overlaid. Builds and tests run from that checkout, so unrelated
+shared-worktree changes cannot enter the run. Signed immutable runtime/web
+registries are linked by digest, while installed Node dependencies are copied
+into the isolated checkout before execution. It emits
 bounded JSON containing actions, durations, digests, cache state, readiness,
 and rollback. Frontend, backend, overlay, runtime, hosting, docs, and
 release-only changes select only their owned gates; documentation does not
 trigger OCI, backend is not run twice, and `changed_suite` is not unconditional.
+Changes to `patches/series.json` are compared semantically with the frozen base:
+`web-build` and `web-react` entry updates remain web-only, while `runtime` or
+unknown series changes select the OCI pipeline.
 
 `dev benchmark` performs the automatic real React-patch-to-live proof. It
 changes patch bytes in an isolated copy, forces new source/build and overlay
@@ -448,11 +459,17 @@ export and manifest read-back, core/sidecar restart with explicit `/api/ready`
 checks, deep link, workspace A/B isolation, exact route denial, browser
 credential non-disclosure. Real-daemon migration/rollback on marked fixture
 copies is a separate gate, not repeated inside UI cases. The final aggregator
-requires all thirteen UI results plus the independent rollback result and emits
-the complete fourteen-scenario evidence. The canonical redaction-safe aggregate
-is `service/opendesign_release_acceptance_0_16_1.json`. Its committed output is
-redaction-safe; each UI scenario carries the full app/runtime correlation join,
-while the separate rollback scenario carries only bounded migration proof.
+requires the exact unique set of thirteen canonical UI ids, explicit restart
+and workspace-isolation scenarios, every source/forward preservation proof, and
+the independent rollback result. Before emitting `passed`, it verifies the
+selected signed overlay and matches its upstream commit, lockfile digest,
+runtime compatibility, and both web patch digests to the current bundle,
+supply-chain inventory, and `patches/series.json`. The schema-3
+`service/opendesign_release_acceptance_0_16_1.json` remains redaction-safe
+historical evidence but predates this series binding; a new real release run
+must replace it with schema 4 before it is current release evidence. Each UI
+scenario carries the full app/runtime correlation join, while the separate
+rollback scenario carries only bounded migration proof.
 The 24 global criteria and stable evidence references are tracked in
 `service/opendesign_production_acceptance_0_16_1.json`.
 

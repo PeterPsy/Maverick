@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -17,17 +18,25 @@ SPEC.loader.exec_module(test_suite)
 
 class ChangedSuiteTests(unittest.TestCase):
     def test_explicit_paths_are_normalized_without_reading_the_working_tree(self) -> None:
-        paths = test_suite.normalize_changed_paths(
-            ["./apps/design-studio/backend/service.py", "core/providers/runtime.py"]
-        )
+        with tempfile.TemporaryDirectory(prefix="test-suite-app-") as temporary:
+            synthetic_root = Path(temporary)
+            (synthetic_root / "apps/sample-app/tests").mkdir(parents=True)
+            paths = test_suite.normalize_changed_paths(
+                ["./apps/sample-app/backend/service.py", "core/providers/runtime.py"]
+            )
 
-        with patch.object(test_suite, "changed_paths", side_effect=AssertionError("working tree consulted")):
-            with patch.object(test_suite, "run_app_test_dirs", return_value=0) as app_tests:
-                with patch.object(test_suite, "run_discover_dirs", return_value=0) as root_tests:
-                    status = test_suite.run_changed(level="fast", jobs=1, changed=paths)
+            with patch.object(test_suite, "REPO_ROOT", synthetic_root):
+                with patch.object(
+                    test_suite,
+                    "changed_paths",
+                    side_effect=AssertionError("working tree consulted"),
+                ):
+                    with patch.object(test_suite, "run_app_test_dirs", return_value=0) as app_tests:
+                        with patch.object(test_suite, "run_discover_dirs", return_value=0) as root_tests:
+                            status = test_suite.run_changed(level="fast", jobs=1, changed=paths)
 
         self.assertEqual(status, 0)
-        app_tests.assert_called_once_with(["apps/design-studio/tests"], level="fast", jobs=1)
+        app_tests.assert_called_once_with(["apps/sample-app/tests"], level="fast", jobs=1)
         root_tests.assert_called_once_with(
             ["tests/e2e/provider_process", "tests/unit/providers"],
             level="fast",

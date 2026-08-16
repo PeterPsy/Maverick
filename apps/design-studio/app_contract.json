@@ -180,6 +180,7 @@
       "install": "hooks/install.py",
       "migrate": "hooks/migrate.py",
       "health_check": "hooks/health_check.py",
+      "backend_recovery": "hooks/backend_recovery.py",
       "runtime_event": "backend/app_backend.py"
     },
     "backend": "backend/app_backend.py",

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -13,12 +15,15 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_dev_apply import (  # noqa: E402
     DevApplyError,
+    _changed_patch_series_components,
     _restart_sidecars,
     _run_gate,
     apply_incremental,
     classify_diff,
+    materialize_changeset,
     resolve_changeset,
 )
+from opendesign_dev_changeset import ChangeSet  # noqa: E402
 
 
 class DevApplyClassifierTests(unittest.TestCase):
@@ -50,6 +55,7 @@ class DevApplyClassifierTests(unittest.TestCase):
             [
                 "apps/design-studio/service/patches/0002-maverick-web-build.patch",
                 "apps/design-studio/service/patches/0003-maverick-web-react.patch",
+                "apps/design-studio/service/patches/series.json",
             ]
         )
         self.assertIn("opendesign_web_overlay", result.actions)
@@ -61,6 +67,59 @@ class DevApplyClassifierTests(unittest.TestCase):
         )
         self.assertIn("opendesign_oci_pipeline", result.actions)
         self.assertNotIn("opendesign_web_overlay", result.actions)
+
+    def test_series_semantics_distinguish_web_digest_updates_from_runtime_updates(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="od-series-classification-") as temporary:
+            root = Path(temporary)
+            series_path = root / "apps/design-studio/service/patches/series.json"
+            series_path.parent.mkdir(parents=True)
+            (root / "AGENTS.md").write_text("guide\n", encoding="utf-8")
+            baseline = {
+                "schema_version": "2",
+                "patches": [
+                    {"component": "runtime", "sha256": "1" * 64},
+                    {"component": "web-build", "sha256": "2" * 64},
+                    {"component": "web-react", "sha256": "3" * 64},
+                ],
+            }
+            series_path.write_text(json.dumps(baseline), encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "base"], cwd=root, check=True)
+
+            web_changed = json.loads(json.dumps(baseline))
+            web_changed["patches"][1]["sha256"] = "4" * 64
+            series_path.write_text(json.dumps(web_changed), encoding="utf-8")
+            changeset = resolve_changeset(
+                {"changed_files": ["apps/design-studio/service/patches/series.json"]},
+                repo_root=root,
+            )
+            web_components = _changed_patch_series_components(changeset, repo_root=root)
+            web_result = classify_diff(
+                changeset.changed_files,
+                series_components=web_components,
+            )
+            self.assertEqual(web_components, ("web-build",))
+            self.assertIn("opendesign_web_overlay", web_result.actions)
+            self.assertNotIn("opendesign_oci_pipeline", web_result.actions)
+
+            runtime_changed = json.loads(json.dumps(baseline))
+            runtime_changed["patches"][0]["sha256"] = "5" * 64
+            series_path.write_text(json.dumps(runtime_changed), encoding="utf-8")
+            changeset = resolve_changeset(
+                {"changed_files": ["apps/design-studio/service/patches/series.json"]},
+                repo_root=root,
+            )
+            runtime_components = _changed_patch_series_components(changeset, repo_root=root)
+            runtime_result = classify_diff(
+                changeset.changed_files,
+                series_components=runtime_components,
+            )
+            self.assertEqual(runtime_components, ("runtime",))
+            self.assertIn("opendesign_oci_pipeline", runtime_result.actions)
+            self.assertNotIn("opendesign_web_overlay", runtime_result.actions)
 
     def test_unknown_file_elevates_to_complete_conservative_profile(self) -> None:
         result = classify_diff(["experimental/opaque-input.xyz"])
@@ -162,6 +221,49 @@ class DevApplyClassifierTests(unittest.TestCase):
             with self.assertRaisesRegex(DevApplyError, "exactly one changeset"):
                 apply_incremental({}, {"dry_run": True})
 
+    def test_post_activation_gate_failure_automatically_restores_previous_overlay(self) -> None:
+        changeset = ChangeSet(
+            source="explicit_paths",
+            changed_files=("apps/design-studio/service/patches/0003-maverick-web-react.patch",),
+            base_sha=None,
+            head_sha=None,
+            path_sha256={
+                "apps/design-studio/service/patches/0003-maverick-web-react.patch": "1" * 64
+            },
+        )
+        overlay_result = {
+            "status": "passed",
+            "derivations": 1,
+            "reproducible": False,
+            "digests": {"runtime_artifact_sha256": "a" * 64, "web_overlay_sha256": "b" * 64},
+            "cache": {},
+            "readiness": {"ready": True},
+            "rollback": {"performed": False},
+            "change_to_live": {
+                "previous_web_overlay_sha256": "c" * 64,
+                "candidate_web_overlay_sha256": "b" * 64,
+                "overlay_changed": True,
+                "activated": True,
+            },
+        }
+        with (
+            patch("opendesign_dev_apply._repo_root", return_value=Path("/repo")),
+            patch("opendesign_dev_apply.resolve_changeset", return_value=changeset),
+            patch("opendesign_dev_apply._resolve_commit", return_value="d" * 40),
+            patch("opendesign_dev_apply.materialize_changeset", return_value=nullcontext(Path("/snapshot"))),
+            patch("opendesign_dev_apply._build_and_activate_overlay", return_value=overlay_result),
+            patch("opendesign_dev_apply._run_gate", side_effect=RuntimeError("e2e regression")),
+            patch(
+                "opendesign_dev_apply._rollback_after_post_activation_failure",
+                return_value={"performed": True, "status": "passed"},
+            ) as rollback,
+        ):
+            with self.assertRaises(DevApplyError) as raised:
+                apply_incremental({}, {"changed_files": list(changeset.changed_files)})
+
+        rollback.assert_called_once()
+        self.assertTrue(raised.exception.report["rollback"]["performed"])
+
     def test_git_range_sees_committed_work_and_ignores_concurrent_dirty_paths(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-dev-changeset-") as temporary:
             root = Path(temporary)
@@ -217,6 +319,41 @@ class DevApplyClassifierTests(unittest.TestCase):
 
         self.assertEqual(changeset.changed_files, ("apps/design-studio/removed.md",))
         self.assertIsNone(changeset.path_sha256["apps/design-studio/removed.md"])
+
+    def test_materialized_changeset_excludes_undeclared_shared_worktree_changes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="od-materialized-checkout-") as temporary:
+            root = Path(temporary)
+            target = root / "apps/design-studio/backend/service.py"
+            unrelated = root / "core/providers/runtime.py"
+            target.parent.mkdir(parents=True)
+            unrelated.parent.mkdir(parents=True)
+            (root / "AGENTS.md").write_text("guide\n", encoding="utf-8")
+            target.write_text("value = 'before'\n", encoding="utf-8")
+            unrelated.write_text("value = 'committed'\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "base"], cwd=root, check=True)
+            target.write_text("value = 'declared'\n", encoding="utf-8")
+            unrelated.write_text("value = 'concurrent'\n", encoding="utf-8")
+            untracked = root / "core/providers/concurrent.py"
+            untracked.write_text("value = True\n", encoding="utf-8")
+            changeset = resolve_changeset(
+                {"changed_files": ["apps/design-studio/backend/service.py"]},
+                repo_root=root,
+            )
+
+            with materialize_changeset(root, changeset) as snapshot:
+                self.assertEqual(
+                    (snapshot / "apps/design-studio/backend/service.py").read_text(encoding="utf-8"),
+                    "value = 'declared'\n",
+                )
+                self.assertEqual(
+                    (snapshot / "core/providers/runtime.py").read_text(encoding="utf-8"),
+                    "value = 'committed'\n",
+                )
+                self.assertFalse((snapshot / "core/providers/concurrent.py").exists())
 
 
 if __name__ == "__main__":

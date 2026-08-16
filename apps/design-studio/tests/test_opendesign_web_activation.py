@@ -238,6 +238,89 @@ class WebActivationTests(unittest.TestCase):
         )
         self.assertEqual(terminal.state, "rolled_back")
 
+    def test_new_activation_completes_pending_rollback_recovery_before_cutover(self) -> None:
+        failed_restarts = iter(
+            (
+                {"ready": False, "service_count": 1},
+                {"ready": False, "service_count": 1},
+            )
+        )
+        with self.assertRaises(self.activation.WebActivationError):
+            self.activation.activate_web_overlay(
+                self.root,
+                target_web_overlay_sha256=WEB_B,
+                web_activation_id="web_old_pending_001",
+                verified_artifacts=VERIFIED_ARTIFACTS,
+                verified_overlays=VERIFIED_OVERLAYS,
+                restart_sidecars=lambda: next(failed_restarts),
+            )
+
+        restart_calls = 0
+
+        def ready_restart():
+            nonlocal restart_calls
+            restart_calls += 1
+            return {"ready": True, "service_count": 1}
+
+        outcome = self.activation.activate_web_overlay(
+            self.root,
+            target_web_overlay_sha256=WEB_B,
+            web_activation_id="web_new_cutover_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+            restart_sidecars=ready_restart,
+        )
+
+        self.assertEqual(restart_calls, 2)
+        self.assertTrue(outcome.activated)
+        old_journal = self.control.load_web_activation_journal(
+            self.root,
+            "web_old_pending_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+        self.assertEqual(old_journal.state, "rolled_back")
+        control = self.control.load_generation_control(
+            self.root,
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+        self.assertEqual(control.web_activation_id, "web_new_cutover_001")
+
+    def test_backend_restart_hook_finalizes_pending_rollback_without_new_cutover(self) -> None:
+        failed_restarts = iter(
+            (
+                {"ready": False, "service_count": 1},
+                {"ready": False, "service_count": 1},
+            )
+        )
+        with self.assertRaises(self.activation.WebActivationError):
+            self.activation.activate_web_overlay(
+                self.root,
+                target_web_overlay_sha256=WEB_B,
+                web_activation_id="web_host_restart_pending_001",
+                verified_artifacts=VERIFIED_ARTIFACTS,
+                verified_overlays=VERIFIED_OVERLAYS,
+                restart_sidecars=lambda: next(failed_restarts),
+            )
+
+        outcome = self.activation.finalize_web_activation_after_host_restart(
+            self.root,
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+
+        self.assertIsNotNone(outcome)
+        self.assertTrue(outcome.rolled_back)
+        journal = self.control.load_web_activation_journal(
+            self.root,
+            "web_host_restart_pending_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+        self.assertEqual(journal.state, "rolled_back")
+        self.assertEqual(journal.readiness["rollback"]["restart_reason"], "backend_restart")
+
 
 if __name__ == "__main__":
     unittest.main()

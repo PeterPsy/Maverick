@@ -188,6 +188,18 @@ class OpenDesignWebOverlayTests(unittest.TestCase):
         self.assertEqual(parallel_build.next, react_changed.next)
         self.assertNotEqual(parallel_build.source_build, react_changed.source_build)
 
+        manifest["upstream"]["commit"] = "c" * 40
+        upstream_changed = compute_web_cache_keys(
+            source,
+            manifest=manifest,
+            service_root=service,
+            node_version="v24.11.0",
+            pnpm_version="10.33.2",
+        )
+        self.assertEqual(upstream_changed.dependency, parallel_build.dependency)
+        self.assertNotEqual(upstream_changed.source_build, parallel_build.source_build)
+        self.assertNotEqual(upstream_changed.next, parallel_build.next)
+
         (source / "pnpm-lock.yaml").write_text("lockfileVersion: '9.1'\n", encoding="utf-8")
         lock_changed = compute_web_cache_keys(
             source,

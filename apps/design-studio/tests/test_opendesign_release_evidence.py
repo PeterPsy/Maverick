@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 import json
 import shutil
@@ -54,8 +55,10 @@ class ReleaseEvidenceTests(unittest.TestCase):
         }
         benchmark = self._benchmark()
 
-        result = aggregate(ui, migration, benchmark)
+        provenance = self._provenance()
+        result = aggregate(ui, migration, benchmark, release_provenance=provenance)
 
+        self.assertEqual(result["schema_version"], "4")
         self.assertEqual(result["scenario_count"], 14)
         self.assertTrue(result["rollback_gate_separate"])
         self.assertEqual(result["scenarios"][-1]["id"], "upgrade_rollback")
@@ -65,8 +68,120 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.assertTrue(result["change_to_live_benchmark"]["browser_remount_event_emitted"])
 
         ui["scenarios"][4]["status"] = "failed"
-        with self.assertRaisesRegex(ValueError, "13 passed scenarios"):
-            aggregate(ui, migration, benchmark)
+        with self.assertRaisesRegex(ValueError, "canonical passed scenarios"):
+            aggregate(ui, migration, benchmark, release_provenance=provenance)
+
+    def test_aggregator_rejects_arbitrary_duplicate_scenarios_and_false_rollback_proofs(self) -> None:
+        scenarios = [
+            {"id": identifier, "status": "passed"}
+            for identifier in (
+                "login_open",
+                "create_project_ui",
+                "storage_import",
+                "runtime_start",
+                "incremental_sse",
+                "generated_preview",
+                "cancel_long_run",
+                "storage_export",
+                "restart_reload",
+                "deep_link",
+                "workspace_isolation",
+                "forbidden_routes",
+                "secret_boundary",
+            )
+        ]
+        ui = {
+            "profile": "release",
+            "status": "passed",
+            "opendesign": {
+                "runtime_artifact_sha256": "a" * 64,
+                "web_overlay_sha256": "b" * 64,
+            },
+            "scenarios": scenarios,
+        }
+        migration = {
+            "ok": True,
+            "workspace_data_migrated": False,
+            "source_tree_sha256_before": "c" * 64,
+            "source_tree_sha256_after": "c" * 64,
+            "real_rollback": {"forward_generation_preserved": True},
+        }
+        arbitrary = copy.deepcopy(ui)
+        arbitrary["scenarios"] = [
+            {"id": f"arbitrary_{index}", "status": "passed"} for index in range(13)
+        ]
+        with self.assertRaisesRegex(ValueError, "canonical passed scenarios"):
+            aggregate(
+                arbitrary,
+                migration,
+                self._benchmark(),
+                release_provenance=self._provenance(),
+            )
+
+        duplicated = copy.deepcopy(ui)
+        duplicated["scenarios"][-1]["id"] = "workspace_isolation"
+        with self.assertRaisesRegex(ValueError, "canonical passed scenarios"):
+            aggregate(
+                duplicated,
+                migration,
+                self._benchmark(),
+                release_provenance=self._provenance(),
+            )
+
+        for field, target in (
+            ("source_generation_preserved", migration),
+            ("forward_generation_preserved", migration),
+        ):
+            with self.subTest(field=field):
+                rejected = copy.deepcopy(target)
+                rejected[field] = False
+                with self.assertRaisesRegex(ValueError, "preservation proofs"):
+                    aggregate(
+                        ui,
+                        rejected,
+                        self._benchmark(),
+                        release_provenance=self._provenance(),
+                    )
+
+    def test_aggregator_rejects_signed_overlay_inputs_from_an_older_patch_series(self) -> None:
+        ui = {
+            "profile": "release",
+            "status": "passed",
+            "opendesign": {
+                "runtime_artifact_sha256": "a" * 64,
+                "web_overlay_sha256": "b" * 64,
+            },
+            "scenarios": [
+                {"id": identifier, "status": "passed"}
+                for identifier in (
+                    "login_open",
+                    "create_project_ui",
+                    "storage_import",
+                    "runtime_start",
+                    "incremental_sse",
+                    "generated_preview",
+                    "cancel_long_run",
+                    "storage_export",
+                    "restart_reload",
+                    "deep_link",
+                    "workspace_isolation",
+                    "forbidden_routes",
+                    "secret_boundary",
+                )
+            ],
+        }
+        migration = {
+            "ok": True,
+            "workspace_data_migrated": False,
+            "source_tree_sha256_before": "c" * 64,
+            "source_tree_sha256_after": "c" * 64,
+            "real_rollback": {"forward_generation_preserved": True},
+        }
+        stale = self._provenance()
+        stale["web_patch_sha256"]["web-build"] = "9" * 64
+
+        with self.assertRaisesRegex(ValueError, "current patch series"):
+            aggregate(ui, migration, self._benchmark(), release_provenance=stale)
 
     def test_committed_change_to_live_benchmark_proves_a_real_uncached_patch_build(self) -> None:
         evidence = json.loads(
@@ -91,7 +206,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.assertEqual(evidence["selection"]["restored"], evidence["selection"]["before"])
         self.assertTrue(evidence["activation"]["browser_remount_event_emitted"])
 
-    def test_committed_release_aggregate_contains_all_passed_scenarios_and_both_digests(self) -> None:
+    def test_committed_historical_release_aggregate_remains_redaction_safe(self) -> None:
         evidence = json.loads(
             (SERVICE_ROOT / "opendesign_release_acceptance_0_16_1.json").read_text(
                 encoding="utf-8"
@@ -192,6 +307,22 @@ class ReleaseEvidenceTests(unittest.TestCase):
             },
             "restoration": {"ready": True, "browser_remount_event_emitted": True},
             "target_ceiling_seconds": 180.0,
+        }
+
+    @staticmethod
+    def _provenance() -> dict:
+        return {
+            "signed_overlay_manifest": True,
+            "web_overlay_sha256": "b" * 64,
+            "runtime_artifact_sha256": "a" * 64,
+            "runtime_compatibility": ["a" * 64],
+            "expected_runtime_artifact_sha256": "a" * 64,
+            "upstream_commit": "1" * 40,
+            "expected_upstream_commit": "1" * 40,
+            "lockfile_sha256": "2" * 64,
+            "expected_lockfile_sha256": "2" * 64,
+            "web_patch_sha256": {"web-build": "3" * 64, "web-react": "4" * 64},
+            "expected_web_patch_sha256": {"web-build": "3" * 64, "web-react": "4" * 64},
         }
 
 

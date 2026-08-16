@@ -53,12 +53,29 @@ def activate_web_overlay(
     now: Callable[[], str] | None = None,
 ) -> WebActivationOutcome:
     timestamp = now or _utc_now
+    recover_web_activation(
+        root,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+        restart_sidecars=restart_sidecars,
+        now=timestamp,
+    )
     with _web_activation_lock(root):
         control = load_generation_control(
             root,
             verified_artifacts=verified_artifacts,
             verified_overlays=verified_overlays,
         )
+        if control.web_activation_id is not None:
+            current_journal = load_web_activation_journal(
+                root,
+                control.web_activation_id,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
+            current_state = reconcile_web_activation(control, current_journal)
+            if current_state not in {"ready_committed", "rolled_back"}:
+                raise WebActivationError("previous web activation recovery is incomplete")
         source = control.active
         target = LaunchSelection(
             runtime_artifact_sha256=source.runtime_artifact_sha256,
@@ -231,6 +248,63 @@ def recover_web_activation(
             )
             return WebActivationOutcome(control, journal.web_activation_id, False, True, readiness)
         return None
+
+
+def finalize_web_activation_after_host_restart(
+    root: Path,
+    *,
+    verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
+    now: Callable[[], str] | None = None,
+) -> WebActivationOutcome | None:
+    """Finalize a rollback whose process restart was supplied by backend restart recovery."""
+    timestamp = now or _utc_now
+    with _web_activation_lock(root):
+        control = load_generation_control(
+            root,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        if control.web_activation_id is None:
+            return None
+        journal = load_web_activation_journal(
+            root,
+            control.web_activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        state = reconcile_web_activation(control, journal)
+        if state in {"ready_committed", "rolled_back"}:
+            return WebActivationOutcome(
+                control,
+                journal.web_activation_id,
+                state == "ready_committed",
+                state == "rolled_back",
+                journal.readiness,
+            )
+        if state not in {"rollback_committed_journal_pending", "rollback_restart_pending"}:
+            raise WebActivationError("host restart cannot certify candidate activation readiness")
+        readiness = {
+            "rollback": {
+                "ready": True,
+                "service_count": 0,
+                "restart_reason": "backend_restart",
+            }
+        }
+        rolled_back = _journal_state(
+            journal,
+            "rolled_back",
+            readiness=readiness,
+            error=journal.error or "candidate_restart_failed:host_restart_recovery",
+            updated_at=timestamp(),
+        )
+        write_web_activation_journal(
+            root,
+            rolled_back,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        return WebActivationOutcome(control, journal.web_activation_id, False, True, readiness)
 
 
 def _rollback_after_failed_restart(

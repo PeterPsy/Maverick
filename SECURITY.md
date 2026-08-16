@@ -112,13 +112,16 @@ has no direct fallback. Reference access is read-only and browser authority
 does not imply entrypoint authority. This closes that transport path; app
 backend and lifecycle-hook sandboxing remain open production blockers.
 
-Design Studio's OpenDesign 0.16.1 integration has a narrower completed product
-gate. Its committed release evidence runs the official materialized OCI daemon,
+Design Studio's OpenDesign 0.16.1 integration has a narrower product gate. A
+current schema-4 release record must run the official materialized OCI daemon,
 the independently signed static web overlay, real Chromium, isolated sidecar
 origins, the Unix broker, Storage, scoped restart, workspace A/B isolation, and
 exact route denial. Marked-fixture migration/rollback is an independent gate;
-the aggregate requires both it and all UI scenarios. The evidence is checked
-for complete correlation and absence of prompt, cookie,
+the aggregate requires the exact canonical UI scenario set, every rollback
+preservation proof, and signed overlay provenance matching the current upstream,
+lockfile, runtime compatibility, and web patch series. The committed schema-3
+record predates that series binding and is historical rather than current release
+certification. Evidence is checked for complete correlation and absence of prompt, cookie,
 bearer, provider payload, environment, host path, and secret values. This does
 not close the launch blockers above or authorize production data, credentials,
 internet exposure, or migration of an existing workspace.

@@ -166,6 +166,10 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertTrue(parsed.contract.permissions.runtime.create_sessions)
         self.assertTrue(parsed.contract.permissions.runtime.cleanup_sessions)
         self.assertEqual(parsed.contract.entrypoints.hooks["runtime_event"], "backend/app_backend.py")
+        self.assertEqual(
+            parsed.contract.entrypoints.hooks["backend_recovery"],
+            "hooks/backend_recovery.py",
+        )
         sidecar = parsed.contract.services.http_sidecars[0]
         self.assertEqual(sidecar.service_id, "opendesign")
         self.assertIsNone(sidecar.package_manager)

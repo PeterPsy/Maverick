@@ -250,17 +250,23 @@ current runtime/version/data tuple. Web activation never clones or migrates
 data and never changes runtime selection or the migration journal. It atomically
 updates the overlay selection, restarts through the generic
 `app.<id>.sidecars.restart` capability, waits for declared readiness, and rolls
-back automatically on failure.
+back automatically on failure. `dev apply` also restores the previous overlay
+when any later selected gate fails after a ready cutover.
 If both candidate and rollback restarts fail, the activation journal remains
 `rollback_restart_pending`; recovery retries readiness/restart and only then
-transitions to terminal `rolled_back`.
+transitions to terminal `rolled_back`. A new activation always completes that
+recovery before preparing another journal. The declared app-owned
+`backend_recovery` hook finalizes a rollback after a successful host restart,
+without allowing a new cutover to replace the pending activation id.
 
 `opendesign_web_builder.py` persists dependency, invariant workspace-output,
 source/build, and compatible Next caches. Every cache is file/content-manifest
 verified, locked per key, and published from staging by atomic rename.
 Lockfile, package graph, Node, pnpm, and platform form the dependency key; a
 verified hit skips `pnpm install --frozen-lockfile`. The upstream pin, build
-profile, CPU bound, and web patch digests form compiled keys. Development uses
+profile, CPU bound, and web patch digests form compiled keys, including the
+Next/workspace-output key so an upstream upgrade cannot restore stale
+`packages/*/dist`. Development uses
 one bounded Turbopack derivation; release disables all caches for two clean
 independent derivations and compares every byte before signing and publishing.
 
@@ -371,7 +377,12 @@ PYTHONDONTWRITEBYTECODE=1 python3 -B \
 The app-owned `dev apply` command accepts no implicit worktree diff. Callers
 must provide explicit repository-relative `changed_files`, or immutable
 `base_sha`/current-`head_sha`; path bytes are snapshotted and the exact set is
-propagated to `scripts/test_suite.py --changed-path`. Classification avoids
+propagated to `scripts/test_suite.py --changed-path`. A Git archive of the
+selected commit is materialized and only explicit frozen path bytes are
+overlaid, so every source build and test runs outside the shared checkout.
+Classification compares `patches/series.json` entries against the frozen base:
+web component updates stay on the overlay path, while runtime or malformed
+series changes fail upward to OCI. Classification avoids
 duplicate backend/full-suite runs and does not elevate docs to OCI. The command
 emits JSON actions, durations, selected digests, cache state, readiness, and
 rollback outcome, with an error status code on every failed result.
@@ -414,9 +425,14 @@ python3 -m unittest apps.design-studio.tests.test_production_acceptance
 The release UI record contains thirteen browser scenarios and the complete
 correlation join. The independently run migration/rollback smoke supplies the
 fourteenth scenario to `aggregate_opendesign_release_evidence.py`. The
-canonical record is `opendesign_release_acceptance_0_16_1.json` and
-contains no prompt, cookie, bearer, provider payload, environment, host path,
-or secret value.
+aggregator requires the exact canonical UI id set, restart/workspace isolation,
+all rollback preservation proofs, and a signature-verified overlay whose
+upstream, lockfile, runtime compatibility, and `web-build`/`web-react` digests
+match the current reviewed contracts. It emits schema 4. The committed schema-3
+`opendesign_release_acceptance_0_16_1.json` is redaction-safe historical
+evidence, but a new complete run is required before it can be replaced by
+current series-bound evidence; it contains no prompt, cookie, bearer, provider
+payload, environment, host path, or secret value.
 `opendesign_production_acceptance_0_16_1.json` maps every global acceptance
 criterion to a stable test, proof, or canonical document. Neither record
 authorizes migration of an existing workspace data root.

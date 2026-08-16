@@ -207,6 +207,7 @@ def compute_web_cache_keys(
     )
     next_key = _payload_sha256(
         {
+            "upstream_commit": manifest["upstream"]["commit"],
             "dependency": dependency,
             "next_major": _next_major(source),
             "toolchain_sha256": toolchain_sha256,

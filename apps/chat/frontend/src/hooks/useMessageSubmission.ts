@@ -28,6 +28,7 @@ import { hasInvalidAttachments } from "../lib/attachments";
 import { ActiveAppContext, mergeAppReferences } from "../lib/activeAppContext";
 import { appReferencesFromText } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
+import { delegatedChatSourceAppId } from "../lib/sourceAppPresentation";
 import {
   PendingMessage,
   QueuedMessage,
@@ -1688,7 +1689,7 @@ function interAgentSteeredMessageText(message: QueuedMessage): string {
 
 function sourceAppOwner(thread: ChatThread | null, activeAppContext: ActiveAppContext | null): string {
   const sourceAppId = thread?.source_app_id || (!thread ? activeAppContext?.app_id || "" : "");
-  return sourceAppId && sourceAppId !== "chat" ? sourceAppId : "";
+  return delegatedChatSourceAppId(sourceAppId);
 }
 
 function sourceAppProjectId(thread: ChatThread | null, activeAppContext: ActiveAppContext | null): string {

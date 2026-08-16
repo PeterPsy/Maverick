@@ -6,6 +6,7 @@ import type { ComposerAttachment } from "../lib/attachments";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { isGroupChatComposerModeEnabled } from "../lib/interAgentFeatures";
 import type { MentionItem } from "../lib/mentions";
+import { delegatedChatSourceAppId } from "../lib/sourceAppPresentation";
 import { useComposerEditor } from "../hooks/useComposerEditor";
 import { useMentionPicker } from "../hooks/useMentionPicker";
 import { AgentSelector } from "./AgentSelector";
@@ -261,7 +262,7 @@ export function ChatComposer({
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">
                 <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
-                {sourceAppId && onSelectSourceAppChatMode ? (
+                {delegatedChatSourceAppId(sourceAppId) && onSelectSourceAppChatMode ? (
                   <SourceAppChatTools
                     disabled={disabled || isSending}
                     mode={sourceAppChatMode}

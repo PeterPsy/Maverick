@@ -166,6 +166,7 @@ async function renderComposer({
   multiAgentGroupChatEnabled = false,
   multiAgentMode = "off",
   onSubmit = () => undefined,
+  sourceAppId = "",
   transcriptionChunkedDictationSupported = false,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
@@ -183,6 +184,7 @@ async function renderComposer({
   multiAgentGroupChatEnabled?: boolean;
   multiAgentMode?: MultiAgentComposerMode;
   onSubmit?: () => void;
+  sourceAppId?: string;
   transcriptionChunkedDictationSupported?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
@@ -227,6 +229,10 @@ async function renderComposer({
         queuedCount={0}
         queuedPreview={null}
         selectedAgentTypeId=""
+        sourceAppChatMode="design"
+        sourceAppId={sourceAppId}
+        sourceAppProjectId=""
+        onSelectSourceAppChatMode={() => undefined}
         transcriptionChunkedDictationSupported={transcriptionChunkedDictationSupported}
         transcriptionProviderAppId={transcriptionProviderAppId}
         transcriptionProviderAvailable={transcriptionProviderAvailable}
@@ -256,6 +262,20 @@ describe("agent selector loading", () => {
 
     expect(element.querySelector('[aria-label="Agent runner: Loading agents..."]')).toBeTruthy();
     expect(element.querySelector('[role="textbox"]')?.getAttribute("aria-disabled")).toBe("false");
+  });
+});
+
+describe("delegated source app tools", () => {
+  it.each(["chat", "settings", "senses"])("does not render source tools for %s", async (sourceAppId) => {
+    const { element } = await renderComposer({ sourceAppId });
+
+    expect(element.querySelector(".chatapp-source-tools")).toBeNull();
+  });
+
+  it("renders source tools for Design Studio", async () => {
+    const { element } = await renderComposer({ sourceAppId: "design-studio" });
+
+    expect(element.querySelector('[aria-label="OpenDesign options"]')).toBeTruthy();
   });
 });
 

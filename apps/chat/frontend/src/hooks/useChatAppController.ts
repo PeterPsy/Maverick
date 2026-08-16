@@ -20,6 +20,7 @@ import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInput
 import { type ActiveAppContext, loadWidgetActiveAppContext } from "../lib/activeAppContext";
 import { providerUsesPlainHostedRuntime } from "../lib/providerRuntimeOptions";
 import { openAppParamsInShell } from "../lib/shellNavigation";
+import { delegatedChatSourceAppId } from "../lib/sourceAppPresentation";
 import { postActiveThreadChanged } from "./chatActiveThreadNotifications";
 import { useChatComposerContext } from "./useChatComposerContext";
 import { useChatControllerPresentation } from "./useChatControllerPresentation";
@@ -564,6 +565,13 @@ export function useChatAppController({
     queuedMessages,
   });
 
+  const sourceAppId = delegatedChatSourceAppId(activeThread?.source_app_id || activeAppContext?.app_id);
+  const sourceAppProjectId = sourceAppId
+    ? activeThread?.project_id
+      || (typeof activeAppContext?.params?.od_project_id === "string" ? activeAppContext.params.od_project_id : "")
+      || (typeof activeAppContext?.params?.project_id === "string" ? activeAppContext.params.project_id : "")
+    : "";
+
   const presentation = useChatControllerPresentation({
     activeProviderId: composerActiveProviderId,
     activeConversationKey,
@@ -619,11 +627,8 @@ export function useChatAppController({
     removeAttachment,
     selectedAgentTypeId,
     sourceAppChatMode,
-    sourceAppId: activeThread?.source_app_id || activeAppContext?.app_id || "",
-    sourceAppProjectId:
-      activeThread?.project_id
-      || (typeof activeAppContext?.params?.od_project_id === "string" ? activeAppContext.params.od_project_id : "")
-      || (typeof activeAppContext?.params?.project_id === "string" ? activeAppContext.params.project_id : ""),
+    sourceAppId,
+    sourceAppProjectId,
     setSourceAppChatMode,
     setMultiAgentMode,
     setComposer,

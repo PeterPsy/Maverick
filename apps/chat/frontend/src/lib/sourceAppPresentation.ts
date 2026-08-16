@@ -8,6 +8,11 @@ export function isOpenDesignSourceApp(sourceAppId: string | null | undefined): b
   return sourceAppId === "design-studio" || Boolean(sourceAppId?.endsWith("-design-studio"));
 }
 
+export function delegatedChatSourceAppId(sourceAppId: string | null | undefined): string {
+  const normalized = String(sourceAppId || "").trim();
+  return isOpenDesignSourceApp(normalized) ? normalized : "";
+}
+
 export function sourceAppPresentation(sourceAppId: string | null | undefined): SourceAppPresentation | null {
   const normalized = String(sourceAppId || "").trim();
   if (!normalized || normalized === "chat") {

@@ -380,3 +380,35 @@ The complete decision metadata is inserted first into the session-owned
 `egress_decisions.json`; only then may transformed bytes be used. Its audit
 projection contains domain-separated HMAC digests and decision metadata, never
 the original or transformed content.
+
+## Shared Hosted Agentic Loop
+
+Hosted model vendors implement `AgenticModelProviderClient`, which accepts one
+normalized `AgenticModelRequest` and emits decoded `AgenticModelEvent` values.
+Vendor payloads, retry behavior, and credentials remain behind that boundary.
+`HostedAgenticEngineAdapter` delegates every provider to the same Core loop for
+request journaling, live authority refresh, tool catalog materialization,
+per-request egress, sequential tool execution, confirmation pause/resume,
+provider-private codec access, usage, cancellation, and recovery.
+
+The loop journals a deterministic request id in provider state before transport
+acceptance. It performs no blind retry after acceptance. Each model step,
+tool call, tool-result byte, input/output token, estimated micro-USD cost, and
+wall-clock interval is checked against a policy that may tighten but never
+loosen during the turn. Decoded streamed output also has a conservative byte
+ceiling, so a provider cannot bypass the limit by delaying usage events. Tool
+parallelism remains disabled. Result content stays
+in encrypted tool storage and is re-evaluated against the current egress policy
+when included in every subsequent request.
+
+Confirmation waiting is represented by the persisted invocation and
+`waiting_for_tool_confirmation` turn state. Approval consumes the exact one-shot
+grant and refreshes authority before the side effect. Cancellation makes a
+still-waiting invocation terminal. Recovery never automatically replays an
+ambiguous `executing` mutation; it becomes `execution_unknown`. Public provider
+events are bounded JSON and recursively reject private-state field names.
+
+The deterministic fake provider certification covers a two-request streamed
+loop, official read and confirmed mutating tools, restart deduplication,
+provider-private round-trip, egress records, budgets, cancellation transport
+closure, normalized provider failures, and conservative recovery.

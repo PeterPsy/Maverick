@@ -249,6 +249,17 @@ class RuntimeToolLedger:
             raise RuntimeToolError("tool_private_payload_integrity_failed")
         return decode_tool_arguments(payload)
 
+    def load_result(self, record: ToolInvocationRecord) -> dict[str, object]:
+        """Resolve one succeeded result from Core private storage."""
+        if record.state != "succeeded" or not record.result_private_ref:
+            raise RuntimeToolError("tool_result_unavailable")
+        payload = self.private_payload_store.read(
+            workspace_id=record.workspace_id,
+            session_id=record.session_id,
+            private_ref=record.result_private_ref,
+        )
+        return decode_tool_arguments(payload)
+
     def delete_session_private_payloads(self, *, workspace_id: str, session_id: str) -> int:
         """Delete opaque argument/result payloads before ledger retention cleanup."""
         deleted = 0

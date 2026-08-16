@@ -645,6 +645,15 @@ For non-default workspaces, the effective runtime mode remains sandbox-only rega
 
 Browser-controlled network work uses the core-owned `egress/` domain before navigation and after redirects. P0 browser egress is fail-closed: only `http` and `https` URLs are eligible, private, loopback, link-local, Docker bridge, host-gateway, and metadata endpoints are denied beneath DNS names, and local Maverick development targets such as `http://hostmachine:8000` require an explicit admin-enabled dev exception.
 
+Hosted agentic runtimes use one Core-owned sequential loop. Provider clients are
+codec/transport boundaries only; they do not own budgets, tool registries,
+confirmation, retry, egress, or recovery policy. The loop refreshes effective
+authority before each request and side effect, journals request identity before
+acceptance, and routes every tool through the existing CLI/MCP/app-interface/Core
+catalog and encrypted invocation ledger. Provider-private protocol bytes remain
+behind the matching codec service and public events are bounded, normalized,
+and private-field-free.
+
 ### 8. Secret management
 
 The core owns:

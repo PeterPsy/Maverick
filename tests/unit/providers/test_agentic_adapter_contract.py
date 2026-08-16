@@ -8,13 +8,15 @@ import unittest
 from core.providers.agentic_adapter import (
     RuntimeCancelContext,
     RuntimeCloseContext,
+    RuntimeProviderEvent,
     RuntimeRecoveryContext,
 )
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.certificate_service import runtime_adapter_artifact_digest
 from core.providers.errors import ProviderNotFoundError
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.service import builtin_provider_registry
-from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.runtime.agentic_execution import _validate_event
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.execution_events import RuntimeExecutionEvent
@@ -149,6 +151,27 @@ class AgenticAdapterContractTest(unittest.TestCase):
                 provider_state=self.provider_state,
                 correlation_id="turn-uncertified",
             )
+
+    def test_public_provider_events_reject_nested_private_state_and_oversize_payloads(self) -> None:
+        private = RuntimeProviderEvent(
+            event_type="runtime.output.delta",
+            correlation_id="turn-fake",
+            ordinal=1,
+            schema_version="1",
+            payload={"metadata": {"thoughtSignature": "never-public"}},
+        )
+        oversized = RuntimeProviderEvent(
+            event_type="runtime.output.delta",
+            correlation_id="turn-fake",
+            ordinal=1,
+            schema_version="1",
+            payload={"text": "x" * 1_048_577},
+        )
+
+        with self.assertRaisesRegex(ValueError, "Provider-private"):
+            _validate_event(private, correlation_id="turn-fake", last_ordinal=0)
+        with self.assertRaisesRegex(ValueError, "event bound"):
+            _validate_event(oversized, correlation_id="turn-fake", last_ordinal=0)
 
     def test_cancel_recover_and_close_are_async_and_process_independent(self) -> None:
         cancel = RuntimeCancelContext(self.session, self.binding, self.provider_state, "turn-fake")

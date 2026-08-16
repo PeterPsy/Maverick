@@ -56,9 +56,11 @@ The runtime now also persists per-block fail-closed egress decisions before
 export and keeps provider-private/tool payloads in restart-safe, integrity-bound
 encrypted session storage with explicit codec and quota failures. Audit records
 contain keyed digests but no content, and generic provider events cannot carry
-thought signatures. This completes the Phase-4 storage and policy primitives;
-remote profiles remain disabled until the hosted loop, provider-specific codecs,
-leakage review, and production key-management gates are completed.
+thought signatures. The shared hosted loop now passes deterministic fake-provider
+coverage for streaming, bounded sequential tools, persisted confirmation,
+cancellation, restart deduplication, and conservative recovery. Remote profiles
+remain disabled until provider-specific codecs/transports, dated capability
+evidence, leakage review, and production key-management gates are completed.
 
 ## Design Studio OpenDesign Gate
 

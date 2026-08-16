@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Callable
 
 from core.providers.agentic_adapter import (
@@ -18,6 +19,17 @@ from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.skills.models import SkillDefinition
+
+
+MAX_RUNTIME_PROVIDER_EVENT_BYTES = 1_048_576
+_FORBIDDEN_PROVIDER_PRIVATE_FIELDS = {
+    "providerprivateenvelope",
+    "thoughtsignature",
+    "thoughtsignatures",
+    "opaquestate",
+    "rawproviderstate",
+    "rawpayload",
+}
 
 
 async def execute_agentic_runtime_turn(
@@ -142,6 +154,20 @@ def _validate_event(event: RuntimeProviderEvent, *, correlation_id: str, last_or
         raise ValueError("Runtime provider event correlation does not match the active turn.")
     if event.ordinal <= last_ordinal:
         raise ValueError("Runtime provider event ordinals must increase monotonically.")
+    if _contains_private_field(event.payload):
+        raise ValueError("Provider-private state cannot enter public runtime events.")
+    try:
+        encoded = json.dumps(
+            event.payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    except (TypeError, ValueError) as error:
+        raise ValueError("Runtime provider event payload must be bounded JSON.") from error
+    if len(encoded) > MAX_RUNTIME_PROVIDER_EVENT_BYTES:
+        raise ValueError("Runtime provider event payload exceeds the public event bound.")
 
 
 def _apply_provider_state_update(
@@ -149,15 +175,7 @@ def _apply_provider_state_update(
     thread_callback: Callable[[str], None] | None,
     state_callback: Callable[[dict[str, object]], RuntimeProviderState] | None,
 ) -> RuntimeProviderState | None:
-    forbidden_private_fields = {
-        "provider_private_envelope",
-        "thought_signature",
-        "thought_signatures",
-        "opaque_state",
-        "raw_provider_state",
-        "raw_payload",
-    }
-    if forbidden_private_fields.intersection(payload):
+    if _contains_private_field(payload):
         raise ValueError("Provider-private state requires the Core private state service.")
     if payload and state_callback is not None:
         return state_callback(payload)
@@ -165,3 +183,14 @@ def _apply_provider_state_update(
     if provider_thread_id and thread_callback is not None and state_callback is None:
         thread_callback(provider_thread_id)
     return None
+
+
+def _contains_private_field(value: object) -> bool:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized = "".join(character for character in str(key).lower() if character.isalnum())
+            if normalized in _FORBIDDEN_PROVIDER_PRIVATE_FIELDS or _contains_private_field(item):
+                return True
+    elif isinstance(value, (list, tuple)):
+        return any(_contains_private_field(item) for item in value)
+    return False

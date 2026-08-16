@@ -598,13 +598,19 @@ read-only CLI/MCP surfaces `core.runtime.threads.list`,
 `core.runtime.transcript.message.read`. These surfaces are a safe message
 projection, not access to raw runtime events or session files. The catalog
 filters authorization before metadata search and pagination. Transcript reads
-use only the paged append-only event-history contract, capture a newest-event
-watermark, return stable message ids and explicit projection warnings, and use
-character-window continuation for long messages. Historical agent-facing reads
-derive their messages exclusively from events inside that watermark and never
-mix in current mutable turn records. An initially empty archive receives an
-opaque empty-snapshot sentinel, so its replay stays empty after later events or
-turns are written. Returned conversation content is labeled
+use only the paged append-only event-history contract, capture physical append
+positions for both events and eligible turn-input fallbacks in one opaque
+`snapshot_cursor`, return stable message ids and explicit projection warnings,
+and use character-window continuation for long messages. Event ordering by
+`(created_at, event_id)` happens only after the immutable append boundary is
+applied, so retroactively timestamped events cannot enter an older snapshot.
+Turn records admitted before the turn boundary may supply missing user input,
+whose submission fields (`input_text`, client message id, creation time, and
+runtime mode) remain immutable across lifecycle updates. Mutable terminal state
+is never used by historical reads; every such input fallback produces a warning
+and makes `projection_complete` false. Empty event
+or turn positions are represented inside the same cursor and remain empty on
+replay after later writes. Returned conversation content is labeled
 `untrusted_conversation_data`; system/developer prompts, provider payloads and
 thread ids, runtime paths, environments, and raw tool output are not part of
 the default `messages` profile. Structured payload keys are canonicalized
@@ -1649,7 +1655,7 @@ The WebSocket transport should subscribe to that bus before performing its initi
 
 The local JSON persistence adapter is suitable for bootstrap control-plane state and runtime history replay. It is not a live token-streaming mechanism and must not sit in the active-turn hot path as a polling source.
 
-For bootstrap deployments that persist runtime events in local JSON, event writes must be append-oriented. Saving one new runtime event must not require rereading and rewriting the full event history file, because active provider turns can produce many events while the HTTP host is also serving shell and app traffic.
+For bootstrap deployments that persist runtime events in local JSON, event writes must be append-oriented. Saving one new runtime event must not require rereading and rewriting the full event history file, because active provider turns can produce many events while the HTTP host is also serving shell and app traffic. The bounded `events.json` hot tail may retain one additional bounded window between amortized compactions, while runtime store reads expose only the configured newest-event limit; reaching the logical tail limit must not turn every later event into a full-tail rewrite.
 
 The local JSON adapter must treat malformed collection files as storage errors, not as empty collections. A corrupt runtime history file may require recovery, but it must not be silently overwritten in a way that makes existing chat threads appear empty.
 

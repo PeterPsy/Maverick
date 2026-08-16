@@ -161,9 +161,13 @@ sandboxed agents; full-access mode does not expand their data authority.
 `threads.list` searches metadata only after unauthorized threads are removed.
 `transcript.read` returns bounded newest-first pages presented in chronological
 order, plus `has_more_before`, `next_before_cursor`, a
-`snapshot_newest_event_id`, and projection completeness warnings. The snapshot
-id is opaque and also represents an empty event archive; historical projection
-does not consult mutable turn records. Long message previews advertise
+`snapshot_cursor`, and projection completeness warnings. The opaque cursor
+captures physical append positions for both the event archive and eligible
+turn-input fallbacks, including empty positions. Later events are excluded by
+append position before chronological ordering. Missing queued events may use a
+bounded turn input fallback, which is reported by warning and sets
+`projection_complete: false`; mutable turn terminal state is never projected.
+Long message previews advertise
 `content_complete: false` and `next_offset`;
 `transcript.message.read` continues the exact redacted text in windows of at
 most 12,000 characters. Structured output is bounded by one global node and

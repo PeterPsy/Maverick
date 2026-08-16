@@ -54,6 +54,18 @@ class RuntimeEventHistoryRead:
     """Historical runtime events loaded through the paged store contract."""
 
     events: list
-    snapshot_newest_event_id: str | None
+    snapshot_position: int
+    snapshot_event_id: str | None
+    warnings: list[str]
+    complete: bool
+
+
+@dataclass(frozen=True)
+class RuntimeTurnHistoryRead:
+    """Turn inputs bounded by their immutable record append position."""
+
+    turns: list
+    snapshot_position: int
+    snapshot_turn_id: str | None
     warnings: list[str]
     complete: bool

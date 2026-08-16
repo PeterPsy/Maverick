@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import json
 import unittest
 
-from core.runtime.errors import RuntimeTranscriptAccessError
+from core.runtime.errors import RuntimeTranscriptAccessError, RuntimeTranscriptValidationError
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
@@ -153,7 +153,7 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
             store,
             context=self.context(),
             thread_id="session-1",
-            snapshot_newest_event_id=first["snapshot_newest_event_id"],
+            snapshot_cursor=first["snapshot_cursor"],
         )
 
         self.assertTrue(replay["projection_complete"])
@@ -164,9 +164,47 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
                 context=self.context(),
                 thread_id="session-1",
                 message_id="client-turn-late",
-                snapshot_newest_event_id=first["snapshot_newest_event_id"],
+                snapshot_cursor=first["snapshot_cursor"],
             )
         self.assertEqual(missing.exception.reason, "transcript_message_not_found")
+
+    def test_snapshot_excludes_event_appended_later_with_earlier_timestamp(self) -> None:
+        store = self.store()
+        store.save_turn(self.turn("turn-1", "first"))
+        store.save_event(self.event("queued", "runtime.turn.queued", {"input_text": "first"}))
+        store.save_event(self.event("final", "runtime.output.final", {"complete_text": "answer"}, seconds=2))
+        first = read_runtime_transcript(store, context=self.context(), thread_id="session-1")
+        store.save_event(
+            self.event(
+                "late-steered",
+                "runtime.message.steered",
+                {"input_text": "written after snapshot"},
+                seconds=1,
+            )
+        )
+
+        replay = read_runtime_transcript(
+            store,
+            context=self.context(),
+            thread_id="session-1",
+            snapshot_cursor=first["snapshot_cursor"],
+        )
+
+        self.assertEqual([message["content"] for message in replay["messages"]], ["first", "answer"])
+        self.assertTrue(replay["projection_complete"])
+
+    def test_snapshot_cursor_rejects_malformed_input(self) -> None:
+        store = self.store()
+
+        with self.assertRaises(RuntimeTranscriptValidationError) as invalid:
+            read_runtime_transcript(
+                store,
+                context=self.context(),
+                thread_id="session-1",
+                snapshot_cursor="runtime.transcript.snapshot.v1.not-base64!",
+            )
+
+        self.assertEqual(str(invalid.exception), "invalid_snapshot_cursor")
 
     def test_event_watermark_excludes_late_turn_with_equal_timestamp(self) -> None:
         store = self.store()
@@ -180,7 +218,7 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
             store,
             context=self.context(),
             thread_id="session-1",
-            snapshot_newest_event_id=first["snapshot_newest_event_id"],
+            snapshot_cursor=first["snapshot_cursor"],
         )
 
         self.assertNotIn("equal timestamp fallback", [message["content"] for message in replay["messages"]])
@@ -190,7 +228,7 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
                 context=self.context(),
                 thread_id="session-1",
                 message_id="client-turn-equal",
-                snapshot_newest_event_id=first["snapshot_newest_event_id"],
+                snapshot_cursor=first["snapshot_cursor"],
             )
 
     def test_event_watermark_ignores_equal_timestamp_terminal_turn_mutation(self) -> None:
@@ -218,13 +256,13 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
             store,
             context=self.context(),
             thread_id="session-1",
-            snapshot_newest_event_id=first["snapshot_newest_event_id"],
+            snapshot_cursor=first["snapshot_cursor"],
         )
 
         self.assertTrue(replay["projection_complete"])
         self.assertNotIn("retroactive failure", [message["content"] for message in replay["messages"]])
 
-    def test_empty_event_snapshot_never_projects_mutable_turn_records(self) -> None:
+    def test_empty_event_snapshot_preserves_only_initial_turn_fallbacks(self) -> None:
         store = self.store()
         store.save_turn(self.turn("turn-1", "first fallback"))
 
@@ -240,13 +278,49 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
             store,
             context=self.context(),
             thread_id="session-1",
-            snapshot_newest_event_id=first["snapshot_newest_event_id"],
+            snapshot_cursor=first["snapshot_cursor"],
+        )
+        fallback_window = read_runtime_transcript_message(
+            store,
+            context=self.context(),
+            thread_id="session-1",
+            message_id="client-turn-1",
+            snapshot_cursor=first["snapshot_cursor"],
         )
 
-        self.assertEqual(first["snapshot_newest_event_id"], "runtime.snapshot.empty.v1")
-        self.assertEqual(first["messages"], [])
-        self.assertEqual(replay["messages"], [])
-        self.assertTrue(replay["projection_complete"])
+        self.assertEqual([message["content"] for message in first["messages"]], ["first fallback"])
+        self.assertEqual([message["content"] for message in replay["messages"]], ["first fallback"])
+        self.assertEqual(fallback_window["content"], "first fallback")
+        self.assertFalse(first["projection_complete"])
+        self.assertFalse(replay["projection_complete"])
+        self.assertIn("turn_input_fallback_used:turn-1", first["projection_warnings"])
+
+    def test_turn_input_fallback_fields_are_immutable_after_submission(self) -> None:
+        store = self.store()
+        original = self.turn("turn-1", "original fallback")
+        store.save_turn(original)
+        first = read_runtime_transcript(store, context=self.context(), thread_id="session-1")
+
+        persisted = store.save_turn(
+            replace(
+                original,
+                input_text="mutated fallback",
+                client_message_id="mutated-client-id",
+                status="failed",
+                failure_reason="later failure",
+            )
+        )
+        replay = read_runtime_transcript(
+            store,
+            context=self.context(),
+            thread_id="session-1",
+            snapshot_cursor=first["snapshot_cursor"],
+        )
+
+        self.assertEqual(persisted.input_text, "original fallback")
+        self.assertEqual(persisted.client_message_id, "client-turn-1")
+        self.assertEqual([message["content"] for message in replay["messages"]], ["original fallback"])
+        self.assertNotIn("later failure", [message["content"] for message in replay["messages"]])
 
     def test_structured_projection_has_one_global_size_and_depth_budget(self) -> None:
         deep: dict = {"leaf": "visible"}

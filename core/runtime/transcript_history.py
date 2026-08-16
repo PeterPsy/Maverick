@@ -1,44 +1,43 @@
-"""Complete runtime event-history reads through the paged store contract."""
+"""Stable runtime event and turn history snapshots."""
 
 from __future__ import annotations
 
 from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION, RuntimeStore
-from core.runtime.transcript_models import RuntimeEventHistoryRead
-
-
-EMPTY_RUNTIME_EVENT_SNAPSHOT_ID = "runtime.snapshot.empty.v1"
+from core.runtime.transcript_models import RuntimeEventHistoryRead, RuntimeTurnHistoryRead
 
 
 def read_runtime_event_history(
     store: RuntimeStore,
     session_id: str,
     *,
-    snapshot_newest_event_id: str | None = None,
+    snapshot_position: int | None = None,
+    snapshot_event_id: str | None = None,
 ) -> RuntimeEventHistoryRead:
-    """Load complete ordered history using only ``list_event_page``."""
-    requested_snapshot = str(snapshot_newest_event_id or "").strip()
-    if requested_snapshot == EMPTY_RUNTIME_EVENT_SNAPSHOT_ID:
-        return RuntimeEventHistoryRead(
-            events=[],
-            snapshot_newest_event_id=EMPTY_RUNTIME_EVENT_SNAPSHOT_ID,
-            warnings=[],
-            complete=True,
-        )
+    """Load event history bounded by physical append position."""
     pages: list[list] = []
     warnings: list[str] = []
     seen_event_ids: set[str] = set()
-    seen_cursors: set[str] = set()
-    before_event_id: str | None = None
-    captured_newest_event_id: str | None = None
+    seen_positions: set[int] = set()
+    before_position: int | None = None
+    captured_position = snapshot_position
+    captured_event_id = snapshot_event_id
     complete = True
     while True:
-        page = store.list_event_page(
+        page = store.list_event_archive_page(
             session_id,
-            before_event_id=before_event_id,
+            before_position=before_position,
+            snapshot_position=captured_position,
+            snapshot_event_id=captured_event_id,
             limit=MAX_RUNTIME_EVENTS_PER_SESSION,
         )
-        if captured_newest_event_id is None:
-            captured_newest_event_id = page.newest_event_id
+        if not page.snapshot_found:
+            warnings.append("snapshot_event_archive_cursor_not_found")
+            complete = False
+            pages = []
+            break
+        if captured_position is None:
+            captured_position = page.snapshot_position
+            captured_event_id = page.snapshot_event_id
         unique_events = []
         for event in page.events:
             if event.event_id in seen_event_ids:
@@ -50,31 +49,63 @@ def read_runtime_event_history(
         pages.append(unique_events)
         if not page.has_more_before:
             break
-        next_cursor = page.oldest_event_id
-        if not next_cursor or next_cursor in seen_cursors or not page.events:
+        next_position = page.oldest_position
+        if next_position is None or next_position in seen_positions or not page.events:
             warnings.append("history_archive_cursor_inconsistent")
             complete = False
             break
-        seen_cursors.add(next_cursor)
-        before_event_id = next_cursor
+        seen_positions.add(next_position)
+        before_position = next_position
     events = sorted(
         [event for page_events in pages for event in page_events],
         key=lambda item: (item.created_at, item.event_id),
     )
-    if requested_snapshot:
-        snapshot_index = next((index for index, event in enumerate(events) if event.event_id == requested_snapshot), None)
-        if snapshot_index is None:
-            warnings.append("snapshot_newest_event_not_found")
-            complete = False
-            events = []
-        else:
-            events = events[: snapshot_index + 1]
-            captured_newest_event_id = requested_snapshot
-    elif captured_newest_event_id is None:
-        captured_newest_event_id = EMPTY_RUNTIME_EVENT_SNAPSHOT_ID
     return RuntimeEventHistoryRead(
         events=events,
-        snapshot_newest_event_id=captured_newest_event_id,
+        snapshot_position=captured_position if captured_position is not None else -1,
+        snapshot_event_id=captured_event_id,
         warnings=warnings,
         complete=complete,
+    )
+
+
+def read_runtime_turn_history(
+    store: RuntimeStore,
+    session_id: str,
+    *,
+    snapshot_position: int | None = None,
+    snapshot_turn_id: str | None = None,
+) -> RuntimeTurnHistoryRead:
+    """Bound immutable turn-input fallbacks by record append position."""
+    turns = store.list_turns(session_id)
+    resolved_position = len(turns) - 1 if snapshot_position is None else int(snapshot_position)
+    if resolved_position == -1:
+        return RuntimeTurnHistoryRead(
+            turns=[],
+            snapshot_position=-1,
+            snapshot_turn_id=None,
+            warnings=[],
+            complete=True,
+        )
+    if resolved_position < 0 or resolved_position >= len(turns):
+        return _missing_turn_snapshot(resolved_position, snapshot_turn_id)
+    resolved_turn_id = turns[resolved_position].turn_id
+    if snapshot_position is not None and resolved_turn_id != str(snapshot_turn_id or "").strip():
+        return _missing_turn_snapshot(resolved_position, snapshot_turn_id)
+    return RuntimeTurnHistoryRead(
+        turns=turns[: resolved_position + 1],
+        snapshot_position=resolved_position,
+        snapshot_turn_id=resolved_turn_id,
+        warnings=[],
+        complete=True,
+    )
+
+
+def _missing_turn_snapshot(position: int, turn_id: str | None) -> RuntimeTurnHistoryRead:
+    return RuntimeTurnHistoryRead(
+        turns=[],
+        snapshot_position=position,
+        snapshot_turn_id=turn_id,
+        warnings=["snapshot_turn_archive_cursor_not_found"],
+        complete=False,
     )

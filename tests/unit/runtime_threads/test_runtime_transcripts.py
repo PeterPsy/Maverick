@@ -384,10 +384,25 @@ class RuntimeTranscriptTest(unittest.TestCase):
 
         self.assertNotIn("event-0000", [event.event_id for event in store.list_events("session-1")])
         payload = read_runtime_transcript(store, context=self.context(), thread_id="session-1")
+        store.save_event(
+            self.event(
+                "event-late-retroactive",
+                "runtime.message.steered",
+                {"input_text": "late retroactive"},
+                seconds=1,
+            )
+        )
+        replay = read_runtime_transcript(
+            store,
+            context=self.context(),
+            thread_id="session-1",
+            snapshot_cursor=payload["snapshot_cursor"],
+        )
 
         self.assertEqual([item["content"] for item in payload["messages"]], ["old hello", "complete answer"])
+        self.assertEqual([item["content"] for item in replay["messages"]], ["old hello", "complete answer"])
         self.assertTrue(payload["projection_complete"])
-        self.assertEqual(payload["snapshot_newest_event_id"], "event-0600")
+        self.assertTrue(payload["snapshot_cursor"].startswith("runtime.transcript.snapshot.v1."))
 
     def test_long_unicode_message_uses_explicit_windows_without_silent_loss(self) -> None:
         store = self.memory_store()
@@ -406,7 +421,7 @@ class RuntimeTranscriptTest(unittest.TestCase):
             message_id="turn-1:agent",
             offset=1,
             max_chars=3,
-            snapshot_newest_event_id=transcript["snapshot_newest_event_id"],
+            snapshot_cursor=transcript["snapshot_cursor"],
         )
         exhausted = read_runtime_transcript_message(
             store,
@@ -415,7 +430,7 @@ class RuntimeTranscriptTest(unittest.TestCase):
             message_id="turn-1:agent",
             offset=len(content) + 10,
             max_chars=3,
-            snapshot_newest_event_id=transcript["snapshot_newest_event_id"],
+            snapshot_cursor=transcript["snapshot_cursor"],
         )
 
         agent_preview = next(item for item in transcript["messages"] if item["role"] == "agent")

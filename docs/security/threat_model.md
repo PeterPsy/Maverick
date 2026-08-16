@@ -253,7 +253,11 @@ a workspace/platform admin, or a platform-minted `read_transcript` grant may
 read it. Hidden inter-agent participant sessions and cross-workspace targets
 fail closed as not found, and thread catalog filtering happens before search
 and pagination so titles and counts do not leak. Transcript payloads are a
-bounded allowlisted projection marked as untrusted conversation data.
+bounded allowlisted projection marked as untrusted conversation data. Opaque
+snapshot cursors bind both event and turn eligibility to physical append
+positions; timestamp ordering is applied only inside that immutable boundary.
+Missing queued events may use pre-snapshot turn input only with an explicit
+warning and incomplete projection, while mutable turn terminal state is ignored.
 Structured keys are canonicalized across snake, kebab, and camel case before
 sensitive-field filtering, and the projected structure has one global node and
 serialized-byte budget with explicit truncation metadata. Read audits exclude

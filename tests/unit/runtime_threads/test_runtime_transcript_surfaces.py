@@ -168,12 +168,12 @@ class RuntimeTranscriptSurfaceTest(unittest.TestCase):
             thread_id="session-1",
             limit=1,
             before_cursor=newest["page"]["next_before_cursor"],
-            snapshot_newest_event_id=newest["snapshot_newest_event_id"],
+            snapshot_cursor=newest["snapshot_cursor"],
         )
 
         self.assertTrue(newest["page"]["has_more_before"])
         self.assertFalse(older["page"]["has_more_before"])
-        self.assertEqual(older["snapshot_newest_event_id"], newest["snapshot_newest_event_id"])
+        self.assertEqual(older["snapshot_cursor"], newest["snapshot_cursor"])
         self.assertEqual(
             [older["messages"][0]["content"], newest["messages"][0]["content"]],
             ["hello", "answer"],

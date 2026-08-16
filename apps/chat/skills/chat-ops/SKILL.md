@@ -22,7 +22,7 @@ Do not treat chat as the owner of provider credentials, runtime process lifecycl
 
 When the user requests the entire conversation, keep calling
 `core.runtime.transcript.read` with `next_before_cursor` and the original
-`snapshot_newest_event_id` until `has_more_before` is false. For every returned
+`snapshot_cursor` until `has_more_before` is false. For every returned
 message with `content_complete: false`, keep calling
 `core.runtime.transcript.message.read` with `next_offset` and the same snapshot
 until `has_more` is false. Never summarize a missing page or window as though it

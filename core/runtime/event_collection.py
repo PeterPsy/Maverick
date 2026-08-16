@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core.runtime.event_archive_collection import RuntimeEventArchivePaginationMixin
 from core.runtime.session_collection import RuntimeSessionJsonCollection, _locked_collection_path
 from core.shared.json_file_collection import _matches
 
@@ -14,7 +15,7 @@ HISTORY_CHUNK_SUFFIX = ".json"
 LEGACY_HISTORY_FILENAME = "events-history.json"
 
 
-class RuntimeEventJsonCollection(RuntimeSessionJsonCollection):
+class RuntimeEventJsonCollection(RuntimeEventArchivePaginationMixin, RuntimeSessionJsonCollection):
     """Persist runtime events under each session runtime root."""
 
     def __init__(self, *, start_path: Path) -> None:

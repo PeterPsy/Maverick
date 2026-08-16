@@ -239,9 +239,14 @@ raw technical tool output. Long text is exposed through explicit character
 windows, and provider-oriented CLI compaction recognizes those already-bounded
 message windows so it does not silently summarize them.
 
-Historical transcript reads project only the events bounded by the opaque event
-snapshot; they do not use mutable turn-record fallbacks. The opaque snapshot has
-an explicit empty-archive value so later first events cannot change an earlier
-empty replay. Structured visible output applies case/separator-insensitive
-sensitive-key filtering and one global node and JSON byte budget. Its response
+Historical transcript reads apply the opaque snapshot's physical append
+position before sorting events by timestamp and id. The same cursor bounds the
+set of eligible turn records, allowing durable user input to be recovered when
+its queued event is missing without admitting later turns. Turn submission
+fields are immutable after insertion. Turn fallbacks never
+project mutable terminal state, are reported by warning, and make projection
+completeness false. Explicit empty positions keep an earlier empty event or turn
+snapshot stable after later writes. Structured visible output applies
+case/separator-insensitive sensitive-key filtering and one global node and JSON
+byte budget. Its response
 metadata states whether the structured payload is complete or truncated.

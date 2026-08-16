@@ -35,6 +35,9 @@ class _OutputSegment:
 def project_runtime_transcript(
     events: Iterable[RuntimeEventRecord],
     turns: Iterable[RuntimeTurnRecord],
+    *,
+    include_turn_status_fallbacks: bool = True,
+    warn_on_turn_input_fallback: bool = False,
 ) -> RuntimeTranscriptProjection:
     """Return only the conversation-visible projection of complete runtime history."""
     ordered_events = sorted(events, key=lambda item: (item.created_at, item.event_id))
@@ -208,7 +211,13 @@ def project_runtime_transcript(
                     order_rank=0,
                 )
                 seen_user_messages.add(message_id)
-        if turn.turn_id in terminal_turn_ids or turn.status not in {"failed", "cancelled", "timed-out"}:
+                if warn_on_turn_input_fallback:
+                    warnings.append(f"turn_input_fallback_used:{turn.turn_id}")
+        if (
+            not include_turn_status_fallbacks
+            or turn.turn_id in terminal_turn_ids
+            or turn.status not in {"failed", "cancelled", "timed-out"}
+        ):
             continue
         status = turn.status
         content = turn.failure_reason or f"Runtime turn {status}."

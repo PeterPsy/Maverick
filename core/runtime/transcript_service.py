@@ -9,8 +9,13 @@ from core.runtime.store import RuntimeStore
 from core.runtime.transcript_access import resolve_authorized_transcript_thread
 from core.runtime.transcript_audit import record_runtime_transcript_audit
 from core.runtime.transcript_catalog import list_runtime_transcript_threads
-from core.runtime.transcript_history import read_runtime_event_history
-from core.runtime.transcript_models import RuntimeTranscriptReadContext
+from core.runtime.transcript_history import read_runtime_event_history, read_runtime_turn_history
+from core.runtime.transcript_models import (
+    RuntimeEventHistoryRead,
+    RuntimeTranscriptProjection,
+    RuntimeTranscriptReadContext,
+    RuntimeTurnHistoryRead,
+)
 from core.runtime.transcript_payloads import (
     TRANSCRIPT_CONTENT_TRUST,
     bounded_int,
@@ -19,6 +24,11 @@ from core.runtime.transcript_payloads import (
 )
 from core.runtime.transcript_projection import project_runtime_transcript
 from core.runtime.transcript_safety import redact_transcript_text
+from core.runtime.transcript_snapshot import (
+    RuntimeTranscriptSnapshot,
+    decode_runtime_transcript_snapshot,
+    encode_runtime_transcript_snapshot,
+)
 
 
 __all__ = [
@@ -43,7 +53,7 @@ def read_runtime_transcript(
     thread_id: str,
     limit: int = DEFAULT_TRANSCRIPT_LIMIT,
     before_cursor: str | None = None,
-    snapshot_newest_event_id: str | None = None,
+    snapshot_cursor: str | None = None,
     profile: str = "messages",
     observability_store=None,
     surface: str = "service",
@@ -71,23 +81,22 @@ def read_runtime_transcript(
             reason=error.reason,
         )
         raise
-    history = read_runtime_event_history(
+    history, turn_history, projection, resolved_snapshot_cursor = _snapshot_projection(
         store,
-        session.session_id,
-        snapshot_newest_event_id=snapshot_newest_event_id,
+        session_id=session.session_id,
+        snapshot_cursor=snapshot_cursor,
     )
-    projection = project_runtime_transcript(history.events, [])
     messages, page = message_page(
         projection.messages,
         limit=bounded_limit,
         before_cursor=before_cursor,
     )
     payload_messages = [message_payload(message, max_chars=TRANSCRIPT_EMBEDDED_CONTENT_CHARS) for message in messages]
-    warnings = [*history.warnings, *projection.warnings]
+    warnings = [*history.warnings, *turn_history.warnings, *projection.warnings]
     if not page["cursor_found"]:
         warnings.append("message_cursor_not_found")
     redactions_applied = any(bool(message["redactions_applied"]) for message in payload_messages)
-    complete = history.complete and projection.complete and bool(page["cursor_found"])
+    complete = history.complete and turn_history.complete and projection.complete and bool(page["cursor_found"])
     record_runtime_transcript_audit(
         observability_store,
         action="core.runtime.transcript.read",
@@ -108,7 +117,7 @@ def read_runtime_transcript(
         "content_trust": TRANSCRIPT_CONTENT_TRUST,
         "messages": payload_messages,
         "page": page,
-        "snapshot_newest_event_id": history.snapshot_newest_event_id,
+        "snapshot_cursor": resolved_snapshot_cursor,
         "projection_complete": complete,
         "projection_warnings": warnings,
         "redactions_applied": redactions_applied,
@@ -123,7 +132,7 @@ def read_runtime_transcript_message(
     message_id: str,
     offset: int = 0,
     max_chars: int = DEFAULT_MESSAGE_WINDOW_CHARS,
-    snapshot_newest_event_id: str | None = None,
+    snapshot_cursor: str | None = None,
     observability_store=None,
     surface: str = "service",
 ) -> dict[str, Any]:
@@ -148,12 +157,11 @@ def read_runtime_transcript_message(
             reason=error.reason,
         )
         raise
-    history = read_runtime_event_history(
+    history, turn_history, projection, resolved_snapshot_cursor = _snapshot_projection(
         store,
-        session.session_id,
-        snapshot_newest_event_id=snapshot_newest_event_id,
+        session_id=session.session_id,
+        snapshot_cursor=snapshot_cursor,
     )
-    projection = project_runtime_transcript(history.events, [])
     message = next((item for item in projection.messages if item.message_id == message_id), None)
     if message is None:
         error = RuntimeTranscriptAccessError("transcript_message_not_found", status_code=404)
@@ -206,9 +214,9 @@ def read_runtime_transcript_message(
         "complete": complete,
         "redactions_applied": redactions_applied,
         "content_trust": TRANSCRIPT_CONTENT_TRUST,
-        "snapshot_newest_event_id": history.snapshot_newest_event_id,
-        "projection_complete": history.complete and projection.complete,
-        "projection_warnings": [*history.warnings, *projection.warnings],
+        "snapshot_cursor": resolved_snapshot_cursor,
+        "projection_complete": history.complete and turn_history.complete and projection.complete,
+        "projection_warnings": [*history.warnings, *turn_history.warnings, *projection.warnings],
         "source_event_ids": message.source_event_ids,
     }
 
@@ -236,3 +244,42 @@ def _audit_denied_read(
         profile=profile,
         page_limit=limit,
     )
+
+
+def _snapshot_projection(
+    store: RuntimeStore,
+    *,
+    session_id: str,
+    snapshot_cursor: str | None,
+) -> tuple[RuntimeEventHistoryRead, RuntimeTurnHistoryRead, RuntimeTranscriptProjection, str]:
+    requested = (
+        decode_runtime_transcript_snapshot(snapshot_cursor, session_id=session_id)
+        if str(snapshot_cursor or "").strip()
+        else None
+    )
+    event_history = read_runtime_event_history(
+        store,
+        session_id,
+        snapshot_position=requested.event_position if requested else None,
+        snapshot_event_id=requested.event_id if requested else None,
+    )
+    turn_history = read_runtime_turn_history(
+        store,
+        session_id,
+        snapshot_position=requested.turn_position if requested else None,
+        snapshot_turn_id=requested.turn_id if requested else None,
+    )
+    snapshot = requested or RuntimeTranscriptSnapshot(
+        session_id=session_id,
+        event_position=event_history.snapshot_position,
+        event_id=event_history.snapshot_event_id,
+        turn_position=turn_history.snapshot_position,
+        turn_id=turn_history.snapshot_turn_id,
+    )
+    projection = project_runtime_transcript(
+        event_history.events,
+        turn_history.turns,
+        include_turn_status_fallbacks=False,
+        warn_on_turn_input_fallback=True,
+    )
+    return event_history, turn_history, projection, encode_runtime_transcript_snapshot(snapshot)

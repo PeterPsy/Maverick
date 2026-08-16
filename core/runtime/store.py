@@ -28,6 +28,7 @@ from core.runtime.app_streams import (
     snapshot_project_files,
     stream_status_for_event,
 )
+from core.runtime.archive_pagination import page_archive_documents
 from core.runtime.models import RuntimeLocation
 from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -72,13 +73,21 @@ RUNTIME_TURN_CONTROL_FIELDS = frozenset(
         "terminalization_callback_delivered_at",
     }
 )
+RUNTIME_TURN_IMMUTABLE_SUBMISSION_FIELDS = frozenset(
+    {
+        "input_text",
+        "client_message_id",
+        "created_at",
+        "runtime_mode",
+    }
+)
 
 
 def _runtime_turn_lifecycle_payload(record: RuntimeTurnRecord) -> dict[str, object]:
     return {
         key: value
         for key, value in asdict(record).items()
-        if key not in RUNTIME_TURN_CONTROL_FIELDS
+        if key not in RUNTIME_TURN_CONTROL_FIELDS | RUNTIME_TURN_IMMUTABLE_SUBMISSION_FIELDS
     }
 
 
@@ -91,6 +100,19 @@ class RuntimeEventPage:
     before_event_id: str | None
     oldest_event_id: str | None
     newest_event_id: str | None
+
+
+@dataclass(frozen=True)
+class RuntimeEventArchivePage:
+    """One physical append-order page bounded by an immutable snapshot."""
+
+    events: list[RuntimeEventRecord]
+    has_more_before: bool
+    oldest_position: int | None
+    newest_position: int | None
+    snapshot_position: int
+    snapshot_event_id: str | None
+    snapshot_found: bool
 
 
 class DocumentCollection(Protocol):
@@ -307,6 +329,17 @@ class RuntimeStore(Protocol):
         before_event_id: str | None = None,
         limit: int = 200,
     ) -> RuntimeEventPage:
+        ...
+
+    def list_event_archive_page(
+        self,
+        session_id: str,
+        *,
+        before_position: int | None = None,
+        snapshot_position: int | None = None,
+        snapshot_event_id: str | None = None,
+        limit: int = 200,
+    ) -> RuntimeEventArchivePage:
         ...
 
     def has_events_before(self, session_id: str, *, before_event_id: str | None) -> bool:
@@ -662,13 +695,20 @@ class RuntimeDocumentStore:
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
         payload = _runtime_turn_lifecycle_payload(record)
-        self.collections.turns.update_one(
-            {"turn_id": record.turn_id, "workspace_id": record.workspace_id, "session_id": record.session_id},
-            {"$set": payload},
-            upsert=True,
-        )
-        self._remember_turn_partition(record)
-        return record
+        identity = {
+            "turn_id": record.turn_id,
+            "workspace_id": record.workspace_id,
+            "session_id": record.session_id,
+        }
+        existing, inserted = self._insert_runtime_turn_if_absent(identity, asdict(record))
+        if inserted:
+            persisted = RuntimeTurnRecord(**existing)
+            self._remember_turn_partition(persisted)
+            return persisted
+        self.collections.turns.update_one(identity, {"$set": payload}, upsert=False)
+        persisted = RuntimeTurnRecord(**{**existing, **payload})
+        self._remember_turn_partition(persisted)
+        return persisted
 
     def save_turn_if_cancellation_absent(
         self,
@@ -1704,6 +1744,46 @@ class RuntimeDocumentStore:
             newest_event_id=events[-1].event_id if events else None,
         )
 
+    def list_event_archive_page(
+        self,
+        session_id: str,
+        *,
+        before_position: int | None = None,
+        snapshot_position: int | None = None,
+        snapshot_event_id: str | None = None,
+        limit: int = 200,
+    ) -> RuntimeEventArchivePage:
+        """Read a bounded page by physical append position, not event time."""
+        bounded_limit = max(1, min(int(limit), MAX_RUNTIME_EVENTS_PER_SESSION))
+        query = self._session_query(session_id)
+        find_archive_page = getattr(self.collections.events, "find_event_archive_page", None)
+        if callable(find_archive_page):
+            page = find_archive_page(
+                query,
+                before_position=before_position,
+                snapshot_position=snapshot_position,
+                snapshot_event_id=snapshot_event_id,
+                limit=bounded_limit,
+            )
+        else:
+            page = page_archive_documents(
+                list(self.collections.events.find(query)),
+                identity_field="event_id",
+                before_position=before_position,
+                snapshot_position=snapshot_position,
+                snapshot_record_id=snapshot_event_id,
+                limit=bounded_limit,
+            )
+        return RuntimeEventArchivePage(
+            events=[RuntimeEventRecord(**document) for document in page["documents"]],
+            has_more_before=bool(page["has_more_before"]),
+            oldest_position=page["oldest_position"],
+            newest_position=page["newest_position"],
+            snapshot_position=int(page["snapshot_position"]),
+            snapshot_event_id=page["snapshot_record_id"],
+            snapshot_found=bool(page["snapshot_found"]),
+        )
+
     def has_events_before(self, session_id: str, *, before_event_id: str | None) -> bool:
         if not before_event_id:
             return False
@@ -1799,6 +1879,22 @@ class RuntimeDocumentStore:
             if existing is not None:
                 return existing, False
             collection.update_one(query, {"$set": document}, upsert=True)
+            return {**query, **document}, True
+
+    def _insert_runtime_turn_if_absent(
+        self,
+        query: dict[str, Any],
+        document: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        """Insert a turn atomically through the turn collection boundary."""
+        insert_one_if_absent = getattr(self.collections.turns, "insert_one_if_absent", None)
+        if callable(insert_one_if_absent):
+            return insert_one_if_absent(query, document)
+        with self._fallback_lock:
+            existing = self.collections.turns.find_one(query)
+            if existing is not None:
+                return existing, False
+            self.collections.turns.update_one(query, {"$set": document}, upsert=True)
             return {**query, **document}, True
 
     def _prune_session_events(self, session_id: str) -> None:

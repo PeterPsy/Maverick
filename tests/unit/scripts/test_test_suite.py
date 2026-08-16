@@ -17,6 +17,29 @@ SPEC.loader.exec_module(test_suite)
 
 
 class ChangedSuiteTests(unittest.TestCase):
+    def test_discovery_roots_include_tests_below_non_package_directories(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="test-suite-discovery-") as temporary:
+            synthetic_root = Path(temporary)
+            unit_root = synthetic_root / "tests/unit"
+            package_root = unit_root / "packaged"
+            api_root = unit_root / "api"
+            nested_root = api_root / "nested"
+            for directory in (unit_root, package_root, api_root, nested_root):
+                directory.mkdir(parents=True, exist_ok=True)
+            (unit_root / "test_root.py").touch()
+            (package_root / "__init__.py").touch()
+            (package_root / "test_packaged.py").touch()
+            (api_root / "test_api.py").touch()
+            (nested_root / "test_nested.py").touch()
+
+            with patch.object(test_suite, "REPO_ROOT", synthetic_root):
+                roots = test_suite.unittest_discovery_roots("tests/unit")
+
+        self.assertEqual(
+            roots,
+            ["tests/unit", "tests/unit/api", "tests/unit/api/nested"],
+        )
+
     def test_explicit_paths_are_normalized_without_reading_the_working_tree(self) -> None:
         with tempfile.TemporaryDirectory(prefix="test-suite-app-") as temporary:
             synthetic_root = Path(temporary)

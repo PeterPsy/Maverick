@@ -723,6 +723,11 @@ def _apply_one_runtime_interrupt_request(
     )
     cancellation_request = cancellation_intent.turn if cancellation_intent is not None else turn
     intent_claimed = cancellation_intent.claimed if cancellation_intent is not None else False
+    cancellation_reason = (
+        cancellation_request.cancellation_reason
+        or cancellation_request.failure_reason
+        or reason
+    )
     provider_id = None
     provider_interrupted = False
     if cancellation_request.cancellation_requested_at is not None:
@@ -731,8 +736,8 @@ def _apply_one_runtime_interrupt_request(
     terminalization = terminalize_runtime_turn_cancellation(
         state.runtime_store,
         turn_id=turn_id,
-        reason=reason,
-        event_payload={"reason": reason, "requested_by_app_id": app_id},
+        reason=cancellation_reason,
+        event_payload={"reason": cancellation_reason, "requested_by_app_id": app_id},
         event_bus=state.runtime_event_bus,
         request_intent=False,
     )
@@ -755,14 +760,14 @@ def _apply_one_runtime_interrupt_request(
     terminalization = drain_runtime_turn_terminalization(
         state.runtime_store,
         turn=updated,
-        event_payload={"reason": reason, "requested_by_app_id": app_id},
+        event_payload={"reason": cancellation_reason, "requested_by_app_id": app_id},
         event_bus=state.runtime_event_bus,
         callback=lambda callback_session, callback_turn, callback_event: dispatch_source_app_runtime_event(
             state,
             session=callback_session,
             turn=callback_turn,
             event_type="runtime.turn.cancelled",
-            failure_reason=reason,
+            failure_reason=cancellation_reason,
             runtime_event_id=callback_event.event_id,
             raise_on_failure=True,
         ),

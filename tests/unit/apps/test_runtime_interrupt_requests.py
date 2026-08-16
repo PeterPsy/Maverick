@@ -177,7 +177,10 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
             try:
                 results[owner] = runtime_requests._apply_one_runtime_interrupt_request(
                     state,
-                    request={"turn_id": "app-split-ownership-turn"},
+                    request={
+                        "turn_id": "app-split-ownership-turn",
+                        "reason": f"{owner} reason",
+                    },
                     workspace_id="default",
                     app_id="video-studio",
                 )
@@ -206,13 +209,18 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
         self.assertFalse(outbox_owner.is_alive())
         self.assertTrue(results["intent-owner"]["interrupted"])
         self.assertFalse(results["outbox-owner"]["interrupted"])
+        cancelled_turn = runtime_store.get_turn("app-split-ownership-turn")
+        self.assertEqual(cancelled_turn.cancellation_reason, "intent-owner reason")
+        self.assertEqual(cancelled_turn.failure_reason, "intent-owner reason")
         cancelled_events = [
             event
             for event in runtime_store.list_events(session.session_id)
             if event.event_type == "runtime.turn.cancelled"
         ]
         self.assertEqual(len(cancelled_events), 1)
+        self.assertEqual(cancelled_events[0].payload["reason"], "intent-owner reason")
         dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.kwargs["failure_reason"], "intent-owner reason")
 
     def test_app_retry_repairs_callback_after_terminal_event_was_already_persisted(self) -> None:
         runtime_store, session = self._active_turn(

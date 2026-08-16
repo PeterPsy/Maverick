@@ -316,11 +316,31 @@ def app_test_dirs() -> list[str]:
 
 
 def run_discover_dir(directory: str, *, level: str, extra_env: dict[str, str] | None = None) -> int:
-    return run_command(
-        [sys.executable, "-m", "unittest", "discover", "-s", directory, "-p", "test_*.py"],
-        level=level,
-        extra_env=extra_env or {},
-    )
+    statuses = []
+    for discovery_root in unittest_discovery_roots(directory):
+        statuses.append(
+            run_command(
+                [sys.executable, "-m", "unittest", "discover", "-s", discovery_root, "-p", "test_*.py"],
+                level=level,
+                extra_env=extra_env or {},
+            )
+        )
+    return first_failure(statuses)
+
+
+def unittest_discovery_roots(directory: str) -> list[str]:
+    """Partition tests so unittest also enters directories without ``__init__.py``."""
+    base = REPO_ROOT / directory
+    roots: set[Path] = set()
+    for test_file in base.rglob("test_*.py"):
+        discovery_root = base
+        current = base
+        for part in test_file.parent.relative_to(base).parts:
+            current /= part
+            if not (current / "__init__.py").is_file():
+                discovery_root = current
+        roots.add(discovery_root)
+    return [str(path.relative_to(REPO_ROOT)) for path in sorted(roots)]
 
 
 def changed_paths() -> list[Path]:

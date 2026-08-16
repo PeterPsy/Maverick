@@ -12,6 +12,7 @@ class RecordingCollection(FakeCollection):
     def __init__(self) -> None:
         super().__init__()
         self.find_one_queries: list[dict] = []
+        self.insert_one_if_absent_queries: list[dict] = []
         self.update_one_queries: list[dict] = []
 
     def find_one(self, query: dict) -> dict | None:
@@ -21,6 +22,10 @@ class RecordingCollection(FakeCollection):
     def update_one(self, query: dict, update: dict, *, upsert: bool = False) -> None:
         self.update_one_queries.append(dict(query))
         return super().update_one(query, update, upsert=upsert)
+
+    def insert_one_if_absent(self, query: dict, document: dict) -> tuple[dict, bool]:
+        self.insert_one_if_absent_queries.append(dict(query))
+        return super().insert_one_if_absent(query, document)
 
 
 class RuntimeStorePartitionIndexTestCase(unittest.TestCase):
@@ -51,7 +56,7 @@ class RuntimeStorePartitionIndexTestCase(unittest.TestCase):
         self.assertIn({"session_id": session.session_id, "workspace_id": "acme"}, sessions.update_one_queries)
         self.assertIn({"session_id": session.session_id, "workspace_id": "acme"}, states.update_one_queries)
         self.assertEqual(
-            turns.update_one_queries,
+            turns.insert_one_if_absent_queries,
             [{"turn_id": turn.turn_id, "workspace_id": "acme", "session_id": session.session_id}],
         )
 

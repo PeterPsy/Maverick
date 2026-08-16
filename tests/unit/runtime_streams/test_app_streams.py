@@ -328,7 +328,6 @@ class RuntimeAppStreamTests(unittest.TestCase):
         with (
             patch.object(runtime_requests, "_resolved_provider_id", return_value=None),
             patch.object(runtime_requests, "interrupt_runtime_provider_turn", return_value=True),
-            patch.object(runtime_requests, "set_thread_availability"),
             patch.object(runtime_requests, "release_idle_runtime_processes"),
             patch.object(runtime_requests, "dispatch_source_app_runtime_event"),
         ):

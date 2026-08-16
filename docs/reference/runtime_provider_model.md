@@ -20,6 +20,31 @@ The provider adapter owns:
 - provider-specific protocol translation
 - optional same-turn message admission when the provider declares `supports_same_turn_input`
 
+## Pinned Agentic Session Identity
+
+Agentic sessions no longer resolve their runtime from the mutable workspace
+`ProviderSelection` after creation. The Core resolves a selectable
+`WorkspaceAgenticProfileBinding`, snapshots its immutable installation-level
+`AgenticProfileDefinition`, adapter artifact, exact model, routing constraint,
+credential reference, execution mode, and policy ceilings into the nested
+`RuntimeExecutionBinding`, and inserts that binding with the session aggregate.
+Changing the Settings default therefore affects only later sessions.
+
+Mutable continuation metadata is stored separately in
+`RuntimeProviderState`. Provider thread updates use exact-revision
+compare-and-set and are projected onto the legacy session response only for
+read compatibility. Chat sends `workspace_profile_binding_id` with a new
+session choice and never mutates the Settings default. Child sessions receive a
+new immutable binding derived from the parent but start with independent
+provider state.
+
+The schema migration publishes preview Codex definitions and workspace
+bindings from legacy selections, pins unambiguous existing agentic sessions,
+and moves their provider thread into revision-zero provider state. Ambiguous
+legacy sessions remain readable. A narrow legacy execution path remains during
+the staged migration and is scheduled for removal before the multimodel
+runtime reaches general availability.
+
 ## Current Provider Reality
 
 The current practical backend is Codex.

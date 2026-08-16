@@ -29,6 +29,14 @@ class FakeCollection:
             return True
         return False
 
+    def compare_and_set(self, query: dict, update: dict) -> bool:
+        payload = dict(update.get("$set", {}))
+        for index, document in enumerate(self.documents):
+            if _matches(document, query):
+                self.documents[index] = {**document, **payload}
+                return True
+        return False
+
     def insert_one_if_absent(self, query: dict, document: dict) -> tuple[dict, bool]:
         payload = {**query, **document}
         for existing in self.documents:

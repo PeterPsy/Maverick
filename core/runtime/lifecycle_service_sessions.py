@@ -8,8 +8,11 @@ from typing import TYPE_CHECKING
 
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.errors import RuntimeTransitionError
+from core.runtime.execution_binding import RuntimeExecutionBinding, fork_runtime_execution_binding
+from core.runtime.models import RuntimeRoutingDecision
 from core.runtime.paths import normalize_runtime_session_id
 from core.runtime.routing import build_runtime_routing
+from core.runtime.session_provider_state import initial_runtime_state, initialize_bound_provider_state
 from core.runtime.runtime_session import (
     RuntimeSessionGrantRecord,
     RuntimeSessionRecord,
@@ -21,7 +24,6 @@ from core.runtime.runtime_session import (
     coerce_skill_activation_mode,
     normalize_runtime_session_visibility,
 )
-from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.store import RuntimeStore
 from core.workspaces.models import WorkspaceGovernanceRecord
 
@@ -72,6 +74,8 @@ def create_runtime_session(
     now: datetime | None = None,
     start_path: Path | None = None,
     observability_store=None,
+    execution_binding: RuntimeExecutionBinding | None = None,
+    routing: RuntimeRoutingDecision | None = None,
 ) -> RuntimeSessionRecord:
     """Create one runtime session and its initial runtime state."""
     timestamp = now or utcnow()
@@ -82,7 +86,7 @@ def create_runtime_session(
     )
     normalized_runtime_mode = coerce_runtime_mode(runtime_mode)
     normalized_skill_activation_mode = coerce_skill_activation_mode(skill_activation_mode)
-    routing = build_runtime_routing(
+    routing = routing or build_runtime_routing(
         session_id=session_id,
         workspace_id=workspace_id,
         agent_id=agent_id,
@@ -91,6 +95,14 @@ def create_runtime_session(
         platform_allows_full_access=platform_allows_full_access,
         start_path=start_path,
     )
+    if routing.workspace_id != workspace_id or routing.agent_id != agent_id:
+        raise ValueError("Runtime routing decision does not match the requested session identity.")
+    if execution_binding is not None and (
+        execution_binding.session_id != session_id
+        or execution_binding.workspace_id != workspace_id
+        or execution_binding.execution_mode != routing.effective_mode
+    ):
+        raise ValueError("Runtime execution binding does not match the session routing decision.")
     session = RuntimeSessionRecord(
         session_id=session_id,
         workspace_id=workspace_id,
@@ -122,23 +134,21 @@ def create_runtime_session(
         created_by_user_id=_optional_text(created_by_user_id),
         creator_runtime_session_id=_optional_text(creator_runtime_session_id),
         grants=_platform_runtime_grants(grants),
+        execution_binding=execution_binding,
+        provider_id=execution_binding.runtime_engine_id if execution_binding is not None else None,
         hosted_provider_id=_optional_text(hosted_provider_id),
         hosted_model_id=_optional_text(hosted_model_id),
     )
-    state = RuntimeStateRecord(
+    state = initial_runtime_state(session_id=session_id, workspace_id=workspace_id, now=timestamp)
+    saved = store.insert_session(session)
+    initialize_bound_provider_state(
+        store,
+        execution_binding,
         session_id=session_id,
         workspace_id=workspace_id,
-        current_turn_id=None,
-        session_status="created",
-        turn_status=None,
-        last_progress_at=None,
-        watchdog_deadline_at=None,
-        forced_stop_reason=None,
-        last_error_detail=None,
-        updated_at=timestamp,
+        now=timestamp,
     )
     store.save_state(state)
-    saved = store.save_session(session)
     if observability_store is not None:
         payload = {
             "session_id": session_id,
@@ -218,6 +228,15 @@ def create_child_runtime_session(
     child_session_id = normalize_runtime_session_id(child_session_id)
     runtime_root = Path(parent.runtime_root).parent / child_session_id
     runtime_root.mkdir(parents=True, exist_ok=True)
+    execution_binding = (
+        fork_runtime_execution_binding(
+            parent.execution_binding,
+            session_id=child_session_id,
+            created_at=timestamp,
+        )
+        if parent.execution_binding is not None
+        else None
+    )
     session = RuntimeSessionRecord(
         session_id=child_session_id,
         workspace_id=parent.workspace_id,
@@ -234,6 +253,7 @@ def create_child_runtime_session(
         last_progress_at=None,
         session_kind="inter_agent_participant",
         thread_visibility="hidden",
+        runtime_mode=parent.runtime_mode,
         system_prompt=_optional_text(system_prompt),
         skill_ids=_skill_id_list(skill_ids),
         skill_catalog_app_id=_optional_text(skill_catalog_app_id),
@@ -243,21 +263,26 @@ def create_child_runtime_session(
         created_by_user_id=_optional_text(created_by_user_id),
         creator_runtime_session_id=parent.session_id,
         grants=_platform_runtime_grants(grants),
+        execution_binding=execution_binding,
+        provider_id=execution_binding.runtime_engine_id if execution_binding is not None else parent.provider_id,
+        hosted_provider_id=parent.hosted_provider_id,
+        hosted_model_id=parent.hosted_model_id,
     )
-    state = RuntimeStateRecord(
+    state = initial_runtime_state(
         session_id=child_session_id,
         workspace_id=parent.workspace_id,
-        current_turn_id=None,
-        session_status="created",
-        turn_status=None,
-        last_progress_at=None,
-        watchdog_deadline_at=None,
-        forced_stop_reason=None,
-        last_error_detail=None,
-        updated_at=timestamp,
+        now=timestamp,
+    )
+    saved = store.insert_session(session)
+    initialize_bound_provider_state(
+        store,
+        execution_binding,
+        session_id=child_session_id,
+        workspace_id=parent.workspace_id,
+        now=timestamp,
     )
     store.save_state(state)
-    return store.save_session(session)
+    return saved
 
 
 def _optional_text(value: str | None) -> str | None:

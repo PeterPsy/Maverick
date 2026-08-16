@@ -27,7 +27,12 @@ from core.authorization.service import authorize_runtime_session_create, require
 from core.observability.service import append_platform_log
 from core.observability.startup_performance import startup_timer
 from core.providers.errors import ProviderError
-from core.providers.service import resolve_provider_for_runtime_session
+from core.providers.agentic_profiles import (
+    build_pinned_execution_binding,
+    ensure_codex_workspace_profile,
+)
+from core.providers.service import effective_provider_registry, resolve_provider_for_runtime_session
+from core.providers.models import ProviderSelection
 from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError, RuntimeTurnNotFoundError
 from core.runtime.client_message_claims import RuntimeClientMessageClaim, RuntimeClientMessageClaimConflictError
 from core.runtime.runtime_threads import (
@@ -52,6 +57,8 @@ from core.runtime.service import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
+from core.runtime.runtime_session import coerce_runtime_mode
+from core.runtime.routing import build_runtime_routing
 from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
     plain_hosted_chat_attachment_limit_error,
@@ -807,9 +814,53 @@ def _create_session(
         workspace_id=context.workspace_id,
     )
     source_app_id = str(body.get("source_app_id") or "").strip() or None
+    resolved_session_id = session_id or str(uuid4())
+    governance = state.workspace_store.get_governance(context.workspace_id)
+    routing = build_runtime_routing(
+        session_id=resolved_session_id,
+        workspace_id=context.workspace_id,
+        agent_id=agent_id,
+        requested_mode=body.get("requested_mode"),
+        governance=governance,
+        platform_allows_full_access=context.workspace_id == "default",
+        start_path=start_path,
+    )
+    execution_binding = None
+    if coerce_runtime_mode(body.get("runtime_mode")) == "agentic":
+        registry = effective_provider_registry(state.provider_store)
+        legacy_selection = state.provider_store.get_provider_selection(context.workspace_id)
+        if legacy_selection is None:
+            codex = registry.get_provider_definition("codex")
+            timestamp = datetime.now(tz=UTC)
+            legacy_selection = ProviderSelection(
+                selection_id=f"agentic-default:{context.workspace_id}:codex",
+                workspace_id=context.workspace_id,
+                provider_id="codex",
+                binding_id=None,
+                selection_scope="workspace_default",
+                selection_reason="implicit agentic profile compatibility default",
+                created_at=timestamp,
+                updated_at=timestamp,
+                model_id=codex.default_model_family,
+                model_reasoning_effort=None,
+            )
+        if legacy_selection.provider_id == "codex":
+            ensure_codex_workspace_profile(
+                state.provider_store,
+                definition=registry.get_provider_definition("codex"),
+                selection=legacy_selection,
+            )
+        execution_binding = build_pinned_execution_binding(
+            state.provider_store,
+            registry,
+            session_id=resolved_session_id,
+            workspace_id=context.workspace_id,
+            execution_mode=routing.effective_mode,
+            workspace_binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
+        )
     session = create_runtime_session(
         state.runtime_store,
-        session_id=session_id or str(uuid4()),
+        session_id=resolved_session_id,
         workspace_id=context.workspace_id,
         agent_id=agent_id,
         requested_mode=body.get("requested_mode"),
@@ -839,10 +890,12 @@ def _create_session(
         created_by_user_id=context.user.user_id,
         thread_visibility="hidden" if prepare_only else "user",
         grants=[],
-        governance=state.workspace_store.get_governance(context.workspace_id),
+        governance=governance,
         platform_allows_full_access=context.workspace_id == "default",
         start_path=start_path,
         observability_store=state.observability_store,
+        execution_binding=execution_binding,
+        routing=routing,
     )
     session = transition_runtime_session(
         state.runtime_store,

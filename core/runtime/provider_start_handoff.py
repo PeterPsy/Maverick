@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Callable, ContextManager, Iterator
 
-from core.runtime.errors import RuntimeTransitionError
+from core.runtime.errors import RuntimeProviderStateError, RuntimeTransitionError
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.store import RuntimeStore
 
@@ -34,6 +34,17 @@ class RuntimeProviderStartHandoff:
                 raise RuntimeTransitionError(
                     f"Cannot start a provider while session `{session.session_id}` is {session.status}."
                 )
+            if session.runtime_mode == "agentic":
+                binding = session.execution_binding
+                if binding is not None:
+                    provider_state = self.store.get_provider_state(session.session_id)
+                    if (
+                        provider_state.runtime_engine_id != binding.runtime_engine_id
+                        or provider_state.model_provider_id != binding.model_provider_id
+                    ):
+                        raise RuntimeProviderStateError(
+                            f"Runtime provider state for session `{session.session_id}` does not match its binding."
+                        )
             if self.turn_id is not None:
                 turn = self.store.get_turn(self.turn_id)
                 if turn.session_id != session.session_id or turn.status != "active":
@@ -109,9 +120,9 @@ def provider_thread_recorder(
     provider_id: str,
 ) -> Callable[[str], None]:
     """Build the lifecycle-safe provider-thread metadata callback."""
-    from core.runtime.turn_submission_service_output import _record_provider_thread_id
+    from core.runtime.provider_state_service import record_provider_thread_id
 
-    return lambda provider_thread_id: _record_provider_thread_id(
+    return lambda provider_thread_id: record_provider_thread_id(
         state,
         session_id=session_id,
         provider_id=provider_id,

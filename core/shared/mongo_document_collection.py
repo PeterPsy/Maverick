@@ -42,6 +42,20 @@ class MongoDocumentCollection:
             return
         self.collection.update_one(deepcopy(query), mongo_update, upsert=upsert)
 
+    def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
+        """Apply one Mongo conditional update and expose its matched result."""
+        payload = deepcopy(update.get("$set", {}))
+        unset_payload = deepcopy(update.get("$unset", {}))
+        mongo_update: dict[str, Any] = {}
+        if payload:
+            mongo_update["$set"] = payload
+        if unset_payload:
+            mongo_update["$unset"] = unset_payload
+        if not mongo_update:
+            return self.collection.find_one(deepcopy(query)) is not None
+        result = self.collection.update_one(deepcopy(query), mongo_update, upsert=False)
+        return bool(getattr(result, "matched_count", 0))
+
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """Atomically insert one document when no record matches the identity query."""
         payload = {**deepcopy(query), **deepcopy(document)}

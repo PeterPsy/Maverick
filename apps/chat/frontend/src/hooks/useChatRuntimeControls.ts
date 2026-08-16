@@ -111,7 +111,7 @@ export function useChatRuntimeControls({
     }
     setActiveProviderId(providerId);
     const provider = providers.find((item) => item.provider_id === providerId) || null;
-    if (providerUsesPlainHostedRuntime(provider)) {
+    if (providerUsesPlainHostedRuntime(provider) || provider?.provider_role === "runtime_engine") {
       setError(null);
       return;
     }
@@ -153,6 +153,8 @@ export function useChatRuntimeControls({
       source_app_id: config.source_app_id,
       system_prompt: promptWithActiveAppContext(config.renderedPrompt, activeApp),
       title: config.title,
+      runtime_mode: "agentic",
+      workspace_profile_binding_id: selectedProvider?.workspace_profile_binding_id,
     };
   }
 

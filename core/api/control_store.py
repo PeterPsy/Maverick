@@ -41,6 +41,10 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "provider_selections": (("workspace_id",),),
     "provider_hosted_selections": (("workspace_id", "profile"),),
     "provider_speech_selections": (("workspace_id", "profile"),),
+    "provider_agentic_profile_definitions": (("definition_id", "revision"),),
+    "provider_agentic_profile_definition_statuses": (("definition_id", "definition_revision"),),
+    "provider_agentic_workspace_bindings": (("binding_id",),),
+    "provider_agentic_migrations": (("migration_id",),),
     "runtime_api_tokens": (("token_id",),),
     "compute_jobs": (("workspace_id", "job_id"), ("workspace_id", "idempotency_key")),
     "compute_job_events": (("event_id",),),
@@ -147,6 +151,19 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
         ControlPlaneCollectionSpec("provider_credential_bindings", collections.provider.bindings),
         ControlPlaneCollectionSpec("provider_selections", collections.provider.selections),
         ControlPlaneCollectionSpec("provider_hosted_selections", collections.provider.hosted_selections),
+        ControlPlaneCollectionSpec(
+            "provider_agentic_profile_definitions",
+            collections.provider.agentic_profile_definitions,
+        ),
+        ControlPlaneCollectionSpec(
+            "provider_agentic_profile_definition_statuses",
+            collections.provider.agentic_profile_definition_statuses,
+        ),
+        ControlPlaneCollectionSpec(
+            "provider_agentic_workspace_bindings",
+            collections.provider.workspace_agentic_profile_bindings,
+        ),
+        ControlPlaneCollectionSpec("provider_agentic_migrations", collections.provider.agentic_migrations),
         ControlPlaneCollectionSpec("runtime_api_tokens", collections.runtime_api_tokens),
         ControlPlaneCollectionSpec("compute_jobs", collections.jobs.jobs),
         ControlPlaneCollectionSpec("compute_job_events", collections.jobs.events),
@@ -198,6 +215,16 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             selections=JsonFileCollection(provider_state_root / "selections.json"),
             hosted_selections=JsonFileCollection(provider_state_root / "hosted_selections.json"),
             speech_selections=JsonFileCollection(provider_state_root / "speech_selections.json"),
+            agentic_profile_definitions=JsonFileCollection(
+                provider_state_root / "agentic_profile_definitions.json"
+            ),
+            agentic_profile_definition_statuses=JsonFileCollection(
+                provider_state_root / "agentic_profile_definition_statuses.json"
+            ),
+            workspace_agentic_profile_bindings=JsonFileCollection(
+                provider_state_root / "agentic_workspace_bindings.json"
+            ),
+            agentic_migrations=JsonFileCollection(provider_state_root / "agentic_migrations.json"),
         ),
         runtime_api_tokens=JsonFileCollection(json_root / "runtime" / "api_tokens.json"),
         jobs=JobCollections(
@@ -247,6 +274,14 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             selections=collection("provider_selections"),
             hosted_selections=collection("provider_hosted_selections"),
             speech_selections=collection("provider_speech_selections"),
+            agentic_profile_definitions=collection("provider_agentic_profile_definitions"),
+            agentic_profile_definition_statuses=collection(
+                "provider_agentic_profile_definition_statuses"
+            ),
+            workspace_agentic_profile_bindings=collection(
+                "provider_agentic_workspace_bindings"
+            ),
+            agentic_migrations=collection("provider_agentic_migrations"),
         ),
         runtime_api_tokens=collection("runtime_api_tokens"),
         jobs=JobCollections(

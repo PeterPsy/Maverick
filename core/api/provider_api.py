@@ -10,6 +10,7 @@ from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_provider_selection_authority
 from core.providers.models import ProviderDefinition, ProviderHostedSelection, ProviderSelection, ProviderSpeechSelection
+from core.providers.errors import ProviderNotFoundError
 from core.providers.payloads import (
     hosted_provider_selection_payload,
     provider_model_option_payload,
@@ -34,6 +35,7 @@ from core.providers.service import (
     resolve_workspace_provider_status,
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.execution_binding import canonical_digest
 
 
 def provider_model_settings_payload(definition: ProviderDefinition, selection: ProviderSelection | None) -> dict[str, object]:
@@ -358,11 +360,53 @@ def workspace_provider_status(
         "active_provider": active_provider,
         "selection": provider_selection_payload(status.selection),
         "model_settings": None if status.active_provider is None else provider_model_settings_payload(status.active_provider, status.selection),
+        "agentic_profiles": workspace_agentic_profile_status(state, workspace_id=workspace_id),
         "hosted_text": workspace_hosted_text_status(state, workspace_id=workspace_id),
         "speech_stt": workspace_speech_stt_status(state, workspace_id=workspace_id),
         "blocked_reason": status.blocked_reason,
         "blocked_detail": status.blocked_detail,
         "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(status.available_providers)],
+    }
+
+
+def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+    """Return selectable workspace profiles without credential or authority details."""
+    items: list[dict[str, object]] = []
+    for binding in state.provider_store.list_workspace_agentic_profile_bindings(workspace_id):
+        try:
+            definition = state.provider_store.get_agentic_profile_definition(
+                binding.definition_id,
+                binding.definition_revision,
+            )
+        except ProviderNotFoundError:
+            continue
+        status = state.provider_store.get_agentic_profile_definition_status(
+            definition.definition_id,
+            definition.revision,
+        )
+        items.append(
+            {
+                "workspace_profile_binding_id": binding.binding_id,
+                "workspace_binding_revision": binding.revision,
+                "definition_id": definition.definition_id,
+                "definition_revision": definition.revision,
+                "display_name": definition.display_name,
+                "runtime_engine_id": definition.runtime_engine_id,
+                "model_provider_id": definition.model_provider_id,
+                "model_id": definition.model_id,
+                "rollout_status": None if status is None else status.rollout_status,
+                "enabled": binding.enabled,
+                "is_default": binding.is_default,
+                "credential_binding_configured": bool(binding.credential_binding_id),
+                "capability_certificate_id": definition.capability_certificate_id,
+                "policy_ceiling_digest": canonical_digest(binding.workspace_policy_ceiling),
+            }
+        )
+    items.sort(key=lambda item: (not bool(item["is_default"]), str(item["display_name"])))
+    default = next((item for item in items if item["enabled"] and item["is_default"]), None)
+    return {
+        "default_binding_id": None if default is None else default["workspace_profile_binding_id"],
+        "items": items,
     }
 
 

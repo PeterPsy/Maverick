@@ -96,6 +96,13 @@ export function selectedProviderForSession({
     return providerFallback || null;
   }
   if (activeThread && selectionSession?.provider_id) {
+    const pinnedBindingId = selectionSession.execution_binding?.workspace_binding_id || "";
+    if (pinnedBindingId) {
+      const pinned = providers.find((provider) => provider.workspace_profile_binding_id === pinnedBindingId);
+      if (pinned) {
+        return pinned;
+      }
+    }
     return providerById(providers, selectionSession.provider_id) || existingThreadDefaultProvider(providers);
   }
   if (activeThread) {

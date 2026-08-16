@@ -113,6 +113,10 @@ class RuntimeSessionJsonCollection:
                     return True
         return False
 
+    def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
+        """Apply an exact conditional update inside one session partition."""
+        return self.update_one(query, update, upsert=False)
+
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """Insert one session-partitioned record atomically when the query has no match."""
         payload = {**deepcopy(query), **deepcopy(document)}

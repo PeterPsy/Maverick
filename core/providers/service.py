@@ -7,6 +7,10 @@ from datetime import UTC, datetime
 from inspect import signature
 
 from core.observability.service import record_platform_audit, record_platform_event
+from core.providers.agentic_profiles import (
+    ensure_codex_workspace_profile,
+    provider_selection_from_execution_binding,
+)
 from core.providers.errors import (
     ProviderCapabilityError,
     ProviderError,
@@ -716,6 +720,13 @@ def configure_workspace_provider(
         selection_reason=selection_reason,
         now=now,
     )
+    if provider_id == "codex":
+        ensure_codex_workspace_profile(
+            store,
+            definition=active_registry.get_provider_definition(provider_id),
+            selection=selection,
+            now=now,
+        )
     if observability_store is not None:
         record_platform_audit(
             observability_store,
@@ -761,6 +772,20 @@ def resolve_provider_for_runtime_session(
     """Resolve the effective provider selection for one runtime session."""
     active_registry = registry or builtin_provider_registry(codex_command=codex_command)
     register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
+    execution_binding = session.execution_binding
+    if execution_binding is not None:
+        definition = active_registry.get_provider_definition(execution_binding.runtime_engine_id)
+        selection = provider_selection_from_execution_binding(execution_binding)
+        if definition.requires_credentials:
+            binding = resolve_provider_binding(
+                store,
+                provider_id=definition.provider_id,
+                workspace_id=session.workspace_id,
+                binding_id=execution_binding.credential_binding_id,
+            )
+            if binding is None:
+                raise ProviderSelectionError("credential_binding_unavailable")
+        return definition, selection
     service = ProviderSelectionService(store, active_registry)
     return service.resolve_runtime_backend_provider(workspace_id=session.workspace_id)
 
@@ -775,8 +800,12 @@ def resolve_runtime_backend_for_session(
     """Resolve provider definition, selection, and executable runtime adapter for one session."""
     active_registry = registry or builtin_provider_registry(codex_command=codex_command)
     register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
-    service = ProviderSelectionService(store, active_registry)
-    definition, selection = service.resolve_runtime_backend_provider(workspace_id=session.workspace_id)
+    definition, selection = resolve_provider_for_runtime_session(
+        store,
+        session=session,
+        registry=active_registry,
+        codex_command=codex_command,
+    )
     return definition, selection, active_registry.get_runtime_adapter(definition.provider_id)
 
 

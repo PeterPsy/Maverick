@@ -39,6 +39,16 @@ class InMemoryCollection:
             if upsert:
                 self._documents.append({**deepcopy(query), **payload})
 
+    def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
+        """Apply one conditional update and report whether the query matched."""
+        payload = deepcopy(update.get("$set", {}))
+        with self._lock:
+            for index, document in enumerate(self._documents):
+                if all(document.get(key) == value for key, value in query.items()):
+                    self._documents[index] = {**document, **payload}
+                    return True
+        return False
+
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         payload = {**deepcopy(query), **deepcopy(document)}
         with self._lock:

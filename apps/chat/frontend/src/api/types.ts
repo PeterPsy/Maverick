@@ -10,6 +10,7 @@ export type ProviderItem = {
   capabilities?: Record<string, boolean>;
   hosted_provider_id?: string;
   hosted_model_id?: string;
+  workspace_profile_binding_id?: string;
   input_modalities?: string[];
   output_modalities?: string[];
 };
@@ -70,6 +71,23 @@ export type ProviderPayload = {
   blocked_detail?: string | null;
   items?: ProviderItem[];
   available_providers?: ProviderItem[];
+  agentic_profiles?: {
+    default_binding_id: string | null;
+    items: AgenticProfileItem[];
+  } | null;
+};
+
+export type AgenticProfileItem = {
+  workspace_profile_binding_id: string;
+  definition_id: string;
+  definition_revision: string;
+  display_name: string;
+  runtime_engine_id: string;
+  model_provider_id: string;
+  model_id: string;
+  rollout_status: string | null;
+  enabled: boolean;
+  is_default: boolean;
 };
 
 export type DependencyProviderCandidate = {
@@ -325,6 +343,12 @@ export type RuntimeSession = {
   skill_catalog_app_id?: string | null;
   skill_activation_mode?: "implicit" | "explicit" | string;
   provider_id?: string;
+  execution_binding?: {
+    workspace_binding_id: string;
+    model_id: string;
+    runtime_engine_id: string;
+    binding_digest: string;
+  } | null;
   hosted_provider_id?: string | null;
   hosted_model_id?: string | null;
   prewarm_status?: string;
@@ -782,6 +806,7 @@ export type RuntimeSessionOptions = {
   routing_profile?: "fast_model" | string;
   hosted_provider_id?: string;
   hosted_model_id?: string;
+  workspace_profile_binding_id?: string;
   prepare_only?: boolean;
   title?: string;
 };

@@ -57,6 +57,19 @@ class JsonFileCollection:
                     documents.append({**deepcopy(query), **payload})
                     self._write_documents(documents)
 
+    def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
+        """Apply one conditional update while holding the collection file lock."""
+        payload = deepcopy(update.get("$set", {}))
+        with self._lock:
+            with self._process_lock(exclusive=True):
+                documents = self._read_documents()
+                for index, document in enumerate(documents):
+                    if _matches(document, query):
+                        documents[index] = {**document, **payload}
+                        self._write_documents(documents)
+                        return True
+        return False
+
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """Insert one document only when no existing document matches the query."""
         payload = {**deepcopy(query), **deepcopy(document)}

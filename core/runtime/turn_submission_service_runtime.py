@@ -24,7 +24,6 @@ from core.runtime.turn_submission_service_output import (
     _build_launch_spec_for_execution,
     _record_provider_accepted,
     _record_provider_dispatching,
-    _record_provider_thread_id,
     _record_provider_turn_start_sent,
     _record_turn_activation_completed,
     _record_turn_started,
@@ -32,6 +31,7 @@ from core.runtime.turn_submission_service_output import (
     _record_turn_worker_entered,
     _record_turn_worker_started,
 )
+from core.runtime.provider_state_service import record_provider_thread_id
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
 from core.runtime.turn_submission_service_references import (
     _materialize_app_references_for_execution,
@@ -185,7 +185,7 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                         status = "missing_provider_thread"
                         return
                     if provider_thread_id != (provider_session.provider_thread_id or ""):
-                        _record_provider_thread_id(
+                        record_provider_thread_id(
                             state,
                             session_id=provider_session.session_id,
                             provider_id=provider.provider_id,

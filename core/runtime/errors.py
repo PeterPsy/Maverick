@@ -46,3 +46,7 @@ class RuntimeTranscriptValidationError(RuntimeDomainError):
 
 class RuntimeTransitionError(RuntimeDomainError):
     """Raised when one runtime lifecycle transition is invalid."""
+
+
+class RuntimeProviderStateError(RuntimeDomainError):
+    """Raised when provider state is missing, stale, or invalid."""

@@ -38,6 +38,14 @@ class WorkspaceRuntimeJsonCollection:
             raise ValueError(f"Runtime {self.filename} updates require workspace_id.")
         JsonFileCollection(self._record_path(workspace_id)).update_one(query, update, upsert=upsert)
 
+    def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
+        """Apply an exact conditional update inside one workspace partition."""
+        payload = deepcopy(update.get("$set", {}))
+        workspace_id = str(payload.get("workspace_id") or query.get("workspace_id") or "").strip()
+        if not workspace_id:
+            raise ValueError(f"Runtime {self.filename} compare-and-set requires workspace_id.")
+        return JsonFileCollection(self._record_path(workspace_id)).compare_and_set(query, update)
+
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """Insert one workspace-scoped record atomically when no existing record matches."""
         payload = {**deepcopy(query), **deepcopy(document)}

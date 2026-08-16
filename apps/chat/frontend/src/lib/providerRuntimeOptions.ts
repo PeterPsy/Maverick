@@ -3,7 +3,34 @@ import type { AgentRuntimeConfig } from "../hooks/useMessageSubmission";
 
 export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem[] {
   const options: ProviderItem[] = [];
-  if (payload.active_provider && providerIsActive(payload.active_provider)) {
+  const agenticProfiles = (payload.agentic_profiles?.items || []).filter(
+    (profile) => profile.enabled && profile.rollout_status !== "disabled" && profile.rollout_status !== "suspended",
+  );
+  if (agenticProfiles.length) {
+    options.push(
+      ...agenticProfiles.map((profile) => {
+        const engine = [payload.active_provider, ...(payload.available_providers || [])].find(
+          (provider) => provider?.provider_id === profile.runtime_engine_id,
+        );
+        return {
+          ...(engine || {
+            description: "Pinned agentic runtime profile",
+            label: profile.display_name,
+            status: "active",
+            default_model_family: profile.model_id,
+          }),
+          provider_id: profile.is_default
+            ? profile.runtime_engine_id
+            : `agentic:${encodeURIComponent(profile.workspace_profile_binding_id)}`,
+          provider_role: "runtime_engine",
+          workspace_profile_binding_id: profile.workspace_profile_binding_id,
+          default_model_family: profile.model_id,
+          label: profile.display_name,
+          status: "active",
+        };
+      }),
+    );
+  } else if (payload.active_provider && providerIsActive(payload.active_provider)) {
     options.push(payload.active_provider);
   }
 

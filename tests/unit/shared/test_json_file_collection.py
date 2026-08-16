@@ -20,6 +20,31 @@ def _write_json_collection_records(path_text: str, start: int, count: int) -> No
 
 
 class JsonFileCollectionTestCase(unittest.TestCase):
+    def test_compare_and_set_updates_only_the_expected_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = JsonFileCollection(Path(temp_dir) / "records.json")
+            collection.update_one(
+                {"record_id": "one"},
+                {"$set": {"record_id": "one", "revision": 0, "value": "initial"}},
+                upsert=True,
+            )
+
+            updated = collection.compare_and_set(
+                {"record_id": "one", "revision": 0},
+                {"$set": {"revision": 1, "value": "updated"}},
+            )
+            stale = collection.compare_and_set(
+                {"record_id": "one", "revision": 0},
+                {"$set": {"revision": 2, "value": "stale"}},
+            )
+
+            self.assertTrue(updated)
+            self.assertFalse(stale)
+            self.assertEqual(
+                collection.find_one({"record_id": "one"}),
+                {"record_id": "one", "revision": 1, "value": "updated"},
+            )
+
     def test_append_only_upsert_appends_without_losing_existing_documents(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "events.json"

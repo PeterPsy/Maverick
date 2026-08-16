@@ -122,6 +122,36 @@ const googleProvider = {
 };
 
 describe("provider runtime options", () => {
+  it("maps agentic profiles to per-session choices without changing the runtime engine id", () => {
+    const providers = providerItemsFromPayload({
+      ...payload,
+      agentic_profiles: {
+        default_binding_id: "binding-codex",
+        items: [
+          {
+            workspace_profile_binding_id: "binding-codex",
+            definition_id: "profile-codex",
+            definition_revision: "1",
+            display_name: "Codex · gpt-5.6-sol",
+            runtime_engine_id: "codex",
+            model_provider_id: "codex",
+            model_id: "gpt-5.6-sol",
+            rollout_status: "preview",
+            enabled: true,
+            is_default: true,
+          },
+        ],
+      },
+    });
+
+    expect(providers[0]).toMatchObject({
+      provider_id: "codex",
+      workspace_profile_binding_id: "binding-codex",
+      default_model_family: "gpt-5.6-sol",
+      label: "Codex · gpt-5.6-sol",
+    });
+  });
+
   it("labels hosted text options with the selected model and provider", () => {
     expect(providerItemsFromPayload(payload).map((provider) => provider.label)).toEqual([
       "Codex",

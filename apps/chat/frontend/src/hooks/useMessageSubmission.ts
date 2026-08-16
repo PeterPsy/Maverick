@@ -56,6 +56,7 @@ export type AgentRuntimeConfig = {
   routing_profile?: string;
   hosted_provider_id?: string;
   hosted_model_id?: string;
+  workspace_profile_binding_id?: string;
   skill_catalog_app_id: string;
   skill_ids: string[];
   skill_activation_mode?: "implicit" | "explicit";
@@ -265,6 +266,7 @@ export function runtimeSessionOptionsForNewChat({
     routing_profile: agentRuntimeConfig?.routing_profile,
     hosted_provider_id: agentRuntimeConfig?.hosted_provider_id,
     hosted_model_id: agentRuntimeConfig?.hosted_model_id,
+    workspace_profile_binding_id: agentRuntimeConfig?.workspace_profile_binding_id,
     title: "New chat",
   };
 }
@@ -277,6 +279,7 @@ function preparedRuntimeSessionKey(conversationKey: string, options: RuntimeSess
     agent_type_id: options.agent_type_id || "",
     hosted_model_id: options.hosted_model_id || "",
     hosted_provider_id: options.hosted_provider_id || "",
+    workspace_profile_binding_id: options.workspace_profile_binding_id || "",
     project_id: options.project_id || null,
     routing_profile: options.routing_profile || "",
     runtime_mode: options.runtime_mode || "",

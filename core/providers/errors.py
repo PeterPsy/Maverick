@@ -37,3 +37,11 @@ class ProviderUsageUnavailableError(ProviderError):
     def __init__(self, reason: str) -> None:
         self.reason = str(reason or "provider_unavailable")
         super().__init__(self.reason)
+
+
+class AgenticProfileError(ProviderError):
+    """Raised when an agentic definition or workspace binding is invalid."""
+
+
+class AgenticProfileConflictError(AgenticProfileError):
+    """Raised when an immutable record or expected revision conflicts."""

@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Literal
 
 from core.execution_policy.models import ExecutionMode
+from core.runtime.execution_binding import RuntimeExecutionBinding, execution_binding_from_document
 
 
 RuntimeSessionStatus = Literal["created", "running", "stopping", "stopped", "failed"]
@@ -77,6 +78,7 @@ class RuntimeSessionRecord:
     created_by_user_id: str | None = None
     creator_runtime_session_id: str | None = None
     grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] = field(default_factory=list)
+    execution_binding: RuntimeExecutionBinding | None = None
     provider_id: str | None = None
     provider_thread_id: str | None = None
     hosted_provider_id: str | None = None
@@ -167,6 +169,11 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     payload["thread_visibility"] = thread_visibility
     payload["runtime_mode"] = coerce_runtime_mode(payload.get("runtime_mode"))
     payload["skill_activation_mode"] = coerce_skill_activation_mode(payload.get("skill_activation_mode"))
+    execution_binding = payload.get("execution_binding")
+    if isinstance(execution_binding, dict):
+        payload["execution_binding"] = execution_binding_from_document(execution_binding)
+    elif execution_binding is not None and not isinstance(execution_binding, RuntimeExecutionBinding):
+        raise ValueError("Runtime execution binding must be an object.")
     return RuntimeSessionRecord(**payload)
 
 

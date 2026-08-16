@@ -629,29 +629,6 @@ def _record_provider_accepted(
     )
 
 
-def _record_provider_thread_id(
-    state: PlatformState,
-    *,
-    session_id: str,
-    provider_id: str,
-    provider_thread_id: str,
-) -> RuntimeEventRecord:
-    updated = state.runtime_store.patch_session_metadata(
-        session_id=session_id,
-        workspace_id=state.runtime_store.get_session(session_id).workspace_id,
-        updates={"provider_id": provider_id, "provider_thread_id": provider_thread_id},
-    )
-    return record_runtime_event(
-        state.runtime_store,
-        event_id=str(uuid4()),
-        session_id=updated.session_id,
-        plane="runtime",
-        event_type="runtime.provider_thread.bound",
-        payload={"provider_id": provider_id, "provider_thread_id": provider_thread_id},
-        event_bus=state.runtime_event_bus,
-    )
-
-
 def _build_launch_spec_for_execution(
     state: PlatformState,
     *,

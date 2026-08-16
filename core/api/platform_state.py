@@ -23,6 +23,8 @@ from core.jobs.service import JobService
 from core.jobs.store import JobDocumentStore
 from core.observability.store import ObservabilityDocumentStore, ObservabilityCollections
 from core.providers.provider_codex import refresh_workspace_maverick_wrappers
+from core.providers.agentic_migration import migrate_agentic_runtime_schema
+from core.providers.service import builtin_provider_registry
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
 from core.providers.store import ProviderDocumentStore
 from core.recovery.store import RecoveryDocumentStore, RecoveryCollections
@@ -90,6 +92,10 @@ def bootstrap_platform_state(
     runtime_events = RuntimeEventJsonCollection(start_path=repository_root)
     runtime_processes = RuntimeSessionJsonCollection(start_path=repository_root, filename="processes.json")
     runtime_states = RuntimeSessionJsonCollection(start_path=repository_root, filename="state.json")
+    runtime_provider_states = RuntimeSessionJsonCollection(
+        start_path=repository_root,
+        filename="provider_state.json",
+    )
     runtime_threads = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="threads.json")
     runtime_client_messages = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="client_messages.json")
     runtime_app_streams = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="app_streams.json")
@@ -108,6 +114,7 @@ def bootstrap_platform_state(
             client_messages=runtime_client_messages,
             app_streams=runtime_app_streams,
             app_stream_events=runtime_app_stream_events,
+            provider_states=runtime_provider_states,
             api_tokens=control_collections.runtime_api_tokens,
         )
     )
@@ -143,6 +150,12 @@ def bootstrap_platform_state(
         provider_store=provider_store,
         install_builtin_apps=install_builtin_apps,
         register_providers=register_builtin_provider_definitions,
+        now=now,
+    )
+    migrate_agentic_runtime_schema(
+        provider_store,
+        runtime_store,
+        builtin_provider_registry(),
         now=now,
     )
     if bootstrap_admin:

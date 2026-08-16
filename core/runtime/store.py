@@ -9,6 +9,7 @@ from typing import Any, ContextManager, Protocol
 
 from core.runtime.errors import (
     RuntimeProcessNotFoundError,
+    RuntimeProviderStateError,
     RuntimeSessionNotFoundError,
     RuntimeStateNotFoundError,
     RuntimeThreadNotFoundError,
@@ -33,10 +34,12 @@ from core.runtime.models import RuntimeLocation
 from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_process import RuntimeProcessRecord
+from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.runtime_session import RuntimeApiTokenRecord, RuntimeSessionRecord, runtime_session_allows_user_thread, runtime_session_from_document
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.shared.in_memory_collection import InMemoryCollection
 
 
 MAX_RUNTIME_EVENTS_PER_SESSION = 500
@@ -131,6 +134,9 @@ class DocumentCollection(Protocol):
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         ...
 
+    def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
+        ...
+
     def delete_one(self, query: dict[str, Any]) -> Any:
         ...
 
@@ -149,6 +155,7 @@ class RuntimeCollections:
     client_messages: DocumentCollection | None = None
     app_streams: DocumentCollection | None = None
     app_stream_events: DocumentCollection | None = None
+    provider_states: DocumentCollection | None = None
 
 
 class RuntimeStore(Protocol):
@@ -163,6 +170,9 @@ class RuntimeStore(Protocol):
         ...
 
     def save_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
+        ...
+
+    def insert_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
         ...
 
     def patch_session_metadata(
@@ -364,6 +374,20 @@ class RuntimeStore(Protocol):
     def get_state(self, session_id: str) -> RuntimeStateRecord:
         ...
 
+    def initialize_provider_state(self, record: RuntimeProviderState) -> RuntimeProviderState:
+        ...
+
+    def get_provider_state(self, session_id: str) -> RuntimeProviderState:
+        ...
+
+    def update_provider_state(
+        self,
+        record: RuntimeProviderState,
+        *,
+        expected_revision: int,
+    ) -> RuntimeProviderState:
+        ...
+
     def delete_session_records(self, session_id: str) -> dict[str, int]:
         ...
 
@@ -505,6 +529,7 @@ class RuntimeDocumentStore:
 
     def __init__(self, collections: RuntimeCollections) -> None:
         self.collections = collections
+        self._provider_states = collections.provider_states or InMemoryCollection()
         self._fallback_lock = RLock()
         self._partition_index_lock = RLock()
         self._session_workspace_index: dict[str, str] = {}
@@ -523,11 +548,46 @@ class RuntimeDocumentStore:
         return self._fallback_lock
 
     def save_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
+        identity = {"session_id": record.session_id, "workspace_id": record.workspace_id}
+        existing_document = self.collections.sessions.find_one(identity)
+        if existing_document is not None:
+            existing_binding = runtime_session_from_document(existing_document).execution_binding
+            binding_changed = existing_binding != record.execution_binding
+            legacy_migration = (
+                existing_binding is None
+                and record.execution_binding is not None
+                and record.execution_binding.legacy_inferred
+            )
+            if binding_changed and not legacy_migration:
+                raise RuntimeProviderStateError(
+                    f"Runtime session `{record.session_id}` execution binding is immutable."
+                )
+        payload = asdict(record)
+        # Mutable provider continuation metadata is authoritative only in
+        # RuntimeProviderState. Keep the legacy field readable for migration,
+        # but never create or update it through session writes.
+        payload.pop("provider_thread_id", None)
         self.collections.sessions.update_one(
-            {"session_id": record.session_id, "workspace_id": record.workspace_id},
-            {"$set": asdict(record)},
+            identity,
+            {"$set": payload},
             upsert=True,
         )
+        self._remember_session_partition(record.session_id, record.workspace_id)
+        return record
+
+    def insert_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
+        """Insert one session aggregate without overwriting an existing binding."""
+        payload = asdict(record)
+        payload.pop("provider_thread_id", None)
+        _document, inserted = self._insert_one_if_absent(
+            self.collections.sessions,
+            {"session_id": record.session_id, "workspace_id": record.workspace_id},
+            payload,
+        )
+        if not inserted:
+            raise RuntimeProviderStateError(
+                f"Runtime session `{record.session_id}` already exists; its execution binding is immutable."
+            )
         self._remember_session_partition(record.session_id, record.workspace_id)
         return record
 
@@ -554,6 +614,10 @@ class RuntimeDocumentStore:
                 )
             if not updates:
                 return current
+            if "provider_thread_id" in updates and current.execution_binding is not None:
+                raise RuntimeProviderStateError(
+                    "Pinned sessions store provider thread metadata only in RuntimeProviderState."
+                )
             payload = {**updates, "updated_at": now or datetime.now(tz=UTC)}
             self.collections.sessions.update_one(
                 {"session_id": session_id, "workspace_id": workspace_id},
@@ -594,10 +658,13 @@ class RuntimeDocumentStore:
             raise RuntimeSessionNotFoundError(f"Runtime session `{session_id}` was not found.")
         session = runtime_session_from_document(document)
         self._remember_session_partition(session.session_id, session.workspace_id)
-        return session
+        return self._session_with_provider_state(session)
 
     def list_sessions(self, workspace_id: str) -> list[RuntimeSessionRecord]:
-        return _valid_runtime_sessions(self.collections.sessions.find({"workspace_id": workspace_id}))
+        return [
+            self._session_with_provider_state(session)
+            for session in _valid_runtime_sessions(self.collections.sessions.find({"workspace_id": workspace_id}))
+        ]
 
     def runtime_session_thread_visibility_map(self, workspace_id: str) -> dict[str, bool]:
         visibility: dict[str, bool] = {}
@@ -612,7 +679,10 @@ class RuntimeDocumentStore:
         return visibility
 
     def list_all_sessions(self) -> list[RuntimeSessionRecord]:
-        return _valid_runtime_sessions(self.collections.sessions.find({}))
+        return [
+            self._session_with_provider_state(session)
+            for session in _valid_runtime_sessions(self.collections.sessions.find({}))
+        ]
 
     def delete_session_records(self, session_id: str) -> dict[str, int]:
         session_document = self.collections.sessions.find_one({"session_id": session_id}) or {}
@@ -623,6 +693,7 @@ class RuntimeDocumentStore:
             "events": 0,
             "processes": 0,
             "states": 0,
+            "provider_states": 0,
             "api_tokens": 0,
             "client_messages": 0,
             "app_streams": 0,
@@ -648,6 +719,12 @@ class RuntimeDocumentStore:
         )
         deleted["states"] = _delete_session_records(
             self.collections.states,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            identity_field="session_id",
+        )
+        deleted["provider_states"] = _delete_session_records(
+            self._provider_states,
             session_id=session_id,
             workspace_id=workspace_id,
             identity_field="session_id",
@@ -1838,6 +1915,69 @@ class RuntimeDocumentStore:
         self._remember_session_partition(state.session_id, state.workspace_id)
         return state
 
+    def initialize_provider_state(self, record: RuntimeProviderState) -> RuntimeProviderState:
+        """Insert revision zero for one bound session exactly once."""
+        if record.revision != 0:
+            raise RuntimeProviderStateError("Initial runtime provider state must use revision zero.")
+        document, inserted = self._insert_one_if_absent(
+            self._provider_states,
+            {"session_id": record.session_id, "workspace_id": record.workspace_id},
+            asdict(record),
+        )
+        existing = RuntimeProviderState(**document)
+        if not inserted and existing != record:
+            raise RuntimeProviderStateError(
+                f"Runtime provider state for session `{record.session_id}` already exists."
+            )
+        self._remember_session_partition(record.session_id, record.workspace_id)
+        return existing
+
+    def get_provider_state(self, session_id: str) -> RuntimeProviderState:
+        """Read the mutable provider state for one runtime session."""
+        query = self._session_query(session_id)
+        document = self._provider_states.find_one(query)
+        if document is None and "workspace_id" in query:
+            document = self._provider_states.find_one({"session_id": session_id})
+        if document is None:
+            raise RuntimeProviderStateError(
+                f"Runtime provider state for session `{session_id}` was not found."
+            )
+        state = RuntimeProviderState(**document)
+        self._remember_session_partition(state.session_id, state.workspace_id)
+        return state
+
+    def update_provider_state(
+        self,
+        record: RuntimeProviderState,
+        *,
+        expected_revision: int,
+    ) -> RuntimeProviderState:
+        """Advance provider-private state by exactly one revision through CAS."""
+        if expected_revision < 0 or record.revision != expected_revision + 1:
+            raise RuntimeProviderStateError(
+                "Runtime provider state updates must advance the expected revision by exactly one."
+            )
+        current = self.get_provider_state(record.session_id)
+        if (
+            current.workspace_id != record.workspace_id
+            or current.runtime_engine_id != record.runtime_engine_id
+            or current.model_provider_id != record.model_provider_id
+        ):
+            raise RuntimeProviderStateError("Runtime provider state identity fields are immutable.")
+        applied = self._provider_states.compare_and_set(
+            {
+                "session_id": record.session_id,
+                "workspace_id": record.workspace_id,
+                "revision": expected_revision,
+            },
+            {"$set": asdict(record)},
+        )
+        if not applied:
+            raise RuntimeProviderStateError(
+                f"Stale runtime provider state revision `{expected_revision}` for session `{record.session_id}`."
+            )
+        return record
+
     def save_thread(self, record: RuntimeThreadRecord) -> RuntimeThreadRecord:
         self.collections.threads.update_one({"thread_id": record.thread_id}, {"$set": asdict(record)}, upsert=True)
         return record
@@ -1930,6 +2070,14 @@ class RuntimeDocumentStore:
         if workspace_id:
             query["workspace_id"] = workspace_id
         return query
+
+    def _session_with_provider_state(self, session: RuntimeSessionRecord) -> RuntimeSessionRecord:
+        """Project mutable continuation state onto the legacy read model only."""
+        try:
+            provider_state = self.get_provider_state(session.session_id)
+        except RuntimeProviderStateError:
+            return session
+        return replace(session, provider_thread_id=provider_state.provider_thread_id)
 
     def _turn_query(self, turn_id: str) -> dict[str, str]:
         query = {"turn_id": turn_id}

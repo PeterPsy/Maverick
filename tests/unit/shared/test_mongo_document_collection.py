@@ -36,12 +36,12 @@ class FakeMongoCollection:
                 for field in unset_payload:
                     updated.pop(field, None)
                 self.documents[index] = updated
-                return FakeUpdateResult(None)
+                return FakeUpdateResult(None, matched_count=1)
         if upsert:
             inserted_id = f"fake-{len(self.documents)}"
             self.documents.append({"_id": inserted_id, **deepcopy(query), **insert_payload, **payload})
-            return FakeUpdateResult(inserted_id)
-        return FakeUpdateResult(None)
+            return FakeUpdateResult(inserted_id, matched_count=0)
+        return FakeUpdateResult(None, matched_count=0)
 
     def delete_one(self, query: dict[str, Any]) -> None:
         for index, document in enumerate(self.documents):
@@ -57,6 +57,25 @@ class FakeMongoCollection:
 
 
 class MongoDocumentCollectionTestCase(unittest.TestCase):
+    def test_compare_and_set_reports_match_and_rejects_stale_revision(self) -> None:
+        fake = FakeMongoCollection()
+        fake.documents.append({"record_id": "one", "revision": 0})
+        collection = MongoDocumentCollection(fake)
+
+        self.assertTrue(
+            collection.compare_and_set(
+                {"record_id": "one", "revision": 0},
+                {"$set": {"revision": 1}},
+            )
+        )
+        self.assertFalse(
+            collection.compare_and_set(
+                {"record_id": "one", "revision": 0},
+                {"$set": {"revision": 2}},
+            )
+        )
+        self.assertEqual(collection.find_one({"record_id": "one"})["revision"], 1)
+
     def test_insert_one_if_absent_is_idempotent(self) -> None:
         collection = MongoDocumentCollection(FakeMongoCollection())
 
@@ -146,8 +165,9 @@ def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
 
 
 class FakeUpdateResult:
-    def __init__(self, upserted_id: str | None) -> None:
+    def __init__(self, upserted_id: str | None, *, matched_count: int = 0) -> None:
         self.upserted_id = upserted_id
+        self.matched_count = matched_count
 
 
 if __name__ == "__main__":

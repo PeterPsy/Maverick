@@ -78,6 +78,18 @@ describe("runtime API client", () => {
     });
   });
 
+  it("serializes an agentic profile choice only on the new session", async () => {
+    await createRuntimeSession({
+      runtime_mode: "agentic",
+      workspace_profile_binding_id: "binding-codex-preview",
+    });
+
+    expect(requestBody()).toMatchObject({
+      runtime_mode: "agentic",
+      workspace_profile_binding_id: "binding-codex-preview",
+    });
+  });
+
   it("posts runtime session prewarm requests", async () => {
     await prewarmRuntimeSession("session-hot");
 

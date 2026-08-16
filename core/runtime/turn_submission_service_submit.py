@@ -98,7 +98,7 @@ def submit_runtime_turn(
         resolved_engine = None
         provider_id = HOSTED_TEXT_RUNTIME_PROVIDER_ID
     else:
-        resolved_engine = ResolvedRuntimeEngine(*resolve_runtime_engine_for_session(state.provider_store, session=session))
+        resolved_engine = ResolvedRuntimeEngine(*resolve_runtime_engine_for_session(state.provider_store, session=session, registry=getattr(state, "provider_registry", None)))
         provider = resolved_engine.provider
         provider_id = resolved_engine.provider_id
     with runtime_turn_queue_fence(queue_fence):

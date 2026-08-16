@@ -25,21 +25,24 @@ def runtime_adapter_artifact_digest(adapter: object) -> str:
     digest = hashlib.sha256()
     source_count = 0
     seen_paths: set[Path] = set()
-    for adapter_type in type(concrete).__mro__:
-        try:
-            source_path = inspect.getsourcefile(adapter_type)
-        except TypeError:
-            source_path = None
-        if not source_path:
-            continue
-        path = Path(source_path)
-        digest.update(f"{adapter_type.__module__}:{adapter_type.__qualname__}\0".encode())
-        if path in seen_paths:
-            continue
-        seen_paths.add(path)
-        digest.update(path.read_bytes())
-        digest.update(b"\0")
-        source_count += 1
+    components = (concrete, *tuple(getattr(concrete, "artifact_components", ())))
+    for component in components:
+        component_type = component if inspect.isclass(component) else type(component)
+        for adapter_type in component_type.__mro__:
+            try:
+                source_path = inspect.getsourcefile(adapter_type)
+            except TypeError:
+                source_path = None
+            if not source_path:
+                continue
+            path = Path(source_path)
+            digest.update(f"{adapter_type.__module__}:{adapter_type.__qualname__}\0".encode())
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            digest.update(path.read_bytes())
+            digest.update(b"\0")
+            source_count += 1
     if not source_count:
         raise CapabilityCertificateError("adapter_artifact_unavailable")
     return digest.hexdigest()

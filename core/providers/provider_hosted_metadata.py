@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from core.providers.provider_agentic_runtime_metadata import (
+    build_hosted_agentic_runtime_definition,
+)
+from core.providers.provider_google_metadata import build_google_ai_studio_definition
 from core.providers.models import (
     ProviderCapabilitySet,
     ProviderCredentialRequirement,
@@ -23,7 +27,8 @@ def build_hosted_provider_definitions(now: datetime | None = None) -> list[Provi
     """Return built-in hosted provider metadata without executable runtime adapters."""
     timestamp = now or utcnow()
     return [
-        _google_ai_studio_definition(timestamp),
+        build_hosted_agentic_runtime_definition(timestamp),
+        build_google_ai_studio_definition(timestamp),
         _openrouter_definition(timestamp),
         _deepgram_definition(timestamp),
         _cartesia_definition(timestamp),
@@ -106,55 +111,6 @@ def _openrouter_upstream(
     if max_completion_tokens is not None:
         payload["max_completion_tokens"] = max_completion_tokens
     return payload
-
-
-def _google_ai_studio_definition(timestamp: datetime) -> ProviderDefinition:
-    return ProviderDefinition(
-        provider_id="google-ai-studio",
-        label="Google AI Studio",
-        description="Hosted Gemini text generation provider metadata.",
-        kind="hosted_api",
-        provider_role="model_provider",
-        status="disabled",
-        capabilities=_hosted_text_capabilities(latency_class="low"),
-        default_model_family="gemini-3.5-flash",
-        requires_credentials=True,
-        supported_execution_modes=[],
-        created_at=timestamp,
-        updated_at=timestamp,
-        model_options=[
-            ProviderModelOption(
-                model_id="gemini-3.5-flash",
-                label="Gemini 3.5 Flash",
-                description="Google AI Studio Gemini Flash model candidate for fast_model routing.",
-                default_reasoning_effort=None,
-                input_modalities=["text", "image", "audio", "video", "pdf"],
-                output_modalities=["text"],
-                metadata={
-                    "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
-                    "context_length": 1000000,
-                    "max_output_tokens": 65536,
-                },
-            ),
-            ProviderModelOption(
-                model_id="gemini-3.1-flash-lite",
-                label="Gemini 3.1 Flash-Lite",
-                description="Google AI Studio Gemini Flash-Lite model candidate for fast_model routing.",
-                default_reasoning_effort=None,
-                input_modalities=["text", "image", "audio", "video", "pdf"],
-                output_modalities=["text"],
-                metadata={
-                    "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
-                    "context_length": 1048576,
-                    "max_output_tokens": 65536,
-                },
-            ),
-        ],
-        credential_requirements=[_credential("google_ai_studio_api_key", modes=["plain_hosted_chat"])],
-        network_requirements=[_network("generativelanguage.googleapis.com")],
-        execution_contract=_hosted_text_contract("google_ai_studio_api_key"),
-        latency_metadata={"latency_class": "low"},
-    )
 
 
 def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:

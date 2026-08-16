@@ -106,7 +106,15 @@ class ProvidersTestCase(unittest.TestCase):
 
         self.assertEqual(
             {definition.provider_id for definition in definitions},
-            {"cartesia", "codex", "deepgram", "google-ai-studio", "kokoro-hosted", "openrouter"},
+            {
+                "cartesia",
+                "codex",
+                "deepgram",
+                "google-ai-studio",
+                "kokoro-hosted",
+                "maverick-tool-loop",
+                "openrouter",
+            },
         )
         self.assertEqual(codex.kind, "runtime_backend")
         self.assertEqual(codex.provider_role, "runtime_engine")

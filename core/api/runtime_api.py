@@ -830,7 +830,10 @@ def _create_session(
     )
     execution_binding = None
     if coerce_runtime_mode(body.get("runtime_mode")) == "agentic":
-        registry = effective_provider_registry(state.provider_store)
+        registry = effective_provider_registry(
+            state.provider_store,
+            registry=getattr(state, "provider_registry", None),
+        )
         legacy_selection = state.provider_store.get_provider_selection(context.workspace_id)
         if legacy_selection is None:
             codex = registry.get_provider_definition("codex")

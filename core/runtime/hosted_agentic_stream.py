@@ -78,6 +78,11 @@ async def consume_hosted_provider_step(
                 if provider_event.upstream_id:
                     payload["upstream_id"] = provider_event.upstream_id
                 yield HostedProviderStepEmission("provider.accepted", payload)
+            elif provider_event.event_type == "error":
+                reason = provider_event.error_code or "provider_response_invalid"
+                if not _REASON_CODE.fullmatch(reason) or reason not in _ALLOWED_PROVIDER_ERRORS:
+                    reason = "provider_response_invalid"
+                raise HostedAgenticLoopError(reason)
             elif not accepted or completed:
                 raise HostedAgenticLoopError("provider_response_invalid")
             elif provider_event.event_type == "text_delta":
@@ -117,11 +122,6 @@ async def consume_hosted_provider_step(
                 on_private_state(provider_event)
             elif provider_event.event_type == "completed":
                 completed = True
-            elif provider_event.event_type == "error":
-                reason = provider_event.error_code or "provider_response_invalid"
-                if not _REASON_CODE.fullmatch(reason) or reason not in _ALLOWED_PROVIDER_ERRORS:
-                    reason = "provider_response_invalid"
-                raise HostedAgenticLoopError(reason)
             else:
                 raise HostedAgenticLoopError("provider_response_invalid")
     except HostedAgenticLoopError:

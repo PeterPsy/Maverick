@@ -8,6 +8,7 @@ from pathlib import Path
 from core.apps.builtin_apps import register_and_install_builtin_apps_for_active_workspaces
 from core.apps.store import AppStore
 from core.providers.service import register_builtin_providers
+from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.shared.repository import installation_paths
 from core.workspaces.service import ensure_default_workspace, ensure_default_workspace_record
@@ -20,6 +21,7 @@ def create_application(
     workspace_store: WorkspaceStore | None = None,
     app_store: AppStore | None = None,
     provider_store: ProviderStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
     install_builtin_apps: bool = True,
     register_providers: bool = True,
     now: datetime | None = None,
@@ -44,7 +46,7 @@ def create_application(
         )
         builtin_app_count = sum(len(app_ids) for app_ids in installed_by_workspace.values())
     if register_providers and provider_store is not None:
-        register_builtin_providers(provider_store)
+        register_builtin_providers(provider_store, registry=provider_registry)
     return {
         "name": "maverick-core",
         "status": "initialized",

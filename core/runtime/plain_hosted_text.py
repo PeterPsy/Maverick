@@ -100,7 +100,10 @@ def execute_plain_hosted_text_turn(
         ProviderRoutingContext(
             workspace_id=session.workspace_id,
             provider_store=state.provider_store,
-            registry=effective_provider_registry(state.provider_store),
+            registry=effective_provider_registry(
+                state.provider_store,
+                registry=getattr(state, "provider_registry", None),
+            ),
             secret_store=state.secret_store,
             request_id=None,
             hosted_provider_id=session.hosted_provider_id,
@@ -113,7 +116,10 @@ def execute_plain_hosted_text_turn(
         reason = primary_routing_failure_reason(decision)
         raise HostedTextGenerationError(reason, reason_codes=decision.reason_codes)
     model_option = _selected_model_option(
-        effective_provider_registry(state.provider_store).get_provider_definition(decision.selected_provider_id),
+        effective_provider_registry(
+            state.provider_store,
+            registry=getattr(state, "provider_registry", None),
+        ).get_provider_definition(decision.selected_provider_id),
         decision.selected_model_id_or_voice_id,
     )
     messages = build_plain_hosted_message_history(

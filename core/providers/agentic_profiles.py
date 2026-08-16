@@ -167,6 +167,9 @@ def build_pinned_execution_binding(
         workspace_id=workspace_id,
         binding_id=workspace_binding_id,
     )
+    model_provider = registry.get_provider_definition(definition.model_provider_id)
+    if model_provider.requires_credentials and not binding.credential_binding_id:
+        raise ProviderCredentialBindingError("credential_binding_unavailable")
     provider = registry.get_provider_definition(definition.runtime_engine_id)
     adapter = registry.get_agentic_runtime_adapter(provider.provider_id)
     adapter_version = str(getattr(adapter, "adapter_version", ""))

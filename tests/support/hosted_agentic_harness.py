@@ -12,6 +12,7 @@ from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.mcp.tool_registry import McpToolRegistry
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.capability_models import RuntimeCapabilitySet
 from core.providers.service import builtin_provider_registry
 from core.runtime.authority import EffectiveRuntimeAuthority
@@ -26,6 +27,10 @@ from core.runtime.hosted_agentic_models import (
     HostedProviderPrivateCodec,
 )
 from core.runtime.hosted_agentic_request import HostedAgenticRequestBuilder
+from core.runtime.hosted_provider_runtime import (
+    HostedProviderRuntime,
+    HostedProviderRuntimeRegistry,
+)
 from core.runtime.private_payload_store import EncryptedRuntimePrivatePayloadStore
 from core.runtime.provider_private_state import ProviderPrivateStateService
 from core.runtime.provider_state import RuntimeProviderState
@@ -52,7 +57,17 @@ OBJECT_SCHEMA = {
 
 
 class HostedAgenticHarness:
-    def __init__(self, test_case, *, max_tool_calls: int = 4) -> None:
+    def __init__(
+        self,
+        test_case,
+        *,
+        max_tool_calls: int = 4,
+        model_provider_id: str = "fake-model-provider",
+        model_id: str = "fake-model-v1",
+        provider_protocol: str = "fake-agentic-v1",
+        provider_api_version: str | None = "v1",
+        routing_constraint=None,
+    ) -> None:
         self.root = make_temp_repo_root(test_case)
         self.cli_calls = 0
         self.mcp_calls = 0
@@ -100,11 +115,11 @@ class HostedAgenticHarness:
             adapter_id="hosted-agentic-test-adapter",
             adapter_version="1",
             adapter_artifact_digest="b" * 64,
-            model_provider_id="fake-model-provider",
-            model_id="fake-model-v1",
-            provider_protocol="fake-agentic-v1",
-            provider_api_version="v1",
-            routing_constraint=codex_routing_constraint(),
+            model_provider_id=model_provider_id,
+            model_id=model_id,
+            provider_protocol=provider_protocol,
+            provider_api_version=provider_api_version,
+            routing_constraint=routing_constraint or codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
             execution_mode="full-access",
@@ -203,18 +218,37 @@ class HostedAgenticHarness:
             default_model_family="fake-model-v1",
         )
 
-    def adapter(self, client) -> HostedAgenticEngineAdapter:
+    def adapter(
+        self,
+        client,
+        *,
+        private_codec: HostedProviderPrivateCodec | None = None,
+        credential: EphemeralCredential | None = None,
+        cost_estimator=None,
+    ) -> HostedAgenticEngineAdapter:
+        runtimes = HostedProviderRuntimeRegistry()
+        runtimes.register(
+            HostedProviderRuntime(
+                model_provider_id=self.binding.model_provider_id,
+                provider_protocol=self.binding.provider_protocol,
+                provider_api_version=self.binding.provider_api_version,
+                client=client,
+                private_codec=private_codec
+                or HostedProviderPrivateCodec(
+                    codec_id="fake-hosted-codec",
+                    codec_version="1",
+                    schema_version="1",
+                    content_type="application/vnd.maverick.fake-private",
+                ),
+                cost_estimator=cost_estimator or (lambda _request: 0),
+            )
+        )
         loop = HostedAgenticLoop(
-            client=client,
+            provider_runtimes=runtimes,
             request_builder=self.request_builder,
-            tool_orchestrator=self.orchestrator,
+            tool_orchestrator_resolver=lambda _context, _actor: self.orchestrator,
+            tool_ledger=self.orchestrator.ledger,
             private_state_service=self.private_state_service,
-            private_codec=HostedProviderPrivateCodec(
-                codec_id="fake-hosted-codec",
-                codec_version="1",
-                schema_version="1",
-                content_type="application/vnd.maverick.fake-private",
-            ),
             policy_resolver=lambda _context: self.policy,
             authority_refresher=lambda _context: self.authority,
             actor_context_resolver=lambda _context: RuntimeToolActorContext(
@@ -226,8 +260,7 @@ class HostedAgenticHarness:
                 session_id="session-hosted",
                 execution_mode="full-access",
             ),
-            credential_resolver=lambda _context: None,
-            cost_estimator=lambda _request: 0,
+            credential_resolver=lambda _context: credential,
             turn_status_callback=self._turn_status_callback(),
             confirmation_poll_seconds=0.01,
         )

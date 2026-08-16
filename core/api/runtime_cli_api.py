@@ -10,7 +10,7 @@ from core.api.orchestration_workers import resume_orchestrated_execution_worker
 from core.app_sdk.cli import run_cli_json
 from core.authorization.errors import AuthorizationError
 from core.cli.models import CliInvocationContext
-from core.identity.errors import UserNotFoundError
+from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.output_compaction.cli_result import (
     RUNTIME_CLI_OUTPUT_PROFILE_PROVIDER_COMPACT,
@@ -18,7 +18,6 @@ from core.runtime.output_compaction.cli_result import (
     runtime_cli_output_profile,
 )
 from core.runtime.workspace_api_token import RuntimeApiTokenClaims, validate_workspace_api_token_lifecycle
-from core.workspaces.errors import WorkspaceMembershipError
 
 
 def handle_runtime_cli_api(
@@ -59,7 +58,11 @@ def handle_runtime_cli_api(
     effective_mode = session.effective_mode
     caller_kind = "full_access_agent" if effective_mode == "full-access" else "sandbox_agent"
     try:
-        platform_role, user_id, workspace_role = _runtime_actor_authority(state, session.owner_user_id, session.workspace_id)
+        platform_role, user_id, workspace_role = _runtime_actor_authority(
+            state,
+            session.owner_user_id,
+            session.workspace_id,
+        )
     except AuthorizationError as error:
         return json_response(start_response, {"error": error.reason}, status="401 Unauthorized")
     trusted_argv = [*raw_argv, "--workspace", session.workspace_id]
@@ -121,23 +124,17 @@ def _runtime_claims(state: PlatformState, environ: dict) -> tuple[RuntimeApiToke
     return validate_workspace_api_token_lifecycle(state.runtime_store, token.strip())
 
 
-def _runtime_actor_authority(state: PlatformState, user_id: str | None, workspace_id: str) -> tuple[str, str | None, str]:
-    if not user_id:
-        raise AuthorizationError("runtime_session_owner_not_authorized")
-    try:
-        user = state.identity_store.get_user(user_id)
-    except UserNotFoundError:
-        raise AuthorizationError("runtime_session_owner_not_authorized") from None
-    try:
-        membership = state.workspace_store.get_membership(user_id=user_id, workspace_id=workspace_id)
-    except WorkspaceMembershipError:
-        if user.platform_role == "admin":
-            return user.platform_role, user_id, "admin"
-        raise AuthorizationError("runtime_session_owner_not_authorized") from None
-    if membership.status != "active" and user.platform_role != "admin":
-        raise AuthorizationError("runtime_session_owner_not_authorized")
-    workspace_role = membership.role if membership.status == "active" else "admin"
-    return user.platform_role, user_id, workspace_role
+def _runtime_actor_authority(
+    state: PlatformState,
+    user_id: str | None,
+    workspace_id: str,
+) -> tuple[str, str | None, str]:
+    """Compatibility seam delegating to the shared authoritative resolver."""
+    return resolve_runtime_actor_roles(
+        state,
+        user_id=user_id,
+        workspace_id=workspace_id,
+    )
 
 
 def _runtime_cli_error_response(

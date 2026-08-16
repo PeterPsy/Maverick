@@ -6,6 +6,7 @@ from dataclasses import asdict, replace
 
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
+from core.providers.service import builtin_provider_registry
 from core.api.provider_api import workspace_provider_status, workspace_runtime_status
 from core.api.runtime_cleanup import RuntimeCleanupError, cleanup_runtime_session
 from core.api.session_api import RequestSession, public_user_payload, require_session
@@ -15,7 +16,6 @@ from core.authorization.service import (
     require_governance_management,
     require_runtime_session_operation,
 )
-from core.providers.service import builtin_provider_registry
 from core.recovery.service import execute_session_restart, record_provider_health, record_runtime_health, recovery_status
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
@@ -163,7 +163,7 @@ def _record_workspace_health(state: PlatformState, context: RequestSession, body
         provider_id = str(active_provider["provider_id"])
     result = record_provider_health(
         state.recovery_store,
-        provider_registry=builtin_provider_registry(),
+        provider_registry=getattr(state, "provider_registry", None) or builtin_provider_registry(),
         provider_id=provider_id,
         workspace_id=context.workspace_id,
         observability_store=state.observability_store,

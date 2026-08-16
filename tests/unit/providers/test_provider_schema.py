@@ -205,16 +205,27 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertEqual(google.label, "Google AI Studio")
         self.assertEqual(google.kind, "hosted_api")
         self.assertEqual(google.provider_role, "model_provider")
-        self.assertEqual(google.default_model_family, "gemini-3.5-flash")
-        self.assertEqual([option.model_id for option in google.model_options], ["gemini-3.5-flash", "gemini-3.1-flash-lite"])
-        self.assertEqual([option.label for option in google.model_options], ["Gemini 3.5 Flash", "Gemini 3.1 Flash-Lite"])
+        self.assertEqual(google.default_model_family, "gemini-3.6-flash")
+        self.assertEqual(
+            [option.model_id for option in google.model_options],
+            [
+                "gemini-3.6-flash",
+                "gemini-3.5-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-3.1-flash-lite",
+            ],
+        )
         self.assertEqual(google.model_options[0].input_modalities, ["text", "image", "audio", "video", "pdf"])
         self.assertEqual(google.model_options[0].output_modalities, ["text"])
         self.assertEqual(google.credential_requirements[0].secret_alias_or_logical_name, "google_ai_studio_api_key")
         self.assertEqual(google.network_requirements[0].allowed_hosts, ["generativelanguage.googleapis.com"])
         self.assertEqual(google.execution_contract.adapter_type if google.execution_contract else None, "hosted_text_generation")
-        self.assertEqual(payload["model_options"][0]["metadata"]["context_length"], 1000000)
-        self.assertEqual(payload["model_options"][1]["metadata"]["endpoint"], "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent")
+        self.assertEqual(payload["model_options"][0]["metadata"]["context_length"], 1048576)
+        self.assertEqual(payload["model_options"][0]["metadata"]["protocol"], "google-interactions")
+        self.assertEqual(
+            payload["model_options"][3]["metadata"]["endpoint"],
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        )
         self.assertNotIn("platform:secret-alias/google_ai_studio_api_key", str(payload))
         self.assertNotIn("secret_ref", str(payload))
 

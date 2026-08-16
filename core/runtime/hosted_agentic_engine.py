@@ -21,6 +21,7 @@ from core.providers.agentic_adapter import (
     RuntimeValidationContext,
 )
 from core.runtime.hosted_agentic_loop import HostedAgenticLoop
+from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.provider_private_state import ProviderPrivateStateError
 from core.runtime.service import transition_runtime_turn
 
@@ -45,6 +46,15 @@ class HostedAgenticEngineAdapter:
         self._cancellations: dict[str, tuple[str, Event]] = {}
         self._lock = RLock()
 
+    @property
+    def artifact_components(self) -> tuple[object, ...]:
+        """Expose the shared loop and installed provider codecs to certification."""
+        return (
+            self.loop,
+            *self.loop.artifact_components,
+            *self.loop.provider_runtimes.artifact_components(),
+        )
+
     async def validate(self, context: RuntimeValidationContext) -> RuntimeHealth:
         binding = context.binding
         if (
@@ -53,6 +63,10 @@ class HostedAgenticEngineAdapter:
             or binding.adapter_version != self.adapter_version
         ):
             return RuntimeHealth(status="unavailable", reason_codes=("adapter_version_mismatch",))
+        try:
+            self.loop.provider_runtimes.resolve(binding)
+        except HostedAgenticLoopError as error:
+            return RuntimeHealth(status="unavailable", reason_codes=(error.reason_code,))
         return RuntimeHealth(status="healthy")
 
     async def prepare(self, context: RuntimePrepareContext) -> RuntimePrepareResult:
@@ -61,8 +75,11 @@ class HostedAgenticEngineAdapter:
                 ready=False,
                 metadata={"reason_code": "hosted_launch_spec_forbidden"},
             )
+        try:
+            codec = self.loop.provider_runtimes.resolve(context.binding).private_codec
+        except HostedAgenticLoopError as error:
+            return RuntimePrepareResult(ready=False, metadata={"reason_code": error.reason_code})
         if context.provider_state.provider_private_envelope is not None:
-            codec = self.loop.private_codec
             try:
                 self.loop.private_state_service.read_state(
                     session_id=context.session.session_id,
@@ -104,7 +121,10 @@ class HostedAgenticEngineAdapter:
         return RuntimeCancelResult(cancelled=True, reason_code="cancelled")
 
     async def recover(self, context: RuntimeRecoveryContext) -> RuntimeRecoveryResult:
-        codec = self.loop.private_codec
+        try:
+            codec = self.loop.provider_runtimes.resolve(context.binding).private_codec
+        except HostedAgenticLoopError as error:
+            return RuntimeRecoveryResult(False, error.reason_code)
         if context.provider_state.provider_private_envelope is not None:
             try:
                 self.loop.private_state_service.read_state(
@@ -119,7 +139,7 @@ class HostedAgenticEngineAdapter:
             except ProviderPrivateStateError:
                 return RuntimeRecoveryResult(False, "provider_private_state_invalid")
         uncertain = False
-        ledger = self.loop.tool_orchestrator.ledger
+        ledger = self.loop.tool_ledger
         for invocation in ledger.store.list_tool_invocations(
             session_id=context.session.session_id
         ):

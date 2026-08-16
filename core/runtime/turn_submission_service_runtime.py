@@ -160,7 +160,11 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                     status = "skipped_plain_hosted"
                     return
                 resolved_engine = ResolvedRuntimeEngine(
-                    *resolve_runtime_engine_for_session(state.provider_store, session=current_session)
+                    *resolve_runtime_engine_for_session(
+                        state.provider_store,
+                        session=current_session,
+                        registry=getattr(state, "provider_registry", None),
+                    )
                 )
                 provider_id = resolved_engine.provider_id
                 if current_session.provider_id != provider_id:
@@ -868,7 +872,11 @@ def submit_runtime_turn_async(
                     )
                 else:
                     resolved_engine = ResolvedRuntimeEngine(
-                        *resolve_runtime_engine_for_session(state.provider_store, session=current_session)
+                        *resolve_runtime_engine_for_session(
+                            state.provider_store,
+                            session=current_session,
+                            registry=getattr(state, "provider_registry", None),
+                        )
                     )
                     provider = resolved_engine.provider
                     worker_provider_id = resolved_engine.provider_id

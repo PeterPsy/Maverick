@@ -9,20 +9,16 @@ import json
 from threading import Event
 from typing import Callable
 
-from core.providers.agentic_protocol import (
-    AgenticModelProviderClient,
-    AgenticToolResult,
-)
+from core.providers.agentic_protocol import AgenticToolResult
 from core.providers.agentic_adapter import RuntimeProviderEvent, RuntimeTurnContext
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.hosted_agentic_models import (
     HostedActorContextResolver,
     HostedAgenticLoopError,
     HostedAuthorityRefresher,
-    HostedCostEstimator,
     HostedCredentialResolver,
     HostedPolicyResolver,
-    HostedProviderPrivateCodec,
+    HostedToolOrchestratorResolver,
     HostedTurnStatusCallback,
     raise_if_hosted_cancelled,
 )
@@ -41,11 +37,10 @@ from core.runtime.hosted_agentic_stream import (
 )
 from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
 from core.runtime.provider_private_state import ProviderPrivateStateService
+from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 from core.runtime.tool_errors import RuntimeToolError
-from core.runtime.tool_orchestrator import (
-    RuntimeToolInvocationOutcome,
-    RuntimeToolOrchestrator,
-)
+from core.runtime.tool_orchestrator import RuntimeToolInvocationOutcome
+from core.runtime.tool_ledger import RuntimeToolLedger
 
 
 class HostedAgenticLoop:
@@ -54,35 +49,39 @@ class HostedAgenticLoop:
     def __init__(
         self,
         *,
-        client: AgenticModelProviderClient,
+        provider_runtimes: HostedProviderRuntimeRegistry,
         request_builder: HostedAgenticRequestBuilder,
-        tool_orchestrator: RuntimeToolOrchestrator,
+        tool_orchestrator_resolver: HostedToolOrchestratorResolver,
+        tool_ledger: RuntimeToolLedger,
         private_state_service: ProviderPrivateStateService,
-        private_codec: HostedProviderPrivateCodec,
         policy_resolver: HostedPolicyResolver,
         authority_refresher: HostedAuthorityRefresher,
         actor_context_resolver: HostedActorContextResolver,
         credential_resolver: HostedCredentialResolver,
-        cost_estimator: HostedCostEstimator,
         turn_status_callback: HostedTurnStatusCallback | None = None,
         confirmation_poll_seconds: float = 0.05,
     ) -> None:
-        self.client = client
+        self.provider_runtimes = provider_runtimes
         self.request_builder = request_builder
-        self.tool_orchestrator = tool_orchestrator
+        self.tool_orchestrator_resolver = tool_orchestrator_resolver
+        self.tool_ledger = tool_ledger
         self.private_state_service = private_state_service
-        self.private_codec = private_codec
-        self.private_state = HostedAgenticStateBridge(
-            service=private_state_service,
-            codec=private_codec,
-        )
         self.policy_resolver = policy_resolver
         self.authority_refresher = authority_refresher
         self.actor_context_resolver = actor_context_resolver
         self.credential_resolver = credential_resolver
-        self.cost_estimator = cost_estimator
         self.turn_status_callback = turn_status_callback
         self.confirmation_poll_seconds = max(0.01, confirmation_poll_seconds)
+
+    @property
+    def artifact_components(self) -> tuple[object, ...]:
+        """Expose shared orchestration modules to the adapter artifact digest."""
+        return (
+            HostedAgenticBudget,
+            HostedAgenticRequestBuilder,
+            HostedAgenticStateBridge,
+            HostedProviderStep,
+        )
 
     async def execute(
         self,
@@ -123,11 +122,16 @@ class HostedAgenticLoop:
     ) -> AsyncIterator[RuntimeProviderEvent]:
         authority = self.authority_refresher(context)
         policy = self.policy_resolver(context)
+        provider_runtime = self.provider_runtimes.resolve(context.binding)
+        private_state = HostedAgenticStateBridge(
+            service=self.private_state_service,
+            codec=provider_runtime.private_codec,
+        )
         budget = HostedAgenticBudget(policy)
         egress_policy = hosted_egress_policy(context, policy)
         destination_upstream_id = destination_upstream(context)
         tool_results: list[AgenticToolResult] = []
-        self.private_state.fence_turn(context)
+        private_state.fence_turn(context)
         for step in range(policy.max_steps_per_turn + 1):
             raise_if_hosted_cancelled(cancellation)
             policy = self.policy_resolver(context)
@@ -137,8 +141,9 @@ class HostedAgenticLoop:
             actor_context = self.actor_context_resolver(
                 replace(context, effective_authority=authority)
             )
-            private_state = self.private_state.read(context, authority)
-            catalog = self.tool_orchestrator.materialize(
+            provider_private_state = private_state.read(context, authority)
+            tool_orchestrator = self.tool_orchestrator_resolver(context, actor_context)
+            catalog = tool_orchestrator.materialize(
                 authority=authority,
                 context=actor_context,
             )
@@ -148,26 +153,26 @@ class HostedAgenticLoop:
                 input_text=context.input_text,
                 catalog=catalog,
                 tool_results=tuple(tool_results),
-                provider_private_state=private_state,
+                provider_private_state=provider_private_state,
                 egress_policy=egress_policy,
                 destination_upstream_id=destination_upstream_id,
                 max_output_tokens=max(1, budget.policy.max_output_tokens - budget.output_tokens),
             )
-            budget.begin_step(request, self.cost_estimator(request))
-            self.private_state.persist_request_identity(context, request.request_id)
+            budget.begin_step(request, provider_runtime.cost_estimator(request))
+            private_state.persist_request_identity(context, request.request_id)
             yield event(
                 "provider.request.sent",
                 {"request_id": request.request_id, "step": step + 1},
             )
             response: HostedProviderStep | None = None
             async for emission in consume_hosted_provider_step(
-                client=self.client,
+                client=provider_runtime.client,
                 request=request,
                 credential=self.credential_resolver(context),
                 budget=budget,
                 cancellation=cancellation,
                 destination_upstream_id=destination_upstream_id,
-                on_private_state=lambda provider_event: self.private_state.store(
+                on_private_state=lambda provider_event: private_state.store(
                     context,
                     self.authority_refresher(context),
                     provider_event,
@@ -193,9 +198,10 @@ class HostedAgenticLoop:
             actor_context = self.actor_context_resolver(
                 replace(context, effective_authority=authority)
             )
+            tool_orchestrator = self.tool_orchestrator_resolver(context, actor_context)
             budget.tighten(self.policy_resolver(context))
             tool_policy = hosted_tool_policy(authority, budget.policy)
-            outcome = self.tool_orchestrator.invoke_provider_tool(
+            outcome = tool_orchestrator.invoke_provider_tool(
                 provider_tool_name=response.tool_call.provider_tool_name,
                 provider_tool_call_id=response.tool_call.provider_tool_call_id,
                 arguments=response.tool_call.arguments,
@@ -224,7 +230,7 @@ class HostedAgenticLoop:
                     "runtime.tool_call.started",
                     tool_event_payload(outcome, display_state="executing"),
                 )
-            result, is_error = normalized_tool_result(self.tool_orchestrator, outcome)
+            result, is_error = normalized_tool_result(tool_orchestrator, outcome)
             tool_event_type = (
                 "runtime.tool_call.completed"
                 if outcome.invocation.state == "succeeded"
@@ -262,7 +268,7 @@ class HostedAgenticLoop:
             while True:
                 raise_if_hosted_cancelled(cancellation)
                 budget.check_time()
-                record = self.tool_orchestrator.ledger.store.get_tool_invocation(invocation_id)
+                record = self.tool_ledger.store.get_tool_invocation(invocation_id)
                 if record.state != "awaiting_confirmation":
                     self._resume_turn(invocation_id)
                     return RuntimeToolInvocationOutcome(record)
@@ -272,7 +278,8 @@ class HostedAgenticLoop:
                     actor_context = self.actor_context_resolver(
                         replace(context, effective_authority=authority)
                     )
-                    resumed = self.tool_orchestrator.resume_confirmed(
+                    orchestrator = self.tool_orchestrator_resolver(context, actor_context)
+                    resumed = orchestrator.resume_confirmed(
                         invocation_id=invocation_id,
                         grant_id=record.confirmation_grant_id,
                         authority=authority,
@@ -283,10 +290,10 @@ class HostedAgenticLoop:
                     return resumed
                 await asyncio.sleep(self.confirmation_poll_seconds)
         except HostedAgenticLoopError as error:
-            record = self.tool_orchestrator.ledger.store.get_tool_invocation(invocation_id)
+            record = self.tool_ledger.store.get_tool_invocation(invocation_id)
             if record.state == "awaiting_confirmation":
                 target = "cancelled" if error.reason_code == "runtime_cancelled" else "expired"
-                self.tool_orchestrator.ledger.transition(
+                self.tool_ledger.transition(
                     record,
                     target,
                     failure_reason=error.reason_code,

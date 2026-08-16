@@ -57,7 +57,11 @@ def release_idle_runtime_processes(
     with suppress(Exception):
         session = state.runtime_store.get_session(session_id)
         engine = ResolvedRuntimeEngine(
-            *resolve_runtime_engine_for_session(state.provider_store, session=session)
+            *resolve_runtime_engine_for_session(
+                state.provider_store,
+                session=session,
+                registry=getattr(state, "provider_registry", None),
+            )
         )
         if session.execution_binding is not None:
             terminated += close_agentic_runtime(
@@ -143,7 +147,7 @@ def interrupt_runtime_provider_turn(
             *resolve_runtime_engine_for_session(
                 state.provider_store,
                 session=session,
-                registry=registry,
+                registry=registry or getattr(state, "provider_registry", None),
             )
         )
         if session.execution_binding is not None:

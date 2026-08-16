@@ -207,7 +207,10 @@ def generate_hosted_thread_title(
         ProviderRoutingContext(
             workspace_id=workspace_id,
             provider_store=state.provider_store,
-            registry=effective_provider_registry(state.provider_store),
+            registry=effective_provider_registry(
+                state.provider_store,
+                registry=getattr(state, "provider_registry", None),
+            ),
             secret_store=getattr(state, "secret_store", None),
             app_id="chat",
             requested_capabilities=["text_generation", "low_latency", "thread_title"],

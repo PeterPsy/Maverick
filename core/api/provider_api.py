@@ -102,7 +102,10 @@ def _decision_failed_on_unsupported_hosted_model(decision) -> bool:
 
 def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
     """Return workspace-scoped hosted text provider status without secret refs."""
-    registry = effective_provider_registry(state.provider_store)
+    registry = effective_provider_registry(
+        state.provider_store,
+        registry=getattr(state, "provider_registry", None),
+    )
     available_providers = [
         provider
         for provider in registry.list_provider_definitions()
@@ -180,7 +183,10 @@ def _hosted_provider_display_definition(
 
 def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
     """Return workspace-scoped speech-to-text provider status without secret refs."""
-    registry = effective_provider_registry(state.provider_store)
+    registry = effective_provider_registry(
+        state.provider_store,
+        registry=getattr(state, "provider_registry", None),
+    )
     available_providers = [
         provider
         for provider in registry.list_provider_definitions()
@@ -375,7 +381,10 @@ def workspace_provider_status(
 def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
     """Return selectable workspace profiles without credential or authority details."""
     items: list[dict[str, object]] = []
-    registry = effective_provider_registry(state.provider_store)
+    registry = effective_provider_registry(
+        state.provider_store,
+        registry=getattr(state, "provider_registry", None),
+    )
     for binding in state.provider_store.list_workspace_agentic_profile_bindings(workspace_id):
         try:
             definition = state.provider_store.get_agentic_profile_definition(
@@ -746,7 +755,10 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             ProviderRoutingContext(
                 workspace_id=context.workspace_id,
                 provider_store=state.provider_store,
-                registry=effective_provider_registry(state.provider_store),
+                registry=effective_provider_registry(
+                    state.provider_store,
+                    registry=getattr(state, "provider_registry", None),
+                ),
                 secret_store=state.secret_store,
                 request_id=params.get("request_id"),
                 user_tier=params.get("user_tier"),

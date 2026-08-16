@@ -10,6 +10,7 @@ from core.providers.agentic_models import AgenticRuntimePolicy, RuntimeDataClass
 from core.providers.agentic_protocol import AgenticModelRequest, EphemeralCredential
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.tool_catalog import RuntimeToolActorContext
+from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,9 @@ HostedCredentialResolver = Callable[[object], EphemeralCredential | None]
 HostedPolicyResolver = Callable[[object], AgenticRuntimePolicy]
 HostedAuthorityRefresher = Callable[[object], EffectiveRuntimeAuthority]
 HostedActorContextResolver = Callable[[object], RuntimeToolActorContext]
+HostedToolOrchestratorResolver = Callable[
+    [object, RuntimeToolActorContext], RuntimeToolOrchestrator
+]
 HostedCostEstimator = Callable[[AgenticModelRequest], int | None]
 HostedTurnStatusCallback = Callable[[str, str], None]
 

@@ -25,12 +25,15 @@ from core.jobs.store import JobDocumentStore
 from core.observability.store import ObservabilityDocumentStore, ObservabilityCollections
 from core.providers.provider_codex import refresh_workspace_maverick_wrappers
 from core.providers.agentic_migration import migrate_agentic_runtime_schema
+from core.providers.google_agentic_profile import ensure_google_agentic_preview_profile
+from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import builtin_provider_registry
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
 from core.providers.store import ProviderDocumentStore
 from core.recovery.store import RecoveryDocumentStore, RecoveryCollections
 from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.event_bus import RuntimeEventBus
+from core.runtime.hosted_agentic_factory import build_hosted_agentic_engine_adapter
 from core.runtime.thread_event_bus import RuntimeThreadEventBus
 from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.store import RuntimeDocumentStore, RuntimeCollections
@@ -58,6 +61,7 @@ class PlatformState:
     identity_store: IdentityDocumentStore
     app_store: AppDocumentStore
     provider_store: ProviderDocumentStore
+    provider_registry: ProviderRegistry
     runtime_store: RuntimeDocumentStore
     inter_agent_store: InterAgentDocumentStore
     job_service: JobService
@@ -96,6 +100,7 @@ def bootstrap_platform_state(
     identity_store = IdentityDocumentStore(control_collections.identity)
     app_store = AppDocumentStore(control_collections.apps)
     provider_store = ProviderDocumentStore(control_collections.provider)
+    provider_registry = builtin_provider_registry()
     runtime_sessions = RuntimeSessionJsonCollection(start_path=repository_root, filename="session.json")
     runtime_turns = RuntimeSessionJsonCollection(start_path=repository_root, filename="turns.json")
     runtime_events = RuntimeEventJsonCollection(start_path=repository_root)
@@ -191,6 +196,7 @@ def bootstrap_platform_state(
         workspace_store=workspace_store,
         app_store=app_store,
         provider_store=provider_store,
+        provider_registry=provider_registry,
         install_builtin_apps=install_builtin_apps,
         register_providers=register_builtin_provider_definitions,
         now=now,
@@ -198,7 +204,7 @@ def bootstrap_platform_state(
     migrate_agentic_runtime_schema(
         provider_store,
         runtime_store,
-        builtin_provider_registry(),
+        provider_registry,
         now=now,
     )
     if bootstrap_admin:
@@ -218,6 +224,7 @@ def bootstrap_platform_state(
         identity_store=identity_store,
         app_store=app_store,
         provider_store=provider_store,
+        provider_registry=provider_registry,
         runtime_store=runtime_store,
         inter_agent_store=inter_agent_store,
         job_service=job_service,
@@ -235,6 +242,16 @@ def bootstrap_platform_state(
         provider_private_state_service=provider_private_state_service,
         agentic_egress_evaluator=agentic_egress_evaluator,
     )
+    hosted_adapter = build_hosted_agentic_engine_adapter(
+        state,
+        provider_registry=provider_registry,
+    )
+    if register_builtin_provider_definitions:
+        ensure_google_agentic_preview_profile(
+            provider_store,
+            adapter=hosted_adapter,
+            now=now,
+        )
     if recover_backend_restart:
         recover_interrupted_runtime_turns_after_backend_restart(state)
         job_service.recover_expired_jobs()

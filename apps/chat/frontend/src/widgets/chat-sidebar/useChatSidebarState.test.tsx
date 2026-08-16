@@ -240,14 +240,14 @@ describe("useChatSidebarState search persistence", () => {
     expect(button?.textContent).toBe("OpenDesign chat");
   });
 
-  it("keeps a live chat in Hot across active and completed updates from an ahead server clock", async () => {
-    const initialTime = Date.parse("2026-08-12T12:00:00.000Z");
+  it("anchors Hot to the newest catalog chat and shifts the window on live updates", async () => {
+    const initialTime = Date.parse("2026-08-20T12:00:00.000Z");
     vi.setSystemTime(initialTime);
     const initialHotThread = thread({
       thread_id: "thread-initial-hot",
       runtime_session_id: "session-initial-hot",
       title: "Initial hot chat",
-      updated_at: "2026-08-12T11:00:00.000Z",
+      updated_at: "2026-08-10T11:00:00.000Z",
     });
     let setLiveThreads: Dispatch<SetStateAction<ChatThread[]>> | null = null;
     mocks.useRuntimeThreads.mockImplementation(({ setThreads }: { setThreads: Dispatch<SetStateAction<ChatThread[]>> }) => {
@@ -272,27 +272,27 @@ describe("useChatSidebarState search persistence", () => {
       runtime_session_id: "session-live-hot",
       title: "Live hot chat",
       availability: "active",
-      updated_at: "2026-08-12T12:01:00.000Z",
+      updated_at: "2026-08-20T12:01:00.000Z",
     });
     vi.setSystemTime(initialTime + 1_000);
     await act(async () => {
       setLiveThreads?.((current) => [liveThread, ...current]);
     });
 
-    expect(button?.textContent).toBe("Live hot chat,Initial hot chat");
+    expect(button?.textContent).toBe("Live hot chat");
 
     const completedLiveThread = {
       ...liveThread,
       availability: "free",
       has_unread_completed_response: true,
-      last_completed_response_at: "2026-08-12T12:02:00.000Z",
-      updated_at: "2026-08-12T12:02:00.000Z",
+      last_completed_response_at: "2026-08-20T12:02:00.000Z",
+      updated_at: "2026-08-20T12:02:00.000Z",
     };
     await act(async () => {
       setLiveThreads?.((current) => [completedLiveThread, ...current.filter((item) => item.thread_id !== liveThread.thread_id)]);
     });
 
-    expect(button?.textContent).toBe("Live hot chat,Initial hot chat");
+    expect(button?.textContent).toBe("Live hot chat");
   });
 });
 

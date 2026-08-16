@@ -18,11 +18,7 @@ describe("chat sidebar read receipts", () => {
 
     expect(source).toContain('setRetainedUnreadThreadId(threadFilter === "unread" ? thread.thread_id : null);');
     expect(source).toContain("activeThreadId !== retainedUnreadThreadId");
-    expect(source).toContain(
-      "filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId, threadFilterReferenceTime)",
-    );
-    expect(source).toContain(
-      "buildSections(projects, threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId, threadFilterReferenceTime)",
-    );
+    expect(source).toContain("filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId)");
+    expect(source).toContain("buildSections(projects, threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId)");
   });
 });

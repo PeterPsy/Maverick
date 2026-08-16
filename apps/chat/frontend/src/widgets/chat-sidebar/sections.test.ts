@@ -10,6 +10,7 @@ import {
   isThreadUnread,
   threadSourceBadges,
 } from "./sections";
+import { threadLastMessageTimestamp } from "./threadTimestamps";
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -130,28 +131,27 @@ describe("chat sidebar runtime status", () => {
     ]);
   });
 
-  it("filters chats with activity in the last 24 hours for the Hot view", () => {
-    const referenceTime = Date.parse("2026-08-12T18:00:00.000Z");
-    const recentThread = thread({ thread_id: "recent-thread", updated_at: "2026-08-12T17:00:00.000Z" });
-    const boundaryThread = thread({ thread_id: "boundary-thread", updated_at: "2026-08-11T18:00:00.000Z" });
-    const oldThread = thread({ thread_id: "old-thread", updated_at: "2026-08-11T17:59:59.999Z" });
-    const futureThread = thread({ thread_id: "future-thread", updated_at: "2026-08-12T18:00:00.001Z" });
-    const threads = [recentThread, boundaryThread, oldThread, futureThread];
+  it("anchors the Hot window to the newest chat instead of the current time", () => {
+    const latestThread = thread({ thread_id: "latest-thread", updated_at: "2026-08-10T18:00:00.000Z" });
+    const recentThread = thread({ thread_id: "recent-thread", updated_at: "2026-08-10T17:00:00.000Z" });
+    const boundaryThread = thread({ thread_id: "boundary-thread", updated_at: "2026-08-09T18:00:00.000Z" });
+    const oldThread = thread({ thread_id: "old-thread", updated_at: "2026-08-09T17:59:59.999Z" });
+    const threads = [recentThread, oldThread, latestThread, boundaryThread];
 
     expect(HOT_THREAD_WINDOW_MS).toBe(86_400_000);
-    expect(isThreadHot(recentThread, referenceTime)).toBe(true);
-    expect(isThreadHot(boundaryThread, referenceTime)).toBe(true);
-    expect(isThreadHot(oldThread, referenceTime)).toBe(false);
-    expect(isThreadHot(futureThread, referenceTime)).toBe(true);
-    expect(filterThreads(threads, "hot", new Set(), referenceTime).map((item) => item.thread_id)).toEqual([
+    expect(isThreadHot(latestThread, threadLastMessageTimestamp(latestThread))).toBe(true);
+    expect(isThreadHot(recentThread, threadLastMessageTimestamp(latestThread))).toBe(true);
+    expect(isThreadHot(boundaryThread, threadLastMessageTimestamp(latestThread))).toBe(true);
+    expect(isThreadHot(oldThread, threadLastMessageTimestamp(latestThread))).toBe(false);
+    expect(filterThreads(threads, "hot").map((item) => item.thread_id)).toEqual([
       "recent-thread",
+      "latest-thread",
       "boundary-thread",
-      "future-thread",
     ]);
-    expect(buildSections([], threads, "hot", new Set(), null, referenceTime)[0].items.map((item) => item.thread_id)).toEqual([
+    expect(buildSections([], threads, "hot")[0].items.map((item) => item.thread_id)).toEqual([
       "recent-thread",
+      "latest-thread",
       "boundary-thread",
-      "future-thread",
     ]);
   });
 

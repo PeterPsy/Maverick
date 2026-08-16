@@ -42,9 +42,8 @@ export function buildSections(
   threadFilter: ThreadFilter = "all",
   multiAgentThreadIds: ReadonlySet<string> = new Set(),
   retainedUnreadThreadId: string | null = null,
-  referenceTime: number = Date.now(),
 ): FolderSection[] {
-  const visibleThreads = filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId, referenceTime);
+  const visibleThreads = filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId);
   const projectSections: FolderSection[] = projects.map((project) => ({
     id: project.project_id,
     projectId: project.project_id,
@@ -104,10 +103,10 @@ export function filterThreads(
   threads: ChatThread[],
   threadFilter: ThreadFilter,
   multiAgentThreadIds: ReadonlySet<string> = new Set(),
-  referenceTime: number = Date.now(),
 ): ChatThread[] {
   if (threadFilter === "hot") {
-    return threads.filter((thread) => isThreadHot(thread, referenceTime));
+    const anchorTime = latestThreadActivityTimestamp(threads);
+    return threads.filter((thread) => isThreadHot(thread, anchorTime));
   }
   if (threadFilter === "senses") {
     return threads.filter(isSensesThread);
@@ -129,12 +128,11 @@ export function filterThreadsForSidebar(
   threadFilter: ThreadFilter,
   multiAgentThreadIds: ReadonlySet<string> = new Set(),
   retainedUnreadThreadId: string | null = null,
-  referenceTime: number = Date.now(),
 ): ChatThread[] {
   if (threadFilter === "unread" && retainedUnreadThreadId) {
     return threads.filter((thread) => thread.thread_id === retainedUnreadThreadId || isThreadUnreadOrInProgress(thread));
   }
-  return filterThreads(threads, threadFilter, multiAgentThreadIds, referenceTime);
+  return filterThreads(threads, threadFilter, multiAgentThreadIds);
 }
 
 export function isSensesThread(thread: ChatThread): boolean {
@@ -169,9 +167,13 @@ export function isThreadTitlePending(thread: ChatThread | null | undefined): boo
   return Boolean(thread?.title_pending);
 }
 
-export function isThreadHot(thread: ChatThread, referenceTime: number = Date.now()): boolean {
+export function latestThreadActivityTimestamp(threads: ChatThread[]): number {
+  return threads.reduce((latest, thread) => Math.max(latest, threadLastMessageTimestamp(thread)), 0);
+}
+
+export function isThreadHot(thread: ChatThread, anchorTime: number): boolean {
   const activityTime = threadLastMessageTimestamp(thread);
-  return activityTime > 0 && activityTime >= referenceTime - HOT_THREAD_WINDOW_MS;
+  return activityTime > 0 && activityTime <= anchorTime && activityTime >= anchorTime - HOT_THREAD_WINDOW_MS;
 }
 
 export function isThreadUnread(thread: ChatThread): boolean {

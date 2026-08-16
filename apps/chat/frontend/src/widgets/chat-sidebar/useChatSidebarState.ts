@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatProject, ChatThread } from "../../api/client";
 import {
   applyThreadCatalogPayload,
@@ -49,16 +49,14 @@ const TRANSCRIPT_SEARCH_EVENT_LIMIT = 500;
 const TRANSCRIPT_SEARCH_MAX_CONCURRENT = 4;
 const THREAD_PAGE_LIMIT = 50;
 const THREAD_BACKFILL_IDLE_DELAY_MS = 320;
-const HOT_FILTER_REFRESH_INTERVAL_MS = 60_000;
 const THREAD_FILTERS: ThreadFilter[] = ["all", "hot", "unread", "opendesign", "senses", "multi_agent"];
 
 export function useChatSidebarState() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
-  const [threads, setThreadCatalog] = useState<ChatThread[]>([]);
+  const [threads, setThreads] = useState<ChatThread[]>([]);
   const [multiAgentThreadIds, setMultiAgentThreadIds] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
-  const [threadFilterReferenceTime, setThreadFilterReferenceTime] = useState(Date.now);
   const [retainedUnreadThreadId, setRetainedUnreadThreadId] = useState<string | null>(null);
   const [transcriptSearchTextByThreadId, setTranscriptSearchTextByThreadId] = useState<TranscriptSearchTextByThreadId>({});
   const [isTranscriptSearchLoading, setIsTranscriptSearchLoading] = useState(false);
@@ -77,10 +75,6 @@ export function useChatSidebarState() {
   const [isPending, setIsPending] = useState(false);
   const [isBulkDeletePending, setIsBulkDeletePending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const setThreads = useCallback<typeof setThreadCatalog>((nextThreads) => {
-    setThreadFilterReferenceTime(Date.now());
-    setThreadCatalog(nextThreads);
-  }, []);
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const transcriptSearchCacheRef = useRef<Map<string, TranscriptSearchCacheEntry>>(new Map());
   const lastPersistedSearchQueryRef = useRef("");
@@ -99,19 +93,19 @@ export function useChatSidebarState() {
     [threads],
   );
   const filteredThreads = useMemo(
-    () => filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId, threadFilterReferenceTime),
-    [multiAgentThreadIds, retainedUnreadThreadId, threadFilter, threadFilterReferenceTime, threads],
+    () => filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId),
+    [multiAgentThreadIds, retainedUnreadThreadId, threadFilter, threads],
   );
   const threadFilterCounts = useMemo(
     () => ({
       all: threads.length,
-      hot: filterThreads(threads, "hot", multiAgentThreadIds, threadFilterReferenceTime).length,
+      hot: filterThreads(threads, "hot", multiAgentThreadIds).length,
       unread: filterThreads(threads, "unread").length,
       opendesign: filterThreads(threads, "opendesign").length,
       senses: filterThreads(threads, "senses").length,
       multi_agent: filterThreads(threads, "multi_agent", multiAgentThreadIds).length,
     }),
-    [multiAgentThreadIds, threadFilterReferenceTime, threads],
+    [multiAgentThreadIds, threads],
   );
   const sections = useMemo(
     () =>
@@ -123,7 +117,7 @@ export function useChatSidebarState() {
             threads: filteredThreads,
             transcriptTextByThreadId: transcriptSearchTextByThreadId,
           })
-        : buildSections(projects, threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId, threadFilterReferenceTime),
+        : buildSections(projects, threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId),
     [
       filteredThreads,
       isTranscriptSearchLoading,
@@ -132,7 +126,6 @@ export function useChatSidebarState() {
       retainedUnreadThreadId,
       searchTerm,
       threadFilter,
-      threadFilterReferenceTime,
       threads,
       transcriptSearchTextByThreadId,
     ],
@@ -172,11 +165,6 @@ export function useChatSidebarState() {
     setError,
     setThreads,
   });
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => setThreadFilterReferenceTime(Date.now()), HOT_FILTER_REFRESH_INTERVAL_MS);
-    return () => window.clearInterval(intervalId);
-  }, []);
 
   async function refreshProjects() {
     try {

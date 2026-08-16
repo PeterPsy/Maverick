@@ -430,9 +430,9 @@ export default function Plan({
   };
 
   return (
-    <div className="bg-background text-foreground min-h-0 p-2">
+    <div className={`agent-plan-frame bg-background text-foreground min-h-0 p-2 ${compact ? "is-compact" : ""}`}>
       <motion.div
-        className="bg-card border-border rounded-lg border shadow overflow-hidden"
+        className="agent-plan-frame__surface bg-card border-border rounded-lg border shadow overflow-hidden"
         initial={{ opacity: 0, y: 10 }}
         animate={{
           opacity: 1,
@@ -444,7 +444,7 @@ export default function Plan({
         }}
       >
         <LayoutGroup>
-          <div className="p-4 overflow-hidden">
+          <div className="agent-plan-frame__content p-4 overflow-hidden">
             <ul className="space-y-1 overflow-hidden">
               {tasks.map((task, index) => {
                 const isExpanded = expandedTasks.includes(task.id);

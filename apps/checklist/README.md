@@ -149,4 +149,4 @@ For an agent plan, include richer task fields:
 }
 ```
 
-The response includes `chat_render`, which a chat host can render with the `design-checklist` widget. The structured payload is intentionally minimal and carries only the checklist id; the widget resolves the full checklist state from the Checklist backend. The widget registry uses `checklist.design`. The chat widget reports content-based pixel resize messages and expects the host to cap long checklists instead of letting them stretch the transcript indefinitely.
+The response includes `chat_render`, which a chat host can render with the `design-checklist` widget. The structured payload is intentionally minimal and carries only the checklist id; the widget resolves the full checklist state from the Checklist backend. The widget registry uses `checklist.design`. The chat widget reports content-based pixel resize messages and expects the host to cap long checklists instead of letting them stretch the transcript indefinitely. Once capped, the widget owns the remaining vertical scroll and exposes a transient overlay thumb while the user is actively scrolling.

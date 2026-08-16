@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import AgentPlan from './components/ui/agent-plan';
 import { ChecklistWidgetSkeleton } from './components/ChecklistLoadingSkeletons';
+import { useTransientOverlayScrollbar } from './components/useTransientOverlayScrollbar';
 import { loadWidgetContext, readChecklist } from './api';
 import type { ChecklistItem } from './types';
 import './styles/main.css';
@@ -16,6 +17,13 @@ function Widget() {
   const [error, setError] = useState('');
   const frameRef = useRef<HTMLElement | null>(null);
   const lastHeightRef = useRef<number | null>(null);
+  const {
+    handleScroll,
+    isScrolling,
+    refreshScrollbarMetrics,
+    scrollRef,
+    scrollbarMetrics
+  } = useTransientOverlayScrollbar();
   const tasks = useMemo(() => item?.sections.flatMap((section) => section.tasks) || [], [item]);
 
   const load = async (knownId = checklistId) => {
@@ -50,7 +58,13 @@ function Widget() {
       if (!frame) {
         return;
       }
-      const nextHeight = Math.ceil(frame.scrollHeight);
+      const scrollElement = scrollRef.current;
+      const fixedHeight = scrollElement
+        ? Math.max(0, frame.getBoundingClientRect().height - scrollElement.getBoundingClientRect().height)
+        : 0;
+      const contentHeight = scrollElement ? fixedHeight + scrollElement.scrollHeight : frame.scrollHeight;
+      const nextHeight = Math.ceil(Math.max(frame.scrollHeight, contentHeight));
+      refreshScrollbarMetrics();
       if (lastHeightRef.current === nextHeight) {
         return;
       }
@@ -66,16 +80,26 @@ function Widget() {
       );
     };
     resize();
+    const frame = window.requestAnimationFrame(resize);
+    const delayedResize = window.setTimeout(resize, 120);
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
     if (frameRef.current) {
       observer?.observe(frameRef.current);
     }
+    if (scrollRef.current) {
+      observer?.observe(scrollRef.current);
+      if (scrollRef.current.firstElementChild instanceof HTMLElement) {
+        observer?.observe(scrollRef.current.firstElementChild);
+      }
+    }
     window.addEventListener('resize', resize);
     return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(delayedResize);
       observer?.disconnect();
       window.removeEventListener('resize', resize);
     };
-  }, [item, error]);
+  }, [item, error, refreshScrollbarMetrics]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -143,7 +167,32 @@ function Widget() {
             {item.checked_count}/{item.task_count}
           </span>
         </header>
-        <AgentPlan tasks={tasks} compact readonly />
+        <div className="checklist-widget-scroll-shell">
+          <div
+            aria-label="Checklist tasks"
+            className="checklist-widget-scroll"
+            onScroll={handleScroll}
+            ref={scrollRef}
+            role="region"
+            tabIndex={0}
+          >
+            <AgentPlan tasks={tasks} compact readonly />
+          </div>
+          {scrollbarMetrics.canScroll ? (
+            <span
+              aria-hidden="true"
+              className={`checklist-widget-scrollbar ${isScrolling ? 'is-scrolling' : ''}`}
+            >
+              <span
+                className="checklist-widget-scrollbar__thumb"
+                style={{
+                  height: `${scrollbarMetrics.thumbHeight}px`,
+                  transform: `translateY(${scrollbarMetrics.thumbOffset}px)`
+                }}
+              />
+            </span>
+          ) : null}
+        </div>
       </article>
     );
   }

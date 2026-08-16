@@ -99,7 +99,7 @@
   .chatapp-structured-widget {
     width: 100%;
     min-height: min(160px, 40dvh);
-    border-radius: 14px;
+    border-radius: 0;
   }
 
   .chatapp-tool-inline,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -114,9 +115,14 @@ class ChatWidgetHostingTests(unittest.TestCase):
     def test_chat_structured_messages_use_generic_widget_host(self) -> None:
         structured_source = (REPO_ROOT / "apps/chat/frontend/src/components/StructuredContentMessage.tsx").read_text()
         host_source = (REPO_ROOT / "apps/chat/frontend/src/components/WidgetHostFrame.tsx").read_text()
+        structured_styles = (REPO_ROOT / "apps/chat/frontend/src/styles/chat/transcript/structured-content.css").read_text()
 
         self.assertIn("<WidgetHostFrame", structured_source)
         self.assertIn('hostAppId="chat"', structured_source)
+        self.assertIn("<MorphingSpinner", structured_source)
+        self.assertIn('aria-label="Loading widget"', structured_source)
+        self.assertNotIn("Ricerca widget compatibile", structured_source)
+        self.assertIn(".chatapp-structured-widget-loader", structured_styles)
         self.assertIn("listWidgets(hostAppId, content.kind)", host_source)
         self.assertIn("createWidgetContext", host_source)
         self.assertIn("host_app_id: hostAppId", host_source)
@@ -128,6 +134,15 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn("#context=", host_source)
         self.assertIn("sandbox={MAVERICK_WIDGET_IFRAME_SANDBOX}", host_source)
         self.assertNotIn("widgetContextTokenFromLocation", host_source)
+
+    def test_chat_widget_host_leaves_visual_chrome_to_widget_owner(self) -> None:
+        structured_styles = (REPO_ROOT / "apps/chat/frontend/src/styles/chat/transcript/structured-content.css").read_text()
+        widget_styles = re.findall(r"\.chatapp-structured-widget\s*\{(?P<body>[^}]*)\}", structured_styles)
+
+        self.assertTrue(widget_styles)
+        for styles in widget_styles:
+            self.assertIn("border: 0;", styles)
+            self.assertIn("background: transparent;", styles)
 
     def test_chat_widget_host_bounds_resize_messages(self) -> None:
         host_source = (REPO_ROOT / "apps/chat/frontend/src/components/WidgetHostFrame.tsx").read_text()

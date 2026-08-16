@@ -41,8 +41,36 @@ class ChecklistFrontendLayoutTest(unittest.TestCase):
             APP_ROOT / "frontend" / "src" / "components" / "ui" / "agent-plan.tsx"
         ).read_text(encoding="utf-8")
 
-        self.assertIn("bg-background text-foreground min-h-0 p-2", source)
+        self.assertIn("agent-plan-frame bg-background text-foreground min-h-0 p-2", source)
+        self.assertIn('compact ? "is-compact" : ""', source)
         self.assertNotIn("h-full overflow-auto", source)
+
+    def test_chat_widget_owns_transient_overlay_scrolling(self) -> None:
+        styles = (APP_ROOT / "frontend" / "src" / "styles" / "main.css").read_text(encoding="utf-8")
+        source = (APP_ROOT / "frontend" / "src" / "widget.tsx").read_text(encoding="utf-8")
+        scrollbar_source = (
+            APP_ROOT / "frontend" / "src" / "components" / "useTransientOverlayScrollbar.ts"
+        ).read_text(encoding="utf-8")
+
+        widget_root = css_block(styles, ".checklist-widget-body,\n.checklist-widget-body #root")
+        widget_frame = css_block(styles, ".checklist-widget-frame")
+        widget_scroll = css_block(styles, ".checklist-widget-scroll")
+        compact_plan = css_block(styles, ".agent-plan-frame.is-compact .agent-plan-frame__surface")
+
+        self.assertIn("height: 100%;", widget_root)
+        self.assertIn("overflow: hidden;", widget_root)
+        self.assertIn("height: 100%;", widget_frame)
+        self.assertIn("overflow: hidden;", widget_frame)
+        self.assertIn("overflow-y: auto;", widget_scroll)
+        self.assertIn("scrollbar-width: none;", widget_scroll)
+        self.assertIn(".checklist-widget-scrollbar.is-scrolling", styles)
+        self.assertIn(".checklist-widget-scrollbar__thumb", styles)
+        self.assertIn("border: 0;", compact_plan)
+        self.assertIn("background: transparent;", compact_plan)
+        self.assertIn("onScroll={handleScroll}", source)
+        self.assertIn("useTransientOverlayScrollbar", source)
+        self.assertIn("setIsScrolling(false)", scrollbar_source)
+        self.assertIn("SCROLL_IDLE_DELAY_MS", scrollbar_source)
 
     def test_loading_skeleton_uses_same_whole_surface_scroll_model(self) -> None:
         styles = (APP_ROOT / "frontend" / "src" / "styles" / "skeleton.css").read_text(encoding="utf-8")

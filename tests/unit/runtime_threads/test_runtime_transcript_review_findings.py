@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 import json
 import unittest
 
 from core.runtime.errors import RuntimeTranscriptAccessError, RuntimeTranscriptValidationError
+from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
@@ -16,6 +17,7 @@ from core.runtime.transcript_payloads import message_payload
 from core.runtime.transcript_projection import project_runtime_transcript
 from core.runtime.transcript_service import read_runtime_transcript, read_runtime_transcript_message
 from tests.support.collections import FakeCollection
+from tests.support.repo import make_temp_repo_root
 
 
 NOW = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
@@ -191,6 +193,101 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
         )
 
         self.assertEqual([message["content"] for message in replay["messages"]], ["first", "answer"])
+        self.assertTrue(replay["projection_complete"])
+
+    def test_legacy_snapshot_survives_first_chunk_and_fresh_read_unifies_both(self) -> None:
+        collection = RuntimeEventJsonCollection(start_path=make_temp_repo_root(self))
+        query = {"workspace_id": "default", "session_id": "session-1"}
+        legacy_events = [
+            self.event("legacy-1", "runtime.turn.queued", {"input_text": "first"}),
+            self.event("legacy-2", "runtime.output.final", {"complete_text": "answer"}, seconds=2),
+        ]
+        collection._write_documents(
+            collection._legacy_history_path(workspace_id="default", session_id="session-1"),
+            [asdict(event) for event in legacy_events],
+        )
+        legacy_page = collection.find_event_archive_page(
+            query,
+            before_position=None,
+            snapshot_position=None,
+            snapshot_event_id=None,
+            limit=10,
+        )
+
+        chunk_event = self.event(
+            "new-1",
+            "runtime.message.steered",
+            {"input_text": "written after migration"},
+            seconds=3,
+        )
+        collection.append_history_upsert(
+            {"event_id": chunk_event.event_id},
+            {"$set": asdict(chunk_event)},
+        )
+        replay = collection.find_event_archive_page(
+            query,
+            before_position=None,
+            snapshot_position=legacy_page["snapshot_position"],
+            snapshot_event_id=legacy_page["snapshot_record_id"],
+            limit=10,
+        )
+        fresh = collection.find_event_archive_page(
+            query,
+            before_position=None,
+            snapshot_position=None,
+            snapshot_event_id=None,
+            limit=2,
+        )
+        older = collection.find_event_archive_page(
+            query,
+            before_position=fresh["oldest_position"],
+            snapshot_position=fresh["snapshot_position"],
+            snapshot_event_id=fresh["snapshot_record_id"],
+            limit=2,
+        )
+
+        self.assertTrue(replay["snapshot_found"])
+        self.assertEqual([event["event_id"] for event in replay["documents"]], ["legacy-1", "legacy-2"])
+        self.assertTrue(fresh["has_more_before"])
+        self.assertEqual(
+            [event["event_id"] for event in older["documents"] + fresh["documents"]],
+            ["legacy-1", "legacy-2", "new-1"],
+        )
+
+    def test_streamed_message_status_is_stable_within_snapshot(self) -> None:
+        store = self.store()
+        active_turn = replace(
+            self.turn("turn-1", "first"),
+            status="active",
+            completed_at=None,
+            updated_at=NOW,
+        )
+        store.save_turn(active_turn)
+        store.save_event(self.event("queued", "runtime.turn.queued", {"input_text": "first"}))
+        store.save_event(self.event("delta", "runtime.output.delta", {"text": "partial"}, seconds=1))
+        first = read_runtime_transcript(store, context=self.context(), thread_id="session-1")
+
+        store.save_turn(
+            replace(
+                active_turn,
+                status="completed",
+                completed_at=NOW + timedelta(seconds=2),
+                updated_at=NOW + timedelta(seconds=2),
+            )
+        )
+        replay = read_runtime_transcript(
+            store,
+            context=self.context(),
+            thread_id="session-1",
+            snapshot_cursor=first["snapshot_cursor"],
+        )
+
+        first_agent = next(message for message in first["messages"] if message["role"] == "agent")
+        replay_agent = next(message for message in replay["messages"] if message["role"] == "agent")
+        self.assertEqual(first_agent["status"], "pending")
+        self.assertEqual(replay_agent["status"], "pending")
+        self.assertEqual(replay["messages"], first["messages"])
+        self.assertTrue(first["projection_complete"])
         self.assertTrue(replay["projection_complete"])
 
     def test_snapshot_cursor_rejects_malformed_input(self) -> None:

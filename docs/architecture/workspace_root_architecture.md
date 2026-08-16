@@ -235,7 +235,12 @@ The append-only `events-history/` archive is the authoritative source for
 complete transcript projection, including conversations whose recent
 `events.json` tail has already pruned older events. Core transcript services
 must page this archive through the runtime store adapter and must not expose or
-read its files directly from agent-facing code. Stopped and failed user-visible
+read its files directly from agent-facing code. During compatibility with the
+legacy `events-history.json` layout, that file is the immutable archive prefix
+and chunk files are its suffix; the adapter pages both as one deduplicated
+append sequence so a legacy snapshot remains valid after the first chunk is
+created. The mutable recent tail is only a fallback when no historical archive
+exists. Stopped and failed user-visible
 sessions remain readable while the session, thread, turns, and event archive
 exist. Normal runtime/thread cleanup removes those records and the historical
 archive together; deleted conversations are not recovered from residual files

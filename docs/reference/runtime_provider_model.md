@@ -228,7 +228,8 @@ See `docs/reference/runtime_output_compaction.md` for the event contract, provid
 The runtime owns the official read-only conversation projection exposed as
 `core.runtime.threads.list`, `core.runtime.transcript.read`, and
 `core.runtime.transcript.message.read` over both CLI and MCP. The projection
-pages the append-only event history through `RuntimeStore.list_event_page()`;
+pages the append-only event history through
+`RuntimeStore.list_event_archive_page()`;
 it never reconstructs a complete chat from the 500-event recent tail.
 
 The `messages` profile includes queued and steered user messages, canonical
@@ -246,7 +247,9 @@ its queued event is missing without admitting later turns. Turn submission
 fields are immutable after insertion. Turn fallbacks never
 project mutable terminal state, are reported by warning, and make projection
 completeness false. Explicit empty positions keep an earlier empty event or turn
-snapshot stable after later writes. Structured visible output applies
+snapshot stable after later writes. Streamed output status in historical reads
+is derived only from terminal events inside that event snapshot, never from the
+mutable current turn status. Structured visible output applies
 case/separator-insensitive sensitive-key filtering and one global node and JSON
 byte budget. Its response
 metadata states whether the structured payload is complete or truncated.

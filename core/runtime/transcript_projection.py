@@ -75,7 +75,9 @@ def project_runtime_transcript(
         if segment is None or not segment.text:
             return
         turn = turns_by_id.get(turn_id)
-        terminal = bool(turn and turn.status in {"completed", "failed", "cancelled", "timed-out"})
+        terminal = include_turn_status_fallbacks and bool(
+            turn and turn.status in {"completed", "failed", "cancelled", "timed-out"}
+        )
         push(
             RuntimeTranscriptMessage(
                 message_id=f"{turn_id}:agent:stream:{segment.index}",

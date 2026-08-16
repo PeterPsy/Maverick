@@ -101,12 +101,11 @@ def _web_registry_root() -> Path:
 
 
 def _verified_registry_path(path: Path, *, variable: str) -> Path:
-    lexical = Path(os.path.abspath(path))
     resolved = path.resolve()
     if os.environ.get("MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE") == "1":
         return resolved
     app_root = APP_ROOT.resolve()
-    if app_root != lexical and app_root not in lexical.parents:
+    if app_root != resolved and app_root not in resolved.parents:
         raise SystemExit(f"{variable} must stay inside the Design Studio app source.")
     return resolved
 

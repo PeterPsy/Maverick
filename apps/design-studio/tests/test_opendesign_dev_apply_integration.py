@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -22,14 +25,21 @@ class DevApplyIsolatedGateIntegrationTests(unittest.TestCase):
         )
         changeset = resolve_changeset({"changed_files": list(changed_files)}, repo_root=ROOT)
 
-        with materialize_changeset(ROOT, changeset) as snapshot:
-            result = _run_gate(
-                "opendesign_e2e_quick",
-                {},
-                repo_root=snapshot,
-                publish_repo_root=ROOT,
-                changed_files=changed_files,
-            )
+        with tempfile.TemporaryDirectory(prefix="mav-agent-home-") as agent_home:
+            with patch.dict(os.environ, {"HOME": agent_home}):
+                for variable in (
+                    "MAVERICK_PLAYWRIGHT_BROWSERS_PATH",
+                    "PLAYWRIGHT_BROWSERS_PATH",
+                ):
+                    os.environ.pop(variable, None)
+                with materialize_changeset(ROOT, changeset) as snapshot:
+                    result = _run_gate(
+                        "opendesign_e2e_quick",
+                        {},
+                        repo_root=snapshot,
+                        publish_repo_root=ROOT,
+                        changed_files=changed_files,
+                    )
 
         self.assertEqual(result["status"], "passed")
         self.assertEqual(result["exit_code"], 0)

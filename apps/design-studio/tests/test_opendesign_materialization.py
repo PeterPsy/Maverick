@@ -71,7 +71,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         )
         self.assertFalse(any(path.name.startswith(".materialize-") for path in registry.iterdir()))
 
-    def test_launcher_accepts_verified_registry_symlink_inside_app_but_not_external_path(self) -> None:
+    def test_launcher_requires_opt_in_when_internal_symlink_resolves_outside_app(self) -> None:
         app_root = self.root / "app"
         vendor = app_root / "service/vendor"
         external = self.root / "operational-registry"
@@ -84,6 +84,25 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             patch.object(self.launcher, "APP_ROOT", app_root),
             patch.dict("os.environ", {}, clear=True),
         ):
+            with self.assertRaisesRegex(SystemExit, "must stay inside"):
+                self.launcher._verified_registry_path(
+                    linked,
+                    variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
+                )
+            with self.assertRaisesRegex(SystemExit, "must stay inside"):
+                self.launcher._verified_registry_path(
+                    external,
+                    variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
+                )
+
+        with (
+            patch.object(self.launcher, "APP_ROOT", app_root),
+            patch.dict(
+                "os.environ",
+                {"MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE": "1"},
+                clear=True,
+            ),
+        ):
             self.assertEqual(
                 self.launcher._verified_registry_path(
                     linked,
@@ -91,11 +110,6 @@ class OpenDesignMaterializationTests(unittest.TestCase):
                 ),
                 external.resolve(),
             )
-            with self.assertRaisesRegex(SystemExit, "must stay inside"):
-                self.launcher._verified_registry_path(
-                    external,
-                    variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
-                )
 
     def test_launcher_finalizes_recovery_only_after_verified_readiness(self) -> None:
         plan = self.launcher.LaunchPlan("test", ["daemon"], self.root, "test")

@@ -390,11 +390,13 @@ current `head_sha`. It snapshots and propagates that set to every changed-suite
 gate, then materializes a committed checkout with only those declared path
 bytes overlaid. Builds and tests run from that checkout, so unrelated
 shared-worktree changes cannot enter the run. Signed immutable runtime/web
-registries are materialized as real hardlinked trees, while installed Node
-dependencies are copied into the isolated checkout before execution. A newly
-built candidate overlay is hardlinked into that checkout and signature-verified
-before the browser gate. The E2E process receives an executable Python path and
-Playwright browser cache resolved and verified from the publishing repository;
+registries are materialized as independent real trees, using copy-on-write
+reflinks when supported and copies otherwise. The snapshot includes only the
+pinned current runtime and release overlay, while installed Node dependencies
+are copied into the isolated checkout before execution. A newly built candidate
+overlay is materialized the same way and signature-verified before the browser
+gate. The E2E process receives an executable Python path and a Playwright browser
+cache resolved from the host account that owns the publishing repository;
 the default web-build cache is likewise resolved there before the temporary
 checkout exists, so it survives cleanup. It emits
 bounded JSON containing actions, durations, digests, cache state, readiness,

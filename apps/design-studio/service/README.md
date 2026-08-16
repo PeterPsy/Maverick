@@ -384,12 +384,14 @@ propagated to `scripts/test_suite.py --changed-path`. A Git archive of the
 selected commit is materialized and only explicit frozen path bytes are
 overlaid, so every source build and test runs outside the shared checkout.
 Installed Node dependencies are copied; signed runtime/web registries are
-materialized as real hardlinked trees visible inside the sidecar sandbox. A web
-candidate published after snapshot creation is added to that isolated registry
-and signature-verified before E2E. Python and the Playwright browser cache are
-explicit verified operational paths from the publishing repository, and the
-default build cache is resolved against that repository before snapshot entry,
-so it remains reusable after cleanup.
+materialized as independent real trees visible inside the sidecar sandbox,
+using copy-on-write reflinks when supported and copies otherwise. Only the pinned
+current runtime and release overlay enter the initial snapshot; a web candidate
+published after snapshot creation is added to that isolated registry and
+signature-verified before E2E. Python is resolved from the publishing repository,
+the default Playwright browser cache from the host account that owns it, and the
+default build cache against that repository before snapshot entry, so both
+caches remain reusable after cleanup.
 Classification compares `patches/series.json` entries against the frozen base:
 web component updates stay on the overlay path, while runtime or malformed
 series changes fail upward to OCI. Classification avoids

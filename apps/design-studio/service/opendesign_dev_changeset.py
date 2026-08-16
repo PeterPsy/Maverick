@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+import fcntl
 import hashlib
 import io
 import json
@@ -14,8 +15,11 @@ import tarfile
 import tempfile
 from typing import Any, Iterable
 
+from opendesign_artifact import ArtifactError, is_sha256, read_bundle_manifest, selected_asset
+
 
 PATCH_SERIES_PATH = "apps/design-studio/service/patches/series.json"
+_FICLONE = 0x40049409
 
 
 class DevApplyError(RuntimeError):
@@ -226,11 +230,33 @@ def _materialize_operational_inputs(repo_root: Path, snapshot_root: Path) -> Non
     vendor = repo_root / "apps/design-studio/service/vendor"
     snapshot_vendor = snapshot_root / "apps/design-studio/service/vendor"
     if vendor.is_dir() and not vendor.is_symlink() and not snapshot_vendor.exists():
-        materialize_immutable_tree(vendor, snapshot_vendor)
+        for relative in _required_operational_registry_paths(snapshot_root):
+            materialize_immutable_tree(vendor / relative, snapshot_vendor / relative)
+
+
+def _required_operational_registry_paths(repo_root: Path) -> tuple[Path, ...]:
+    service_root = repo_root / "apps/design-studio/service"
+    try:
+        manifest = read_bundle_manifest(service_root / "opendesign_bundle.json")
+        runtime_digest = selected_asset(manifest, require_artifact_digest=True)["sha256"]
+        release = json.loads(
+            (service_root / "opendesign_release_acceptance_0_16_1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        web_digest = release["opendesign"]["web_overlay_sha256"]
+    except (ArtifactError, KeyError, OSError, TypeError, json.JSONDecodeError) as error:
+        raise DevApplyError("operational registry selection is invalid", report={}) from error
+    if not is_sha256(runtime_digest) or not is_sha256(web_digest):
+        raise DevApplyError("operational registry selection is invalid", report={})
+    return (
+        Path("open-design") / runtime_digest,
+        Path("open-design-web") / web_digest,
+    )
 
 
 def materialize_immutable_tree(source: Path, destination: Path) -> None:
-    """Materialize an immutable operational tree as real paths, using hardlinks when possible."""
+    """Materialize operational inputs as independent real paths, using COW when possible."""
     if not source.is_dir() or source.is_symlink():
         raise DevApplyError("operational input must be a real directory", report={})
     if destination.exists() or destination.is_symlink():
@@ -240,16 +266,23 @@ def materialize_immutable_tree(source: Path, destination: Path) -> None:
         source,
         destination,
         symlinks=True,
-        copy_function=_hardlink_or_copy,
+        copy_function=_reflink_or_copy,
     )
 
 
-def _hardlink_or_copy(source: str, destination: str) -> str:
+def _reflink_or_copy(source: str, destination: str) -> str:
+    source_path = Path(source)
+    destination_path = Path(destination)
     try:
-        Path(destination).hardlink_to(source)
-        return destination
+        with source_path.open("rb") as source_file, destination_path.open("xb") as destination_file:
+            fcntl.ioctl(destination_file.fileno(), _FICLONE, source_file.fileno())
+        shutil.copystat(source_path, destination_path, follow_symlinks=False)
+        return str(destination_path)
+    except FileExistsError:
+        raise
     except OSError:
-        return shutil.copy2(source, destination)
+        destination_path.unlink(missing_ok=True)
+        return shutil.copy2(source_path, destination_path)
 
 
 def _directory_content_sha256(root: Path) -> str:

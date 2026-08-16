@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager, nullcontext
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,7 +24,11 @@ from opendesign_dev_apply import (  # noqa: E402
     materialize_changeset,
     resolve_changeset,
 )
-from opendesign_dev_changeset import ChangeSet, materialize_immutable_tree  # noqa: E402
+from opendesign_dev_changeset import (  # noqa: E402
+    ChangeSet,
+    _materialize_operational_inputs,
+    materialize_immutable_tree,
+)
 
 
 class DevApplyClassifierTests(unittest.TestCase):
@@ -251,6 +256,48 @@ class DevApplyClassifierTests(unittest.TestCase):
         self.assertEqual(environment["PLAYWRIGHT_BROWSERS_PATH"], str(browsers))
         self.assertEqual(run.call_args.kwargs["cwd"], snapshot / "apps/design-studio")
 
+    def test_e2e_gate_resolves_default_browser_cache_from_publishing_owner(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="od-e2e-default-closure-") as temporary:
+            root = Path(temporary)
+            snapshot = root / "snapshot"
+            publish = root / "publish"
+            publish.mkdir()
+            playwright_package = snapshot / "apps/design-studio/node_modules/playwright/package.json"
+            playwright_package.parent.mkdir(parents=True)
+            playwright_package.write_text("{}\n", encoding="utf-8")
+            python = publish / ".venv/bin/python"
+            python.parent.mkdir(parents=True)
+            python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            python.chmod(0o755)
+            host_home = root / "host-home"
+            browsers = host_home / ".cache/ms-playwright"
+            browsers.mkdir(parents=True)
+            agent_home = root / "agent-home"
+            agent_home.mkdir()
+            completed = Mock(returncode=0, stdout="")
+
+            with (
+                patch.dict("os.environ", {"HOME": str(agent_home)}, clear=True),
+                patch(
+                    "opendesign_dev_apply.pwd.getpwuid",
+                    return_value=Mock(pw_dir=str(host_home)),
+                ),
+                patch("opendesign_dev_apply.subprocess.run", return_value=completed) as run,
+            ):
+                result = _run_gate(
+                    "opendesign_e2e_affected",
+                    {},
+                    repo_root=snapshot,
+                    publish_repo_root=publish,
+                    changed_files=("apps/design-studio/backend/service.py",),
+                )
+
+        self.assertEqual(result["status"], "passed")
+        environment = run.call_args.kwargs["env"]
+        self.assertEqual(environment["HOME"], str(agent_home))
+        self.assertEqual(environment["MAVERICK_PLAYWRIGHT_BROWSERS_PATH"], str(browsers))
+        self.assertEqual(environment["PLAYWRIGHT_BROWSERS_PATH"], str(browsers))
+
     def test_apply_requires_one_explicit_changeset(self) -> None:
         with patch("opendesign_dev_apply._repo_root", return_value=Path("/repo")):
             with self.assertRaisesRegex(DevApplyError, "exactly one changeset"):
@@ -450,7 +497,7 @@ class DevApplyClassifierTests(unittest.TestCase):
                 )
                 self.assertFalse((snapshot / "core/providers/concurrent.py").exists())
 
-    def test_immutable_operational_tree_uses_real_snapshot_paths(self) -> None:
+    def test_immutable_operational_tree_uses_independent_real_snapshot_paths(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-operational-tree-") as temporary:
             root = Path(temporary)
             source = root / "source"
@@ -466,7 +513,59 @@ class DevApplyClassifierTests(unittest.TestCase):
             self.assertFalse(destination.is_symlink())
             self.assertFalse(copied.is_symlink())
             self.assertEqual(copied.read_bytes(), payload.read_bytes())
-            self.assertEqual(copied.stat().st_ino, payload.stat().st_ino)
+            self.assertNotEqual(copied.stat().st_ino, payload.stat().st_ino)
+
+            copied.chmod(0o644)
+            copied.write_text('{"verified":false}\n', encoding="utf-8")
+
+            self.assertEqual(payload.read_text(encoding="utf-8"), '{"verified":true}\n')
+
+    def test_operational_snapshot_copies_only_current_release_registry_entries(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="od-operational-selection-") as temporary:
+            root = Path(temporary) / "repository"
+            snapshot = Path(temporary) / "snapshot"
+            service = root / "apps/design-studio/service"
+            source_service = SERVICE_ROOT
+            snapshot_service = snapshot / "apps/design-studio/service"
+            service.mkdir(parents=True)
+            snapshot_service.mkdir(parents=True)
+            for name in (
+                "opendesign_bundle.json",
+                "opendesign_release_acceptance_0_16_1.json",
+            ):
+                shutil.copy2(source_service / name, service / name)
+                shutil.copy2(source_service / name, snapshot_service / name)
+            manifest = json.loads((service / "opendesign_bundle.json").read_text(encoding="utf-8"))
+            release = json.loads(
+                (service / "opendesign_release_acceptance_0_16_1.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            runtime_digest = manifest["artifact"]["assets"]["linux-x86_64"]["sha256"]
+            web_digest = release["opendesign"]["web_overlay_sha256"]
+            selected_runtime = service / "vendor/open-design" / runtime_digest / "runtime.txt"
+            selected_web = service / "vendor/open-design-web" / web_digest / "web.txt"
+            retained_runtime = service / "vendor/open-design" / ("a" * 64) / "retained.txt"
+            for path in (selected_runtime, selected_web, retained_runtime):
+                path.parent.mkdir(parents=True)
+                path.write_text(f"{path.name}\n", encoding="utf-8")
+
+            _materialize_operational_inputs(root, snapshot)
+
+            copied_runtime = (
+                snapshot / "apps/design-studio/service/vendor/open-design" / runtime_digest / "runtime.txt"
+            )
+            copied_web = (
+                snapshot
+                / "apps/design-studio/service/vendor/open-design-web"
+                / web_digest
+                / "web.txt"
+            )
+            self.assertTrue(copied_runtime.is_file())
+            self.assertTrue(copied_web.is_file())
+            self.assertFalse(
+                (snapshot / "apps/design-studio/service/vendor/open-design" / ("a" * 64)).exists()
+            )
 
 
 if __name__ == "__main__":

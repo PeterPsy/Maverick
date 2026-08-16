@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+import pwd
 import shutil
 import subprocess
 import sys
@@ -658,7 +659,7 @@ def _e2e_environment(
     if not python.is_file() or not os.access(python, os.X_OK):
         raise RuntimeError("OpenDesign E2E Python runtime is unavailable")
 
-    default_browsers = Path.home() / ".cache/ms-playwright"
+    default_browsers = _publishing_user_home(publish_repo_root) / ".cache/ms-playwright"
     raw_browsers = (
         arguments.get("playwright_browsers_path")
         or os.environ.get("MAVERICK_PLAYWRIGHT_BROWSERS_PATH")
@@ -674,6 +675,17 @@ def _e2e_environment(
     environment["MAVERICK_PLAYWRIGHT_BROWSERS_PATH"] = str(browsers)
     environment["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers)
     return environment
+
+
+def _publishing_user_home(publish_repo_root: Path) -> Path:
+    try:
+        repository_owner = pwd.getpwuid(publish_repo_root.stat().st_uid)
+    except (KeyError, OSError) as error:
+        raise RuntimeError("OpenDesign E2E publishing repository owner is unavailable") from error
+    home = Path(repository_owner.pw_dir)
+    if not home.is_absolute():
+        raise RuntimeError("OpenDesign E2E publishing repository owner has no absolute home")
+    return home
 
 
 def _work_parent(arguments: dict[str, Any]) -> Path:

@@ -172,6 +172,10 @@ class CodexProviderAdapter(
     CodexCommandPathMixin,
     CodexSteeringMixin,
 ):
+    adapter_id = "codex-app-server"
+    adapter_version = "1"
+    synchronizes_runtime_skills = True
+
     def __init__(
         self,
         *,
@@ -194,6 +198,12 @@ class CodexProviderAdapter(
             self._source_codex_home(),
             transport=self.subscription_usage_transport,
         )
+
+    def prewarm_runtime(self, session, launch_spec) -> str:
+        """Prepare the optional local lifecycle behind the async bridge."""
+        from core.providers.codex_app_server import prewarm_codex_app_server_runtime
+
+        return prewarm_codex_app_server_runtime(session=session, launch_spec=launch_spec)
 
 
 def remove_codex_system_skills(runtime_home: Path) -> None:

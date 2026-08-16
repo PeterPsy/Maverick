@@ -136,6 +136,7 @@ def _session_payload(
                 "prewarm_status": prewarm.status,
                 "prewarm_completed": prewarm.prewarm_completed,
                 "provider_thread_ready": prewarm.provider_thread_ready,
+                "runtime_ready": prewarm.runtime_ready,
             }
         )
         if prewarm.prewarm_total_ms is not None:
@@ -464,6 +465,7 @@ def _prewarm_new_runtime_session(
             status="not_required",
             prewarm_completed=True,
             provider_thread_ready=True,
+            runtime_ready=True,
             provider_id=HOSTED_TEXT_RUNTIME_PROVIDER_ID,
         )
     try:

@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from core.runtime.agentic_runtime_service import update_runtime_provider_state
 from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.lifecycle_service_events import record_runtime_event
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -24,6 +23,8 @@ def record_provider_thread_id(
 ) -> RuntimeEventRecord:
     """Bind continuation state with CAS, retaining only the Phase-0 legacy path."""
     session = state.runtime_store.get_session(session_id)
+    if session.execution_binding is not None and session.execution_binding.runtime_engine_id != provider_id:
+        raise RuntimeProviderStateError("Provider thread does not match the pinned runtime engine.")
     if session.execution_binding is None:
         state.runtime_store.patch_session_metadata(
             session_id=session_id,
@@ -31,11 +32,13 @@ def record_provider_thread_id(
             updates={"provider_id": provider_id, "provider_thread_id": provider_thread_id},
         )
     else:
-        _update_pinned_provider_thread(
-            state,
+        update_runtime_provider_state(
+            state.runtime_store,
             session_id=session_id,
-            provider_id=provider_id,
-            provider_thread_id=provider_thread_id,
+            updates={
+                "continuation_id": provider_thread_id,
+                "provider_thread_id": provider_thread_id,
+            },
         )
     return record_runtime_event(
         state.runtime_store,
@@ -46,33 +49,3 @@ def record_provider_thread_id(
         payload={"provider_id": provider_id, "provider_thread_id": provider_thread_id},
         event_bus=state.runtime_event_bus,
     )
-
-
-def _update_pinned_provider_thread(
-    state: PlatformState,
-    *,
-    session_id: str,
-    provider_id: str,
-    provider_thread_id: str,
-) -> None:
-    for attempt in range(3):
-        provider_state = state.runtime_store.get_provider_state(session_id)
-        if provider_state.runtime_engine_id != provider_id:
-            raise RuntimeProviderStateError("Provider thread does not match the pinned runtime engine.")
-        if provider_state.provider_thread_id == provider_thread_id:
-            return
-        try:
-            state.runtime_store.update_provider_state(
-                replace(
-                    provider_state,
-                    continuation_id=provider_thread_id,
-                    provider_thread_id=provider_thread_id,
-                    revision=provider_state.revision + 1,
-                    updated_at=datetime.now(tz=UTC),
-                ),
-                expected_revision=provider_state.revision,
-            )
-            return
-        except RuntimeProviderStateError:
-            if attempt == 2:
-                raise

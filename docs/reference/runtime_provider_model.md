@@ -13,12 +13,16 @@ Maverick owns:
 - streaming and persistence of runtime events
 - compaction of large persisted `runtime.tool_call.*` event payloads
 
-The provider adapter owns:
+The runtime engine adapter owns:
 
-- provider process launch
+- provider preparation and recovery
 - provider session or thread linking
 - provider-specific protocol translation
+- cancellation and resource closure
 - optional same-turn message admission when the provider declares `supports_same_turn_input`
+
+Local process launch is an optional lifecycle capability, not a requirement of
+an agentic runtime.
 
 ## Pinned Agentic Session Identity
 
@@ -45,6 +49,28 @@ legacy sessions remain readable. A narrow legacy execution path remains during
 the staged migration and is scheduled for removal before the multimodel
 runtime reaches general availability.
 
+## Provider-Neutral Async Engine Contract
+
+Pinned agentic sessions execute through `AgenticRuntimeEngineAdapter`. Its
+validation, preparation, cancellation, recovery, close, and health operations
+are asynchronous; execution produces an ordered async stream of typed runtime
+events carrying a correlation id, ordinal, schema version, and bounded payload.
+Core validates stream ordering and correlation before translating events into
+the durable runtime event model.
+
+`LocalProcessRuntimeLifecycle` is present only for engines that actually need a
+host process. Hosted engines prepare, execute, cancel, recover, and close with
+no launch specification. The Codex backend currently runs behind the same
+contract through a compatibility bridge while retaining its local lifecycle.
+The common turn, prewarm, cancellation, and idle-close paths select behavior by
+adapter capability and contain no Codex-specific dispatch branches.
+
+The adapter may propose allowlisted updates to `RuntimeProviderState`; Core is
+the only writer and applies them with revision fencing. Session APIs expose the
+provider-neutral `runtime_ready` prewarm result separately from the legacy
+`provider_thread_ready` projection, because a hosted engine can be ready
+without creating a provider thread.
+
 ## Current Provider Reality
 
 The current practical backend is Codex.
@@ -59,7 +85,7 @@ Important implications:
 - network access for providers is not equivalent to unconstrained filesystem access
 - shell settings can list runtime sessions across workspaces visible to the authenticated user, terminate individual sessions, and clear visible session records in batch through controlled settings runtime-session endpoints
 
-Chat may create hidden `prepare_only` runtime sessions before the first message. The create response waits for provider prewarm for at most two seconds and reports `prewarm_status`, `prewarm_completed`, and `provider_thread_ready`. A client must treat the session as ready only when prewarm completed and the provider thread is ready; a session record existing is not sufficient. Plain hosted chat reports prewarm as `not_required` and ready because it has no local provider process or thread to warm.
+Chat may create hidden `prepare_only` runtime sessions before the first message. The create response waits for provider prewarm for at most two seconds and reports `prewarm_status`, `prewarm_completed`, `runtime_ready`, and the legacy `provider_thread_ready`. A client treats the session as ready when prewarm completed and `runtime_ready` is true; older servers fall back to `provider_thread_ready`. A session record existing is not sufficient. Plain hosted chat reports prewarm as `not_required` and ready because it has no local provider process or thread to warm.
 
 Codex turn startup emits separate runtime events for `ensure_runtime`, generated-system-skill cleanup, `ensure_thread`, event-sink reset, and the `turn/start` write boundary. Each start/completed pair is persisted under `runtime.provider.*`, while `runtime.provider.turn_start_sent` remains the write-complete marker and provider acceptance carries `turn_start_request_ack_ms`. This keeps cold-process, cleanup, cold-thread, local reset, request-write, and provider-ack latency distinguishable. Generated `.system` skills are removed on runtime initialization/prewarm and only checked again when that runtime home may need cleanup; a warm turn does not recursively remove an already-clean tree. Maverick owns Codex's `[skills] include_instructions` setting per runtime session: `implicit` writes `true`, while `explicit` writes `false` and supplies validated `type=skill` user-input items only on the invoking `turn/start` or `turn/steer` request.
 

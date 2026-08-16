@@ -10,6 +10,7 @@ from core.providers.models import ProviderDefinition, ProviderSubscriptionUsage,
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 if TYPE_CHECKING:
+    from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter
     from core.runtime.execution import RuntimeExecutionResult
     from core.runtime.execution_events import RuntimeExecutionEventSink
     from core.skills.models import SkillDefinition, SkillMaterialization
@@ -101,6 +102,7 @@ class ProviderRegistry:
     def __init__(self) -> None:
         self._definitions: dict[str, ProviderDefinition] = {}
         self._runtime_adapters: dict[str, RuntimeBackendAdapter] = {}
+        self._agentic_runtime_adapters: dict[str, AgenticRuntimeEngineAdapter] = {}
 
     def register_provider_definition(self, definition: ProviderDefinition) -> ProviderDefinition:
         """Register one provider definition without a runtime adapter."""
@@ -112,7 +114,24 @@ class ProviderRegistry:
         definition = adapter.provider_definition()
         self._definitions[definition.provider_id] = definition
         self._runtime_adapters[definition.provider_id] = adapter
+        from core.providers.provider_legacy_agentic_bridge import LegacyRuntimeBackendAgenticBridge
+
+        self._agentic_runtime_adapters[definition.provider_id] = LegacyRuntimeBackendAgenticBridge(adapter)
         return definition
+
+    def register_agentic_runtime_adapter(
+        self,
+        adapter: AgenticRuntimeEngineAdapter,
+        *,
+        definition: ProviderDefinition | None = None,
+    ) -> ProviderDefinition:
+        """Register an async agentic engine without requiring a process adapter."""
+        active_definition = definition or self.get_provider_definition(adapter.runtime_engine_id)
+        if active_definition.provider_id != adapter.runtime_engine_id:
+            raise ValueError("Agentic adapter identity does not match its provider definition.")
+        self._definitions[active_definition.provider_id] = active_definition
+        self._agentic_runtime_adapters[active_definition.provider_id] = adapter
+        return active_definition
 
     def list_provider_definitions(self) -> list[ProviderDefinition]:
         """Return all known provider definitions."""
@@ -129,6 +148,14 @@ class ProviderRegistry:
         if provider_id not in self._runtime_adapters:
             raise ProviderNotFoundError(f"Runtime backend adapter `{provider_id}` is not registered.")
         return self._runtime_adapters[provider_id]
+
+    def get_agentic_runtime_adapter(self, runtime_engine_id: str) -> AgenticRuntimeEngineAdapter:
+        """Return the provider-neutral async adapter for one runtime engine."""
+        if runtime_engine_id not in self._agentic_runtime_adapters:
+            raise ProviderNotFoundError(
+                f"Agentic runtime engine adapter `{runtime_engine_id}` is not registered."
+            )
+        return self._agentic_runtime_adapters[runtime_engine_id]
 
     def get_subscription_usage_adapter(self, provider_id: str) -> SubscriptionUsageAdapter:
         """Return a provider adapter that implements subscription usage reads."""

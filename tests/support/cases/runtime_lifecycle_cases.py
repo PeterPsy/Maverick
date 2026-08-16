@@ -400,9 +400,16 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
             def start(self) -> None:
                 return None
 
-        resolve_backend = Mock(return_value=(SimpleNamespace(provider_id="fake-provider"), None, SimpleNamespace()))
+        resolve_backend = Mock(
+            return_value=(
+                SimpleNamespace(provider_id="fake-provider"),
+                None,
+                SimpleNamespace(local_process_lifecycle=object()),
+                SimpleNamespace(),
+            )
+        )
         worker_globals = submit_runtime_turn_async.__globals__
-        with patch.dict(worker_globals, {"Thread": DeferredThread, "resolve_runtime_backend_for_session": resolve_backend}), patch(
+        with patch.dict(worker_globals, {"Thread": DeferredThread, "resolve_runtime_engine_for_session": resolve_backend}), patch(
             "core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation"
         ):
             first_turn, first_events = submit_runtime_turn_async(
@@ -411,6 +418,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
                     provider_store=SimpleNamespace(),
                     runtime_event_bus=None,
                     runtime_thread_event_bus=None,
+                    repository_root=repo_root,
                 ),
                 session=session,
                 input_text="fast ack",
@@ -422,6 +430,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
                     provider_store=SimpleNamespace(),
                     runtime_event_bus=None,
                     runtime_thread_event_bus=None,
+                    repository_root=repo_root,
                 ),
                 session=session,
                 input_text="fast ack retry",
@@ -727,8 +736,13 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
             worker_globals,
             {
                 "Thread": ImmediateThread,
-                "resolve_runtime_backend_for_session": Mock(
-                    return_value=(SimpleNamespace(provider_id="fake-provider"), None, SimpleNamespace())
+                "resolve_runtime_engine_for_session": Mock(
+                    return_value=(
+                        SimpleNamespace(provider_id="fake-provider"),
+                        None,
+                        SimpleNamespace(local_process_lifecycle=object()),
+                        SimpleNamespace(),
+                    )
                 ),
                 "_build_launch_spec_for_execution": Mock(return_value=SimpleNamespace()),
                 "execute_runtime_turn": fake_execute_runtime_turn,
@@ -1727,15 +1741,25 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
             {
                 "Thread": ImmediateThread,
                 "execute_runtime_turn": Mock(side_effect=RuntimeError("provider failed")),
-                "resolve_runtime_backend_for_session": Mock(
-                    return_value=(SimpleNamespace(provider_id="fake-provider"), None, SimpleNamespace())
+                "resolve_runtime_engine_for_session": Mock(
+                    return_value=(
+                        SimpleNamespace(provider_id="fake-provider"),
+                        None,
+                        SimpleNamespace(local_process_lifecycle=object()),
+                        SimpleNamespace(),
+                    )
                 ),
                 "_build_launch_spec_for_execution": Mock(return_value=SimpleNamespace()),
                 "release_idle_runtime_processes": release_mock,
             },
         ):
             turn, _events = submit_runtime_turn_async(
-                SimpleNamespace(runtime_store=store, provider_store=SimpleNamespace(), runtime_event_bus=None),
+                SimpleNamespace(
+                    runtime_store=store,
+                    provider_store=SimpleNamespace(),
+                    runtime_event_bus=None,
+                    repository_root=repo_root,
+                ),
                 session=session,
                 input_text="fail",
             )

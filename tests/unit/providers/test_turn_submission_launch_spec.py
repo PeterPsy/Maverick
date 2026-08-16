@@ -14,6 +14,7 @@ from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launc
 from core.runtime.turn_submission_service_events import _debug_log_runtime_turn
 from core.runtime.turn_submission_service_output import _build_launch_spec_for_execution
 from tests.support.collections import FakeCollection
+from tests.support.fake_agentic_adapter import FakeLegacyLocalRuntimeCapabilities
 from tests.support.repo import make_temp_repo_root
 
 
@@ -93,7 +94,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             {
                 "Thread": _ImmediateThread,
                 "Timer": lambda delay, target: _CapturingTimer(delay, target, scheduled_timers),
-                "resolve_runtime_backend_for_session": Mock(return_value=(provider, None, adapter)),
+                "resolve_runtime_engine_for_session": Mock(return_value=(provider, None, adapter, adapter)),
                 "_build_launch_spec_for_execution": Mock(return_value=(launch_spec, {})),
                 "execute_runtime_turn": Mock(return_value=SimpleNamespace(output_text="done", exit_code=0)),
                 "release_idle_runtime_processes": Mock(return_value=0),
@@ -132,8 +133,8 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         )
 
         with patch("core.runtime.turn_submission_service_runtime.Thread", _ImmediateThread), patch(
-            "core.runtime.turn_submission_service_runtime.resolve_runtime_backend_for_session",
-            Mock(return_value=(provider, None, adapter)),
+            "core.runtime.turn_submission_service_runtime.resolve_runtime_engine_for_session",
+            Mock(return_value=(provider, None, adapter, adapter)),
         ), patch(
             "core.runtime.turn_submission_service_runtime._build_launch_spec_for_execution",
             Mock(return_value=(launch_spec, {})),
@@ -196,7 +197,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
                 "Thread": _ImmediateThread,
                 "Timer": lambda delay, target: _CapturingTimer(delay, target, []),
                 "_wait_for_session_prewarm": wait_for_prewarm,
-                "resolve_runtime_backend_for_session": Mock(return_value=(provider, None, adapter)),
+                "resolve_runtime_engine_for_session": Mock(return_value=(provider, None, adapter, adapter)),
                 "_build_launch_spec_for_execution": Mock(return_value=(launch_spec, {})),
                 "execute_runtime_turn": execute_turn,
                 "release_idle_runtime_processes": Mock(return_value=0),
@@ -316,7 +317,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             {
                 "Thread": _ImmediateThread,
                 "_wait_for_session_prewarm": Mock(return_value=False),
-                "resolve_runtime_backend_for_session": Mock(return_value=(provider, None, adapter)),
+                "resolve_runtime_engine_for_session": Mock(return_value=(provider, None, adapter, adapter)),
                 "_build_launch_spec_for_execution": Mock(return_value=(launch_spec, {})),
                 "execute_runtime_turn": execute_turn,
                 "release_idle_runtime_processes": Mock(return_value=0),
@@ -490,7 +491,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         self.assertEqual(second_metadata["skill_prepare_ms"], 0.0)
 
 
-class _FakeRuntimeAdapter:
+class _FakeRuntimeAdapter(FakeLegacyLocalRuntimeCapabilities):
     def __init__(self) -> None:
         self.launch_calls: list[tuple[str | None, str | None]] = []
         self.skill_prepare_calls: list[list[str]] = []
@@ -521,7 +522,6 @@ class _FakeRuntimeAdapter:
     def prepare_runtime_skills(self, _session, skills):
         self.skill_prepare_calls.append([skill.skill_id for skill in skills])
         return []
-
 
 class _ImmediateThread:
     def __init__(self, *, target, name, daemon) -> None:

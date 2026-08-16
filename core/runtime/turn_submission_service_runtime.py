@@ -11,8 +11,7 @@ from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
-from core.providers.service import resolve_runtime_backend_for_session
-from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
+from core.providers.service import resolve_runtime_engine_for_session
 from core.runtime.turn_submission_service_events import (
     _complete_turn_from_exit_code,
     _debug_log_runtime_turn,
@@ -31,7 +30,13 @@ from core.runtime.turn_submission_service_output import (
     _record_turn_worker_entered,
     _record_turn_worker_started,
 )
-from core.runtime.provider_state_service import record_provider_thread_id
+from core.runtime.agentic_runtime_service import (
+    prepare_agentic_runtime,
+)
+from core.runtime.resolved_runtime_engine import (
+    ResolvedRuntimeEngine,
+    build_optional_local_launch_spec,
+)
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
 from core.runtime.turn_submission_service_references import (
     _materialize_app_references_for_execution,
@@ -44,7 +49,6 @@ from core.runtime.plain_hosted_text import (
     queue_provider_id_for_session,
     runtime_session_is_plain_hosted_chat,
 )
-from core.runtime.plain_hosted_cancellation import interrupt_plain_hosted_requests
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.provider_input_context import generalist_orchestration_input_text, runtime_provider_input_text
 from core.runtime.provider_start_handoff import (
@@ -52,7 +56,11 @@ from core.runtime.provider_start_handoff import (
     provider_thread_recorder,
     runtime_provider_start_handoff,
 )
-from core.runtime.process_control import terminate_codex_app_server_processes_for_session, terminate_runtime_processes
+from core.runtime.runtime_process_lifecycle import (
+    IDLE_RUNTIME_REAP_TTL_SECONDS,
+    interrupt_runtime_provider_turn,
+    release_idle_runtime_processes,
+)
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -62,17 +70,13 @@ from core.skills.service import resolve_invoked_runtime_skills
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
-    from core.providers.provider_registry import ProviderRegistry
 
 
 _SESSION_EXECUTION_LOCKS: dict[str, Lock] = {}
 _SESSION_EXECUTION_LOCKS_LOCK = Lock()
-_ACTIVE_TURN_STATUSES = {"queued", "active"}
-_IDLE_RUNTIME_REAP_TTL_SECONDS = 180.0
+_IDLE_RUNTIME_REAP_TTL_SECONDS = IDLE_RUNTIME_REAP_TTL_SECONDS
 _PREWARM_AFTER_TURN_DELAY_SECONDS = 0.05
 _PREWARM_JOIN_TIMEOUT_SECONDS = 0.25
-_IDLE_REAP_TIMERS: dict[str, Timer] = {}
-_IDLE_REAP_TIMERS_LOCK = Lock()
 _PREWARM_COMPLETIONS: OrderedDict[str, "_SessionPrewarmState"] = OrderedDict()
 _PREWARM_COMPLETIONS_LOCK = Lock()
 _PREWARM_STATUS_MAX_ENTRIES = 2048
@@ -86,6 +90,7 @@ class _SessionPrewarmState:
     provider_id: str | None = None
     provider_thread_id: str | None = None
     elapsed_ms: float | None = None
+    runtime_ready: bool = False
 
 
 @dataclass(frozen=True)
@@ -95,6 +100,7 @@ class RuntimeSessionPrewarmResult:
     status: str
     prewarm_completed: bool
     provider_thread_ready: bool
+    runtime_ready: bool = False
     provider_id: str | None = None
     provider_thread_id: str | None = None
     prewarm_total_ms: float | None = None
@@ -135,6 +141,7 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
         status = "completed"
         provider_id = ""
         provider_thread_id = ""
+        runtime_ready = False
         try:
             lock = _session_execution_lock(session.session_id)
             if not lock.acquire(blocking=False):
@@ -148,48 +155,55 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                 if runtime_session_is_plain_hosted_chat(current_session):
                     status = "skipped_plain_hosted"
                     return
-                provider, selection, runtime_adapter = resolve_runtime_backend_for_session(
-                    state.provider_store,
-                    session=current_session,
+                resolved_engine = ResolvedRuntimeEngine(
+                    *resolve_runtime_engine_for_session(state.provider_store, session=current_session)
                 )
-                provider_id = provider.provider_id
-                if provider.provider_id != "codex":
-                    status = "skipped_non_codex"
-                    return
-                if current_session.provider_id != provider.provider_id:
+                provider_id = resolved_engine.provider_id
+                if current_session.provider_id != provider_id:
                     current_session = patch_runtime_session_metadata(
-                        state.runtime_store, current_session, provider_id=provider.provider_id
+                        state.runtime_store, current_session, provider_id=provider_id
                     )
-                launch_spec, _metadata = _build_launch_spec_for_execution(
+                launch_result = build_optional_local_launch_spec(
+                    resolved_engine,
+                    _build_launch_spec_for_execution,
                     state,
                     session=current_session,
-                    provider_id=provider.provider_id,
-                    provider_definition=provider,
-                    provider_selection=selection,
-                    runtime_adapter=runtime_adapter,
                 )
-                if launch_spec is None or _session_has_executing_turn(state, session.session_id):
-                    status = "skipped_no_launch_spec"
+                launch_spec = launch_result[0] if isinstance(launch_result, tuple) else launch_result
+                if _session_has_executing_turn(state, session.session_id):
+                    status = "skipped_active_turn"
                     return
-                from core.providers.codex_app_server import prewarm_codex_app_server_runtime
 
                 with runtime_provider_start_handoff(
                     state.runtime_store,
                     session_id=current_session.session_id,
                 ) as (provider_session, _provider_accepted):
-                    provider_thread_id = prewarm_codex_app_server_runtime(
-                        session=provider_session,
-                        launch_spec=launch_spec,
-                    )
-                    if not provider_thread_id:
-                        status = "missing_provider_thread"
-                        return
-                    if provider_thread_id != (provider_session.provider_thread_id or ""):
-                        record_provider_thread_id(
-                            state,
+                    if provider_session.execution_binding is None:
+                        legacy_prewarm = getattr(resolved_engine.legacy_adapter, "prewarm_runtime", None)
+                        if not callable(legacy_prewarm) or launch_spec is None:
+                            status = "legacy_prepare_unavailable"
+                            return
+                        provider_thread_id = str(legacy_prewarm(provider_session, launch_spec) or "")
+                        runtime_ready = bool(provider_thread_id)
+                        if provider_thread_id and provider_thread_id != (provider_session.provider_thread_id or ""):
+                            provider_thread_recorder(
+                                state,
+                                session_id=provider_session.session_id,
+                                provider_id=provider_id,
+                            )(provider_thread_id)
+                    else:
+                        prepared = prepare_agentic_runtime(
+                            state.runtime_store,
                             session_id=provider_session.session_id,
-                            provider_id=provider.provider_id,
-                            provider_thread_id=provider_thread_id,
+                            adapter=resolved_engine.agentic_adapter,
+                            local_launch_spec=launch_spec,
+                        )
+                        if not prepared.ready:
+                            status = "prepare_not_ready"
+                            return
+                        runtime_ready = True
+                        provider_thread_id = (
+                            state.runtime_store.get_provider_state(provider_session.session_id).provider_thread_id or ""
                         )
             finally:
                 lock.release()
@@ -211,6 +225,7 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                 status=status,
                 provider_id=provider_id or None,
                 provider_thread_id=provider_thread_id or None,
+                runtime_ready=runtime_ready,
                 elapsed_ms=elapsed_ms,
             )
             if status != "failed":
@@ -221,6 +236,7 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                     elapsed_ms=elapsed_ms,
                     status=status,
                     provider_thread_ready=bool(status == "completed" and provider_thread_id),
+                    runtime_ready=runtime_ready,
                 )
 
     try:
@@ -292,6 +308,7 @@ def _complete_session_prewarm(
     status: str = "completed",
     provider_id: str | None = None,
     provider_thread_id: str | None = None,
+    runtime_ready: bool = False,
     elapsed_ms: float | None = None,
 ) -> None:
     with _PREWARM_COMPLETIONS_LOCK:
@@ -299,6 +316,7 @@ def _complete_session_prewarm(
         completion.provider_id = provider_id
         completion.provider_thread_id = provider_thread_id
         completion.elapsed_ms = elapsed_ms
+        completion.runtime_ready = runtime_ready
         completion.completion.set()
         if _PREWARM_COMPLETIONS.get(session_id) is completion:
             _PREWARM_COMPLETIONS.move_to_end(session_id)
@@ -329,16 +347,19 @@ def runtime_session_prewarm_status(session_id: str) -> RuntimeSessionPrewarmResu
                 status="not_started",
                 prewarm_completed=False,
                 provider_thread_ready=False,
+                runtime_ready=False,
             )
         completed = state.completion.is_set()
         status = state.status
         provider_id = state.provider_id
         provider_thread_id = state.provider_thread_id
+        runtime_ready = state.runtime_ready
         elapsed_ms = state.elapsed_ms
     return RuntimeSessionPrewarmResult(
         status=status,
         prewarm_completed=completed,
         provider_thread_ready=bool(completed and status == "completed" and provider_thread_id),
+        runtime_ready=bool(completed and status == "completed" and runtime_ready),
         provider_id=provider_id,
         provider_thread_id=provider_thread_id,
         prewarm_total_ms=round(elapsed_ms, 3) if elapsed_ms is not None else None,
@@ -416,6 +437,7 @@ def _record_session_prewarm_completed(
     elapsed_ms: float,
     status: str,
     provider_thread_ready: bool,
+    runtime_ready: bool,
 ) -> RuntimeEventRecord | None:
     with suppress(Exception):
         return record_runtime_event(
@@ -430,6 +452,7 @@ def _record_session_prewarm_completed(
                 "status": status,
                 "prewarm_completed": True,
                 "provider_thread_ready": provider_thread_ready,
+                "runtime_ready": runtime_ready,
             },
             event_bus=getattr(state, "runtime_event_bus", None),
         )
@@ -829,19 +852,21 @@ def submit_runtime_turn_async(
                         state.runtime_store, current_session, provider_id=worker_provider_id
                     )
                 else:
-                    provider, selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=current_session)
-                    worker_provider_id = provider.provider_id
+                    resolved_engine = ResolvedRuntimeEngine(
+                        *resolve_runtime_engine_for_session(state.provider_store, session=current_session)
+                    )
+                    provider = resolved_engine.provider
+                    worker_provider_id = resolved_engine.provider_id
                     if current_session.provider_id != worker_provider_id:
                         current_session = patch_runtime_session_metadata(
                             state.runtime_store, current_session, provider_id=worker_provider_id
                         )
-                    launch_result = _build_launch_spec_for_execution(
+                    launch_result = build_optional_local_launch_spec(
+                        resolved_engine,
+                        _build_launch_spec_for_execution,
                         state,
                         session=current_session,
-                        provider_id=worker_provider_id,
-                        provider_definition=provider,
-                        provider_selection=selection,
-                        runtime_adapter=runtime_adapter,
+                        absent_result=(None, {"launch_spec_ms": 0.0, "launch_cache_hit": False}),
                     )
                     if isinstance(launch_result, tuple):
                         launch_spec, launch_metadata = launch_result
@@ -948,7 +973,11 @@ def submit_runtime_turn_async(
                             input_text=provider_input_text,
                             invoked_skills=current_invoked_skills,
                             launch_spec=launch_spec,
-                            runtime_adapter=runtime_adapter,
+                            **resolved_engine.execution_kwargs(
+                                state.runtime_store,
+                                provider_session,
+                                correlation_id=turn.turn_id,
+                            ),
                             on_provider_thread_id=provider_thread_recorder(
                                 state,
                                 session_id=provider_session.session_id,
@@ -1084,122 +1113,6 @@ def submit_runtime_turn_async(
 
     Thread(target=worker, name=f"maverick-runtime-turn-{turn.turn_id}", daemon=True).start()
     return turn, events
-
-
-def release_idle_runtime_processes(
-    state: PlatformState,
-    *,
-    session_id: str,
-    provider_id: str,
-    reason: str,
-    idle_ttl_seconds: float | None = _IDLE_RUNTIME_REAP_TTL_SECONDS,
-) -> int:
-    """Terminate live provider processes after an idle TTL when a session has no pending work."""
-    if any(turn.status in _ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id)):
-        return 0
-    if idle_ttl_seconds is None:
-        idle_ttl_seconds = _IDLE_RUNTIME_REAP_TTL_SECONDS
-    if idle_ttl_seconds > 0:
-        return _schedule_idle_runtime_process_reap(
-            state,
-            session_id=session_id,
-            provider_id=provider_id,
-            reason=reason,
-            idle_ttl_seconds=idle_ttl_seconds,
-        )
-    _cancel_scheduled_idle_runtime_process_reap(session_id)
-    clear_cached_runtime_launch_context(session_id)
-    terminated = terminate_runtime_processes(session_id)
-    with suppress(Exception):
-        _definition, _selection, runtime_adapter = resolve_runtime_backend_for_session(
-            state.provider_store,
-            session=state.runtime_store.get_session(session_id),
-        )
-        closed = runtime_adapter.close_runtime(session_id)
-        if isinstance(closed, int):
-            terminated += closed
-    if provider_id == "codex":
-        terminated += terminate_codex_app_server_processes_for_session(session_id)
-    if terminated:
-        record_runtime_event(
-            state.runtime_store,
-            event_id=str(uuid4()),
-            session_id=session_id,
-            plane="process",
-            event_type="runtime.process.idle_reaped",
-            payload={"provider_id": provider_id, "terminated_processes": terminated, "reason": reason},
-            event_bus=state.runtime_event_bus,
-        )
-    return terminated
-
-
-def _schedule_idle_runtime_process_reap(
-    state: PlatformState,
-    *,
-    session_id: str,
-    provider_id: str,
-    reason: str,
-    idle_ttl_seconds: float,
-) -> int:
-    key = session_id
-
-    def run_reap() -> None:
-        with _IDLE_REAP_TIMERS_LOCK:
-            if _IDLE_REAP_TIMERS.get(key) is not timer:
-                return
-            _IDLE_REAP_TIMERS.pop(key, None)
-        release_idle_runtime_processes(
-            state,
-            session_id=session_id,
-            provider_id=provider_id,
-            reason=reason,
-            idle_ttl_seconds=0,
-        )
-
-    timer = Timer(idle_ttl_seconds, run_reap)
-    timer.daemon = True
-    with _IDLE_REAP_TIMERS_LOCK:
-        previous = _IDLE_REAP_TIMERS.get(key)
-        _IDLE_REAP_TIMERS[key] = timer
-    if previous is not None:
-        previous.cancel()
-    timer.start()
-    return 0
-
-
-def _cancel_scheduled_idle_runtime_process_reap(session_id: str) -> None:
-    with _IDLE_REAP_TIMERS_LOCK:
-        timer = _IDLE_REAP_TIMERS.pop(session_id, None)
-    if timer is not None:
-        timer.cancel()
-
-
-
-def interrupt_runtime_provider_turn(
-    state: PlatformState,
-    session: RuntimeSessionRecord,
-    *,
-    turn_id: str | None = None,
-    registry: "ProviderRegistry | None" = None,
-    wait_for_termination: bool = False,
-) -> bool:
-    """Ask the selected runtime provider adapter to interrupt the active turn."""
-    if runtime_session_is_plain_hosted_chat(session):
-        return interrupt_plain_hosted_requests(
-            session.session_id,
-            turn_id=turn_id,
-            store=state.runtime_store,
-            wait_for_termination=wait_for_termination,
-        )
-    with suppress(Exception):
-        _definition, _selection, runtime_adapter = resolve_runtime_backend_for_session(
-            state.provider_store,
-            session=session,
-            registry=registry,
-        )
-        return runtime_adapter.interrupt_turn(session.session_id)
-    return False
-
 
 
 def _session_execution_lock(session_id: str) -> Lock:

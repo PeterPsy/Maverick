@@ -1,5 +1,4 @@
 """Runtime turn submission helpers shared by HTTP and future host surfaces."""
-
 from __future__ import annotations
 
 from threading import Lock
@@ -7,7 +6,7 @@ import time
 from typing import TYPE_CHECKING, Callable
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
-from core.providers.service import resolve_runtime_backend_for_session
+from core.providers.service import resolve_runtime_engine_for_session
 from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
     assert_plain_hosted_chat_input_allowed,
@@ -16,6 +15,10 @@ from core.runtime.plain_hosted_text import (
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.provider_input_context import runtime_provider_input_text
+from core.runtime.resolved_runtime_engine import (
+    ResolvedRuntimeEngine,
+    build_optional_local_launch_spec,
+)
 from core.runtime.provider_start_handoff import (
     provider_thread_recorder,
     runtime_provider_start_handoff,
@@ -92,11 +95,12 @@ def submit_runtime_turn(
     )
     if plain_hosted:
         provider = None
-        runtime_adapter = None
+        resolved_engine = None
         provider_id = HOSTED_TEXT_RUNTIME_PROVIDER_ID
     else:
-        provider, selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=session)
-        provider_id = provider.provider_id
+        resolved_engine = ResolvedRuntimeEngine(*resolve_runtime_engine_for_session(state.provider_store, session=session))
+        provider = resolved_engine.provider
+        provider_id = resolved_engine.provider_id
     with runtime_turn_queue_fence(queue_fence):
         turn, events, created = _queue_turn_with_event_result(
             state,
@@ -210,13 +214,11 @@ def submit_runtime_turn(
                 )
             else:
                 assert provider is not None
-                launch_result = _build_launch_spec_for_execution(
+                launch_result = build_optional_local_launch_spec(
+                    resolved_engine,
+                    _build_launch_spec_for_execution,
                     state,
                     session=session,
-                    provider_id=provider_id,
-                    provider_definition=provider,
-                    provider_selection=selection,
-                    runtime_adapter=runtime_adapter,
                 )
                 launch_spec = launch_result[0] if isinstance(launch_result, tuple) else launch_result
                 app_reference_count, storage_reference_count = _runtime_app_reference_counts(app_references)
@@ -270,11 +272,9 @@ def submit_runtime_turn(
                         input_text=provider_input_text,
                         invoked_skills=invoked_skills,
                         launch_spec=launch_spec,
-                        runtime_adapter=runtime_adapter,
+                        **resolved_engine.execution_kwargs(state.runtime_store, provider_session, correlation_id=turn.turn_id),
                         on_provider_thread_id=provider_thread_recorder(
-                            state,
-                            session_id=provider_session.session_id,
-                            provider_id=provider_id,
+                            state, session_id=provider_session.session_id, provider_id=provider_id
                         ),
                         on_provider_startup_event=provider_callbacks.record_startup_event,
                         on_provider_turn_start_sent=provider_callbacks.record_turn_start_sent,

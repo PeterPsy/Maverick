@@ -189,8 +189,13 @@ class OrchestrationProviderStartRaceTest(unittest.TestCase):
         provider = SimpleNamespace(provider_id="codex")
         with (
             patch(
-                "core.runtime.turn_submission_service_runtime.resolve_runtime_backend_for_session",
-                return_value=(provider, None, object()),
+                "core.runtime.turn_submission_service_runtime.resolve_runtime_engine_for_session",
+                return_value=(
+                    provider,
+                    None,
+                    SimpleNamespace(local_process_lifecycle=object()),
+                    object(),
+                ),
             ),
             patch(
                 "core.runtime.turn_submission_service_runtime._build_launch_spec_for_execution",

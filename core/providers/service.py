@@ -34,6 +34,7 @@ from core.providers.provider_hosted_metadata import build_hosted_provider_defini
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.provider_registry import ProviderRegistry, RuntimeBackendAdapter
+from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.provider_selection import ProviderSelectionService
 from core.providers.store import ProviderStore
@@ -807,6 +808,58 @@ def resolve_runtime_backend_for_session(
         codex_command=codex_command,
     )
     return definition, selection, active_registry.get_runtime_adapter(definition.provider_id)
+
+
+def resolve_agentic_runtime_engine_for_session(
+    store: ProviderStore,
+    *,
+    session: RuntimeSessionRecord,
+    registry: ProviderRegistry | None = None,
+    codex_command: str | None = None,
+) -> tuple[ProviderDefinition, ProviderSelection | None, AgenticRuntimeEngineAdapter]:
+    """Resolve the pinned session through the provider-neutral async registry."""
+    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
+    register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
+    definition, selection = resolve_provider_for_runtime_session(
+        store,
+        session=session,
+        registry=active_registry,
+        codex_command=codex_command,
+    )
+    return definition, selection, active_registry.get_agentic_runtime_adapter(definition.provider_id)
+
+
+def resolve_runtime_engine_for_session(
+    store: ProviderStore,
+    *,
+    session: RuntimeSessionRecord,
+    registry: ProviderRegistry | None = None,
+    codex_command: str | None = None,
+) -> tuple[
+    ProviderDefinition,
+    ProviderSelection | None,
+    AgenticRuntimeEngineAdapter,
+    RuntimeBackendAdapter | None,
+]:
+    """Resolve async engine plus its optional legacy local-process bridge input."""
+    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
+    register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
+    definition, selection = resolve_provider_for_runtime_session(
+        store,
+        session=session,
+        registry=active_registry,
+        codex_command=codex_command,
+    )
+    try:
+        legacy_adapter = active_registry.get_runtime_adapter(definition.provider_id)
+    except ProviderNotFoundError:
+        legacy_adapter = None
+    return (
+        definition,
+        selection,
+        active_registry.get_agentic_runtime_adapter(definition.provider_id),
+        legacy_adapter,
+    )
 
 
 def resolve_provider_for_workspace(

@@ -90,8 +90,8 @@ def terminate_runtime_process(process: subprocess.Popen, *, timeout_seconds: flo
     return True
 
 
-def terminate_codex_app_server_processes_for_session(session_id: str, *, timeout_seconds: float = 1.5) -> int:
-    """Best-effort fallback for Codex app-server processes lost from the in-memory registry."""
+def terminate_orphaned_runtime_processes_for_session(session_id: str, *, timeout_seconds: float = 1.5) -> int:
+    """Best-effort fallback for marked runtime engines lost from the in-memory registry."""
     proc_root = "/proc"
     if not os.path.isdir(proc_root):
         return 0
@@ -101,7 +101,7 @@ def terminate_codex_app_server_processes_for_session(session_id: str, *, timeout
             continue
         pid = int(name)
         try:
-            if not _proc_matches_codex_app_server_session(pid, session_id):
+            if not _proc_matches_runtime_engine_session(pid, session_id):
                 continue
             if _terminate_process_group_pid(pid, timeout_seconds=timeout_seconds):
                 terminated += 1
@@ -112,15 +112,18 @@ def terminate_codex_app_server_processes_for_session(session_id: str, *, timeout
     return terminated
 
 
-def _proc_matches_codex_app_server_session(pid: int, session_id: str) -> bool:
+def _proc_matches_runtime_engine_session(pid: int, session_id: str) -> bool:
     base = f"/proc/{pid}"
     with open(f"{base}/environ", "rb") as handle:
         environ = handle.read().split(b"\0")
     if f"MAVERICK_RUNTIME_SESSION_ID={session_id}".encode() not in environ:
         return False
-    with open(f"{base}/cmdline", "rb") as handle:
-        cmdline = handle.read().decode("utf-8", errors="ignore").replace("\0", " ")
-    return "codex" in cmdline and "app-server" in cmdline and "--listen" in cmdline
+    return any(item.startswith(b"MAVERICK_RUNTIME_ENGINE_ID=") and item.split(b"=", 1)[1] for item in environ)
+
+
+def terminate_codex_app_server_processes_for_session(session_id: str, *, timeout_seconds: float = 1.5) -> int:
+    """Compatibility alias for the provider-neutral orphan reaper."""
+    return terminate_orphaned_runtime_processes_for_session(session_id, timeout_seconds=timeout_seconds)
 
 
 def _terminate_process_group_pid(pid: int, *, timeout_seconds: float) -> bool:

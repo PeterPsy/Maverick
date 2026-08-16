@@ -700,7 +700,7 @@ def _build_launch_spec_for_execution(
     )
     skill_resolve_ms = (time.perf_counter() - skill_resolve_started_at) * 1000
     skill_prepare_ms = 0.0
-    if skills or provider_id == "codex":
+    if skills or bool(getattr(runtime_adapter, "synchronizes_runtime_skills", False)):
         skill_prepare_started_at = time.perf_counter()
         prepare_runtime_skills(state.provider_store, session=session, skills=skills, runtime_adapter=runtime_adapter)
         skill_prepare_ms = (time.perf_counter() - skill_prepare_started_at) * 1000

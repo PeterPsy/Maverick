@@ -108,6 +108,7 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
         repo_root = make_temp_repo_root(self)
         relative_path = self._write_generated_storage_file(repo_root)
         state = self._runtime_request_state()
+        state.repository_root = repo_root
         result = {
             "json": {"ok": True},
             "runtime_launch_requests": [
@@ -131,6 +132,7 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
             client_message_id=None,
             attachments=None,
             app_references=None,
+            invoked_skill_ids=None,
             on_queued=None,
         ):
             captured["attachments"] = attachments
@@ -177,6 +179,7 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
         repo_root = make_temp_repo_root(self)
         relative_path = self._write_generated_storage_file(repo_root)
         state = self._runtime_request_state()
+        state.repository_root = repo_root
         result = {
             "json": {"ok": True},
             "runtime_launch_requests": [
@@ -194,8 +197,13 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
         executed = Event()
         completed = Event()
 
-        def fake_resolve_runtime_backend_for_session(_provider_store, *, session, **_kwargs):
-            return SimpleNamespace(provider_id="test-provider"), SimpleNamespace(), SimpleNamespace()
+        def fake_resolve_runtime_engine_for_session(_provider_store, *, session, **_kwargs):
+            return (
+                SimpleNamespace(provider_id="test-provider"),
+                SimpleNamespace(),
+                SimpleNamespace(local_process_lifecycle=object()),
+                SimpleNamespace(),
+            )
 
         def fake_execute_runtime_turn(**kwargs):
             captured["input_text"] = kwargs["input_text"]
@@ -207,7 +215,7 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
 
         with (
             patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", lambda *_args, **_kwargs: None),
-            patch.object(runtime_submission_runtime, "resolve_runtime_backend_for_session", fake_resolve_runtime_backend_for_session),
+            patch.object(runtime_submission_runtime, "resolve_runtime_engine_for_session", fake_resolve_runtime_engine_for_session),
             patch.object(runtime_submission_runtime, "_build_launch_spec_for_execution", lambda *_args, **_kwargs: None),
             patch.object(runtime_submission_runtime, "execute_runtime_turn", fake_execute_runtime_turn),
             patch.object(runtime_submission_runtime, "dispatch_source_app_runtime_event", fake_dispatch_source_app_runtime_event),

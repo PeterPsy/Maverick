@@ -354,6 +354,7 @@ export type RuntimeSession = {
   prewarm_status?: string;
   prewarm_completed?: boolean;
   provider_thread_ready?: boolean;
+  runtime_ready?: boolean;
   prewarm_total_ms?: number;
 };
 

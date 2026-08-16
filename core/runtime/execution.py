@@ -6,13 +6,17 @@ from dataclasses import dataclass
 import json
 import os
 import subprocess
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from core.providers.models import ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_registry import RuntimeBackendAdapter
 from core.runtime.execution_events import RuntimeExecutionEvent, RuntimeExecutionEventSink, is_internal_provider_noise, parse_provider_json_event
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.skills.models import SkillDefinition
+
+if TYPE_CHECKING:
+    from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter
+    from core.runtime.provider_state import RuntimeProviderState
 
 
 OUTPUT_DELTA_FLUSH_CHARS = 80
@@ -36,7 +40,11 @@ def execute_runtime_turn(
     event_sink: RuntimeExecutionEventSink | None = None,
     launch_spec: RuntimeBackendLaunchSpec | None = None,
     runtime_adapter: RuntimeBackendAdapter | None = None,
+    agentic_adapter: AgenticRuntimeEngineAdapter | None = None,
+    provider_state: RuntimeProviderState | None = None,
+    correlation_id: str | None = None,
     on_provider_thread_id: Callable[[str], None] | None = None,
+    on_provider_state_update: Callable[[dict[str, object]], RuntimeProviderState] | None = None,
     on_provider_startup_event: Callable[[str, dict[str, object]], None] | None = None,
     on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
     on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
@@ -62,6 +70,34 @@ def execute_runtime_turn(
         _emit_fake_events(event_sink)
         return RuntimeExecutionResult(output_text=fake_response, exit_code=0)
 
+    if agentic_adapter is not None and session.execution_binding is not None:
+        if provider_state is None:
+            raise ValueError("Agentic adapter execution requires runtime provider state.")
+        from core.runtime.agentic_execution import execute_agentic_runtime_turn
+        from core.runtime.async_runtime import run_runtime_coroutine
+
+        coalesced_sink = RuntimeOutputDeltaCoalescer(event_sink)
+        try:
+            return run_runtime_coroutine(
+                execute_agentic_runtime_turn(
+                    session=session,
+                    provider_state=provider_state,
+                    adapter=agentic_adapter,
+                    input_text=input_text,
+                    correlation_id=correlation_id or session.session_id,
+                    invoked_skills=invoked_skills,
+                    timeout_seconds=timeout_seconds,
+                    event_sink=coalesced_sink.emit,
+                    local_launch_spec=launch_spec,
+                    on_provider_thread_id=on_provider_thread_id,
+                    on_provider_state_update=on_provider_state_update,
+                    on_provider_startup_event=on_provider_startup_event,
+                    on_provider_turn_start_sent=on_provider_turn_start_sent,
+                    on_provider_accepted=on_provider_accepted,
+                )
+            )
+        finally:
+            coalesced_sink.flush()
     if runtime_adapter is None:
         return RuntimeExecutionResult(
             output_text=f"Provider `{provider.provider_id}` is registered but has no executable adapter in this host yet.",

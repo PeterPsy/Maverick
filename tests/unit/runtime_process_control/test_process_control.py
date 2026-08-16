@@ -46,7 +46,11 @@ class RuntimeProcessControlTestCase(unittest.TestCase):
         transition_runtime_turn(store, turn_id=turn.turn_id, target_status="active", now=now)
         transition_runtime_turn(store, turn_id=turn.turn_id, target_status="cancelled", now=now)
 
-        env = {**os.environ, "MAVERICK_RUNTIME_SESSION_ID": "sess-lost-codex-process"}
+        env = {
+            **os.environ,
+            "MAVERICK_RUNTIME_SESSION_ID": "sess-lost-codex-process",
+            "MAVERICK_RUNTIME_ENGINE_ID": "codex",
+        }
         process = subprocess.Popen(
             ["bash", "-c", "exec -a 'codex app-server --listen stdio://' sleep 30"],
             env=env,

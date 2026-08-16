@@ -720,7 +720,8 @@ export function useMessageSubmission({
       { signal: abortController.signal },
     )
       .then((session) => {
-        if (!session.prewarm_completed || !session.provider_thread_ready) {
+        const runtimeReady = session.runtime_ready ?? session.provider_thread_ready;
+        if (!session.prewarm_completed || !runtimeReady) {
           return null;
         }
         const prepared = { conversationKey, key, session };

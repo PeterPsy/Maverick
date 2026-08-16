@@ -104,6 +104,11 @@ OAuth providers, remote model providers, remote app catalogs, and external APIs 
 
 Data sent to them leaves the local trust boundary.
 
+Remote model providers used by the hosted agentic runtime are never runtime
+authorities. They receive only content blocks and tool schemas that pass the
+Core egress and effective-authority checks. Provider continuation data remains
+private Core runtime state and is not a browser, app, or workspace capability.
+
 ## Main Attacker Types
 
 Relevant attackers:
@@ -122,6 +127,74 @@ Relevant attackers:
 ### Prompt injection leading to tool misuse
 
 An agent reads hostile instructions and uses legitimate tools for unintended actions.
+
+The hosted agentic runtime treats model output and tool output as untrusted.
+Tool availability is derived from the immutable execution-binding ceiling
+intersected with live workspace, actor, app-mount, invocation, execution, health,
+and revocation policy. Every proposed call is persisted before validation or a
+side effect. Mutating and destructive calls require a one-shot confirmation
+grant when policy requires it, and a crash after the side-effect boundary
+produces `execution_unknown` instead of automatic replay. Prompt instructions
+cannot expand this authority.
+
+### Remote model content exfiltration
+
+An injected prompt, malicious tool result, compromised app reference, or
+misclassified attachment may attempt to send workspace content, credentials,
+host metadata, or runtime bearer authority to a remote model provider.
+
+Every outbound content block receives a fail-closed Core `EgressDecision` bound
+to destination provider/upstream, data class, provenance, trust level, and an
+immutable policy revision. Unknown values are denied. The initial preview
+allows only public or explicitly fake data; secrets, credentials, bearer tokens,
+host operational metadata, and unclassified content are always denied. Audit
+records contain domain-separated HMAC digests and reason metadata, never raw
+content. Redaction is a secondary transform rather than the trust boundary.
+
+Residual risk remains because content classification and prompt/tool-result
+provenance are new enforcement paths. Remote agentic execution therefore stays
+disabled by default and fake-data-only until leakage tests and the broader
+production blockers are closed.
+
+### Profile, certificate, or routing substitution
+
+An attacker may try to substitute a profile revision, credential binding,
+adapter artifact, provider model, protocol, endpoint, or router upstream after a
+session is created. A provider may also silently route to an uncertified
+upstream.
+
+The runtime session embeds an immutable execution binding. Capability derives
+from an unexpired, unrevoked certificate matching the exact adapter artifact,
+provider, model, protocol, routing digest, and effective upstream. Workspace
+defaults are not consulted after session creation. Live state may only narrow
+the pinned ceiling. OpenRouter agentic requests use an explicit certified
+upstream allowlist, no fallback, required parameters, denied data collection,
+and policy-required ZDR; no eligible endpoint means no request.
+
+### Confirmation and side-effect replay
+
+A browser retry, worker crash, stale resume, duplicated provider call id, or
+malicious actor may try to execute a mutating tool twice or reuse another
+confirmation.
+
+Tool invocations and one-shot grants are revisioned Core records. Grants bind
+actor, session, turn, invocation, tool handle, canonical argument HMAC, policy
+revision, and expiry. The active-to-consumed transition is atomic, `executing`
+is persisted before the boundary, and uncertain mutating/destructive outcomes
+are not replayed. Browser state and model-supplied ids are not authoritative.
+
+### Provider-private state disclosure or corruption
+
+Provider continuation state, thought signatures, exact function-call pairing,
+or opaque protocol steps may contain sensitive information or be corrupted to
+change future model behavior.
+
+The Core stores that state as bounded authenticated-encryption envelopes behind
+Core-issued opaque locators. AAD binds workspace, session, engine, adapter,
+codec, and schema. Ordinary APIs, UI, logs, app hooks, exports, and analytics do
+not receive the content. Digest, codec, or version mismatch fails into explicit
+recovery rather than best-effort parsing. Ciphertext stored in a workspace
+runtime partition is not itself a resolution capability.
 
 ### Orchestrator-authored authority escalation
 
@@ -240,6 +313,11 @@ Secrets leak through files, logs, runtime state, generated files, or outbound ac
 
 Current mitigations require apps to persist only references or grant ids, keep raw values in AES-GCM Core Secrets envelopes, use action-scoped grants for app use, reject mixed-action wildcard target grants, require explicit targets for non-internal actions, validate structured HTTP/HTTPS targets or the `maverick://app.backend/*` platform delivery target family, strip query strings from audit targets, allowlist and bound audit request context, redact HTTP responses and audit payloads, fail closed with audit/event records when declared app-entrypoint grants are denied or missing, limit CLI/MCP delivery to command/tool descriptor `required_secrets`, ignore expired and non-deliverable grants during delivery selection, audit app-owned secret write create/rotate/grant operations, require admin authority for secret-mutating runtime CLI calls, and treat resolved values as ephemeral runtime input. Residual risk remains until the production secret backend, external key management, CSRF hardening, and app/runtime sandboxing blockers are closed.
 
+Agentic model requests add a second mandatory boundary: credential resolution
+occurs only at execution time, and neither raw credentials nor credential
+bindings that could resolve them are serialized into prompts, public events,
+provider-private envelopes, tool results, or egress audit content.
+
 ### App privilege escalation
 
 App frontend or backend code gains more authority than the app contract and workspace policy should allow.
@@ -289,6 +367,9 @@ The near-term goals are:
 - no silent privilege expansion from app or agent code
 - clear separation between control-plane state and app-owned data
 - explicit disclosure that current local bootstrap and deployment are not production-safe
+- immutable runtime execution binding with live authority that can only narrow
+- per-content remote-provider egress decisions and fake-data-only preview gates
+- persistent one-shot tool confirmation and no replay of uncertain side effects
 
 ## Non-Goals For The First Public Release
 

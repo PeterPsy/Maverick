@@ -14,6 +14,8 @@ Do not run an internet-exposed Maverick deployment with real secrets, customer d
 - app backend and lifecycle hook sandboxing
 - restrictive control-plane store permissions
 - recovery automation policy gates
+- remote agentic-provider egress classification and leakage review
+- hosted tool-orchestration confirmation/replay and runtime-authority review
 
 ## Experimental Use Only
 
@@ -32,6 +34,17 @@ Unacceptable current uses:
 - real customer data
 - shared untrusted multi-user deployments
 - third-party app execution without review
+- remote agentic model profiles with real workspace, personal, customer, or regulated data
+
+## Agentic Multimodel Preview Gate
+
+ADR-0010 approves the architecture and implementation sequence for hosted
+agentic model providers. It does not close any launch blocker. Until a separate
+production security gate is approved, remote agentic profiles must remain
+disabled by default, explicitly marked preview, and limited to public or fake
+data by Core egress policy. Capability certificates attest only to one exact
+engine/adapter/provider/model/protocol/upstream combination and evidence suite;
+they are not a platform production-safety certificate.
 
 ## Design Studio OpenDesign Gate
 

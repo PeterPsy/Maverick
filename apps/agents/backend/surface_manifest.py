@@ -62,6 +62,7 @@ OPERATIONS_MANIFEST = {
                 "role_id",
                 "role_description",
                 "skill_ids",
+                "skill_activation_mode",
                 "trace_verbosity",
                 "enabled",
                 "common_prompt",

@@ -69,6 +69,7 @@ class OrchestrationAgentCatalog:
             ),
             skill_ids=_string_items(definition.get("skill_ids")),
             skill_catalog_app_id=skill_catalog_app_id,
+            skill_activation_mode=str(definition.get("skill_activation_mode") or "implicit"),
             provider_id=self.provider_app_id,
             revision_id=(
                 str(definition.get("revision_id") or definition.get("updated_at") or "").strip() or None
@@ -153,6 +154,7 @@ def _root_snapshot(participant: InterAgentParticipantRecord) -> AgentParticipant
         system_prompt=str(document.get("system_prompt") or ""),
         skill_ids=_string_items(document.get("skill_ids")),
         skill_catalog_app_id=str(document.get("skill_catalog_app_id") or "skills"),
+        skill_activation_mode=str(document.get("skill_activation_mode") or "implicit"),
         provider_id=str(document.get("provider_id") or participant.provider_id or "").strip() or None,
         revision_id=str(document.get("revision_id") or "").strip() or None,
         metadata=document.get("metadata") if isinstance(document.get("metadata"), dict) else {},

@@ -40,6 +40,7 @@ export function hostedProviderRuntimeConfig(provider: ProviderItem | null | unde
     hosted_model_id: provider.hosted_model_id || provider.default_model_family || "",
     skill_catalog_app_id: "",
     skill_ids: [],
+    skill_activation_mode: "explicit",
     source_app_id: "chat",
     system_prompt: "",
     title: provider?.label || "Hosted chat",

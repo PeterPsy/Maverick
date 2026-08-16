@@ -58,6 +58,7 @@ from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import record_runtime_event, transition_runtime_turn
+from core.skills.service import resolve_invoked_runtime_skills
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -568,6 +569,7 @@ def submit_runtime_turn_async(
     client_message_id: str | None = None,
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
+    invoked_skill_ids: list[str] | None = None,
     app_reference_materializer: Callable[[list[dict[str, object]]], object] | None = None,
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
     turn_id: str | None = None,
@@ -578,7 +580,17 @@ def submit_runtime_turn_async(
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue one runtime turn and execute it in a background worker."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
-    assert_plain_hosted_chat_input_allowed(session, attachments=attachments, app_references=app_references)
+    assert_plain_hosted_chat_input_allowed(
+        session,
+        attachments=attachments,
+        app_references=app_references,
+        invoked_skill_ids=invoked_skill_ids,
+    )
+    invoked_skills = resolve_invoked_runtime_skills(
+        session,
+        invoked_skill_ids,
+        start_path=state.repository_root,
+    )
     queue_provider_id = HOSTED_TEXT_RUNTIME_PROVIDER_ID if plain_hosted else queue_provider_id_for_session(session)
     with runtime_turn_queue_fence(queue_fence):
         turn, events, created = _queue_turn_with_event_result(
@@ -589,6 +601,7 @@ def submit_runtime_turn_async(
             client_message_id=client_message_id,
             attachments=attachments,
             app_references=app_references,
+            invoked_skill_ids=[skill.skill_id for skill in invoked_skills],
             turn_id=turn_id,
             received_perf_counter=received_perf_counter,
             submission_timing=submission_timing,
@@ -737,6 +750,11 @@ def submit_runtime_turn_async(
 
                 session_lookup_started_at = time.perf_counter()
                 current_session = state.runtime_store.get_session(session.session_id)
+                current_invoked_skills = resolve_invoked_runtime_skills(
+                    current_session,
+                    turn.invoked_skill_ids,
+                    start_path=state.repository_root,
+                )
                 worker_metrics["worker_session_lookup_ms"] = (time.perf_counter() - session_lookup_started_at) * 1000
                 _debug_log_runtime_turn_with_timing(
                     state,
@@ -928,6 +946,7 @@ def submit_runtime_turn_async(
                             session=provider_session,
                             provider=provider,
                             input_text=provider_input_text,
+                            invoked_skills=current_invoked_skills,
                             launch_spec=launch_spec,
                             runtime_adapter=runtime_adapter,
                             on_provider_thread_id=provider_thread_recorder(

@@ -12,6 +12,7 @@ from core.providers.models import ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_registry import RuntimeBackendAdapter
 from core.runtime.execution_events import RuntimeExecutionEvent, RuntimeExecutionEventSink, is_internal_provider_noise, parse_provider_json_event
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.skills.models import SkillDefinition
 
 
 OUTPUT_DELTA_FLUSH_CHARS = 80
@@ -30,6 +31,7 @@ def execute_runtime_turn(
     session: RuntimeSessionRecord,
     provider: ProviderDefinition,
     input_text: str,
+    invoked_skills: list[SkillDefinition] | None = None,
     timeout_seconds: int | None = None,
     event_sink: RuntimeExecutionEventSink | None = None,
     launch_spec: RuntimeBackendLaunchSpec | None = None,
@@ -68,7 +70,7 @@ def execute_runtime_turn(
     active_launch_spec = launch_spec or runtime_adapter.build_launch_spec(session)
     coalesced_sink = RuntimeOutputDeltaCoalescer(event_sink)
     try:
-        result = runtime_adapter.execute_turn(
+        execution_kwargs = dict(
             session=session,
             launch_spec=active_launch_spec,
             input_text=input_text,
@@ -80,6 +82,9 @@ def execute_runtime_turn(
             on_provider_accepted=on_provider_accepted,
             command_runner=command_runner,
         )
+        if invoked_skills:
+            execution_kwargs["invoked_skills"] = invoked_skills
+        result = runtime_adapter.execute_turn(**execution_kwargs)
     finally:
         coalesced_sink.flush()
     return RuntimeExecutionResult(output_text=result.output_text, exit_code=result.exit_code)

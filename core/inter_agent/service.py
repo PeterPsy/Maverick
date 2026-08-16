@@ -940,6 +940,7 @@ class InterAgentService:
                 system_prompt=materialized_prompt,
                 skill_ids=materialized_skill_ids,
                 skill_catalog_app_id=materialized_skill_catalog_app_id,
+                skill_activation_mode=_materialized_skill_activation_mode(participant),
                 source_app_id=_clean_optional(source_app_id) or run.source_app_id,
                 owner_user_id=_clean_optional(owner_user_id),
                 created_by_user_id=_clean_optional(created_by_user_id) or run.created_by_user_id,
@@ -1895,6 +1896,11 @@ def _materialized_skill_ids(
     if explicit_skill_ids is not None:
         return _clean_string_list(explicit_skill_ids)
     return _clean_string_list(participant.skill_ids)
+
+
+def _materialized_skill_activation_mode(participant: InterAgentParticipantRecord) -> str:
+    snapshot = participant.agent_snapshot if isinstance(participant.agent_snapshot, dict) else {}
+    return str(snapshot.get("skill_activation_mode") or "implicit")
 
 
 def _materialized_skill_catalog_app_id(

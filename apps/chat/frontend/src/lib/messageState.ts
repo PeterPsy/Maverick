@@ -8,6 +8,7 @@ export type PendingMessage = {
   createdAt: string;
   attachments: ChatMessageAttachment[];
   appReferences: AppReference[];
+  invokedSkillIds?: string[];
   multiAgentMode?: MultiAgentComposerMode;
   clientSubmissionStartedAt?: string;
   clientSubmissionMetrics?: RuntimeTurnClientMetrics;
@@ -18,6 +19,7 @@ export type QueuedMessage = {
   content: string;
   attachments: ChatMessageAttachment[];
   appReferences: AppReference[];
+  invokedSkillIds?: string[];
   multiAgentMode?: MultiAgentComposerMode;
   clientSubmissionStartedAt?: string;
   clientSubmissionMetrics?: RuntimeTurnClientMetrics;

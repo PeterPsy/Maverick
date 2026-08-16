@@ -8,11 +8,13 @@ import subprocess
 import time
 from typing import Callable
 
+from core.providers.codex_skill_inputs import codex_skill_input_items
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.codex_app_server_runtime_state import _RUNTIMES, _RUNTIMES_LOCK
 from core.runtime.execution_events import RuntimeExecutionEventSink
 from core.runtime.process_control import terminate_runtime_process, unregister_runtime_process
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.skills.models import SkillDefinition
 
 
 @dataclass
@@ -42,6 +44,7 @@ def execute_codex_app_server_turn(
     session: RuntimeSessionRecord,
     launch_spec: RuntimeBackendLaunchSpec,
     input_text: str,
+    invoked_skills: list[SkillDefinition] | None = None,
     event_sink: RuntimeExecutionEventSink | None,
     timeout_seconds: int | None,
     on_provider_thread_id: Callable[[str], None] | None = None,
@@ -134,12 +137,16 @@ def execute_codex_app_server_turn(
             on_provider_turn_start_sent(enriched_metadata)
 
     turn_start_request_started_at = time.perf_counter()
+    turn_input = [
+        {"type": "text", "text": input_text},
+        *codex_skill_input_items(runtime.runtime_root, invoked_skills),
+    ]
     turn = _send_request(
         runtime,
         "turn/start",
         {
             "threadId": provider_thread_id,
-            "input": [{"type": "text", "text": input_text}],
+            "input": turn_input,
             "approvalPolicy": "never",
             "sandboxPolicy": _turn_sandbox_policy(launch_spec),
             "cwd": launch_spec.working_directory,

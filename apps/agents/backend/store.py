@@ -177,12 +177,16 @@ def normalize_agent_type(payload: dict) -> dict:
     skills = payload.get("skill_ids") if isinstance(payload.get("skill_ids"), list) else payload.get("codex_skill_ids")
     if not isinstance(skills, list):
         skills = []
+    skill_activation_mode = str(payload.get("skill_activation_mode") or "implicit").strip()
+    if skill_activation_mode not in {"implicit", "explicit"}:
+        raise AgentsValidationError(f"Invalid skill_activation_mode: {skill_activation_mode}")
     return {
         "id": agent_type_id,
         "name": " ".join(str(payload.get("name") or agent_type_id).split()).strip(),
         "description": " ".join(str(payload.get("description") or "").split()).strip(),
         "role_id": role_id,
         "skill_ids": [str(skill_id).strip() for skill_id in skills if str(skill_id).strip()],
+        "skill_activation_mode": skill_activation_mode,
         "trace_verbosity": trace,
         "enabled": bool(payload.get("enabled", True)),
         "created_at": str(payload.get("created_at") or now_timestamp()),

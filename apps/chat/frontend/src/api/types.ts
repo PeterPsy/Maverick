@@ -109,6 +109,7 @@ export type AgentTypeSummary = {
   description: string;
   role_id: string;
   skill_ids: string[];
+  skill_activation_mode?: "implicit" | "explicit";
   trace_verbosity: string;
   enabled: boolean;
 };
@@ -322,6 +323,7 @@ export type RuntimeSession = {
   effective_mode: string;
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
   skill_catalog_app_id?: string | null;
+  skill_activation_mode?: "implicit" | "explicit" | string;
   provider_id?: string;
   hosted_provider_id?: string | null;
   hosted_model_id?: string | null;
@@ -338,6 +340,7 @@ export type RuntimeTurn = {
   status: string;
   input_text: string | null;
   client_message_id?: string | null;
+  invoked_skill_ids?: string[];
   failure_reason: string | null;
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
   created_at: string;
@@ -774,6 +777,7 @@ export type RuntimeSessionOptions = {
   source_app_id?: string;
   skill_catalog_app_id?: string;
   skill_ids?: string[];
+  skill_activation_mode?: "implicit" | "explicit";
   runtime_mode?: "agentic" | "plain_hosted_chat";
   routing_profile?: "fast_model" | string;
   hosted_provider_id?: string;

@@ -129,6 +129,8 @@ function parsePersistedMessages(items: unknown[]): PersistedMessage[] {
           return null;
         }
         const multiAgentMode = persistedMultiAgentMode(record.multiAgentMode);
+        const clientSubmissionMetrics = persistedClientSubmissionMetrics(record.clientSubmissionMetrics);
+        const invokedSkillIds = persistedSkillIds(record.invokedSkillIds);
         return {
           clientMessageId,
           content,
@@ -136,14 +138,22 @@ function parsePersistedMessages(items: unknown[]): PersistedMessage[] {
           ...(typeof record.clientSubmissionStartedAt === "string"
             ? { clientSubmissionStartedAt: record.clientSubmissionStartedAt }
             : {}),
-          clientSubmissionMetrics: persistedClientSubmissionMetrics(record.clientSubmissionMetrics),
+          ...(clientSubmissionMetrics ? { clientSubmissionMetrics } : {}),
           appReferences: persistedAppReferences(record.appReferences),
+          ...(invokedSkillIds.length ? { invokedSkillIds } : {}),
           attachments,
           ...(multiAgentMode ? { multiAgentMode } : {}),
         };
       })
       .filter((item): item is PersistedMessage => Boolean(item)),
   );
+}
+
+function persistedSkillIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean))];
 }
 
 function dedupeMessages<T extends QueuedMessage>(messages: T[]): T[] {

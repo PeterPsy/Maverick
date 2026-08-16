@@ -11,6 +11,7 @@ export type AgentType = {
   description: string;
   role_id: string;
   skill_ids: string[];
+  skill_activation_mode?: 'implicit' | 'explicit';
   trace_verbosity: string;
   enabled: boolean;
 };
@@ -69,4 +70,5 @@ export type AgentEdits = {
   instructions: string;
   commonPrompt: string;
   skillIds: string[];
+  skillActivationMode: 'implicit' | 'explicit';
 };

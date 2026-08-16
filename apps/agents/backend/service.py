@@ -110,6 +110,7 @@ def prompt_preview(data_root: Path, body: dict) -> dict:
             "content": (
                 f"Name: {agent_type['name']}\n"
                 f"Trace verbosity: {agent_type['trace_verbosity']}\n"
+                f"Skill activation: {agent_type.get('skill_activation_mode', 'implicit')}\n"
                 f"Skills: {', '.join(agent_type['skill_ids']) if agent_type['skill_ids'] else 'all enabled workspace skills'}"
             ),
         },

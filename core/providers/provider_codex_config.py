@@ -166,9 +166,9 @@ class CodexRuntimeConfigMixin:
             return True
         if self._is_managed_codex_hook_section(section):
             return True
-        if section in {"[mcp_servers]", "[plugins]", "[features]"}:
+        if section in {"[mcp_servers]", "[plugins]", "[features]", "[skills]", "[[skills]]"}:
             return True
-        if section.startswith(("[mcp_servers.", "[plugins.", "[features.")):
+        if section.startswith(("[mcp_servers.", "[plugins.", "[features.", "[skills.", "[[skills.")):
             return True
         return self._is_sandbox_project_section_outside_workspace(
             section,
@@ -234,6 +234,10 @@ class CodexRuntimeConfigMixin:
         for name, enabled in CODEX_MANAGED_RUNTIME_FEATURES.items():
             lines.append(f"{name} = {str(enabled).lower()}")
         return lines
+
+
+    def _managed_runtime_skill_lines(self, *, include_instructions: bool) -> list[str]:
+        return ["[skills]", f"include_instructions = {str(include_instructions).lower()}"]
 
 
 

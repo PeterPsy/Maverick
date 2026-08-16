@@ -13,9 +13,79 @@ from core.providers import codex_app_server_runtime_process as runtime_process
 from core.providers import codex_app_server_runtime_thread as runtime_thread
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime import process_control
+from core.skills.models import SkillDefinition
 
 
 class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
+    def test_turn_start_sends_text_and_structured_skill_input(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_root = Path(temp_dir) / "runtime"
+            runtime_home = runtime_root / "codex-home"
+            skill_file = runtime_home / "skills" / "storage-ops" / "SKILL.md"
+            skill_file.parent.mkdir(parents=True)
+            skill_file.write_text("# Storage Ops\n", encoding="utf-8")
+            session = SimpleNamespace(
+                session_id="session-explicit-skill",
+                workspace_id="default",
+                runtime_root=str(runtime_root),
+            )
+            launch_spec = RuntimeBackendLaunchSpec(
+                provider_id="codex",
+                command=["codex", "app-server"],
+                env_overrides={"CODEX_HOME": str(runtime_home)},
+                credential_binding_id=None,
+                resolved_secret_refs=[],
+                working_directory=temp_dir,
+                execution_mode="sandbox",
+                readable_roots=[],
+                writable_roots=[],
+            )
+            runtime = runtime_process._CodexAppServerRuntime(
+                session_id=session.session_id,
+                workspace_id=session.workspace_id,
+                runtime_root=session.runtime_root,
+                process=SimpleNamespace(pid=123, poll=lambda: None),
+            )
+            invoked_skill = SkillDefinition(
+                skill_id="storage-ops",
+                local_skill_id="storage-ops",
+                name="Storage Ops",
+                description="Operate Storage.",
+                source_root="/catalog/storage-ops",
+                owner_kind="workspace",
+                owner_id="default",
+                workspace_id="default",
+                status="available",
+            )
+            captured: dict[str, object] = {}
+
+            def send_request(_runtime, method, params, *, timeout, on_sent=None):
+                captured.update(params)
+                _runtime.completion_queue.put({"status": "completed"})
+                return {"turn": {"id": "provider-turn-1"}}
+
+            with patch.object(runtime_process, "_ensure_runtime", return_value=runtime), patch.object(
+                runtime_process, "_ensure_provider_thread", return_value="provider-thread-1"
+            ), patch.object(runtime_process, "_send_request", side_effect=send_request), patch.object(
+                runtime_process, "_debug_log"
+            ), patch("core.providers.codex_app_server_runtime_thread.remove_codex_system_skills"):
+                runtime_process.execute_codex_app_server_turn(
+                    session=session,
+                    launch_spec=launch_spec,
+                    input_text="$storage-ops list files",
+                    invoked_skills=[invoked_skill],
+                    event_sink=None,
+                    timeout_seconds=1,
+                )
+
+        self.assertEqual(
+            captured["input"],
+            [
+                {"type": "text", "text": "$storage-ops list files"},
+                {"type": "skill", "name": "storage-ops", "path": str(skill_file.resolve())},
+            ],
+        )
+
     def test_reader_exit_fails_pending_protocol_requests_immediately(self) -> None:
         process = SimpleNamespace(pid=4321, poll=lambda: 1)
         runtime = runtime_process._CodexAppServerRuntime(

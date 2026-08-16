@@ -1,19 +1,50 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from core.providers.provider_codex import build_codex_definition
 from core.runtime.service import create_runtime_session
-from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
+from core.runtime.turn_submission_launch_cache import build_runtime_launch_context_fingerprint, clear_cached_runtime_launch_context
 from core.runtime.turn_submission_service_output import _build_launch_spec_for_execution
 from tests.support.repo import make_temp_repo_root
 from tests.unit.providers.test_turn_submission_launch_spec import _FakeRuntimeAdapter, _runtime_store
 
 
 class StorageLaunchCacheTestCase(unittest.TestCase):
+    def test_skill_activation_mode_changes_launch_fingerprint(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        runtime_store = _runtime_store()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-skill-mode-cache",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        state = SimpleNamespace(repository_root=repo_root)
+        definition = build_codex_definition()
+
+        implicit = build_runtime_launch_context_fingerprint(
+            state,
+            session=session,
+            provider_id="codex",
+            provider_definition=definition,
+            provider_selection=None,
+        )
+        explicit = build_runtime_launch_context_fingerprint(
+            state,
+            session=replace(session, skill_activation_mode="explicit"),
+            provider_id="codex",
+            provider_definition=definition,
+            provider_selection=None,
+        )
+
+        self.assertNotEqual(implicit, explicit)
+
     def test_storage_skill_catalog_state_changes_do_not_invalidate_launch_context(self) -> None:
         repo_root = make_temp_repo_root(self)
         runtime_store = _runtime_store()

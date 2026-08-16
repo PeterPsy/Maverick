@@ -404,6 +404,7 @@ def _apply_one_runtime_request(
             client_message_id=_text(request.get("client_message_id")) or f"{app_id}:{request_id}",
             attachments=attachments,
             app_references=_list_of_dicts(request.get("app_references")),
+            invoked_skill_ids=_list_of_text(request.get("invoked_skill_ids")),
             on_queued=on_queued,
         )
     except Exception as exc:
@@ -498,6 +499,7 @@ def _runtime_session_for_request(
         requested_mode=request.get("requested_mode"),
         system_prompt=system_prompt,
         skill_ids=_list_of_text(request.get("skill_ids")),
+        skill_activation_mode=request.get("skill_activation_mode"),
         skill_catalog_app_id=runtime_skill_catalog_app_id_for_request(
             state.app_store,
             workspace_id=workspace_id,

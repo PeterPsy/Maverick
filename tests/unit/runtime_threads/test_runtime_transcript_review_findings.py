@@ -394,7 +394,7 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
 
     def test_turn_input_fallback_fields_are_immutable_after_submission(self) -> None:
         store = self.store()
-        original = self.turn("turn-1", "original fallback")
+        original = replace(self.turn("turn-1", "original fallback"), invoked_skill_ids=["storage-ops"])
         store.save_turn(original)
         first = read_runtime_transcript(store, context=self.context(), thread_id="session-1")
 
@@ -403,6 +403,7 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
                 original,
                 input_text="mutated fallback",
                 client_message_id="mutated-client-id",
+                invoked_skill_ids=["different-skill"],
                 status="failed",
                 failure_reason="later failure",
             )
@@ -416,6 +417,7 @@ class RuntimeTranscriptReviewFindingTest(unittest.TestCase):
 
         self.assertEqual(persisted.input_text, "original fallback")
         self.assertEqual(persisted.client_message_id, "client-turn-1")
+        self.assertEqual(persisted.invoked_skill_ids, ["storage-ops"])
         self.assertEqual([message["content"] for message in replay["messages"]], ["original fallback"])
         self.assertNotIn("later failure", [message["content"] for message in replay["messages"]])
 

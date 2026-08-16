@@ -17,6 +17,7 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import record_runtime_event
 from core.runtime.thread_catalog_events import mark_thread_user_message_queued
+from core.skills.service import resolve_invoked_runtime_skills
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -46,6 +47,7 @@ def attempt_runtime_message_steer(
     app_references: list[dict[str, object]] | None = None,
     materialized_app_references: list[dict[str, object]] | None = None,
     expected_runtime_turn_id: str | None = None,
+    invoked_skill_ids: list[str] | None = None,
 ) -> RuntimeMessageSteerAttempt:
     """Try same-turn input and return a race-safe fallback decision."""
     with runtime_message_admission_handoff(session.session_id):
@@ -58,6 +60,7 @@ def attempt_runtime_message_steer(
             app_references=app_references,
             materialized_app_references=materialized_app_references,
             expected_runtime_turn_id=expected_runtime_turn_id,
+            invoked_skill_ids=invoked_skill_ids,
         )
 
 
@@ -71,6 +74,7 @@ def _attempt_runtime_message_steer_locked(
     app_references: list[dict[str, object]] | None,
     materialized_app_references: list[dict[str, object]] | None,
     expected_runtime_turn_id: str | None,
+    invoked_skill_ids: list[str] | None,
 ) -> RuntimeMessageSteerAttempt:
     normalized_client_message_id = str(client_message_id or "").strip()
     if not normalized_client_message_id:
@@ -111,6 +115,11 @@ def _attempt_runtime_message_steer_locked(
         return RuntimeMessageSteerAttempt(status="fallback", reason="provider_turn_not_accepted")
 
     try:
+        invoked_skills = resolve_invoked_runtime_skills(
+            session,
+            invoked_skill_ids,
+            start_path=getattr(state, "repository_root", None),
+        )
         provider_input = runtime_provider_input_text(
             state,
             session=session,
@@ -140,12 +149,21 @@ def _attempt_runtime_message_steer_locked(
         return RuntimeMessageSteerAttempt(status="fallback", reason="message_admission_store_unavailable")
 
     try:
-        provider_result = runtime_adapter.steer_turn(
-            session.session_id,
-            input_text=provider_input,
-            client_message_id=normalized_client_message_id,
-            expected_provider_turn_id=expected_provider_turn_id,
-        )
+        if invoked_skills:
+            provider_result = runtime_adapter.steer_turn(
+                session.session_id,
+                input_text=provider_input,
+                client_message_id=normalized_client_message_id,
+                expected_provider_turn_id=expected_provider_turn_id,
+                invoked_skills=invoked_skills,
+            )
+        else:
+            provider_result = runtime_adapter.steer_turn(
+                session.session_id,
+                input_text=provider_input,
+                client_message_id=normalized_client_message_id,
+                expected_provider_turn_id=expected_provider_turn_id,
+            )
     except Exception:
         return RuntimeMessageSteerAttempt(
             status="delivery_uncertain",
@@ -176,6 +194,8 @@ def _attempt_runtime_message_steer_locked(
         payload["attachments"] = attachments
     if app_references:
         payload["app_references"] = app_references
+    if invoked_skill_ids:
+        payload["invoked_skill_ids"] = list(invoked_skill_ids)
     try:
         event = record_runtime_event(
             state.runtime_store,

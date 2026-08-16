@@ -89,6 +89,7 @@ class RuntimeThreadVisibilityTest(unittest.TestCase):
 
         self.assertEqual(session.session_kind, "chat_root")
         self.assertEqual(session.thread_visibility, "user")
+        self.assertEqual(session.skill_activation_mode, "implicit")
 
     def test_inter_agent_participant_defaults_to_hidden_when_visibility_is_omitted(self) -> None:
         store = self.make_store()

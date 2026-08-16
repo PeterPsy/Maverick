@@ -79,6 +79,7 @@ RUNTIME_TURN_IMMUTABLE_SUBMISSION_FIELDS = frozenset(
         "client_message_id",
         "created_at",
         "runtime_mode",
+        "invoked_skill_ids",
     }
 )
 

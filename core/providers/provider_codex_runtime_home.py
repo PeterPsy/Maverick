@@ -170,6 +170,7 @@ class CodexRuntimeHomeMixin:
             runtime_bin=runtime_bin or Path(session.runtime_root) / "bin",
             shell_path=shell_path,
             execution_mode=session.effective_mode,
+            include_skill_instructions=session.skill_activation_mode == "implicit",
             model_id=model_id,
             model_reasoning_effort=model_reasoning_effort,
         )
@@ -244,6 +245,7 @@ class CodexRuntimeHomeMixin:
         runtime_root: Path,
         runtime_bin: Path,
         execution_mode: str,
+        include_skill_instructions: bool,
         shell_path: str | None = None,
         model_id: str | None = None,
         model_reasoning_effort: str | None = None,
@@ -294,5 +296,10 @@ class CodexRuntimeHomeMixin:
         if output_lines and output_lines[-1].strip():
             output_lines.append("")
         output_lines.extend(self._managed_runtime_feature_lines())
+        if output_lines and output_lines[-1].strip():
+            output_lines.append("")
+        output_lines.extend(
+            self._managed_runtime_skill_lines(include_instructions=include_skill_instructions)
+        )
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text("\n".join(output_lines).strip() + "\n", encoding="utf-8")

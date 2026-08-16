@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { interAgentComposerBudgetLabel, interAgentOrchestrationIntent } from "./useMessageSubmission";
+import { interAgentComposerBudgetLabel, interAgentOrchestrationIntent, runtimeSessionOptionsForNewChat } from "./useMessageSubmission";
 
 describe("interAgentOrchestrationIntent", () => {
   it("sends only the root turn identity and orchestration policy", () => {
@@ -27,5 +27,30 @@ describe("interAgentOrchestrationIntent", () => {
     expect(interAgentComposerBudgetLabel("auto")).toBe("Dynamic plan · quality gated");
     expect(interAgentComposerBudgetLabel("multi")).toBe("Implement · review · revise");
     expect(interAgentComposerBudgetLabel("group_chat")).toBe("Dynamic group · quality gated");
+  });
+});
+
+describe("runtimeSessionOptionsForNewChat", () => {
+  it("uses explicit skill activation for a new generalist chat", () => {
+    const options = runtimeSessionOptionsForNewChat({ agentRuntimeConfig: null, draftChat: null, systemPrompt: "" });
+    expect(options.skill_activation_mode).toBe("explicit");
+  });
+
+  it("preserves implicit activation for legacy specialized agent definitions", () => {
+    const options = runtimeSessionOptionsForNewChat({
+      agentRuntimeConfig: {
+        agent_id: "Reviewer",
+        agent_role_id: "reviewer",
+        agent_type_id: "reviewer",
+        skill_catalog_app_id: "skills",
+        skill_ids: ["review-skill"],
+        source_app_id: "agents",
+        system_prompt: "Review.",
+        title: "Reviewer",
+      },
+      draftChat: null,
+      systemPrompt: "Review.",
+    });
+    expect(options.skill_activation_mode).toBe("implicit");
   });
 });

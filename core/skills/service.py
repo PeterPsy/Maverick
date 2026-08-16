@@ -11,6 +11,14 @@ from core.skills.materializer import materialize_skills_for_provider
 from core.skills.models import SkillDefinition, SkillMaterialization
 
 
+class SkillInvocationError(ValueError):
+    """Reject an explicit skill invocation before provider dispatch."""
+
+    def __init__(self, reason_code: str, detail: str) -> None:
+        super().__init__(detail)
+        self.reason_code = reason_code
+
+
 def list_available_workspace_skills(
     *,
     workspace_id: str,
@@ -29,6 +37,47 @@ def resolve_runtime_skills(session: RuntimeSessionRecord, *, start_path: Path | 
         start_path=start_path,
         app_id=session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID,
     )
+
+
+def resolve_invoked_runtime_skills(
+    session: RuntimeSessionRecord,
+    invoked_skill_ids: list[str] | None,
+    *,
+    start_path: Path | None = None,
+) -> list[SkillDefinition]:
+    """Resolve enabled, session-allowed skill ids without trusting client paths."""
+    requested: list[str] = []
+    seen: set[str] = set()
+    for value in invoked_skill_ids or []:
+        skill_id = str(value or "").strip()
+        if not skill_id:
+            raise SkillInvocationError("invalid_invoked_skill_id", "Invoked skill ids cannot be empty.")
+        if skill_id in seen:
+            continue
+        if len(skill_id) > 160 or any(token in skill_id for token in ("/", "\\")) or skill_id in {".", ".."}:
+            raise SkillInvocationError("invalid_invoked_skill_id", f"Invalid invoked skill id `{skill_id}`.")
+        requested.append(skill_id)
+        seen.add(skill_id)
+    if len(requested) > 32:
+        raise SkillInvocationError("too_many_invoked_skills", "A turn may invoke at most 32 skills.")
+    if not requested:
+        return []
+    allowed = set(session.skill_ids)
+    denied = [skill_id for skill_id in requested if allowed and skill_id not in allowed]
+    if denied:
+        raise SkillInvocationError(
+            "invoked_skill_not_allowed",
+            f"Skill invocation is outside the session allowlist: {', '.join(denied)}",
+        )
+    try:
+        return resolve_workspace_skills(
+            workspace_id=session.workspace_id,
+            skill_ids=requested,
+            start_path=start_path,
+            app_id=session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID,
+        )
+    except ValueError as error:
+        raise SkillInvocationError("invoked_skill_unavailable", str(error)) from error
 
 
 def prepare_runtime_skills(

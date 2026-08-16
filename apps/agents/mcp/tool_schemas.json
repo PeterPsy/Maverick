@@ -176,6 +176,11 @@
             "items": {"type": "string"},
             "default": []
           },
+          "skill_activation_mode": {
+            "type": "string",
+            "enum": ["implicit", "explicit"],
+            "default": "implicit"
+          },
           "trace_verbosity": {
             "type": "string",
             "enum": ["compact", "verbose"],

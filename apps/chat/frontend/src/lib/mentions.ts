@@ -125,7 +125,7 @@ export function applyMention(text: string, mention: ActiveMention, item: Mention
 
 export function mentionText(item: MentionItem): string {
   if (item.kind === "skill") {
-    return `$${item.label}`;
+    return `$${item.id}`;
   }
   if (item.reference?.type === "entity") {
     return `@${item.label} [ref:${item.reference.app_id}/${item.reference.entity_type}/${item.reference.entity_id}]`;
@@ -192,6 +192,16 @@ export function appReferencesFromText(text: string, items: MentionItem[]): Menti
     }
   }
   return [...referencesById.values()];
+}
+
+export function skillIdsFromText(text: string, items: MentionItem[]): string[] {
+  const skillIds = new Set<string>();
+  for (const token of findMentionTokens(text, items)) {
+    if (token.item.kind === "skill") {
+      skillIds.add(token.item.id);
+    }
+  }
+  return [...skillIds];
 }
 
 export function findEntityReferenceMarkers(text: string): EntityReferenceMarker[] {

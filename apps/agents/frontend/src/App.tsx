@@ -220,7 +220,8 @@ export function App() {
         edits.description !== selectedAgentType.description ||
         edits.instructions !== selectedRole.instructions ||
         edits.commonPrompt !== catalog.common_prompt ||
-        skillSelection.changed;
+        skillSelection.changed ||
+        edits.skillActivationMode !== (selectedAgentType.skill_activation_mode || 'implicit');
 
       if (hasEdits) {
         await callBackend({
@@ -232,6 +233,7 @@ export function App() {
           role_description: selectedRole.description,
           instructions: edits.instructions,
           skill_ids: skillSelection.skillIds,
+          skill_activation_mode: edits.skillActivationMode,
           trace_verbosity: selectedAgentType.trace_verbosity,
           enabled: selectedAgentType.enabled,
           ...(edits.commonPrompt !== catalog.common_prompt ? { common_prompt: edits.commonPrompt } : {})

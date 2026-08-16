@@ -48,6 +48,7 @@ from core.runtime.turn_submission_service_references import (
 )
 from core.runtime.turn_submission_service_sync_hosted import execute_sync_plain_hosted_turn
 from core.runtime.turn_submission_service_runtime import _wait_for_session_prewarm
+from core.skills.service import resolve_invoked_runtime_skills
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -67,6 +68,7 @@ def submit_runtime_turn(
     client_message_id: str | None = None,
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
+    invoked_skill_ids: list[str] | None = None,
     app_reference_materializer: Callable[[list[dict[str, object]]], object] | None = None,
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
     turn_id: str | None = None,
@@ -77,7 +79,17 @@ def submit_runtime_turn(
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue and execute one runtime turn synchronously."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
-    assert_plain_hosted_chat_input_allowed(session, attachments=attachments, app_references=app_references)
+    assert_plain_hosted_chat_input_allowed(
+        session,
+        attachments=attachments,
+        app_references=app_references,
+        invoked_skill_ids=invoked_skill_ids,
+    )
+    invoked_skills = resolve_invoked_runtime_skills(
+        session,
+        invoked_skill_ids,
+        start_path=state.repository_root,
+    )
     if plain_hosted:
         provider = None
         runtime_adapter = None
@@ -94,6 +106,7 @@ def submit_runtime_turn(
             client_message_id=client_message_id,
             attachments=attachments,
             app_references=app_references,
+            invoked_skill_ids=[skill.skill_id for skill in invoked_skills],
             turn_id=turn_id,
             received_perf_counter=received_perf_counter,
             submission_timing=submission_timing,
@@ -255,6 +268,7 @@ def submit_runtime_turn(
                         session=provider_session,
                         provider=provider,
                         input_text=provider_input_text,
+                        invoked_skills=invoked_skills,
                         launch_spec=launch_spec,
                         runtime_adapter=runtime_adapter,
                         on_provider_thread_id=provider_thread_recorder(

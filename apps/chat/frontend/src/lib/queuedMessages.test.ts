@@ -126,6 +126,22 @@ describe("queued message persistence", () => {
     expect(readPersistedQueuedMessages(storageKey)[0].multiAgentMode).toBe("group_chat");
   });
 
+  it("preserves explicitly invoked skill ids across reloads", () => {
+    const storageKey = queueStorageKey("", "thread:thread-1");
+
+    persistQueuedMessages(storageKey, [
+      {
+        clientMessageId: "message-skill",
+        content: "$storage-ops list files",
+        appReferences: [],
+        invokedSkillIds: ["storage-ops"],
+        attachments: [],
+      },
+    ]);
+
+    expect(readPersistedQueuedMessages(storageKey)[0].invokedSkillIds).toEqual(["storage-ops"]);
+  });
+
   it("drops invalid payloads and clears empty queues", () => {
     const storageKey = queueStorageKey("", "draft:draft-1");
 

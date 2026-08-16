@@ -53,7 +53,7 @@ from core.inter_agent.surfaces import (
 )
 from core.providers.errors import ProviderError
 from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeTurnNotFoundError
-from core.runtime.runtime_session import runtime_session_allows_user_thread
+from core.runtime.runtime_session import coerce_skill_activation_mode, runtime_session_allows_user_thread
 from core.runtime.transcript_service import read_runtime_event_history
 from core.skills.runtime_catalog import (
     selected_runtime_skill_catalog_app_id_for_source_app,
@@ -487,6 +487,7 @@ def _orchestrator_snapshot_from_root(root_session) -> AgentParticipantSnapshot:
         system_prompt=_text(root_session.system_prompt),
         skill_ids=[str(item).strip() for item in root_session.skill_ids if str(item).strip()],
         skill_catalog_app_id=_text(root_session.skill_catalog_app_id) or "skills",
+        skill_activation_mode=_text(root_session.skill_activation_mode) or "implicit",
         provider_id=_text(root_session.source_app_id) or CHAT_APP_ID,
         metadata={"source": "root_runtime_session", "root_runtime_session_id": root_session.session_id},
     )
@@ -1186,6 +1187,7 @@ def _materialize_agent_snapshot_from_provider(
         "label": _text(agent_definition.get("name")) or requested_agent_type_id,
         "system_prompt": system_prompt,
         "skill_ids": _string_items(agent_definition.get("skill_ids")),
+        "skill_activation_mode": coerce_skill_activation_mode(agent_definition.get("skill_activation_mode")),
         "skill_catalog_app_id": _materialized_agent_snapshot_skill_catalog(
             state,
             context,

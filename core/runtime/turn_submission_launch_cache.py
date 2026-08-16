@@ -70,7 +70,7 @@ def build_runtime_launch_context_fingerprint(
         return None
     catalog_app_id = session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID
     payload = {
-        "version": 1,
+        "version": 2,
         "provider_id": provider_id,
         "workspace_id": session.workspace_id,
         "session_id": session.session_id,
@@ -80,6 +80,7 @@ def build_runtime_launch_context_fingerprint(
         "runtime_root": session.runtime_root,
         "skill_ids": list(session.skill_ids),
         "skill_catalog_app_id": catalog_app_id,
+        "skill_activation_mode": session.skill_activation_mode,
         "model_id": getattr(provider_selection, "model_id", None),
         "model_reasoning_effort": getattr(provider_selection, "model_reasoning_effort", None),
         "binding_id": getattr(provider_selection, "binding_id", None),

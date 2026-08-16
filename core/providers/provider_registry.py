@@ -49,6 +49,7 @@ class RuntimeBackendAdapter(Protocol):
         session: RuntimeSessionRecord,
         launch_spec: RuntimeBackendLaunchSpec,
         input_text: str,
+        invoked_skills: list["SkillDefinition"] | None = None,
         event_sink: "RuntimeExecutionEventSink | None" = None,
         timeout_seconds: int | None = None,
         on_provider_thread_id: Callable[[str], None] | None = None,
@@ -72,6 +73,7 @@ class RuntimeBackendAdapter(Protocol):
         input_text: str,
         client_message_id: str | None = None,
         expected_provider_turn_id: str | None = None,
+        invoked_skills: list["SkillDefinition"] | None = None,
     ) -> RuntimeSteerResult:
         ...
 

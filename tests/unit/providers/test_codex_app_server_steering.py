@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib
 import json
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -14,9 +16,46 @@ from core.providers.codex_app_server_runtime_errors import (
     CodexAppServerRequestError,
 )
 from core.providers.codex_app_server_runtime_transport import _send_request
+from core.skills.models import SkillDefinition
 
 
 class CodexAppServerSteeringTestCase(unittest.TestCase):
+    def test_steer_sends_the_same_structured_skill_item(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime = self._runtime("session-steer", provider_turn_id="provider-turn-1")
+            runtime.runtime_root = str(Path(temp_dir) / "runtime")
+            skill_file = Path(runtime.runtime_root) / "codex-home" / "skills" / "storage-ops" / "SKILL.md"
+            skill_file.parent.mkdir(parents=True)
+            skill_file.write_text("# Storage Ops\n", encoding="utf-8")
+            invoked_skill = SkillDefinition(
+                skill_id="storage-ops",
+                local_skill_id="storage-ops",
+                name="Storage Ops",
+                description="Operate Storage.",
+                source_root="/catalog/storage-ops",
+                owner_kind="workspace",
+                owner_id="default",
+                workspace_id="default",
+                status="available",
+            )
+
+            with patch.object(runtime_steering, "_send_request", return_value={"turnId": "provider-turn-1"}) as send_request:
+                result = runtime_process.steer_codex_app_server_turn(
+                    runtime.session_id,
+                    input_text="$storage-ops continue",
+                    expected_provider_turn_id="provider-turn-1",
+                    invoked_skills=[invoked_skill],
+                )
+
+        self.assertEqual(result.status, "steered")
+        self.assertEqual(
+            send_request.call_args.args[2]["input"],
+            [
+                {"type": "text", "text": "$storage-ops continue"},
+                {"type": "skill", "name": "storage-ops", "path": str(skill_file.resolve())},
+            ],
+        )
+
     def tearDown(self) -> None:
         for session_id in (
             "session-steer",

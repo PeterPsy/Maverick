@@ -618,6 +618,8 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertIn('"MAVERICK_RUNTIME_API_TOKEN"', runtime_config)
         self.assertNotIn(launch_spec.env_overrides["MAVERICK_RUNTIME_API_TOKEN"], runtime_config)
         self.assertIn("experimental_use_unified_exec_tool = false", runtime_config)
+        self.assertIn("[skills]", runtime_config)
+        self.assertIn("include_instructions = true", runtime_config)
         self.assertIn("[shell_environment_policy.set]", runtime_config)
         self.assertIn(f'PATH = "{launch_spec.env_overrides["PATH"]}"', runtime_config)
         self.assertIn(f"MAVERICK_RUNTIME_BIN = \"{runtime_bin}\"", runtime_config)
@@ -1024,6 +1026,9 @@ class ProvidersTestCase(unittest.TestCase):
                     "plugins = true",
                     "skill_mcp_dependency_install = true",
                     "",
+                    "[skills]",
+                    "include_instructions = true",
+                    "",
                     "[[hooks.PostToolUse]]",
                     'matcher = ".*"',
                     "",
@@ -1050,6 +1055,7 @@ class ProvidersTestCase(unittest.TestCase):
             session_id="sess-codex-home",
             workspace_id="default",
             agent_id="agent-1",
+            skill_activation_mode="explicit",
             start_path=repo_root,
         )
         stale_runtime_home = repo_root / "workspaces" / "default" / "runtime" / "sessions" / "sess-codex-home" / "codex-home"
@@ -1089,6 +1095,8 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertIn("hooks = true", runtime_config)
         self.assertIn("plugins = false", runtime_config)
         self.assertIn("skill_mcp_dependency_install = false", runtime_config)
+        self.assertEqual(runtime_config.count("[skills]"), 1)
+        self.assertIn("include_instructions = false", runtime_config)
         self.assertIn("[[hooks.PostToolUse]]", runtime_config)
         self.assertIn(CODEX_POST_TOOL_USE_HOOK_NAME, runtime_config)
         runtime_bin = Path(spec.env_overrides["PATH"].split(os.pathsep)[0])

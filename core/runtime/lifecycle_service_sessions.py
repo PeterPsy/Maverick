@@ -16,7 +16,9 @@ from core.runtime.runtime_session import (
     RuntimeSessionKind,
     RuntimeThreadVisibility,
     RuntimeMode,
+    SkillActivationMode,
     coerce_runtime_mode,
+    coerce_skill_activation_mode,
     normalize_runtime_session_visibility,
 )
 from core.runtime.runtime_state import RuntimeStateRecord
@@ -49,6 +51,7 @@ def create_runtime_session(
     system_prompt: str | None = None,
     skill_ids: list[str] | None = None,
     skill_catalog_app_id: str | None = None,
+    skill_activation_mode: SkillActivationMode | str | None = None,
     source_app_id: str | None = None,
     thread_title: str | None = None,
     agent_label: str | None = None,
@@ -78,6 +81,7 @@ def create_runtime_session(
         thread_visibility,
     )
     normalized_runtime_mode = coerce_runtime_mode(runtime_mode)
+    normalized_skill_activation_mode = coerce_skill_activation_mode(skill_activation_mode)
     routing = build_runtime_routing(
         session_id=session_id,
         workspace_id=workspace_id,
@@ -107,6 +111,7 @@ def create_runtime_session(
         system_prompt=_optional_text(system_prompt),
         skill_ids=_skill_id_list(skill_ids),
         skill_catalog_app_id=_optional_text(skill_catalog_app_id),
+        skill_activation_mode=normalized_skill_activation_mode,
         source_app_id=_optional_text(source_app_id),
         thread_title=(_optional_text(thread_title) or "")[:80],
         agent_label=(_optional_text(agent_label) or "")[:120],
@@ -200,6 +205,7 @@ def create_child_runtime_session(
     system_prompt: str | None = None,
     skill_ids: list[str] | None = None,
     skill_catalog_app_id: str | None = None,
+    skill_activation_mode: SkillActivationMode | str | None = None,
     source_app_id: str | None = None,
     owner_user_id: str | None = None,
     created_by_user_id: str | None = None,
@@ -231,6 +237,7 @@ def create_child_runtime_session(
         system_prompt=_optional_text(system_prompt),
         skill_ids=_skill_id_list(skill_ids),
         skill_catalog_app_id=_optional_text(skill_catalog_app_id),
+        skill_activation_mode=coerce_skill_activation_mode(skill_activation_mode),
         source_app_id=_optional_text(source_app_id),
         owner_user_id=_optional_text(owner_user_id),
         created_by_user_id=_optional_text(created_by_user_id),

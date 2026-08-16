@@ -110,6 +110,13 @@ def upsert_agent_definition(data_root: Path, body: dict[str, Any]) -> dict[str, 
     if trace_verbosity not in TRACE_VERBOSITIES:
         raise AgentsValidationError(f"Invalid trace_verbosity: {trace_verbosity}")
     skill_ids = _skill_ids(body.get("skill_ids"), default=(existing_agent_type or {}).get("skill_ids", []))
+    skill_activation_mode = str(
+        body.get("skill_activation_mode")
+        or (existing_agent_type or {}).get("skill_activation_mode")
+        or "implicit"
+    ).strip()
+    if skill_activation_mode not in {"implicit", "explicit"}:
+        raise AgentsValidationError("Field `skill_activation_mode` must be `implicit` or `explicit`.")
     enabled = bool(body.get("enabled", (existing_agent_type or {}).get("enabled", True)))
 
     role_candidate = {
@@ -124,6 +131,7 @@ def upsert_agent_definition(data_root: Path, body: dict[str, Any]) -> dict[str, 
         "description": description,
         "role_id": role_id,
         "skill_ids": skill_ids,
+        "skill_activation_mode": skill_activation_mode,
         "trace_verbosity": trace_verbosity,
         "enabled": enabled,
     }
@@ -240,6 +248,7 @@ def _compact_agent_type(agent_type: dict[str, Any]) -> dict[str, Any]:
         "description": agent_type.get("description", ""),
         "role_id": agent_type["role_id"],
         "skill_count": len(agent_type.get("skill_ids", [])),
+        "skill_activation_mode": agent_type.get("skill_activation_mode", "implicit"),
         "trace_verbosity": agent_type.get("trace_verbosity", "compact"),
         "enabled": bool(agent_type.get("enabled", True)),
         "updated_at": agent_type.get("updated_at", ""),
@@ -255,6 +264,7 @@ def _definition_payload(*, agent_type: dict[str, Any], role: dict[str, Any], inc
         "role_name": role["name"],
         "role_description": role.get("description", ""),
         "skill_ids": agent_type.get("skill_ids", []),
+        "skill_activation_mode": agent_type.get("skill_activation_mode", "implicit"),
         "trace_verbosity": agent_type.get("trace_verbosity", "compact"),
         "enabled": bool(agent_type.get("enabled", True)),
         "created_at": agent_type.get("created_at", ""),

@@ -62,11 +62,12 @@ def assert_plain_hosted_chat_input_allowed(
     *,
     attachments: list[dict[str, object]] | None,
     app_references: list[dict[str, object]] | None,
+    invoked_skill_ids: list[str] | None = None,
 ) -> None:
     """Fail closed on agentic/operative features before prompt materialization."""
     if not runtime_session_is_plain_hosted_chat(session):
         return
-    if session.skill_ids:
+    if session.skill_ids or invoked_skill_ids:
         raise HostedTextGenerationError("plain_hosted_chat_blocks_skills")
     if app_references:
         raise HostedTextGenerationError("plain_hosted_chat_blocks_app_references")

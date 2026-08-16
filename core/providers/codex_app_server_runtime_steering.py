@@ -12,6 +12,8 @@ from core.providers.codex_app_server_runtime_errors import (
 from core.providers.codex_app_server_runtime_state import _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
 from core.providers.models import RuntimeSteerResult
+from core.providers.codex_skill_inputs import codex_skill_input_items
+from core.skills.models import SkillDefinition
 
 
 _STEER_BACKPRESSURE_RETRY_DELAYS = (0.05, 0.1, 0.2)
@@ -23,6 +25,7 @@ def steer_codex_app_server_turn(
     input_text: str,
     client_message_id: str | None = None,
     expected_provider_turn_id: str | None = None,
+    invoked_skills: list[SkillDefinition] | None = None,
 ) -> RuntimeSteerResult:
     """Admit one user message into the live regular Codex turn."""
     with _RUNTIMES_LOCK:
@@ -49,7 +52,10 @@ def steer_codex_app_server_turn(
             params: dict[str, object] = {
                 "threadId": provider_thread_id,
                 "expectedTurnId": expected_turn_id,
-                "input": [{"type": "text", "text": input_text}],
+                "input": [
+                    {"type": "text", "text": input_text},
+                    *codex_skill_input_items(runtime.runtime_root, invoked_skills),
+                ],
             }
             normalized_client_message_id = str(client_message_id or "").strip()
             if normalized_client_message_id:

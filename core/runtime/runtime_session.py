@@ -24,10 +24,12 @@ RuntimeSessionGrantPrincipalKind = Literal["user", "app", "runtime_session"]
 RuntimeSessionKind = Literal["chat_root", "inter_agent_participant", "system"]
 RuntimeThreadVisibility = Literal["user", "hidden"]
 RuntimeMode = Literal["agentic", "plain_hosted_chat"]
+SkillActivationMode = Literal["implicit", "explicit"]
 
 RUNTIME_SESSION_KINDS = {"chat_root", "inter_agent_participant", "system"}
 RUNTIME_THREAD_VISIBILITIES = {"user", "hidden"}
 RUNTIME_MODES = {"agentic", "plain_hosted_chat"}
+SKILL_ACTIVATION_MODES = {"implicit", "explicit"}
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,7 @@ class RuntimeSessionRecord:
     system_prompt: str | None = None
     skill_ids: list[str] = field(default_factory=list)
     skill_catalog_app_id: str | None = None
+    skill_activation_mode: SkillActivationMode = "implicit"
     source_app_id: str | None = None
     thread_title: str = ""
     agent_label: str = ""
@@ -124,6 +127,16 @@ def coerce_runtime_mode(value: object | None) -> RuntimeMode:
     raise ValueError(f"Unsupported runtime mode `{normalized}`.")
 
 
+def coerce_skill_activation_mode(value: object | None) -> SkillActivationMode:
+    """Return a supported skill mode, preserving implicit behavior for legacy records."""
+    if value is None or value == "":
+        return "implicit"
+    normalized = str(value).strip()
+    if normalized in SKILL_ACTIVATION_MODES:
+        return normalized  # type: ignore[return-value]
+    raise ValueError(f"Unsupported skill activation mode `{normalized}`.")
+
+
 def normalize_runtime_session_visibility(
     session_kind: object | None,
     thread_visibility: object | None,
@@ -153,6 +166,7 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     payload["session_kind"] = session_kind
     payload["thread_visibility"] = thread_visibility
     payload["runtime_mode"] = coerce_runtime_mode(payload.get("runtime_mode"))
+    payload["skill_activation_mode"] = coerce_skill_activation_mode(payload.get("skill_activation_mode"))
     return RuntimeSessionRecord(**payload)
 
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeMentionAt, appReferencesFromText, applyMention, filterMentionItems, findMentionTokens, removeMentionToken } from "./mentions";
+import { activeMentionAt, appReferencesFromText, applyMention, filterMentionItems, findMentionTokens, removeMentionToken, skillIdsFromText } from "./mentions";
 import type { MentionItem } from "./mentions";
 
 const items: MentionItem[] = [
@@ -100,16 +100,22 @@ describe("mention autocomplete helpers", () => {
   });
 
   it("finds readable mention tokens for chips", () => {
-    expect(findMentionTokens("Use @Test App with $Maverick Code Skill", items).map((token) => token.text)).toEqual([
+    expect(findMentionTokens("Use @Test App with $maverick-code-skill", items).map((token) => token.text)).toEqual([
       "@Test App",
-      "$Maverick Code Skill",
+      "$maverick-code-skill",
+    ]);
+  });
+
+  it("extracts stable skill ids from structured dollar mentions", () => {
+    expect(skillIdsFromText("Use $maverick-code-skill twice: $maverick-code-skill", items)).toEqual([
+      "maverick-code-skill",
     ]);
   });
 
   it("extracts app and entity references for runtime payloads", () => {
     expect(
       appReferencesFromText(
-        "Use @Test App with $Maverick Code Skill and @Agency launch [ref:checklist/checklist/check_123]",
+        "Use @Test App with $maverick-code-skill and @Agency launch [ref:checklist/checklist/check_123]",
         items,
       ),
     ).toEqual([

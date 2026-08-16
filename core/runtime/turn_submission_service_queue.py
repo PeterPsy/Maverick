@@ -74,6 +74,7 @@ def _queue_turn_with_event(
     client_message_id: str | None,
     attachments: list[dict[str, object]] | None,
     app_references: list[dict[str, object]] | None,
+    invoked_skill_ids: list[str] | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
     submission_timing: RuntimeTurnSubmissionTiming | None = None,
@@ -86,6 +87,7 @@ def _queue_turn_with_event(
         client_message_id=client_message_id,
         attachments=attachments,
         app_references=app_references,
+        invoked_skill_ids=invoked_skill_ids,
         turn_id=turn_id,
         received_perf_counter=received_perf_counter,
         submission_timing=submission_timing,
@@ -102,6 +104,7 @@ def _queue_turn_with_event_result(
     client_message_id: str | None,
     attachments: list[dict[str, object]] | None,
     app_references: list[dict[str, object]] | None,
+    invoked_skill_ids: list[str] | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
@@ -116,6 +119,7 @@ def _queue_turn_with_event_result(
         session_id=session.session_id,
         input_text=input_text,
         client_message_id=client_message_id,
+        invoked_skill_ids=invoked_skill_ids,
         client_message_claim=client_message_claim,
     )
     if not created:
@@ -127,6 +131,8 @@ def _queue_turn_with_event_result(
         payload["attachments"] = attachments
     if app_references:
         payload["app_references"] = app_references
+    if invoked_skill_ids:
+        payload["invoked_skill_ids"] = list(invoked_skill_ids)
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),

@@ -108,6 +108,7 @@ def _root_snapshot(
         system_prompt=str(document.get("system_prompt") or ""),
         skill_ids=[str(item) for item in document.get("skill_ids", []) if str(item).strip()],
         skill_catalog_app_id=str(document.get("skill_catalog_app_id") or "skills"),
+        skill_activation_mode=str(document.get("skill_activation_mode") or "implicit"),
         provider_id=str(document.get("provider_id") or "").strip() or orchestrator.provider_id,
         revision_id=str(document.get("revision_id") or "").strip() or None,
         metadata={
@@ -136,6 +137,7 @@ def _snapshot_from_document(
         system_prompt=str(document.get("system_prompt") or ""),
         skill_ids=[str(item) for item in skill_ids] if isinstance(skill_ids, list) else [],
         skill_catalog_app_id=str(document.get("skill_catalog_app_id") or ""),
+        skill_activation_mode=str(document.get("skill_activation_mode") or "implicit"),
         provider_id=str(document.get("provider_id") or "").strip() or None,
         revision_id=str(document.get("revision_id") or "").strip() or None,
         metadata=metadata,

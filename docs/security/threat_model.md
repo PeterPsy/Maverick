@@ -141,6 +141,17 @@ agent kind, child-runtime execution mode, task label, agent type, task-bound
 snapshot digest, skill ids, and provider material all match. This keeps a model
 output from turning the root orchestrator into its own delegated worker.
 
+### Explicit skill path injection
+
+A client may attempt to invoke an unknown, disabled, or out-of-allowlist skill,
+or to replace a stable skill id with a filesystem path or symlink escape. Turn
+requests therefore accept only `invoked_skill_ids`. Core resolves those ids
+from the runtime session's selected enabled catalog, enforces the session
+allowlist, and the Codex adapter reconstructs `SKILL.md` only below the
+session-local `codex-home/skills` copy. Missing files, symlinks, non-files, and
+resolved paths outside that root fail closed before provider dispatch. Runtime
+paths are not included in public API or transcript event payloads.
+
 ### Participant output influencing the root generalist
 
 The root generalist may receive a session-linked orchestration status read so

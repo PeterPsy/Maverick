@@ -151,6 +151,7 @@ def queue_runtime_turn(
     session_id: str,
     input_text: str | None = None,
     client_message_id: str | None = None,
+    invoked_skill_ids: list[str] | None = None,
     now: datetime | None = None,
 ) -> RuntimeTurnRecord:
     """Create one queued runtime turn."""
@@ -161,6 +162,7 @@ def queue_runtime_turn(
             session_id=session_id,
             input_text=input_text,
             client_message_id=client_message_id,
+            invoked_skill_ids=invoked_skill_ids,
             now=now,
         )
 
@@ -172,6 +174,7 @@ def _queue_runtime_turn_locked(
     session_id: str,
     input_text: str | None = None,
     client_message_id: str | None = None,
+    invoked_skill_ids: list[str] | None = None,
     now: datetime | None = None,
 ) -> RuntimeTurnRecord:
     timestamp = now or utcnow()
@@ -190,6 +193,7 @@ def _queue_runtime_turn_locked(
             failure_reason=None,
             runtime_mode=session.runtime_mode,
             client_message_id=client_message_id.strip() if isinstance(client_message_id, str) and client_message_id.strip() else None,
+            invoked_skill_ids=_normalized_skill_ids(invoked_skill_ids),
         )
     )
     _update_thread_for_queued_turn(store, record)
@@ -203,6 +207,7 @@ def queue_runtime_turn_if_client_message_absent(
     session_id: str,
     input_text: str | None = None,
     client_message_id: str | None = None,
+    invoked_skill_ids: list[str] | None = None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
     now: datetime | None = None,
 ) -> tuple[RuntimeTurnRecord, bool]:
@@ -214,6 +219,7 @@ def queue_runtime_turn_if_client_message_absent(
             session_id=session_id,
             input_text=input_text,
             client_message_id=client_message_id,
+            invoked_skill_ids=invoked_skill_ids,
             client_message_claim=client_message_claim,
             now=now,
         )
@@ -226,6 +232,7 @@ def _queue_runtime_turn_if_client_message_absent_locked(
     session_id: str,
     input_text: str | None = None,
     client_message_id: str | None = None,
+    invoked_skill_ids: list[str] | None = None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
     now: datetime | None = None,
 ) -> tuple[RuntimeTurnRecord, bool]:
@@ -244,6 +251,7 @@ def _queue_runtime_turn_if_client_message_absent_locked(
         failure_reason=None,
         runtime_mode=session.runtime_mode,
         client_message_id=client_message_id.strip() if isinstance(client_message_id, str) and client_message_id.strip() else None,
+        invoked_skill_ids=_normalized_skill_ids(invoked_skill_ids),
     )
     save_claimed = getattr(store, "save_turn_if_current_client_message_claim", None)
     if client_message_claim is not None and callable(save_claimed):
@@ -271,3 +279,14 @@ def _update_thread_for_queued_turn(store: RuntimeStore, turn: RuntimeTurnRecord)
         availability="queued",
         now=turn.created_at,
     )
+
+
+def _normalized_skill_ids(skill_ids: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in skill_ids or []:
+        skill_id = str(value or "").strip()
+        if skill_id and skill_id not in seen:
+            normalized.append(skill_id)
+            seen.add(skill_id)
+    return normalized

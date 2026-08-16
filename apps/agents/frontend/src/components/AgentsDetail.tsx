@@ -105,6 +105,7 @@ export function AgentsDetail({
   const [roleInstructions, setRoleInstructions] = useState('');
   const [commonPrompt, setCommonPrompt] = useState('');
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const [skillActivationMode, setSkillActivationMode] = useState<'implicit' | 'explicit'>('implicit');
   const initialSkillIds = useMemo(
     () => (selectedAgentType ? effectiveSkillIds(selectedAgentType, skills) : []),
     [selectedAgentType, skills]
@@ -117,6 +118,7 @@ export function AgentsDetail({
       setRoleInstructions('');
       setCommonPrompt(catalog.common_prompt);
       setSelectedSkillIds([]);
+      setSkillActivationMode('implicit');
       return;
     }
     setAgentName(selectedAgentType.name);
@@ -124,6 +126,7 @@ export function AgentsDetail({
     setRoleInstructions(selectedRole.instructions);
     setCommonPrompt(catalog.common_prompt);
     setSelectedSkillIds(effectiveSkillIds(selectedAgentType, skills));
+    setSkillActivationMode(selectedAgentType.skill_activation_mode || 'implicit');
     setSkillSearch('');
   }, [catalog.common_prompt, selectedAgentType, selectedRole, skills]);
 
@@ -139,6 +142,7 @@ export function AgentsDetail({
     agentDescription !== selectedAgentType.description ||
     roleInstructions !== selectedRole.instructions ||
     commonPrompt !== catalog.common_prompt ||
+    skillActivationMode !== (selectedAgentType.skill_activation_mode || 'implicit') ||
     !sameSet(selectedSkillIds, initialSkillIds);
 
   function toggleSkill(skillId: string, checked: boolean) {
@@ -157,7 +161,8 @@ export function AgentsDetail({
       description: agentDescription,
       instructions: roleInstructions,
       commonPrompt,
-      skillIds: selectedSkillIds
+      skillIds: selectedSkillIds,
+      skillActivationMode
     });
   }
 
@@ -244,6 +249,13 @@ export function AgentsDetail({
             <strong>{selectedSkillCount} installed</strong>
           </div>
           <div className="skill-scroll-shell">
+            <label>
+              Activation mode
+              <select value={skillActivationMode} onChange={(event) => setSkillActivationMode(event.target.value as 'implicit' | 'explicit')}>
+                <option value="implicit">Implicit — expose configured skills</option>
+                <option value="explicit">Explicit — load only when invoked</option>
+              </select>
+            </label>
             <div className="skill-search-frame">
               <span className="material-symbols-rounded" aria-hidden="true">search</span>
               <input

@@ -207,6 +207,7 @@ def agent_snapshot_from_payload(payload: Any) -> AgentParticipantSnapshot | None
         system_prompt=_text(payload.get("system_prompt")),
         skill_ids=_string_list(payload.get("skill_ids")),
         skill_catalog_app_id=_text(payload.get("skill_catalog_app_id")),
+        skill_activation_mode=_text(payload.get("skill_activation_mode")) or "implicit",
         provider_id=_text(payload.get("provider_id")) or None,
         revision_id=_text(payload.get("revision_id")) or None,
         metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},

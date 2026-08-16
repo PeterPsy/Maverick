@@ -26,7 +26,7 @@ import type { ComposerAttachment } from "../lib/attachments";
 import type { RuntimeSessionOptions, RuntimeTurnClientMetrics } from "../api/client";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { ActiveAppContext, mergeAppReferences } from "../lib/activeAppContext";
-import { appReferencesFromText } from "../lib/mentions";
+import { appReferencesFromText, skillIdsFromText } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
 import { delegatedChatSourceAppId } from "../lib/sourceAppPresentation";
 import {
@@ -58,6 +58,7 @@ export type AgentRuntimeConfig = {
   hosted_model_id?: string;
   skill_catalog_app_id: string;
   skill_ids: string[];
+  skill_activation_mode?: "implicit" | "explicit";
   source_app_id: string;
   system_prompt: string;
   title: string;
@@ -241,7 +242,7 @@ function isPendingIdempotencyResponse(response: RuntimeTurnSubmitResponse): bool
   return response.idempotency?.status === "pending" && !response.turn;
 }
 
-function runtimeSessionOptionsForNewChat({
+export function runtimeSessionOptionsForNewChat({
   agentRuntimeConfig,
   draftChat,
   systemPrompt,
@@ -259,6 +260,7 @@ function runtimeSessionOptionsForNewChat({
     system_prompt: systemPrompt,
     skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
     skill_ids: agentRuntimeConfig?.skill_ids || [],
+    skill_activation_mode: agentRuntimeConfig?.skill_activation_mode || (agentRuntimeConfig ? "implicit" : "explicit"),
     runtime_mode: agentRuntimeConfig?.runtime_mode,
     routing_profile: agentRuntimeConfig?.routing_profile,
     hosted_provider_id: agentRuntimeConfig?.hosted_provider_id,
@@ -280,6 +282,7 @@ function preparedRuntimeSessionKey(conversationKey: string, options: RuntimeSess
     runtime_mode: options.runtime_mode || "",
     skill_catalog_app_id: options.skill_catalog_app_id || "",
     skill_ids: options.skill_ids || [],
+    skill_activation_mode: options.skill_activation_mode || "implicit",
     source_app_id: options.source_app_id || "chat",
     system_prompt: options.system_prompt || "",
   });
@@ -589,6 +592,7 @@ export function useMessageSubmission({
               content: message.content,
               multiAgentMode: message.multiAgentMode,
               clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+              invokedSkillIds: message.invokedSkillIds,
               clientSubmissionMetrics: message.clientSubmissionMetrics,
             }
           : item,
@@ -605,6 +609,7 @@ export function useMessageSubmission({
         createdAt: new Date().toISOString(),
         attachments: message.attachments,
         appReferences: message.appReferences,
+        invokedSkillIds: message.invokedSkillIds,
         multiAgentMode: message.multiAgentMode,
         clientSubmissionStartedAt: message.clientSubmissionStartedAt,
         clientSubmissionMetrics: message.clientSubmissionMetrics,
@@ -1242,6 +1247,7 @@ export function useMessageSubmission({
                   signal: abortController.signal,
                   clientMetrics,
                   clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+                  invokedSkillIds: message.invokedSkillIds,
                 },
               ),
             );
@@ -1259,6 +1265,7 @@ export function useMessageSubmission({
                 clientSubmissionStartedAt: message.clientSubmissionStartedAt,
                 clientMessageId: message.clientMessageId,
                 inputText: message.content,
+                invokedSkillIds: message.invokedSkillIds,
                 options: runtimeOptions.options,
                 signal: abortController.signal,
               }),
@@ -1274,6 +1281,7 @@ export function useMessageSubmission({
               clientSubmissionStartedAt: message.clientSubmissionStartedAt,
               clientMessageId: message.clientMessageId,
               inputText: message.content,
+              invokedSkillIds: message.invokedSkillIds,
               options: runtimeOptions.options,
               signal: abortController.signal,
             }),
@@ -1301,6 +1309,7 @@ export function useMessageSubmission({
               signal: abortController.signal,
               clientMetrics,
               clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+              invokedSkillIds: message.invokedSkillIds,
               expectedRuntimeTurnId: target.expectedRuntimeTurnId,
             },
           ),
@@ -1510,6 +1519,7 @@ export function useMessageSubmission({
     const clientMessageId = crypto.randomUUID();
     const clientSubmissionStartedAt = new Date().toISOString();
     const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
+    const invokedSkillIds = skillIdsFromText(input, composerMentionItems);
     const clientSubmissionMetrics: RuntimeTurnClientMetrics = {};
     const localMessage: QueuedMessage = {
       clientMessageId,
@@ -1518,6 +1528,7 @@ export function useMessageSubmission({
       content: input,
       attachments: targetAttachments.map(attachmentToMessageAttachment),
       appReferences,
+      invokedSkillIds,
       multiAgentMode,
     };
     const shouldQueue = Boolean(sendingByConversationKeyRef.current[target.conversationKey]);
@@ -1557,6 +1568,7 @@ export function useMessageSubmission({
         content: input,
         attachments: messageAttachments,
         appReferences,
+        invokedSkillIds,
         multiAgentMode,
       };
       const immediateTarget = currentSubmissionTarget(queueConversationKey);

@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.events import InterAgentVisibilityPlane, validate_visibility_plane
-from core.runtime.runtime_session import RuntimeThreadVisibility, normalize_runtime_session_visibility
+from core.runtime.runtime_session import RuntimeThreadVisibility, coerce_skill_activation_mode, normalize_runtime_session_visibility
 
 
 InterAgentRunMode = Literal[
@@ -112,6 +112,7 @@ class AgentParticipantSnapshot:
     system_prompt: str
     skill_ids: list[str]
     skill_catalog_app_id: str
+    skill_activation_mode: str = "implicit"
     provider_id: str | None = None
     revision_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -124,6 +125,7 @@ class AgentParticipantSnapshot:
             "system_prompt": self.system_prompt,
             "skill_ids": sorted(self.skill_ids),
             "skill_catalog_app_id": self.skill_catalog_app_id,
+            "skill_activation_mode": self.skill_activation_mode,
             "provider_id": self.provider_id,
             "revision_id": self.revision_id,
             "metadata": self.metadata,
@@ -463,6 +465,10 @@ def validate_agent_snapshot(snapshot: AgentParticipantSnapshot) -> AgentParticip
     _require_non_empty(snapshot.skill_catalog_app_id, "agent_snapshot.skill_catalog_app_id")
     if not all(str(skill_id).strip() for skill_id in snapshot.skill_ids):
         raise InterAgentValidationError("agent_snapshot.skill_ids cannot contain empty values.")
+    try:
+        coerce_skill_activation_mode(snapshot.skill_activation_mode)
+    except ValueError as error:
+        raise InterAgentValidationError(str(error)) from error
     snapshot.digest()
     return snapshot
 

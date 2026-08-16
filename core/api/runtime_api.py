@@ -81,6 +81,7 @@ from core.runtime.turn_submission_service_queue import (
     runtime_turn_submission_timing,
 )
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
+from core.skills.service import SkillInvocationError, resolve_invoked_runtime_skills
 
 
 IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
@@ -110,6 +111,7 @@ class RuntimeTurnSubmissionDraft:
     input_text: str
     app_reference_items: list[dict[str, object]]
     app_reference_context: RuntimeAppReferenceRequestContext
+    invoked_skill_ids: list[str]
     async_requested: bool
 
 
@@ -816,6 +818,7 @@ def _create_session(
         hosted_model_id=body.get("hosted_model_id"),
         system_prompt=str(body.get("system_prompt") or "").strip() or None,
         skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
+        skill_activation_mode=body.get("skill_activation_mode"),
         skill_catalog_app_id=runtime_skill_catalog_app_id_for_request(
             state.app_store,
             workspace_id=context.workspace_id,
@@ -1675,6 +1678,7 @@ def _runtime_message_steer_response(
         app_references=draft.app_reference_items,
         materialized_app_references=materialized_references,
         expected_runtime_turn_id=str(body.get("expected_runtime_turn_id") or "").strip() or None,
+        invoked_skill_ids=draft.invoked_skill_ids,
     )
     if attempt.status == "fallback":
         return None
@@ -1746,8 +1750,22 @@ def _prepare_runtime_turn_submission(
         _release_client_message_claim(state, release_claim_on_failure)
         return None, json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
     app_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
+    raw_invoked_skill_ids = body.get("invoked_skill_ids", [])
+    if not isinstance(raw_invoked_skill_ids, list) or any(not isinstance(item, str) for item in raw_invoked_skill_ids):
+        _release_client_message_claim(state, release_claim_on_failure)
+        return None, json_response(start_response, {"error": "invalid_invoked_skill_ids"}, status="400 Bad Request")
+    try:
+        invoked_skills = resolve_invoked_runtime_skills(
+            session,
+            raw_invoked_skill_ids,
+            start_path=start_path,
+        )
+    except SkillInvocationError as error:
+        _release_client_message_claim(state, release_claim_on_failure)
+        return None, json_response(start_response, {"error": error.reason_code}, status="400 Bad Request")
+    invoked_skill_ids = [skill.skill_id for skill in invoked_skills]
     if runtime_session_is_plain_hosted_chat(session):
-        if session.skill_ids:
+        if session.skill_ids or invoked_skill_ids:
             _release_client_message_claim(state, release_claim_on_failure)
             return None, json_response(start_response, {"error": "plain_hosted_chat_blocks_skills"}, status="400 Bad Request")
         if app_references:
@@ -1778,6 +1796,7 @@ def _prepare_runtime_turn_submission(
         input_text=input_text,
         app_reference_items=app_reference_items,
         app_reference_context=app_reference_context,
+        invoked_skill_ids=invoked_skill_ids,
         async_requested=bool(body.get("async")),
     ), None
 
@@ -1800,6 +1819,7 @@ def _queue_runtime_turn_response(
     input_text = draft.input_text
     app_reference_items = draft.app_reference_items
     app_reference_context = draft.app_reference_context
+    invoked_skill_ids = draft.invoked_skill_ids
     async_requested = draft.async_requested
 
     def materialize_app_references(references: list[dict[str, object]]) -> object:
@@ -1830,6 +1850,7 @@ def _queue_runtime_turn_response(
                 client_message_id=client_message_id,
                 attachments=attachment_items,
                 app_references=app_reference_items,
+                invoked_skill_ids=invoked_skill_ids,
                 app_reference_materializer=materialize_app_references if app_reference_items else None,
                 on_queued=notify_source_app_queued,
                 turn_id=reserved_turn_id,
@@ -1846,6 +1867,7 @@ def _queue_runtime_turn_response(
                 client_message_id=client_message_id,
                 attachments=attachment_items,
                 app_references=app_reference_items,
+                invoked_skill_ids=invoked_skill_ids,
                 app_reference_materializer=materialize_app_references if app_reference_items else None,
                 on_queued=notify_source_app_queued,
                 turn_id=reserved_turn_id,
@@ -1863,6 +1885,10 @@ def _queue_runtime_turn_response(
             return _pending_client_message_claim_response(state, context, current_claim, start_response)
         _release_client_message_claim_if_turn_absent(state, release_claim_on_failure)
         return json_response(start_response, {"error": "client_message_claim_expired"}, status="409 Conflict")
+    except SkillInvocationError as error:
+        if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
+            _release_client_message_claim(state, release_claim_on_failure)
+        return json_response(start_response, {"error": error.reason_code}, status="400 Bad Request")
     except ProviderError as error:
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)

@@ -41,6 +41,7 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}, reques
       system_prompt: options.system_prompt || undefined,
       skill_catalog_app_id: options.skill_catalog_app_id || undefined,
       skill_ids: options.skill_ids || [],
+      skill_activation_mode: options.skill_activation_mode || undefined,
       runtime_mode: options.runtime_mode || undefined,
       routing_profile: options.routing_profile || undefined,
       hosted_provider_id: options.hosted_provider_id || undefined,
@@ -100,6 +101,7 @@ export function createRuntimeSessionWithTurn({
   clientSubmissionStartedAt,
   clientMetrics,
   inputText,
+  invokedSkillIds = [],
   options = {},
   signal,
 }: {
@@ -109,6 +111,7 @@ export function createRuntimeSessionWithTurn({
   clientSubmissionStartedAt?: string;
   clientMetrics?: RuntimeTurnClientMetrics;
   inputText: string;
+  invokedSkillIds?: string[];
   options?: RuntimeSessionOptions;
   signal?: AbortSignal;
 }): Promise<RuntimeTurnSubmitResponse> {
@@ -121,12 +124,14 @@ export function createRuntimeSessionWithTurn({
     system_prompt: options.system_prompt || undefined,
     skill_catalog_app_id: options.skill_catalog_app_id || undefined,
     skill_ids: options.skill_ids || [],
+    skill_activation_mode: options.skill_activation_mode || undefined,
     runtime_mode: options.runtime_mode || undefined,
     routing_profile: options.routing_profile || undefined,
     hosted_provider_id: options.hosted_provider_id || undefined,
     hosted_model_id: options.hosted_model_id || undefined,
     title: options.title || "New chat",
     input_text: inputText,
+    invoked_skill_ids: invokedSkillIds,
     client_message_id: clientMessageId,
     client_submission_started_at: clientSubmissionStartedAt || undefined,
     attachments: serializableMessageAttachments(attachments),
@@ -229,6 +234,7 @@ export function sendRuntimeTurn(
     clientMetrics?: RuntimeTurnClientMetrics;
     clientSubmissionStartedAt?: string;
     expectedRuntimeTurnId?: string;
+    invokedSkillIds?: string[];
   } = {},
 ): Promise<RuntimeTurnSubmitResponse> {
   const body: Record<string, unknown> = {
@@ -239,6 +245,7 @@ export function sendRuntimeTurn(
     async: true,
     delivery_policy: "steer_or_queue",
     expected_runtime_turn_id: requestOptions.expectedRuntimeTurnId || undefined,
+    invoked_skill_ids: requestOptions.invokedSkillIds || [],
   };
   const serializedClientMetrics = serializableClientMetrics(requestOptions.clientMetrics, { includeSubmitPostMs: false });
   if (serializedClientMetrics) {

@@ -12,6 +12,15 @@ from typing import Callable
 from core.providers.agentic_protocol import AgenticToolResult
 from core.providers.agentic_adapter import RuntimeProviderEvent, RuntimeTurnContext
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
+from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    MAVERICK_FEATURE_AGENTIC_PROFILES,
+    MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+    MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+    feature_enabled,
+    require_agentic_feature,
+)
 from core.runtime.hosted_agentic_models import (
     HostedActorContextResolver,
     HostedAgenticLoopError,
@@ -120,6 +129,22 @@ class HostedAgenticLoop:
         cancellation: Event,
         event: Callable[[str, dict[str, object]], RuntimeProviderEvent],
     ) -> AsyncIterator[RuntimeProviderEvent]:
+        require_agentic_feature(
+            MAVERICK_FEATURE_AGENTIC_PROFILES,
+            "agentic_profiles_disabled",
+        )
+        require_agentic_feature(
+            MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+            "agentic_adapter_contract_disabled",
+        )
+        require_agentic_feature(
+            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+            "hosted_agent_runtime_disabled",
+        )
+        require_agentic_feature(
+            MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+            "provider_private_state_disabled",
+        )
         authority = self.authority_refresher(context)
         policy = self.policy_resolver(context)
         provider_runtime = self.provider_runtimes.resolve(context.binding)
@@ -215,6 +240,8 @@ class HostedAgenticLoop:
                 tool_event_payload(outcome, display_state="proposed"),
             )
             if outcome.awaiting_confirmation:
+                if not feature_enabled(MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION):
+                    raise HostedAgenticLoopError("agentic_tool_confirmation_disabled")
                 yield event("runtime.tool_call.awaiting_confirmation", tool_event_payload(outcome))
                 outcome = await self._await_confirmation(
                     context=context,

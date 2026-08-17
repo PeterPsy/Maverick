@@ -18,6 +18,11 @@ from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    MAVERICK_FEATURE_AGENTIC_PROFILES,
+    feature_enabled,
+)
 from core.skills.models import SkillDefinition
 
 
@@ -57,6 +62,21 @@ async def execute_agentic_runtime_turn(
     binding = session.execution_binding
     if binding is None:
         raise ValueError("Agentic adapter execution requires a pinned session binding.")
+    disabled_reason = None
+    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
+        disabled_reason = "agentic_profiles_disabled"
+    elif not feature_enabled(MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT):
+        disabled_reason = "agentic_adapter_contract_disabled"
+    if disabled_reason is not None:
+        if event_sink is not None:
+            event_sink(RuntimeExecutionEvent("runtime.error", {"reason_code": disabled_reason}))
+            event_sink(
+                RuntimeExecutionEvent(
+                    "provider.execution.completed",
+                    {"output_text": "", "exit_code": 1, "reason_code": disabled_reason},
+                )
+            )
+        return RuntimeExecutionResult(output_text="", exit_code=1)
     if (
         effective_authority.execution_binding_id != binding.execution_binding_id
         or effective_authority.turn_id != correlation_id

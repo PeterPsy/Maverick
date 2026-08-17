@@ -13,6 +13,10 @@ from core.runtime.provider_private_state import (
     ProviderPrivateStateService,
     public_provider_private_reason,
 )
+from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+    require_agentic_feature,
+)
 
 
 class HostedAgenticStateBridge:
@@ -56,6 +60,10 @@ class HostedAgenticStateBridge:
         state = self.service.store.get_provider_state(context.session.session_id)
         if state.provider_private_envelope is None:
             return None
+        require_agentic_feature(
+            MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+            "provider_private_state_disabled",
+        )
         if not authority.allowed_capabilities.provider_private_state:
             raise HostedAgenticLoopError("provider_private_state_invalid")
         try:
@@ -80,6 +88,10 @@ class HostedAgenticStateBridge:
         )
 
     def store(self, context, authority, provider_event: AgenticModelEvent) -> None:
+        require_agentic_feature(
+            MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+            "provider_private_state_disabled",
+        )
         if not authority.allowed_capabilities.provider_private_state:
             raise HostedAgenticLoopError("provider_private_state_invalid")
         state = provider_event.provider_private_state

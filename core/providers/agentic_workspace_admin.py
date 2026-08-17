@@ -30,6 +30,10 @@ from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import canonical_digest
+from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_AGENTIC_PROFILES,
+    feature_enabled,
+)
 
 
 def configure_workspace_agentic_default(
@@ -44,6 +48,8 @@ def configure_workspace_agentic_default(
     now: datetime | None = None,
 ) -> WorkspaceAgenticProfileBinding:
     """Serve the legacy default-provider write as one agentic control-plane update."""
+    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
+        raise AgenticProfileError("agentic_profiles_disabled")
     if provider_id != "codex":
         raise AgenticProfileError("agentic_profile_definition_must_be_published")
     timestamp = now or datetime.now(tz=UTC)
@@ -134,6 +140,8 @@ def save_workspace_agentic_binding(
     now: datetime | None = None,
 ) -> WorkspaceAgenticProfileBinding:
     """Create or update one binding while proving every policy change is restrictive."""
+    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
+        raise AgenticProfileError("agentic_profiles_disabled")
     timestamp = now or datetime.now(tz=UTC)
     definition = store.get_agentic_profile_definition(definition_id, definition_revision)
     definition_status = store.get_agentic_profile_definition_status(definition_id, definition_revision)

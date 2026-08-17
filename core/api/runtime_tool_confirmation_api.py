@@ -19,6 +19,10 @@ from core.runtime.errors import (
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.tool_errors import RuntimeToolError, RuntimeToolRevisionError
+from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+    feature_enabled,
+)
 
 
 def handle_runtime_tool_confirmation(
@@ -32,6 +36,12 @@ def handle_runtime_tool_confirmation(
     start_response: StartResponse,
 ) -> list[bytes]:
     """Read or decide one exact invocation without exposing grant authority."""
+    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION):
+        return json_response(
+            start_response,
+            {"error": "agentic_tool_confirmation_disabled"},
+            status="409 Conflict",
+        )
     authorized = _authorized_invocation(
         state,
         context,

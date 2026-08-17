@@ -13,6 +13,7 @@ from core.providers.errors import CapabilityCertificateError, ProviderNotFoundEr
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
+from core.runtime.agentic_feature_flags import parallel_tool_calls_enabled
 
 
 @dataclass(frozen=True)
@@ -242,6 +243,8 @@ def _validate_policy(policy: AgenticRuntimePolicy) -> None:
     )
     if any(value <= 0 for value in positive) or policy.max_parallel_tool_calls < 0:
         raise CapabilityCertificateError("runtime_policy_limit_invalid")
+    if policy.max_parallel_tool_calls > 0 and not parallel_tool_calls_enabled():
+        raise CapabilityCertificateError("parallel_tool_calls_disabled")
     if policy.max_estimated_cost_microusd is not None and policy.max_estimated_cost_microusd < 0:
         raise CapabilityCertificateError("runtime_policy_cost_invalid")
     if policy.tool_handle_mode == "none" and policy.allowed_tool_handles:

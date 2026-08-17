@@ -31,6 +31,11 @@ from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, build_runtime_execution_binding
+from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    MAVERICK_FEATURE_AGENTIC_PROFILES,
+    feature_enabled,
+)
 
 
 CODEX_PROFILE_REVISION = "3"
@@ -173,6 +178,8 @@ def resolve_workspace_agentic_profile(
     binding_id: str | None = None,
 ) -> tuple[AgenticProfileDefinition, WorkspaceAgenticProfileBinding]:
     """Resolve one enabled workspace binding and its exact immutable definition."""
+    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
+        raise AgenticProfileError("agentic_profiles_disabled")
     bindings = store.list_workspace_agentic_profile_bindings(workspace_id)
     if binding_id:
         binding = next((item for item in bindings if item.binding_id == binding_id), None)
@@ -215,6 +222,8 @@ def build_pinned_execution_binding(
     now: datetime | None = None,
 ) -> RuntimeExecutionBinding:
     """Resolve a workspace profile once and return its immutable session snapshot."""
+    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT):
+        raise AgenticProfileError("agentic_adapter_contract_disabled")
     timestamp = now or utcnow()
     definition, binding = resolve_workspace_agentic_profile(
         store,

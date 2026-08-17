@@ -22,6 +22,10 @@ from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     HostedContentClassifier,
 )
+from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+    require_agentic_feature,
+)
 from core.runtime.tool_catalog import RuntimeToolCatalog
 
 
@@ -266,6 +270,10 @@ class HostedAgenticRequestBuilder:
         destination_upstream_id: str | None,
         classification=None,
     ) -> bytes:
+        require_agentic_feature(
+            MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+            "agentic_egress_enforcement_disabled",
+        )
         classification = classification or self.classifier(context, provenance, content)
         result = self.egress_evaluator.evaluate(
             block=AgenticEgressContentBlock(

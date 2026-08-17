@@ -283,6 +283,32 @@ isolation, and recovery-policy blockers in `SECURITY.md` are closed:
 - UI and API status must expose the preview limitation;
 - no certificate or feature flag may claim production readiness.
 
+### Operational feature flags
+
+The agentic rollout has independent process-level kill switches. Existing
+profile and execution-binding records are never rewritten when a switch is
+changed; authoritative runtime boundaries re-evaluate the applicable switches
+to provide live narrowing for already-pinned sessions.
+
+| Surface | Environment variable | Default |
+|---|---|---|
+| Profile definitions and workspace bindings | `MAVERICK_FEATURE_AGENTIC_PROFILES` | enabled |
+| Agentic adapter contract | `MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT` | enabled |
+| Hosted agent runtime | `MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME` | enabled |
+| Tool confirmation and resume | `MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION` | enabled |
+| Provider-private state | `MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE` | enabled |
+| Egress enforcement | `MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT` | enabled |
+| Google agentic preview | `MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW` | enabled |
+| OpenRouter agentic preview | `MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW` | enabled |
+| Parallel tool calls | `MAVERICK_FEATURE_PARALLEL_TOOL_CALLS` | disabled |
+
+Values `0`, `false`, `no`, and `off` disable a released surface. Values `1`,
+`true`, `yes`, and `on` enable it. An absent or invalid value preserves the
+declared default. Disabling egress enforcement blocks hosted export rather than
+bypassing evaluation. Enabling the parallel-tool-call switch does not override
+the MVP's sequential policy ceilings or codec rejection; it only reserves an
+independent rollout control for a future implementation.
+
 ## Implementation sequence
 
 The accepted order is:

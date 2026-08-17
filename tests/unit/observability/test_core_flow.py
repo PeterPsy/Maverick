@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import json
 
+from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.runtime.execution_binding import build_runtime_execution_binding
 from tests.support.observability import *
 
 
@@ -96,12 +99,41 @@ class TestCoreFlowObservability(ObservabilityTestBase):
             workspace_id="default",
             observability_store=observability_store,
         )
-        configure_workspace_provider(
+        selection = configure_workspace_provider(
             provider_store,
             workspace_id="default",
             provider_id="credentialed",
             registry=registry,
             observability_store=observability_store,
+        )
+        bridge = registry.get_agentic_runtime_adapter("credentialed")
+        policy = codex_runtime_policy()
+        execution_binding = build_runtime_execution_binding(
+            session_id="sess-observed",
+            workspace_id="default",
+            profile_definition_id="profile-credentialed-observability",
+            profile_definition_revision="1",
+            workspace_binding_id="workspace-credentialed-observability",
+            workspace_binding_revision=0,
+            capability_certificate_id="certificate-credentialed-observability",
+            certificate_evidence_digest="a" * 64,
+            runtime_engine_id="credentialed",
+            adapter_id=bridge.adapter_id,
+            adapter_version=bridge.adapter_version,
+            adapter_artifact_digest=runtime_adapter_artifact_digest(bridge),
+            model_provider_id="credentialed",
+            model_id="credentialed",
+            provider_protocol="legacy-runtime-backend",
+            provider_api_version=None,
+            routing_constraint=codex_routing_constraint(),
+            credential_binding_id=selection.binding_id,
+            reasoning_effort=None,
+            execution_mode="sandbox",
+            profile_policy_ceiling=policy,
+            workspace_policy_ceiling=policy,
+            egress_policy_id="local-runtime-no-remote-egress",
+            egress_policy_revision="1",
+            created_at=datetime.now(tz=UTC),
         )
 
         session = create_runtime_session(
@@ -111,6 +143,7 @@ class TestCoreFlowObservability(ObservabilityTestBase):
             agent_id="agent-1",
             start_path=repo_root,
             observability_store=observability_store,
+            execution_binding=execution_binding,
         )
         transition_runtime_session(
             runtime_store,

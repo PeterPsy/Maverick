@@ -885,9 +885,7 @@ def resolve_provider_for_workspace(
         codex_command=codex_command,
     )
     if status.active_provider is None or status.selection is None:
-        raise ProviderSelectionError(
-            status.blocked_detail or status.blocked_reason or "no_provider_configured"
-        )
+        raise ProviderSelectionError(status.blocked_reason or "no_provider_configured")
     return status.active_provider, status.selection
 
 

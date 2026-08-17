@@ -11,6 +11,7 @@ import time
 import unittest
 from unittest.mock import patch
 
+from core.providers.agentic_migration import migrate_agentic_runtime_schema
 from core.providers.provider_credentials import bind_provider_credential
 from core.providers.models import ProviderSelection
 from core.providers.service import builtin_provider_registry, register_builtin_providers
@@ -73,13 +74,25 @@ class AsyncProviderContextTest(unittest.TestCase):
         self.assertEqual(self.state.runtime_store.get_turn(turn.turn_id).input_text, original_input)
         self.assertNotIn(provider_input, str(self.state.runtime_store.list_events(session.session_id)))
 
-    def test_agentic_async_dispatch_receives_context_without_persisting_it(self) -> None:
+    def test_migrated_agentic_async_dispatch_receives_context_without_persisting_it(self) -> None:
         session = create_runtime_session(
             self.state.runtime_store,
             session_id="agentic-context",
             workspace_id="default",
             agent_id="chat",
             start_path=self.state.repository_root,
+        )
+        migrate_agentic_runtime_schema(
+            self.state.provider_store,
+            self.state.runtime_store,
+            builtin_provider_registry(),
+        )
+        session = self.state.runtime_store.get_session(session.session_id)
+        self.assertIsNotNone(session.execution_binding)
+        self.assertTrue(session.execution_binding.legacy_inferred)
+        self.assertEqual(
+            self.state.runtime_store.get_provider_state(session.session_id).runtime_engine_id,
+            "codex",
         )
         original_input = "Aggiornami sulla board."
         provider_input = f"{original_input}\n\n[Maverick governed orchestration read]\nRun is active."
@@ -129,6 +142,10 @@ def _state(repository_root: Path) -> SimpleNamespace:
             definitions=FakeCollection(),
             bindings=FakeCollection(),
             selections=FakeCollection(),
+            agentic_profile_definitions=FakeCollection(),
+            agentic_profile_definition_statuses=FakeCollection(),
+            workspace_agentic_profile_bindings=FakeCollection(),
+            agentic_migrations=FakeCollection(),
         )
     )
     register_builtin_providers(provider_store)
@@ -179,6 +196,7 @@ def _state(repository_root: Path) -> SimpleNamespace:
             processes=FakeCollection(),
             states=FakeCollection(),
             threads=FakeCollection(),
+            provider_states=FakeCollection(),
         )
     )
     return SimpleNamespace(

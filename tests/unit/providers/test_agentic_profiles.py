@@ -4,6 +4,7 @@ from dataclasses import asdict, replace
 from datetime import UTC, datetime
 import unittest
 
+from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.providers.agentic_migration import migrate_agentic_runtime_schema
 from core.providers.agentic_profiles import (
     build_pinned_execution_binding,
@@ -169,6 +170,44 @@ class AgenticProfilesTest(unittest.TestCase):
         self.assertEqual(len(provider_states.documents), 1)
         with self.assertRaises(RuntimeProviderStateError):
             runtime_store.initialize_provider_state(replace(state, provider_thread_id="other"))
+
+    def test_codex_profile_suspends_previous_revisions(self) -> None:
+        selection = self.selection()
+        profile, _binding = ensure_codex_workspace_profile(
+            self.provider_store,
+            definition=self.codex,
+            selection=selection,
+            now=NOW,
+        )
+        self.assertEqual(profile.revision, "3")
+
+        for rev in ("1", "2"):
+            self.provider_store.save_agentic_profile_definition_status(
+                AgenticProfileDefinitionStatus(
+                    definition_id=profile.definition_id,
+                    definition_revision=rev,
+                    rollout_status="preview",
+                    revision=0,
+                    updated_at=NOW,
+                ),
+                expected_revision=None,
+            )
+
+        ensure_codex_workspace_profile(
+            self.provider_store,
+            definition=self.codex,
+            selection=selection,
+            now=replace_time(NOW),
+        )
+
+        for rev in ("1", "2"):
+            status = self.provider_store.get_agentic_profile_definition_status(
+                profile.definition_id,
+                rev,
+            )
+            self.assertIsNotNone(status)
+            self.assertEqual(status.rollout_status, "suspended")
+
 
 
 def runtime_session(

@@ -33,7 +33,8 @@ from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, build_runtime_execution_binding
 
 
-CODEX_PROFILE_REVISION = "2"
+CODEX_PROFILE_REVISION = "3"
+CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2")
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"
 CAPABILITY_CERTIFICATE_PREFIX = "capability-certificate"
@@ -136,7 +137,33 @@ def publish_codex_agentic_profile(
             ),
             expected_revision=None,
         )
+    _suspend_previous_codex_revisions(store, definition_id=profile.definition_id, now=timestamp)
     return profile
+
+
+def _suspend_previous_codex_revisions(
+    store: ProviderStore,
+    *,
+    definition_id: str,
+    now: datetime,
+) -> None:
+    """Suspend preview definitions certified against earlier adapter bytes."""
+    for revision in CODEX_PREVIOUS_PROFILE_REVISIONS:
+        status = store.get_agentic_profile_definition_status(
+            definition_id,
+            revision,
+        )
+        if status is None or status.rollout_status in {"disabled", "suspended"}:
+            continue
+        store.save_agentic_profile_definition_status(
+            replace(
+                status,
+                rollout_status="suspended",
+                revision=status.revision + 1,
+                updated_at=now,
+            ),
+            expected_revision=status.revision,
+        )
 
 
 def resolve_workspace_agentic_profile(

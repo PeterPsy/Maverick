@@ -19,6 +19,27 @@ from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
 
 
+_LEGACY_EVIDENCE_FIELDS = (
+    "suite_id",
+    "suite_version",
+    "test_run_id",
+    "adapter_artifact_digest",
+    "result_summary_digest",
+    "evidence_refs",
+    "recorded_at",
+)
+_EXECUTED_EVIDENCE_FIELDS = (
+    "source_commit",
+    "artifact_bundle_digest",
+    "matrix_revision",
+    "matrix_digest",
+    "signer_key_id",
+    "run_signature",
+    "certification_started_at",
+    "certification_outcome",
+)
+
+
 def runtime_adapter_artifact_digest(adapter: object) -> str:
     """Hash the concrete adapter class bundle, unwrapping compatibility bridges."""
     concrete = getattr(adapter, "legacy_adapter", adapter)
@@ -206,12 +227,7 @@ def validate_certificate_for_binding(
         evidence = store.get_capability_evidence(certificate.evidence_digest)
     except ProviderNotFoundError as error:
         raise CapabilityCertificateError("certificate_evidence_missing") from error
-    evidence_payload = {
-        key: value
-        for key, value in evidence.__dict__.items()
-        if key != "evidence_digest"
-    }
-    if canonical_digest(evidence_payload) != evidence.evidence_digest:
+    if not _evidence_digest_is_valid(evidence):
         raise CapabilityCertificateError("certificate_evidence_corrupt")
     for field_name in ("suite_id", "suite_version", "test_run_id", "adapter_artifact_digest"):
         if getattr(certificate, field_name) != getattr(evidence, field_name):
@@ -248,6 +264,21 @@ def validate_certificate_for_binding(
     if runtime_adapter_artifact_digest(adapter) != binding.adapter_artifact_digest:
         raise CapabilityCertificateError("adapter_artifact_mismatch")
     return certificate
+
+
+def _evidence_digest_is_valid(evidence: CapabilityEvidenceRecord) -> bool:
+    """Validate current evidence and pre-executed-certification records."""
+    current_payload = {
+        key: value
+        for key, value in evidence.__dict__.items()
+        if key != "evidence_digest"
+    }
+    if canonical_digest(current_payload) == evidence.evidence_digest:
+        return True
+    if any(getattr(evidence, field) not in {"", None} for field in _EXECUTED_EVIDENCE_FIELDS):
+        return False
+    legacy_payload = {field: getattr(evidence, field) for field in _LEGACY_EVIDENCE_FIELDS}
+    return canonical_digest(legacy_payload) == evidence.evidence_digest
 
 
 def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:

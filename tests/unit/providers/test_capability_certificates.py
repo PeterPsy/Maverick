@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 import unittest
 import tempfile
@@ -237,9 +237,62 @@ class CapabilityCertificateTest(unittest.TestCase):
             with self.assertRaisesRegex(CapabilityCertificateError, "certificate_evidence_blob_corrupt"):
                 store.get(evidence_ref)
 
+    def test_legacy_evidence_digest_remains_valid_after_schema_extension(self) -> None:
+        legacy_fields = (
+            "suite_id",
+            "suite_version",
+            "test_run_id",
+            "adapter_artifact_digest",
+            "result_summary_digest",
+            "evidence_refs",
+            "recorded_at",
+        )
+        legacy_digest = canonical_digest(
+            {field: getattr(self.evidence, field) for field in legacy_fields}
+        )
+        legacy_evidence = replace(self.evidence, evidence_digest=legacy_digest)
+        legacy_binding = replace(
+            self.binding,
+            certificate_evidence_digest=legacy_digest,
+            binding_digest="",
+        )
+        legacy_binding = replace(
+            legacy_binding,
+            binding_digest=canonical_digest(legacy_binding),
+        )
+        legacy_store = certified_test_provider_store(
+            legacy_binding,
+            self.adapter,
+            evidence=legacy_evidence,
+            now=NOW,
+        )
+
+        validated = validate_certificate_for_binding(
+            legacy_store,
+            binding=legacy_binding,
+            adapter=self.adapter,
+            now=NOW,
+        )
+
+        self.assertEqual(validated.evidence_digest, legacy_digest)
+
+        tampered_evidence = replace(legacy_evidence, suite_version="tampered")
+        tampered_store = certified_test_provider_store(
+            legacy_binding,
+            self.adapter,
+            evidence=tampered_evidence,
+            now=NOW,
+        )
+        with self.assertRaisesRegex(CapabilityCertificateError, "certificate_evidence_corrupt"):
+            validate_certificate_for_binding(
+                tampered_store,
+                binding=legacy_binding,
+                adapter=self.adapter,
+                now=NOW,
+            )
+
 
     def test_rehydrated_execution_binding_validates_without_upstream_type_mismatch(self) -> None:
-        from dataclasses import asdict
         from core.runtime.execution_binding import execution_binding_from_document
 
         serialized = asdict(self.binding)

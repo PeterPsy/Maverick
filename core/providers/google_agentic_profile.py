@@ -17,8 +17,9 @@ from core.providers.store import ProviderStore
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "2"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "1"
+GOOGLE_AGENTIC_PROFILE_REVISION = "3"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "2"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2")
 GOOGLE_AGENTIC_CERTIFICATE_ID = (
     f"capability-certificate:{GOOGLE_AGENTIC_PROFILE_ID}:{GOOGLE_AGENTIC_PROFILE_REVISION}"
 )
@@ -78,7 +79,7 @@ def ensure_google_agentic_preview_profile(
         provider_protocol="google-interactions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==2",
+        adapter_version_constraint="==3",
         routing_constraint=google_interactions_routing_constraint(),
         policy_ceiling=google_agentic_preview_policy(),
         capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,
@@ -103,24 +104,25 @@ def ensure_google_agentic_preview_profile(
             expected_revision=None,
         )
     ensure_google_preview_certificate(store, definition=stored, adapter=adapter)
-    _suspend_previous_revision(store, now=timestamp)
+    _suspend_previous_revisions(store, now=timestamp)
     return stored
 
 
-def _suspend_previous_revision(store: ProviderStore, *, now: datetime) -> None:
-    """Prevent selection of a revision certified against adapter v1 bytes."""
-    status = store.get_agentic_profile_definition_status(
-        GOOGLE_AGENTIC_PROFILE_ID,
-        GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION,
-    )
-    if status is None or status.rollout_status in {"disabled", "suspended"}:
-        return
-    store.save_agentic_profile_definition_status(
-        replace(
-            status,
-            rollout_status="suspended",
-            revision=status.revision + 1,
-            updated_at=now,
-        ),
-        expected_revision=status.revision,
-    )
+def _suspend_previous_revisions(store: ProviderStore, *, now: datetime) -> None:
+    """Prevent selection of revisions certified against earlier adapter bytes."""
+    for revision in GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS:
+        status = store.get_agentic_profile_definition_status(
+            GOOGLE_AGENTIC_PROFILE_ID,
+            revision,
+        )
+        if status is None or status.rollout_status in {"disabled", "suspended"}:
+            continue
+        store.save_agentic_profile_definition_status(
+            replace(
+                status,
+                rollout_status="suspended",
+                revision=status.revision + 1,
+                updated_at=now,
+            ),
+            expected_revision=status.revision,
+        )

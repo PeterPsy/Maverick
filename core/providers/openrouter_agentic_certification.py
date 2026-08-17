@@ -17,7 +17,7 @@ from core.runtime.execution_binding import canonical_digest
 
 
 OPENROUTER_CERTIFICATION_SUITE_ID = "maverick-openrouter-agentic-contract"
-OPENROUTER_CERTIFICATION_SUITE_VERSION = "1"
+OPENROUTER_CERTIFICATION_SUITE_VERSION = "2"
 OPENROUTER_CERTIFICATION_VALIDITY_DAYS = 30
 
 

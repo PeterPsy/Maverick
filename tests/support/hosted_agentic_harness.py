@@ -71,6 +71,7 @@ class HostedAgenticHarness:
         self.root = make_temp_repo_root(test_case)
         self.cli_calls = 0
         self.mcp_calls = 0
+        self.read_result: dict[str, object] | None = None
         self.turn_statuses: list[tuple[str, str]] = []
         self.audit = FakeCollection()
         self.store = RuntimeDocumentStore(
@@ -225,6 +226,7 @@ class HostedAgenticHarness:
         private_codec: HostedProviderPrivateCodec | None = None,
         credential: EphemeralCredential | None = None,
         cost_estimator=None,
+        authority_refresher=None,
     ) -> HostedAgenticEngineAdapter:
         runtimes = HostedProviderRuntimeRegistry()
         runtimes.register(
@@ -250,7 +252,7 @@ class HostedAgenticHarness:
             tool_ledger=self.orchestrator.ledger,
             private_state_service=self.private_state_service,
             policy_resolver=lambda _context: self.policy,
-            authority_refresher=lambda _context: self.authority,
+            authority_refresher=authority_refresher or (lambda _context: self.authority),
             actor_context_resolver=lambda _context: RuntimeToolActorContext(
                 workspace_id="default",
                 actor_id="user-1",
@@ -370,7 +372,7 @@ class HostedAgenticHarness:
 
     def _read(self, arguments, _context):
         self.cli_calls += 1
-        return {"value": arguments["value"]}
+        return self.read_result or {"value": arguments["value"]}
 
     def _mutate(self, arguments, _context):
         self.mcp_calls += 1

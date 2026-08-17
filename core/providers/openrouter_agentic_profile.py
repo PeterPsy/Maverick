@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from core.providers.agentic_models import (
@@ -23,7 +24,8 @@ from core.providers.store import ProviderStore
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "1"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "2"
+OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1",)
 OPENROUTER_AGENTIC_CERTIFICATE_ID = (
     f"capability-certificate:{OPENROUTER_AGENTIC_PROFILE_ID}:{OPENROUTER_AGENTIC_PROFILE_REVISION}"
 )
@@ -84,7 +86,7 @@ def ensure_openrouter_agentic_preview_profile(
         provider_protocol="openrouter-chat-completions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==2",
+        adapter_version_constraint="==3",
         routing_constraint=openrouter_agentic_routing_constraint(),
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,
@@ -109,4 +111,25 @@ def ensure_openrouter_agentic_preview_profile(
             expected_revision=None,
         )
     ensure_openrouter_preview_certificate(store, definition=stored, adapter=adapter)
+    _suspend_previous_revisions(store, now=timestamp)
     return stored
+
+
+def _suspend_previous_revisions(store: ProviderStore, *, now: datetime) -> None:
+    """Suspend preview definitions certified against earlier adapter bytes."""
+    for revision in OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS:
+        status = store.get_agentic_profile_definition_status(
+            OPENROUTER_AGENTIC_PROFILE_ID,
+            revision,
+        )
+        if status is None or status.rollout_status in {"disabled", "suspended"}:
+            continue
+        store.save_agentic_profile_definition_status(
+            replace(
+                status,
+                rollout_status="suspended",
+                revision=status.revision + 1,
+                updated_at=now,
+            ),
+            expected_revision=status.revision,
+        )

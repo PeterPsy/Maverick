@@ -23,6 +23,16 @@ MAX_PROVIDER_PRIVATE_BLOB_BYTES = 2 * 1_048_576
 MAX_PROVIDER_PRIVATE_SESSION_BYTES = 8 * 1_048_576
 ProviderPrivateAccessPurpose = Literal["adapter", "recovery"]
 
+_PUBLIC_PROVIDER_PRIVATE_REASONS = frozenset(
+    {
+        "provider_private_codec_mismatch",
+        "provider_private_integrity_failed",
+        "provider_private_quota_exceeded",
+        "provider_private_size_invalid",
+        "provider_private_state_unavailable",
+    }
+)
+
 
 class ProviderPrivateStateError(RuntimeProviderStateError):
     """Fail-closed error carrying a stable recovery reason."""
@@ -30,6 +40,13 @@ class ProviderPrivateStateError(RuntimeProviderStateError):
     def __init__(self, reason_code: str) -> None:
         super().__init__(reason_code)
         self.reason_code = reason_code
+
+
+def public_provider_private_reason(error: ProviderPrivateStateError) -> str:
+    """Expose only recovery-safe private-state failures outside the Core store."""
+    if error.reason_code in _PUBLIC_PROVIDER_PRIVATE_REASONS:
+        return error.reason_code
+    return "provider_private_state_invalid"
 
 
 class ProviderPrivateStateService:

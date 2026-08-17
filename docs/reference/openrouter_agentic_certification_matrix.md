@@ -3,7 +3,7 @@
 Status date: 2026-08-17  
 Rollout: preview, fake-data-only  
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==2`
+Adapter: `maverick-hosted-tool-loop==3`
 
 ## Certified combination
 
@@ -75,6 +75,11 @@ Primary references:
 | Usage and price estimate | token fixtures and integer micro-USD estimator | pass |
 | Shared tool loop | real OpenRouter codec through deterministic hosted-loop E2E | pass |
 | Cancel/recovery/confirmation | shared hosted runtime contract suite | pass |
+| Outage after acceptance | terminal normalized failure with no blind retry | pass |
+| Revocation and egress drift | mid-step revocation and live-policy drift fixtures | pass |
+| Private-state failure | explicit quota, integrity, and recovery-reason fixtures | pass |
+| Prompt-injection containment | untrusted tool output cannot expand materialized tools | pass |
+| Child-agent isolation | forked immutable binding and independent private state | pass |
 
 The packaged preview certificate is fixture-backed. Bootstrap never calls a
 remote provider and does not claim that an installation credential was tested.

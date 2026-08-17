@@ -12,6 +12,9 @@ import unittest
 from unittest.mock import patch
 
 from core.api.application import create_application
+from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_profiles import build_pinned_execution_binding
+from core.providers.certificate_service import runtime_adapter_artifact_digest
 from core.providers.errors import ProviderCredentialBindingError, ProviderNotFoundError, ProviderSelectionError
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_codex_config_policy import (
@@ -39,6 +42,7 @@ from core.workspaces.models import WorkspaceGovernanceRecord
 from core.runtime.workspace_api_token import verify_workspace_api_token
 from core.providers.store import ProviderDocumentStore, ProviderCollections
 from core.runtime.service import create_runtime_session
+from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.store import RuntimeDocumentStore, RuntimeCollections
 from core.secrets.service import create_platform_secret
 from core.secrets.store import SecretDocumentStore, SecretCollections
@@ -98,6 +102,46 @@ class ProvidersTestCase(unittest.TestCase):
                 target.mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         return repo_root
+
+    def make_pinned_codex_session(
+        self,
+        provider_store: ProviderDocumentStore,
+        runtime_store: RuntimeDocumentStore,
+        *,
+        repo_root: Path,
+        session_id: str,
+        workspace_id: str,
+        codex_command: str | None = None,
+        now: datetime | None = None,
+    ):
+        timestamp = now or datetime.now(tz=UTC)
+        registry = builtin_provider_registry(codex_command=codex_command)
+        configure_workspace_provider(
+            provider_store,
+            workspace_id=workspace_id,
+            provider_id="codex",
+            registry=registry,
+            codex_command=codex_command,
+            now=timestamp,
+        )
+        execution_binding = build_pinned_execution_binding(
+            provider_store,
+            registry,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            execution_mode="sandbox",
+            now=timestamp,
+        )
+        session = create_runtime_session(
+            runtime_store,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            agent_id="agent-1",
+            now=timestamp,
+            start_path=repo_root,
+            execution_binding=execution_binding,
+        )
+        return session, registry
 
     def test_builtin_registry_registers_codex_provider(self) -> None:
         registry = builtin_provider_registry()
@@ -371,7 +415,10 @@ class ProvidersTestCase(unittest.TestCase):
             start_path=repo_root,
         )
 
-        with self.assertRaisesRegex(ProviderSelectionError, "no_provider_configured"):
+        with self.assertRaisesRegex(
+            ProviderSelectionError,
+            "runtime_execution_binding_missing",
+        ):
             resolve_provider_for_runtime_session(provider_store, session=session)
 
     def test_configured_selection_is_persisted_per_workspace(self) -> None:
@@ -390,19 +437,21 @@ class ProvidersTestCase(unittest.TestCase):
 
     def test_runtime_resolution_uses_configured_codex_adapter(self) -> None:
         provider_store = self.make_provider_store()
-        register_builtin_providers(provider_store)
         runtime_store = self.make_runtime_store()
         repo_root = self.make_repo_root()
-        session = create_runtime_session(
+        session, registry = self.make_pinned_codex_session(
+            provider_store,
             runtime_store,
+            repo_root=repo_root,
             session_id="sess-codex-runtime",
             workspace_id="default",
-            agent_id="agent-1",
-            start_path=repo_root,
         )
-        configure_workspace_provider(provider_store, workspace_id="default", provider_id="codex")
 
-        provider, selection, runtime_adapter = resolve_runtime_backend_for_session(provider_store, session=session)
+        provider, selection, runtime_adapter = resolve_runtime_backend_for_session(
+            provider_store,
+            session=session,
+            registry=registry,
+        )
 
         self.assertEqual(provider.provider_id, "codex")
         self.assertEqual(selection.provider_id if selection is not None else None, "codex")
@@ -561,21 +610,25 @@ class ProvidersTestCase(unittest.TestCase):
 
     def test_codex_launch_spec_is_built_from_provider_adapter_not_runtime_domain(self) -> None:
         provider_store = self.make_provider_store()
-        register_builtin_providers(provider_store)
         runtime_store = self.make_runtime_store()
         repo_root = self.make_repo_root()
         now = datetime.now(tz=UTC)
-        session = create_runtime_session(
+        session, registry = self.make_pinned_codex_session(
+            provider_store,
             runtime_store,
+            repo_root=repo_root,
             session_id="sess-1",
             workspace_id="acme",
-            agent_id="agent-1",
             now=now,
-            start_path=repo_root,
+            codex_command="/bin/echo",
         )
-        configure_workspace_provider(provider_store, workspace_id="acme", provider_id="codex", codex_command="/bin/echo")
 
-        launch_spec = build_runtime_backend_launch_spec(provider_store, session=session, codex_command="/bin/echo")
+        launch_spec = build_runtime_backend_launch_spec(
+            provider_store,
+            session=session,
+            registry=registry,
+            codex_command="/bin/echo",
+        )
 
         self.assertEqual(launch_spec.provider_id, "codex")
         self.assertEqual(launch_spec.command[:2], [os.sys.executable, str(repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1" / "bin" / "workspace_sandbox.py")])
@@ -1269,7 +1322,7 @@ class ProvidersTestCase(unittest.TestCase):
             workspace_id="default",
         )
         create_platform_secret(secret_store, label="Provider Secret", raw_value="super-secret-token", alias="provider-secret")
-        configure_workspace_provider(
+        selection = configure_workspace_provider(
             provider_store,
             workspace_id="default",
             provider_id="credentialed",
@@ -1277,12 +1330,42 @@ class ProvidersTestCase(unittest.TestCase):
         )
         runtime_store = self.make_runtime_store()
         repo_root = self.make_repo_root()
+        bridge = registry.get_agentic_runtime_adapter("credentialed")
+        policy = codex_runtime_policy()
+        execution_binding = build_runtime_execution_binding(
+            session_id="sess-credentialed",
+            workspace_id="default",
+            profile_definition_id="profile-credentialed-fixture",
+            profile_definition_revision="1",
+            workspace_binding_id="workspace-credentialed-fixture",
+            workspace_binding_revision=0,
+            capability_certificate_id="certificate-credentialed-fixture",
+            certificate_evidence_digest="a" * 64,
+            runtime_engine_id="credentialed",
+            adapter_id=bridge.adapter_id,
+            adapter_version=bridge.adapter_version,
+            adapter_artifact_digest=runtime_adapter_artifact_digest(bridge),
+            model_provider_id="credentialed",
+            model_id="credentialed",
+            provider_protocol="legacy-runtime-backend",
+            provider_api_version=None,
+            routing_constraint=codex_routing_constraint(),
+            credential_binding_id=selection.binding_id,
+            reasoning_effort=None,
+            execution_mode="sandbox",
+            profile_policy_ceiling=policy,
+            workspace_policy_ceiling=policy,
+            egress_policy_id="local-runtime-no-remote-egress",
+            egress_policy_revision="1",
+            created_at=datetime.now(tz=UTC),
+        )
         session = create_runtime_session(
             runtime_store,
             session_id="sess-credentialed",
             workspace_id="default",
             agent_id="agent-1",
             start_path=repo_root,
+            execution_binding=execution_binding,
         )
 
         spec = build_runtime_backend_launch_spec(

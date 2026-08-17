@@ -22,7 +22,10 @@ from core.providers.agentic_adapter import (
 )
 from core.runtime.hosted_agentic_loop import HostedAgenticLoop
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
-from core.runtime.provider_private_state import ProviderPrivateStateError
+from core.runtime.provider_private_state import (
+    ProviderPrivateStateError,
+    public_provider_private_reason,
+)
 from core.runtime.service import transition_runtime_turn
 
 
@@ -89,10 +92,10 @@ class HostedAgenticEngineAdapter:
                     codec_version=codec.codec_version,
                     schema_version=codec.schema_version,
                 )
-            except ProviderPrivateStateError:
+            except ProviderPrivateStateError as error:
                 return RuntimePrepareResult(
                     ready=False,
-                    metadata={"reason_code": "provider_private_state_invalid"},
+                    metadata={"reason_code": public_provider_private_reason(error)},
                 )
         return RuntimePrepareResult(ready=True, metadata={"transport": "hosted-api"})
 
@@ -136,8 +139,8 @@ class HostedAgenticEngineAdapter:
                     schema_version=codec.schema_version,
                     purpose="recovery",
                 )
-            except ProviderPrivateStateError:
-                return RuntimeRecoveryResult(False, "provider_private_state_invalid")
+            except ProviderPrivateStateError as error:
+                return RuntimeRecoveryResult(False, public_provider_private_reason(error))
         uncertain = False
         ledger = self.loop.tool_ledger
         for invocation in ledger.store.list_tool_invocations(

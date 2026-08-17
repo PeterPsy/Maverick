@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 import asyncio
 
 from core.providers.agentic_protocol import (
@@ -22,20 +22,26 @@ class DeterministicFakeAgenticClient:
         self,
         *,
         tool_name: str | None = None,
+        tool_sequence: tuple[str, ...] = (),
         tool_arguments: dict[str, object] | None = None,
         final_text: str = "fake hosted loop answer",
         stall_after_acceptance: bool = False,
         repeat_tool: bool = False,
         upstream_id: str | None = None,
         transport_error: str | None = None,
+        provider_error_code: str | None = None,
+        before_tool_call: Callable[[], None] | None = None,
     ) -> None:
         self.tool_name = tool_name
+        self.tool_sequence = tool_sequence
         self.tool_arguments = tool_arguments or {"value": 4}
         self.final_text = final_text
         self.stall_after_acceptance = stall_after_acceptance
         self.repeat_tool = repeat_tool
         self.upstream_id = upstream_id
         self.transport_error = transport_error
+        self.provider_error_code = provider_error_code
+        self.before_tool_call = before_tool_call
         self.requests: list[AgenticModelRequest] = []
         self.closed_streams = 0
 
@@ -58,6 +64,14 @@ class DeterministicFakeAgenticClient:
                 await asyncio.sleep(60)
             if self.transport_error is not None:
                 raise RuntimeError(self.transport_error)
+            if self.provider_error_code is not None:
+                yield AgenticModelEvent(
+                    "error",
+                    request.request_id,
+                    2,
+                    error_code=self.provider_error_code,
+                )
+                return
             yield AgenticModelEvent(
                 "provider_state",
                 request.request_id,
@@ -76,17 +90,25 @@ class DeterministicFakeAgenticClient:
                 3,
                 usage=AgenticUsage(input_tokens=10, output_tokens=3, estimated_cost_microusd=0),
             )
-            should_call_tool = self.tool_name is not None and (
-                self.repeat_tool or not request.tool_results
+            sequence_tool = (
+                self.tool_sequence[step - 1]
+                if step <= len(self.tool_sequence)
+                else None
+            )
+            selected_tool = sequence_tool or self.tool_name
+            should_call_tool = selected_tool is not None and (
+                bool(sequence_tool) or self.repeat_tool or not request.tool_results
             )
             if should_call_tool:
+                if self.before_tool_call is not None:
+                    self.before_tool_call()
                 yield AgenticModelEvent(
                     "tool_call",
                     request.request_id,
                     4,
                     tool_call=AgenticToolCall(
                         provider_tool_call_id=f"fake-call-{step}",
-                        provider_tool_name=self.tool_name or "",
+                        provider_tool_name=selected_tool or "",
                         arguments=dict(self.tool_arguments),
                     ),
                 )

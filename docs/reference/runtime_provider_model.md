@@ -421,7 +421,9 @@ still-waiting invocation terminal. Recovery never automatically replays an
 ambiguous `executing` mutation; it becomes `execution_unknown`. Public provider
 events are bounded JSON and recursively reject private-state field names.
 
-The deterministic fake provider certification covers a two-request streamed
-loop, official read and confirmed mutating tools, restart deduplication,
+The deterministic fake provider certification covers multi-request streaming,
+official read and confirmed mutating tools, restart deduplication,
 provider-private round-trip, egress records, budgets, cancellation transport
-closure, normalized provider failures, and conservative recovery.
+closure, terminal outages without blind retry, mid-step certificate revocation,
+policy drift, explicit private-state quota/integrity failures, prompt-injection
+containment, child-agent binding isolation, and conservative recovery.

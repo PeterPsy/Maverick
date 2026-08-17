@@ -172,10 +172,10 @@ The first certified OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The shared hosted adapter is version 2 for this codec
-bundle. Google preview revision 1, which was certified against adapter version
-1 bytes, is suspended and replaced by revision 2 rather than silently reusing
-its certificate.
+accepted as complete. Hardening changed the certified shared bundle to adapter
+version 3. Google preview revisions 1 and 2 and OpenRouter preview revision 1
+are suspended; Google revision 3 and OpenRouter revision 2 carry new immutable
+certificates for the exact v3 artifact rather than reusing earlier evidence.
 
 ## Concrete persistence map
 
@@ -300,6 +300,12 @@ The accepted order is:
 
 Every phase has focused tests and a checkpoint commit. A later phase cannot
 weaken an earlier boundary.
+
+The phase-9 gate covers cancellation races, terminal provider outages,
+mid-session certificate revocation, live egress-policy drift, prompt injection,
+provider-private quota/integrity failure, confirmation replay, child-agent
+binding isolation, and an operator rollback runbook. It does not promote either
+remote profile beyond fake-data preview.
 
 ## Consequences
 

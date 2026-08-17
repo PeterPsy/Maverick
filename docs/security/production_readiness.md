@@ -56,11 +56,16 @@ The runtime now also persists per-block fail-closed egress decisions before
 export and keeps provider-private/tool payloads in restart-safe, integrity-bound
 encrypted session storage with explicit codec and quota failures. Audit records
 contain keyed digests but no content, and generic provider events cannot carry
-thought signatures. The shared hosted loop now passes deterministic fake-provider
-coverage for streaming, bounded sequential tools, persisted confirmation,
-cancellation, restart deduplication, and conservative recovery. Remote profiles
-remain disabled until provider-specific codecs/transports, dated capability
-evidence, leakage review, and production key-management gates are completed.
+thought signatures. The shared hosted loop now passes deterministic
+fake-provider coverage for streaming, bounded sequential tools, persisted
+confirmation, cancellation, restart deduplication, terminal outages, mid-step
+revocation, egress drift, prompt-injection containment, explicit private-state
+quota/integrity failures, child-agent binding isolation, and conservative
+recovery. The operator runbook documents canary, observation, incident
+recovery, and control-plane-first rollback. These phase-9 controls do not close
+the production gate: remote profiles remain disabled until provider-specific
+live evidence, leakage review, production key management, and the platform
+blockers above are completed.
 
 ## Design Studio OpenDesign Gate
 

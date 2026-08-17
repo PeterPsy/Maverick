@@ -97,6 +97,32 @@ class CapabilityCertificateTest(unittest.TestCase):
         self.assertFalse(authority.allowed_capabilities.shell)
         self.assertEqual(authority.authority_digest, canonical_digest(authority))
 
+    def test_live_egress_policy_drift_blocks_existing_binding(self) -> None:
+        live = self.store.get_workspace_agentic_profile_binding(
+            self.binding.workspace_binding_id
+        )
+        self.store.save_workspace_agentic_profile_binding(
+            replace(
+                live,
+                egress_policy_revision="2",
+                revision=live.revision + 1,
+                updated_at=NOW,
+            ),
+            expected_revision=live.revision,
+        )
+
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "egress_policy_drift_unresolved",
+        ):
+            resolve_effective_runtime_authority(
+                self.store,
+                binding=self.binding,
+                adapter=self.adapter,
+                turn_id="turn-drifted-egress",
+                now=NOW,
+            )
+
     def test_revoked_or_expired_certificate_cannot_execute(self) -> None:
         revoked = revoke_capability_certificate(
             self.store,

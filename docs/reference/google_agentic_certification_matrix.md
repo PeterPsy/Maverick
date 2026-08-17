@@ -3,7 +3,7 @@
 Status date: 2026-08-16  
 Rollout: preview, fake-data-only  
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==2`
+Adapter: `maverick-hosted-tool-loop==3`
 
 ## Certified combination
 
@@ -52,6 +52,10 @@ Primary references:
 | Usage and price estimate | token usage fixtures and integer micro-USD estimator | pass |
 | Shared tool loop | Google codec through the deterministic hosted-loop E2E | pass |
 | Cancel/recovery/confirmation | shared hosted runtime contract suite | pass |
+| Revocation and egress drift | mid-step revocation and live-policy drift fixtures | pass |
+| Private-state failure | explicit quota, integrity, and recovery-reason fixtures | pass |
+| Prompt-injection containment | untrusted tool output cannot expand materialized tools | pass |
+| Child-agent isolation | forked immutable binding and independent private state | pass |
 | Live capability probe | explicit operator-only two-request synthetic probe | available, not run at bootstrap |
 
 The packaged preview certificate is intentionally fixture-backed and records

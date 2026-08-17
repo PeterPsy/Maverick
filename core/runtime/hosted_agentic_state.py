@@ -8,7 +8,11 @@ from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     HostedProviderPrivateCodec,
 )
-from core.runtime.provider_private_state import ProviderPrivateStateError, ProviderPrivateStateService
+from core.runtime.provider_private_state import (
+    ProviderPrivateStateError,
+    ProviderPrivateStateService,
+    public_provider_private_reason,
+)
 
 
 class HostedAgenticStateBridge:
@@ -64,7 +68,7 @@ class HostedAgenticStateBridge:
                 schema_version=self.codec.schema_version,
             )
         except ProviderPrivateStateError as error:
-            raise HostedAgenticLoopError("provider_private_state_invalid") from error
+            raise HostedAgenticLoopError(public_provider_private_reason(error)) from error
         if content is None:
             return None
         return AgenticProviderPrivateState(
@@ -106,4 +110,4 @@ class HostedAgenticStateBridge:
                 turn_generation=context.correlation_id,
             )
         except ProviderPrivateStateError as error:
-            raise HostedAgenticLoopError("provider_private_state_invalid") from error
+            raise HostedAgenticLoopError(public_provider_private_reason(error)) from error

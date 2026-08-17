@@ -1,11 +1,11 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-16  
-Rollout: preview, fake-data-only  
+Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==3`
 
-## Certified combination
+## Candidate combination
 
 | Field | Pinned value |
 | --- | --- |
@@ -20,7 +20,7 @@ Adapter: `maverick-hosted-tool-loop==3`
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public`, `workspace_internal_fake` |
 | Tool handles | `core-capability:filesystem.read` only |
-| Certificate lifetime | 45 days |
+| Certificate lifetime after a successful signed run | 45 days |
 
 Google documents Gemini 3.6 Flash as a stable model with a 1,048,576-token
 input limit, 65,536-token output limit and function calling support. The
@@ -41,29 +41,29 @@ Primary references:
 
 ## Evidence matrix
 
-| Contract | Evidence | Preview result |
+| Contract | Required evidence | Current certification result |
 | --- | --- | --- |
-| Request translation | deterministic stateful/stateless fixtures | pass |
-| SSE event ordering and model identity | strict stream decoder fixtures | pass |
-| Function call id/name/count | exact pairing and parallel-call rejection tests | pass |
-| Stateful continuation | previous interaction id round trip | pass |
-| Stateless continuation | exact user/thought/function history replay | pass |
-| Thought-signature isolation | provider-private envelope and public-event assertions | pass |
-| Usage and price estimate | token usage fixtures and integer micro-USD estimator | pass |
-| Shared tool loop | Google codec through the deterministic hosted-loop E2E | pass |
-| Cancel/recovery/confirmation | shared hosted runtime contract suite | pass |
-| Revocation and egress drift | mid-step revocation and live-policy drift fixtures | pass |
-| Private-state failure | explicit quota, integrity, and recovery-reason fixtures | pass |
-| Prompt-injection containment | untrusted tool output cannot expand materialized tools | pass |
-| Child-agent isolation | forked immutable binding and independent private state | pass |
+| Request translation | deterministic stateful/stateless fixtures | not certified |
+| SSE event ordering and model identity | strict stream decoder fixtures | not certified |
+| Function call id/name/count | exact pairing and parallel-call rejection tests | not certified |
+| Stateful continuation | previous interaction id round trip | not certified |
+| Stateless continuation | exact user/thought/function history replay | not certified |
+| Thought-signature isolation | provider-private envelope and public-event assertions | not certified |
+| Usage and price estimate | token usage fixtures and integer micro-USD estimator | not certified |
+| Shared tool loop | Google codec through the deterministic hosted-loop E2E | not certified |
+| Cancel/recovery/confirmation | shared hosted runtime contract suite | not certified |
+| Revocation and egress drift | mid-step revocation and live-policy drift fixtures | not certified |
+| Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
+| Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
+| Child-agent isolation | forked immutable binding and independent private state | not certified |
 | Live capability probe | explicit operator-only two-request synthetic probe | available, not run at bootstrap |
 
-The packaged preview certificate is intentionally fixture-backed and records
-that evidence kind. It does not claim that a live credential was exercised at
-installation time. Before promotion to `available`, an operator must run the
-opt-in capability probe with a Vault-delivered credential, retain its
-redaction-safe result digest as platform evidence, and issue a new certificate
-revision. Bootstrap and automated tests never make a live provider request.
+The table lists the required suite coverage; it is not evidence that the suite
+ran. Bootstrap publishes only the candidate profile and never manufactures a
+certificate. A certification pipeline must execute the complete suite and the
+operator-only synthetic live probe, bind the result to the source commit,
+suite version, adapter artifact bundle and this matrix revision, and sign the
+completed run. Only that verified artifact may be used to issue a certificate.
 
 ## Fail-closed conditions
 

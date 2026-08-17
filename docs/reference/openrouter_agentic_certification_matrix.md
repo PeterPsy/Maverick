@@ -1,11 +1,11 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-17  
-Rollout: preview, fake-data-only  
+Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==3`
 
-## Certified combination
+## Candidate combination
 
 | Field | Pinned value |
 | --- | --- |
@@ -22,7 +22,7 @@ Adapter: `maverick-hosted-tool-loop==3`
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
 | Remote data classes | `public`, `workspace_internal_fake` |
 | Tool handles | `core-capability:filesystem.read` only |
-| Certificate lifetime | 30 days |
+| Certificate lifetime after a successful signed run | 30 days |
 
 The dated OpenRouter endpoint catalogs listed `deepinfra/fp8` as active for
 DeepSeek V4 Flash, with `tools`, `tool_choice`, `reasoning`, `max_tokens`, and
@@ -63,29 +63,30 @@ Primary references:
 
 ## Evidence matrix
 
-| Contract | Evidence | Preview result |
+| Contract | Required evidence | Current certification result |
 | --- | --- | --- |
-| Exact request translation | deterministic payload and relaxed-control rejection fixtures | pass |
-| SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | pass |
-| Effective upstream | response identity and terminal router-metadata mismatch fixtures | pass |
-| No eligible endpoint | HTTP and streamed 404 normalization fixtures | pass |
-| Tool call id/name/count | fragmented arguments, exact pairing, and parallel-call rejection | pass |
-| Multi-step continuation | two sequential tool rounds followed by a final response | pass |
-| Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | pass |
-| Usage and price estimate | token fixtures and integer micro-USD estimator | pass |
-| Shared tool loop | real OpenRouter codec through deterministic hosted-loop E2E | pass |
-| Cancel/recovery/confirmation | shared hosted runtime contract suite | pass |
-| Outage after acceptance | terminal normalized failure with no blind retry | pass |
-| Revocation and egress drift | mid-step revocation and live-policy drift fixtures | pass |
-| Private-state failure | explicit quota, integrity, and recovery-reason fixtures | pass |
-| Prompt-injection containment | untrusted tool output cannot expand materialized tools | pass |
-| Child-agent isolation | forked immutable binding and independent private state | pass |
+| Exact request translation | deterministic payload and relaxed-control rejection fixtures | not certified |
+| SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
+| Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
+| No eligible endpoint | HTTP and streamed 404 normalization fixtures | not certified |
+| Tool call id/name/count | fragmented arguments, exact pairing, and parallel-call rejection | not certified |
+| Multi-step continuation | two sequential tool rounds followed by a final response | not certified |
+| Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
+| Usage and price estimate | token fixtures and integer micro-USD estimator | not certified |
+| Shared tool loop | real OpenRouter codec through deterministic hosted-loop E2E | not certified |
+| Cancel/recovery/confirmation | shared hosted runtime contract suite | not certified |
+| Outage after acceptance | terminal normalized failure with no blind retry | not certified |
+| Revocation and egress drift | mid-step revocation and live-policy drift fixtures | not certified |
+| Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
+| Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
+| Child-agent isolation | forked immutable binding and independent private state | not certified |
 
-The packaged preview certificate is fixture-backed. Bootstrap never calls a
-remote provider and does not claim that an installation credential was tested.
-Promotion requires a fresh operator-run synthetic probe, retained redaction-safe
-evidence, reconfirmation of the endpoint and ZDR catalogs, and a new certificate
-revision.
+The table defines required coverage and does not report a completed run.
+Bootstrap publishes only the candidate profile and never manufactures a
+certificate. Certification requires the complete suite plus a fresh
+operator-run synthetic live probe, reconfirmation of endpoint and ZDR catalogs,
+an immutable result bound to source commit, suite version, adapter artifact
+bundle and this matrix revision, and an Ed25519 signature from a trusted CI key.
 
 ## Fail-closed conditions
 

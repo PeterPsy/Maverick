@@ -1,7 +1,5 @@
 """Production-path integration tests for isolated sidecar browser origins."""
-
 from __future__ import annotations
-
 import asyncio
 from dataclasses import replace
 import json
@@ -11,19 +9,15 @@ import tempfile
 import time
 import unittest
 from unittest.mock import patch
-
 from core.api.asgi_application import PlatformAsgiHost
 from core.api.sidecar_browser import BROWSER_BOOTSTRAP_PATH
 from core.api.sidecar_proxy import stop_app_sidecars
 from core.apps.sidecar_browser_sessions import SESSION_IDLE_TTL_SECONDS
 from core.shared.entrypoints import EntrypointShutdownController
 from tests.integration.app_hosting.sidecar_browser_origin_support import SidecarBrowserOriginTestSupport
-
-
 class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unittest.TestCase):
     def test_cold_launch_after_host_restart_waits_for_declared_health_budget(self) -> None:
         asyncio.run(self._assert_cold_launch_after_host_restart())
-
     async def _assert_cold_launch_after_host_restart(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(Path(temp_dir))
@@ -43,7 +37,6 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             )
             self.assertEqual(first_status, 200)
             first_shutdown.begin_shutdown()
-
             from core.api.platform_state import bootstrap_platform_state
 
             restarted_state = bootstrap_platform_state(start_path=repo_root)
@@ -67,7 +60,6 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
 
     def test_post_bootstrap_cookie_csrf_headers_isolation_and_unbuffered_sse(self) -> None:
         asyncio.run(self._assert_browser_origin_contract())
-
     async def _assert_browser_origin_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(Path(temp_dir))

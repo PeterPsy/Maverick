@@ -1,7 +1,5 @@
 """Runtime turn queueing and idempotent handoff helpers."""
-
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime
 import time
@@ -16,11 +14,8 @@ from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import queue_runtime_turn_if_client_message_absent, record_runtime_event
 from core.runtime.thread_catalog_events import mark_thread_user_message_queued
 from core.runtime.thread_title_jobs import schedule_runtime_thread_title_generation, thread_title_input_hash
-
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
-
-
 @dataclass
 class RuntimeTurnSubmissionTiming:
     """Request-local latency spans for the HTTP receive to queue path."""
@@ -57,7 +52,6 @@ class RuntimeTurnSubmissionTiming:
             if value is not None:
                 payload[name] = round(value, 3)
         return payload
-
 
 def runtime_turn_submission_timing(received_perf_counter: float | None) -> RuntimeTurnSubmissionTiming | None:
     if received_perf_counter is None:

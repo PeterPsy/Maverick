@@ -1,7 +1,5 @@
 """Codex runtime backend adapter."""
-
 from __future__ import annotations
-
 from datetime import UTC, datetime
 import os
 from pathlib import Path
@@ -12,11 +10,9 @@ from core.providers.models import ProviderCapabilitySet, ProviderDefinition, Pro
 from core.providers.provider_codex_hooks import CODEX_POST_TOOL_USE_HOOK_NAME, write_codex_post_tool_use_hook
 from core.providers.provider_codex_wrappers import _write_workspace_maverick_wrapper
 from core.runtime.runtime_session import RuntimeSessionRecord
-
 if TYPE_CHECKING:
     from core.runtime.execution import RuntimeExecutionResult
     from core.skills.models import SkillDefinition, SkillMaterialization
-
 CODEX_RUNTIME_HOME_FILES = ("auth.json", "version.json", ".personality_migration", "installation_id")
 CODEX_DISABLED_RUNTIME_FEATURES = ("apps", "plugins")
 CODEX_SYSTEM_SKILLS_ROOT = ".system"
@@ -33,7 +29,6 @@ CODEX_MANAGED_RUNTIME_FEATURES = {
 def utcnow() -> datetime:
     """Return the current UTC timestamp."""
     return datetime.now(tz=UTC)
-
 
 def _codex_executable() -> str:
     configured = os.environ.get("MAVERICK_CODEX_COMMAND", "").strip()

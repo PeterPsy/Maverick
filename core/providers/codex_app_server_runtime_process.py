@@ -1,7 +1,5 @@
 """Stateful Codex app-server protocol client."""
-
 from __future__ import annotations
-
 from dataclasses import dataclass
 import queue
 import subprocess
@@ -15,8 +13,6 @@ from core.runtime.execution_events import RuntimeExecutionEventSink
 from core.runtime.process_control import terminate_runtime_process, unregister_runtime_process
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.skills.models import SkillDefinition
-
-
 @dataclass
 class CodexAppServerTurnResult:
     """Result of one Codex app-server turn."""

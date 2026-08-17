@@ -1,17 +1,11 @@
 """Runtime turn submission helpers shared by HTTP and future host surfaces."""
 from __future__ import annotations
-
 from threading import Lock
 import time
 from typing import TYPE_CHECKING, Callable
-
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.providers.service import resolve_runtime_engine_for_session
-from core.runtime.plain_hosted_text import (
-    HOSTED_TEXT_RUNTIME_PROVIDER_ID,
-    assert_plain_hosted_chat_input_allowed,
-    runtime_session_is_plain_hosted_chat,
-)
+from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, assert_plain_hosted_chat_input_allowed, runtime_session_is_plain_hosted_chat
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.provider_input_context import runtime_provider_input_text
@@ -52,17 +46,12 @@ from core.runtime.turn_submission_service_references import (
 from core.runtime.turn_submission_service_sync_hosted import execute_sync_plain_hosted_turn
 from core.runtime.turn_submission_service_runtime import _wait_for_session_prewarm
 from core.skills.service import resolve_invoked_runtime_skills
-
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
     from core.providers.provider_registry import ProviderRegistry
-
-
 _SESSION_EXECUTION_LOCKS: dict[str, Lock] = {}
 _SESSION_EXECUTION_LOCKS_LOCK = Lock()
 _ACTIVE_TURN_STATUSES = {"queued", "active", "waiting_for_tool_confirmation"}
-
-
 def submit_runtime_turn(
     state: PlatformState,
     *,

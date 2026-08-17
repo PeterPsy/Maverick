@@ -170,6 +170,7 @@ export type OpenRouterProviderRouting = {
   provider_id?: string;
   allow_fallbacks?: boolean;
   require_parameters?: boolean;
+  zdr?: boolean;
   sort?: '' | 'price' | 'throughput' | 'latency';
   data_collection?: '' | 'allow' | 'deny';
   quantizations?: string[];

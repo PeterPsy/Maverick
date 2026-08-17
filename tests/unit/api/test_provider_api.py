@@ -207,6 +207,7 @@ class ProviderApiTest(unittest.TestCase):
                         "mode": "only",
                         "provider_id": "deepinfra",
                         "allow_fallbacks": False,
+                        "zdr": True,
                     },
                 },
                 state=state,
@@ -230,6 +231,11 @@ class ProviderApiTest(unittest.TestCase):
                 "provider_id"
             ],
             "deepinfra",
+        )
+        self.assertTrue(
+            save_payload["hosted_text"]["selection"]["openrouter_provider_routing_by_model"]["hexgrad/kokoro-82m"][
+                "zdr"
+            ]
         )
         self.assertEqual(
             save_payload["hosted_text"]["model_settings"]["selected_model_id"],

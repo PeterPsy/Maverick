@@ -186,9 +186,20 @@ can store its own routing preference, such as automatic routing, preferring one
 upstream provider, allowing only one upstream provider, ignoring one upstream
 provider, fallback behavior, sorting preference, parameter requirements, data
 collection preference, and quantization filter. Chat does not expose these
-controls; it only selects the model. During OpenRouter execution, Maverick
+controls; Settings also exposes an explicit zero-data-retention filter. Chat
+only selects the model. During OpenRouter execution, Maverick
 translates the saved per-model preference into the OpenRouter `provider`
 request object.
+
+OpenRouter also has one separate agentic fake-data preview. It pins
+`deepseek/deepseek-v4-flash` to `deepinfra/fp8` through
+`openrouter-chat-completions` v1 and the shared `maverick-tool-loop`. Unlike
+plain hosted chat, this profile does not inherit workspace OpenRouter routing
+preferences: its immutable routing constraint always disables fallback,
+requires parameter support, denies data collection, requires ZDR, and requires
+FP8. It preserves tool-call and reasoning continuation only in encrypted
+provider-private state. The exact dated evidence and promotion requirements
+are in `docs/reference/openrouter_agentic_certification_matrix.md`.
 
 Speech-output OpenRouter models such as `hexgrad/kokoro-82m` are cataloged in
 Settings for provider routing metadata, but the current `plain_hosted_chat`

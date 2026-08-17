@@ -1,4 +1,4 @@
-"""Bounded HTTPS/SSE transport for the Google Gemini Interactions API."""
+"""Bounded HTTPS/SSE transport for certified OpenRouter agentic requests."""
 
 from __future__ import annotations
 
@@ -12,18 +12,18 @@ from urllib import request as urllib_request
 
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.agentic_sse import encode_bounded_json, read_bounded_json_sse
-from core.providers.google_interactions_models import (
-    GOOGLE_INTERACTIONS_ENDPOINT,
-    GoogleInteractionsProtocolError,
+from core.providers.openrouter_agentic_models import (
+    OPENROUTER_AGENTIC_ENDPOINT,
+    OpenRouterAgenticProtocolError,
 )
 
 
-MAX_GOOGLE_REQUEST_BYTES = 4 * 1_048_576
-MAX_GOOGLE_SSE_EVENT_BYTES = 2 * 1_048_576
-MAX_GOOGLE_STREAM_BYTES = 16 * 1_048_576
+MAX_OPENROUTER_REQUEST_BYTES = 4 * 1_048_576
+MAX_OPENROUTER_SSE_EVENT_BYTES = 2 * 1_048_576
+MAX_OPENROUTER_STREAM_BYTES = 16 * 1_048_576
 
 
-class GoogleInteractionsTransport(Protocol):
+class OpenRouterAgenticTransport(Protocol):
     def stream(
         self,
         *,
@@ -32,18 +32,27 @@ class GoogleInteractionsTransport(Protocol):
     ) -> AsyncIterator[dict[str, object]]: ...
 
 
-class GoogleInteractionsHttpTransport:
-    """POST to one pinned Google host and decode bounded SSE JSON events."""
+class OpenRouterAgenticHttpTransport:
+    """POST to one pinned OpenRouter path and decode bounded SSE JSON."""
 
-    def __init__(self, *, endpoint: str = GOOGLE_INTERACTIONS_ENDPOINT, timeout_seconds: int = 120) -> None:
+    def __init__(
+        self,
+        *,
+        endpoint: str = OPENROUTER_AGENTIC_ENDPOINT,
+        timeout_seconds: int = 120,
+    ) -> None:
         parsed = urllib_parse.urlsplit(endpoint)
         if (
             parsed.scheme != "https"
-            or parsed.hostname != "generativelanguage.googleapis.com"
+            or parsed.hostname != "openrouter.ai"
+            or parsed.port is not None
             or parsed.username is not None
             or parsed.password is not None
+            or parsed.path != "/api/v1/chat/completions"
+            or parsed.query
+            or parsed.fragment
         ):
-            raise ValueError("Google Interactions endpoint must use the pinned Google HTTPS host.")
+            raise ValueError("OpenRouter agentic endpoint must use the pinned HTTPS route.")
         self.endpoint = endpoint
         self.timeout_seconds = max(1, min(timeout_seconds, 300))
         self._opener = urllib_request.build_opener(_RejectRedirects())
@@ -60,9 +69,10 @@ class GoogleInteractionsHttpTransport:
             data=encoded,
             method="POST",
             headers={
-                "x-goog-api-key": credential.reveal(),
+                "Authorization": f"Bearer {credential.reveal()}",
                 "Content-Type": "application/json",
                 "Accept": "text/event-stream",
+                "X-OpenRouter-Metadata": "enabled",
                 "User-Agent": "Maverick-Agentic-Runtime/1",
             },
         )
@@ -73,20 +83,20 @@ class GoogleInteractionsHttpTransport:
                 request,
                 timeout=self.timeout_seconds,
             )
-            if urllib_parse.urlsplit(response.geturl()).hostname != "generativelanguage.googleapis.com":
-                raise GoogleInteractionsProtocolError("provider_request_rejected")
+            if response.geturl() != self.endpoint:
+                raise OpenRouterAgenticProtocolError("provider_request_rejected")
             content_type = str(response.headers.get("Content-Type") or "").lower()
             if "text/event-stream" not in content_type:
-                raise GoogleInteractionsProtocolError("provider_response_invalid")
+                raise OpenRouterAgenticProtocolError("provider_response_invalid")
             async for event in _read_sse(response):
                 yield event
-        except urllib_error.HTTPError as error:
-            raise GoogleInteractionsProtocolError(_http_reason(error.code)) from error
-        except (TimeoutError, socket.timeout) as error:
-            raise GoogleInteractionsProtocolError("provider_timeout") from error
-        except urllib_error.URLError as error:
-            reason = "provider_timeout" if isinstance(error.reason, socket.timeout) else "provider_unavailable"
-            raise GoogleInteractionsProtocolError(reason) from error
+        except urllib_error.HTTPError as cause:
+            raise OpenRouterAgenticProtocolError(_http_reason(cause.code)) from cause
+        except (TimeoutError, socket.timeout) as cause:
+            raise OpenRouterAgenticProtocolError("provider_timeout") from cause
+        except urllib_error.URLError as cause:
+            reason = "provider_timeout" if isinstance(cause.reason, socket.timeout) else "provider_unavailable"
+            raise OpenRouterAgenticProtocolError(reason) from cause
         finally:
             if response is not None:
                 await asyncio.to_thread(response.close)
@@ -94,30 +104,31 @@ class GoogleInteractionsHttpTransport:
 
 class _RejectRedirects(urllib_request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise GoogleInteractionsProtocolError("provider_request_rejected")
+        raise OpenRouterAgenticProtocolError("provider_request_rejected")
 
 
-async def _read_sse(response) -> AsyncIterator[dict[str, object]]:
-    async for payload in read_bounded_json_sse(
+def _read_sse(response) -> AsyncIterator[dict[str, object]]:
+    return read_bounded_json_sse(
         response,
-        max_event_bytes=MAX_GOOGLE_SSE_EVENT_BYTES,
-        max_stream_bytes=MAX_GOOGLE_STREAM_BYTES,
-        error=GoogleInteractionsProtocolError,
-    ):
-        yield payload
+        max_event_bytes=MAX_OPENROUTER_SSE_EVENT_BYTES,
+        max_stream_bytes=MAX_OPENROUTER_STREAM_BYTES,
+        error=OpenRouterAgenticProtocolError,
+    )
 
 
 def _encode_request(payload: dict[str, object]) -> bytes:
     return encode_bounded_json(
         payload,
-        max_bytes=MAX_GOOGLE_REQUEST_BYTES,
-        error=GoogleInteractionsProtocolError,
+        max_bytes=MAX_OPENROUTER_REQUEST_BYTES,
+        error=OpenRouterAgenticProtocolError,
     )
 
 
 def _http_reason(status_code: int) -> str:
     if status_code in {401, 403}:
         return "provider_authentication_failed"
+    if status_code == 404:
+        return "provider_no_eligible_endpoint"
     if status_code == 429:
         return "provider_rate_limited"
     if status_code in {408, 504}:

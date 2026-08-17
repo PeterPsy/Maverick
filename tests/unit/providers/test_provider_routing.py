@@ -404,6 +404,7 @@ class ProviderRoutingTest(unittest.TestCase):
                 "mode": "only",
                 "provider_id": "google-ai-studio",
                 "allow_fallbacks": False,
+                "zdr": True,
                 "sort": "latency",
             },
         )
@@ -418,6 +419,9 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertEqual(
             selection.openrouter_provider_routing_by_model["google/gemma-4-31b-it:free"]["provider_id"],
             "google-ai-studio",
+        )
+        self.assertTrue(
+            selection.openrouter_provider_routing_by_model["google/gemma-4-31b-it:free"]["zdr"]
         )
         self.assertEqual(
             selection.openrouter_provider_routing_by_model["nvidia/nemotron-3-ultra-550b-a55b:free"]["provider_id"],

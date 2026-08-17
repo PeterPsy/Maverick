@@ -348,7 +348,7 @@ const openrouterModels = [
     default_reasoning_effort: null,
     supported_reasoning_efforts: [],
     upstream_provider_options: [
-      { provider_id: 'wafer/fp4', label: 'Wafer', tag: 'wafer/fp4', quantization: 'fp4' }
+      { provider_id: 'deepinfra/fp8', label: 'DeepInfra', tag: 'deepinfra/fp8', quantization: 'fp8' }
     ]
   },
   {
@@ -635,14 +635,18 @@ assert.ok(html.includes('data-hosted-provider-save="gemini-3.1-flash-lite"'));
 assert.ok(!html.includes('settings-hosted-provider-model'));
 assert.ok(html.includes('OpenRouter upstream'));
 assert.ok(html.includes('data-openrouter-routing="mode"'));
+assert.ok(html.includes('data-openrouter-routing="zdr"'));
+assert.ok(html.includes('Require zero data retention'));
 assert.ok(html.includes('data-hosted-model-id="nvidia/nemotron-3-ultra-550b-a55b:free"'));
 assert.ok(html.includes('Nvidia'));
 assert.ok(html.includes('runtime engine remains Codex'));
 
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'mode', 'only');
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'provider_id', 'open-inference');
+updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'zdr', true);
 assert.equal(hostedProviderRoutingDraft(state, 'google/gemma-4-31b-it:free').mode, 'only');
 assert.equal(hostedProviderRoutingDraft(state, 'google/gemma-4-31b-it:free').provider_id, 'open-inference');
+assert.equal(hostedProviderRoutingDraft(state, 'google/gemma-4-31b-it:free').zdr, true);
 assert.equal(hostedProviderRoutingDraft(state, 'nvidia/nemotron-3-ultra-550b-a55b:free').mode, 'prefer');
 assert.equal(hostedProviderRoutingDraft(state, 'nvidia/nemotron-3-ultra-550b-a55b:free').provider_id, 'nvidia');
 """

@@ -40,6 +40,7 @@ def certified_test_provider_store(
     *,
     evidence,
     now: datetime,
+    validity_days: int = 1,
 ) -> ProviderDocumentStore:
     store = ProviderDocumentStore(
         ProviderCollections(
@@ -121,7 +122,7 @@ def certified_test_provider_store(
             evidence_digest=evidence.evidence_digest,
             evidence_refs=evidence.evidence_refs,
             issued_at=now,
-            expires_at=now + timedelta(days=1),
+            expires_at=now + timedelta(days=validity_days),
         ),
     )
     return store

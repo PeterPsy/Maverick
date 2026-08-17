@@ -26,6 +26,7 @@ from core.observability.store import ObservabilityDocumentStore, ObservabilityCo
 from core.providers.provider_codex import refresh_workspace_maverick_wrappers
 from core.providers.agentic_migration import migrate_agentic_runtime_schema
 from core.providers.google_agentic_profile import ensure_google_agentic_preview_profile
+from core.providers.openrouter_agentic_profile import ensure_openrouter_agentic_preview_profile
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import builtin_provider_registry
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
@@ -248,6 +249,11 @@ def bootstrap_platform_state(
     )
     if register_builtin_provider_definitions:
         ensure_google_agentic_preview_profile(
+            provider_store,
+            adapter=hosted_adapter,
+            now=now,
+        )
+        ensure_openrouter_agentic_preview_profile(
             provider_store,
             adapter=hosted_adapter,
             now=now,

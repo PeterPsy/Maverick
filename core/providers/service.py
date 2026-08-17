@@ -546,6 +546,8 @@ def _normalize_openrouter_provider_routing(value: dict[str, object] | None) -> d
         normalized["provider_id"] = provider_id
     normalized["allow_fallbacks"] = bool(value.get("allow_fallbacks", True))
     normalized["require_parameters"] = bool(value.get("require_parameters", False))
+    if "zdr" in value:
+        normalized["zdr"] = bool(value.get("zdr"))
     if sort:
         normalized["sort"] = sort
     if data_collection:

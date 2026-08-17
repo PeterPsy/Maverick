@@ -26,11 +26,17 @@ from core.runtime.hosted_agentic_models import (
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _ALLOWED_PROVIDER_ERRORS = {
     "provider_authentication_failed",
+    "provider_no_eligible_endpoint",
+    "provider_parallel_tool_calls_forbidden",
+    "provider_private_state_invalid",
     "provider_rate_limited",
     "provider_request_rejected",
     "provider_response_invalid",
+    "provider_routing_not_certified",
     "provider_timeout",
+    "provider_tool_result_pairing_invalid",
     "provider_unavailable",
+    "provider_upstream_not_certified",
 }
 
 

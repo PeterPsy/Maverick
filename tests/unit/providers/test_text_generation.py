@@ -194,7 +194,7 @@ class HostedTextGenerationTest(unittest.TestCase):
                     "allow_fallbacks": False,
                     "require_parameters": True,
                     "sort": "latency",
-                    "data_collection": "deny",
+                    "data_collection": "deny", "zdr": True,
                     "quantizations": ["bf16"],
                 },
             )
@@ -207,7 +207,7 @@ class HostedTextGenerationTest(unittest.TestCase):
                 "allow_fallbacks": False,
                 "require_parameters": True,
                 "sort": "latency",
-                "data_collection": "deny",
+                "data_collection": "deny", "zdr": True,
                 "quantizations": ["bf16"],
             },
         )

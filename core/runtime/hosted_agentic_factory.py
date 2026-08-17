@@ -19,6 +19,16 @@ from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_CONTENT_TYPE,
     GOOGLE_INTERACTIONS_SCHEMA_VERSION,
 )
+from core.providers.openrouter_agentic_client import (
+    OpenRouterAgenticClient,
+    openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+)
+from core.providers.openrouter_agentic_models import (
+    OPENROUTER_AGENTIC_CODEC_ID,
+    OPENROUTER_AGENTIC_CODEC_VERSION,
+    OPENROUTER_AGENTIC_CONTENT_TYPE,
+    OPENROUTER_AGENTIC_SCHEMA_VERSION,
+)
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.runtime.authority import (
@@ -51,7 +61,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "1"
+HOSTED_AGENTIC_ADAPTER_VERSION = "2"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -166,6 +176,21 @@ def _provider_runtimes() -> HostedProviderRuntimeRegistry:
                 content_type=GOOGLE_INTERACTIONS_CONTENT_TYPE,
             ),
             cost_estimator=google_36_flash_request_ceiling_microusd,
+        )
+    )
+    registry.register(
+        HostedProviderRuntime(
+            model_provider_id="openrouter",
+            provider_protocol="openrouter-chat-completions",
+            provider_api_version="v1",
+            client=OpenRouterAgenticClient(),
+            private_codec=HostedProviderPrivateCodec(
+                codec_id=OPENROUTER_AGENTIC_CODEC_ID,
+                codec_version=OPENROUTER_AGENTIC_CODEC_VERSION,
+                schema_version=OPENROUTER_AGENTIC_SCHEMA_VERSION,
+                content_type=OPENROUTER_AGENTIC_CONTENT_TYPE,
+            ),
+            cost_estimator=openrouter_deepinfra_v4_flash_request_ceiling_microusd,
         )
     )
     return registry

@@ -26,6 +26,7 @@ type HostedRoutingDraft = {
   quantization: string;
   requireParameters: boolean;
   sort: '' | 'price' | 'throughput' | 'latency';
+  zdr: boolean;
 };
 
 type HostedProviderModelGroup = {
@@ -163,6 +164,8 @@ export function updateHostedProviderRoutingDraft(
     draft.allowFallbacks = value;
   } else if (field === 'require_parameters' && typeof value === 'boolean') {
     draft.requireParameters = value;
+  } else if (field === 'zdr' && typeof value === 'boolean') {
+    draft.zdr = value;
   } else if (field === 'sort' && typeof value === 'string' && ['', 'price', 'throughput', 'latency'].includes(value)) {
     draft.sort = value as HostedRoutingDraft['sort'];
   } else if (field === 'data_collection' && typeof value === 'string' && ['', 'allow', 'deny'].includes(value)) {
@@ -181,6 +184,7 @@ export function hostedProviderRoutingDraft(state: SettingsPanelState, modelId = 
     provider_id: draft.providerId || undefined,
     allow_fallbacks: draft.allowFallbacks,
     require_parameters: draft.requireParameters,
+    zdr: draft.zdr,
     sort: draft.sort,
     data_collection: draft.dataCollection,
     quantizations: draft.quantization ? [draft.quantization] : []
@@ -899,6 +903,7 @@ function hostedProviderModelAccordionHtml(
     <div class="settings-platform-checks">
       <label><input type="checkbox" data-openrouter-routing="allow_fallbacks" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.allowFallbacks ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Allow OpenRouter fallback</label>
       <label><input type="checkbox" data-openrouter-routing="require_parameters" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.requireParameters ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Require supported parameters</label>
+      <label><input type="checkbox" data-openrouter-routing="zdr" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.zdr ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Require zero data retention</label>
     </div>
     `
         : ''
@@ -1184,6 +1189,7 @@ function openRouterRoutingForModel(settings: PlatformSettings | null, modelId: s
     provider_id: routing?.provider_id || '',
     allow_fallbacks: routing?.allow_fallbacks !== false,
     require_parameters: routing?.require_parameters === true,
+    zdr: routing?.zdr === true,
     sort: routing?.sort || '',
     data_collection: routing?.data_collection || '',
     quantizations: routing?.quantizations || []
@@ -1198,6 +1204,7 @@ function hostedRoutingChanged(state: SettingsPanelState, settings: PlatformSetti
     (saved.provider_id || '') !== (draft.provider_id || '') ||
     (saved.allow_fallbacks !== false) !== (draft.allow_fallbacks !== false) ||
     (saved.require_parameters === true) !== (draft.require_parameters === true) ||
+    (saved.zdr === true) !== (draft.zdr === true) ||
     (saved.sort || '') !== (draft.sort || '') ||
     (saved.data_collection || '') !== (draft.data_collection || '') ||
     (saved.quantizations?.[0] || '') !== (draft.quantizations?.[0] || '')
@@ -1233,7 +1240,8 @@ function routingDraftFromRouting(routing: OpenRouterProviderRouting): HostedRout
     providerId: routing.provider_id || '',
     quantization: routing.quantizations?.[0] || '',
     requireParameters: routing.require_parameters === true,
-    sort: routing.sort || ''
+    sort: routing.sort || '',
+    zdr: routing.zdr === true
   };
 }
 
@@ -1242,6 +1250,7 @@ function defaultHostedRoutingDraft(): HostedRoutingDraft {
     mode: 'auto',
     allow_fallbacks: true,
     require_parameters: false,
+    zdr: false,
     sort: '',
     data_collection: '',
     quantizations: []

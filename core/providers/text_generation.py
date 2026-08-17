@@ -752,6 +752,8 @@ def _openrouter_provider_payload(value: dict[str, object] | None) -> dict[str, o
         payload["allow_fallbacks"] = bool(value.get("allow_fallbacks"))
     if value.get("require_parameters") is not None:
         payload["require_parameters"] = bool(value.get("require_parameters"))
+    if "zdr" in value:
+        payload["zdr"] = bool(value.get("zdr"))
     sort = str(value.get("sort") or "").strip()
     if sort in {"price", "throughput", "latency"}:
         payload["sort"] = sort

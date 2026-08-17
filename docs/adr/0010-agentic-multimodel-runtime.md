@@ -168,6 +168,15 @@ parameters, denies data collection, and enforces ZDR when the egress policy
 requires it. No eligible upstream means no request. Effective upstream drift is
 verified against the certificate.
 
+The first certified OpenRouter preview uses Chat Completions v1, DeepSeek V4
+Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
+tag; response verification additionally requires OpenRouter's effective
+provider identity and terminal router metadata before the continuation is
+accepted as complete. The shared hosted adapter is version 2 for this codec
+bundle. Google preview revision 1, which was certified against adapter version
+1 bytes, is suspended and replaced by revision 2 rather than silently reusing
+its certificate.
+
 ## Concrete persistence map
 
 The first implementation uses the existing JSON/Mongo control-plane adapter

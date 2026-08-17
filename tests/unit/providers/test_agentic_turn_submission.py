@@ -86,7 +86,11 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             now=timestamp,
         )
         provider_store = certified_test_provider_store(
-            binding, adapter, evidence=evidence, now=timestamp
+            binding,
+            adapter,
+            evidence=evidence,
+            now=timestamp,
+            validity_days=30,
         )
         definition = replace(
             builtin_provider_registry().get_provider_definition("codex"),

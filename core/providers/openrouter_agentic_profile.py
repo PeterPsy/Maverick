@@ -1,8 +1,7 @@
-"""Immutable preview profile for certified Google Gemini Interactions."""
+"""Immutable fake-data preview for certified OpenRouter agentic execution."""
 
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import UTC, datetime
 
 from core.providers.agentic_models import (
@@ -12,20 +11,26 @@ from core.providers.agentic_models import (
     RoutingConstraint,
 )
 from core.providers.errors import ProviderNotFoundError
-from core.providers.google_agentic_certification import ensure_google_preview_certificate
+from core.providers.openrouter_agentic_certification import (
+    ensure_openrouter_preview_certificate,
+)
+from core.providers.openrouter_agentic_models import (
+    OPENROUTER_AGENTIC_ENDPOINT_ID,
+    OPENROUTER_AGENTIC_MODEL_ID,
+    OPENROUTER_AGENTIC_UPSTREAM_ID,
+)
 from core.providers.store import ProviderStore
 
 
-GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "2"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "1"
-GOOGLE_AGENTIC_CERTIFICATE_ID = (
-    f"capability-certificate:{GOOGLE_AGENTIC_PROFILE_ID}:{GOOGLE_AGENTIC_PROFILE_REVISION}"
+OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "1"
+OPENROUTER_AGENTIC_CERTIFICATE_ID = (
+    f"capability-certificate:{OPENROUTER_AGENTIC_PROFILE_ID}:{OPENROUTER_AGENTIC_PROFILE_REVISION}"
 )
 
 
-def google_agentic_preview_policy() -> AgenticRuntimePolicy:
-    """Allow only bounded reads over public or explicitly synthetic data."""
+def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
+    """Allow bounded reads over public or explicitly synthetic data only."""
     return AgenticRuntimePolicy(
         max_steps_per_turn=8,
         max_tool_calls_per_turn=4,
@@ -35,7 +40,7 @@ def google_agentic_preview_policy() -> AgenticRuntimePolicy:
         max_total_tool_result_bytes=524_288,
         max_input_tokens=262_144,
         max_output_tokens=16_384,
-        max_estimated_cost_microusd=250_000,
+        max_estimated_cost_microusd=25_000,
         allowed_surface_kinds=("core-capability",),
         tool_handle_mode="exact",
         allowed_tool_handles=("core-capability:filesystem.read",),
@@ -48,40 +53,41 @@ def google_agentic_preview_policy() -> AgenticRuntimePolicy:
     )
 
 
-def google_interactions_routing_constraint() -> RoutingConstraint:
+def openrouter_agentic_routing_constraint() -> RoutingConstraint:
+    """Pin every OpenRouter router control used by the certified profile."""
     return RoutingConstraint(
-        endpoint_id="google-generativelanguage-v1-interactions",
-        allowed_upstream_ids=(),
+        endpoint_id=OPENROUTER_AGENTIC_ENDPOINT_ID,
+        allowed_upstream_ids=(OPENROUTER_AGENTIC_UPSTREAM_ID,),
         allow_fallbacks=False,
         require_parameters=True,
-        data_collection_policy="provider_contract",
-        require_zdr=False,
-        allowed_quantizations=(),
+        data_collection_policy="deny",
+        require_zdr=True,
+        allowed_quantizations=("fp8",),
     )
 
 
-def ensure_google_agentic_preview_profile(
+def ensure_openrouter_agentic_preview_profile(
     store: ProviderStore,
     *,
     adapter: object,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Publish preview metadata and evidence without enabling a workspace binding."""
+    """Publish preview metadata and evidence without enabling a binding."""
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
-        definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-        revision=GOOGLE_AGENTIC_PROFILE_REVISION,
-        display_name="Google Gemini 3.6 Flash · fake-data preview",
+        definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
+        revision=OPENROUTER_AGENTIC_PROFILE_REVISION,
+        display_name="OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · fake-data preview",
         runtime_engine_id="maverick-tool-loop",
-        model_provider_id="google-ai-studio",
-        model_id="gemini-3.6-flash",
-        provider_protocol="google-interactions",
+        model_provider_id="openrouter",
+        model_id=OPENROUTER_AGENTIC_MODEL_ID,
+        provider_protocol="openrouter-chat-completions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
         adapter_version_constraint="==2",
-        routing_constraint=google_interactions_routing_constraint(),
-        policy_ceiling=google_agentic_preview_policy(),
-        capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,
+        routing_constraint=openrouter_agentic_routing_constraint(),
+        policy_ceiling=openrouter_agentic_preview_policy(),
+        capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,
         created_at=timestamp,
     )
     try:
@@ -102,25 +108,5 @@ def ensure_google_agentic_preview_profile(
             ),
             expected_revision=None,
         )
-    ensure_google_preview_certificate(store, definition=stored, adapter=adapter)
-    _suspend_previous_revision(store, now=timestamp)
+    ensure_openrouter_preview_certificate(store, definition=stored, adapter=adapter)
     return stored
-
-
-def _suspend_previous_revision(store: ProviderStore, *, now: datetime) -> None:
-    """Prevent selection of a revision certified against adapter v1 bytes."""
-    status = store.get_agentic_profile_definition_status(
-        GOOGLE_AGENTIC_PROFILE_ID,
-        GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION,
-    )
-    if status is None or status.rollout_status in {"disabled", "suspended"}:
-        return
-    store.save_agentic_profile_definition_status(
-        replace(
-            status,
-            rollout_status="suspended",
-            revision=status.revision + 1,
-            updated_at=now,
-        ),
-        expected_revision=status.revision,
-    )

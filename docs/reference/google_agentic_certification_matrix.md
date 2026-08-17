@@ -3,7 +3,7 @@
 Status date: 2026-08-16  
 Rollout: preview, fake-data-only  
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==1`
+Adapter: `maverick-hosted-tool-loop==2`
 
 ## Certified combination
 

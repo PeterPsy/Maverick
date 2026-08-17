@@ -36,6 +36,9 @@ export function runtimeActivityLabel({
   if (activeTurn?.status === "queued") {
     return "Queued";
   }
+  if (activeTurn?.status === "waiting_for_tool_confirmation") {
+    return "Waiting for tool confirmation";
+  }
   if (activeTurn?.status && activeTurn.status !== "active") {
     return "";
   }
@@ -100,6 +103,9 @@ function toolActivityLabel(event: RuntimeEvent): string | null {
   }
   if (status === "failed") {
     return "Tool failed";
+  }
+  if (status === "awaiting_confirmation") {
+    return "Waiting for tool confirmation";
   }
   if (status !== "started" && status !== "updated") {
     return null;

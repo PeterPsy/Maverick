@@ -10,6 +10,7 @@ from core.observability.service import record_platform_audit, record_platform_ev
 from core.providers.agentic_profiles import (
     ensure_codex_workspace_profile,
     provider_selection_from_execution_binding,
+    resolve_workspace_agentic_profile,
 )
 from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.errors import (
@@ -793,8 +794,7 @@ def resolve_provider_for_runtime_session(
             if binding is None:
                 raise ProviderSelectionError("credential_binding_unavailable")
         return definition, selection
-    service = ProviderSelectionService(store, active_registry)
-    return service.resolve_runtime_backend_provider(workspace_id=session.workspace_id)
+    raise ProviderSelectionError("runtime_execution_binding_missing")
 
 
 def resolve_runtime_backend_for_session(
@@ -875,11 +875,18 @@ def resolve_provider_for_workspace(
     registry: ProviderRegistry | None = None,
     codex_command: str | None = None,
 ) -> tuple[ProviderDefinition, ProviderSelection | None]:
-    """Resolve the effective provider selection for one workspace."""
-    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
-    register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
-    service = ProviderSelectionService(store, active_registry)
-    return service.resolve_runtime_backend_provider(workspace_id=workspace_id)
+    """Resolve the default agentic binding as a compatibility projection."""
+    status = resolve_workspace_provider_status(
+        store,
+        workspace_id=workspace_id,
+        registry=registry,
+        codex_command=codex_command,
+    )
+    if status.active_provider is None or status.selection is None:
+        raise ProviderSelectionError(
+            status.blocked_detail or status.blocked_reason or "no_provider_configured"
+        )
+    return status.active_provider, status.selection
 
 
 def resolve_workspace_provider_status(
@@ -890,7 +897,7 @@ def resolve_workspace_provider_status(
     codex_command: str | None = None,
     refresh_model_catalog: bool = False,
 ) -> WorkspaceProviderStatus:
-    """Return provider selection state without falling back to an implicit backend."""
+    """Project the workspace-default agentic binding for legacy status consumers."""
     active_registry = effective_provider_registry(
         store,
         registry=registry,
@@ -898,40 +905,59 @@ def resolve_workspace_provider_status(
         refresh_model_catalog=refresh_model_catalog,
     )
     available_providers = active_registry.list_provider_definitions()
-    selection = store.get_provider_selection(workspace_id)
-    if selection is None:
+    try:
+        profile, binding = resolve_workspace_agentic_profile(
+            store,
+            workspace_id=workspace_id,
+        )
+    except ProviderError as error:
+        reason = str(error)
         return WorkspaceProviderStatus(
             workspace_id=workspace_id,
             configured=False,
             active_provider=None,
             selection=None,
             available_providers=available_providers,
-            blocked_reason="no_provider_configured",
+            blocked_reason=(
+                "no_provider_configured"
+                if reason in {
+                    "workspace_profile_binding_disabled",
+                    "profile_definition_invalid",
+                }
+                else "provider_unavailable"
+            ),
+            blocked_detail=reason,
         )
-    service = ProviderSelectionService(store, active_registry)
     try:
-        definition, resolved_selection = service.resolve_runtime_backend_provider(workspace_id=workspace_id)
-    except ProviderSelectionError as error:
-        blocked_reason = "no_provider_configured" if str(error) == "no_provider_configured" else "provider_unavailable"
-        return WorkspaceProviderStatus(
-            workspace_id=workspace_id,
-            configured=True,
-            active_provider=None,
-            selection=selection,
-            available_providers=available_providers,
-            blocked_reason=blocked_reason,
-            blocked_detail=str(error),
-        )
+        definition = active_registry.get_provider_definition(profile.runtime_engine_id)
     except ProviderError as error:
         return WorkspaceProviderStatus(
             workspace_id=workspace_id,
             configured=True,
             active_provider=None,
-            selection=selection,
+            selection=None,
             available_providers=available_providers,
             blocked_reason="provider_unavailable",
             blocked_detail=str(error),
         )
+    model_option = next(
+        (item for item in definition.model_options if item.model_id == profile.model_id),
+        None,
+    )
+    resolved_selection = ProviderSelection(
+        selection_id=f"binding:{binding.binding_id}:{binding.revision}",
+        workspace_id=workspace_id,
+        provider_id=profile.runtime_engine_id,
+        binding_id=binding.credential_binding_id,
+        selection_scope="workspace_default",
+        selection_reason="workspace agentic profile binding projection",
+        created_at=binding.created_at,
+        updated_at=binding.updated_at,
+        model_id=profile.model_id,
+        model_reasoning_effort=(
+            None if model_option is None else model_option.default_reasoning_effort
+        ),
+    )
     return WorkspaceProviderStatus(
         workspace_id=workspace_id,
         configured=True,

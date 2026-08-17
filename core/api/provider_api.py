@@ -11,8 +11,14 @@ from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_provider_selection_authority
 from core.providers.models import ProviderDefinition, ProviderHostedSelection, ProviderSelection, ProviderSpeechSelection
-from core.providers.errors import ProviderNotFoundError
+from core.providers.errors import ProviderError, ProviderNotFoundError
 from core.providers.capability_models import CapabilityCertificate
+from core.providers.agentic_models import ActorSelectionPolicy
+from core.providers.agentic_workspace_admin import (
+    configure_workspace_agentic_default,
+    save_workspace_agentic_binding,
+)
+from core.providers.agentic_workspace_policy import human_actor_selection_allowed
 from core.providers.certificate_projection import certificate_profile_status
 from core.providers.payloads import (
     hosted_provider_selection_payload,
@@ -32,7 +38,6 @@ from core.providers.service import (
     activate_speech_provider,
     configure_hosted_model_provider,
     configure_speech_provider,
-    configure_workspace_provider,
     effective_provider_registry,
     read_workspace_provider_subscription_usage,
     resolve_workspace_provider_status,
@@ -355,6 +360,7 @@ def workspace_provider_status(
     *,
     workspace_id: str,
     refresh_model_catalog: bool = False,
+    actor_roles: tuple[str, str, str] | None = None,
 ) -> dict[str, object]:
     """Return the active provider state for one workspace."""
     status = resolve_workspace_provider_status(
@@ -369,7 +375,11 @@ def workspace_provider_status(
         "active_provider": active_provider,
         "selection": provider_selection_payload(status.selection),
         "model_settings": None if status.active_provider is None else provider_model_settings_payload(status.active_provider, status.selection),
-        "agentic_profiles": workspace_agentic_profile_status(state, workspace_id=workspace_id),
+        "agentic_profiles": workspace_agentic_profile_status(
+            state,
+            workspace_id=workspace_id,
+            actor_roles=actor_roles,
+        ),
         "hosted_text": workspace_hosted_text_status(state, workspace_id=workspace_id),
         "speech_stt": workspace_speech_stt_status(state, workspace_id=workspace_id),
         "blocked_reason": status.blocked_reason,
@@ -378,7 +388,12 @@ def workspace_provider_status(
     }
 
 
-def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+def workspace_agentic_profile_status(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    actor_roles: tuple[str, str, str] | None = None,
+) -> dict[str, object]:
     """Return selectable workspace profiles without credential or authority details."""
     items: list[dict[str, object]] = []
     registry = effective_provider_registry(
@@ -386,6 +401,13 @@ def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str)
         registry=getattr(state, "provider_registry", None),
     )
     for binding in state.provider_store.list_workspace_agentic_profile_bindings(workspace_id):
+        if actor_roles is not None and not human_actor_selection_allowed(
+            binding,
+            platform_role=actor_roles[0],
+            user_id=actor_roles[1],
+            workspace_role=actor_roles[2],
+        ):
+            continue
         try:
             definition = state.provider_store.get_agentic_profile_definition(
                 binding.definition_id,
@@ -430,6 +452,10 @@ def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str)
                 "runtime_engine_id": definition.runtime_engine_id,
                 "model_provider_id": definition.model_provider_id,
                 "model_id": definition.model_id,
+                "provider_protocol": definition.provider_protocol,
+                "provider_api_version": definition.provider_api_version,
+                "adapter_id": definition.adapter_id,
+                "adapter_version_constraint": definition.adapter_version_constraint,
                 "rollout_status": None if status is None else status.rollout_status,
                 "enabled": binding.enabled,
                 "is_default": binding.is_default,
@@ -437,6 +463,15 @@ def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str)
                 "capability_certificate_id": definition.capability_certificate_id,
                 "certificate": certificate_payload,
                 "certified": bool(certificate_payload and certificate_payload["effective_status"] == "active"),
+                "egress_policy_id": binding.egress_policy_id,
+                "egress_policy_revision": binding.egress_policy_revision,
+                "allowed_remote_data_classes": binding.workspace_policy_ceiling.allowed_remote_data_classes,
+                "tool_handle_mode": binding.workspace_policy_ceiling.tool_handle_mode,
+                "allowed_tool_handles": binding.workspace_policy_ceiling.allowed_tool_handles,
+                "max_estimated_cost_microusd": binding.workspace_policy_ceiling.max_estimated_cost_microusd,
+                "requires_synthetic_data_declaration": (
+                    binding.egress_policy_id == "fake-data-remote-preview"
+                ),
                 "policy_ceiling_digest": canonical_digest(binding.workspace_policy_ceiling),
             }
         )
@@ -446,6 +481,123 @@ def workspace_agentic_profile_status(state: PlatformState, *, workspace_id: str)
         "default_binding_id": None if default is None else default["workspace_profile_binding_id"],
         "items": items,
     }
+
+
+def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+    """Return the redaction-safe administration catalog for Settings."""
+    registry = effective_provider_registry(
+        state.provider_store,
+        registry=getattr(state, "provider_registry", None),
+    )
+    bindings = state.provider_store.list_workspace_agentic_profile_bindings(workspace_id)
+    bindings_by_definition = {
+        (item.definition_id, item.definition_revision): item for item in bindings
+    }
+    items: list[dict[str, object]] = []
+    for definition in state.provider_store.list_agentic_profile_definitions():
+        status = state.provider_store.get_agentic_profile_definition_status(
+            definition.definition_id,
+            definition.revision,
+        )
+        binding = bindings_by_definition.get((definition.definition_id, definition.revision))
+        certificate_payload = None
+        try:
+            certificate = state.provider_store.get_capability_certificate(
+                definition.capability_certificate_id
+            )
+            certificate_status = state.provider_store.get_capability_certificate_status(
+                certificate.certificate_id
+            )
+            certificate_payload = capability_certificate_payload(certificate, certificate_status)
+            certificate_payload["effective_status"] = certificate_profile_status(
+                certificate,
+                certificate_status,
+                definition=definition,
+                adapter=registry.get_agentic_runtime_adapter(definition.runtime_engine_id),
+            )
+        except ProviderNotFoundError:
+            pass
+        credential_bindings = [
+            provider_credential_binding_payload(item)
+            for item in state.provider_store.list_provider_bindings(
+                provider_id=definition.model_provider_id
+            )
+            if item.status == "active" and item.workspace_id in {None, workspace_id}
+        ]
+        blocked_reason = _agentic_definition_blocked_reason(
+            definition=definition,
+            rollout_status=None if status is None else status.rollout_status,
+            binding=binding,
+            certificate=certificate_payload,
+            credential_bindings=credential_bindings,
+            registry=registry,
+        )
+        items.append(
+            {
+                "definition_id": definition.definition_id,
+                "definition_revision": definition.revision,
+                "display_name": definition.display_name,
+                "runtime_engine_id": definition.runtime_engine_id,
+                "model_provider_id": definition.model_provider_id,
+                "model_id": definition.model_id,
+                "provider_protocol": definition.provider_protocol,
+                "provider_api_version": definition.provider_api_version,
+                "adapter_id": definition.adapter_id,
+                "adapter_version_constraint": definition.adapter_version_constraint,
+                "routing_constraint": asdict(definition.routing_constraint),
+                "profile_policy_ceiling": asdict(definition.policy_ceiling),
+                "rollout_status": None if status is None else status.rollout_status,
+                "certificate": certificate_payload,
+                "credential_bindings": credential_bindings,
+                "binding": None if binding is None else {
+                    "binding_id": binding.binding_id,
+                    "revision": binding.revision,
+                    "credential_binding_id": binding.credential_binding_id,
+                    "enabled": binding.enabled,
+                    "is_default": binding.is_default,
+                    "actor_policy": asdict(binding.actor_policy),
+                    "workspace_policy_ceiling": asdict(binding.workspace_policy_ceiling),
+                    "egress_policy_id": binding.egress_policy_id,
+                    "egress_policy_revision": binding.egress_policy_revision,
+                    "created_at": binding.created_at,
+                    "updated_at": binding.updated_at,
+                },
+                "health": "healthy" if blocked_reason is None else "blocked",
+                "blocked_reason": blocked_reason,
+            }
+        )
+    items.sort(
+        key=lambda item: (
+            not bool((item.get("binding") or {}).get("is_default")),
+            str(item["display_name"]),
+        )
+    )
+    return {"workspace_id": workspace_id, "items": items}
+
+
+def _agentic_definition_blocked_reason(
+    *, definition, rollout_status, binding, certificate, credential_bindings, registry
+) -> str | None:
+    if rollout_status in {None, "disabled", "suspended"}:
+        return "profile_definition_invalid"
+    if certificate is None:
+        return "certificate_missing"
+    if certificate.get("effective_status") != "active":
+        return f"certificate_{certificate.get('effective_status') or 'invalid'}"
+    try:
+        provider = registry.get_provider_definition(definition.model_provider_id)
+    except ProviderNotFoundError:
+        return "model_provider_unavailable"
+    if binding is None:
+        return "workspace_binding_missing"
+    if not binding.enabled:
+        return "workspace_binding_disabled"
+    if provider.requires_credentials and not any(
+        item and item.get("binding_id") == binding.credential_binding_id
+        for item in credential_bindings
+    ):
+        return "credential_binding_unavailable"
+    return None
 
 
 def capability_certificate_payload(certificate: CapabilityCertificate, status) -> dict[str, object]:
@@ -481,10 +633,19 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
     }
 
 
-def workspace_runtime_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+def workspace_runtime_status(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    actor_roles: tuple[str, str, str] | None = None,
+) -> dict[str, object]:
     """Return runtime status for one workspace."""
     return {
-        **workspace_provider_status(state, workspace_id=workspace_id),
+        **workspace_provider_status(
+            state,
+            workspace_id=workspace_id,
+            actor_roles=actor_roles,
+        ),
         "sessions": [
             runtime_session_payload(session)
             for session in state.runtime_store.list_sessions(workspace_id)
@@ -522,6 +683,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         "/api/providers/usage",
         "/api/providers/agentic/profile-definitions",
         "/api/providers/agentic/certificates",
+        "/api/providers/agentic/workspace-bindings",
         "/api/runtime/status",
     }:
         return None
@@ -529,6 +691,85 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
     if not isinstance(context_or_response, RequestSession):
         return context_or_response
     context = context_or_response
+    if path == "/api/providers/agentic/workspace-bindings" and method == "POST":
+        from core.api.http import read_json_body
+
+        try:
+            require_provider_selection_authority(
+                state.workspace_store,
+                user=context.user,
+                workspace_id=context.workspace_id,
+            )
+        except AuthorizationError as error:
+            return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
+        body = read_json_body(environ)
+        definition_id = str(body.get("definition_id") or "").strip()
+        definition_revision = str(body.get("definition_revision") or "").strip()
+        if not definition_id or not definition_revision:
+            return json_response(
+                start_response,
+                {"error": "agentic_profile_definition_required"},
+                status="400 Bad Request",
+            )
+        actor_payload = body.get("actor_policy")
+        policy_patch = body.get("policy_patch")
+        if not isinstance(actor_payload, dict) or not isinstance(policy_patch, dict):
+            return json_response(
+                start_response,
+                {"error": "agentic_workspace_policy_invalid"},
+                status="400 Bad Request",
+            )
+        try:
+            actor_policy = _actor_selection_policy_from_payload(actor_payload)
+            saved = save_workspace_agentic_binding(
+                state.provider_store,
+                effective_provider_registry(
+                    state.provider_store,
+                    registry=getattr(state, "provider_registry", None),
+                ),
+                workspace_id=context.workspace_id,
+                definition_id=definition_id,
+                definition_revision=definition_revision,
+                binding_id=str(body.get("binding_id") or "").strip() or None,
+                expected_revision=(
+                    body.get("expected_revision")
+                    if isinstance(body.get("expected_revision"), int)
+                    and not isinstance(body.get("expected_revision"), bool)
+                    else None
+                ),
+                credential_binding_id=(
+                    str(body.get("credential_binding_id") or "").strip() or None
+                ),
+                enabled=body.get("enabled") is True,
+                is_default=body.get("is_default") is True,
+                actor_policy=actor_policy,
+                policy_patch=policy_patch,
+                confirm_fake_data_only_workspace=(
+                    body.get("confirm_fake_data_only_workspace") is True
+                ),
+                observability_store=state.observability_store,
+            )
+        except (ProviderError, ValueError) as error:
+            return json_response(
+                start_response,
+                {"error": str(error)},
+                status="409 Conflict" if "revision_conflict" in str(error) else "400 Bad Request",
+            )
+        return json_response(
+            start_response,
+            {
+                "binding_id": saved.binding_id,
+                "binding_revision": saved.revision,
+                "agentic_admin": workspace_agentic_admin_status(
+                    state,
+                    workspace_id=context.workspace_id,
+                ),
+                "agentic_profiles": workspace_agentic_profile_status(
+                    state,
+                    workspace_id=context.workspace_id,
+                ),
+            },
+        )
     if path == "/api/providers/hosted/active" and method == "POST":
         from core.api.http import read_json_body
 
@@ -629,7 +870,14 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             )
         except Exception as error:
             return json_response(start_response, {"error": str(error)}, status="400 Bad Request")
-        return json_response(start_response, workspace_provider_status(state, workspace_id=context.workspace_id))
+        return json_response(
+            start_response,
+            workspace_provider_status(
+                state,
+                workspace_id=context.workspace_id,
+                actor_roles=_request_actor_roles(state, context),
+            ),
+        )
     if path == "/api/providers/hosted/selection" and method == "POST":
         from core.api.http import read_json_body
 
@@ -658,7 +906,14 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             )
         except Exception as error:
             return json_response(start_response, {"error": str(error)}, status="400 Bad Request")
-        return json_response(start_response, workspace_provider_status(state, workspace_id=context.workspace_id))
+        return json_response(
+            start_response,
+            workspace_provider_status(
+                state,
+                workspace_id=context.workspace_id,
+                actor_roles=_request_actor_roles(state, context),
+            ),
+        )
     if path == "/api/providers/active" and method == "POST":
         from core.api.http import read_json_body
 
@@ -673,8 +928,13 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         model_id = str(body.get("model_id") or "").strip() or None
         model_reasoning_effort = str(body.get("model_reasoning_effort") or "").strip() or None
         try:
-            configure_workspace_provider(
+            configure_workspace_agentic_default(
                 state.provider_store,
+                effective_provider_registry(
+                    state.provider_store,
+                    registry=getattr(state, "provider_registry", None),
+                    refresh_model_catalog=True,
+                ),
                 workspace_id=context.workspace_id,
                 provider_id=provider_id,
                 model_id=model_id,
@@ -683,7 +943,14 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             )
         except Exception as error:
             return json_response(start_response, {"error": str(error)}, status="400 Bad Request")
-        return json_response(start_response, workspace_provider_status(state, workspace_id=context.workspace_id))
+        return json_response(
+            start_response,
+            workspace_provider_status(
+                state,
+                workspace_id=context.workspace_id,
+                actor_roles=_request_actor_roles(state, context),
+            ),
+        )
     if method != "GET":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     if path == "/api/providers/usage":
@@ -700,6 +967,18 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 "items": [provider_subscription_usage_payload(usage) for usage in usages],
             },
         )
+    if path in {
+        "/api/providers/agentic/profile-definitions",
+        "/api/providers/agentic/certificates",
+    }:
+        try:
+            require_provider_selection_authority(
+                state.workspace_store,
+                user=context.user,
+                workspace_id=context.workspace_id,
+            )
+        except AuthorizationError as error:
+            return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
     if path == "/api/providers/agentic/profile-definitions":
         definitions = state.provider_store.list_agentic_profile_definitions()
         return json_response(
@@ -739,8 +1018,26 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 ]
             },
         )
+    if path == "/api/providers/agentic/workspace-bindings":
+        try:
+            require_provider_selection_authority(
+                state.workspace_store,
+                user=context.user,
+                workspace_id=context.workspace_id,
+            )
+        except AuthorizationError as error:
+            return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
+        return json_response(
+            start_response,
+            workspace_agentic_admin_status(state, workspace_id=context.workspace_id),
+        )
     if path == "/api/providers":
-        provider_status = workspace_provider_status(state, workspace_id=context.workspace_id, refresh_model_catalog=True)
+        provider_status = workspace_provider_status(
+            state,
+            workspace_id=context.workspace_id,
+            refresh_model_catalog=True,
+            actor_roles=_request_actor_roles(state, context),
+        )
         return json_response(
             start_response,
             {
@@ -768,7 +1065,62 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         )
         return json_response(start_response, {"decision": routing_decision_payload(decision)})
     if path == "/api/providers/active":
-        return json_response(start_response, workspace_provider_status(state, workspace_id=context.workspace_id))
+        return json_response(
+            start_response,
+            workspace_provider_status(
+                state,
+                workspace_id=context.workspace_id,
+                actor_roles=_request_actor_roles(state, context),
+            ),
+        )
     if path == "/api/runtime/status":
-        return json_response(start_response, workspace_runtime_status(state, workspace_id=context.workspace_id))
+        return json_response(
+            start_response,
+            workspace_runtime_status(
+                state,
+                workspace_id=context.workspace_id,
+                actor_roles=_request_actor_roles(state, context),
+            ),
+        )
     return None
+
+
+def _actor_selection_policy_from_payload(payload: dict) -> ActorSelectionPolicy:
+    def string_tuple(key: str) -> tuple[str, ...]:
+        value = payload.get(key)
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+            raise ValueError(f"agentic_actor_{key}_invalid")
+        normalized = tuple(dict.fromkeys(item.strip() for item in value if item.strip()))
+        if len(normalized) > 100:
+            raise ValueError(f"agentic_actor_{key}_too_large")
+        return normalized
+
+    return ActorSelectionPolicy(
+        allow_workspace_admins=payload.get("allow_workspace_admins") is True,
+        allowed_user_ids=string_tuple("allowed_user_ids"),
+        allowed_workspace_role_ids=string_tuple("allowed_workspace_role_ids"),
+        allowed_agent_type_ids=string_tuple("allowed_agent_type_ids"),
+    )
+
+
+def _request_actor_roles(
+    state: PlatformState,
+    context: RequestSession,
+) -> tuple[str, str, str]:
+    """Project the authority already established for the authenticated request."""
+    platform_role = str(getattr(context.user, "platform_role", "") or "")
+    user_id = str(context.user.user_id)
+    if platform_role == "admin":
+        return platform_role, user_id, "admin"
+    get_membership = getattr(state.workspace_store, "get_membership", None)
+    if not callable(get_membership):
+        return platform_role, user_id, ""
+    try:
+        membership = get_membership(
+            user_id=user_id,
+            workspace_id=context.workspace_id,
+        )
+    except Exception:
+        return platform_role, user_id, ""
+    workspace_role = membership.role if membership.status == "active" else ""
+    return platform_role, user_id, workspace_role

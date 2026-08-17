@@ -21,6 +21,7 @@ from core.runtime.runtime_session import (
     RuntimeMode,
     SkillActivationMode,
     coerce_runtime_mode,
+    coerce_declared_remote_data_class,
     coerce_skill_activation_mode,
     normalize_runtime_session_visibility,
 )
@@ -68,6 +69,7 @@ def create_runtime_session(
     runtime_mode: RuntimeMode | str | None = None,
     hosted_provider_id: str | None = None,
     hosted_model_id: str | None = None,
+    declared_remote_data_class: str | None = None,
     grants: list[RuntimeSessionGrantRecord] | None = None,
     governance: WorkspaceGovernanceRecord | None = None,
     platform_allows_full_access: bool = False,
@@ -138,6 +140,7 @@ def create_runtime_session(
         provider_id=execution_binding.runtime_engine_id if execution_binding is not None else None,
         hosted_provider_id=_optional_text(hosted_provider_id),
         hosted_model_id=_optional_text(hosted_model_id),
+        declared_remote_data_class=coerce_declared_remote_data_class(declared_remote_data_class),
     )
     state = initial_runtime_state(session_id=session_id, workspace_id=workspace_id, now=timestamp)
     saved = store.insert_session(session)
@@ -161,6 +164,7 @@ def create_runtime_session(
             "runtime_mode": session.runtime_mode,
             "hosted_provider_id": session.hosted_provider_id,
             "hosted_model_id": session.hosted_model_id,
+            "declared_remote_data_class": session.declared_remote_data_class,
         }
         record_platform_event(
             observability_store,

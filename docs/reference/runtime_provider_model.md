@@ -45,9 +45,11 @@ provider state.
 The schema migration publishes preview Codex definitions and workspace
 bindings from legacy selections, pins unambiguous existing agentic sessions,
 and moves their provider thread into revision-zero provider state. Ambiguous
-legacy sessions remain readable. A narrow legacy execution path remains during
-the staged migration and is scheduled for removal before the multimodel
-runtime reaches general availability.
+legacy sessions remain readable but are not continued without a proven
+execution binding. Runtime resolution no longer falls back to the legacy
+workspace provider selection: every executable agentic session resolves only
+from its immutable binding, while `/api/providers/active` is a projection of
+the workspace-default agentic binding for remaining status consumers.
 
 ## Provider-Neutral Async Engine Contract
 

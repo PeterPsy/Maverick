@@ -18,6 +18,9 @@ type RuntimeStepPresentation = {
   title: string;
   tokenBudget?: number;
   tokensUsed?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  estimatedCostMicrousd?: number;
 };
 
 export function RuntimeStepMessage({ createdAt, step }: RuntimeStepMessageProps) {
@@ -41,12 +44,21 @@ export function RuntimeStepMessage({ createdAt, step }: RuntimeStepMessageProps)
 
 export function isExpandableRuntimeStep(step: RuntimeStep): boolean {
   const eventType = runtimeEventType(step.detail);
-  return Boolean(eventType) && (isGoalEvent(eventType) || Boolean(recordValue(step.detail.raw)));
+  return Boolean(eventType) && (
+    isGoalEvent(eventType)
+    || normalizeEventType(eventType) === "provider.usage"
+    || Boolean(recordValue(step.detail.raw))
+  );
 }
 
 function RuntimeStepPanel({ presentation, step }: { presentation: RuntimeStepPresentation; step: RuntimeStep }) {
   const hasUsage =
-    presentation.tokensUsed !== undefined || presentation.tokenBudget !== undefined || presentation.timeUsedSeconds !== undefined;
+    presentation.tokensUsed !== undefined
+    || presentation.inputTokens !== undefined
+    || presentation.outputTokens !== undefined
+    || presentation.estimatedCostMicrousd !== undefined
+    || presentation.tokenBudget !== undefined
+    || presentation.timeUsedSeconds !== undefined;
 
   return (
     <section className="chatapp-tool-call-panel chatapp-runtime-step-panel" role="region" aria-label={`${presentation.eyebrow} details`}>
@@ -105,6 +117,9 @@ function RuntimeUsage({ presentation }: { presentation: RuntimeStepPresentation 
             <dd>{formatDuration(presentation.timeUsedSeconds)}</dd>
           </div>
         ) : null}
+        {presentation.inputTokens !== undefined ? <div><dt>Input</dt><dd>{presentation.inputTokens.toLocaleString()} tokens</dd></div> : null}
+        {presentation.outputTokens !== undefined ? <div><dt>Output</dt><dd>{presentation.outputTokens.toLocaleString()} tokens</dd></div> : null}
+        {presentation.estimatedCostMicrousd !== undefined ? <div><dt>Estimated cost</dt><dd>{formatMicrousd(presentation.estimatedCostMicrousd)}</dd></div> : null}
       </dl>
     </section>
   );
@@ -125,6 +140,25 @@ function runtimeStepPresentation(step: RuntimeStep): RuntimeStepPresentation {
   const tokensUsed = firstNumber(goal.tokensUsed, goal.tokens_used, goal.tokenUsage, goal.token_usage);
   const tokenBudget = firstNumber(goal.tokenBudget, goal.token_budget);
   const timeUsedSeconds = firstNumber(goal.timeUsedSeconds, goal.time_used_seconds, goal.elapsedSeconds, goal.elapsed_seconds);
+  const inputTokens = firstNumber(detail.input_tokens, raw.input_tokens);
+  const outputTokens = firstNumber(detail.output_tokens, raw.output_tokens);
+  const estimatedCostMicrousd = firstNumber(detail.estimated_cost_microusd, raw.estimated_cost_microusd);
+
+  if (normalizeEventType(eventType) === "provider.usage") {
+    return {
+      description: "Usage reported by the pinned model provider for this inference step.",
+      eventType,
+      eyebrow: "Provider usage",
+      label: "Provider usage",
+      objective: "",
+      provider,
+      status: "Reported",
+      title: "Tokens and estimated cost",
+      inputTokens,
+      outputTokens,
+      estimatedCostMicrousd,
+    };
+  }
 
   if (goalEvent) {
     const title = cleared ? "No active goal" : displayStatus || (objective ? "Goal updated" : "Goal status updated");
@@ -211,6 +245,14 @@ function formatDuration(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainder = Math.round(seconds % 60);
   return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`;
+}
+
+function formatMicrousd(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 6,
+  }).format(value / 1_000_000);
 }
 
 function formatTechnicalPayload(value: unknown): string {

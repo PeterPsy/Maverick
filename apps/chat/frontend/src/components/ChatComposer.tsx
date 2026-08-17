@@ -47,6 +47,7 @@ export type ChatComposerProps = {
   onSelectSourceAppChatMode?: (mode: SourceAppChatMode) => void;
   onSelectAgent: (agentTypeId: string) => void;
   onSelectProvider: (providerId: string) => void;
+  onSyntheticDataConfirmedChange?: (confirmed: boolean) => void;
   providerSelectorLocked?: boolean;
   onRemoveAttachment: (attachmentId: string) => void;
   onStopTurn: () => void;
@@ -58,6 +59,8 @@ export type ChatComposerProps = {
   sourceAppChatMode?: SourceAppChatMode;
   sourceAppId?: string;
   sourceAppProjectId?: string;
+  syntheticDataConfirmationRequired?: boolean;
+  syntheticDataConfirmed?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
   transcriptionChunkedDictationSupported?: boolean;
@@ -93,6 +96,7 @@ export function ChatComposer({
   onSelectSourceAppChatMode,
   onSelectAgent,
   onSelectProvider,
+  onSyntheticDataConfirmedChange,
   providerSelectorLocked = false,
   onRemoveAttachment,
   onStopTurn,
@@ -104,6 +108,8 @@ export function ChatComposer({
   sourceAppChatMode = "design",
   sourceAppId = "",
   sourceAppProjectId = "",
+  syntheticDataConfirmationRequired = false,
+  syntheticDataConfirmed = false,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
   transcriptionChunkedDictationSupported = false,
@@ -312,6 +318,9 @@ export function ChatComposer({
                   locked={providerSelectorLocked}
                   onSelectProvider={onSelectProvider}
                   providers={providers}
+                  syntheticDataConfirmationRequired={syntheticDataConfirmationRequired}
+                  syntheticDataConfirmed={syntheticDataConfirmed}
+                  onSyntheticDataConfirmedChange={onSyntheticDataConfirmedChange}
                 />
               </div>
               <ComposerActions

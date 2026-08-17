@@ -33,7 +33,7 @@ function isThreadAvailabilityBusy(availability: string) {
 }
 
 export function isRuntimeTurnBusy(turn: Pick<RuntimeTurn, "status"> | null | undefined) {
-  return turn?.status === "queued" || turn?.status === "active";
+  return turn?.status === "queued" || turn?.status === "active" || turn?.status === "waiting_for_tool_confirmation";
 }
 
 export function selectCachedActiveTurnForThread(thread: ChatThread | null, cachedTranscript: RuntimeTranscriptCacheEntry | null) {

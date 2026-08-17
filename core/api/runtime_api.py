@@ -30,10 +30,10 @@ from core.observability.startup_performance import startup_timer
 from core.providers.errors import ProviderError
 from core.providers.agentic_profiles import (
     build_pinned_execution_binding,
-    ensure_codex_workspace_profile,
+    resolve_workspace_agentic_profile,
 )
+from core.providers.agentic_workspace_policy import actor_selection_allowed
 from core.providers.service import effective_provider_registry, resolve_provider_for_runtime_session
-from core.providers.models import ProviderSelection
 from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError, RuntimeTurnNotFoundError
 from core.runtime.client_message_claims import RuntimeClientMessageClaim, RuntimeClientMessageClaimConflictError
 from core.runtime.runtime_threads import (
@@ -58,7 +58,8 @@ from core.runtime.service import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
-from core.runtime.runtime_session import coerce_runtime_mode
+from core.runtime.runtime_session import coerce_declared_remote_data_class, coerce_runtime_mode
+from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.routing import build_runtime_routing
 from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
@@ -131,6 +132,27 @@ def _session_payload(
 ) -> dict[str, object]:
     payload = asdict(session)
     payload["provider_id"] = provider_id
+    if session.execution_binding is not None:
+        binding = session.execution_binding
+        payload["execution_binding"] = {
+            "execution_binding_id": binding.execution_binding_id,
+            "profile_definition_id": binding.profile_definition_id,
+            "profile_definition_revision": binding.profile_definition_revision,
+            "workspace_binding_id": binding.workspace_binding_id,
+            "workspace_binding_revision": binding.workspace_binding_revision,
+            "capability_certificate_id": binding.capability_certificate_id,
+            "runtime_engine_id": binding.runtime_engine_id,
+            "adapter_id": binding.adapter_id,
+            "adapter_version": binding.adapter_version,
+            "model_provider_id": binding.model_provider_id,
+            "model_id": binding.model_id,
+            "provider_protocol": binding.provider_protocol,
+            "provider_api_version": binding.provider_api_version,
+            "egress_policy_id": binding.egress_policy_id,
+            "egress_policy_revision": binding.egress_policy_revision,
+            "binding_digest": binding.binding_digest,
+            "created_at": binding.created_at,
+        }
     if prewarm is not None:
         payload.update(
             {
@@ -829,33 +851,43 @@ def _create_session(
         start_path=start_path,
     )
     execution_binding = None
+    declared_remote_data_class = coerce_declared_remote_data_class(
+        body.get("declared_remote_data_class")
+    )
     if coerce_runtime_mode(body.get("runtime_mode")) == "agentic":
         registry = effective_provider_registry(
             state.provider_store,
             registry=getattr(state, "provider_registry", None),
         )
-        legacy_selection = state.provider_store.get_provider_selection(context.workspace_id)
-        if legacy_selection is None:
-            codex = registry.get_provider_definition("codex")
-            timestamp = datetime.now(tz=UTC)
-            legacy_selection = ProviderSelection(
-                selection_id=f"agentic-default:{context.workspace_id}:codex",
-                workspace_id=context.workspace_id,
-                provider_id="codex",
-                binding_id=None,
-                selection_scope="workspace_default",
-                selection_reason="implicit agentic profile compatibility default",
-                created_at=timestamp,
-                updated_at=timestamp,
-                model_id=codex.default_model_family,
-                model_reasoning_effort=None,
-            )
-        if legacy_selection.provider_id == "codex":
-            ensure_codex_workspace_profile(
-                state.provider_store,
-                definition=registry.get_provider_definition("codex"),
-                selection=legacy_selection,
-            )
+        definition, workspace_binding = resolve_workspace_agentic_profile(
+            state.provider_store,
+            workspace_id=context.workspace_id,
+            binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
+        )
+        platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
+            state,
+            user_id=context.user.user_id,
+            workspace_id=context.workspace_id,
+        )
+        if not actor_selection_allowed(
+            workspace_binding,
+            user_id=user_id,
+            platform_role=platform_role,
+            workspace_role=workspace_role,
+            agent_type_id=str(body.get("agent_type_id") or "").strip(),
+        ):
+            raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
+        if workspace_binding.egress_policy_id == "fake-data-remote-preview":
+            if declared_remote_data_class != "workspace_internal_fake":
+                raise ProviderError("synthetic_data_declaration_required")
+        elif declared_remote_data_class is not None:
+            raise ProviderError("remote_data_declaration_not_applicable")
+        if (
+            declared_remote_data_class is not None
+            and declared_remote_data_class
+            not in workspace_binding.workspace_policy_ceiling.allowed_remote_data_classes
+        ):
+            raise ProviderError("remote_data_class_not_allowed")
         execution_binding = build_pinned_execution_binding(
             state.provider_store,
             registry,
@@ -863,7 +895,10 @@ def _create_session(
             workspace_id=context.workspace_id,
             execution_mode=routing.effective_mode,
             workspace_binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
+            reasoning_effort=str(body.get("reasoning_effort") or "").strip() or None,
         )
+    elif declared_remote_data_class is not None:
+        raise ProviderError("remote_data_declaration_not_applicable")
     session = create_runtime_session(
         state.runtime_store,
         session_id=resolved_session_id,
@@ -873,6 +908,7 @@ def _create_session(
         runtime_mode=body.get("runtime_mode"),
         hosted_provider_id=body.get("hosted_provider_id"),
         hosted_model_id=body.get("hosted_model_id"),
+        declared_remote_data_class=declared_remote_data_class,
         system_prompt=str(body.get("system_prompt") or "").strip() or None,
         skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
         skill_activation_mode=body.get("skill_activation_mode"),
@@ -979,6 +1015,13 @@ def _handle_session_collection(
                 start_response,
                 {"error": "runtime_skill_catalog_unavailable", "detail": str(error)},
                 status="400 Bad Request",
+            )
+        except (ProviderError, ValueError) as error:
+            _release_client_message_claim(state, client_message_claim if client_message_claim_created else None)
+            return json_response(
+                start_response,
+                {"error": str(error)},
+                status="409 Conflict" if isinstance(error, ProviderError) else "400 Bad Request",
             )
         prewarm_result: RuntimeSessionPrewarmResult | None = None
         if not turn_requested:

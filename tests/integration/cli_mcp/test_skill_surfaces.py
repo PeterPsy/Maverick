@@ -7,6 +7,8 @@ import json
 from core.apps.contracts import build_provided_interface_declaration, build_required_interface_declaration
 from core.apps.dependencies import save_app_dependency_selection
 from core.apps.errors import AppHostingError
+from core.providers.agentic_profiles import build_pinned_execution_binding
+from core.providers.service import builtin_provider_registry
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 from tests.support.surfaces import *
 
@@ -50,8 +52,14 @@ class TestSkillSurfaces(SurfaceTestBase):
     def test_provider_adapter_materializes_skills_into_provider_specific_runtime_home(self) -> None:
         provider_store = self.make_provider_store()
         runtime_store = self.make_runtime_store()
-        register_builtin_providers(provider_store)
-        configure_workspace_provider(provider_store, workspace_id="default", provider_id="codex", codex_command="/bin/echo")
+        registry = builtin_provider_registry(codex_command="/bin/echo")
+        register_builtin_providers(provider_store, registry=registry)
+        configure_workspace_provider(
+            provider_store,
+            workspace_id="default",
+            provider_id="codex",
+            registry=registry,
+        )
         now = datetime.now(tz=UTC)
         repo_root = self.make_repo_root()
         skill_root = repo_root / "workspaces" / "default" / "data" / "skills" / "skills" / "task-helper"
@@ -65,6 +73,14 @@ class TestSkillSurfaces(SurfaceTestBase):
             now=now,
             requested_mode="sandbox",
             start_path=repo_root,
+            execution_binding=build_pinned_execution_binding(
+                provider_store,
+                registry,
+                session_id="sess-1",
+                workspace_id="default",
+                execution_mode="sandbox",
+                now=now,
+            ),
         )
         skills = list_available_workspace_skills(workspace_id=session.workspace_id, start_path=repo_root)
 

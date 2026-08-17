@@ -4,7 +4,7 @@ import type { AgentRuntimeConfig } from "../hooks/useMessageSubmission";
 export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem[] {
   const options: ProviderItem[] = [];
   const agenticProfiles = (payload.agentic_profiles?.items || []).filter(
-    (profile) => profile.enabled && profile.rollout_status !== "disabled" && profile.rollout_status !== "suspended",
+    (profile) => profile.enabled && profile.certified !== false && profile.rollout_status !== "disabled" && profile.rollout_status !== "suspended",
   );
   if (agenticProfiles.length) {
     options.push(
@@ -26,7 +26,19 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           workspace_profile_binding_id: profile.workspace_profile_binding_id,
           default_model_family: profile.model_id,
           label: profile.display_name,
+          description: [
+            `${profile.model_provider_id} · ${profile.model_id}`,
+            profile.rollout_status === "preview" ? "Preview" : "Agentic runtime",
+            profile.requires_synthetic_data_declaration ? "Fake data only" : "Pinned workspace profile",
+          ].join(" · "),
           status: "active",
+          agentic_rollout_status: profile.rollout_status,
+          agentic_certificate_status: profile.certificate?.effective_status || null,
+          agentic_certificate_expires_at: profile.certificate?.expires_at || null,
+          agentic_egress_policy_id: profile.egress_policy_id || null,
+          agentic_allowed_tool_handles: profile.allowed_tool_handles || [],
+          agentic_max_estimated_cost_microusd: profile.max_estimated_cost_microusd ?? null,
+          requires_synthetic_data_declaration: profile.requires_synthetic_data_declaration === true,
         };
       }),
     );

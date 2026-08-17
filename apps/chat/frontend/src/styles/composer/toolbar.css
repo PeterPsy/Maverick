@@ -174,6 +174,40 @@
   text-align: left;
 }
 
+.chatapp-provider-menu__option-block {
+  display: contents;
+}
+
+.chatapp-provider-menu__group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.48rem 0.72rem 0.34rem;
+  border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
+  background: var(--maverick-popover-surface-strong);
+  color: var(--maverick-text-soft);
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.chatapp-provider-menu__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.18rem;
+}
+
+.chatapp-provider-menu__badges > span {
+  padding: 0.14rem 0.36rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
+  border-radius: 999px;
+  color: var(--maverick-text-soft);
+  font-size: 0.62rem;
+  text-transform: capitalize;
+}
+
 .chatapp-provider-menu__item:hover,
 .chatapp-provider-menu__item.is-highlighted,
 .chatapp-provider-menu__item.is-active,
@@ -256,6 +290,61 @@
 
 .chatapp-composer__runtime-badges .chatapp-execution-chip .material-symbols-rounded {
   font-size: 0.95rem;
+}
+
+.chatapp-synthetic-data-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  gap: 0.32rem;
+  padding: 0 0.55rem;
+  border: 1px solid rgba(251, 191, 36, 0.28);
+  border-radius: 0.62rem;
+  background: rgba(251, 191, 36, 0.08);
+  color: var(--maverick-text-soft);
+  font-size: 0.68rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chatapp-synthetic-data-chip.is-confirmed,
+.chatapp-synthetic-data-chip.is-pinned {
+  border-color: rgba(45, 212, 191, 0.28);
+  background: rgba(20, 184, 166, 0.1);
+  color: var(--maverick-text);
+}
+
+.chatapp-synthetic-data-chip input {
+  width: auto;
+  min-height: auto;
+  accent-color: rgb(20, 184, 166);
+}
+
+.chatapp-synthetic-data-chip .material-symbols-rounded {
+  font-size: 0.95rem;
+}
+
+.chatapp-agentic-profile-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  gap: 0.28rem;
+  padding: 0 0.5rem;
+  border: 1px solid rgba(45, 212, 191, 0.24);
+  border-radius: 0.62rem;
+  background: rgba(20, 184, 166, 0.08);
+  color: var(--maverick-text-soft);
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+
+.chatapp-agentic-profile-chip.is-warning {
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.chatapp-agentic-profile-chip .material-symbols-rounded {
+  font-size: 0.9rem;
 }
 
 .chatapp-composer__actions {

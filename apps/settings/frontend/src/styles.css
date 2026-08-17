@@ -1159,6 +1159,187 @@ button.settings-adapter-card {
   padding: 0 0 16px calc(2.4rem + 12px);
 }
 
+.settings-agentic-runtime-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.settings-agentic-runtime {
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: var(--maverick-inner-edge);
+  padding: 0 12px;
+}
+
+.settings-agentic-runtime > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  list-style: none;
+  padding: 12px 0;
+  cursor: pointer;
+}
+
+.settings-agentic-runtime > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-model-summary-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+.settings-model-summary-copy .settings-kicker {
+  margin: 0;
+}
+
+.settings-model-summary-copy strong {
+  overflow: hidden;
+  color: var(--maverick-text);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-model-summary-copy small {
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+}
+
+.settings-agentic-summary-badges,
+.settings-agentic-taxonomy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-agentic-summary-badges {
+  justify-content: flex-end;
+}
+
+.settings-pill.is-healthy {
+  border-color: color-mix(in srgb, var(--maverick-accent) 42%, transparent);
+  color: var(--maverick-text);
+}
+
+.settings-pill.is-warning {
+  border-color: var(--maverick-border-strong);
+  background: var(--maverick-surface-hover);
+  color: var(--maverick-accent);
+}
+
+.settings-agentic-runtime-content {
+  grid-template-columns: 1fr;
+  padding-left: 0;
+}
+
+.settings-agentic-warning {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: var(--maverick-control-radius);
+  background: var(--maverick-surface-hover);
+  padding: 10px 12px;
+}
+
+.settings-agentic-warning > .material-symbols-rounded {
+  color: var(--maverick-accent);
+}
+
+.settings-agentic-warning > span:last-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.settings-agentic-warning strong,
+.settings-agentic-checks strong {
+  color: var(--maverick-text);
+  font-size: 0.78rem;
+}
+
+.settings-agentic-warning small {
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.settings-agentic-taxonomy .settings-pill,
+.settings-agentic-summary-badges .settings-pill {
+  min-height: 1.4rem;
+  padding-inline: 0.5rem;
+  font-size: 0.62rem;
+}
+
+.settings-agentic-metadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: var(--maverick-border);
+}
+
+.settings-agentic-metadata > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  background: var(--maverick-surface);
+  padding: 9px 10px;
+}
+
+.settings-agentic-metadata dt {
+  color: var(--maverick-text-muted);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
+.settings-agentic-metadata dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--maverick-text);
+  font-family: var(--maverick-mono-font, ui-monospace, monospace);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.settings-agentic-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-agentic-checks {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.settings-agentic-checks strong {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
+@media (max-width: 760px) {
+  .settings-agentic-runtime > summary,
+  .settings-agentic-controls,
+  .settings-agentic-metadata,
+  .settings-agentic-checks {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-agentic-summary-badges {
+    justify-content: flex-start;
+  }
+}
+
 .settings-model-code {
   display: block;
   min-height: 2.55rem;

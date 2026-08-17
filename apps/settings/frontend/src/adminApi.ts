@@ -312,6 +312,100 @@ export type ProviderStatus = {
   available_providers?: ProviderItem[];
 };
 
+export type AgenticRuntimePolicy = {
+  max_steps_per_turn: number;
+  max_tool_calls_per_turn: number;
+  max_parallel_tool_calls: number;
+  max_wall_time_seconds: number;
+  max_tool_result_bytes: number;
+  max_total_tool_result_bytes: number;
+  max_input_tokens: number;
+  max_output_tokens: number;
+  max_estimated_cost_microusd: number | null;
+  allowed_surface_kinds: string[];
+  tool_handle_mode: 'none' | 'all_currently_authorized' | 'exact';
+  allowed_tool_handles: string[];
+  allow_filesystem_read: boolean;
+  allow_filesystem_write: boolean;
+  allow_shell: boolean;
+  require_confirmation_for_mutating: boolean;
+  require_confirmation_for_destructive: boolean;
+  allowed_remote_data_classes: string[];
+};
+
+export type AgenticActorPolicy = {
+  allow_workspace_admins: boolean;
+  allowed_user_ids: string[];
+  allowed_workspace_role_ids: string[];
+  allowed_agent_type_ids: string[];
+};
+
+export type AgenticCertificate = {
+  certificate_id: string;
+  effective_status: string;
+  expires_at: string;
+  revoked_at: string | null;
+  revocation_reason: string | null;
+  status_revision: number | null;
+  certified_capabilities: Record<string, boolean>;
+};
+
+export type AgenticCredentialBinding = {
+  binding_id: string;
+  provider_id: string;
+  workspace_id: string | null;
+  label: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgenticAdminItem = {
+  definition_id: string;
+  definition_revision: string;
+  display_name: string;
+  runtime_engine_id: string;
+  model_provider_id: string;
+  model_id: string;
+  provider_protocol: string;
+  provider_api_version: string | null;
+  adapter_id: string;
+  adapter_version_constraint: string;
+  routing_constraint: {
+    endpoint_id: string;
+    allowed_upstream_ids: string[];
+    allow_fallbacks: boolean;
+    require_parameters: boolean;
+    data_collection_policy: string;
+    require_zdr: boolean;
+    allowed_quantizations: string[];
+  };
+  profile_policy_ceiling: AgenticRuntimePolicy;
+  rollout_status: string | null;
+  certificate: AgenticCertificate | null;
+  credential_bindings: AgenticCredentialBinding[];
+  binding: {
+    binding_id: string;
+    revision: number;
+    credential_binding_id: string | null;
+    enabled: boolean;
+    is_default: boolean;
+    actor_policy: AgenticActorPolicy;
+    workspace_policy_ceiling: AgenticRuntimePolicy;
+    egress_policy_id: string;
+    egress_policy_revision: string;
+    created_at: string;
+    updated_at: string;
+  } | null;
+  health: 'healthy' | 'blocked';
+  blocked_reason: string | null;
+};
+
+export type AgenticAdminPayload = {
+  workspace_id: string;
+  items: AgenticAdminItem[];
+};
+
 export type RuntimeSessionItem = {
   session_id: string;
   workspace_id: string;
@@ -367,6 +461,7 @@ export type PlatformSettings = {
   provider: ProviderStatus;
   runtime: RuntimeStatus;
   recovery: Record<string, unknown>;
+  agentic_admin?: AgenticAdminPayload;
 };
 
 export type SessionPayload = {
@@ -496,6 +591,24 @@ export function configureSpeechProvider(payload: {
   conversation_model_id?: string | null;
 }): Promise<ProviderStatus> {
   return requestJson<ProviderStatus>('/api/providers/speech/selection', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function configureAgenticWorkspaceBinding(payload: {
+  definition_id: string;
+  definition_revision: string;
+  binding_id?: string | null;
+  expected_revision?: number | null;
+  credential_binding_id?: string | null;
+  enabled: boolean;
+  is_default: boolean;
+  actor_policy: AgenticActorPolicy;
+  policy_patch: Record<string, unknown>;
+  confirm_fake_data_only_workspace: boolean;
+}): Promise<{ binding_id: string; binding_revision: number; agentic_admin: AgenticAdminPayload }> {
+  return requestJson('/api/providers/agentic/workspace-bindings', {
     method: 'POST',
     body: JSON.stringify(payload)
   });

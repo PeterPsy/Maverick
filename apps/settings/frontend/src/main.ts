@@ -33,6 +33,7 @@ import { workspaceAppsPageHtml } from './workspaceAppsPage';
 import { mountUsageLimitGauges, unmountUsageLimitGauges } from './components/usageLimitGauges';
 import { createProviderUsageController } from './providerUsageController';
 import { noticeHtml, type SettingsNotice } from './notice';
+import { createAgenticBindingController } from './agenticBindingController';
 
 let users: User[] = [];
 let workspaces: Workspace[] = [];
@@ -76,11 +77,12 @@ const providerUsageController = createProviderUsageController({
   render: () => render(),
   state: settingsPanelState
 });
+const agenticBindingController = createAgenticBindingController({
+  getSettings: () => platformSettings, render, state: settingsPanelState,
+  setSettings: (settings, message) => { platformSettings = settings; notice = { tone: 'success', message }; }
+});
 
-function selectedUser(): User | undefined {
-  return users.find((user) => user.user_id === selectedUserId) || users[0];
-}
-
+function selectedUser(): User | undefined { return users.find((user) => user.user_id === selectedUserId) || users[0]; }
 function userIdFromNavigationParams(params: Record<string, unknown>): string {
   const directUserId = scalarParam(params.user_id) || scalarParam(params.selected_user_id) || scalarParam(params.id);
   if (directUserId) {
@@ -98,9 +100,7 @@ function userIdFromNavigationParams(params: Record<string, unknown>): string {
   }
 }
 
-function scalarParam(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
+function scalarParam(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 
 function applyNavigationParams(params: Record<string, unknown>) {
   const pageId = settingsPageIdFromParams(params);
@@ -517,6 +517,7 @@ function bindEvents() {
       updateHostedProviderRoutingDraft(settingsPanelState, platformSettings, modelId, field, value);
       render();
     },
+    saveAgenticBindingFromPanel: agenticBindingController.save,
     onProviderModelChanged: (modelId) => {
       updateDraftModel(settingsPanelState, platformSettings, modelId);
       render();

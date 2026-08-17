@@ -272,7 +272,7 @@ class HostedAgenticHarness:
         )
 
     @staticmethod
-    def classify(provenance: str, _content: object) -> HostedContentClassification:
+    def classify(_context, provenance: str, _content: object) -> HostedContentClassification:
         trust = {
             "platform_instruction": "trusted_platform",
             "tool_schema": "trusted_platform",

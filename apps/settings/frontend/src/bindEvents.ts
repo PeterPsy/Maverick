@@ -12,6 +12,7 @@ export function bindSettingsEvents(context: {
   installWorkspaceApp: (app: WorkspaceApp) => Promise<void>;
   logoutFromSettings: () => Promise<void>;
   onHostedProviderRoutingChanged: (modelId: string, field: string, value: string | boolean) => void;
+  saveAgenticBindingFromPanel: (definitionId: string, definitionRevision: string) => Promise<void>;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
   refreshProviderUsageFromPanel: () => Promise<void>;
@@ -73,6 +74,9 @@ export function bindSettingsEvents(context: {
       context.logoutFromSettings().catch(context.showError);
     },
     onHostedProviderRoutingChanged: context.onHostedProviderRoutingChanged,
+    onSaveAgenticBinding: (definitionId, definitionRevision) => {
+      context.saveAgenticBindingFromPanel(definitionId, definitionRevision).catch(context.showError);
+    },
     onProviderModelChanged: context.onProviderModelChanged,
     onProviderReasoningChanged: context.onProviderReasoningChanged,
     onRefreshProviderUsage: () => {

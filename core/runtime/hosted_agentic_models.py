@@ -27,7 +27,7 @@ class HostedProviderPrivateCodec:
     content_type: str
 
 
-HostedContentClassifier = Callable[[str, object], HostedContentClassification]
+HostedContentClassifier = Callable[[object, str, object], HostedContentClassification]
 HostedCredentialResolver = Callable[[object], EphemeralCredential | None]
 HostedPolicyResolver = Callable[[object], AgenticRuntimePolicy]
 HostedAuthorityRefresher = Callable[[object], EffectiveRuntimeAuthority]

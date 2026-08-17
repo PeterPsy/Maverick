@@ -1,4 +1,5 @@
 import type {
+  AgenticAdminItem,
   OpenRouterProviderRouting,
   PlatformSettings,
   ProviderModelOption,
@@ -35,6 +36,7 @@ type HostedProviderModelGroup = {
 };
 
 export type SettingsPanelState = {
+  agenticBindingErrors: Record<string, string>;
   cleanupError: string;
   clearingAllRuntime: boolean;
   cleaningSessionIds: Set<string>;
@@ -48,6 +50,7 @@ export type SettingsPanelState = {
   isSavingProvider: boolean;
   isSavingSpeechProvider: boolean;
   isLoadingProviderUsage: boolean;
+  savingAgenticBindings: Set<string>;
   providerError: string;
   providerUsageError: string;
   providerUsageItems: ProviderSubscriptionUsage[];
@@ -61,6 +64,7 @@ export type SettingsPanelActions = {
   onClearRuntimeSession: (sessionId: string) => void;
   onLogout: () => void;
   onHostedProviderRoutingChanged: (modelId: string, field: string, value: string | boolean) => void;
+  onSaveAgenticBinding: (definitionId: string, definitionRevision: string) => void;
   onSaveHostedProviderSettings: (modelId?: string) => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
@@ -73,6 +77,7 @@ export type SettingsPanelActions = {
 
 export function createSettingsPanelState(): SettingsPanelState {
   return {
+    agenticBindingErrors: {},
     cleanupError: '',
     clearingAllRuntime: false,
     cleaningSessionIds: new Set(),
@@ -86,6 +91,7 @@ export function createSettingsPanelState(): SettingsPanelState {
     isSavingProvider: false,
     isSavingSpeechProvider: false,
     isLoadingProviderUsage: false,
+    savingAgenticBindings: new Set(),
     providerError: '',
     providerUsageError: '',
     providerUsageItems: [],
@@ -237,16 +243,17 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   );
 
   return `${userSettingsCardHtml(settings)}
-    ${agenticModelSettingsCardHtml(
-      provider,
-      modelOptions,
-      reasoningOptions,
-      canSaveProvider,
-      activeRuntimeSessions.length,
-      runtimeSessions.length,
-      false,
-      state
-    )}
+    ${agenticRuntimeSettingsCardHtml(settings.agentic_admin?.items || [], state)}
+    ${settings.agentic_admin ? '' : agenticModelSettingsCardHtml(
+        provider,
+        modelOptions,
+        reasoningOptions,
+        canSaveProvider,
+        activeRuntimeSessions.length,
+        runtimeSessions.length,
+        false,
+        state
+      )}
     ${hostedTextModelSettingsCardHtml(
       openHostedModel,
       hostedTextModelOptions,
@@ -364,6 +371,14 @@ function speechModelSettingsCardHtml(
 }
 
 export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
+  document.querySelectorAll<HTMLButtonElement>('[data-agentic-binding-save]').forEach((button) => {
+    button.addEventListener('click', () => {
+      actions.onSaveAgenticBinding(
+        button.dataset.agenticDefinitionId || '',
+        button.dataset.agenticDefinitionRevision || ''
+      );
+    });
+  });
   document.getElementById('settings-provider-model')?.addEventListener('change', (event) => {
     actions.onProviderModelChanged((event.currentTarget as HTMLSelectElement).value);
   });
@@ -418,6 +433,151 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   document.querySelectorAll<HTMLButtonElement>('[data-runtime-clear]').forEach((button) => {
     button.addEventListener('click', () => actions.onClearRuntimeSession(button.dataset.runtimeClear || ''));
   });
+}
+
+function agenticRuntimeSettingsCardHtml(items: AgenticAdminItem[], state: SettingsPanelState) {
+  return `<section class="settings-card settings-platform settings-agentic-runtimes-card">
+    ${modelSettingsHeadingHtml('account_tree', 'Agentic runtimes')}
+    <p class="settings-card-copy">Workspace profiles pin an exact engine, adapter, provider, model, certificate and policy for every new session.</p>
+    <div class="settings-agentic-runtime-list">
+      ${items.length ? items.map((item) => agenticRuntimeBindingHtml(item, state)).join('') : `<div class="settings-provider-usage-unavailable">
+        <span class="material-symbols-rounded" aria-hidden="true">block</span>
+        <span><strong>No agentic definitions</strong><small>No certified runtime definitions are published by this installation.</small></span>
+      </div>`}
+    </div>
+  </section>`;
+}
+
+function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelState) {
+  const key = `${item.definition_id}:${item.definition_revision}`;
+  const binding = item.binding;
+  const policy = binding?.workspace_policy_ceiling || item.profile_policy_ceiling;
+  const actor = binding?.actor_policy || {
+    allow_workspace_admins: true,
+    allowed_user_ids: [],
+    allowed_workspace_role_ids: ['admin', 'member'],
+    allowed_agent_type_ids: []
+  };
+  const certificate = item.certificate;
+  const isPreview = item.rollout_status === 'preview';
+  const isRemotePreview = item.runtime_engine_id !== 'codex';
+  const isSaving = state.savingAgenticBindings.has(key);
+  const error = state.agenticBindingErrors[key] || '';
+  const expires = certificate?.expires_at ? formatAgenticDate(certificate.expires_at) : 'Unavailable';
+  const expiryWarning = certificateExpiryWarning(certificate?.expires_at || '', certificate?.effective_status || 'missing');
+  const toolEnabled = policy.tool_handle_mode !== 'none';
+  const costDollars = policy.max_estimated_cost_microusd === null
+    ? ''
+    : String(policy.max_estimated_cost_microusd / 1_000_000);
+  const credentials = item.credential_bindings;
+  const selectedCredential = binding?.credential_binding_id || credentials[0]?.binding_id || '';
+  return `<details class="settings-model-accordion settings-agentic-runtime" data-settings-model-accordion="agentic-${escapeAttr(key)}" ${binding?.is_default || item.health === 'blocked' ? 'open' : ''}>
+    <summary>
+      <span class="settings-model-summary-copy">
+        <span class="settings-kicker">${escapeHtml(item.runtime_engine_id)} · ${escapeHtml(item.model_provider_id)}</span>
+        <strong>${escapeHtml(item.display_name)}</strong>
+        <small>${escapeHtml(item.model_id)} · definition ${escapeHtml(item.definition_revision)}</small>
+      </span>
+      <span class="settings-agentic-summary-badges">
+        ${isPreview ? '<span class="settings-pill is-warning">Preview</span>' : `<span class="settings-pill">${escapeHtml(item.rollout_status || 'Disabled')}</span>`}
+        <span class="settings-pill ${certificate?.effective_status === 'active' ? 'is-healthy' : 'is-warning'}">Certificate ${escapeHtml(certificate?.effective_status || 'missing')}</span>
+        ${binding?.enabled ? '<span class="settings-pill is-healthy">Workspace enabled</span>' : '<span class="settings-pill">Workspace disabled</span>'}
+      </span>
+    </summary>
+    <div class="settings-model-content settings-agentic-runtime-content" data-agentic-binding-form data-agentic-definition-id="${escapeAttr(item.definition_id)}" data-agentic-definition-revision="${escapeAttr(item.definition_revision)}">
+      ${isRemotePreview ? `<div class="settings-agentic-warning" role="note">
+        <span class="material-symbols-rounded" aria-hidden="true">science</span>
+        <span><strong>Preview · fake data only</strong><small>Use only in a workspace containing synthetic data. User prompts, tool results and provider state may leave Maverick for ${escapeHtml(item.model_provider_id)}.</small></span>
+      </div>` : ''}
+      <div class="settings-agentic-taxonomy" aria-label="Capability status">
+        ${agenticTaxonomyPill('Vendor tool calling', Boolean(certificate?.certified_capabilities?.tool_orchestration))}
+        ${agenticTaxonomyPill('Maverick runtime', item.health !== 'blocked' || Boolean(binding))}
+        ${agenticTaxonomyPill('Certificate valid', certificate?.effective_status === 'active')}
+        ${agenticTaxonomyPill('Workspace enabled', Boolean(binding?.enabled))}
+        ${agenticTaxonomyPill('Tools effective', Boolean(binding?.enabled && toolEnabled))}
+      </div>
+      <dl class="settings-agentic-metadata">
+        ${agenticMetadata('Definition', `${item.definition_id} · rev ${item.definition_revision}`)}
+        ${agenticMetadata('Engine / adapter', `${item.runtime_engine_id} · ${item.adapter_id} ${item.adapter_version_constraint}`)}
+        ${agenticMetadata('Provider / model', `${item.model_provider_id} · ${item.model_id}`)}
+        ${agenticMetadata('Protocol', `${item.provider_protocol}${item.provider_api_version ? ` · ${item.provider_api_version}` : ''}`)}
+        ${agenticMetadata('Certificate', certificate?.certificate_id || 'Missing')}
+        ${agenticMetadata('Certificate expiry', `${expires}${expiryWarning ? ` · ${expiryWarning}` : ''}`)}
+        ${agenticMetadata('Endpoint', item.routing_constraint.endpoint_id)}
+        ${agenticMetadata('Upstream routing', agenticRoutingSummary(item))}
+        ${agenticMetadata('Egress policy', binding ? `${binding.egress_policy_id} · rev ${binding.egress_policy_revision}` : isRemotePreview ? 'fake-data-remote-preview · rev 1' : 'local-runtime-no-remote-egress · rev 1')}
+        ${agenticMetadata('Health', item.blocked_reason ? humanizeAgenticCode(item.blocked_reason) : 'Ready')}
+      </dl>
+      <div class="settings-agentic-controls">
+        <label class="settings-platform-field">
+          <span>Credential binding</span>
+          <select data-agentic-field="credential_binding_id" ${isSaving ? 'disabled' : ''}>
+            <option value="">${credentials.length ? 'No credential' : 'No active credential available'}</option>
+            ${credentials.map((credential) => `<option value="${escapeAttr(credential.binding_id)}" ${credential.binding_id === selectedCredential ? 'selected' : ''}>${escapeHtml(credential.label || credential.binding_id)} · ${credential.workspace_id ? 'workspace' : 'platform'}</option>`).join('')}
+          </select>
+        </label>
+        <label class="settings-platform-field">
+          <span>Maximum cost per turn (USD)</span>
+          <input data-agentic-field="max_estimated_cost_usd" type="number" min="0" step="0.01" value="${escapeAttr(costDollars)}" placeholder="No explicit ceiling" ${isSaving ? 'disabled' : ''}>
+        </label>
+        <div class="settings-platform-checks settings-agentic-checks">
+          <strong>Workspace availability</strong>
+          ${agenticCheckbox('enabled', 'Enable for new sessions', Boolean(binding?.enabled), isSaving)}
+          ${agenticCheckbox('is_default', 'Use as workspace default', Boolean(binding?.is_default), isSaving)}
+          <strong>Actors</strong>
+          ${agenticCheckbox('allow_workspace_admins', 'Workspace administrators', actor.allow_workspace_admins, isSaving)}
+          ${agenticCheckbox('allow_workspace_members', 'Workspace members', actor.allowed_workspace_role_ids.includes('member'), isSaving)}
+          <strong>Effective policy</strong>
+          ${agenticCheckbox('tool_access_enabled', `Allow certified tools (${policy.allowed_tool_handles.length || 0})`, toolEnabled, isSaving)}
+          ${agenticCheckbox('require_confirmation_for_mutating', 'Confirm mutating tools', policy.require_confirmation_for_mutating, isSaving, item.profile_policy_ceiling.require_confirmation_for_mutating)}
+          ${agenticCheckbox('require_confirmation_for_destructive', 'Confirm destructive tools', policy.require_confirmation_for_destructive, isSaving, item.profile_policy_ceiling.require_confirmation_for_destructive)}
+          ${item.profile_policy_ceiling.allowed_remote_data_classes.includes('public') ? agenticCheckbox('allow_public_data', 'Permit public data egress', policy.allowed_remote_data_classes.includes('public'), isSaving) : ''}
+          ${item.profile_policy_ceiling.allowed_remote_data_classes.includes('workspace_internal_fake') ? agenticCheckbox('allow_fake_data', 'Permit synthetic workspace data egress', policy.allowed_remote_data_classes.includes('workspace_internal_fake'), isSaving) : ''}
+          ${isRemotePreview ? agenticCheckbox('confirm_fake_data_only_workspace', 'I confirm this workspace is restricted to synthetic data for this preview', Boolean(binding?.enabled), isSaving) : ''}
+        </div>
+      </div>
+      <button type="button" data-agentic-binding-save data-agentic-definition-id="${escapeAttr(item.definition_id)}" data-agentic-definition-revision="${escapeAttr(item.definition_revision)}" ${isSaving ? 'disabled' : ''}>
+        <span class="material-symbols-rounded" aria-hidden="true">${isSaving ? 'progress_activity' : 'verified_user'}</span>
+        ${isSaving ? 'Saving binding' : binding ? 'Save binding' : 'Create binding'}
+      </button>
+      ${error ? `<p class="settings-platform-error" role="alert">${escapeHtml(error)}</p>` : ''}
+    </div>
+  </details>`;
+}
+
+function agenticCheckbox(field: string, label: string, checked: boolean, disabled: boolean, forced = false) {
+  return `<label><input data-agentic-field="${escapeAttr(field)}" type="checkbox" ${checked ? 'checked' : ''} ${disabled || forced ? 'disabled' : ''}> ${escapeHtml(label)}</label>`;
+}
+
+function agenticTaxonomyPill(label: string, active: boolean) {
+  return `<span class="settings-pill ${active ? 'is-healthy' : ''}">${escapeHtml(label)} · ${active ? 'yes' : 'no'}</span>`;
+}
+
+function agenticMetadata(label: string, value: string) {
+  return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
+}
+
+function agenticRoutingSummary(item: AgenticAdminItem) {
+  const routing = item.routing_constraint;
+  const upstreams = routing.allowed_upstream_ids.length ? routing.allowed_upstream_ids.join(', ') : 'provider direct';
+  return `${upstreams} · fallbacks ${routing.allow_fallbacks ? 'on' : 'off'} · parameters ${routing.require_parameters ? 'required' : 'optional'} · collection ${routing.data_collection_policy} · ZDR ${routing.require_zdr ? 'required' : 'not required'}`;
+}
+
+function formatAgenticDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+function certificateExpiryWarning(value: string, status: string) {
+  if (status !== 'active' || !value) return status === 'active' ? '' : humanizeAgenticCode(status);
+  const remainingMs = new Date(value).getTime() - Date.now();
+  if (!Number.isFinite(remainingMs)) return '';
+  const days = Math.ceil(remainingMs / 86_400_000);
+  return days <= 7 ? `expires in ${Math.max(0, days)} day${days === 1 ? '' : 's'}` : '';
+}
+
+function humanizeAgenticCode(value: string) {
+  return value.replace(/[._-]+/g, ' ').replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function providerSettingsFormHtml(

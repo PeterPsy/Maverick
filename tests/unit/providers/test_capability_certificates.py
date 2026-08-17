@@ -212,5 +212,27 @@ class CapabilityCertificateTest(unittest.TestCase):
                 store.get(evidence_ref)
 
 
+    def test_rehydrated_execution_binding_validates_without_upstream_type_mismatch(self) -> None:
+        from dataclasses import asdict
+        from core.runtime.execution_binding import execution_binding_from_document
+
+        serialized = asdict(self.binding)
+        serialized["routing_constraint_snapshot"]["allowed_upstream_ids"] = list(
+            self.binding.routing_constraint_snapshot.allowed_upstream_ids
+        )
+        self.assertIsInstance(serialized["routing_constraint_snapshot"]["allowed_upstream_ids"], list)
+
+        rehydrated = execution_binding_from_document(serialized)
+        self.assertIsInstance(rehydrated.routing_constraint_snapshot.allowed_upstream_ids, tuple)
+
+        validated = validate_certificate_for_binding(
+            self.store,
+            binding=rehydrated,
+            adapter=self.adapter,
+            now=NOW,
+        )
+        self.assertEqual(validated.certificate_id, self.binding.capability_certificate_id)
+
+
 if __name__ == "__main__":
     unittest.main()

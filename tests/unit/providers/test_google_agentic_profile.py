@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 import os
+from types import SimpleNamespace
 from unittest import mock
 import unittest
 
@@ -80,16 +81,29 @@ class GoogleAgenticProfileTest(unittest.TestCase):
 
     def test_default_classifier_never_assumes_user_or_tool_data_is_fake(self) -> None:
         self.assertEqual(
-            classify_hosted_content_fail_closed("user_input", "synthetic-looking text").data_class,
+            classify_hosted_content_fail_closed(None, "user_input", "synthetic-looking text").data_class,
             "unclassified",
         )
         self.assertEqual(
-            classify_hosted_content_fail_closed("tool_result", {"value": 4}).data_class,
+            classify_hosted_content_fail_closed(None, "tool_result", {"value": 4}).data_class,
             "unclassified",
         )
         self.assertEqual(
-            classify_hosted_content_fail_closed("tool_schema", {}).data_class,
+            classify_hosted_content_fail_closed(None, "tool_schema", {}).data_class,
             "public",
+        )
+
+    def test_classifier_honors_only_persisted_session_fake_data_declaration(self) -> None:
+        context = SimpleNamespace(
+            session=SimpleNamespace(declared_remote_data_class="workspace_internal_fake")
+        )
+        self.assertEqual(
+            classify_hosted_content_fail_closed(context, "user_input", "fixture").data_class,
+            "workspace_internal_fake",
+        )
+        self.assertEqual(
+            classify_hosted_content_fail_closed(context, "tool_result", {"fixture": True}).data_class,
+            "workspace_internal_fake",
         )
 
 

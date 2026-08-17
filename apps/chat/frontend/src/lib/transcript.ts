@@ -108,15 +108,15 @@ function toolCallPayload(event: RuntimeEvent): ToolCallMessage | null {
     return null;
   }
   const status = event.event_type.split(".").at(-1);
-  if (status !== "started" && status !== "updated" && status !== "completed" && status !== "failed") {
+  if (status !== "started" && status !== "updated" && status !== "awaiting_confirmation" && status !== "completed" && status !== "failed") {
     return null;
   }
-  const name = event.payload.name || event.payload.tool_name || event.payload.tool;
+  const name = event.payload.name || event.payload.tool_name || event.payload.tool || event.payload.tool_handle;
   return {
     id: event.event_id,
     name: typeof name === "string" && name ? name : "tool",
     status,
-    detail: event.payload,
+    detail: { ...event.payload, turn_id: event.turn_id },
     createdAt: event.created_at,
   };
 }
@@ -126,7 +126,7 @@ function isNonChatFacingToolEvent(event: RuntimeEvent): boolean {
 }
 
 function stableToolCallKey(toolCall: ToolCallMessage): string | null {
-  for (const key of ["tool_call_id", "call_id", "item_id"]) {
+  for (const key of ["invocation_id", "tool_call_id", "provider_tool_call_id", "call_id", "item_id"]) {
     const value = toolCall.detail[key];
     if (typeof value === "string" && value.trim()) {
       return `${key}:${value.trim()}`;
@@ -171,8 +171,9 @@ function mergeToolCall(previous: ToolCallMessage, next: ToolCallMessage): ToolCa
   const statusRank: Record<ToolCallMessage["status"], number> = {
     started: 1,
     updated: 2,
-    completed: 3,
-    failed: 4,
+    awaiting_confirmation: 3,
+    completed: 4,
+    failed: 5,
   };
   const selected = statusRank[next.status] >= statusRank[previous.status] ? next : previous;
   return {
@@ -184,6 +185,12 @@ function mergeToolCall(previous: ToolCallMessage, next: ToolCallMessage): ToolCa
 }
 
 function stepPayload(event: RuntimeEvent): RuntimeStepMessage | null {
+  if (event.event_type === "provider.usage") {
+    return {
+      label: "Provider usage",
+      detail: { ...event.payload, provider_event_type: event.event_type },
+    };
+  }
   const label = runtimeStepLabel(event);
   if (!label) {
     return null;
@@ -372,12 +379,13 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     );
     if (items.length) {
       const hasFailedTool = items.some((item) => item.status === "failed");
+      const hasPendingConfirmation = items.some((item) => item.status === "awaiting_confirmation");
       pushMessage({
         id: `${turnId}:tools:${segment.index}`,
         role: "tool",
         content: "Tool Used",
         createdAt: segment.createdAt,
-        status: hasFailedTool ? "failed" : "complete",
+        status: hasFailedTool ? "failed" : hasPendingConfirmation ? "pending" : "complete",
         toolCalls: items,
         toolCall: items[0],
         ...segment.sourceFields,

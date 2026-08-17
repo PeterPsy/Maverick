@@ -13,6 +13,7 @@ from core.providers.agentic_profiles import (
     ensure_codex_workspace_profile,
 )
 from core.providers.builtin_certification import ensure_codex_preview_certificate
+from core.providers.models import ProviderSelection
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.errors import RuntimeProviderStateError
@@ -60,6 +61,26 @@ def migrate_agentic_runtime_schema(
             now=timestamp,
         )
 
+    if not provider_store.list_workspace_agentic_profile_bindings("default"):
+        codex = registry.get_provider_definition("codex")
+        ensure_codex_workspace_profile(
+            provider_store,
+            definition=codex,
+            selection=ProviderSelection(
+                selection_id="agentic-bootstrap:default:codex",
+                workspace_id="default",
+                provider_id="codex",
+                binding_id=None,
+                selection_scope="workspace_default",
+                selection_reason="agentic schema bootstrap default",
+                created_at=timestamp,
+                updated_at=timestamp,
+                model_id=codex.default_model_family,
+                model_reasoning_effort=None,
+            ),
+            now=timestamp,
+        )
+
     codex_adapter = registry.get_agentic_runtime_adapter("codex")
     for definition in provider_store.list_agentic_profile_definitions():
         if (
@@ -86,6 +107,7 @@ def migrate_agentic_runtime_schema(
                 session_id=session.session_id,
                 workspace_id=session.workspace_id,
                 execution_mode=session.effective_mode,
+                reasoning_effort=selection.model_reasoning_effort,
                 legacy_inferred=True,
                 now=timestamp,
             )
@@ -119,7 +141,11 @@ def migrate_agentic_runtime_schema(
             )
 
     definitions = provider_store.list_agentic_profile_definitions()
-    workspace_ids = {selection.workspace_id for selection in provider_store.list_provider_selections()}
+    workspace_ids = {
+        "default",
+        *(selection.workspace_id for selection in provider_store.list_provider_selections()),
+        *(session.workspace_id for session in sessions),
+    }
     bindings = [
         binding
         for workspace_id in workspace_ids

@@ -139,7 +139,9 @@ def fork_runtime_execution_binding(
 def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutionBinding:
     """Hydrate nested policy and routing records from a stored document."""
     payload = dict(document)
-    payload["routing_constraint_snapshot"] = RoutingConstraint(**payload["routing_constraint_snapshot"])
+    payload["routing_constraint_snapshot"] = _routing_constraint_from_document(
+        payload["routing_constraint_snapshot"]
+    )
     payload["profile_policy_ceiling_snapshot"] = _policy_from_document(
         payload["profile_policy_ceiling_snapshot"]
     )
@@ -171,6 +173,13 @@ def _policy_from_document(document: dict[str, Any]) -> AgenticRuntimePolicy:
     for key in ("allowed_surface_kinds", "allowed_tool_handles", "allowed_remote_data_classes"):
         payload[key] = tuple(payload.get(key, ()))
     return AgenticRuntimePolicy(**payload)
+
+
+def _routing_constraint_from_document(document: dict[str, Any]) -> RoutingConstraint:
+    payload = dict(document)
+    for key in ("allowed_upstream_ids", "allowed_quantizations"):
+        payload[key] = tuple(payload.get(key, ()))
+    return RoutingConstraint(**payload)
 
 
 def _canonical_value(value: object) -> object:

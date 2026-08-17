@@ -78,7 +78,7 @@ class RuntimeToolConfirmationApiTest(unittest.TestCase):
                 session_status="running",
                 turn_status="waiting_for_tool_confirmation",
                 last_progress_at=NOW,
-                watchdog_deadline_at=None,
+                watchdog_deadline_at=NOW.replace(second=45),
                 forced_stop_reason=None,
                 last_error_detail=None,
                 updated_at=NOW,
@@ -165,6 +165,15 @@ class RuntimeToolConfirmationApiTest(unittest.TestCase):
         self.assertEqual(status, "409 Conflict")
         self.assertEqual(payload["error"], "tool_confirmation_digest_mismatch")
         self.assertEqual(self.store.get_turn("turn-confirm").status, "waiting_for_tool_confirmation")
+
+    def test_read_exposes_the_pinned_turn_confirmation_deadline(self) -> None:
+        status, payload = self._invoke(method="GET", body={})
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(
+            payload["confirmation_deadline_at"],
+            "2026-08-16T00:00:45+00:00",
+        )
 
     def _invoke(self, *, method: str, body: dict) -> tuple[str, dict]:
         statuses: list[str] = []

@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import type { ToolCallMessage } from "../api/client";
+import {
+  decideRuntimeToolConfirmation,
+  getRuntimeToolConfirmation,
+  type RuntimeToolConfirmation,
+  type ToolCallMessage,
+} from "../api/client";
 import { isNoisyRuntimeLabel } from "../lib/runtimeStepLabels";
 import { ActivityDisclosure } from "./ActivityDisclosure";
 
@@ -20,11 +25,19 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
     }
   }, [selectedToolKey, toolCalls]);
 
+  useEffect(() => {
+    if (selectedToolKey) return;
+    const pendingIndex = toolCalls.findIndex((toolCall) => toolCall.status === "awaiting_confirmation");
+    if (pendingIndex >= 0) {
+      setSelectedToolKey(toolRenderKey(toolCalls[pendingIndex], pendingIndex));
+    }
+  }, [selectedToolKey, toolCalls]);
+
   return (
     <ActivityDisclosure
       createdAt={activityCreatedAt}
       defaultExpanded={defaultExpanded}
-      label={`Tool Used${toolCount > 1 ? ` (${toolCount})` : ""}`}
+      label={`${toolCalls.some((item) => item.status === "awaiting_confirmation") ? "Tool confirmation required" : "Tool Used"}${toolCount > 1 ? ` (${toolCount})` : ""}`}
     >
       {toolCalls.map((toolCall, index) => {
         const renderKey = toolRenderKey(toolCall, index);
@@ -36,7 +49,7 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
               aria-controls={panelId}
               aria-expanded={isSelected}
               className={`chatapp-tool-inline__row ${toolCall.status === "failed" ? "is-failed" : ""} ${
-                toolCall.status === "started" || toolCall.status === "updated" ? "is-active" : ""
+                toolCall.status === "started" || toolCall.status === "updated" || toolCall.status === "awaiting_confirmation" ? "is-active" : ""
               } ${isSelected ? "is-selected" : ""}`}
               onClick={() => {
                 setSelectedToolKey(isSelected ? null : renderKey);
@@ -58,7 +71,7 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
 }
 
 function ToolStatusIcon({ status }: { status: ToolCallMessage["status"] }) {
-  const icon = status === "failed" ? "error" : status === "completed" ? "check_circle" : "progress_activity";
+  const icon = status === "failed" ? "error" : status === "completed" ? "check_circle" : status === "awaiting_confirmation" ? "approval" : "progress_activity";
   const animationClass = status === "started" || status === "updated" ? "chatapp-tool-inline__stroke--spin" : "";
   return (
     <span className="chatapp-tool-inline__icon" aria-hidden="true">
@@ -98,10 +111,108 @@ function ToolCallPanel({ id, toolCall }: { id: string; toolCall: ToolCallMessage
         {patch ? <ToolPanelCode title="Patch" value={patch} /> : null}
         {output ? <ToolPanelCode title="Output" value={output} /> : null}
         {error ? <ToolPanelCode title="Error" value={error} isError /> : null}
+        {toolCall.status === "awaiting_confirmation" ? <ToolConfirmationPanel toolCall={toolCall} /> : null}
         <ToolPanelCode title="Raw Payload" value={JSON.stringify(toolCall.detail, null, 2)} />
       </div>
     </section>
   );
+}
+
+function ToolConfirmationPanel({ toolCall }: { toolCall: ToolCallMessage }) {
+  const turnId = stringValue(toolCall.detail.turn_id);
+  const invocationId = stringValue(toolCall.detail.invocation_id);
+  const [confirmation, setConfirmation] = useState<RuntimeToolConfirmation | null>(null);
+  const [error, setError] = useState("");
+  const [decisionPending, setDecisionPending] = useState<"approve" | "deny" | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!turnId || !invocationId) {
+      setError("Confirmation identity is unavailable.");
+      return () => { active = false; };
+    }
+    getRuntimeToolConfirmation(turnId, invocationId)
+      .then((payload) => {
+        if (active) setConfirmation(payload);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Unable to load confirmation state.");
+      });
+    return () => { active = false; };
+  }, [invocationId, turnId]);
+
+  const invocation = confirmation?.invocation;
+  const argumentsDigest = invocation?.arguments_digest || stringValue(toolCall.detail.arguments_digest);
+  const invocationRevision = invocation?.revision ?? numberValue(toolCall.detail.invocation_revision);
+  const decided = Boolean(confirmation?.confirmation);
+
+  async function decide(decision: "approve" | "deny") {
+    if (!turnId || !invocationId || !argumentsDigest || invocationRevision === null) return;
+    setDecisionPending(decision);
+    setError("");
+    try {
+      setConfirmation(await decideRuntimeToolConfirmation(turnId, invocationId, {
+        decision,
+        arguments_digest: argumentsDigest,
+        expected_invocation_revision: invocationRevision,
+      }));
+    } catch (decisionError) {
+      setError(decisionError instanceof Error ? decisionError.message : "Unable to record confirmation.");
+    } finally {
+      setDecisionPending(null);
+    }
+  }
+
+  return (
+    <section className="chatapp-tool-confirmation" aria-label="Tool confirmation">
+      <div className="chatapp-tool-confirmation__heading">
+        <span aria-hidden="true" className="material-symbols-rounded">verified_user</span>
+        <span>
+          <strong>Confirmation required</strong>
+          <small>This one-shot decision is bound to the exact argument digest and current policy revision.</small>
+        </span>
+      </div>
+      <dl className="chatapp-tool-confirmation__facts">
+        <div><dt>Tool</dt><dd>{invocation?.tool_handle || displayToolName(toolCall)}</dd></div>
+        <div><dt>Effect</dt><dd>{invocation?.effect_class || stringValue(toolCall.detail.effect_class) || "unclassified"}</dd></div>
+        <div><dt>Scope</dt><dd>Current invocation only</dd></div>
+        <div><dt>Policy</dt><dd>{invocation?.policy_revision || "Current effective authority"}</dd></div>
+        <div><dt>Argument digest</dt><dd>{argumentsDigest ? `${argumentsDigest.slice(0, 16)}…` : "Unavailable"}</dd></div>
+        <div><dt>TTL</dt><dd>{confirmation?.confirmation?.expires_at || confirmation?.confirmation_deadline_at ? formatConfirmationExpiry(confirmation.confirmation?.expires_at || confirmation.confirmation_deadline_at || "") : "Current turn budget"}</dd></div>
+      </dl>
+      <ToolPanelCode
+        title="Canonical argument summary"
+        value={JSON.stringify(invocation?.arguments_summary || toolCall.detail.arguments_summary || {}, null, 2)}
+      />
+      {decided ? (
+        <p className="chatapp-tool-confirmation__receipt" role="status">
+          Decision recorded · {confirmation?.confirmation?.state}
+        </p>
+      ) : (
+        <div className="chatapp-tool-confirmation__actions">
+          <button disabled={Boolean(decisionPending) || invocationRevision === null} onClick={() => void decide("approve")} type="button">
+            <span aria-hidden="true" className="material-symbols-rounded">check</span>
+            {decisionPending === "approve" ? "Approving" : "Approve once"}
+          </button>
+          <button className="is-deny" disabled={Boolean(decisionPending) || invocationRevision === null} onClick={() => void decide("deny")} type="button">
+            <span aria-hidden="true" className="material-symbols-rounded">close</span>
+            {decisionPending === "deny" ? "Denying" : "Deny"}
+          </button>
+        </div>
+      )}
+      {error ? <p className="chatapp-tool-confirmation__error" role="alert">{error}</p> : null}
+    </section>
+  );
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function formatConfirmationExpiry(value: string): string {
+  const expiry = new Date(value);
+  if (Number.isNaN(expiry.getTime())) return value;
+  return `expires ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(expiry)}`;
 }
 
 function ToolPanelWebResults({ results }: { results: Record<string, unknown>[] }) {

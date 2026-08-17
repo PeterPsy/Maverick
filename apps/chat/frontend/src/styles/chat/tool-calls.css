@@ -411,6 +411,118 @@
   overflow-wrap: anywhere;
 }
 
+.chatapp-tool-confirmation {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  border-radius: 0.8rem;
+  background: rgba(251, 191, 36, 0.055);
+}
+
+.chatapp-tool-confirmation__heading {
+  display: grid;
+  grid-template-columns: 1.8rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.chatapp-tool-confirmation__heading > .material-symbols-rounded {
+  color: rgba(251, 191, 36, 0.9);
+}
+
+.chatapp-tool-confirmation__heading > span:last-child {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.chatapp-tool-confirmation__heading strong {
+  color: rgba(var(--maverick-contrast-rgb), 0.92);
+  font-size: 0.86rem;
+}
+
+.chatapp-tool-confirmation__heading small,
+.chatapp-tool-confirmation__receipt,
+.chatapp-tool-confirmation__error {
+  margin: 0;
+  color: rgba(var(--maverick-contrast-rgb), 0.62);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.chatapp-tool-confirmation__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  border-radius: 0.7rem;
+  background: rgba(var(--maverick-contrast-rgb), 0.06);
+}
+
+.chatapp-tool-confirmation__facts > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+  padding: 0.5rem 0.58rem;
+  background: var(--maverick-popover-surface-strong);
+}
+
+.chatapp-tool-confirmation__facts dt {
+  color: rgba(var(--maverick-contrast-rgb), 0.48);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+}
+
+.chatapp-tool-confirmation__facts dd {
+  overflow: hidden;
+  margin: 0;
+  color: rgba(var(--maverick-contrast-rgb), 0.84);
+  font-family: var(--maverick-mono-font, ui-monospace, monospace);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+}
+
+.chatapp-tool-confirmation__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chatapp-tool-confirmation__actions button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  gap: 0.32rem;
+  padding: 0 0.66rem;
+  border: 1px solid rgba(45, 212, 191, 0.24);
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.1);
+  color: var(--maverick-text);
+  cursor: pointer;
+}
+
+.chatapp-tool-confirmation__actions button.is-deny {
+  border-color: rgba(var(--maverick-contrast-rgb), 0.1);
+  background: rgba(var(--maverick-contrast-rgb), 0.04);
+}
+
+.chatapp-tool-confirmation__actions button:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.chatapp-tool-confirmation__error {
+  color: rgba(251, 191, 36, 0.92);
+}
+
+@media (max-width: 640px) {
+  .chatapp-tool-confirmation__facts {
+    grid-template-columns: 1fr;
+  }
+}
+
 .chatapp-runtime-step-panel {
   min-height: 0;
   max-height: min(24rem, 65dvh);

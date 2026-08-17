@@ -7,13 +7,18 @@ from dataclasses import asdict, replace
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.providers.service import builtin_provider_registry
-from core.api.provider_api import workspace_provider_status, workspace_runtime_status
+from core.api.provider_api import (
+    workspace_agentic_admin_status,
+    workspace_provider_status,
+    workspace_runtime_status,
+)
 from core.api.runtime_cleanup import RuntimeCleanupError, cleanup_runtime_session
 from core.api.session_api import RequestSession, public_user_payload, require_session
 from core.api.workspace_api import workspace_payload
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import (
     require_governance_management,
+    require_provider_selection_authority,
     require_runtime_session_operation,
 )
 from core.recovery.service import execute_session_restart, record_provider_health, record_runtime_health, recovery_status
@@ -37,13 +42,27 @@ def platform_settings_payload(state: PlatformState, context: RequestSession) -> 
     cleanup_scope = _runtime_cleanup_scope(state, context)
     runtime_status["cleanup_allowed"] = cleanup_scope != "none"
     runtime_status["cleanup_scope"] = cleanup_scope
-    return {
+    payload = {
         "user": public_user_payload(context.user),
         "workspace": workspace_payload(state, context.workspace_id),
         "provider": workspace_provider_status(state, workspace_id=context.workspace_id),
         "runtime": runtime_status,
         "recovery": recovery_status(state.recovery_store, workspace_id=context.workspace_id),
     }
+    try:
+        require_provider_selection_authority(
+            state.workspace_store,
+            user=context.user,
+            workspace_id=context.workspace_id,
+        )
+    except AuthorizationError:
+        pass
+    else:
+        payload["agentic_admin"] = workspace_agentic_admin_status(
+            state,
+            workspace_id=context.workspace_id,
+        )
+    return payload
 
 
 def provider_setup_settings_payload(state: PlatformState, context: RequestSession) -> dict[str, object]:

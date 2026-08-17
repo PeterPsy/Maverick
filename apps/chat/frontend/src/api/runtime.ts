@@ -10,6 +10,7 @@ import type {
   RuntimeTurn,
   RuntimeTurnClientMetrics,
   RuntimeTurnSubmitResponse,
+  RuntimeToolConfirmation,
   RuntimeWebSocketFrame,
   UploadedWorkspaceFile,
 } from "./types";
@@ -47,6 +48,7 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}, reques
       hosted_provider_id: options.hosted_provider_id || undefined,
       hosted_model_id: options.hosted_model_id || undefined,
       workspace_profile_binding_id: options.workspace_profile_binding_id || undefined,
+      declared_remote_data_class: options.declared_remote_data_class || undefined,
       prepare_only: options.prepare_only || undefined,
       title: options.title || "New chat",
     }),
@@ -131,6 +133,7 @@ export function createRuntimeSessionWithTurn({
     hosted_provider_id: options.hosted_provider_id || undefined,
     hosted_model_id: options.hosted_model_id || undefined,
     workspace_profile_binding_id: options.workspace_profile_binding_id || undefined,
+    declared_remote_data_class: options.declared_remote_data_class || undefined,
     title: options.title || "New chat",
     input_text: inputText,
     invoked_skill_ids: invokedSkillIds,
@@ -319,4 +322,29 @@ export function interruptRuntimeTurn(turnId: string): Promise<{
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
+}
+
+export function getRuntimeToolConfirmation(turnId: string, invocationId: string): Promise<RuntimeToolConfirmation> {
+  return requestJson(
+    `/api/runtime/turns/${encodeURIComponent(turnId)}/tool-confirmations/${encodeURIComponent(invocationId)}`,
+  );
+}
+
+export function decideRuntimeToolConfirmation(
+  turnId: string,
+  invocationId: string,
+  payload: {
+    decision: "approve" | "deny";
+    arguments_digest: string;
+    expected_invocation_revision: number;
+  },
+): Promise<RuntimeToolConfirmation> {
+  return requestJson(
+    `/api/runtime/turns/${encodeURIComponent(turnId)}/tool-confirmations/${encodeURIComponent(invocationId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
 }

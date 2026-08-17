@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useEffect } from "react";
+import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import {
   ChatThread,
   ProviderItem,
@@ -100,9 +100,17 @@ export function useChatRuntimeControls({
   setSelectedAgentTypeId,
   setComposerError,
 }: UseChatRuntimeControlsParams) {
+  const [syntheticDataConfirmed, setSyntheticDataConfirmed] = useState(false);
+  const activeProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
+  const syntheticDataConfirmationRequired = activeProvider?.requires_synthetic_data_declaration === true;
+
   useEffect(() => {
     preloadAgentRuntimeConfig(workspaceId, agentCatalogAppId, selectedAgentTypeId);
   }, [agentCatalogAppId, selectedAgentTypeId, workspaceId]);
+
+  useEffect(() => {
+    setSyntheticDataConfirmed(false);
+  }, [activeProviderId]);
 
   async function handleSelectProvider(providerId: string) {
     if (activeThread) {
@@ -110,6 +118,7 @@ export function useChatRuntimeControls({
       return;
     }
     setActiveProviderId(providerId);
+    setSyntheticDataConfirmed(false);
     const provider = providers.find((item) => item.provider_id === providerId) || null;
     if (providerUsesPlainHostedRuntime(provider) || provider?.provider_role === "runtime_engine") {
       setError(null);
@@ -142,6 +151,9 @@ export function useChatRuntimeControls({
     if (!selectedAgentTypeId || !agentCatalogAppId || !workspaceId) {
       return null;
     }
+    if (selectedProvider?.requires_synthetic_data_declaration && !syntheticDataConfirmed) {
+      throw new Error("Confirm that this new preview chat contains synthetic data only.");
+    }
     const config = await loadAgentRuntimeConfig(workspaceId, agentCatalogAppId, selectedAgentTypeId);
     return {
       agent_id: config.agent_id,
@@ -155,6 +167,9 @@ export function useChatRuntimeControls({
       title: config.title,
       runtime_mode: "agentic",
       workspace_profile_binding_id: selectedProvider?.workspace_profile_binding_id,
+      declared_remote_data_class: selectedProvider?.requires_synthetic_data_declaration
+        ? "workspace_internal_fake"
+        : undefined,
     };
   }
 
@@ -179,5 +194,8 @@ export function useChatRuntimeControls({
     handleSelectProvider,
     handleStopTurn,
     selectedAgentRuntimeConfig,
+    setSyntheticDataConfirmed,
+    syntheticDataConfirmationRequired,
+    syntheticDataConfirmed,
   };
 }

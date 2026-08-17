@@ -55,27 +55,15 @@ def ensure_codex_workspace_profile(
     """Publish the exact Codex model profile and bind the workspace default."""
     if definition.provider_id != "codex" or definition.provider_role != "runtime_engine":
         raise AgenticProfileError("Phase-0 agentic profile publication supports the Codex runtime only.")
-    timestamp = now or utcnow()
     model_id = str(selection.model_id or definition.default_model_family or "").strip()
-    if not model_id:
-        raise AgenticProfileError("Codex agentic profiles require an exact model id.")
-    profile = _codex_profile_definition(definition=definition, model_id=model_id, now=timestamp)
-    try:
-        profile = store.get_agentic_profile_definition(profile.definition_id, profile.revision)
-    except ProviderNotFoundError:
-        store.save_agentic_profile_definition(profile)
-    status = store.get_agentic_profile_definition_status(profile.definition_id, profile.revision)
-    if status is None:
-        store.save_agentic_profile_definition_status(
-            AgenticProfileDefinitionStatus(
-                definition_id=profile.definition_id,
-                definition_revision=profile.revision,
-                rollout_status="preview",
-                revision=0,
-                updated_at=timestamp,
-            ),
-            expected_revision=None,
-        )
+    timestamp = now or utcnow()
+    profile = publish_codex_agentic_profile(
+        store,
+        definition=definition,
+        model_id=model_id,
+        now=timestamp,
+    )
+
     binding_id = _default_workspace_binding_id(selection.workspace_id)
     bindings = store.list_workspace_agentic_profile_bindings(selection.workspace_id)
     existing = next((item for item in bindings if item.binding_id == binding_id), None)
@@ -111,6 +99,44 @@ def ensure_codex_workspace_profile(
     binding = replace(desired, revision=existing.revision + 1, updated_at=timestamp)
     store.save_workspace_agentic_profile_binding(binding, expected_revision=existing.revision)
     return profile, binding
+
+
+def publish_codex_agentic_profile(
+    store: ProviderStore,
+    *,
+    definition: ProviderDefinition,
+    model_id: str,
+    now: datetime | None = None,
+) -> AgenticProfileDefinition:
+    """Publish one immutable Codex definition without mutating workspace state."""
+    if definition.provider_id != "codex" or definition.provider_role != "runtime_engine":
+        raise AgenticProfileError("Codex profile publication requires the Codex runtime engine.")
+    normalized_model_id = str(model_id or definition.default_model_family or "").strip()
+    if not normalized_model_id:
+        raise AgenticProfileError("Codex agentic profiles require an exact model id.")
+    timestamp = now or utcnow()
+    profile = _codex_profile_definition(
+        definition=definition,
+        model_id=normalized_model_id,
+        now=timestamp,
+    )
+    try:
+        profile = store.get_agentic_profile_definition(profile.definition_id, profile.revision)
+    except ProviderNotFoundError:
+        store.save_agentic_profile_definition(profile)
+    status = store.get_agentic_profile_definition_status(profile.definition_id, profile.revision)
+    if status is None:
+        store.save_agentic_profile_definition_status(
+            AgenticProfileDefinitionStatus(
+                definition_id=profile.definition_id,
+                definition_revision=profile.revision,
+                rollout_status="preview",
+                revision=0,
+                updated_at=timestamp,
+            ),
+            expected_revision=None,
+        )
+    return profile
 
 
 def resolve_workspace_agentic_profile(
@@ -157,6 +183,7 @@ def build_pinned_execution_binding(
     workspace_id: str,
     execution_mode: ExecutionMode,
     workspace_binding_id: str | None = None,
+    reasoning_effort: str | None = None,
     legacy_inferred: bool = False,
     now: datetime | None = None,
 ) -> RuntimeExecutionBinding:
@@ -182,11 +209,17 @@ def build_pinned_execution_binding(
             certificate = store.get_capability_certificate(definition.capability_certificate_id)
         except ProviderNotFoundError as error:
             raise CapabilityCertificateError("certificate_missing") from error
-    selection = _selection_projection(definition, binding, reasoning_effort=None, now=timestamp)
-    if provider.provider_id == "codex":
-        legacy_selection = store.get_provider_selection(workspace_id)
-        if legacy_selection is not None and legacy_selection.provider_id == "codex":
-            selection = replace(selection, model_reasoning_effort=legacy_selection.model_reasoning_effort)
+    normalized_reasoning_effort = _validated_reasoning_effort(
+        provider,
+        model_id=definition.model_id,
+        reasoning_effort=reasoning_effort,
+    )
+    selection = _selection_projection(
+        definition,
+        binding,
+        reasoning_effort=normalized_reasoning_effort,
+        now=timestamp,
+    )
     runtime_binding = build_runtime_execution_binding(
         session_id=session_id,
         workspace_id=workspace_id,
@@ -222,6 +255,24 @@ def build_pinned_execution_binding(
         now=timestamp,
     )
     return runtime_binding
+
+
+def _validated_reasoning_effort(
+    provider: ProviderDefinition,
+    *,
+    model_id: str,
+    reasoning_effort: str | None,
+) -> str | None:
+    normalized = str(reasoning_effort or "").strip() or None
+    if normalized is None:
+        return None
+    model = next((item for item in provider.model_options if item.model_id == model_id), None)
+    if model is None:
+        raise AgenticProfileError("profile_model_unavailable")
+    supported = {item.effort for item in model.supported_reasoning_efforts}
+    if normalized not in supported:
+        raise AgenticProfileError("profile_reasoning_effort_unsupported")
+    return normalized
 
 
 def provider_selection_from_execution_binding(

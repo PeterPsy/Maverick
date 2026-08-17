@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Literal
 
 from core.execution_policy.models import ExecutionMode
+from core.providers.agentic_models import RuntimeDataClass
 from core.runtime.execution_binding import RuntimeExecutionBinding, execution_binding_from_document
 
 
@@ -32,6 +33,7 @@ RUNTIME_SESSION_KINDS = {"chat_root", "inter_agent_participant", "system"}
 RUNTIME_THREAD_VISIBILITIES = {"user", "hidden"}
 RUNTIME_MODES = {"agentic", "plain_hosted_chat"}
 SKILL_ACTIVATION_MODES = {"implicit", "explicit"}
+DECLARABLE_REMOTE_DATA_CLASSES = {"public", "workspace_internal_fake"}
 
 
 @dataclass(frozen=True)
@@ -84,6 +86,7 @@ class RuntimeSessionRecord:
     provider_thread_id: str | None = None
     hosted_provider_id: str | None = None
     hosted_model_id: str | None = None
+    declared_remote_data_class: RuntimeDataClass | None = None
 
 
 @dataclass(frozen=True)
@@ -140,6 +143,16 @@ def coerce_skill_activation_mode(value: object | None) -> SkillActivationMode:
     raise ValueError(f"Unsupported skill activation mode `{normalized}`.")
 
 
+def coerce_declared_remote_data_class(value: object | None) -> RuntimeDataClass | None:
+    """Accept only data classes a user can safely attest for an entire session."""
+    if value is None or value == "":
+        return None
+    normalized = str(value).strip()
+    if normalized in DECLARABLE_REMOTE_DATA_CLASSES:
+        return normalized  # type: ignore[return-value]
+    raise ValueError("Unsupported declared remote data class.")
+
+
 def normalize_runtime_session_visibility(
     session_kind: object | None,
     thread_visibility: object | None,
@@ -170,6 +183,9 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     payload["thread_visibility"] = thread_visibility
     payload["runtime_mode"] = coerce_runtime_mode(payload.get("runtime_mode"))
     payload["skill_activation_mode"] = coerce_skill_activation_mode(payload.get("skill_activation_mode"))
+    payload["declared_remote_data_class"] = coerce_declared_remote_data_class(
+        payload.get("declared_remote_data_class")
+    )
     execution_binding = payload.get("execution_binding")
     if isinstance(execution_binding, dict):
         payload["execution_binding"] = execution_binding_from_document(execution_binding)

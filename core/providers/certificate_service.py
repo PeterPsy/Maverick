@@ -219,7 +219,9 @@ def validate_certificate_for_binding(
             raise CapabilityCertificateError(f"certificate_{field_name}_mismatch")
     if certificate.routing_constraint_digest != canonical_digest(binding.routing_constraint_snapshot):
         raise CapabilityCertificateError("certificate_routing_constraint_mismatch")
-    if certificate.certified_upstream_ids != binding.routing_constraint_snapshot.allowed_upstream_ids:
+    if tuple(certificate.certified_upstream_ids) != tuple(
+        binding.routing_constraint_snapshot.allowed_upstream_ids
+    ):
         raise CapabilityCertificateError("certificate_upstream_constraint_mismatch")
     if observed_upstream_id and observed_upstream_id not in certificate.certified_upstream_ids:
         raise CapabilityCertificateError("provider_upstream_not_certified")

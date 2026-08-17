@@ -9,18 +9,60 @@ export function ComposerRuntimeBadges({
   executionMode,
   locked = false,
   onSelectProvider,
+  onSyntheticDataConfirmedChange,
   providers,
+  syntheticDataConfirmationRequired = false,
+  syntheticDataConfirmed = false,
 }: {
   activeProviderId: string;
   disabled: boolean;
   executionMode: ExecutionMode | null;
   locked?: boolean;
   onSelectProvider: (providerId: string) => void;
+  onSyntheticDataConfirmedChange?: (confirmed: boolean) => void;
   providers: ProviderItem[];
+  syntheticDataConfirmationRequired?: boolean;
+  syntheticDataConfirmed?: boolean;
 }) {
+  const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
+  const certificateExpiring = agenticCertificateExpiringSoon(selectedProvider?.agentic_certificate_expires_at);
   return (
     <div className="chatapp-composer__runtime-badges">
       <ProviderSelector activeProviderId={activeProviderId} disabled={disabled} locked={locked} onSelect={onSelectProvider} providers={providers} />
+      {syntheticDataConfirmationRequired ? (
+        locked ? (
+          <span className="chatapp-synthetic-data-chip is-pinned" title="This pinned preview session is restricted to synthetic data">
+            <span aria-hidden="true" className="material-symbols-rounded">science</span>
+            Synthetic preview
+          </span>
+        ) : (
+          <label className={`chatapp-synthetic-data-chip ${syntheticDataConfirmed ? "is-confirmed" : ""}`}>
+            <input
+              checked={syntheticDataConfirmed}
+              disabled={disabled}
+              onChange={(event) => onSyntheticDataConfirmedChange?.(event.currentTarget.checked)}
+              type="checkbox"
+            />
+            <span aria-hidden="true" className="material-symbols-rounded">science</span>
+            Synthetic data only
+          </label>
+        )
+      ) : null}
+      {selectedProvider?.workspace_profile_binding_id ? (
+        <span
+          className={`chatapp-agentic-profile-chip ${certificateExpiring ? "is-warning" : ""}`}
+          title={[
+            "Pinned workspace profile",
+            selectedProvider.agentic_rollout_status,
+            `certificate ${selectedProvider.agentic_certificate_status || "unknown"}`,
+            `${selectedProvider.agentic_allowed_tool_handles?.length || 0} tools`,
+          ].filter(Boolean).join(" · ")}
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">verified_user</span>
+          {locked ? "Pinned" : selectedProvider.agentic_rollout_status || "Agentic"}
+          {certificateExpiring ? " · certificate expiring" : ""}
+        </span>
+      ) : null}
       {executionMode ? (
         <span
           aria-label={executionMode === "full-access" ? "Full access runtime" : "Sandbox runtime"}
@@ -35,4 +77,10 @@ export function ComposerRuntimeBadges({
       ) : null}
     </div>
   );
+}
+
+function agenticCertificateExpiringSoon(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const remaining = new Date(value).getTime() - Date.now();
+  return Number.isFinite(remaining) && remaining <= 7 * 86_400_000;
 }

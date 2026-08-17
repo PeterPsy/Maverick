@@ -139,6 +139,15 @@ describe("provider runtime options", () => {
             rollout_status: "preview",
             enabled: true,
             is_default: true,
+            certified: true,
+            certificate: {
+              effective_status: "active",
+              expires_at: "2026-09-16T00:00:00Z",
+            },
+            egress_policy_id: "fake-data-remote-preview",
+            allowed_tool_handles: ["mcp:storage_read"],
+            max_estimated_cost_microusd: 250_000,
+            requires_synthetic_data_declaration: true,
           },
         ],
       },
@@ -149,6 +158,11 @@ describe("provider runtime options", () => {
       workspace_profile_binding_id: "binding-codex",
       default_model_family: "gpt-5.6-sol",
       label: "Codex · gpt-5.6-sol",
+      agentic_certificate_status: "active",
+      agentic_egress_policy_id: "fake-data-remote-preview",
+      agentic_allowed_tool_handles: ["mcp:storage_read"],
+      agentic_max_estimated_cost_microusd: 250_000,
+      requires_synthetic_data_declaration: true,
     });
   });
 

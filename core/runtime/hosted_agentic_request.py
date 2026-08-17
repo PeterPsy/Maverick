@@ -140,7 +140,7 @@ class HostedAgenticRequestBuilder:
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
     ) -> AgenticRequestContentBlock:
-        classification = self.classifier(provenance, content)
+        classification = self.classifier(context, provenance, content)
         content_block_id = f"{request_id}:content:{index}"
         exported = self._evaluate(
             context=context,
@@ -171,6 +171,7 @@ class HostedAgenticRequestBuilder:
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
     ) -> AgenticToolResult:
+        classification = self.classifier(context, "tool_result", result.content)
         exported = self._evaluate(
             context=context,
             content_block_id=(
@@ -181,6 +182,7 @@ class HostedAgenticRequestBuilder:
             content_type=result.content_type,
             egress_policy=egress_policy,
             destination_upstream_id=destination_upstream_id,
+            classification=classification,
         )
         return AgenticToolResult(
             provider_tool_call_id=result.provider_tool_call_id,
@@ -264,7 +266,7 @@ class HostedAgenticRequestBuilder:
         destination_upstream_id: str | None,
         classification=None,
     ) -> bytes:
-        classification = classification or self.classifier(provenance, content)
+        classification = classification or self.classifier(context, provenance, content)
         result = self.egress_evaluator.evaluate(
             block=AgenticEgressContentBlock(
                 content_block_id=content_block_id,

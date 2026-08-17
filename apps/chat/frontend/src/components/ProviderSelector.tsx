@@ -21,6 +21,9 @@ function providerSearchText(provider: ProviderItem) {
     provider.default_model_family,
     provider.hosted_provider_id,
     provider.hosted_model_id,
+    provider.agentic_rollout_status,
+    provider.agentic_certificate_status,
+    provider.agentic_egress_policy_id,
   ]
     .filter(Boolean)
     .join(" ")
@@ -277,12 +280,19 @@ export function ProviderSelector({
               value={query}
             />
           </label>
-          {filteredProviders.map((provider, providerIndex) => (
-            <button
+          {filteredProviders.map((provider, providerIndex) => {
+            const currentGroup = provider.workspace_profile_binding_id ? "Agentic workspace profiles" : "Hosted text models";
+            const previousProvider = filteredProviders[providerIndex - 1];
+            const previousGroup = previousProvider?.workspace_profile_binding_id ? "Agentic workspace profiles" : "Hosted text models";
+            return (
+            <div className="chatapp-provider-menu__option-block" key={provider.provider_id}>
+              {providerIndex === 0 || currentGroup !== previousGroup ? (
+                <div className="chatapp-provider-menu__group" role="presentation">{currentGroup}</div>
+              ) : null}
+              <button
               aria-selected={provider.provider_id === activeProviderId}
               className={`chatapp-provider-menu__item ${provider.provider_id === activeProviderId ? "is-active" : ""} ${providerIndex === activeIndex ? "is-highlighted" : ""}`}
               id={`${menuId}-option-${provider.provider_id}`}
-              key={provider.provider_id}
               onClick={() => {
                 selectProvider(provider.provider_id);
               }}
@@ -295,8 +305,17 @@ export function ProviderSelector({
             >
               <span className="chatapp-provider-menu__name">{provider.label}</span>
               {provider.description ? <span className="chatapp-provider-menu__description">{provider.description}</span> : null}
-            </button>
-          ))}
+              {provider.workspace_profile_binding_id ? (
+                <span className="chatapp-provider-menu__badges">
+                  <span>{provider.agentic_rollout_status || "agentic"}</span>
+                  <span>certificate {provider.agentic_certificate_status || "unknown"}</span>
+                  <span>{provider.agentic_allowed_tool_handles?.length || 0} tools</span>
+                </span>
+              ) : null}
+              </button>
+            </div>
+            );
+          })}
           {!filteredProviders.length ? <div className="chatapp-provider-menu__empty">No matching models</div> : null}
         </div>
       ) : null}

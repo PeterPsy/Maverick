@@ -57,6 +57,7 @@ export type AgentRuntimeConfig = {
   hosted_provider_id?: string;
   hosted_model_id?: string;
   workspace_profile_binding_id?: string;
+  declared_remote_data_class?: "workspace_internal_fake" | "public";
   skill_catalog_app_id: string;
   skill_ids: string[];
   skill_activation_mode?: "implicit" | "explicit";
@@ -267,6 +268,7 @@ export function runtimeSessionOptionsForNewChat({
     hosted_provider_id: agentRuntimeConfig?.hosted_provider_id,
     hosted_model_id: agentRuntimeConfig?.hosted_model_id,
     workspace_profile_binding_id: agentRuntimeConfig?.workspace_profile_binding_id,
+    declared_remote_data_class: agentRuntimeConfig?.declared_remote_data_class,
     title: "New chat",
   };
 }
@@ -280,6 +282,7 @@ function preparedRuntimeSessionKey(conversationKey: string, options: RuntimeSess
     hosted_model_id: options.hosted_model_id || "",
     hosted_provider_id: options.hosted_provider_id || "",
     workspace_profile_binding_id: options.workspace_profile_binding_id || "",
+    declared_remote_data_class: options.declared_remote_data_class || "",
     project_id: options.project_id || null,
     routing_profile: options.routing_profile || "",
     runtime_mode: options.runtime_mode || "",

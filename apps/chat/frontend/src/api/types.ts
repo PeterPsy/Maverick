@@ -11,6 +11,13 @@ export type ProviderItem = {
   hosted_provider_id?: string;
   hosted_model_id?: string;
   workspace_profile_binding_id?: string;
+  agentic_rollout_status?: string | null;
+  agentic_certificate_status?: string | null;
+  agentic_certificate_expires_at?: string | null;
+  agentic_egress_policy_id?: string | null;
+  agentic_allowed_tool_handles?: string[];
+  agentic_max_estimated_cost_microusd?: number | null;
+  requires_synthetic_data_declaration?: boolean;
   input_modalities?: string[];
   output_modalities?: string[];
 };
@@ -88,6 +95,19 @@ export type AgenticProfileItem = {
   rollout_status: string | null;
   enabled: boolean;
   is_default: boolean;
+  certified?: boolean;
+  provider_protocol?: string;
+  provider_api_version?: string | null;
+  adapter_id?: string;
+  adapter_version_constraint?: string;
+  egress_policy_id?: string;
+  allowed_tool_handles?: string[];
+  max_estimated_cost_microusd?: number | null;
+  requires_synthetic_data_declaration?: boolean;
+  certificate?: {
+    effective_status?: string;
+    expires_at?: string;
+  } | null;
 };
 
 export type DependencyProviderCandidate = {
@@ -344,9 +364,19 @@ export type RuntimeSession = {
   skill_activation_mode?: "implicit" | "explicit" | string;
   provider_id?: string;
   execution_binding?: {
+    profile_definition_id?: string;
+    profile_definition_revision?: string;
     workspace_binding_id: string;
+    workspace_binding_revision?: number;
+    capability_certificate_id?: string;
     model_id: string;
     runtime_engine_id: string;
+    adapter_id?: string;
+    adapter_version?: string;
+    model_provider_id?: string;
+    provider_protocol?: string;
+    provider_api_version?: string | null;
+    egress_policy_id?: string;
     binding_digest: string;
   } | null;
   hosted_provider_id?: string | null;
@@ -356,6 +386,7 @@ export type RuntimeSession = {
   provider_thread_ready?: boolean;
   runtime_ready?: boolean;
   prewarm_total_ms?: number;
+  declared_remote_data_class?: string | null;
 };
 
 export type RuntimeTurn = {
@@ -518,9 +549,30 @@ export type StructuredContent = {
 export type ToolCallMessage = {
   id?: string;
   name: string;
-  status: "started" | "updated" | "completed" | "failed";
+  status: "started" | "updated" | "awaiting_confirmation" | "completed" | "failed";
   detail: Record<string, unknown>;
   createdAt?: string;
+};
+
+export type RuntimeToolConfirmation = {
+  turn_id: string;
+  turn_status: string;
+  confirmation_deadline_at?: string | null;
+  invocation: {
+    invocation_id: string;
+    tool_handle: string;
+    effect_class: string;
+    arguments_summary: Record<string, unknown>;
+    arguments_digest: string;
+    state: string;
+    revision: number;
+    policy_revision: string;
+  };
+  confirmation: {
+    state: string;
+    expires_at: string;
+    revision: number;
+  } | null;
 };
 
 export type RuntimeStepMessage = {
@@ -808,6 +860,7 @@ export type RuntimeSessionOptions = {
   hosted_provider_id?: string;
   hosted_model_id?: string;
   workspace_profile_binding_id?: string;
+  declared_remote_data_class?: "workspace_internal_fake" | "public";
   prepare_only?: boolean;
   title?: string;
 };

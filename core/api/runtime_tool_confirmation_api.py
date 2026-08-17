@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from uuid import NAMESPACE_URL, uuid5
 
 from core.api.http import StartResponse, json_response
@@ -49,7 +50,15 @@ def handle_runtime_tool_confirmation(
             status="409 Conflict",
         )
     if method == "GET":
-        return json_response(start_response, _confirmation_payload(ledger, turn, invocation))
+        return json_response(
+            start_response,
+            _confirmation_payload(
+                ledger,
+                turn,
+                invocation,
+                confirmation_deadline_at=_confirmation_deadline(state, turn),
+            ),
+        )
     if method != "POST":
         return json_response(
             start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed"
@@ -120,7 +129,12 @@ def handle_runtime_tool_confirmation(
     return json_response(
         start_response,
         {
-            **_confirmation_payload(ledger, turn, invocation),
+            **_confirmation_payload(
+                ledger,
+                turn,
+                invocation,
+                confirmation_deadline_at=_confirmation_deadline(state, turn),
+            ),
             "event": {
                 "event_id": event.event_id,
                 "event_type": event.event_type,
@@ -168,12 +182,19 @@ def _authorized_invocation(
     return turn, invocation
 
 
-def _confirmation_payload(ledger, turn, invocation) -> dict[str, object]:
+def _confirmation_payload(
+    ledger,
+    turn,
+    invocation,
+    *,
+    confirmation_deadline_at=None,
+) -> dict[str, object]:
     grants = ledger.store.list_tool_confirmation_grants(invocation_id=invocation.invocation_id)
     grant = max(grants, key=lambda item: item.created_at, default=None)
     return {
         "turn_id": turn.turn_id,
         "turn_status": turn.status,
+        "confirmation_deadline_at": confirmation_deadline_at,
         "invocation": {
             "invocation_id": invocation.invocation_id,
             "tool_handle": invocation.resolved_tool_handle,
@@ -194,3 +215,28 @@ def _confirmation_payload(ledger, turn, invocation) -> dict[str, object]:
             }
         ),
     }
+
+
+def _confirmation_deadline(state: PlatformState, turn):
+    deadlines = []
+    try:
+        runtime_state = state.runtime_store.get_state(turn.session_id)
+    except Exception:
+        runtime_state = None
+    if runtime_state is not None and runtime_state.watchdog_deadline_at is not None:
+        deadlines.append(runtime_state.watchdog_deadline_at)
+    try:
+        session = state.runtime_store.get_session(turn.session_id)
+    except Exception:
+        session = None
+    binding = None if session is None else session.execution_binding
+    if binding is not None:
+        max_wall_time_seconds = min(
+            binding.profile_policy_ceiling_snapshot.max_wall_time_seconds,
+            binding.workspace_policy_ceiling_snapshot.max_wall_time_seconds,
+        )
+        deadlines.append(
+            (turn.started_at or turn.created_at)
+            + timedelta(seconds=max_wall_time_seconds)
+        )
+    return min(deadlines) if deadlines else None

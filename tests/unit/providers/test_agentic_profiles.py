@@ -10,6 +10,7 @@ from core.providers.agentic_profiles import (
     ensure_codex_workspace_profile,
 )
 from core.providers.errors import AgenticProfileConflictError
+from core.providers.certificate_service import validate_certificate_for_binding
 from core.providers.models import ProviderSelection
 from core.providers.service import builtin_provider_registry, resolve_provider_for_runtime_session
 from core.providers.store import ProviderCollections, ProviderDocumentStore
@@ -97,6 +98,7 @@ class AgenticProfilesTest(unittest.TestCase):
             execution_mode="full-access",
             now=NOW,
         )
+        self.assertIsNone(binding.reasoning_effort)
         changed = replace(original, model_id="gpt-5.6-mini", updated_at=replace_time(NOW))
         self.provider_store.save_provider_selection(changed)
         ensure_codex_workspace_profile(
@@ -155,6 +157,13 @@ class AgenticProfilesTest(unittest.TestCase):
         migrated = runtime_store.get_session("session-a")
         state = runtime_store.get_provider_state("session-a")
         self.assertTrue(migrated.execution_binding.legacy_inferred)
+        self.assertEqual(migrated.execution_binding.reasoning_effort, "high")
+        validate_certificate_for_binding(
+            self.provider_store,
+            binding=migrated.execution_binding,
+            adapter=self.registry.get_agentic_runtime_adapter("codex"),
+            now=NOW,
+        )
         self.assertEqual(state.provider_thread_id, "legacy-thread")
         self.assertEqual(first.summary_digest, second.summary_digest)
         self.assertEqual(len(provider_states.documents), 1)

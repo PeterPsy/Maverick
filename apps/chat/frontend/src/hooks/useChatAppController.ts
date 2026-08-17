@@ -50,7 +50,7 @@ function isThreadAvailabilityBusy(availability: string) {
 }
 
 function isRuntimeTurnBusy(turn: RuntimeTurn | null) {
-  return turn?.status === "queued" || turn?.status === "active";
+  return turn?.status === "queued" || turn?.status === "active" || turn?.status === "waiting_for_tool_confirmation";
 }
 
 export function isActiveRuntimeTurnBusyForThread(activeTurn: RuntimeTurn | null, activeThread: ChatThread | null) {
@@ -636,6 +636,9 @@ export function useChatAppController({
     sourceAppChatMode,
     sourceAppId,
     sourceAppProjectId,
+    syntheticDataConfirmationRequired: runtimeControls.syntheticDataConfirmationRequired,
+    syntheticDataConfirmed: runtimeControls.syntheticDataConfirmed,
+    setSyntheticDataConfirmed: runtimeControls.setSyntheticDataConfirmed,
     setSourceAppChatMode,
     setMultiAgentMode,
     setComposer,

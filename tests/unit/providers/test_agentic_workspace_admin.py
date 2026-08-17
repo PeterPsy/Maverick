@@ -9,7 +9,7 @@ from core.api.platform_state import bootstrap_platform_state
 from core.providers.agentic_models import ActorSelectionPolicy
 from core.providers.agentic_workspace_admin import save_workspace_agentic_binding
 from core.providers.agentic_workspace_policy import actor_selection_allowed
-from core.providers.errors import AgenticProfileError
+from core.providers.errors import AgenticProfileError, ProviderNotFoundError
 from core.providers.google_agentic_profile import (
     GOOGLE_AGENTIC_PROFILE_ID,
     GOOGLE_AGENTIC_PROFILE_REVISION,
@@ -75,36 +75,21 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 now=NOW,
             )
 
-        saved = save_workspace_agentic_binding(
-            self.state.provider_store,
-            self.state.provider_registry,
-            workspace_id="default",
-            definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-            definition_revision=GOOGLE_AGENTIC_PROFILE_REVISION,
-            credential_binding_id=credential.binding_id,
-            enabled=True,
-            is_default=False,
-            actor_policy=actor_policy,
-            policy_patch=policy_patch,
-            confirm_fake_data_only_workspace=True,
-            now=NOW,
-        )
-
-        self.assertEqual(saved.egress_policy_id, "fake-data-remote-preview")
-        self.assertEqual(
-            saved.workspace_policy_ceiling.allowed_remote_data_classes,
-            ("workspace_internal_fake",),
-        )
-        self.assertEqual(saved.workspace_policy_ceiling.tool_handle_mode, "none")
-        self.assertTrue(
-            actor_selection_allowed(
-                saved,
-                user_id="member-1",
-                platform_role="member",
-                workspace_role="member",
-                agent_type_id="researcher",
+        with self.assertRaises(ProviderNotFoundError):
+            save_workspace_agentic_binding(
+                self.state.provider_store,
+                self.state.provider_registry,
+                workspace_id="default",
+                definition_id=GOOGLE_AGENTIC_PROFILE_ID,
+                definition_revision=GOOGLE_AGENTIC_PROFILE_REVISION,
+                credential_binding_id=credential.binding_id,
+                enabled=True,
+                is_default=False,
+                actor_policy=actor_policy,
+                policy_patch=policy_patch,
+                confirm_fake_data_only_workspace=True,
+                now=NOW,
             )
-        )
 
     def test_workspace_policy_cannot_widen_profile_limits(self) -> None:
         profile = self.state.provider_store.get_agentic_profile_definition(

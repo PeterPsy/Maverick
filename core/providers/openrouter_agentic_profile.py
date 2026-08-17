@@ -12,9 +12,6 @@ from core.providers.agentic_models import (
     RoutingConstraint,
 )
 from core.providers.errors import ProviderNotFoundError
-from core.providers.openrouter_agentic_certification import (
-    ensure_openrouter_preview_certificate,
-)
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_ENDPOINT_ID,
     OPENROUTER_AGENTIC_MODEL_ID,
@@ -24,8 +21,8 @@ from core.providers.store import ProviderStore
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "2"
-OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1",)
+OPENROUTER_AGENTIC_PROFILE_REVISION = "3"
+OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2")
 OPENROUTER_AGENTIC_CERTIFICATE_ID = (
     f"capability-certificate:{OPENROUTER_AGENTIC_PROFILE_ID}:{OPENROUTER_AGENTIC_PROFILE_REVISION}"
 )
@@ -74,7 +71,7 @@ def ensure_openrouter_agentic_preview_profile(
     adapter: object,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Publish preview metadata and evidence without enabling a binding."""
+    """Publish uncertified candidate metadata without enabling a binding."""
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
@@ -110,7 +107,6 @@ def ensure_openrouter_agentic_preview_profile(
             ),
             expected_revision=None,
         )
-    ensure_openrouter_preview_certificate(store, definition=stored, adapter=adapter)
     _suspend_previous_revisions(store, now=timestamp)
     return stored
 

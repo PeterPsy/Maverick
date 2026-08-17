@@ -39,6 +39,14 @@ class CapabilityEvidenceRecord:
     result_summary_digest: str
     evidence_refs: tuple[str, ...]
     recorded_at: datetime
+    source_commit: str = ""
+    artifact_bundle_digest: str = ""
+    matrix_revision: str = ""
+    matrix_digest: str = ""
+    signer_key_id: str = ""
+    run_signature: str = ""
+    certification_started_at: datetime | None = None
+    certification_outcome: str = ""
 
 
 @dataclass(frozen=True)

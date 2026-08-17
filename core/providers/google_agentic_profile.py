@@ -12,14 +12,13 @@ from core.providers.agentic_models import (
     RoutingConstraint,
 )
 from core.providers.errors import ProviderNotFoundError
-from core.providers.google_agentic_certification import ensure_google_preview_certificate
 from core.providers.store import ProviderStore
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "3"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "2"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2")
+GOOGLE_AGENTIC_PROFILE_REVISION = "4"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "3"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3")
 GOOGLE_AGENTIC_CERTIFICATE_ID = (
     f"capability-certificate:{GOOGLE_AGENTIC_PROFILE_ID}:{GOOGLE_AGENTIC_PROFILE_REVISION}"
 )
@@ -67,7 +66,7 @@ def ensure_google_agentic_preview_profile(
     adapter: object,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Publish preview metadata and evidence without enabling a workspace binding."""
+    """Publish uncertified candidate metadata without enabling a workspace binding."""
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=GOOGLE_AGENTIC_PROFILE_ID,
@@ -103,7 +102,6 @@ def ensure_google_agentic_preview_profile(
             ),
             expected_revision=None,
         )
-    ensure_google_preview_certificate(store, definition=stored, adapter=adapter)
     _suspend_previous_revisions(store, now=timestamp)
     return stored
 

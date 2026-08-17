@@ -6,10 +6,7 @@ from unittest import mock
 import unittest
 
 from core.api.platform_state import bootstrap_platform_state
-from core.providers.certificate_service import runtime_adapter_artifact_digest
-from core.providers.openrouter_agentic_certification import (
-    OPENROUTER_CERTIFICATION_VALIDITY_DAYS,
-)
+from core.providers.errors import ProviderNotFoundError
 from core.providers.openrouter_agentic_profile import (
     OPENROUTER_AGENTIC_PROFILE_ID,
     OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
@@ -45,9 +42,6 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             profile.definition_id,
             profile.revision,
         )
-        certificate = state.provider_store.get_capability_certificate(
-            profile.capability_certificate_id
-        )
         adapter = state.provider_registry.get_agentic_runtime_adapter(
             profile.runtime_engine_id
         )
@@ -64,16 +58,8 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(routing.data_collection_policy, "deny")
         self.assertTrue(routing.require_zdr)
         self.assertEqual(routing.allowed_quantizations, ("fp8",))
-        self.assertEqual(certificate.certified_upstream_ids, ("deepinfra/fp8",))
-        self.assertEqual(
-            certificate.expires_at,
-            NOW + timedelta(days=OPENROUTER_CERTIFICATION_VALIDITY_DAYS),
-        )
-        self.assertEqual(
-            certificate.adapter_artifact_digest,
-            runtime_adapter_artifact_digest(adapter),
-        )
-        self.assertEqual(certificate.suite_version, "2")
+        with self.assertRaises(ProviderNotFoundError):
+            state.provider_store.get_capability_certificate(profile.capability_certificate_id)
         self.assertFalse(
             any(
                 binding.definition_id == profile.definition_id

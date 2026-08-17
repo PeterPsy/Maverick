@@ -57,6 +57,14 @@ def build_capability_evidence(
     result_summary_digest: str,
     evidence_refs: tuple[str, ...],
     recorded_at: datetime,
+    source_commit: str = "",
+    artifact_bundle_digest: str = "",
+    matrix_revision: str = "",
+    matrix_digest: str = "",
+    signer_key_id: str = "",
+    run_signature: str = "",
+    certification_started_at: datetime | None = None,
+    certification_outcome: str = "",
 ) -> CapabilityEvidenceRecord:
     """Build one self-identifying evidence record from platform-owned references."""
     _require_aware(recorded_at, "certificate_evidence_time_invalid")
@@ -69,6 +77,14 @@ def build_capability_evidence(
         "result_summary_digest": _sha256(result_summary_digest, "certificate_evidence_digest_invalid"),
         "evidence_refs": normalized_refs,
         "recorded_at": recorded_at,
+        "source_commit": source_commit,
+        "artifact_bundle_digest": artifact_bundle_digest,
+        "matrix_revision": matrix_revision,
+        "matrix_digest": matrix_digest,
+        "signer_key_id": signer_key_id,
+        "run_signature": run_signature,
+        "certification_started_at": certification_started_at,
+        "certification_outcome": certification_outcome,
     }
     return CapabilityEvidenceRecord(evidence_digest=canonical_digest(payload), **payload)
 

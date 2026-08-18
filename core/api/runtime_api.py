@@ -146,6 +146,7 @@ def _session_payload(
             "adapter_version": binding.adapter_version,
             "model_provider_id": binding.model_provider_id,
             "model_id": binding.model_id,
+            "reasoning_effort": binding.reasoning_effort,
             "provider_protocol": binding.provider_protocol,
             "provider_api_version": binding.provider_api_version,
             "egress_policy_id": binding.egress_policy_id,

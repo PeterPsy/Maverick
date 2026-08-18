@@ -84,12 +84,17 @@ class AgenticProfileApiTest(unittest.TestCase):
             last_progress_at=None,
             execution_binding=runtime_binding,
         )
+        session_payload = _session_payload(session, provider_id="codex")
         serialized_session = json.dumps(
-            _session_payload(session, provider_id="codex"),
+            session_payload,
             default=str,
         )
         self.assertNotIn("credential_binding_id", serialized_session)
         self.assertIn("profile_definition_revision", serialized_session)
+        self.assertEqual(
+            session_payload["execution_binding"]["reasoning_effort"],
+            runtime_binding.reasoning_effort,
+        )
 
     def test_status_only_projects_profiles_selectable_by_the_human_actor(self) -> None:
         provider_store = ProviderDocumentStore(

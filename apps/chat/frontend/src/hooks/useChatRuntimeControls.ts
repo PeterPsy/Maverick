@@ -3,6 +3,7 @@ import {
   ChatThread,
   ProviderItem,
   RuntimeEvent,
+  RuntimeSession,
   RuntimeTurn,
   getAgentDefinition,
   interruptRuntimeTurn,
@@ -16,6 +17,7 @@ import type { AgentRuntimeConfig } from "./useMessageSubmission";
 
 type UseChatRuntimeControlsParams = {
   activeThread: ChatThread | null;
+  activeSession: RuntimeSession | null;
   activeTurn: RuntimeTurn | null;
   activeProviderId: string;
   agentCatalogAppId: string;
@@ -86,6 +88,7 @@ function preloadAgentRuntimeConfig(workspaceId: string, agentCatalogAppId: strin
 
 export function useChatRuntimeControls({
   activeThread,
+  activeSession,
   activeTurn,
   activeProviderId,
   agentCatalogAppId,
@@ -107,6 +110,9 @@ export function useChatRuntimeControls({
   const defaultReasoningEffort = activeProvider?.default_reasoning_effort
     || activeProvider?.supported_reasoning_efforts?.[0]?.effort
     || "";
+  const pinnedReasoningEffort = activeThread
+    ? activeSession?.execution_binding?.reasoning_effort || ""
+    : "";
   const syntheticDataConfirmationRequired = activeProvider?.requires_synthetic_data_declaration === true;
 
   useEffect(() => {
@@ -115,9 +121,13 @@ export function useChatRuntimeControls({
 
   useEffect(() => {
     setSyntheticDataConfirmed(false);
+    if (activeThread) {
+      if (pinnedReasoningEffort) setReasoningEffort(pinnedReasoningEffort);
+      return;
+    }
     setReasoningEffort(pendingReasoningEffortRef.current || defaultReasoningEffort);
     pendingReasoningEffortRef.current = "";
-  }, [activeProviderId, defaultReasoningEffort]);
+  }, [activeProviderId, activeThread, defaultReasoningEffort, pinnedReasoningEffort]);
 
   async function handleSelectProvider(providerId: string, selectedReasoningEffort = "") {
     if (activeThread) {

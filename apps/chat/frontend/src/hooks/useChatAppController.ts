@@ -269,6 +269,7 @@ export function useChatAppController({
     workspaceId,
   });
   const runtimeControls = useChatRuntimeControls({
+    activeSession,
     activeThread,
     activeTurn,
     activeProviderId: composerActiveProviderId,

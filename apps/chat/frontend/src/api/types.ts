@@ -374,6 +374,7 @@ export type RuntimeSession = {
     workspace_binding_revision?: number;
     capability_certificate_id?: string;
     model_id: string;
+    reasoning_effort?: string | null;
     runtime_engine_id: string;
     adapter_id?: string;
     adapter_version?: string;

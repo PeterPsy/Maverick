@@ -60,18 +60,18 @@ export function ComposerRuntimeBadges({
           </label>
         )
       ) : null}
-      {selectedProvider?.workspace_profile_binding_id ? (
+      {selectedProvider?.workspace_profile_binding_id && !locked ? (
         <span
           className={`chatapp-agentic-profile-chip ${certificateExpiring ? "is-warning" : ""}`}
           title={[
-            locked ? "Model, reasoning and permissions are fixed for this chat" : "Workspace agentic profile",
+            "Workspace agentic profile",
             selectedProvider.agentic_rollout_status,
             `certificate ${selectedProvider.agentic_certificate_status || "unknown"}`,
             `${selectedProvider.agentic_allowed_tool_handles?.length || 0} tools`,
           ].filter(Boolean).join(" · ")}
         >
           <span aria-hidden="true" className="material-symbols-rounded">verified_user</span>
-          {locked ? "Fixed for this chat" : selectedProvider.agentic_rollout_status || "Agentic"}
+          {selectedProvider.agentic_rollout_status || "Agentic"}
           {certificateExpiring ? " · certificate expiring" : ""}
         </span>
       ) : null}

@@ -21,6 +21,7 @@ from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_CODEC_VERSION,
     OPENROUTER_AGENTIC_CONTENT_TYPE,
     OPENROUTER_AGENTIC_MODEL_ID,
+    OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
     OPENROUTER_AGENTIC_SCHEMA_VERSION,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
 )
@@ -42,6 +43,17 @@ REASONING_DETAIL = {
 
 
 class OpenRouterAgenticCodecTest(unittest.TestCase):
+    def test_accepts_exact_certified_resolved_model_revision(self) -> None:
+        stream = _text_stream("generation-resolved-model", "answer")
+        metadata = stream[-1]["openrouter_metadata"]
+        metadata["endpoints"]["available"][0]["model"] = OPENROUTER_AGENTIC_RESOLVED_MODEL_ID
+        metadata["attempts"][0]["model"] = OPENROUTER_AGENTIC_RESOLVED_MODEL_ID
+        client = OpenRouterAgenticClient(transport=_ScriptedTransport([stream]))
+
+        events = asyncio.run(_events(client, _request("request-resolved-model")))
+
+        self.assertEqual(events[-1].event_type, "completed")
+
     def test_accepts_empty_terminal_usage_chunk_repeating_finish_reason(self) -> None:
         stream = _tool_stream("generation-terminal-usage", "maverick_probe_echo")
         terminal = stream[-1]

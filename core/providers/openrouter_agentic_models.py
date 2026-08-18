@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 
 OPENROUTER_AGENTIC_MODEL_ID = "deepseek/deepseek-v4-flash"
+OPENROUTER_AGENTIC_RESOLVED_MODEL_ID = "deepseek/deepseek-v4-flash-20260423"
 OPENROUTER_AGENTIC_UPSTREAM_ID = "deepinfra/fp8"
 OPENROUTER_AGENTIC_PROVIDER_NAME = "DeepInfra"
 OPENROUTER_AGENTIC_ENDPOINT_ID = "openrouter-chat-completions-v1"

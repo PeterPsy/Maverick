@@ -76,7 +76,10 @@ OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
     artifact_paths=(
         "core/providers/openrouter_agentic_client.py",
         "core/providers/openrouter_agentic_request.py",
+        "core/providers/openrouter_agentic_models.py",
+        "core/providers/openrouter_agentic_state.py",
         "core/providers/openrouter_agentic_stream.py",
+        "core/providers/openrouter_agentic_stream_fields.py",
         "core/providers/openrouter_agentic_transport.py",
         "core/providers/openrouter_agentic_certification.py",
         "core/providers/certification_pipeline.py",

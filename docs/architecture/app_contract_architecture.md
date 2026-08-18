@@ -2207,6 +2207,34 @@ Cross-app composition is allowed only through declared app interfaces and offici
 
 Composition may also happen through agents or runtime orchestration when that is the product behavior, but the same rule applies: agents and apps use official surfaces rather than another app's private files.
 
+### Agentic runtime tool resolution
+
+The hosted agentic runtime is a consumer of these same contracts, not a new app
+host or a second tool registry. It builds a provider-safe tool catalog from the
+Core CLI registry, Core MCP registry, enabled workspace app mounts, declared
+app interfaces and dependency selections, grants, and the current invocation
+policy. Canonical handles remain typed (`cli:`, `mcp:`, `app-interface:`, or
+`core-capability:`); model-facing names are only deterministic aliases for those
+handles.
+
+Discovery never grants execution authority. Immediately before every tool call,
+the Core resolves the canonical handle again against the current workspace app
+binding and selected interface provider, then reapplies actor/session grants,
+runtime execution mode, tool invocation policy, and the pinned execution
+binding ceiling. A disabled or missing app, changed dependency selection,
+revoked grant, unknown handle, or policy mismatch fails closed. Live state may
+remove tools from a session but cannot add authority above its pinned ceiling.
+
+The runtime must invoke the selected app through its declared, platform-hosted
+CLI, MCP, backend, or app-interface surface. It must not import an app module,
+read `data/<app_id>/`, inspect an app-private database, infer a provider from a
+well-known app id, or retain a direct entrypoint after resolution. Tool
+arguments and results pass through the persistent invocation/confirmation
+ledger and egress policy; protocol-private copies remain in the Core private
+state service, not in app-owned storage. This preserves the same app isolation,
+visibility, secret-delivery, and per-app degradation semantics used by ordinary
+CLI and MCP callers.
+
 This preserves:
 
 - modularity

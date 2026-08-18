@@ -333,6 +333,12 @@ The accepted order is:
 Every phase has focused tests and a checkpoint commit. A later phase cannot
 weaken an earlier boundary.
 
+Execution status and remaining preview gates are tracked in
+`docs/product/agentic_multimodel_tasklist.md`. Signed evidence creation and its
+handoff to the certificate publisher follow
+`docs/runbooks/agentic_certification_evidence.md`; provider activation and
+rollback then follow `docs/runbooks/agentic_provider_preview.md`.
+
 The phase-9 gate covers cancellation races, terminal provider outages,
 mid-session certificate revocation, live egress-policy drift, prompt injection,
 provider-private quota/integrity failure, confirmation replay, child-agent

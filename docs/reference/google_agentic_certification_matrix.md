@@ -64,6 +64,8 @@ certificate. A certification pipeline must execute the complete suite and the
 operator-only synthetic live probe, bind the result to the source commit,
 suite version, adapter artifact bundle and this matrix revision, and sign the
 completed run. Only that verified artifact may be used to issue a certificate.
+The executable signing and publication workflow is defined in
+`docs/runbooks/agentic_certification_evidence.md`.
 
 ## Fail-closed conditions
 

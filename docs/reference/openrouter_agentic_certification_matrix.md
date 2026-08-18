@@ -87,6 +87,8 @@ certificate. Certification requires the complete suite plus a fresh
 operator-run synthetic live probe, reconfirmation of endpoint and ZDR catalogs,
 an immutable result bound to source commit, suite version, adapter artifact
 bundle and this matrix revision, and an Ed25519 signature from a trusted CI key.
+The executable signing and publication workflow is defined in
+`docs/runbooks/agentic_certification_evidence.md`.
 
 ## Fail-closed conditions
 

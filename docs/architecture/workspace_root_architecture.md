@@ -211,6 +211,48 @@ Runtime session provider state must be partitioned below that root by runtime se
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/
 ```
 
+### Agentic runtime state ownership
+
+The agentic multimodel runtime uses the workspace runtime root for physical
+partitioning, but that location does not make its records workspace data or app
+data. The following paths are private, Core-owned operational state:
+
+```text
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/provider_state.json
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/tool_invocations.json
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/tool_confirmation_grants.json
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/egress_decisions.json
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/private/
+```
+
+`session.json` contains the immutable execution binding and its one-way
+preparation barrier. Provider state is insert-if-absent and then revisioned with
+compare-and-set. Tool invocations and confirmation grants are a private
+side-effect ledger; egress decisions are append-only and redaction-safe. The
+`private/` directory contains encrypted, bounded provider continuation and tool
+payloads behind opaque Core-issued locators. Apps, browser APIs, ordinary logs,
+workspace exports, and provider adapters do not receive a locator-resolution
+surface. Being able to read ciphertext on disk is not runtime authority.
+
+Capability definitions, workspace bindings, certificates, certificate status,
+and evidence metadata remain in their platform control-plane stores. Large
+certification evidence lives in the platform-owned content-addressed evidence
+store under `data/control-plane/provider-evidence/` (or an equivalent configured
+platform blob adapter), outside every workspace root. A copy placed in
+`storage/generated/` is a redaction-safe operational export only and is never
+authoritative evidence.
+
+Workspace backup and export therefore treat these records differently:
+
+- app and Storage exports exclude runtime-private and certification-authority
+  state;
+- runtime recovery retains private session state according to Core retention
+  and deletion policy, independently of app lifecycle;
+- control-plane backup covers agentic definitions, bindings, certificate
+  status, evidence metadata, and the content-addressed evidence store;
+- moving or restoring a workspace cannot manufacture, widen, or reactivate a
+  capability certificate.
+
 Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`, copied runtime skills, and transient provider binaries live under the session runtime root. The workspace may contain hundreds or thousands of runtime session roots over time, but active provider state must not be shared between concurrent agents unless a provider adapter documents an explicit immutable cache.
 Runtime session history and operational records that belong to one agent must live inside that same session root so cleanup can remove one agent's files without scanning or rewriting shared cross-agent history files. This includes persisted runtime events, turn records, process records, and the mutable runtime state snapshot.
 

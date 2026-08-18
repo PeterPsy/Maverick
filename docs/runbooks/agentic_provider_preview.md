@@ -11,6 +11,10 @@ profiles. A capability certificate proves one exact implementation and provider
 combination. It is not approval for customer data, arbitrary workspace data, or
 production exposure.
 
+Certificate evidence must be produced and published through
+`docs/runbooks/agentic_certification_evidence.md` before this activation
+runbook begins. This runbook never manufactures or repairs a certificate.
+
 ## Invariants
 
 - Remote profiles remain `preview`, unbound by default, and restricted to

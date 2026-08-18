@@ -99,7 +99,7 @@ describe("ProviderSelector", () => {
     const element = await renderSelector({ onReasoningEffortChange });
 
     await act(async () => {
-      element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex"]')?.click();
+      element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]')?.click();
     });
     const reasoning = element.querySelector<HTMLSelectElement>('[aria-label="Reasoning for Codex"]');
     expect(reasoning).toBeInstanceOf(HTMLSelectElement);
@@ -117,9 +117,10 @@ describe("ProviderSelector", () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ onSelect });
 
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex"]');
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]');
     expect(trigger).toBeInstanceOf(HTMLButtonElement);
     expect(trigger?.textContent).toContain("Codex");
+    expect(trigger?.textContent).toContain("High");
     expect(trigger?.textContent).not.toContain("expand_more");
 
     await act(async () => {
@@ -150,7 +151,7 @@ describe("ProviderSelector", () => {
   it("selects the active filtered model with Enter", async () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ onSelect });
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex"]');
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]');
 
     await act(async () => {
       trigger?.click();
@@ -171,10 +172,10 @@ describe("ProviderSelector", () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ locked: true, onSelect });
 
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex"]');
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]');
     expect(trigger).toBeInstanceOf(HTMLButtonElement);
     expect(trigger?.disabled).toBe(true);
-    expect(trigger?.title).toBe("Start a new chat to switch models");
+    expect(trigger?.title).toBe("Codex · High. Start a new chat to change model or reasoning.");
 
     await act(async () => {
       trigger?.click();

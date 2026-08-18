@@ -64,6 +64,18 @@ export function ProviderSelector({
   const normalizedQuery = normalizeProviderQuery(query);
   const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
   const selectedLabel = selectedProvider?.label || "Select model";
+  const selectedReasoningEffort = selectedProvider
+    ? reasoningEffort
+      || selectedProvider.default_reasoning_effort
+      || selectedProvider.supported_reasoning_efforts?.[0]?.effort
+      || ""
+    : "";
+  const selectedReasoningLabel = selectedProvider?.supported_reasoning_efforts
+    ?.find((option) => option.effort === selectedReasoningEffort)?.label
+    || selectedReasoningEffort;
+  const selectedDisplayLabel = selectedReasoningLabel
+    ? `${selectedLabel} · ${selectedReasoningLabel}`
+    : selectedLabel;
   const filteredProviders = useMemo(
     () => providers.filter((provider) => providerMatchesQuery(provider, normalizedQuery)),
     [providers, normalizedQuery],
@@ -253,19 +265,21 @@ export function ProviderSelector({
       <button
         aria-expanded={isOpen}
         aria-haspopup="listbox"
-        aria-label={`Model: ${selectedLabel}`}
+        aria-label={`Model: ${selectedDisplayLabel}`}
         className={`chatapp-composer__tool-button chatapp-provider-selector__trigger ${isOpen ? "is-active" : ""}`}
         disabled={isDisabled}
         onClick={handleTriggerClick}
         onPointerDown={handleTriggerPointerDown}
         ref={buttonRef}
-        title={locked ? "Start a new chat to switch models" : `Model: ${selectedLabel}`}
+        title={locked
+          ? `${selectedDisplayLabel}. Start a new chat to change model or reasoning.`
+          : `Model: ${selectedDisplayLabel}`}
         type="button"
       >
         <span aria-hidden="true" className="chatapp-provider-selector__icon material-symbols-rounded">
           hub
         </span>
-        <span className="chatapp-provider-selector__label">{selectedLabel}</span>
+        <span className="chatapp-provider-selector__label">{selectedDisplayLabel}</span>
       </button>
       {isOpen ? (
         <div

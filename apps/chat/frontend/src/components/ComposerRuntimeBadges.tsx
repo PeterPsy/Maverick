@@ -64,14 +64,14 @@ export function ComposerRuntimeBadges({
         <span
           className={`chatapp-agentic-profile-chip ${certificateExpiring ? "is-warning" : ""}`}
           title={[
-            "Pinned workspace profile",
+            locked ? "Model, reasoning and permissions are fixed for this chat" : "Workspace agentic profile",
             selectedProvider.agentic_rollout_status,
             `certificate ${selectedProvider.agentic_certificate_status || "unknown"}`,
             `${selectedProvider.agentic_allowed_tool_handles?.length || 0} tools`,
           ].filter(Boolean).join(" · ")}
         >
           <span aria-hidden="true" className="material-symbols-rounded">verified_user</span>
-          {locked ? "Pinned" : selectedProvider.agentic_rollout_status || "Agentic"}
+          {locked ? "Fixed for this chat" : selectedProvider.agentic_rollout_status || "Agentic"}
           {certificateExpiring ? " · certificate expiring" : ""}
         </span>
       ) : null}

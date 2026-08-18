@@ -39,6 +39,32 @@ type CachedAgentRuntimeConfig = Omit<AgentRuntimeConfig, "system_prompt"> & {
 
 const agentRuntimeConfigCache = new Map<string, Promise<CachedAgentRuntimeConfig>>();
 
+export function genericAgenticRuntimeConfig(
+  provider: ProviderItem | null,
+  reasoningEffort: string,
+): AgentRuntimeConfig | null {
+  if (provider?.provider_role !== "runtime_engine" || !provider.workspace_profile_binding_id) {
+    return null;
+  }
+  return {
+    agent_id: "chat",
+    agent_role_id: "",
+    agent_type_id: "",
+    skill_catalog_app_id: "",
+    skill_ids: [],
+    skill_activation_mode: "explicit",
+    source_app_id: "chat",
+    system_prompt: "",
+    title: provider.label || "Chat",
+    runtime_mode: "agentic",
+    workspace_profile_binding_id: provider.workspace_profile_binding_id,
+    reasoning_effort: reasoningEffort || undefined,
+    declared_remote_data_class: provider.requires_synthetic_data_declaration
+      ? "workspace_internal_fake"
+      : undefined,
+  };
+}
+
 export function clearAgentRuntimeConfigCache(): void {
   agentRuntimeConfigCache.clear();
 }
@@ -167,11 +193,12 @@ export function useChatRuntimeControls({
     if (hostedConfig) {
       return hostedConfig;
     }
-    if (!selectedAgentTypeId || !agentCatalogAppId || !workspaceId) {
-      return null;
-    }
     if (selectedProvider?.requires_synthetic_data_declaration && !syntheticDataConfirmed) {
       throw new Error("Confirm that this new preview chat contains synthetic data only.");
+    }
+    const genericConfig = genericAgenticRuntimeConfig(selectedProvider, reasoningEffort);
+    if (!selectedAgentTypeId || !agentCatalogAppId || !workspaceId) {
+      return genericConfig;
     }
     const config = await loadAgentRuntimeConfig(workspaceId, agentCatalogAppId, selectedAgentTypeId);
     return {

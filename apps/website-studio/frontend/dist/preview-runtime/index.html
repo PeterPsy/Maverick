@@ -73,6 +73,12 @@
 
       window.addEventListener('message', (event) => {
         const data = event.data || {};
+        if (!data || data.type !== 'website-studio.preview.document-ready' || !isPreviewFrameWindow(event.source)) return;
+        notifyPreviewDocumentReady(data.preview_id || currentPreviewId);
+      });
+
+      window.addEventListener('message', (event) => {
+        const data = event.data || {};
         if (!data || data.type !== 'website-studio.preview.report' || !isPreviewFrameWindow(event.source)) return;
         const envelope = {
           preview_id: data.preview_id || currentPreviewId,
@@ -91,9 +97,6 @@
             report: envelope.report
           }, window.location.origin);
         } catch {}
-        if (['domcontentloaded', 'interactive'].includes(String(envelope.report?.phase || ''))) {
-          notifyPreviewDocumentReady(envelope.preview_id);
-        }
       });
 
       function notifyPreviewDocumentReady(previewId) {
@@ -776,9 +779,19 @@
     try { parent.postMessage({ type: 'website-studio.preview.report', preview_id: previewId, report: collect(phase) }, '*'); }
     catch {}
   };
+  const notifyDocumentReady = () => {
+    try { parent.postMessage({ type: 'website-studio.preview.document-ready', preview_id: previewId }, '*'); }
+    catch {}
+  };
   const schedule = (phase) => window.setTimeout(() => send(phase), 0);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => schedule('domcontentloaded'), { once: true });
-  else schedule('interactive');
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => {
+    notifyDocumentReady();
+    schedule('domcontentloaded');
+  }, { once: true });
+  else {
+    notifyDocumentReady();
+    schedule('interactive');
+  }
   if (document.fonts?.ready) document.fonts.ready.then(() => schedule('fonts-ready')).catch(() => schedule('fonts-error'));
   window.addEventListener('load', () => schedule('load'), { once: true });
   window.setTimeout(() => send('settled'), 1200);

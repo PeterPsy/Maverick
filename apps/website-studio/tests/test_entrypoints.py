@@ -2917,6 +2917,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("website-studio.preview.document-ready", app_source)
         self.assertIn("website-studio.preview.document-ready", runtime_source)
         self.assertIn("notifyPreviewDocumentReady(entry.previewId)", runtime_source)
+        self.assertIn("notifyDocumentReady();\n    schedule('domcontentloaded')", runtime_source)
         self.assertIn("bootstrap.active_site_id || requestedSite || persistedSite || availableSites[0]?.id || ''", app_source)
         self.assertIn("active_view: activeView", app_source)
         self.assertIn("context_tool: 'website_page_context'", app_source)

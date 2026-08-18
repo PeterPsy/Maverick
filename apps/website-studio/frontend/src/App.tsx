@@ -63,6 +63,8 @@ export function App() {
   const pages = useMemo(() => sitemap.items || [], [sitemap]);
   const activeSite = useMemo(() => sites.find((site) => site.id === activeSiteId), [sites, activeSiteId]);
   const activePage = useMemo(() => pages.find((page) => page.id === activePageId), [pages, activePageId]);
+  const activeRoute = useMemo(() => (sitemap.routes || []).find((route) => route.id === activeRouteId), [sitemap.routes, activeRouteId]);
+  const loadingLabel = activePage?.title || routeDisplayName(activeRoute?.route || previewState?.route || '') || activeSite?.display_name || 'sito';
   const importOnly = showNewWebsite || !activeSite;
   const previewUrl = useMemo(() => normalizePreviewUrl(previewState?.preview_url || '', activeTarget), [activeTarget, previewState?.preview_url]);
 
@@ -371,7 +373,7 @@ export function App() {
       ) : (
         <section className="site-canvas" aria-label={activeSite?.display_name || 'Website'}>
           {previewLoading && !(previewUrl || previewHtml) ? (
-            <PreviewLoadingState />
+            <PreviewLoadingState label={loadingLabel} />
           ) : previewUrl || previewHtml ? (
             <>
               {previewUrl && previewState ? (
@@ -382,17 +384,16 @@ export function App() {
                   activeRouteId={activeRouteId}
                   activeAssetId={activeAssetId}
                   activeTarget={activeTarget}
+                  loadingLabel={loadingLabel}
                 />
               ) : (
-                <iframe
+                <InlinePreviewFrame
                   title={activePage?.title || activeSite?.display_name || 'Website preview'}
-                  data-route-id={activeRouteId}
-                  data-asset-id={activeAssetId}
-                  data-component-id={activeTarget.componentId || activeTarget.id || ''}
-                  data-target-anchor={activeTarget.anchor || ''}
-                  data-target-selector={activeTarget.selector || ''}
-                  sandbox=""
-                  srcDoc={previewHtml}
+                  activeRouteId={activeRouteId}
+                  activeAssetId={activeAssetId}
+                  activeTarget={activeTarget}
+                  html={previewHtml}
+                  loadingLabel={loadingLabel}
                 />
               )}
               {infoPanelOpen && previewState && siteStatus ? (
@@ -426,6 +427,7 @@ function WarmPreviewFrame({
   activeTarget,
   preview,
   previewUrl,
+  loadingLabel,
   title
 }: {
   activeAssetId: string;
@@ -433,12 +435,26 @@ function WarmPreviewFrame({
   activeTarget: ActiveTarget;
   preview: PreviewPayload;
   previewUrl: string;
+  loadingLabel: string;
   title: string;
 }) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const lastPreviewRef = useRef<PreviewPayload | null>(null);
   const pendingCommandRef = useRef<PreviewNavigateCommand | null>(null);
   const [mountedUrl, setMountedUrl] = useState(previewUrl);
+  const [readyPreviewId, setReadyPreviewId] = useState('');
+
+  useEffect(() => {
+    function handleDocumentReady(event: MessageEvent) {
+      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow) return;
+      const payload = event.data as { owner_app_id?: string; preview_id?: string; type?: string } | null;
+      if (payload?.type !== 'website-studio.preview.document-ready' || payload.owner_app_id !== 'website-studio') return;
+      if (payload.preview_id !== preview.preview_id) return;
+      setReadyPreviewId(payload.preview_id);
+    }
+    window.addEventListener('message', handleDocumentReady);
+    return () => window.removeEventListener('message', handleDocumentReady);
+  }, [preview.preview_id]);
 
   useEffect(() => {
     if (!previewUrl) return;
@@ -460,7 +476,8 @@ function WarmPreviewFrame({
   }
 
   return (
-    <iframe
+    <>
+      <iframe
       ref={frameRef}
       title={title}
       data-route-id={activeRouteId}
@@ -472,18 +489,48 @@ function WarmPreviewFrame({
       sandbox="allow-scripts allow-same-origin"
       src={mountedUrl}
       onLoad={handleLoad}
-    />
+      />
+      {readyPreviewId !== preview.preview_id ? <PreviewLoadingState label={loadingLabel} overlay /> : null}
+    </>
   );
 }
 
-function PreviewLoadingState() {
+function PreviewLoadingState({ label, overlay = false }: { label: string; overlay?: boolean }) {
+  const text = `Caricamento ${label}`;
   return (
-    <div className="preview-loading-state" role="status" aria-label="Preview is loading">
+    <div className={`preview-loading-state${overlay ? ' is-overlay' : ''}`} role="status" aria-label={text}>
       <span className="preview-loading-indicator" aria-hidden="true">
         <span className="preview-loading-shape" />
       </span>
-      <span className="preview-loading-label">Preview is loading</span>
+      <span className="preview-loading-label">{text}</span>
     </div>
+  );
+}
+
+function InlinePreviewFrame({ activeAssetId, activeRouteId, activeTarget, html, loadingLabel, title }: {
+  activeAssetId: string;
+  activeRouteId: string;
+  activeTarget: ActiveTarget;
+  html: string;
+  loadingLabel: string;
+  title: string;
+}) {
+  const [readyHtml, setReadyHtml] = useState('');
+  return (
+    <>
+      <iframe
+        title={title}
+        data-route-id={activeRouteId}
+        data-asset-id={activeAssetId}
+        data-component-id={activeTarget.componentId || activeTarget.id || ''}
+        data-target-anchor={activeTarget.anchor || ''}
+        data-target-selector={activeTarget.selector || ''}
+        sandbox=""
+        srcDoc={html}
+        onLoad={() => setReadyHtml(html)}
+      />
+      {readyHtml !== html ? <PreviewLoadingState label={loadingLabel} overlay /> : null}
+    </>
   );
 }
 
@@ -587,6 +634,12 @@ function resolveSelection(map: SitemapPayload, nextPageId = '', nextRoute = '', 
     previewRoute: page?.route || route?.route || nextRoute || '/',
     route
   };
+}
+
+function routeDisplayName(route = ''): string {
+  const segment = route.split(/[?#]/, 1)[0].split('/').filter(Boolean).pop() || '';
+  if (!segment) return 'Home';
+  return segment.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function snapshotToBootstrap(snapshot: WorkspaceSnapshot): BootstrapPayload {

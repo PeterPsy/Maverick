@@ -51,7 +51,7 @@ test.describe('Website Studio visual smoke', () => {
 
     const loading = page.locator('.preview-loading-state');
     await expect(loading).toBeVisible();
-    await expect(loading).toContainText('Preview is loading');
+    await expect(loading).toContainText('Caricamento Home');
     await expect(page.locator('.site-empty')).toHaveCount(0);
 
     const screenshot = await page.screenshot({ fullPage: false });
@@ -63,6 +63,23 @@ test.describe('Website Studio visual smoke', () => {
 
     await expect(page.locator('.site-canvas iframe')).toBeVisible();
     await expect(loading).toHaveCount(0);
+  });
+
+  test('keeps the Maverick loader over the canvas until the first HTML document is mounted', async ({ page }) => {
+    await page.setViewportSize({ width: 1180, height: 820 });
+    await installWebsiteStudioMocks(page, { delayedAction: 'preview_document', delayMs: 1_200 });
+
+    await page.goto('/');
+
+    const frame = page.locator('.site-canvas iframe');
+    const loader = page.locator('.preview-loading-state.is-overlay');
+    await expect(frame).toBeVisible();
+    await expect(loader).toBeVisible();
+    await expect(loader).toContainText('Caricamento Home');
+    await expect(loader).toHaveCount(0, { timeout: 4_000 });
+    const contentFrame = await (await frame.elementHandle())?.contentFrame();
+    expect(contentFrame).not.toBeNull();
+    await expect(contentFrame!.locator('[data-testid="runtime-preview"]')).toContainText('Giuntitrail');
   });
 
   for (const viewport of [

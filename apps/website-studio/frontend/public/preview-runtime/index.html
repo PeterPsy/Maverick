@@ -91,7 +91,20 @@
             report: envelope.report
           }, window.location.origin);
         } catch {}
+        if (['domcontentloaded', 'interactive'].includes(String(envelope.report?.phase || ''))) {
+          notifyPreviewDocumentReady(envelope.preview_id);
+        }
       });
+
+      function notifyPreviewDocumentReady(previewId) {
+        try {
+          window.parent?.postMessage({
+            type: 'website-studio.preview.document-ready',
+            owner_app_id: 'website-studio',
+            preview_id: String(previewId || '')
+          }, window.location.origin);
+        } catch {}
+      }
 
       window.addEventListener('message', (event) => {
         const data = event.data || {};
@@ -247,7 +260,9 @@
       function activateCachedPreviewFrame(previewId) {
         const entry = frameCache.get(String(previewId || '').trim());
         if (!entry?.documentUrl) return false;
-        return activateFrameEntry(entry);
+        const activated = activateFrameEntry(entry);
+        if (activated) notifyPreviewDocumentReady(entry.previewId);
+        return activated;
       }
 
       function pruneFrameCache() {

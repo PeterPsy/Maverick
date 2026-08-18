@@ -2876,6 +2876,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
     def test_frontend_handles_route_and_asset_deep_links(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        runtime_source = (APP_ROOT / "frontend" / "public" / "preview-runtime" / "index.html").read_text(encoding="utf-8")
 
         self.assertIn("appPage.startsWith('routes/')", app_source)
         self.assertIn("appPage.startsWith('assets/')", app_source)
@@ -2912,7 +2913,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("setPreviewLoading(true)", app_source)
         self.assertIn("setPreviewLoading(false)", app_source)
         self.assertIn("PreviewLoadingState", app_source)
-        self.assertIn("Preview is loading", app_source)
+        self.assertIn("Caricamento ${label}", app_source)
+        self.assertIn("website-studio.preview.document-ready", app_source)
+        self.assertIn("website-studio.preview.document-ready", runtime_source)
+        self.assertIn("notifyPreviewDocumentReady(entry.previewId)", runtime_source)
         self.assertIn("bootstrap.active_site_id || requestedSite || persistedSite || availableSites[0]?.id || ''", app_source)
         self.assertIn("active_view: activeView", app_source)
         self.assertIn("context_tool: 'website_page_context'", app_source)
@@ -2926,7 +2930,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("previewUrl || previewHtml", app_source)
         self.assertIn("sandbox=\"allow-scripts allow-same-origin\"", app_source)
         self.assertIn("data-preview-url={previewUrl}", app_source)
-        self.assertIn("srcDoc={previewHtml}", app_source)
+        self.assertIn("srcDoc={html}", app_source)
 
     def test_preview_runtime_frontend_uses_backend_document_and_opaque_inner_frame(self) -> None:
         runtime_source = (APP_ROOT / "frontend" / "public" / "preview-runtime" / "index.html").read_text(encoding="utf-8")

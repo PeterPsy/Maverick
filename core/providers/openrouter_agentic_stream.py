@@ -111,9 +111,20 @@ class OpenRouterChatStreamDecoder:
         return []
 
     def _choice(self, choice: dict[str, object]) -> list[AgenticModelEvent]:
-        if choice.get("index") != 0 or self.finish_reason is not None:
+        if choice.get("index") != 0:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
         delta = object_field(choice.get("delta"))
+        finish_reason = choice.get("finish_reason")
+        if self.finish_reason is not None:
+            if (
+                finish_reason != self.finish_reason
+                or any(delta.get(field) is not None for field in (
+                    "role", "content", "reasoning", "reasoning_content",
+                    "reasoning_details", "tool_calls",
+                ))
+            ):
+                raise OpenRouterAgenticProtocolError("provider_response_invalid")
+            return []
         events: list[AgenticModelEvent] = []
         role = delta.get("role")
         if role is not None and role != "assistant":
@@ -128,7 +139,6 @@ class OpenRouterChatStreamDecoder:
         self._reasoning(delta)
         if delta.get("tool_calls") is not None:
             self._tool_delta(delta["tool_calls"])
-        finish_reason = choice.get("finish_reason")
         if finish_reason is not None:
             if finish_reason not in {"stop", "tool_calls"}:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")

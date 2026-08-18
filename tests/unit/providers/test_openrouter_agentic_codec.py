@@ -42,6 +42,30 @@ REASONING_DETAIL = {
 
 
 class OpenRouterAgenticCodecTest(unittest.TestCase):
+    def test_accepts_empty_terminal_usage_chunk_repeating_finish_reason(self) -> None:
+        stream = _tool_stream("generation-terminal-usage", "maverick_probe_echo")
+        terminal = stream[-1]
+        stream[-1] = {
+            **_identity("generation-terminal-usage"),
+            "choices": terminal["choices"],
+        }
+        stream.append({
+            **_identity("generation-terminal-usage"),
+            "choices": [{
+                "index": 0,
+                "delta": {"role": None, "content": None},
+                "finish_reason": "tool_calls",
+            }],
+            "usage": terminal["usage"],
+            "openrouter_metadata": terminal["openrouter_metadata"],
+        })
+        client = OpenRouterAgenticClient(transport=_ScriptedTransport([stream]))
+
+        events = asyncio.run(_events(client, _request("request-terminal-usage")))
+
+        self.assertEqual(events[-1].event_type, "completed")
+        self.assertFalse(any(event.event_type == "error" for event in events))
+
     def test_request_pins_every_router_control(self) -> None:
         transport = _ScriptedTransport([_text_stream("generation-routing", "answer")])
         client = OpenRouterAgenticClient(transport=transport)

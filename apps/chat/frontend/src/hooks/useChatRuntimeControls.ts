@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
 import {
   ChatThread,
   ProviderItem,
@@ -103,6 +103,7 @@ export function useChatRuntimeControls({
   const [syntheticDataConfirmed, setSyntheticDataConfirmed] = useState(false);
   const activeProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
   const [reasoningEffort, setReasoningEffort] = useState("");
+  const pendingReasoningEffortRef = useRef("");
   const defaultReasoningEffort = activeProvider?.default_reasoning_effort
     || activeProvider?.supported_reasoning_efforts?.[0]?.effort
     || "";
@@ -114,14 +115,17 @@ export function useChatRuntimeControls({
 
   useEffect(() => {
     setSyntheticDataConfirmed(false);
-    setReasoningEffort(defaultReasoningEffort);
+    setReasoningEffort(pendingReasoningEffortRef.current || defaultReasoningEffort);
+    pendingReasoningEffortRef.current = "";
   }, [activeProviderId, defaultReasoningEffort]);
 
-  async function handleSelectProvider(providerId: string) {
+  async function handleSelectProvider(providerId: string, selectedReasoningEffort = "") {
     if (activeThread) {
       setComposerError("Start a new chat to switch models.");
       return;
     }
+    pendingReasoningEffortRef.current = selectedReasoningEffort;
+    if (selectedReasoningEffort) setReasoningEffort(selectedReasoningEffort);
     setActiveProviderId(providerId);
     setSyntheticDataConfirmed(false);
     const provider = providers.find((item) => item.provider_id === providerId) || null;

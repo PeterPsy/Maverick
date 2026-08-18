@@ -1,5 +1,6 @@
 import type { User, Workspace } from './adminApi';
 import { escapeAttr, escapeHtml } from './html';
+import { bouncyToggleHtml } from './bouncyToggle';
 
 export function usersPageHtml({
   pendingDeleteUserId,
@@ -52,7 +53,7 @@ export function usersPageHtml({
                 <option value="facilitated" ${selectedUser.account_type === 'facilitated' ? 'selected' : ''}>Facilitated</option>
               </select></label>
             </div>
-            <label class="settings-toggle"><input name="is_active" type="checkbox" ${selectedUser.is_active ? 'checked' : ''} /> Account active</label>
+            ${bouncyToggleHtml(`<input name="is_active" type="checkbox" role="switch" ${selectedUser.is_active ? 'checked' : ''} />`, 'Account active')}
             <button type="submit">
               <span class="material-symbols-rounded" aria-hidden="true">save</span>
               Save user

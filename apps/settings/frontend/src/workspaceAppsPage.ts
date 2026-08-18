@@ -1,5 +1,6 @@
 import type { Workspace, WorkspaceApp } from './adminApi';
 import { escapeAttr, escapeHtml } from './html';
+import { bouncyToggleHtml } from './bouncyToggle';
 
 export function workspaceAppsPageHtml({
   workspaceApps,
@@ -56,10 +57,7 @@ function workspaceAppRowHtml(app: WorkspaceApp) {
     </span>
     ${
       installed
-        ? `<label class="settings-switch">
-          <input type="checkbox" data-app-toggle="${escapeAttr(appKey)}" ${enabled ? 'checked' : ''} />
-          <span>Enabled</span>
-        </label>
+        ? `${bouncyToggleHtml(`<input type="checkbox" role="switch" data-app-toggle="${escapeAttr(appKey)}" ${enabled ? 'checked' : ''} />`, 'Enabled', 'settings-switch')}
         <button type="button" class="settings-secondary" data-app-uninstall="${escapeAttr(appKey)}">
           <span class="material-symbols-rounded" aria-hidden="true">link_off</span>
           Uninstall

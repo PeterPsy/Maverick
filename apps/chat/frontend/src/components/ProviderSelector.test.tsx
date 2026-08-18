@@ -15,6 +15,11 @@ const providerOptions: ProviderItem[] = [
     description: "Agentic runtime",
     status: "active",
     default_model_family: null,
+    default_reasoning_effort: "high",
+    supported_reasoning_efforts: [
+      { effort: "high", label: "High", description: null },
+      { effort: "xhigh", label: "Extra high", description: null },
+    ],
   },
   {
     provider_id: "hosted:openrouter:google%2Fgemma-4-31b-it%3Afree",
@@ -50,10 +55,12 @@ async function renderSelector({
   activeProviderId = "codex",
   locked = false,
   onSelect = () => undefined,
+  onReasoningEffortChange = () => undefined,
 }: {
   activeProviderId?: string;
   locked?: boolean;
-  onSelect?: (providerId: string) => void;
+  onSelect?: (providerId: string, reasoningEffort?: string) => void;
+  onReasoningEffortChange?: (effort: string) => void;
 } = {}) {
   container = document.createElement("div");
   document.body.append(container);
@@ -61,7 +68,7 @@ async function renderSelector({
 
   await act(async () => {
     root?.render(
-      <ProviderSelector activeProviderId={activeProviderId} disabled={false} locked={locked} onSelect={onSelect} providers={providerOptions} />,
+      <ProviderSelector activeProviderId={activeProviderId} disabled={false} locked={locked} onReasoningEffortChange={onReasoningEffortChange} onSelect={onSelect} providers={providerOptions} reasoningEffort="high" />,
     );
   });
 
@@ -87,6 +94,25 @@ function optionByText(element: Element, text: string): HTMLButtonElement {
 }
 
 describe("ProviderSelector", () => {
+  it("keeps the selected model reasoning control inside the model menu", async () => {
+    const onReasoningEffortChange = vi.fn();
+    const element = await renderSelector({ onReasoningEffortChange });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex"]')?.click();
+    });
+    const reasoning = element.querySelector<HTMLSelectElement>('[aria-label="Reasoning for Codex"]');
+    expect(reasoning).toBeInstanceOf(HTMLSelectElement);
+    expect(element.querySelector(".chatapp-reasoning-selector")).toBeNull();
+
+    await act(async () => {
+      if (!reasoning) return;
+      reasoning.value = "xhigh";
+      reasoning.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(onReasoningEffortChange).toHaveBeenCalledWith("xhigh");
+  });
+
   it("opens a searchable model dropdown and keeps the selected model name visible", async () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ onSelect });

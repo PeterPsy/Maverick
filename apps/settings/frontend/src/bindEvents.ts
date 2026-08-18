@@ -1,6 +1,7 @@
 import type { AppDependenciesPayload, User, WorkspaceApp } from './adminApi';
 import type { createPersistenceController, MigrationTargetDraft } from './persistenceController';
 import { bindSettingsPanelEvents } from './settingsPanel';
+import { bindBouncyToggles } from './bouncyToggle';
 
 type PersistenceController = ReturnType<typeof createPersistenceController>;
 
@@ -39,6 +40,7 @@ export function bindSettingsEvents(context: {
   workspaceApps: () => WorkspaceApp[];
   appDependencies: () => AppDependenciesPayload[];
 }) {
+  bindBouncyToggles();
   document.getElementById('dismiss-notice')?.addEventListener('click', context.dismissNotice);
   document.getElementById('create-user')?.addEventListener('submit', (event) => {
     event.preventDefault();

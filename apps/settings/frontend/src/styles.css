@@ -1237,17 +1237,77 @@ button.settings-adapter-card {
   font-size: 0.72rem;
 }
 
-.settings-model-toggle input {
-  width: 2.15rem;
-  height: 1.2rem;
-  margin: 0;
-  accent-color: var(--maverick-accent);
-  cursor: pointer;
+.settings-toggle.settings-bouncy-toggle > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 
-.settings-model-toggle input:disabled {
+.settings-toggle.settings-bouncy-toggle > input:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.settings-bouncy-toggle__label { order: 2; transition: color 300ms ease; }
+
+.settings-bouncy-toggle__track {
+  position: relative;
+  display: block;
+  width: 3.5rem;
+  height: 2rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--maverick-text-muted) 20%, transparent);
+  transition: background 500ms ease-out, opacity 200ms ease;
+}
+
+.settings-bouncy-toggle input:checked ~ .settings-bouncy-toggle__track { background: var(--maverick-text); }
+.settings-bouncy-toggle input:focus-visible ~ .settings-bouncy-toggle__track { outline: 2px solid var(--maverick-accent); outline-offset: 2px; }
+.settings-bouncy-toggle input:disabled ~ .settings-bouncy-toggle__track { cursor: not-allowed; opacity: 0.5; }
+
+.settings-bouncy-toggle__inner {
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  opacity: 0;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+  transition: opacity 500ms ease;
+}
+
+.settings-bouncy-toggle input:checked ~ .settings-bouncy-toggle__track .settings-bouncy-toggle__inner { opacity: 1; }
+
+.settings-bouncy-toggle__thumb {
+  position: relative;
+  display: block;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--maverick-surface);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
+  transition: transform 500ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.settings-bouncy-toggle input:checked ~ .settings-bouncy-toggle__track .settings-bouncy-toggle__thumb { transform: translateX(1.5rem); }
+.settings-bouncy-toggle.is-pressed .settings-bouncy-toggle__thumb { transform: scale(0.9); transition-duration: 150ms; }
+.settings-bouncy-toggle.is-pressed input:checked ~ .settings-bouncy-toggle__track .settings-bouncy-toggle__thumb { transform: translateX(1.5rem) scale(0.9); }
+
+.settings-bouncy-toggle__dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--maverick-text-muted) 40%, transparent);
+  transform: translate(-50%, -50%);
+  transition: all 500ms ease;
+}
+
+.settings-bouncy-toggle input:checked ~ .settings-bouncy-toggle__track .settings-bouncy-toggle__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--maverick-text);
 }
 
 .settings-pill.is-healthy {

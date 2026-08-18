@@ -1,6 +1,7 @@
 import type { MigrationPlan, MigrationResult } from './adminApi';
 import { escapeAttr, escapeHtml } from './html';
 import type { MigrationProgress, PersistenceMigrationViewState } from './persistenceController';
+import { bouncyToggleHtml } from './bouncyToggle';
 
 export function persistencePageHtml(state: PersistenceMigrationViewState) {
   return persistenceHtml(state);
@@ -26,10 +27,7 @@ export function persistenceMigrationModalHtml(state: PersistenceMigrationViewSta
       </div>
       ${migrationPlan ? migrationPlanHtml(migrationPlan) : pendingPlanHtml(migrationProgress)}
       ${targetDraftFormHtml(state)}
-      <label class="settings-toggle settings-migration-delete-source">
-        <input id="settings-delete-source" type="checkbox" ${deleteSourceAfterMigration ? 'checked' : ''} ${isBusy ? 'disabled' : ''} />
-        Schedule source cleanup after restart health check
-      </label>
+      ${bouncyToggleHtml(`<input id="settings-delete-source" type="checkbox" role="switch" ${deleteSourceAfterMigration ? 'checked' : ''} ${isBusy ? 'disabled' : ''} />`, 'Schedule source cleanup after restart health check', 'settings-migration-delete-source')}
       <p class="settings-card-copy">Leave cleanup off to preserve the current source adapter data as a rollback point. Cleanup is a separate explicit choice and requires backend restart.</p>
       <div class="settings-modal-actions">
         <button type="button" class="settings-secondary" id="cancel-migration" ${isBusy ? 'disabled' : ''}>Cancel</button>

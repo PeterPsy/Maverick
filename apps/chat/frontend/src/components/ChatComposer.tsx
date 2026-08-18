@@ -46,7 +46,7 @@ export type ChatComposerProps = {
   onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
   onSelectSourceAppChatMode?: (mode: SourceAppChatMode) => void;
   onSelectAgent: (agentTypeId: string) => void;
-  onSelectProvider: (providerId: string) => void;
+  onSelectProvider: (providerId: string, reasoningEffort?: string) => void;
   onReasoningEffortChange?: (effort: string) => void;
   onSyntheticDataConfirmedChange?: (confirmed: boolean) => void;
   providerSelectorLocked?: boolean;

@@ -38,14 +38,18 @@ export function ProviderSelector({
   activeProviderId,
   disabled,
   locked = false,
+  onReasoningEffortChange = () => undefined,
   onSelect,
   providers,
+  reasoningEffort = "",
 }: {
   activeProviderId: string;
   disabled: boolean;
   locked?: boolean;
-  onSelect: (providerId: string) => void;
+  onReasoningEffortChange?: (effort: string) => void;
+  onSelect: (providerId: string, reasoningEffort?: string) => void;
   providers: ProviderItem[];
+  reasoningEffort?: string;
 }) {
   const menuId = useId();
   const [isOpen, setIsOpen] = useState(false);
@@ -154,6 +158,14 @@ export function ProviderSelector({
   function selectProvider(providerId: string) {
     onSelect(providerId);
     closeMenu();
+  }
+
+  function selectProviderReasoning(provider: ProviderItem, effort: string) {
+    if (provider.provider_id !== activeProviderId) {
+      onSelect(provider.provider_id, effort);
+      return;
+    }
+    onReasoningEffortChange(effort);
   }
 
   function handleQueryChange(value: string) {
@@ -313,6 +325,24 @@ export function ProviderSelector({
                 </span>
               ) : null}
               </button>
+              {provider.supported_reasoning_efforts?.length ? (
+                <label className="chatapp-provider-menu__reasoning">
+                  <span className="material-symbols-rounded" aria-hidden="true">psychology</span>
+                  <span>Reasoning</span>
+                  <select
+                    aria-label={`Reasoning for ${provider.label}`}
+                    disabled={disabled || locked}
+                    onChange={(event) => selectProviderReasoning(provider, event.currentTarget.value)}
+                    value={provider.provider_id === activeProviderId
+                      ? reasoningEffort || provider.default_reasoning_effort || provider.supported_reasoning_efforts[0]?.effort || ""
+                      : provider.default_reasoning_effort || provider.supported_reasoning_efforts[0]?.effort || ""}
+                  >
+                    {provider.supported_reasoning_efforts.map((option) => (
+                      <option key={option.effort} value={option.effort}>{option.label || option.effort}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
             </div>
             );
           })}

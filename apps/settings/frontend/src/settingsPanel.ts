@@ -15,6 +15,7 @@ import {
   selectedHostedProviderDraft,
   selectedProviderDraft
 } from './providerModelOptions';
+import { bouncyToggleHtml } from './bouncyToggle';
 
 const ACTIVE_RUNTIME_STATUSES = new Set(['created', 'running', 'stopping']);
 
@@ -388,6 +389,7 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
     });
   });
   document.querySelectorAll<HTMLInputElement>('[data-agentic-model-toggle]').forEach((toggle) => {
+    const toggleLabel = toggle.closest<HTMLElement>('.settings-bouncy-toggle');
     toggle.addEventListener('click', (event) => event.stopPropagation());
     toggle.closest('label')?.addEventListener('click', (event) => event.stopPropagation());
     toggle.addEventListener('change', () => {
@@ -397,6 +399,8 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
         toggle.checked = false;
         return;
       }
+      const statusLabel = toggleLabel?.querySelector<HTMLElement>('.settings-bouncy-toggle__label');
+      if (statusLabel) statusLabel.textContent = enable ? 'On' : 'Off';
       actions.onSaveAgenticBinding(
         toggle.dataset.agenticDefinitionId || '',
         toggle.dataset.agenticDefinitionRevision || '',
@@ -514,13 +518,17 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       <span class="settings-agentic-summary-badges">
         ${isPreview ? '<span class="settings-pill is-warning">Preview</span>' : ''}
         ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(item.blocked_reason || certificate?.effective_status || 'Unavailable'))}</span>`}
-        <label class="settings-model-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
+        <label class="settings-model-toggle settings-toggle settings-bouncy-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
           <input type="checkbox" role="switch" data-agentic-model-toggle
             data-agentic-definition-id="${escapeAttr(item.definition_id)}"
             data-agentic-definition-revision="${escapeAttr(item.definition_revision)}"
             data-agentic-remote-preview="${isRemotePreview ? 'true' : 'false'}"
             ${enabled ? 'checked' : ''} ${isSaving || (!available && !enabled) ? 'disabled' : ''}>
-          <span>${enabled ? 'On' : 'Off'}</span>
+          <span class="settings-bouncy-toggle__label">${enabled ? 'On' : 'Off'}</span>
+          <span class="settings-bouncy-toggle__track" aria-hidden="true">
+            <span class="settings-bouncy-toggle__inner"></span>
+            <span class="settings-bouncy-toggle__thumb"><span class="settings-bouncy-toggle__dot"></span></span>
+          </span>
         </label>
       </span>
     </summary>
@@ -568,7 +576,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
 }
 
 function agenticCheckbox(field: string, label: string, checked: boolean, disabled: boolean, forced = false) {
-  return `<label><input data-agentic-field="${escapeAttr(field)}" type="checkbox" ${checked ? 'checked' : ''} ${disabled || forced ? 'disabled' : ''}> ${escapeHtml(label)}</label>`;
+  return bouncyToggleHtml(`<input data-agentic-field="${escapeAttr(field)}" type="checkbox" role="switch" ${checked ? 'checked' : ''} ${disabled || forced ? 'disabled' : ''}>`, escapeHtml(label));
 }
 
 function agenticModelUsageHtml(item: AgenticAdminItem, state: SettingsPanelState) {
@@ -936,9 +944,9 @@ function hostedProviderModelAccordionHtml(
       </select>
     </label>
     <div class="settings-platform-checks">
-      <label><input type="checkbox" data-openrouter-routing="allow_fallbacks" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.allowFallbacks ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Allow OpenRouter fallback</label>
-      <label><input type="checkbox" data-openrouter-routing="require_parameters" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.requireParameters ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Require supported parameters</label>
-      <label><input type="checkbox" data-openrouter-routing="zdr" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.zdr ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Require zero data retention</label>
+      ${bouncyToggleHtml(`<input type="checkbox" role="switch" data-openrouter-routing="allow_fallbacks" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.allowFallbacks ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}>`, 'Allow OpenRouter fallback')}
+      ${bouncyToggleHtml(`<input type="checkbox" role="switch" data-openrouter-routing="require_parameters" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.requireParameters ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}>`, 'Require supported parameters')}
+      ${bouncyToggleHtml(`<input type="checkbox" role="switch" data-openrouter-routing="zdr" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.zdr ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}>`, 'Require zero data retention')}
     </div>
     `
         : ''

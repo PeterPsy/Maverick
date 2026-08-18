@@ -131,10 +131,10 @@ class OpenRouterChatStreamDecoder:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
         content = delta.get("content")
         if content is not None:
-            if not isinstance(content, str) or self.tool_call is not None:
+            if not isinstance(content, str) or (content and self.tool_call is not None):
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
-            self.text_chunks.append(content)
             if content:
+                self.text_chunks.append(content)
                 events.append(self._event("text_delta", text=content))
         self._reasoning(delta)
         if delta.get("tool_calls") is not None:

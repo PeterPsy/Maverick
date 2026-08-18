@@ -47,8 +47,20 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         terminal = stream[-1]
         stream[-1] = {
             **_identity("generation-terminal-usage"),
-            "choices": terminal["choices"],
+            "choices": [{
+                **terminal["choices"][0],
+                "finish_reason": None,
+            }],
         }
+        stream.append({
+            **_identity("generation-terminal-usage"),
+            "choices": [{
+                "index": 0,
+                "delta": {"role": "assistant", "content": ""},
+                "finish_reason": "tool_calls",
+            }],
+        }
+        )
         stream.append({
             **_identity("generation-terminal-usage"),
             "choices": [{

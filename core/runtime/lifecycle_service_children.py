@@ -44,6 +44,10 @@ def transition_runtime_session(
             "failed": {"running"},
         }
         _transition_allowed(session.status, target_status, allowed=allowed, kind="runtime session")
+        if target_status == "running" and session.preparation_status != "prepared":
+            raise RuntimeTransitionError(
+                f"Cannot run unprepared runtime session `{session.session_id}`."
+            )
         started_at = session.started_at or (timestamp if target_status == "running" else None)
         ended_at = timestamp if target_status in {"stopped", "failed"} else None
         updated = replace(

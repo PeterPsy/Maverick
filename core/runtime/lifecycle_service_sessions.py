@@ -12,7 +12,7 @@ from core.runtime.execution_binding import RuntimeExecutionBinding, fork_runtime
 from core.runtime.models import RuntimeRoutingDecision
 from core.runtime.paths import normalize_runtime_session_id
 from core.runtime.routing import build_runtime_routing
-from core.runtime.session_provider_state import initial_runtime_state, initialize_bound_provider_state
+from core.runtime.session_preparation import prepare_runtime_session
 from core.runtime.runtime_session import (
     RuntimeSessionGrantRecord,
     RuntimeSessionRecord,
@@ -119,6 +119,7 @@ def create_runtime_session(
         updated_at=timestamp,
         ended_at=None,
         last_progress_at=None,
+        preparation_status="unprepared",
         session_kind=normalized_session_kind,
         thread_visibility=normalized_thread_visibility,
         runtime_mode=normalized_runtime_mode,
@@ -142,16 +143,9 @@ def create_runtime_session(
         hosted_model_id=_optional_text(hosted_model_id),
         declared_remote_data_class=coerce_declared_remote_data_class(declared_remote_data_class),
     )
-    state = initial_runtime_state(session_id=session_id, workspace_id=workspace_id, now=timestamp)
-    saved = store.insert_session(session)
-    initialize_bound_provider_state(
-        store,
-        execution_binding,
-        session_id=session_id,
-        workspace_id=workspace_id,
-        now=timestamp,
-    )
-    store.save_state(state)
+    saved, published = prepare_runtime_session(store, session, execution_binding, now=timestamp)
+    if not published:
+        return saved
     if observability_store is not None:
         payload = {
             "session_id": session_id,
@@ -255,6 +249,7 @@ def create_child_runtime_session(
         updated_at=timestamp,
         ended_at=None,
         last_progress_at=None,
+        preparation_status="unprepared",
         session_kind="inter_agent_participant",
         thread_visibility="hidden",
         runtime_mode=parent.runtime_mode,
@@ -272,20 +267,7 @@ def create_child_runtime_session(
         hosted_provider_id=parent.hosted_provider_id,
         hosted_model_id=parent.hosted_model_id,
     )
-    state = initial_runtime_state(
-        session_id=child_session_id,
-        workspace_id=parent.workspace_id,
-        now=timestamp,
-    )
-    saved = store.insert_session(session)
-    initialize_bound_provider_state(
-        store,
-        execution_binding,
-        session_id=child_session_id,
-        workspace_id=parent.workspace_id,
-        now=timestamp,
-    )
-    store.save_state(state)
+    saved, _published = prepare_runtime_session(store, session, execution_binding, now=timestamp)
     return saved
 
 

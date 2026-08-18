@@ -1445,6 +1445,15 @@ The first implementation should keep those boundaries explicit instead of collap
 #### Runtime session
 
 A runtime session is the lifecycle container for one running agent runtime.
+Creation is logically atomic across the session aggregate, optional bound
+provider state, and initial runtime-state snapshot through a persisted
+publication barrier: the aggregate is first `unprepared`, initialization writes
+are idempotent, and only a final compare-and-set marks it `prepared`. Exact
+retries repair an interrupted preparation; conflicting retries are rejected.
+An unprepared session cannot transition to `running` or cross the
+provider-start handoff. Persisted records from before this barrier are treated
+as prepared because the former creation path exposed them only after all
+initialization writes returned successfully.
 
 It should carry:
 

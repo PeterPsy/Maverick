@@ -34,6 +34,15 @@ credential reference, execution mode, and policy ceilings into the nested
 `RuntimeExecutionBinding`, and inserts that binding with the session aggregate.
 Changing the Settings default therefore affects only later sessions.
 
+Session creation uses that aggregate as a persisted publication barrier. A new
+record is inserted with `preparation_status=unprepared`; Core then initializes
+provider state (when bound) and the runtime-state snapshot idempotently, and
+publishes `prepared` with a one-way compare-and-set. An exact retry repairs any
+missing initialization writes, while a retry with different aggregate identity
+is rejected. Neither the `running` transition nor the provider-start handoff
+accepts an unprepared session. Records predating this barrier hydrate as
+prepared because the former creation API returned only after initialization.
+
 Mutable continuation metadata is stored separately in
 `RuntimeProviderState`. Provider thread updates use exact-revision
 compare-and-set and are projected onto the legacy session response only for

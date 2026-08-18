@@ -62,9 +62,15 @@ Every new agentic session owns these distinct records:
    start and before every side effect. Only its HMAC digest and redaction-safe
    summary are persisted in audit data.
 
-The session is not executable until provider state revision zero exists. A
-failure between the aggregate insert and provider-state insert leaves a
-repairable, non-executable session and cannot start a provider request.
+The session aggregate is initially persisted with
+`preparation_status=unprepared`. It becomes executable only after provider
+state revision zero (when a binding exists) and the initial runtime-state
+snapshot have both been written, followed by a one-way `prepared` CAS on the
+session. Exact creation retries complete missing writes with the original
+preparation timestamp; conflicting retries fail closed. Both lifecycle
+promotion to `running` and the provider-start handoff reject an unprepared
+session, so a failure at any write boundary leaves a repairable,
+non-executable aggregate.
 
 Live certificate, credential, binding, workspace policy, actor/session grant,
 tool policy, app mount, health, and revocation state may only reduce or block the
@@ -192,7 +198,7 @@ normative so both adapters implement the same semantics.
 | Certificate status | `providers/agentic_capability_certificate_statuses.json` / `provider_agentic_capability_certificate_statuses` | `certificate_id`, revision CAS |
 | Evidence metadata | `providers/agentic_capability_evidence.json` / `provider_agentic_capability_evidence` | evidence digest, insert-only |
 | Evidence blob | `data/control-plane/provider-evidence/<digest-prefix>/<digest>` or configured platform blob adapter | content-addressed, create-if-absent, digest verified |
-| Execution binding | `runtime/sessions/<session_id>/session.json` | embedded in session aggregate, single insert, immutable |
+| Execution binding / preparation barrier | `runtime/sessions/<session_id>/session.json` | binding embedded in a single immutable aggregate insert; `unprepared -> prepared` publication uses a one-way CAS |
 | Provider state | `runtime/sessions/<session_id>/provider_state.json` | `session_id`, insert-if-absent then revision/generation CAS |
 | Tool invocation | `runtime/sessions/<session_id>/tool_invocations.json` | `invocation_id`, revision CAS |
 | Confirmation grant | `runtime/sessions/<session_id>/tool_confirmation_grants.json` | `grant_id`, revision CAS and atomic active-to-consumed transition |

@@ -30,6 +30,10 @@ class RuntimeProviderStartHandoff:
         self._handoff.__enter__()
         try:
             session = self.store.get_session(self.session_id)
+            if session.preparation_status != "prepared":
+                raise RuntimeTransitionError(
+                    f"Cannot start a provider for unprepared runtime session `{session.session_id}`."
+                )
             if session.status not in {"created", "running"}:
                 raise RuntimeTransitionError(
                     f"Cannot start a provider while session `{session.session_id}` is {session.status}."

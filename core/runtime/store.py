@@ -180,6 +180,11 @@ class RuntimeStore(Protocol):
     def insert_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
         ...
 
+    def mark_session_prepared(
+        self, *, session_id: str, workspace_id: str, now: datetime
+    ) -> RuntimeSessionRecord:
+        ...
+
     def patch_session_metadata(
         self,
         *,
@@ -796,6 +801,34 @@ class RuntimeDocumentStore:
             )
         self._remember_session_partition(record.session_id, record.workspace_id)
         return record
+
+    def mark_session_prepared(
+        self, *, session_id: str, workspace_id: str, now: datetime
+    ) -> RuntimeSessionRecord:
+        """Publish a fully initialized session through a one-way CAS barrier."""
+        current = self.get_session(session_id)
+        if current.workspace_id != workspace_id:
+            raise RuntimeSessionNotFoundError(
+                f"Runtime session `{session_id}` was not found in workspace `{workspace_id}`."
+            )
+        if current.preparation_status == "prepared":
+            return current
+        applied = self.collections.sessions.compare_and_set(
+            {
+                "session_id": session_id,
+                "workspace_id": workspace_id,
+                "preparation_status": "unprepared",
+            },
+            {"$set": {"preparation_status": "prepared", "updated_at": now}},
+        )
+        if not applied:
+            refreshed = self.get_session(session_id)
+            if refreshed.preparation_status == "prepared":
+                return refreshed
+            raise RuntimeProviderStateError(
+                f"Runtime session `{session_id}` preparation state changed concurrently."
+            )
+        return replace(current, preparation_status="prepared", updated_at=now)
 
     def patch_session_metadata(
         self,

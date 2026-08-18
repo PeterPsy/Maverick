@@ -13,6 +13,7 @@ from core.runtime.execution_binding import RuntimeExecutionBinding, execution_bi
 
 
 RuntimeSessionStatus = Literal["created", "running", "stopping", "stopped", "failed"]
+RuntimeSessionPreparationStatus = Literal["unprepared", "prepared"]
 RuntimeApiTokenStatus = Literal["active", "revoked"]
 RuntimeSessionGrantOperation = Literal[
     "cleanup",
@@ -64,6 +65,7 @@ class RuntimeSessionRecord:
     updated_at: datetime
     ended_at: datetime | None
     last_progress_at: datetime | None
+    preparation_status: RuntimeSessionPreparationStatus = "prepared"
     session_kind: RuntimeSessionKind = "chat_root"
     thread_visibility: RuntimeThreadVisibility = "user"
     runtime_mode: RuntimeMode = "agentic"
@@ -175,6 +177,9 @@ def normalize_runtime_session_visibility(
 def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSessionRecord:
     """Hydrate and validate one runtime session document."""
     payload = dict(document)
+    # Records written before the preparation barrier was introduced were only
+    # returned after all initial state writes completed, so they are prepared.
+    payload.setdefault("preparation_status", "prepared")
     session_kind, thread_visibility = normalize_runtime_session_visibility(
         payload.get("session_kind"),
         payload.get("thread_visibility"),

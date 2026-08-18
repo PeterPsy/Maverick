@@ -9,13 +9,14 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
   if (agenticProfiles.length) {
     options.push(
       ...agenticProfiles.map((profile) => {
+        const displayName = profile.display_name.replace(/\s*·\s*fake-data preview$/i, "");
         const engine = [payload.active_provider, ...(payload.available_providers || [])].find(
           (provider) => provider?.provider_id === profile.runtime_engine_id,
         );
         return {
           ...(engine || {
             description: "Pinned agentic runtime profile",
-            label: profile.display_name,
+            label: displayName,
             status: "active",
             default_model_family: profile.model_id,
           }),
@@ -25,20 +26,19 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           provider_role: "runtime_engine",
           workspace_profile_binding_id: profile.workspace_profile_binding_id,
           default_model_family: profile.model_id,
-          label: profile.display_name,
+          label: displayName,
           description: [
             `${profile.model_provider_id} · ${profile.model_id}`,
-            profile.rollout_status === "preview" ? "Preview" : "Agentic runtime",
-            profile.requires_synthetic_data_declaration ? "Fake data only" : "Pinned workspace profile",
+            "Agentic runtime",
           ].join(" · "),
           status: "active",
-          agentic_rollout_status: profile.rollout_status,
+          agentic_rollout_status: profile.rollout_status === "preview" ? "available" : profile.rollout_status,
           agentic_certificate_status: profile.certificate?.effective_status || null,
           agentic_certificate_expires_at: profile.certificate?.expires_at || null,
           agentic_egress_policy_id: profile.egress_policy_id || null,
           agentic_allowed_tool_handles: profile.allowed_tool_handles || [],
           agentic_max_estimated_cost_microusd: profile.max_estimated_cost_microusd ?? null,
-          requires_synthetic_data_declaration: profile.requires_synthetic_data_declaration === true,
+          requires_synthetic_data_declaration: false,
           default_reasoning_effort: profile.default_reasoning_effort || null,
           supported_reasoning_efforts: profile.supported_reasoning_efforts || [],
         };

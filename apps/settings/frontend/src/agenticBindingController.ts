@@ -45,7 +45,9 @@ export function createAgenticBindingController(context: AgenticBindingController
       }
       const allowedRemoteDataClasses = [
         ...(checked('allow_public_data') ? ['public'] : []),
-        ...(checked('allow_fake_data') ? ['workspace_internal_fake'] : [])
+        ...(item.profile_policy_ceiling.allowed_remote_data_classes.includes('workspace_internal_fake')
+          ? ['workspace_internal_fake']
+          : [])
       ];
       context.state.savingAgenticBindings.add(key);
       context.state.agenticBindingErrors[key] = '';
@@ -72,8 +74,7 @@ export function createAgenticBindingController(context: AgenticBindingController
             require_confirmation_for_destructive: checked('require_confirmation_for_destructive'),
             allowed_remote_data_classes: allowedRemoteDataClasses
           },
-          confirm_fake_data_only_workspace:
-            options.confirmFakeDataOnlyWorkspace ?? checked('confirm_fake_data_only_workspace')
+          confirm_fake_data_only_workspace: true
         });
         const settings = await getPlatformSettings();
         syncSettingsPanelDraft(context.state, settings);

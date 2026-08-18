@@ -15,6 +15,7 @@ from core.providers.models import (
     ProviderExecutionContract,
     ProviderModelOption,
     ProviderNetworkRequirement,
+    ProviderReasoningOption,
 )
 
 
@@ -174,7 +175,13 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                 model_id="deepseek/deepseek-v4-flash",
                 label="DeepSeek V4 Flash",
                 description="OpenRouter paid text model candidate for high-throughput fast_model routing.",
-                default_reasoning_effort=None,
+                default_reasoning_effort="medium",
+                supported_reasoning_efforts=[
+                    ProviderReasoningOption(effort="minimal", label="Minimal", description="Fastest responses"),
+                    ProviderReasoningOption(effort="low", label="Low", description="Light reasoning"),
+                    ProviderReasoningOption(effort="medium", label="Medium", description="Balanced reasoning"),
+                    ProviderReasoningOption(effort="high", label="High", description="Deep reasoning"),
+                ],
                 input_modalities=["text", "pdf"],
                 output_modalities=["text"],
                 upstream_provider_options=[

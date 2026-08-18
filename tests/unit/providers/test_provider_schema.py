@@ -201,6 +201,12 @@ class ProviderSchemaTest(unittest.TestCase):
     def test_google_ai_studio_metadata_exposes_gemini_flash_models(self) -> None:
         definitions = build_hosted_provider_definitions(datetime(2026, 6, 24, 12, 0, tzinfo=UTC))
         google = next(definition for definition in definitions if definition.provider_id == "google-ai-studio")
+        gemini = next(model for model in google.model_options if model.model_id == "gemini-3.6-flash")
+        self.assertEqual(gemini.default_reasoning_effort, "medium")
+        self.assertEqual(
+            [option.effort for option in gemini.supported_reasoning_efforts],
+            ["minimal", "low", "medium", "high"],
+        )
         payload = provider_payload(google)
 
         self.assertEqual(google.label, "Google AI Studio")

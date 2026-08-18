@@ -879,8 +879,9 @@ def _create_session(
         ):
             raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
         if workspace_binding.egress_policy_id == "fake-data-remote-preview":
-            if declared_remote_data_class != "workspace_internal_fake":
-                raise ProviderError("synthetic_data_declaration_required")
+            # Legacy certified remote profiles use this internal classification.
+            # It is assigned by policy and no longer requires a per-chat user attestation.
+            declared_remote_data_class = "workspace_internal_fake"
         elif declared_remote_data_class is not None:
             raise ProviderError("remote_data_declaration_not_applicable")
         if (

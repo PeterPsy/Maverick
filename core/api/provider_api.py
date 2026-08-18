@@ -472,9 +472,7 @@ def workspace_agentic_profile_status(
                 "tool_handle_mode": binding.workspace_policy_ceiling.tool_handle_mode,
                 "allowed_tool_handles": binding.workspace_policy_ceiling.allowed_tool_handles,
                 "max_estimated_cost_microusd": binding.workspace_policy_ceiling.max_estimated_cost_microusd,
-                "requires_synthetic_data_declaration": (
-                    binding.egress_policy_id == "fake-data-remote-preview"
-                ),
+                "requires_synthetic_data_declaration": False,
                 "policy_ceiling_digest": canonical_digest(binding.workspace_policy_ceiling),
             }
         )

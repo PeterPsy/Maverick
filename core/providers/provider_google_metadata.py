@@ -11,6 +11,7 @@ from core.providers.models import (
     ProviderExecutionContract,
     ProviderModelOption,
     ProviderNetworkRequirement,
+    ProviderReasoningOption,
 )
 
 
@@ -136,6 +137,16 @@ def _model(
         label=label,
         description=description,
         default_reasoning_effort=reasoning,
+        supported_reasoning_efforts=(
+            [
+                ProviderReasoningOption(effort="minimal", label="Minimal", description="Fastest responses"),
+                ProviderReasoningOption(effort="low", label="Low", description="Light reasoning"),
+                ProviderReasoningOption(effort="medium", label="Medium", description="Balanced reasoning"),
+                ProviderReasoningOption(effort="high", label="High", description="Deep reasoning"),
+            ]
+            if reasoning is not None
+            else []
+        ),
         input_modalities=["text", "image", "audio", "video", "pdf"],
         output_modalities=["text"],
         metadata=metadata,

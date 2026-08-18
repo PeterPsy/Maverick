@@ -35,7 +35,7 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 install_builtin_apps=False,
             )
 
-    def test_remote_preview_requires_explicit_fake_workspace_and_credential(self) -> None:
+    def test_remote_model_requires_credential_and_active_certificate_without_extra_consent(self) -> None:
         credential = bind_provider_credential(
             self.state.provider_store,
             provider_id="google-ai-studio",
@@ -56,25 +56,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             "max_estimated_cost_microusd": 100_000,
         }
 
-        with self.assertRaisesRegex(
-            AgenticProfileError,
-            "fake_data_workspace_confirmation_required",
-        ):
-            save_workspace_agentic_binding(
-                self.state.provider_store,
-                self.state.provider_registry,
-                workspace_id="default",
-                definition_id=GOOGLE_AGENTIC_PROFILE_ID,
-                definition_revision=GOOGLE_AGENTIC_PROFILE_REVISION,
-                credential_binding_id=credential.binding_id,
-                enabled=True,
-                is_default=False,
-                actor_policy=actor_policy,
-                policy_patch=policy_patch,
-                confirm_fake_data_only_workspace=False,
-                now=NOW,
-            )
-
         with self.assertRaises(ProviderNotFoundError):
             save_workspace_agentic_binding(
                 self.state.provider_store,
@@ -87,7 +68,7 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 is_default=False,
                 actor_policy=actor_policy,
                 policy_patch=policy_patch,
-                confirm_fake_data_only_workspace=True,
+                confirm_fake_data_only_workspace=False,
                 now=NOW,
             )
 

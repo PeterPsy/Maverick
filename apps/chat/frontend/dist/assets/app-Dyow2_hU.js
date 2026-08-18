@@ -1,1 +1,0 @@
-import{a as t,l as r,c as o,j as e,R as s}from"./shellTheme-W-oCw19b.js";import{A as i}from"./main-DwSE9-Ez.js";import"./createLucideIcon-D9suMiTq.js";import"./useRuntimeEvents-DDaLb5uB.js";import"./transcript-BoNbFepA.js";import"./useRuntimeThreads-CnfnyQrx.js";t();r();o.createRoot(document.getElementById("root")).render(e.jsx(s.StrictMode,{children:e.jsx(i,{})}));

@@ -394,17 +394,12 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
     toggle.closest('label')?.addEventListener('click', (event) => event.stopPropagation());
     toggle.addEventListener('change', () => {
       const enable = toggle.checked;
-      const remotePreview = toggle.dataset.agenticRemotePreview === 'true';
-      if (enable && remotePreview && !window.confirm('Enable this preview model for synthetic data only?')) {
-        toggle.checked = false;
-        return;
-      }
       const statusLabel = toggleLabel?.querySelector<HTMLElement>('.settings-bouncy-toggle__label');
       if (statusLabel) statusLabel.textContent = enable ? 'On' : 'Off';
       actions.onSaveAgenticBinding(
         toggle.dataset.agenticDefinitionId || '',
         toggle.dataset.agenticDefinitionRevision || '',
-        { enabled: enable, confirmFakeDataOnlyWorkspace: enable && remotePreview }
+        { enabled: enable }
       );
     });
   });
@@ -495,8 +490,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
     allowed_agent_type_ids: []
   };
   const certificate = item.certificate;
-  const isPreview = item.rollout_status === 'preview';
-  const isRemotePreview = item.runtime_engine_id !== 'codex';
+  const isRemote = item.runtime_engine_id !== 'codex';
   const isSaving = state.savingAgenticBindings.has(key);
   const error = state.agenticBindingErrors[key] || '';
   const toolEnabled = policy.tool_handle_mode !== 'none';
@@ -508,21 +502,20 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
   const enabled = Boolean(binding?.enabled);
   const available = certificate?.effective_status === 'active' && item.rollout_status !== 'disabled' && item.rollout_status !== 'suspended';
   const usageSummary = agenticModelUsageSummary(item, state);
+  const displayName = item.display_name.replace(/\s*·\s*fake-data preview$/i, '');
   return `<details class="settings-model-accordion settings-agentic-runtime" data-settings-model-accordion="agentic-${escapeAttr(key)}">
     <summary>
       <span class="settings-model-summary-copy">
         <span class="settings-kicker">${escapeHtml(item.model_provider_id)}</span>
-        <strong>${escapeHtml(item.display_name)}</strong>
+        <strong>${escapeHtml(displayName)}</strong>
         <small>${escapeHtml(item.model_id)}${binding?.is_default ? ' · Default' : ''}${usageSummary ? ` · ${escapeHtml(usageSummary)}` : ''}</small>
       </span>
       <span class="settings-agentic-summary-badges">
-        ${isPreview ? '<span class="settings-pill is-warning">Preview</span>' : ''}
         ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(item.blocked_reason || certificate?.effective_status || 'Unavailable'))}</span>`}
         <label class="settings-model-toggle settings-toggle settings-bouncy-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
           <input type="checkbox" role="switch" data-agentic-model-toggle
             data-agentic-definition-id="${escapeAttr(item.definition_id)}"
             data-agentic-definition-revision="${escapeAttr(item.definition_revision)}"
-            data-agentic-remote-preview="${isRemotePreview ? 'true' : 'false'}"
             ${enabled ? 'checked' : ''} ${isSaving || (!available && !enabled) ? 'disabled' : ''}>
           <span class="settings-bouncy-toggle__label">${enabled ? 'On' : 'Off'}</span>
           <span class="settings-bouncy-toggle__track" aria-hidden="true">
@@ -533,13 +526,9 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       </span>
     </summary>
     <div class="settings-model-content settings-agentic-runtime-content" data-agentic-binding-form data-agentic-definition-id="${escapeAttr(item.definition_id)}" data-agentic-definition-revision="${escapeAttr(item.definition_revision)}">
-      ${isRemotePreview ? `<div class="settings-agentic-warning" role="note">
-        <span class="material-symbols-rounded" aria-hidden="true">science</span>
-        <span><strong>Preview · fake data only</strong><small>Use only in a workspace containing synthetic data. User prompts, tool results and provider state may leave Maverick for ${escapeHtml(item.model_provider_id)}.</small></span>
-      </div>` : ''}
       ${agenticModelUsageHtml(item, state)}
       <div class="settings-agentic-controls">
-        ${isRemotePreview ? `<label class="settings-platform-field">
+        ${isRemote ? `<label class="settings-platform-field">
           <span>Credential binding</span>
           <select data-agentic-field="credential_binding_id" ${isSaving ? 'disabled' : ''}>
             <option value="">${credentials.length ? 'No credential' : 'No active credential available'}</option>
@@ -561,9 +550,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
             ${agenticCheckbox('require_confirmation_for_mutating', 'Confirm mutating tools', policy.require_confirmation_for_mutating, isSaving, item.profile_policy_ceiling.require_confirmation_for_mutating)}
             ${agenticCheckbox('require_confirmation_for_destructive', 'Confirm destructive tools', policy.require_confirmation_for_destructive, isSaving, item.profile_policy_ceiling.require_confirmation_for_destructive)}
             ${item.profile_policy_ceiling.allowed_remote_data_classes.includes('public') ? agenticCheckbox('allow_public_data', 'Permit public data', policy.allowed_remote_data_classes.includes('public'), isSaving) : ''}
-            ${item.profile_policy_ceiling.allowed_remote_data_classes.includes('workspace_internal_fake') ? agenticCheckbox('allow_fake_data', 'Permit synthetic data', policy.allowed_remote_data_classes.includes('workspace_internal_fake'), isSaving) : ''}
           </details>
-          <input data-agentic-field="confirm_fake_data_only_workspace" type="checkbox" ${enabled && isRemotePreview ? 'checked' : ''} hidden>
         </div>
       </div>
       <button type="button" data-agentic-binding-save data-agentic-definition-id="${escapeAttr(item.definition_id)}" data-agentic-definition-revision="${escapeAttr(item.definition_revision)}" ${isSaving ? 'disabled' : ''}>

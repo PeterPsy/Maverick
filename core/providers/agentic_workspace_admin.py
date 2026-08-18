@@ -205,8 +205,6 @@ def save_workspace_agentic_binding(
     )
     egress_policy_id, egress_policy_revision = egress_policy_for_definition(definition)
     if egress_policy_id == REMOTE_PREVIEW_EGRESS_POLICY_ID and enabled:
-        if not confirm_fake_data_only_workspace:
-            raise AgenticProfileError("fake_data_workspace_confirmation_required")
         if "workspace_internal_fake" not in workspace_policy.allowed_remote_data_classes:
             raise AgenticProfileError("fake_data_egress_class_required")
     if enabled:

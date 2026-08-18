@@ -132,7 +132,7 @@ describe("provider runtime options", () => {
             workspace_profile_binding_id: "binding-codex",
             definition_id: "profile-codex",
             definition_revision: "1",
-            display_name: "Codex · gpt-5.6-sol",
+            display_name: "Codex · gpt-5.6-sol · fake-data preview",
             runtime_engine_id: "codex",
             model_provider_id: "codex",
             model_id: "gpt-5.6-sol",
@@ -167,7 +167,8 @@ describe("provider runtime options", () => {
       agentic_egress_policy_id: "fake-data-remote-preview",
       agentic_allowed_tool_handles: ["mcp:storage_read"],
       agentic_max_estimated_cost_microusd: 250_000,
-      requires_synthetic_data_declaration: true,
+      requires_synthetic_data_declaration: false,
+      agentic_rollout_status: "available",
       default_reasoning_effort: "xhigh",
       supported_reasoning_efforts: [
         { effort: "high", label: "High", description: null },

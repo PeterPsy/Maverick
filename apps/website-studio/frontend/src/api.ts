@@ -235,6 +235,12 @@ export function invalidateWorkspaceSnapshots(resources: string[] = []) {
   if (!resources.length || resources.some((resource) => ['source', 'navigation', 'view-selection'].includes(resource))) {
     snapshotMemory.clear();
     snapshotRequests.clear();
+    try {
+      for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+        const key = sessionStorage.key(index);
+        if (key?.startsWith('website-studio:snapshot:')) sessionStorage.removeItem(key);
+      }
+    } catch { /* storage can be unavailable in sandboxed widgets */ }
   }
 }
 

@@ -57,6 +57,7 @@ export function App() {
   const previewCacheRef = useRef<Map<string, PreviewPayload>>(new Map());
   const previewRequestCacheRef = useRef<Map<string, Promise<PreviewPayload>>>(new Map());
   const refreshRunRef = useRef(0);
+  const snapshotAbortRef = useRef<AbortController | null>(null);
   const sitemapRef = useRef<SitemapPayload>(EMPTY_SITEMAP);
 
   const pages = useMemo(() => sitemap.items || [], [sitemap]);
@@ -106,9 +107,20 @@ export function App() {
       setChangeHistory(null);
     }
     try {
-      const snapshotRequest = cachedWorkspaceSnapshot(nextSiteId, nextRoute || '/', { revalidate: true });
-      const bootstrap = snapshotToBootstrap(snapshotRequest.cached || await snapshotRequest.fresh);
-      void snapshotRequest.fresh.catch(() => null);
+      snapshotAbortRef.current?.abort();
+      const snapshotAbort = new AbortController();
+      snapshotAbortRef.current = snapshotAbort;
+      const snapshotRequest = cachedWorkspaceSnapshot(nextSiteId, nextRoute || '/', { revalidate: true, signal: snapshotAbort.signal });
+      const initialSnapshot = snapshotRequest.cached || await snapshotRequest.fresh;
+      const bootstrap = snapshotToBootstrap(initialSnapshot);
+      if (snapshotRequest.cached) {
+        void snapshotRequest.fresh.then((freshSnapshot) => {
+          if (runId !== refreshRunRef.current || freshSnapshot === initialSnapshot) return;
+          return refresh(nextSiteId, nextPageId, nextRoute, nextRouteId, nextAssetId, nextTarget, { resetPreview: false });
+        }).catch((error: Error) => {
+          if (error.name !== 'AbortError' && runId === refreshRunRef.current) setNotice({ tone: 'warn', text: error.message });
+        });
+      }
       if (runId !== refreshRunRef.current) return;
       setSites(bootstrap.sites);
       const availableSites = bootstrap.sites.filter((site) => site.status !== 'archived');
@@ -244,6 +256,7 @@ export function App() {
 
   useEffect(() => {
     refresh().catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
+    return () => snapshotAbortRef.current?.abort();
   }, []);
 
   useEffect(() => {

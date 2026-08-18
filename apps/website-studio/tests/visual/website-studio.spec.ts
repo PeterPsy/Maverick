@@ -200,7 +200,7 @@ test.describe('Website Studio visual smoke', () => {
 
   test('does not open the removed sidebar fullscreen preview flow', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
-    await installWebsiteStudioMocks(page);
+    const mockState = await installWebsiteStudioMocks(page);
 
     await page.goto('/');
     await openSite(page);
@@ -237,6 +237,7 @@ test.describe('Website Studio visual smoke', () => {
     });
 
     await expect(page.locator('.website-studio-tree-trigger').filter({ hasText: 'Giuntitrail' }).first()).toBeVisible();
+    await expect.poll(() => mockState.backendActions.filter((action) => action === 'navigation_analyze').length).toBeGreaterThan(0);
     await expect(page.getByText('Backend and config')).toHaveCount(0);
     await expect(page.getByText('README.md')).toHaveCount(0);
     await expect(page.getByText('No observed sections')).toHaveCount(0);
@@ -247,6 +248,9 @@ test.describe('Website Studio visual smoke', () => {
 
     const homeTrigger = page.locator('.website-studio-tree-trigger').filter({ hasText: 'Home' }).first();
     await homeTrigger.locator('.website-studio-tree-expander').click();
+    const sectionsTrigger = page.locator('.website-studio-tree-trigger').filter({ hasText: 'Sections' }).first();
+    await sectionsTrigger.locator('.website-studio-tree-expander').click();
+    await expect(page.getByText('Hero')).toBeVisible();
     const componentsTrigger = page.locator('.website-studio-tree-trigger').filter({ hasText: 'Components' }).first();
     await componentsTrigger.locator('.website-studio-tree-expander').click();
     await expect(page.getByText('Call to action')).toBeVisible();

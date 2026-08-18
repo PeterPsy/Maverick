@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { cachedWorkspaceSnapshot, invalidateWorkspaceSnapshots, type WorkspaceSnapshot } from '../../api';
 import {
@@ -97,11 +97,12 @@ type ChangesPayload = {
 
 const DEFAULT_EXPANDED_IDS = ['site:root', 'group:pages'];
 
-async function backend<T>(body: Record<string, unknown>): Promise<T> {
+async function backend<T>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const response = await fetch('/api/apps/website-studio/backend', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal
   });
   if (!response.ok) throw new Error('backend request failed');
   return response.json() as Promise<T>;
@@ -116,6 +117,7 @@ function WebsiteSitemapSidebarWidget() {
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   const filteredSites = useMemo(() => sites.filter((site) => site.status !== 'archived'), [sites]);
   const treeItems = useMemo(
@@ -127,14 +129,25 @@ function WebsiteSitemapSidebarWidget() {
 
   async function load(nextSiteId = activeSiteId) {
     if (!navigation) setIsLoading(true);
-    const request = cachedWorkspaceSnapshot(nextSiteId, '/', { revalidate: true });
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+    const request = cachedWorkspaceSnapshot(nextSiteId, '/', { revalidate: true, signal: controller.signal });
     const snapshot = request.cached || await request.fresh;
-    applySnapshot(snapshot, nextSiteId);
+    let selectedSiteId = applySnapshot(snapshot, nextSiteId);
+    let visualRequest = selectedSiteId ? hydrateVisualNavigation(selectedSiteId, controller.signal) : Promise.resolve();
     const fresh = await request.fresh;
-    if (fresh !== snapshot) applySnapshot(fresh, nextSiteId);
+    if (fresh !== snapshot) {
+      const freshSiteId = applySnapshot(fresh, nextSiteId);
+      if (freshSiteId !== selectedSiteId) {
+        selectedSiteId = freshSiteId;
+        visualRequest = selectedSiteId ? hydrateVisualNavigation(selectedSiteId, controller.signal) : Promise.resolve();
+      }
+    }
+    await visualRequest;
   }
 
-  function applySnapshot(snapshot: WorkspaceSnapshot, requestedSiteId = '') {
+  function applySnapshot(snapshot: WorkspaceSnapshot, requestedSiteId = ''): string {
     const nextSites = snapshot.workspace?.projects || [];
     setSites(nextSites);
     const selectableSites = nextSites.filter((item) => item.status !== 'archived');
@@ -147,7 +160,7 @@ function WebsiteSitemapSidebarWidget() {
       setChangeHistory(null);
       setError('');
       setIsLoading(false);
-      return;
+      return '';
     }
     setActiveSiteId(site.id);
     const project = snapshot.project;
@@ -157,13 +170,22 @@ function WebsiteSitemapSidebarWidget() {
     setChangeHistory({ working_diff: Array.from({ length: changedCount }, () => ({})) });
     setError('');
     setIsLoading(false);
+    return site.id;
+  }
+
+  async function hydrateVisualNavigation(siteId: string, signal: AbortSignal) {
+    const visual = await backend<VisualNavigationPayload>({ action: 'navigation_analyze', site_id: siteId }, signal);
+    if (signal.aborted) return;
+    setNavigation(visual || null);
   }
 
   useEffect(() => {
     load().catch((loadError: Error) => {
+      if (loadError.name === 'AbortError') return;
       setError(loadError.message || 'Visual navigation unavailable.');
       setIsLoading(false);
     });
+    return () => loadAbortRef.current?.abort();
   }, []);
 
   useEffect(() => {
@@ -172,13 +194,13 @@ function WebsiteSitemapSidebarWidget() {
       const payload = event.data as { context?: { content?: { payload?: { active_app_params?: Record<string, string> } } }; owner_app_id?: string; resource?: string; type?: string };
       if (payload.type === 'maverick.widget.data-changed' && payload.owner_app_id === 'website-studio') {
         invalidateWorkspaceSnapshots(payload.resource ? [payload.resource] : []);
-        load(activeSiteId).catch((loadError: Error) => setError(loadError.message || 'Visual navigation unavailable.'));
+        load(activeSiteId).catch((loadError: Error) => { if (loadError.name !== 'AbortError') setError(loadError.message || 'Visual navigation unavailable.'); });
         return;
       }
       if (payload.type !== 'maverick.widget.context-changed') return;
       const params = payload.context?.content?.payload?.active_app_params || {};
       if (params.site_id && params.site_id !== activeSiteId) {
-        load(String(params.site_id)).catch((loadError: Error) => setError(loadError.message || 'Visual navigation unavailable.'));
+        load(String(params.site_id)).catch((loadError: Error) => { if (loadError.name !== 'AbortError') setError(loadError.message || 'Visual navigation unavailable.'); });
       }
     }
     window.addEventListener('message', handleMessage);

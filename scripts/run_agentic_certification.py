@@ -23,26 +23,17 @@ def main() -> int:
     parser.add_argument("--suite-id", required=True)
     parser.add_argument("--suite-version", required=True)
     parser.add_argument("--adapter-artifact-digest", required=True)
-    parser.add_argument("--matrix", type=Path, required=True)
-    parser.add_argument("--matrix-revision", required=True)
-    parser.add_argument("--artifact", action="append", type=Path, required=True)
     parser.add_argument("--evidence-ref", action="append", required=True)
     parser.add_argument("--signer-key-id", required=True)
     parser.add_argument("--private-key-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    command = args.command[1:] if args.command[:1] == ["--"] else args.command
     root = REPOSITORY_ROOT
     run = execute_certification_suite(
-        command=command,
         cwd=root,
         suite_id=args.suite_id,
         suite_version=args.suite_version,
         adapter_artifact_digest=args.adapter_artifact_digest,
-        artifact_paths=tuple(root / item for item in args.artifact),
-        matrix_path=root / args.matrix,
-        matrix_revision=args.matrix_revision,
         evidence_refs=tuple(args.evidence_ref),
     )
     signed = sign_certification_run(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 from typing import Mapping
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -10,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from core.providers.agentic_models import AgenticProfileDefinition
 from core.providers.capability_models import CapabilityCertificate, RuntimeCapabilitySet
 from core.providers.certificate_service import build_capability_evidence, publish_capability_certificate, runtime_adapter_artifact_digest
-from core.providers.certification_pipeline import SignedCertificationRun, verify_certification_run
+from core.providers.certification_pipeline import SignedCertificationRun, validate_run_against_manifest, verify_certification_run
 from core.providers.errors import CapabilityCertificateError
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import canonical_digest
@@ -32,6 +33,7 @@ def publish_openrouter_preview_certificate(
 ) -> CapabilityCertificate:
     """Verify a completed run and publish its exact OpenRouter combination."""
     run = verify_certification_run(signed_run, trusted_keys=trusted_keys)
+    validate_run_against_manifest(run, cwd=Path(__file__).resolve().parents[2])
     if (run.suite_id, run.suite_version) != (
         OPENROUTER_CERTIFICATION_SUITE_ID,
         OPENROUTER_CERTIFICATION_SUITE_VERSION,

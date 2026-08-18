@@ -73,30 +73,31 @@ class GoogleAgenticProfileTest(unittest.TestCase):
 
         private_key = Ed25519PrivateKey.generate()
         repository_root = Path(__file__).resolve().parents[3]
-        run = execute_certification_suite(
-            command=("python3", "-c", "pass"),
-            cwd=repository_root,
-            suite_id=GOOGLE_CERTIFICATION_SUITE_ID,
-            suite_version=GOOGLE_CERTIFICATION_SUITE_VERSION,
-            adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
-            artifact_paths=(Path(__file__).resolve(),),
-            matrix_path=repository_root / "docs/reference/google_agentic_certification_matrix.md",
-            matrix_revision=GOOGLE_CERTIFICATION_MATRIX_REVISION,
-            evidence_refs=("platform-evidence:test-run:google",),
-            started_at=NOW,
-        )
+        completed = mock.Mock(returncode=0, stdout=b"passed", stderr=b"")
+        with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
+            "core.providers.certification_pipeline._git_commit", return_value="a" * 40
+        ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=completed):
+            run = execute_certification_suite(
+                cwd=repository_root,
+                suite_id=GOOGLE_CERTIFICATION_SUITE_ID,
+                suite_version=GOOGLE_CERTIFICATION_SUITE_VERSION,
+                adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
+                evidence_refs=("platform-evidence:test-run:google",),
+                started_at=NOW,
+            )
         signed = sign_certification_run(
             run,
             signer_key_id="test-ci",
             private_key=private_key,
         )
-        certificate = publish_google_preview_certificate(
-            state.provider_store,
-            definition=profile,
-            adapter=adapter,
-            signed_run=signed,
-            trusted_keys={"test-ci": private_key.public_key()},
-        )
+        with mock.patch("core.providers.certification_pipeline._git_commit", return_value="a" * 40):
+            certificate = publish_google_preview_certificate(
+                state.provider_store,
+                definition=profile,
+                adapter=adapter,
+                signed_run=signed,
+                trusted_keys={"test-ci": private_key.public_key()},
+            )
         evidence = state.provider_store.get_capability_evidence(certificate.evidence_digest)
         self.assertEqual(certificate.test_run_id, run.test_run_id)
         self.assertEqual(evidence.source_commit, run.source_commit)

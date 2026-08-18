@@ -26,7 +26,7 @@ def feature_enabled(
     default: bool = True,
     environment: Mapping[str, str] | None = None,
 ) -> bool:
-    """Resolve a strict boolean flag, preserving the declared rollout default."""
+    """Resolve a strict boolean flag; any malformed configured value disables it."""
     source = os.environ if environment is None else environment
     raw = source.get(name)
     if raw is None or not str(raw).strip():
@@ -36,7 +36,7 @@ def feature_enabled(
         return True
     if normalized in _DISABLED_VALUES:
         return False
-    return default
+    return False
 
 
 def require_agentic_feature(name: str, reason_code: str) -> None:

@@ -32,30 +32,27 @@ non-synthetic data.
 
 Create an output directory outside the repository. The runner opens its output
 with create-only semantics and emits nothing when the command exits non-zero.
-The command after `--` must be the reviewed certification suite, including its
-operator-only live probe wrapper.
+The runner selects a code-owned, versioned manifest from `suite-id` and
+`suite-version`. It accepts no command, matrix path/revision, artifact list, or
+probe entrypoint from the CLI. Every manifest contains a fixture/contract step
+and a distinct operator-only live synthetic probe step; both must pass.
 
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
   --suite-version 3 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
-  --matrix docs/reference/google_agentic_certification_matrix.md \
-  --matrix-revision 2026-08-16-r2 \
-  --artifact core/providers/google_interactions_client.py \
-  --artifact core/providers/google_agentic_certification.py \
-  --artifact core/providers/certification_pipeline.py \
-  --artifact tests/unit/providers/test_google_agentic_profile.py \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
   --private-key-file "$CERTIFICATION_PRIVATE_KEY_FILE" \
-  --output "$CERTIFICATION_OUTPUT/google-run.json" \
-  -- "$REVIEWED_GOOGLE_CERTIFICATION_SUITE"
+  --output "$CERTIFICATION_OUTPUT/google-run.json"
 ```
 
 For OpenRouter use suite id
 `maverick-openrouter-agentic-contract`, matrix revision `2026-08-17-r2`, the
-OpenRouter matrix, and the reviewed OpenRouter artifact list and suite command.
+OpenRouter manifest. The canonical matrices, artifact bundles, commands, and
+live probe entrypoints live in
+`core/providers/certification_manifests.py`.
 Do not reuse a Google artifact bundle, result, live probe, or evidence reference.
 
 The runner records and signs the source commit, suite identity/version, matrix
@@ -76,9 +73,10 @@ signature against its configured trusted public keys, and call exactly one of:
 - `publish_openrouter_preview_certificate` in
   `core/providers/openrouter_agentic_certification.py`.
 
-Those functions recheck suite identity/version, matrix revision, and the digest
-of the deployed adapter before publishing immutable evidence and certificate
-records through the provider store. There is deliberately no bootstrap
+Those functions recheck the deployed source commit, suite manifest and step
+command digests, matrix bytes, complete artifact bundle, and deployed adapter
+digest before publishing immutable evidence and certificate records through
+the provider store. There is deliberately no bootstrap
 fallback. A mismatch, untrusted signer, duplicate conflicting identity,
 invalid evidence reference, or publisher failure leaves the candidate
 uncertified; a binding must not be enabled until both records and active status

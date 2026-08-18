@@ -65,9 +65,9 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
                     )
                 )
 
-    def test_invalid_value_preserves_declared_default(self) -> None:
+    def test_invalid_value_fails_closed_regardless_of_declared_default(self) -> None:
         environment = {MAVERICK_FEATURE_AGENTIC_PROFILES: "invalid"}
-        self.assertTrue(
+        self.assertFalse(
             feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES, environment=environment)
         )
         self.assertFalse(

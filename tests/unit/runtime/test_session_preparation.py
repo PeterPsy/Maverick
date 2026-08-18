@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 import unittest
 
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.errors import RuntimeProviderStateError, RuntimeTransitionError
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.provider_start_handoff import RuntimeProviderStartHandoff
+from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.service import create_runtime_session, transition_runtime_session
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
+from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
 
@@ -89,6 +93,19 @@ class RuntimeSessionPreparationTestCase(unittest.TestCase):
             start_path=self.repo_root,
         )
 
+    def _json_store(self) -> RuntimeDocumentStore:
+        return RuntimeDocumentStore(RuntimeCollections(
+            sessions=RuntimeSessionJsonCollection(start_path=self.repo_root, filename="sessions.json"),
+            turns=RuntimeSessionJsonCollection(start_path=self.repo_root, filename="turns.json"),
+            events=RuntimeEventJsonCollection(start_path=self.repo_root),
+            processes=RuntimeSessionJsonCollection(start_path=self.repo_root, filename="processes.json"),
+            states=RuntimeSessionJsonCollection(start_path=self.repo_root, filename="states.json"),
+            threads=WorkspaceRuntimeJsonCollection(start_path=self.repo_root, filename="threads.json"),
+            provider_states=RuntimeSessionJsonCollection(
+                start_path=self.repo_root, filename="provider_states.json"
+            ),
+        ))
+
     def test_retry_repairs_every_persistence_boundary_before_publication(self) -> None:
         for method_name in ("initialize_provider_state", "save_state", "mark_session_prepared"):
             with self.subTest(method_name=method_name):
@@ -131,6 +148,19 @@ class RuntimeSessionPreparationTestCase(unittest.TestCase):
                 now=NOW,
                 start_path=self.repo_root,
             )
+
+    def test_json_adapter_repairs_and_concurrent_identical_retries_converge(self) -> None:
+        store = self._json_store()
+        faulting = FailOnceStore(store, "save_state")
+        with self.assertRaisesRegex(RuntimeError, "injected_save_state_failure"):
+            self._create(faulting)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            sessions = tuple(executor.map(lambda _: self._create(faulting), range(2)))
+
+        self.assertTrue(all(item.preparation_status == "prepared" for item in sessions))
+        self.assertEqual(store.get_session(self.binding.session_id).preparation_status, "prepared")
+        self.assertEqual(store.get_provider_state(self.binding.session_id).revision, 0)
 
 
 if __name__ == "__main__":

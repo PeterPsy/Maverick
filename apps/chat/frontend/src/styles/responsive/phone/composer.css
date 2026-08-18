@@ -113,4 +113,8 @@
     padding: 0.62rem;
   }
 
+  .chatapp-provider-menu__reasoning-label {
+    display: none;
+  }
+
 }

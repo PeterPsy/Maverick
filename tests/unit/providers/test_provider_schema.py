@@ -159,6 +159,7 @@ class ProviderSchemaTest(unittest.TestCase):
     def test_openrouter_metadata_exposes_requested_models_without_secret_refs(self) -> None:
         definitions = build_hosted_provider_definitions(datetime(2026, 6, 23, 12, 0, tzinfo=UTC))
         openrouter = next(definition for definition in definitions if definition.provider_id == "openrouter")
+        deepseek = next(model for model in openrouter.model_options if model.model_id == "deepseek/deepseek-v4-flash")
         payload = provider_payload(openrouter)
 
         self.assertEqual(openrouter.label, "OpenRouter")
@@ -182,6 +183,11 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertEqual(openrouter.model_options[2].input_modalities, ["text", "pdf"])
         self.assertEqual(openrouter.model_options[3].input_modalities, ["text"])
         self.assertEqual(openrouter.model_options[3].output_modalities, ["speech"])
+        self.assertEqual(deepseek.default_reasoning_effort, "high")
+        self.assertEqual(
+            [option.effort for option in deepseek.supported_reasoning_efforts],
+            ["minimal", "low", "medium", "high"],
+        )
         self.assertEqual(payload["model_options"][0]["input_modalities"], ["text", "image", "video", "pdf"])
         self.assertEqual(payload["model_options"][0]["upstream_provider_options"][0]["provider_id"], "google-ai-studio")
         self.assertEqual(payload["model_options"][1]["upstream_provider_options"][0]["provider_id"], "nvidia")
@@ -202,7 +208,7 @@ class ProviderSchemaTest(unittest.TestCase):
         definitions = build_hosted_provider_definitions(datetime(2026, 6, 24, 12, 0, tzinfo=UTC))
         google = next(definition for definition in definitions if definition.provider_id == "google-ai-studio")
         gemini = next(model for model in google.model_options if model.model_id == "gemini-3.6-flash")
-        self.assertEqual(gemini.default_reasoning_effort, "medium")
+        self.assertEqual(gemini.default_reasoning_effort, "high")
         self.assertEqual(
             [option.effort for option in gemini.supported_reasoning_efforts],
             ["minimal", "low", "medium", "high"],

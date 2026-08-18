@@ -8,6 +8,11 @@ from typing import TYPE_CHECKING
 
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, ProviderModelOption, ProviderReasoningOption
 from core.providers.provider_codex_hooks import CODEX_POST_TOOL_USE_HOOK_NAME, write_codex_post_tool_use_hook
+from core.providers.provider_codex_reasoning import (
+    CODEX_DEFAULT_REASONING_EFFORT,
+    codex_default_reasoning_effort,
+    normalize_codex_model_options,
+)
 from core.providers.provider_codex_wrappers import _write_workspace_maverick_wrapper
 from core.runtime.runtime_session import RuntimeSessionRecord
 if TYPE_CHECKING:
@@ -17,7 +22,6 @@ CODEX_RUNTIME_HOME_FILES = ("auth.json", "version.json", ".personality_migration
 CODEX_DISABLED_RUNTIME_FEATURES = ("apps", "plugins")
 CODEX_SYSTEM_SKILLS_ROOT = ".system"
 CODEX_DEFAULT_MODEL = "gpt-5.6-sol"
-CODEX_DEFAULT_REASONING_EFFORT = "high"
 CODEX_MANAGED_TOP_LEVEL_CONFIG_KEYS = {"model", "model_reasoning_effort"}
 CODEX_MANAGED_RUNTIME_FEATURES = {
     "apps": False,
@@ -55,7 +59,7 @@ def build_codex_definition(
 ) -> ProviderDefinition:
     """Build the canonical provider definition for the local Codex backend."""
     timestamp = now or utcnow()
-    options = list(model_options or _fallback_model_options())
+    options = normalize_codex_model_options(list(model_options or _fallback_model_options()))
     return ProviderDefinition(
         provider_id="codex",
         label="Codex",
@@ -100,7 +104,8 @@ def _fallback_reasoning_options() -> list[ProviderReasoningOption]:
         ProviderReasoningOption(effort="low", label="Low", description="Fast responses with lighter reasoning"),
         ProviderReasoningOption(effort="medium", label="Mid", description="Balanced reasoning depth"),
         ProviderReasoningOption(effort="high", label="High", description="Greater reasoning depth"),
-        ProviderReasoningOption(effort="xhigh", label="Extra high", description="Maximum reasoning depth"),
+        ProviderReasoningOption(effort="xhigh", label="Extra high", description="Very deep reasoning"),
+        ProviderReasoningOption(effort="max", label="Max", description="Maximum single-agent reasoning depth"),
     ]
 
 
@@ -112,14 +117,7 @@ def _default_model_id(options: list[ProviderModelOption]) -> str:
 
 
 def _default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
-    if option is None:
-        return CODEX_DEFAULT_REASONING_EFFORT
-    supported = {reasoning.effort for reasoning in option.supported_reasoning_efforts}
-    if option.default_reasoning_effort in supported:
-        return option.default_reasoning_effort
-    if CODEX_DEFAULT_REASONING_EFFORT in supported:
-        return CODEX_DEFAULT_REASONING_EFFORT
-    return option.supported_reasoning_efforts[0].effort if option.supported_reasoning_efforts else None
+    return codex_default_reasoning_effort(option)
 
 
 def remove_codex_system_skills(runtime_home: Path) -> None:

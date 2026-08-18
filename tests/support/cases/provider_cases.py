@@ -280,15 +280,23 @@ class ProvidersTestCase(unittest.TestCase):
                     "slug": "gpt-5.6-sol",
                     "display_name": "GPT-5.6 Sol",
                     "visibility": "list",
-                    "default_reasoning_level": "xhigh",
-                    "supported_reasoning_levels": [{"effort": "xhigh"}],
+                    "default_reasoning_level": "low",
+                    "supported_reasoning_levels": [
+                        {"effort": "low"},
+                        {"effort": "xhigh"},
+                        {"effort": "max"},
+                        {"effort": "ultra"},
+                    ],
                 },
                 {
                     "slug": "gpt-5.5",
                     "display_name": "GPT-5.5",
                     "visibility": "list",
                     "default_reasoning_level": "medium",
-                    "supported_reasoning_levels": [{"effort": "medium"}],
+                    "supported_reasoning_levels": [
+                        {"effort": "medium"},
+                        {"effort": "xhigh"},
+                    ],
                 },
             ]
         }
@@ -308,6 +316,15 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(
             [option.model_id for option in self.provider_by_id(providers, "codex").model_options],
             ["gpt-5.6-sol", "gpt-5.5"],
+        )
+        persisted_options = provider_store.get_provider_definition("codex").model_options
+        self.assertEqual(
+            [option.default_reasoning_effort for option in persisted_options],
+            ["max", "xhigh"],
+        )
+        self.assertEqual(
+            [item.effort for item in persisted_options[0].supported_reasoning_efforts],
+            ["low", "xhigh", "max"],
         )
 
     def test_non_refresh_registration_updates_stale_codex_fallback_model(self) -> None:
@@ -1139,7 +1156,7 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertFalse((runtime_home / "skills" / ".system" / "SKILL.md").exists())
         runtime_config = (runtime_home / "config.toml").read_text(encoding="utf-8")
         self.assertIn('model = "gpt-5.6-sol"', runtime_config)
-        self.assertIn('model_reasoning_effort = "high"', runtime_config)
+        self.assertIn('model_reasoning_effort = "max"', runtime_config)
         self.assertNotIn('model = "gpt-5.4"', runtime_config)
         self.assertNotIn('model_reasoning_effort = "medium"', runtime_config)
         self.assertIn("experimental_use_unified_exec_tool = false", runtime_config)

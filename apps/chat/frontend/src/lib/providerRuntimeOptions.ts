@@ -15,15 +15,16 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
   if (agenticProfiles.length) {
     options.push(
       ...agenticProfiles.map((profile) => {
-        const displayName = profile.display_name.replace(/\s*·\s*fake-data preview$/i, "");
         const engine = [payload.active_provider, ...(payload.available_providers || [])].find(
           (provider) => provider?.provider_id === profile.runtime_engine_id,
         );
+        const modelProvider = providerForAgenticProfile(payload, profile);
+        const model = modelProvider?.model_options?.find((candidate) => candidate.model_id === profile.model_id);
         const reasoning = reasoningForAgenticProfile(payload, profile);
         return {
           ...(engine || {
             description: "Pinned agentic runtime profile",
-            label: displayName,
+            label: model?.label || profile.model_id,
             status: "active",
             default_model_family: profile.model_id,
           }),
@@ -33,11 +34,8 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           provider_role: "runtime_engine",
           workspace_profile_binding_id: profile.workspace_profile_binding_id,
           default_model_family: profile.model_id,
-          label: displayName,
-          description: [
-            `${profile.model_provider_id} · ${profile.model_id}`,
-            "Agentic runtime",
-          ].join(" · "),
+          label: model?.label || profile.model_id,
+          description: modelProvider?.label || profile.model_provider_id,
           status: "active",
           agentic_rollout_status: profile.rollout_status === "preview" ? "available" : profile.rollout_status,
           agentic_certificate_status: profile.certificate?.effective_status || null,
@@ -71,13 +69,7 @@ function reasoningForAgenticProfile(
   payload: ProviderPayload,
   profile: AgenticProfileItem,
 ): { defaultEffort: string | null; options: ProviderReasoningOption[] } {
-  const provider = [
-    payload.active_provider,
-    ...(payload.available_providers || []),
-    ...(payload.items || []),
-    payload.hosted_text?.active_provider,
-    ...(payload.hosted_text?.available_providers || []),
-  ].find((candidate) => candidate?.provider_id === profile.model_provider_id);
+  const provider = providerForAgenticProfile(payload, profile);
   const model = provider?.model_options?.find((candidate) => candidate.model_id === profile.model_id);
   const options = profile.supported_reasoning_efforts?.length
     ? profile.supported_reasoning_efforts
@@ -87,6 +79,19 @@ function reasoningForAgenticProfile(
     ? options[0]?.effort || null
     : requestedDefault;
   return { defaultEffort, options };
+}
+
+function providerForAgenticProfile(
+  payload: ProviderPayload,
+  profile: AgenticProfileItem,
+): ProviderItem | undefined {
+  return [
+    payload.active_provider,
+    ...(payload.available_providers || []),
+    ...(payload.items || []),
+    payload.hosted_text?.active_provider,
+    ...(payload.hosted_text?.available_providers || []),
+  ].find((candidate) => candidate?.provider_id === profile.model_provider_id) || undefined;
 }
 
 export function providerUsesPlainHostedRuntime(provider: ProviderItem | null | undefined): boolean {
@@ -155,7 +160,8 @@ function hostedModelProviderItems(status: HostedTextProviderStatus | null | unde
         provider_id: hostedRuntimeOptionId(provider.provider_id, selectedModelId || provider.default_model_family || "default"),
         hosted_provider_id: provider.provider_id,
         hosted_model_id: selectedModelId || provider.default_model_family || "",
-        label: `${selectedModelId || "Hosted model"} - ${provider.label || provider.provider_id}`,
+        label: selectedModelId || "Hosted model",
+        description: provider.label || provider.provider_id,
       },
     ];
   }
@@ -165,8 +171,8 @@ function hostedModelProviderItems(status: HostedTextProviderStatus | null | unde
     hosted_provider_id: provider.provider_id,
     hosted_model_id: model.model_id,
     default_model_family: model.model_id,
-    label: `${model.label || model.model_id} - ${provider.label || provider.provider_id}`,
-    description: model.description || provider.description,
+    label: model.label || model.model_id,
+    description: provider.label || provider.provider_id,
     input_modalities: model.input_modalities || [],
     output_modalities: model.output_modalities || [],
   }));

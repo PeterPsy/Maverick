@@ -32,6 +32,7 @@ from core.providers.models import (
     WorkspaceProviderStatus,
 )
 from core.providers.provider_codex import CodexProviderAdapter, build_codex_definition
+from core.providers.provider_codex_reasoning import normalize_codex_model_options
 from core.providers.provider_hosted_metadata import build_hosted_provider_definitions
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
@@ -120,7 +121,7 @@ def register_builtin_providers(
             definition,
             refresh_model_catalog=refresh_model_catalog,
         ):
-            refreshed_model_options = existing.model_options
+            refreshed_model_options = normalize_codex_model_options(existing.model_options)
             refreshed_default_model_family = existing.default_model_family
         refreshed_definition = replace(
             definition,

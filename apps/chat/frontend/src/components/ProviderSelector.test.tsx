@@ -11,20 +11,21 @@ import { ProviderSelector } from "./ProviderSelector";
 const providerOptions: ProviderItem[] = [
   {
     provider_id: "codex",
-    label: "Codex",
-    description: "Agentic runtime",
+    label: "GPT-5.6-Sol",
+    description: "Codex",
     status: "active",
     default_model_family: null,
-    default_reasoning_effort: "high",
+    default_reasoning_effort: "max",
     supported_reasoning_efforts: [
       { effort: "high", label: "High", description: null },
       { effort: "xhigh", label: "Extra high", description: null },
+      { effort: "max", label: "Max", description: null },
     ],
   },
   {
     provider_id: "hosted:openrouter:google%2Fgemma-4-31b-it%3Afree",
-    label: "Gemma 4 31B (free) - OpenRouter",
-    description: "Fast hosted model",
+    label: "Gemma 4 31B (free)",
+    description: "OpenRouter",
     status: "active",
     default_model_family: "google/gemma-4-31b-it:free",
     hosted_provider_id: "openrouter",
@@ -32,8 +33,8 @@ const providerOptions: ProviderItem[] = [
   },
   {
     provider_id: "hosted:openrouter:nvidia%2Fnemotron-3-ultra-550b-a55b%3Afree",
-    label: "Nemotron 3 Ultra (free) - OpenRouter",
-    description: "Large hosted model",
+    label: "Nemotron 3 Ultra (free)",
+    description: "OpenRouter",
     status: "active",
     default_model_family: "nvidia/nemotron-3-ultra-550b-a55b:free",
     hosted_provider_id: "openrouter",
@@ -41,12 +42,12 @@ const providerOptions: ProviderItem[] = [
   },
   {
     provider_id: "agentic:binding-google",
-    label: "Google Gemini 3.6 Flash",
-    description: "google-ai-studio · gemini-3.6-flash · Agentic runtime",
+    label: "Gemini 3.6 Flash",
+    description: "Google AI Studio",
     status: "active",
     default_model_family: "gemini-3.6-flash",
     workspace_profile_binding_id: "binding-google",
-    default_reasoning_effort: "medium",
+    default_reasoning_effort: "high",
     supported_reasoning_efforts: [
       { effort: "minimal", label: "Minimal", description: null },
       { effort: "low", label: "Low", description: null },
@@ -56,12 +57,12 @@ const providerOptions: ProviderItem[] = [
   },
   {
     provider_id: "agentic:binding-openrouter",
-    label: "OpenRouter DeepSeek V4 Flash · DeepInfra FP8",
-    description: "openrouter · deepseek/deepseek-v4-flash · Agentic runtime",
+    label: "DeepSeek V4 Flash",
+    description: "OpenRouter",
     status: "active",
     default_model_family: "deepseek/deepseek-v4-flash",
     workspace_profile_binding_id: "binding-openrouter",
-    default_reasoning_effort: "medium",
+    default_reasoning_effort: "high",
     supported_reasoning_efforts: [
       { effort: "minimal", label: "Minimal", description: null },
       { effort: "low", label: "Low", description: null },
@@ -86,11 +87,13 @@ async function renderSelector({
   locked = false,
   onSelect = () => undefined,
   onReasoningEffortChange = () => undefined,
+  reasoningEffort = "",
 }: {
   activeProviderId?: string;
   locked?: boolean;
   onSelect?: (providerId: string, reasoningEffort?: string) => void;
   onReasoningEffortChange?: (effort: string) => void;
+  reasoningEffort?: string;
 } = {}) {
   container = document.createElement("div");
   document.body.append(container);
@@ -98,7 +101,7 @@ async function renderSelector({
 
   await act(async () => {
     root?.render(
-      <ProviderSelector activeProviderId={activeProviderId} disabled={false} locked={locked} onReasoningEffortChange={onReasoningEffortChange} onSelect={onSelect} providers={providerOptions} reasoningEffort="high" />,
+      <ProviderSelector activeProviderId={activeProviderId} disabled={false} locked={locked} onReasoningEffortChange={onReasoningEffortChange} onSelect={onSelect} providers={providerOptions} reasoningEffort={reasoningEffort} />,
     );
   });
 
@@ -129,9 +132,9 @@ describe("ProviderSelector", () => {
     const element = await renderSelector({ onReasoningEffortChange });
 
     await act(async () => {
-      element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]')?.click();
+      element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]')?.click();
     });
-    const reasoning = element.querySelector<HTMLSelectElement>('[aria-label="Reasoning for Codex"]');
+    const reasoning = element.querySelector<HTMLSelectElement>('[aria-label="Reasoning for GPT-5.6-Sol"]');
     expect(reasoning).toBeInstanceOf(HTMLSelectElement);
     expect(element.querySelector(".chatapp-reasoning-selector")).toBeNull();
 
@@ -148,12 +151,12 @@ describe("ProviderSelector", () => {
     const element = await renderSelector({ onSelect });
 
     await act(async () => {
-      element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]')?.click();
+      element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]')?.click();
     });
 
-    expect(element.querySelector('[aria-label="Reasoning for Google Gemini 3.6 Flash"]')).toBeInstanceOf(HTMLSelectElement);
+    expect(element.querySelector('[aria-label="Reasoning for Gemini 3.6 Flash"]')).toBeInstanceOf(HTMLSelectElement);
     const openRouterReasoning = element.querySelector<HTMLSelectElement>(
-      '[aria-label="Reasoning for OpenRouter DeepSeek V4 Flash · DeepInfra FP8"]',
+      '[aria-label="Reasoning for DeepSeek V4 Flash"]',
     );
     expect(openRouterReasoning).toBeInstanceOf(HTMLSelectElement);
 
@@ -170,10 +173,10 @@ describe("ProviderSelector", () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ onSelect });
 
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]');
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]');
     expect(trigger).toBeInstanceOf(HTMLButtonElement);
-    expect(trigger?.textContent).toContain("Codex");
-    expect(trigger?.textContent).toContain("High");
+    expect(trigger?.textContent).toContain("GPT-5.6-Sol");
+    expect(trigger?.textContent).toContain("Max");
     expect(trigger?.textContent).not.toContain("expand_more");
 
     await act(async () => {
@@ -190,8 +193,8 @@ describe("ProviderSelector", () => {
       changeInputValue(searchInput as HTMLInputElement, "nemotron");
     });
 
-    expect(element.textContent).toContain("Nemotron 3 Ultra (free) - OpenRouter");
-    expect(element.textContent).not.toContain("Gemma 4 31B (free) - OpenRouter");
+    expect(element.textContent).toContain("Nemotron 3 Ultra (free)");
+    expect(element.textContent).not.toContain("Gemma 4 31B (free)");
 
     await act(async () => {
       optionByText(element, "Nemotron").click();
@@ -204,7 +207,7 @@ describe("ProviderSelector", () => {
   it("selects the active filtered model with Enter", async () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ onSelect });
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]');
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]');
 
     await act(async () => {
       trigger?.click();
@@ -225,10 +228,10 @@ describe("ProviderSelector", () => {
     const onSelect = vi.fn();
     const element = await renderSelector({ locked: true, onSelect });
 
-    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]');
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]');
     expect(trigger).toBeInstanceOf(HTMLButtonElement);
     expect(trigger?.disabled).toBe(true);
-    expect(trigger?.title).toBe("Codex · High. Start a new chat to change model or reasoning.");
+    expect(trigger?.title).toBe("GPT-5.6-Sol · Max. Start a new chat to change model or reasoning.");
 
     await act(async () => {
       trigger?.click();
@@ -236,5 +239,24 @@ describe("ProviderSelector", () => {
 
     expect(element.querySelector('[role="listbox"]')).toBeNull();
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("shows only the model, provider, and inline reasoning control in each row", async () => {
+    const element = await renderSelector();
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Model: GPT-5.6-Sol · Max"]')?.click();
+    });
+
+    const googleOption = optionByText(element, "Gemini 3.6 Flash");
+    const row = googleOption.closest(".chatapp-provider-menu__option-block");
+    expect(row?.querySelector(".chatapp-provider-menu__name")?.textContent).toBe("Gemini 3.6 Flash");
+    expect(row?.querySelector(".chatapp-provider-menu__description")?.textContent).toBe("Google AI Studio");
+    expect(row?.querySelector('[aria-label="Reasoning for Gemini 3.6 Flash"]')).toBeInstanceOf(HTMLSelectElement);
+    expect(element.querySelector(".chatapp-provider-menu__group")).toBeNull();
+    expect(element.querySelector(".chatapp-provider-menu__badges")).toBeNull();
+    expect(element.textContent).not.toContain("Agentic runtime");
+    expect(element.textContent).not.toContain("certificate");
+    expect(element.textContent).not.toContain("tools");
   });
 });

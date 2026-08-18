@@ -14,10 +14,10 @@ const reasoningOptions: ProviderReasoningOption[] = [
   { effort: "high", label: "High", description: null },
 ];
 
-function modelProvider(providerId: string, modelId: string): ProviderItem {
+function modelProvider(providerId: string, providerLabel: string, modelId: string, modelLabel: string): ProviderItem {
   return {
     provider_id: providerId,
-    label: providerId,
+    label: providerLabel,
     description: "Remote agentic model provider",
     kind: "hosted_api",
     provider_role: "model_provider",
@@ -26,9 +26,9 @@ function modelProvider(providerId: string, modelId: string): ProviderItem {
     model_options: [
       {
         model_id: modelId,
-        label: modelId,
+        label: modelLabel,
         description: null,
-        default_reasoning_effort: "medium",
+        default_reasoning_effort: "high",
         supported_reasoning_efforts: reasoningOptions,
       },
     ],
@@ -59,8 +59,8 @@ describe("remote agentic provider runtime options", () => {
       workspace_id: "default",
       active_provider: null,
       available_providers: [
-        modelProvider("google-ai-studio", googleModelId),
-        modelProvider("openrouter", openRouterModelId),
+        modelProvider("google-ai-studio", "Google AI Studio", googleModelId, "Gemini 3.6 Flash"),
+        modelProvider("openrouter", "OpenRouter", openRouterModelId, "DeepSeek V4 Flash"),
       ],
       agentic_profiles: {
         default_binding_id: null,
@@ -75,17 +75,23 @@ describe("remote agentic provider runtime options", () => {
 
     expect(providers.map((provider) => ({
       model: provider.default_model_family,
+      title: provider.label,
+      subtitle: provider.description,
       defaultReasoning: provider.default_reasoning_effort,
       reasoning: provider.supported_reasoning_efforts?.map((option) => option.effort),
     }))).toEqual([
       {
         model: googleModelId,
-        defaultReasoning: "medium",
+        title: "Gemini 3.6 Flash",
+        subtitle: "Google AI Studio",
+        defaultReasoning: "high",
         reasoning: ["minimal", "low", "medium", "high"],
       },
       {
         model: openRouterModelId,
-        defaultReasoning: "medium",
+        title: "DeepSeek V4 Flash",
+        subtitle: "OpenRouter",
+        defaultReasoning: "high",
         reasoning: ["minimal", "low", "medium", "high"],
       },
     ]);

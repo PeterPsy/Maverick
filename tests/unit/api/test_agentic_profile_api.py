@@ -150,7 +150,7 @@ class AgenticProfileApiTest(unittest.TestCase):
             for profile in payload["agentic_profiles"]["items"]
         }
         for provider_id in ("google-ai-studio", "openrouter"):
-            self.assertEqual(profiles[provider_id]["default_reasoning_effort"], "medium")
+            self.assertEqual(profiles[provider_id]["default_reasoning_effort"], "high")
             self.assertEqual(
                 [option["effort"] for option in profiles[provider_id]["supported_reasoning_efforts"]],
                 ["minimal", "low", "medium", "high"],

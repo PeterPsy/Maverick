@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.providers.agentic_migration import migrate_agentic_runtime_schema
@@ -159,6 +161,74 @@ class AgenticProfilesTest(unittest.TestCase):
                 now=NOW,
             )
 
+    def test_remote_reasoning_is_validated_against_the_model_provider(self) -> None:
+        profile = SimpleNamespace(
+            definition_id="profile-google",
+            revision="1",
+            runtime_engine_id="maverick-tool-loop",
+            model_provider_id="google-ai-studio",
+            model_id="gemini-3.6-flash",
+            provider_protocol="google-interactions",
+            provider_api_version="v1",
+            adapter_id="maverick-hosted-tool-loop",
+            adapter_version_constraint="==3",
+            routing_constraint=SimpleNamespace(),
+            policy_ceiling=SimpleNamespace(),
+            capability_certificate_id="certificate-google",
+        )
+        binding = SimpleNamespace(
+            binding_id="binding-google",
+            workspace_id="default",
+            credential_binding_id="credential-google",
+            workspace_policy_ceiling=SimpleNamespace(),
+            egress_policy_id="fake-data-remote-preview",
+            egress_policy_revision="1",
+            revision=0,
+            created_at=NOW,
+        )
+        adapter = SimpleNamespace(adapter_version="3")
+        expected = object()
+
+        with (
+            patch(
+                "core.providers.agentic_profiles.resolve_workspace_agentic_profile",
+                return_value=(profile, binding),
+            ),
+            patch.object(
+                self.registry,
+                "get_agentic_runtime_adapter",
+                return_value=adapter,
+            ),
+            patch.object(
+                self.provider_store,
+                "get_capability_certificate",
+                return_value=SimpleNamespace(evidence_digest="evidence-google"),
+            ),
+            patch(
+                "core.providers.agentic_profiles.runtime_adapter_artifact_digest",
+                return_value="adapter-digest",
+            ),
+            patch(
+                "core.providers.agentic_profiles.build_runtime_execution_binding",
+                return_value=expected,
+            ) as build_binding,
+            patch("core.providers.agentic_profiles.validate_certificate_for_binding"),
+        ):
+            resolved = build_pinned_execution_binding(
+                self.provider_store,
+                self.registry,
+                session_id="session-google",
+                workspace_id="default",
+                workspace_binding_id="binding-google",
+                execution_mode="sandbox",
+                reasoning_effort="high",
+                now=NOW,
+            )
+
+        self.assertIs(resolved, expected)
+        self.assertEqual(build_binding.call_args.kwargs["model_provider_id"], "google-ai-studio")
+        self.assertEqual(build_binding.call_args.kwargs["reasoning_effort"], "high")
+
     def test_migration_is_idempotent_and_preserves_legacy_continuation(self) -> None:
         selection = self.selection()
         self.provider_store.save_provider_selection(selection)
@@ -219,9 +289,9 @@ class AgenticProfilesTest(unittest.TestCase):
             selection=selection,
             now=NOW,
         )
-        self.assertEqual(profile.revision, "3")
+        self.assertEqual(profile.revision, "4")
 
-        for rev in ("1", "2"):
+        for rev in ("1", "2", "3"):
             self.provider_store.save_agentic_profile_definition_status(
                 AgenticProfileDefinitionStatus(
                     definition_id=profile.definition_id,
@@ -240,7 +310,7 @@ class AgenticProfilesTest(unittest.TestCase):
             now=replace_time(NOW),
         )
 
-        for rev in ("1", "2"):
+        for rev in ("1", "2", "3"):
             status = self.provider_store.get_agentic_profile_definition_status(
                 profile.definition_id,
                 rev,

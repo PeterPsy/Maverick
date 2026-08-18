@@ -37,8 +37,8 @@ from core.runtime.agentic_feature_flags import (
 )
 
 
-CODEX_PROFILE_REVISION = "3"
-CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2")
+CODEX_PROFILE_REVISION = "4"
+CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3")
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"
 CAPABILITY_CERTIFICATE_PREFIX = "capability-certificate"
@@ -242,7 +242,7 @@ def build_pinned_execution_binding(
     except ProviderNotFoundError as error:
         raise CapabilityCertificateError("certificate_missing") from error
     normalized_reasoning_effort = _validated_reasoning_effort(
-        provider,
+        model_provider,
         model_id=definition.model_id,
         reasoning_effort=reasoning_effort,
     )

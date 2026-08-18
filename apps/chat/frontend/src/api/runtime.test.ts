@@ -82,11 +82,13 @@ describe("runtime API client", () => {
     await createRuntimeSession({
       runtime_mode: "agentic",
       workspace_profile_binding_id: "binding-codex-preview",
+      reasoning_effort: "xhigh",
     });
 
     expect(requestBody()).toMatchObject({
       runtime_mode: "agentic",
       workspace_profile_binding_id: "binding-codex-preview",
+      reasoning_effort: "xhigh",
     });
   });
 

@@ -102,6 +102,10 @@ export function useChatRuntimeControls({
 }: UseChatRuntimeControlsParams) {
   const [syntheticDataConfirmed, setSyntheticDataConfirmed] = useState(false);
   const activeProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
+  const [reasoningEffort, setReasoningEffort] = useState("");
+  const defaultReasoningEffort = activeProvider?.default_reasoning_effort
+    || activeProvider?.supported_reasoning_efforts?.[0]?.effort
+    || "";
   const syntheticDataConfirmationRequired = activeProvider?.requires_synthetic_data_declaration === true;
 
   useEffect(() => {
@@ -110,7 +114,8 @@ export function useChatRuntimeControls({
 
   useEffect(() => {
     setSyntheticDataConfirmed(false);
-  }, [activeProviderId]);
+    setReasoningEffort(defaultReasoningEffort);
+  }, [activeProviderId, defaultReasoningEffort]);
 
   async function handleSelectProvider(providerId: string) {
     if (activeThread) {
@@ -167,6 +172,7 @@ export function useChatRuntimeControls({
       title: config.title,
       runtime_mode: "agentic",
       workspace_profile_binding_id: selectedProvider?.workspace_profile_binding_id,
+      reasoning_effort: reasoningEffort || undefined,
       declared_remote_data_class: selectedProvider?.requires_synthetic_data_declaration
         ? "workspace_internal_fake"
         : undefined,
@@ -194,6 +200,8 @@ export function useChatRuntimeControls({
     handleSelectProvider,
     handleStopTurn,
     selectedAgentRuntimeConfig,
+    reasoningEffort,
+    setReasoningEffort,
     setSyntheticDataConfirmed,
     syntheticDataConfirmationRequired,
     syntheticDataConfirmed,

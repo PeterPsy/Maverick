@@ -47,12 +47,14 @@ export type ChatComposerProps = {
   onSelectSourceAppChatMode?: (mode: SourceAppChatMode) => void;
   onSelectAgent: (agentTypeId: string) => void;
   onSelectProvider: (providerId: string) => void;
+  onReasoningEffortChange?: (effort: string) => void;
   onSyntheticDataConfirmedChange?: (confirmed: boolean) => void;
   providerSelectorLocked?: boolean;
   onRemoveAttachment: (attachmentId: string) => void;
   onStopTurn: () => void;
   onSubmit: () => void;
   providers: ProviderItem[];
+  reasoningEffort?: string;
   queuedCount: number;
   queuedPreview: string | null;
   selectedAgentTypeId: string;
@@ -96,12 +98,14 @@ export function ChatComposer({
   onSelectSourceAppChatMode,
   onSelectAgent,
   onSelectProvider,
+  onReasoningEffortChange = () => undefined,
   onSyntheticDataConfirmedChange,
   providerSelectorLocked = false,
   onRemoveAttachment,
   onStopTurn,
   onSubmit,
   providers,
+  reasoningEffort = "",
   queuedCount,
   queuedPreview,
   selectedAgentTypeId,
@@ -317,7 +321,9 @@ export function ChatComposer({
                   executionMode={executionMode}
                   locked={providerSelectorLocked}
                   onSelectProvider={onSelectProvider}
+                  onReasoningEffortChange={onReasoningEffortChange}
                   providers={providers}
+                  reasoningEffort={reasoningEffort}
                   syntheticDataConfirmationRequired={syntheticDataConfirmationRequired}
                   syntheticDataConfirmed={syntheticDataConfirmed}
                   onSyntheticDataConfirmedChange={onSyntheticDataConfirmedChange}

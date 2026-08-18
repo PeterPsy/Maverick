@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from core.api.provider_api import handle_provider_api
+from core.api.provider_api import _agentic_model_reasoning, handle_provider_api
 from core.api.session_api import RequestSession
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
-from core.providers.service import register_builtin_providers
+from core.providers.service import builtin_provider_registry, register_builtin_providers
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.runtime.service import create_runtime_session
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
@@ -21,6 +21,19 @@ from tests.support.collections import FakeCollection
 
 
 class ProviderApiTest(unittest.TestCase):
+    def test_agentic_codex_profile_exposes_provider_reasoning_choices(self) -> None:
+        default, options = _agentic_model_reasoning(
+            builtin_provider_registry(refresh_model_catalog=False),
+            SimpleNamespace(
+                model_provider_id="codex",
+                runtime_engine_id="codex",
+                model_id="gpt-5.6-sol",
+            ),
+        )
+
+        self.assertIn(default, {item["effort"] for item in options})
+        self.assertIn("xhigh", {item["effort"] for item in options})
+
     def make_provider_store(self) -> ProviderDocumentStore:
         store = ProviderDocumentStore(
             ProviderCollections(

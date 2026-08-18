@@ -18,6 +18,8 @@ export type ProviderItem = {
   agentic_allowed_tool_handles?: string[];
   agentic_max_estimated_cost_microusd?: number | null;
   requires_synthetic_data_declaration?: boolean;
+  default_reasoning_effort?: string | null;
+  supported_reasoning_efforts?: ProviderReasoningOption[];
   input_modalities?: string[];
   output_modalities?: string[];
 };
@@ -92,6 +94,8 @@ export type AgenticProfileItem = {
   runtime_engine_id: string;
   model_provider_id: string;
   model_id: string;
+  default_reasoning_effort?: string | null;
+  supported_reasoning_efforts?: ProviderReasoningOption[];
   rollout_status: string | null;
   enabled: boolean;
   is_default: boolean;
@@ -860,6 +864,7 @@ export type RuntimeSessionOptions = {
   hosted_provider_id?: string;
   hosted_model_id?: string;
   workspace_profile_binding_id?: string;
+  reasoning_effort?: string;
   declared_remote_data_class?: "workspace_internal_fake" | "public";
   prepare_only?: boolean;
   title?: string;

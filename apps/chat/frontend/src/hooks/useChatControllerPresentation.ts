@@ -59,6 +59,7 @@ type UseChatControllerPresentationParams = {
   handleResolveInterAgentApproval: (approvalId: string, approved: boolean) => Promise<void>;
   handleSelectAgent: (agentTypeId: string) => void;
   handleSelectProvider: (providerId: string) => void;
+  handleReasoningEffortChange: (effort: string) => void;
   handleSend: () => void;
   handleStopTurn: () => void;
   hasLoadedHistory: boolean;
@@ -75,6 +76,7 @@ type UseChatControllerPresentationParams = {
   onCloseInterAgentGraph: () => void;
   pendingUserMessages: PendingMessage[];
   providers: ProviderItem[];
+  reasoningEffort: string;
   providerSelectorLocked: boolean;
   queuedMessages: QueuedMessage[];
   removeAttachment: (attachmentId: string) => void;
@@ -136,6 +138,7 @@ export function useChatControllerPresentation({
   handleResolveInterAgentApproval,
   handleSelectAgent,
   handleSelectProvider,
+  handleReasoningEffortChange,
   handleSend,
   handleStopTurn,
   hasLoadedHistory,
@@ -152,6 +155,7 @@ export function useChatControllerPresentation({
   onCloseInterAgentGraph,
   pendingUserMessages,
   providers,
+  reasoningEffort,
   providerSelectorLocked,
   queuedMessages,
   removeAttachment,
@@ -250,9 +254,11 @@ export function useChatControllerPresentation({
       onSelectMultiAgentMode: setMultiAgentMode,
       onSelectAgent: handleSelectAgent,
       onSelectProvider: handleSelectProvider,
+      onReasoningEffortChange: handleReasoningEffortChange,
       onStopTurn: handleStopTurn,
       onSubmit: handleSend,
       providers,
+      reasoningEffort,
       providerSelectorLocked,
       syntheticDataConfirmationRequired,
       syntheticDataConfirmed,

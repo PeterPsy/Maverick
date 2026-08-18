@@ -1165,6 +1165,12 @@ button.settings-adapter-card {
   margin-top: 2px;
 }
 
+.settings-models-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: -0.25rem 0 0.25rem;
+}
+
 .settings-agentic-runtime {
   border: 1px solid var(--maverick-border);
   border-radius: var(--maverick-control-radius);
@@ -1218,7 +1224,30 @@ button.settings-adapter-card {
 }
 
 .settings-agentic-summary-badges {
+  align-items: center;
   justify-content: flex-end;
+}
+
+.settings-model-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  cursor: pointer;
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+}
+
+.settings-model-toggle input {
+  width: 2.15rem;
+  height: 1.2rem;
+  margin: 0;
+  accent-color: var(--maverick-accent);
+  cursor: pointer;
+}
+
+.settings-model-toggle input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .settings-pill.is-healthy {
@@ -1261,6 +1290,61 @@ button.settings-adapter-card {
 .settings-agentic-checks strong {
   color: var(--maverick-text);
   font-size: 0.78rem;
+}
+
+.settings-agentic-advanced {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--maverick-border);
+  padding-top: 0.65rem;
+}
+
+.settings-agentic-advanced > summary {
+  cursor: pointer;
+  color: var(--maverick-text-muted);
+  font-size: 0.75rem;
+}
+
+.settings-agentic-advanced[open] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 1rem;
+}
+
+.settings-agentic-advanced[open] > summary {
+  grid-column: 1 / -1;
+}
+
+.settings-agentic-model-usage {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.settings-agentic-model-usage-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.settings-agentic-model-usage-heading strong {
+  font-size: 0.78rem;
+}
+
+.settings-agentic-model-usage-heading small {
+  color: var(--maverick-text-muted);
+  font-size: 0.7rem;
+}
+
+.settings-agentic-usage-note {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+}
+
+.settings-agentic-usage-note .material-symbols-rounded {
+  font-size: 1rem;
 }
 
 .settings-agentic-warning small {

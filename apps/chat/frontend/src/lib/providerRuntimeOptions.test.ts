@@ -136,6 +136,11 @@ describe("provider runtime options", () => {
             runtime_engine_id: "codex",
             model_provider_id: "codex",
             model_id: "gpt-5.6-sol",
+            default_reasoning_effort: "xhigh",
+            supported_reasoning_efforts: [
+              { effort: "high", label: "High", description: null },
+              { effort: "xhigh", label: "Extra high", description: null },
+            ],
             rollout_status: "preview",
             enabled: true,
             is_default: true,
@@ -163,6 +168,11 @@ describe("provider runtime options", () => {
       agentic_allowed_tool_handles: ["mcp:storage_read"],
       agentic_max_estimated_cost_microusd: 250_000,
       requires_synthetic_data_declaration: true,
+      default_reasoning_effort: "xhigh",
+      supported_reasoning_efforts: [
+        { effort: "high", label: "High", description: null },
+        { effort: "xhigh", label: "Extra high", description: null },
+      ],
     });
   });
 

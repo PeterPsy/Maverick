@@ -39,6 +39,8 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           agentic_allowed_tool_handles: profile.allowed_tool_handles || [],
           agentic_max_estimated_cost_microusd: profile.max_estimated_cost_microusd ?? null,
           requires_synthetic_data_declaration: profile.requires_synthetic_data_declaration === true,
+          default_reasoning_effort: profile.default_reasoning_effort || null,
+          supported_reasoning_efforts: profile.supported_reasoning_efforts || [],
         };
       }),
     );

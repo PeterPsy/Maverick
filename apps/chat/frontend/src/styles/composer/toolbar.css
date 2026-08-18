@@ -280,6 +280,37 @@
   box-shadow: none;
 }
 
+.chatapp-reasoning-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2rem;
+  border: 1px solid var(--chatapp-soft-border);
+  border-radius: 999px;
+  background: var(--chatapp-soft-surface);
+  color: var(--maverick-text-muted);
+  padding: 0 0.45rem;
+}
+
+.chatapp-reasoning-selector .material-symbols-rounded {
+  font-size: 1rem;
+}
+
+.chatapp-reasoning-selector select {
+  max-width: 8rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chatapp-reasoning-selector select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .chatapp-composer__runtime-badges .chatapp-execution-chip {
   width: 2rem;
   min-width: 2rem;

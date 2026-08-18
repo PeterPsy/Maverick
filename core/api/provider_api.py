@@ -415,6 +415,7 @@ def workspace_agentic_profile_status(
             )
         except ProviderNotFoundError:
             continue
+        reasoning = _agentic_model_reasoning(registry, definition)
         status = state.provider_store.get_agentic_profile_definition_status(
             definition.definition_id,
             definition.revision,
@@ -452,6 +453,8 @@ def workspace_agentic_profile_status(
                 "runtime_engine_id": definition.runtime_engine_id,
                 "model_provider_id": definition.model_provider_id,
                 "model_id": definition.model_id,
+                "default_reasoning_effort": reasoning[0],
+                "supported_reasoning_efforts": reasoning[1],
                 "provider_protocol": definition.provider_protocol,
                 "provider_api_version": definition.provider_api_version,
                 "adapter_id": definition.adapter_id,
@@ -481,6 +484,30 @@ def workspace_agentic_profile_status(
         "default_binding_id": None if default is None else default["workspace_profile_binding_id"],
         "items": items,
     }
+
+
+def _agentic_model_reasoning(registry, definition) -> tuple[str | None, list[dict[str, object]]]:
+    """Project provider-declared per-session reasoning choices for Chat."""
+    provider = None
+    for provider_id in (definition.model_provider_id, definition.runtime_engine_id):
+        try:
+            provider = registry.get_provider_definition(provider_id)
+            break
+        except ProviderNotFoundError:
+            continue
+    if provider is None:
+        return None, []
+    model = next((item for item in provider.model_options if item.model_id == definition.model_id), None)
+    if model is None:
+        return None, []
+    return model.default_reasoning_effort, [
+        {
+            "effort": option.effort,
+            "label": option.label,
+            "description": option.description,
+        }
+        for option in model.supported_reasoning_efforts
+    ]
 
 
 def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:

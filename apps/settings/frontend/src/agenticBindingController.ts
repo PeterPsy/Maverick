@@ -14,7 +14,11 @@ type AgenticBindingControllerContext = {
 
 export function createAgenticBindingController(context: AgenticBindingControllerContext) {
   return {
-    save: async (definitionId: string, definitionRevision: string) => {
+    save: async (
+      definitionId: string,
+      definitionRevision: string,
+      options: { enabled?: boolean; confirmFakeDataOnlyWorkspace?: boolean } = {}
+    ) => {
       const key = `${definitionId}:${definitionRevision}`;
       const item = context.getSettings()?.agentic_admin?.items.find(
         (candidate) => candidate.definition_id === definitionId
@@ -53,8 +57,8 @@ export function createAgenticBindingController(context: AgenticBindingController
           binding_id: item.binding?.binding_id || null,
           expected_revision: item.binding?.revision ?? null,
           credential_binding_id: field<HTMLSelectElement>('credential_binding_id')?.value || null,
-          enabled: checked('enabled'),
-          is_default: checked('is_default'),
+          enabled: options.enabled ?? checked('enabled'),
+          is_default: options.enabled === false ? false : checked('is_default'),
           actor_policy: {
             allow_workspace_admins: checked('allow_workspace_admins'),
             allowed_user_ids: item.binding?.actor_policy.allowed_user_ids || [],
@@ -68,7 +72,8 @@ export function createAgenticBindingController(context: AgenticBindingController
             require_confirmation_for_destructive: checked('require_confirmation_for_destructive'),
             allowed_remote_data_classes: allowedRemoteDataClasses
           },
-          confirm_fake_data_only_workspace: checked('confirm_fake_data_only_workspace')
+          confirm_fake_data_only_workspace:
+            options.confirmFakeDataOnlyWorkspace ?? checked('confirm_fake_data_only_workspace')
         });
         const settings = await getPlatformSettings();
         syncSettingsPanelDraft(context.state, settings);

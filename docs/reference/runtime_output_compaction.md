@@ -8,13 +8,20 @@ Phase 1 reduces storage, websocket, replay, UI, and downstream event payload siz
 
 | Phase | Pipeline point | Reduces storage/UI/event bus | Reduces provider tokens | Status |
 | --- | --- | --- | --- | --- |
-| 1 | `_RuntimeTurnOutputRecorder.record()` and the `record_runtime_event()` persistence guard | Yes | Not guaranteed | Implemented |
+| 1 | Codex agentic compatibility bridge, `_RuntimeTurnOutputRecorder.record()`, and the `record_runtime_event()` persistence guard | Yes | Not guaranteed | Implemented |
 | 2 | Controlled Maverick CLI through `/api/runtime/cli` with `output_profile` in the JSON body | Yes | Yes, only for that controlled CLI surface | Implemented |
 | 3 | Maverick-owned Codex `PostToolUse` hook before supported shell tool results enter provider history | Yes, when the hook runs | Only when Codex accepts and runs the trusted hook | Integrated; hard provider-token guarantee requires a trusted-hook end-to-end proof |
 
 Phase 1 deliberately does not compact `runtime.output.delta`, because those deltas are used to reconstruct assistant text through `final_text()` and `complete_text()`. It also does not compact `runtime.output.final`: `payload.text` remains the transcript suffix that was not already streamed, while `payload.complete_text` is the explicit complete final answer for consumers such as inter-agent execution and backend restart recovery. That means final events can be larger than suffix-only transcript events when `complete_text` duplicates streamed deltas; this is an accepted contract tradeoff rather than a tool-output compaction target.
 
-The turn output recorder performs compaction before normal turn persistence, and `record_runtime_event()` repeats the same idempotent guard for direct future callers that persist `runtime.tool_call.*` events. The persistence guard does not trust self-reported `output_compaction` metadata by itself; it only skips reprocessing when the payload is already bounded, redaction-clean, and its provider `raw` payload already matches the configured raw sanitization policy.
+The Codex compatibility bridge performs compaction before a legacy
+`runtime.tool_call.*` event enters the bounded public agentic adapter stream.
+The turn output recorder applies the same compaction before normal turn
+persistence, and `record_runtime_event()` repeats the idempotent guard for
+direct future callers. These later guards do not trust self-reported
+`output_compaction` metadata by itself; they only skip reprocessing when the
+payload is already bounded, redaction-clean, and its provider `raw` payload
+already matches the configured raw sanitization policy.
 
 ## Event Contract
 

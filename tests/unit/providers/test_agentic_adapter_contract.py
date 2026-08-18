@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
+import json
 import unittest
 
 from core.providers.agentic_adapter import (
@@ -186,7 +187,8 @@ class AgenticAdapterContractTest(unittest.TestCase):
         self.assertIsNone(self.adapter.local_process_lifecycle)
 
     def test_legacy_process_adapter_streams_through_async_bridge(self) -> None:
-        legacy = _LegacyAdapter(self.definition)
+        large_tool_output = "tool output line\n" * 80_000
+        legacy = _LegacyAdapter(self.definition, tool_output=large_tool_output)
         self.registry.register_runtime_adapter(legacy)
         bridge = self.registry.get_agentic_runtime_adapter(self.definition.provider_id)
         legacy_evidence = fake_capability_evidence(bridge, now=NOW)
@@ -205,6 +207,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
             legacy_binding, bridge, evidence=legacy_evidence, now=NOW
         )
         accepted: list[dict[str, object]] = []
+        events: list[RuntimeExecutionEvent] = []
         thread_ids: list[str] = []
 
         result = execute_runtime_turn(
@@ -219,6 +222,7 @@ class AgenticAdapterContractTest(unittest.TestCase):
                 legacy_store, legacy_binding, bridge, turn_id="turn-legacy", now=NOW
             ),
             launch_spec=_launch_spec(self.session),
+            event_sink=events.append,
             on_provider_accepted=accepted.append,
             on_provider_thread_id=thread_ids.append,
         )
@@ -227,6 +231,13 @@ class AgenticAdapterContractTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(accepted, [{"request_id": "legacy-request"}])
         self.assertEqual(thread_ids, ["legacy-thread"])
+        self.assertEqual([event.event_type for event in events], ["runtime.tool_call.completed"])
+        tool_payload = events[0].payload
+        self.assertTrue(tool_payload["output_compaction"]["applied"])
+        self.assertIn("[tool output compacted]", tool_payload["output"])
+        self.assertNotIn("aggregatedOutput", tool_payload["raw"]["item"])
+        encoded_payload = json.dumps(tool_payload, separators=(",", ":")).encode("utf-8")
+        self.assertLessEqual(len(encoded_payload), 1_048_576)
 
     async def _lifecycle(self, cancel, recovery, close):
         return (
@@ -237,8 +248,9 @@ class AgenticAdapterContractTest(unittest.TestCase):
 
 
 class _LegacyAdapter:
-    def __init__(self, definition) -> None:
+    def __init__(self, definition, *, tool_output: str | None = None) -> None:
         self.definition = definition
+        self.tool_output = tool_output
 
     def provider_definition(self):
         return self.definition
@@ -247,6 +259,25 @@ class _LegacyAdapter:
         return None
 
     def execute_turn(self, **kwargs):
+        if self.tool_output is not None:
+            kwargs["event_sink"](
+                RuntimeExecutionEvent(
+                    event_type="runtime.tool_call.completed",
+                    payload={
+                        "name": "command",
+                        "status": "completed",
+                        "command": "generate large output",
+                        "exit_code": 0,
+                        "output": self.tool_output,
+                        "raw": {
+                            "item": {
+                                "type": "commandExecution",
+                                "aggregatedOutput": self.tool_output,
+                            }
+                        },
+                    },
+                )
+            )
         kwargs["on_provider_thread_id"]("legacy-thread")
         kwargs["on_provider_accepted"]({"request_id": "legacy-request"})
         return type("Result", (), {"output_text": "legacy answer", "exit_code": 0})()

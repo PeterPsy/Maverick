@@ -331,7 +331,13 @@ Provider setup is required only for end-to-end agent execution paths that depend
 
 ## Runtime Event Payload Compaction
 
-Large tool-call event payloads are compacted in the runtime recorder before persistence and live event fanout. This Phase 1 behavior protects storage, websocket delivery, runtime replay, UI rendering, and downstream app consumers, but it does not guarantee provider-token reduction for generic shell/tool output.
+Large tool-call event payloads are compacted before persistence and live event
+fanout. The Codex compatibility bridge applies the same compaction before it
+yields legacy tool-call events into the bounded public agentic stream, and the
+runtime recorder repeats an idempotent guard at the persistence boundary. This
+Phase 1 behavior protects the agentic adapter boundary, storage, websocket
+delivery, runtime replay, UI rendering, and downstream app consumers, but it
+does not guarantee provider-token reduction for generic shell/tool output.
 
 Runtime-token CLI responses can request provider-oriented compaction for controlled Maverick CLI calls, and Maverick-managed Codex sessions install a Maverick-owned `PostToolUse` hook plus matching Codex `hooks.state` trusted hash to replace large `Bash` shell tool results before those results enter Codex provider history when Codex runs the hook. Maverick disables Codex `unified_exec` in these managed sessions because Codex hook coverage for that richer shell path is currently incomplete. Automated Maverick tests cover the bridge/config/trust-state/fallback/diagnostic behavior; deployments that need a hard provider-token guarantee must verify an actual trusted Codex hook execution.
 

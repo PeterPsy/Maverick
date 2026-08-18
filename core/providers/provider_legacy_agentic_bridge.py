@@ -29,6 +29,8 @@ from core.providers.agentic_adapter import (
 )
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.provider_registry import RuntimeBackendAdapter
+from core.runtime.execution_events import RuntimeExecutionEvent
+from core.runtime.output_compaction import ToolOutputCompactionContext, compact_tool_call_event
 
 
 class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
@@ -73,16 +75,27 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[RuntimeProviderEvent | None] = asyncio.Queue()
         ordinal = 0
+        compaction_context = ToolOutputCompactionContext(
+            session_id=context.session.session_id,
+            turn_id=context.correlation_id,
+        )
 
         def publish(event_type: str, payload: dict[str, object]) -> None:
             nonlocal ordinal
+            public_payload = dict(payload)
+            if event_type.startswith("runtime.tool_call."):
+                compacted_event = compact_tool_call_event(
+                    RuntimeExecutionEvent(event_type=event_type, payload=public_payload),
+                    context=compaction_context,
+                )
+                public_payload = compacted_event.payload
             ordinal += 1
             event = RuntimeProviderEvent(
                 event_type=event_type,
                 correlation_id=context.correlation_id,
                 ordinal=ordinal,
                 schema_version="1",
-                payload=dict(payload),
+                payload=public_payload,
             )
             loop.call_soon_threadsafe(queue.put_nowait, event)
 

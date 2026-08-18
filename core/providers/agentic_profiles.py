@@ -25,7 +25,6 @@ from core.providers.certificate_service import (
     runtime_adapter_artifact_digest,
     validate_certificate_for_binding,
 )
-from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.models import ProviderDefinition, ProviderSelection
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
@@ -238,13 +237,10 @@ def build_pinned_execution_binding(
     adapter_version = str(getattr(adapter, "adapter_version", ""))
     if definition.adapter_version_constraint != f"=={adapter_version}":
         raise AgenticProfileError("adapter_version_mismatch")
-    if definition.runtime_engine_id == "codex":
-        certificate = ensure_codex_preview_certificate(store, definition=definition, adapter=adapter)
-    else:
-        try:
-            certificate = store.get_capability_certificate(definition.capability_certificate_id)
-        except ProviderNotFoundError as error:
-            raise CapabilityCertificateError("certificate_missing") from error
+    try:
+        certificate = store.get_capability_certificate(definition.capability_certificate_id)
+    except ProviderNotFoundError as error:
+        raise CapabilityCertificateError("certificate_missing") from error
     normalized_reasoning_effort = _validated_reasoning_effort(
         provider,
         model_id=definition.model_id,
@@ -354,6 +350,8 @@ def _codex_profile_definition(
         policy_ceiling=codex_runtime_policy(),
         capability_certificate_id=f"{CAPABILITY_CERTIFICATE_PREFIX}:{definition_id}:{CODEX_PROFILE_REVISION}",
         created_at=now,
+        egress_policy_id=DEFAULT_EGRESS_POLICY_ID,
+        egress_policy_revision=DEFAULT_EGRESS_POLICY_REVISION,
     )
 
 

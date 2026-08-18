@@ -83,6 +83,8 @@ def ensure_google_agentic_preview_profile(
         policy_ceiling=google_agentic_preview_policy(),
         capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,
         created_at=timestamp,
+        egress_policy_id="fake-data-remote-preview",
+        egress_policy_revision="1",
     )
     try:
         stored = store.get_agentic_profile_definition(

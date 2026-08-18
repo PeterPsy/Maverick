@@ -10,8 +10,10 @@ from core.providers.agentic_profiles import (
     build_pinned_execution_binding,
     ensure_codex_workspace_profile,
 )
-from core.providers.errors import AgenticProfileConflictError
+from core.providers.errors import AgenticProfileConflictError, CapabilityCertificateError
 from core.providers.certificate_service import validate_certificate_for_binding
+from core.providers.builtin_certification import ensure_codex_preview_certificate
+from core.providers.agentic_workspace_policy import egress_policy_for_definition
 from core.providers.models import ProviderSelection
 from core.providers.service import builtin_provider_registry, resolve_provider_for_runtime_session
 from core.providers.store import ProviderCollections, ProviderDocumentStore
@@ -85,11 +87,16 @@ class AgenticProfilesTest(unittest.TestCase):
     def test_session_resolution_remains_pinned_after_workspace_default_changes(self) -> None:
         original = self.selection(model_id="gpt-5.6-sol")
         self.provider_store.save_provider_selection(original)
-        ensure_codex_workspace_profile(
+        profile, _ = ensure_codex_workspace_profile(
             self.provider_store,
             definition=self.codex,
             selection=original,
             now=NOW,
+        )
+        ensure_codex_preview_certificate(
+            self.provider_store,
+            definition=profile,
+            adapter=self.registry.get_agentic_runtime_adapter("codex"),
         )
         binding = build_pinned_execution_binding(
             self.provider_store,
@@ -118,6 +125,39 @@ class AgenticProfilesTest(unittest.TestCase):
 
         self.assertEqual(selection.model_id if selection else None, "gpt-5.6-sol")
         self.assertEqual(session.execution_binding.binding_digest, binding.binding_digest)
+
+    def test_definition_egress_metadata_is_not_inferred_from_engine_id(self) -> None:
+        profile, _binding = ensure_codex_workspace_profile(
+            self.provider_store,
+            definition=self.codex,
+            selection=self.selection(),
+            now=NOW,
+        )
+
+        future_local_engine = replace(profile, runtime_engine_id="future-local-runtime")
+
+        self.assertEqual(
+            egress_policy_for_definition(future_local_engine),
+            ("local-runtime-no-remote-egress", "1"),
+        )
+
+    def test_generic_pinning_does_not_auto_issue_codex_certificate(self) -> None:
+        ensure_codex_workspace_profile(
+            self.provider_store,
+            definition=self.codex,
+            selection=self.selection(),
+            now=NOW,
+        )
+
+        with self.assertRaisesRegex(CapabilityCertificateError, "certificate_missing"):
+            build_pinned_execution_binding(
+                self.provider_store,
+                self.registry,
+                session_id="session-without-published-certificate",
+                workspace_id="default",
+                execution_mode="full-access",
+                now=NOW,
+            )
 
     def test_migration_is_idempotent_and_preserves_legacy_continuation(self) -> None:
         selection = self.selection()

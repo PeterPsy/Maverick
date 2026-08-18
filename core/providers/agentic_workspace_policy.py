@@ -16,8 +16,6 @@ from core.runtime.execution_binding import canonical_digest
 
 REMOTE_PREVIEW_EGRESS_POLICY_ID = "fake-data-remote-preview"
 REMOTE_PREVIEW_EGRESS_POLICY_REVISION = "1"
-LOCAL_EGRESS_POLICY_ID = "local-runtime-no-remote-egress"
-LOCAL_EGRESS_POLICY_REVISION = "1"
 
 
 def actor_selection_allowed(
@@ -120,6 +118,5 @@ def workspace_policy_from_patch(
 
 
 def egress_policy_for_definition(definition: AgenticProfileDefinition) -> tuple[str, str]:
-    if definition.runtime_engine_id == "codex":
-        return LOCAL_EGRESS_POLICY_ID, LOCAL_EGRESS_POLICY_REVISION
-    return REMOTE_PREVIEW_EGRESS_POLICY_ID, REMOTE_PREVIEW_EGRESS_POLICY_REVISION
+    """Return publisher-owned egress metadata without inferring engine semantics."""
+    return definition.egress_policy_id, definition.egress_policy_revision

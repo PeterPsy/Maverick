@@ -87,6 +87,8 @@ class AgenticProfileDefinition:
     policy_ceiling: AgenticRuntimePolicy
     capability_certificate_id: str
     created_at: datetime
+    egress_policy_id: str
+    egress_policy_revision: str
 
 
 @dataclass(frozen=True)

@@ -88,6 +88,8 @@ def ensure_openrouter_agentic_preview_profile(
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,
         created_at=timestamp,
+        egress_policy_id="fake-data-remote-preview",
+        egress_policy_revision="1",
     )
     try:
         stored = store.get_agentic_profile_definition(

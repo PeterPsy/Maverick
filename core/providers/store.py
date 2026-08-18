@@ -507,9 +507,21 @@ class ProviderDocumentStore:
 
 def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefinition:
     payload = dict(document)
+    _migrate_legacy_agentic_profile_egress(payload)
     payload["routing_constraint"] = _routing_constraint(payload["routing_constraint"])
     payload["policy_ceiling"] = _agentic_runtime_policy(payload["policy_ceiling"])
     return AgenticProfileDefinition(**payload)
+
+
+def _migrate_legacy_agentic_profile_egress(payload: dict[str, Any]) -> None:
+    """Project pre-egress-metadata definitions during the bounded schema migration."""
+    if "egress_policy_id" in payload and "egress_policy_revision" in payload:
+        return
+    if payload.get("provider_protocol") == "codex-app-server-stdio":
+        payload["egress_policy_id"] = "local-runtime-no-remote-egress"
+    else:
+        payload["egress_policy_id"] = "fake-data-remote-preview"
+    payload["egress_policy_revision"] = "1"
 
 
 def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:

@@ -39,6 +39,36 @@ const providerOptions: ProviderItem[] = [
     hosted_provider_id: "openrouter",
     hosted_model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
   },
+  {
+    provider_id: "agentic:binding-google",
+    label: "Google Gemini 3.6 Flash",
+    description: "google-ai-studio · gemini-3.6-flash · Agentic runtime",
+    status: "active",
+    default_model_family: "gemini-3.6-flash",
+    workspace_profile_binding_id: "binding-google",
+    default_reasoning_effort: "medium",
+    supported_reasoning_efforts: [
+      { effort: "minimal", label: "Minimal", description: null },
+      { effort: "low", label: "Low", description: null },
+      { effort: "medium", label: "Medium", description: null },
+      { effort: "high", label: "High", description: null },
+    ],
+  },
+  {
+    provider_id: "agentic:binding-openrouter",
+    label: "OpenRouter DeepSeek V4 Flash · DeepInfra FP8",
+    description: "openrouter · deepseek/deepseek-v4-flash · Agentic runtime",
+    status: "active",
+    default_model_family: "deepseek/deepseek-v4-flash",
+    workspace_profile_binding_id: "binding-openrouter",
+    default_reasoning_effort: "medium",
+    supported_reasoning_efforts: [
+      { effort: "minimal", label: "Minimal", description: null },
+      { effort: "low", label: "Low", description: null },
+      { effort: "medium", label: "Medium", description: null },
+      { effort: "high", label: "High", description: null },
+    ],
+  },
 ];
 
 let root: Root | null = null;
@@ -111,6 +141,29 @@ describe("ProviderSelector", () => {
       reasoning.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(onReasoningEffortChange).toHaveBeenCalledWith("xhigh");
+  });
+
+  it("shows reasoning controls for Google and OpenRouter agentic models", async () => {
+    const onSelect = vi.fn();
+    const element = await renderSelector({ onSelect });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex · High"]')?.click();
+    });
+
+    expect(element.querySelector('[aria-label="Reasoning for Google Gemini 3.6 Flash"]')).toBeInstanceOf(HTMLSelectElement);
+    const openRouterReasoning = element.querySelector<HTMLSelectElement>(
+      '[aria-label="Reasoning for OpenRouter DeepSeek V4 Flash · DeepInfra FP8"]',
+    );
+    expect(openRouterReasoning).toBeInstanceOf(HTMLSelectElement);
+
+    await act(async () => {
+      if (!openRouterReasoning) return;
+      openRouterReasoning.value = "high";
+      openRouterReasoning.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(onSelect).toHaveBeenCalledWith("agentic:binding-openrouter", "high");
   });
 
   it("opens a searchable model dropdown and keeps the selected model name visible", async () => {

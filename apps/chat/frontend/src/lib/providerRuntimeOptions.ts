@@ -1,4 +1,10 @@
-import type { ProviderItem, ProviderPayload, HostedTextProviderStatus } from "../api/client";
+import type {
+  AgenticProfileItem,
+  HostedTextProviderStatus,
+  ProviderItem,
+  ProviderPayload,
+  ProviderReasoningOption,
+} from "../api/client";
 import type { AgentRuntimeConfig } from "../hooks/useMessageSubmission";
 
 export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem[] {
@@ -13,6 +19,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
         const engine = [payload.active_provider, ...(payload.available_providers || [])].find(
           (provider) => provider?.provider_id === profile.runtime_engine_id,
         );
+        const reasoning = reasoningForAgenticProfile(payload, profile);
         return {
           ...(engine || {
             description: "Pinned agentic runtime profile",
@@ -39,8 +46,8 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           agentic_allowed_tool_handles: profile.allowed_tool_handles || [],
           agentic_max_estimated_cost_microusd: profile.max_estimated_cost_microusd ?? null,
           requires_synthetic_data_declaration: false,
-          default_reasoning_effort: profile.default_reasoning_effort || null,
-          supported_reasoning_efforts: profile.supported_reasoning_efforts || [],
+          default_reasoning_effort: reasoning.defaultEffort,
+          supported_reasoning_efforts: reasoning.options,
         };
       }),
     );
@@ -58,6 +65,28 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
   }
 
   return dedupeProviders(options);
+}
+
+function reasoningForAgenticProfile(
+  payload: ProviderPayload,
+  profile: AgenticProfileItem,
+): { defaultEffort: string | null; options: ProviderReasoningOption[] } {
+  const provider = [
+    payload.active_provider,
+    ...(payload.available_providers || []),
+    ...(payload.items || []),
+    payload.hosted_text?.active_provider,
+    ...(payload.hosted_text?.available_providers || []),
+  ].find((candidate) => candidate?.provider_id === profile.model_provider_id);
+  const model = provider?.model_options?.find((candidate) => candidate.model_id === profile.model_id);
+  const options = profile.supported_reasoning_efforts?.length
+    ? profile.supported_reasoning_efforts
+    : model?.supported_reasoning_efforts || [];
+  const requestedDefault = profile.default_reasoning_effort || model?.default_reasoning_effort || null;
+  const defaultEffort = options.length && !options.some((option) => option.effort === requestedDefault)
+    ? options[0]?.effort || null
+    : requestedDefault;
+  return { defaultEffort, options };
 }
 
 export function providerUsesPlainHostedRuntime(provider: ProviderItem | null | undefined): boolean {

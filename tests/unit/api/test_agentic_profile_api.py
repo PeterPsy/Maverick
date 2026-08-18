@@ -16,7 +16,13 @@ from core.providers.service import (
     register_builtin_providers,
 )
 from core.providers.agentic_profiles import build_pinned_execution_binding
-from core.providers.agentic_models import ActorSelectionPolicy
+from core.providers.agentic_models import (
+    ActorSelectionPolicy,
+    WorkspaceAgenticProfileBinding,
+    default_actor_selection_policy,
+)
+from core.providers.google_agentic_profile import ensure_google_agentic_preview_profile
+from core.providers.openrouter_agentic_profile import ensure_openrouter_agentic_preview_profile
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.runtime.runtime_session import RuntimeSessionRecord
 from tests.support.collections import FakeCollection
@@ -95,6 +101,60 @@ class AgenticProfileApiTest(unittest.TestCase):
             session_payload["execution_binding"]["reasoning_effort"],
             runtime_binding.reasoning_effort,
         )
+
+    def test_status_exposes_remote_model_reasoning_choices(self) -> None:
+        provider_store = ProviderDocumentStore(
+            ProviderCollections(
+                definitions=FakeCollection(),
+                bindings=FakeCollection(),
+                selections=FakeCollection(),
+            )
+        )
+        registry = builtin_provider_registry()
+        register_builtin_providers(provider_store, registry=registry)
+        now = datetime(2026, 8, 18, tzinfo=UTC)
+        definitions = [
+            ensure_google_agentic_preview_profile(provider_store, adapter=object(), now=now),
+            ensure_openrouter_agentic_preview_profile(provider_store, adapter=object(), now=now),
+        ]
+        for definition in definitions:
+            provider_store.save_workspace_agentic_profile_binding(
+                WorkspaceAgenticProfileBinding(
+                    binding_id=f"binding-{definition.model_provider_id}",
+                    workspace_id="default",
+                    definition_id=definition.definition_id,
+                    definition_revision=definition.revision,
+                    credential_binding_id=None,
+                    enabled=True,
+                    is_default=False,
+                    actor_policy=default_actor_selection_policy(),
+                    workspace_policy_ceiling=definition.policy_ceiling,
+                    egress_policy_id=definition.egress_policy_id,
+                    egress_policy_revision=definition.egress_policy_revision,
+                    revision=0,
+                    created_at=now,
+                    updated_at=now,
+                ),
+                expected_revision=None,
+            )
+        state = SimpleNamespace(
+            provider_store=provider_store,
+            provider_registry=registry,
+            secret_store=None,
+        )
+
+        payload = workspace_provider_status(state, workspace_id="default")
+
+        profiles = {
+            profile["model_provider_id"]: profile
+            for profile in payload["agentic_profiles"]["items"]
+        }
+        for provider_id in ("google-ai-studio", "openrouter"):
+            self.assertEqual(profiles[provider_id]["default_reasoning_effort"], "medium")
+            self.assertEqual(
+                [option["effort"] for option in profiles[provider_id]["supported_reasoning_efforts"]],
+                ["minimal", "low", "medium", "high"],
+            )
 
     def test_status_only_projects_profiles_selectable_by_the_human_actor(self) -> None:
         provider_store = ProviderDocumentStore(

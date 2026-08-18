@@ -135,16 +135,11 @@ function WebsiteSitemapSidebarWidget() {
     const request = cachedWorkspaceSnapshot(nextSiteId, '/', { revalidate: true, signal: controller.signal });
     const snapshot = request.cached || await request.fresh;
     let selectedSiteId = applySnapshot(snapshot, nextSiteId);
-    let visualRequest = selectedSiteId ? hydrateVisualNavigation(selectedSiteId, controller.signal) : Promise.resolve();
     const fresh = await request.fresh;
     if (fresh !== snapshot) {
-      const freshSiteId = applySnapshot(fresh, nextSiteId);
-      if (freshSiteId !== selectedSiteId) {
-        selectedSiteId = freshSiteId;
-        visualRequest = selectedSiteId ? hydrateVisualNavigation(selectedSiteId, controller.signal) : Promise.resolve();
-      }
+      selectedSiteId = applySnapshot(fresh, nextSiteId);
     }
-    await visualRequest;
+    if (selectedSiteId) await hydrateVisualNavigation(selectedSiteId, controller.signal);
   }
 
   function applySnapshot(snapshot: WorkspaceSnapshot, requestedSiteId = ''): string {

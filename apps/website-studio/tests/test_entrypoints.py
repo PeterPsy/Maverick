@@ -2846,6 +2846,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("cachedWorkspaceSnapshot", widget_source)
         self.assertIn("action: 'navigation_analyze'", widget_source)
         self.assertIn("hydrateVisualNavigation", widget_source)
+        self.assertLess(widget_source.index("const fresh = await request.fresh"), widget_source.index("await hydrateVisualNavigation(selectedSiteId"))
         self.assertNotIn("action: 'sitemap'", widget_source)
         self.assertNotIn("map.assets || []", widget_source)
         self.assertIn('<option value="">Select a site</option>', widget_source)
@@ -3008,6 +3009,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("freshSnapshot === initialSnapshot", app_source)
         self.assertIn("snapshotAbortRef.current?.abort()", app_source)
         self.assertIn("sessionStorage.removeItem(key)", api_source)
+        self.assertIn("existing.signal === options.signal", api_source)
+        self.assertIn("snapshotRequests.get(key)?.promise === fresh", api_source)
 
     def test_frontend_and_sidebar_do_not_select_archived_sites(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")

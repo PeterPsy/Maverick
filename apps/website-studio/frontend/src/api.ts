@@ -203,7 +203,8 @@ export async function callBackend<T = BackendStatus>(body: Record<string, unknow
 }
 
 const snapshotMemory = new Map<string, WorkspaceSnapshot>();
-const snapshotRequests = new Map<string, Promise<WorkspaceSnapshot>>();
+type SnapshotRequest = { promise: Promise<WorkspaceSnapshot>; signal?: AbortSignal };
+const snapshotRequests = new Map<string, SnapshotRequest>();
 
 export function cachedWorkspaceSnapshot(siteId = '', route = '/', options: { revalidate?: boolean; signal?: AbortSignal } = {}): { cached: WorkspaceSnapshot | null; fresh: Promise<WorkspaceSnapshot> } {
   const key = `${siteId || 'active'}::${route || '/'}`;
@@ -216,7 +217,11 @@ export function cachedWorkspaceSnapshot(siteId = '', route = '/', options: { rev
     } catch { /* storage can be unavailable in sandboxed widgets */ }
   }
   const existing = snapshotRequests.get(key);
-  const fresh = existing || callBackend<WorkspaceSnapshot>({
+  if (existing && ((!options.signal && !existing.signal) || existing.signal === options.signal)) {
+    return { cached, fresh: existing.promise };
+  }
+  let fresh: Promise<WorkspaceSnapshot>;
+  fresh = callBackend<WorkspaceSnapshot>({
     action: 'workspace_snapshot',
     site_id: siteId || undefined,
     route: route || undefined,
@@ -226,8 +231,10 @@ export function cachedWorkspaceSnapshot(siteId = '', route = '/', options: { rev
     snapshotMemory.set(key, payload);
     try { sessionStorage.setItem(`website-studio:snapshot:${key}`, JSON.stringify(payload)); } catch { /* best effort */ }
     return payload;
-  }).finally(() => snapshotRequests.delete(key));
-  snapshotRequests.set(key, fresh);
+  }).finally(() => {
+    if (snapshotRequests.get(key)?.promise === fresh) snapshotRequests.delete(key);
+  });
+  snapshotRequests.set(key, { promise: fresh, signal: options.signal });
   return { cached, fresh };
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { cachedWorkspaceSnapshot, invalidateWorkspaceSnapshots, type WorkspaceSnapshot } from '../../api';
 import {
   TreeExpander,
   TreeIcon,
@@ -122,17 +123,24 @@ function WebsiteSitemapSidebarWidget() {
     [activeSiteId, changeHistory, navigation, query]
   );
   const defaultExpandedIds = useMemo(() => collectDefaultExpandedIds(treeItems, Boolean(query.trim())), [query, treeItems]);
-  const treeProviderKey = `${activeSiteId || 'site'}:${query.trim().toLowerCase() || 'tree'}`;
+  const treeProviderKey = activeSiteId || 'site';
 
   async function load(nextSiteId = activeSiteId) {
-    setIsLoading(true);
-    const sitePayload = await backend<{ items?: Site[] }>({ action: 'sites_list' });
-    const nextSites = sitePayload.items || [];
+    if (!navigation) setIsLoading(true);
+    const request = cachedWorkspaceSnapshot(nextSiteId, '/', { revalidate: true });
+    const snapshot = request.cached || await request.fresh;
+    applySnapshot(snapshot, nextSiteId);
+    const fresh = await request.fresh;
+    if (fresh !== snapshot) applySnapshot(fresh, nextSiteId);
+  }
+
+  function applySnapshot(snapshot: WorkspaceSnapshot, requestedSiteId = '') {
+    const nextSites = snapshot.workspace?.projects || [];
     setSites(nextSites);
     const selectableSites = nextSites.filter((item) => item.status !== 'archived');
-    const requestedSite = selectableSites.find((item) => item.id === nextSiteId);
+    const requestedSite = selectableSites.find((item) => item.id === requestedSiteId);
     const persistedSite = selectableSites.find((item) => item.is_active);
-    const site = requestedSite || persistedSite || selectableSites[0];
+    const site = requestedSite || persistedSite || selectableSites.find((item) => item.id === snapshot.workspace?.active_project_id) || selectableSites[0];
     if (!site?.id) {
       setActiveSiteId('');
       setNavigation(null);
@@ -142,12 +150,11 @@ function WebsiteSitemapSidebarWidget() {
       return;
     }
     setActiveSiteId(site.id);
-    const [navigationPayload, changesPayload] = await Promise.all([
-      backend<VisualNavigationPayload>({ action: 'navigation_analyze', site_id: site.id }),
-      backend<ChangesPayload>({ action: 'list_changes', site_id: site.id })
-    ]);
-    setNavigation(navigationPayload || null);
-    setChangeHistory(changesPayload || null);
+    const project = snapshot.project;
+    const navigationPayload = project?.navigation as VisualNavigationPayload | undefined;
+    const changedCount = project?.working_state.changed_files_count || 0;
+    setNavigation(navigationPayload ? { ...navigationPayload, status: { ...navigationPayload.status, changed_files_count: changedCount } } : null);
+    setChangeHistory({ working_diff: Array.from({ length: changedCount }, () => ({})) });
     setError('');
     setIsLoading(false);
   }
@@ -162,8 +169,9 @@ function WebsiteSitemapSidebarWidget() {
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
-      const payload = event.data as { context?: { content?: { payload?: { active_app_params?: Record<string, string> } } }; owner_app_id?: string; type?: string };
+      const payload = event.data as { context?: { content?: { payload?: { active_app_params?: Record<string, string> } } }; owner_app_id?: string; resource?: string; type?: string };
       if (payload.type === 'maverick.widget.data-changed' && payload.owner_app_id === 'website-studio') {
+        invalidateWorkspaceSnapshots(payload.resource ? [payload.resource] : []);
         load(activeSiteId).catch((loadError: Error) => setError(loadError.message || 'Visual navigation unavailable.'));
         return;
       }

@@ -62,6 +62,7 @@ from store import (
     sync_source,
     validate_build,
     write_file,
+    workspace_snapshot,
     _connection_id,
     _parse_github_repository,
     _publish_target_for_environment,
@@ -120,6 +121,13 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             return 200, {"items": list_sites(data_root)}
         if action == "bootstrap":
             return 200, bootstrap(data_root, payload.get("site_id"), payload.get("route"))
+        if action == "workspace_snapshot":
+            return 200, workspace_snapshot(
+                data_root,
+                payload.get("site_id"),
+                route=payload.get("route"),
+                known_versions=payload.get("known_versions"),
+            )
         if action == "site_create":
             return 201, {
                 "site": create_site(
@@ -498,11 +506,27 @@ def app_events_for_action(action: str, payload: dict[str, object] | None = None)
         return []
     if action == "maintenance_prune" and _event_truthy((payload or {}).get("dry_run")):
         return []
+    source_actions = {"import_zip", "import_git", "sync_source", "write_file", "apply_patch", "rollback", "site_duplicate"}
+    navigation_actions = source_actions | {"site_create", "site_archive", "site_restore", "site_rename"}
+    preview_actions = {"build_validate", "preview_report"}
+    activity_actions = {"approval_record", "publish_request", "publish", "maintenance_prune", "git_connection_prepare", "git_connection_activate"}
+    settings_actions = {"environment_configure", "publish_target_configure"}
+    view_actions = {"clear_custom_view", "set_custom_view", "set_view_filter", "site_set_active"}
     resources = []
-    if action not in {"clear_custom_view", "set_custom_view", "set_view_filter", "site_set_active"}:
-        resources.append("records")
-    if action in {"clear_custom_view", "set_custom_view", "set_view_filter", "site_set_active", "site_create", "site_archive", "import_zip", "import_git", "git_connection_prepare"}:
-        resources.append("view-state")
+    if action in source_actions:
+        resources.extend(["source", "working-state"])
+    if action in navigation_actions:
+        resources.append("navigation")
+    if action in preview_actions:
+        resources.append("preview")
+    if action in activity_actions:
+        resources.append("activity")
+    if action in settings_actions:
+        resources.append("settings")
+    if action in view_actions or action in {"site_create", "site_archive", "site_restore", "import_zip", "import_git", "git_connection_prepare"}:
+        resources.append("view-selection")
+    if not resources:
+        resources.append("activity")
     return [{"type": "maverick.app.data-changed", "owner_app_id": "website-studio", "resource": resource} for resource in resources]
 
 

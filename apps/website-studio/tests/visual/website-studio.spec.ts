@@ -736,6 +736,25 @@ function backendResponse(action: string, body: Record<string, unknown>, state: M
   }
 
   switch (action) {
+    case 'workspace_snapshot':
+      if (options.emptySites) {
+        return { status: 200, body: { schema: 'workspace_snapshot.v1', versions: {}, workspace: { projects: [], active_project_id: '', persisted_active_project_id: '' }, project: null } };
+      }
+      return {
+        status: 200,
+        body: {
+          schema: 'workspace_snapshot.v1',
+          versions: { workspace_version: '1', project_version: '1', source_version: `src_${state.changedFilesCount}`, navigation_version: `src_${state.changedFilesCount}`, working_state_version: `src_${state.changedFilesCount}`, preview_version: '1', activity_version: String(state.changedFilesCount), settings_version: '1' },
+          workspace: { projects: [site], active_project_id: SITE_ID, persisted_active_project_id: SITE_ID },
+          project: {
+            site,
+            navigation: navigationBody(),
+            working_state: { changed_files_count: state.changedFilesCount },
+            activity: { latest_build: { id: 'build_ready', status: 'passed' }, latest_publish_request: { id: 'pub_ready', status: 'published' } },
+            latest_preview: options.withoutLatestPreview ? null : latestPreview
+          }
+        }
+      };
     case 'bootstrap':
       if (options.emptySites) {
         return {

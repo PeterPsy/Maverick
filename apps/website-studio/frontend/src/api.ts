@@ -95,6 +95,22 @@ export type BootstrapPayload = {
   latest_preview?: RuntimeSummary['latest_preview'] | null;
 };
 
+export type SnapshotVersions = Record<'workspace_version' | 'project_version' | 'source_version' | 'navigation_version' | 'working_state_version' | 'preview_version' | 'activity_version' | 'settings_version', string>;
+
+export type WorkspaceSnapshot = {
+  schema: 'workspace_snapshot.v1';
+  versions: SnapshotVersions;
+  not_modified?: boolean;
+  workspace?: { projects: Site[]; active_project_id: string; persisted_active_project_id: string };
+  project?: null | {
+    site: Site;
+    navigation: { site_id: string; site: Site; pages: Page[]; routes: Route[]; inventory_summary: { page_count: number; route_count: number; asset_count: number } };
+    working_state: { changed_files_count: number };
+    activity: { latest_build?: ChangeRecord | null; latest_publish_request?: ChangeRecord | null };
+    latest_preview?: RuntimeSummary['latest_preview'] | null;
+  };
+};
+
 export type ChangeRecord = {
   id?: string;
   status?: string;
@@ -172,17 +188,54 @@ type AppDependencies = {
   dependencies: DependencyResolution[];
 };
 
-export async function callBackend<T = BackendStatus>(body: Record<string, unknown>): Promise<T> {
+export async function callBackend<T = BackendStatus>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   const response = await fetch('/api/apps/website-studio/backend', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(String(payload.detail || payload.error || `Backend request failed with ${response.status}`));
   }
   return response.json() as Promise<T>;
+}
+
+const snapshotMemory = new Map<string, WorkspaceSnapshot>();
+const snapshotRequests = new Map<string, Promise<WorkspaceSnapshot>>();
+
+export function cachedWorkspaceSnapshot(siteId = '', route = '/', options: { revalidate?: boolean; signal?: AbortSignal } = {}): { cached: WorkspaceSnapshot | null; fresh: Promise<WorkspaceSnapshot> } {
+  const key = `${siteId || 'active'}::${route || '/'}`;
+  let cached = snapshotMemory.get(key) || null;
+  if (!cached) {
+    try {
+      const value = sessionStorage.getItem(`website-studio:snapshot:${key}`);
+      cached = value ? JSON.parse(value) as WorkspaceSnapshot : null;
+      if (cached) snapshotMemory.set(key, cached);
+    } catch { /* storage can be unavailable in sandboxed widgets */ }
+  }
+  const existing = snapshotRequests.get(key);
+  const fresh = existing || callBackend<WorkspaceSnapshot>({
+    action: 'workspace_snapshot',
+    site_id: siteId || undefined,
+    route: route || undefined,
+    known_versions: options.revalidate ? cached?.versions : undefined
+  }, options.signal).then((payload) => {
+    if (payload.not_modified && cached) return cached;
+    snapshotMemory.set(key, payload);
+    try { sessionStorage.setItem(`website-studio:snapshot:${key}`, JSON.stringify(payload)); } catch { /* best effort */ }
+    return payload;
+  }).finally(() => snapshotRequests.delete(key));
+  snapshotRequests.set(key, fresh);
+  return { cached, fresh };
+}
+
+export function invalidateWorkspaceSnapshots(resources: string[] = []) {
+  if (!resources.length || resources.some((resource) => ['source', 'navigation', 'view-selection'].includes(resource))) {
+    snapshotMemory.clear();
+    snapshotRequests.clear();
+  }
 }
 
 export async function callStorageProvider<T = { file?: StorageFile }>(alias: string, body: Record<string, unknown>): Promise<T> {

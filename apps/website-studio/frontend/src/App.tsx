@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   callBackend,
+  cachedWorkspaceSnapshot,
+  invalidateWorkspaceSnapshots,
   type Asset,
   type BootstrapPayload,
   type ChangeHistoryPayload,
@@ -11,7 +13,8 @@ import {
   type RuntimeSummary,
   type SitemapPayload,
   type Site,
-  type SiteStatusPayload
+  type SiteStatusPayload,
+  type WorkspaceSnapshot
 } from './api';
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
@@ -103,11 +106,9 @@ export function App() {
       setChangeHistory(null);
     }
     try {
-      const bootstrap = await callBackend<BootstrapPayload>({
-        action: 'bootstrap',
-        site_id: nextSiteId || undefined,
-        route: nextRoute || undefined
-      });
+      const snapshotRequest = cachedWorkspaceSnapshot(nextSiteId, nextRoute || '/', { revalidate: true });
+      const bootstrap = snapshotToBootstrap(snapshotRequest.cached || await snapshotRequest.fresh);
+      void snapshotRequest.fresh.catch(() => null);
       if (runId !== refreshRunRef.current) return;
       setSites(bootstrap.sites);
       const availableSites = bootstrap.sites.filter((site) => site.status !== 'archived');
@@ -147,7 +148,7 @@ export function App() {
       setActiveTarget(nextTarget || {});
       postSelection(selectedSite, selection.page, selection.route, selection.asset, nextTarget);
       await renderSite(selectedSite, selection.previewRoute, bootstrap.latest_preview || null, { resetPreview, runId });
-      if (runId === refreshRunRef.current) {
+      if (runId === refreshRunRef.current && infoPanelOpen) {
         loadSiteDetails(selectedSite, runId);
       }
     } finally {
@@ -196,6 +197,11 @@ export function App() {
   function applyPreviewPayload(payload: PreviewPayload, runId?: number) {
     if (runId && runId !== refreshRunRef.current) return;
     previewCacheRef.current.set(previewCacheKey(payload.site_id, payload.route || '/'), payload);
+    while (previewCacheRef.current.size > 12) {
+      const oldest = previewCacheRef.current.keys().next().value;
+      if (oldest) previewCacheRef.current.delete(oldest);
+      else break;
+    }
     previewStateRef.current = payload;
     setPreviewState(payload);
     setPreviewHtml(payload.html || '');
@@ -243,11 +249,16 @@ export function App() {
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
-      const payload = event.data as { type?: string; params?: Record<string, string> };
+      const payload = event.data as { type?: string; resource?: string; params?: Record<string, string> };
       if (payload.type === 'maverick.app.data-changed' && (payload as { owner_app_id?: string }).owner_app_id === 'website-studio') {
-        previewCacheRef.current.clear();
-        previewRequestCacheRef.current.clear();
-        refresh(activeSiteIdRef.current, activePageIdRef.current, '', '', '', {}, { resetPreview: true }).catch((error: Error) =>
+        const resource = payload.resource || '';
+        const resetsPreview = ['source', 'navigation'].includes(resource);
+        if (resetsPreview) {
+          previewCacheRef.current.clear();
+          previewRequestCacheRef.current.clear();
+        }
+        invalidateWorkspaceSnapshots(resource ? [resource] : []);
+        refresh(activeSiteIdRef.current, activePageIdRef.current, '', '', '', {}, { resetPreview: resetsPreview }).catch((error: Error) =>
           setNotice({ tone: 'error', text: error.message })
         );
         return;
@@ -562,6 +573,23 @@ function resolveSelection(map: SitemapPayload, nextPageId = '', nextRoute = '', 
     page,
     previewRoute: page?.route || route?.route || nextRoute || '/',
     route
+  };
+}
+
+function snapshotToBootstrap(snapshot: WorkspaceSnapshot): BootstrapPayload {
+  const workspace = snapshot.workspace || { projects: [], active_project_id: '', persisted_active_project_id: '' };
+  const project = snapshot.project || null;
+  return {
+    sites: workspace.projects,
+    active_site_id: workspace.active_project_id,
+    persisted_active_site_id: workspace.persisted_active_project_id,
+    sitemap: project ? {
+      site_id: project.navigation.site_id,
+      items: project.navigation.pages || [],
+      routes: project.navigation.routes || [],
+      assets: []
+    } : EMPTY_SITEMAP,
+    latest_preview: project?.latest_preview || null
   };
 }
 

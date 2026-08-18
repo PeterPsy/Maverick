@@ -7,10 +7,13 @@ from datetime import UTC, datetime
 from collections.abc import Iterator
 from pathlib import Path
 import sqlite3
+from threading import Lock
 
 
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 REFERENCE_ENTITIES = ["site", "page", "route", "component", "asset", "revision", "publish_request"]
+_SCHEMA_READY: set[Path] = set()
+_SCHEMA_LOCK = Lock()
 
 
 def now_timestamp() -> str:
@@ -35,6 +38,17 @@ def connect(data_root: Path) -> Iterator[sqlite3.Connection]:
 
 
 def ensure_schema(data_root: Path) -> None:
+    database = db_path(data_root).resolve()
+    if database in _SCHEMA_READY and database.exists():
+        return
+    with _SCHEMA_LOCK:
+        if database in _SCHEMA_READY and database.exists():
+            return
+        _ensure_schema(data_root)
+        _SCHEMA_READY.add(database)
+
+
+def _ensure_schema(data_root: Path) -> None:
     with connect(data_root) as db:
         db.executescript("""
             CREATE TABLE IF NOT EXISTS schema_metadata (
@@ -293,6 +307,13 @@ def ensure_schema(data_root: Path) -> None:
               summary TEXT NOT NULL,
               metadata_json TEXT NOT NULL DEFAULT '{}',
               created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS project_read_models (
+              site_id TEXT PRIMARY KEY REFERENCES sites(id) ON DELETE CASCADE,
+              source_version TEXT NOT NULL,
+              navigation_json TEXT NOT NULL,
+              working_state_json TEXT NOT NULL,
+              updated_at TEXT NOT NULL
             );
         """)
         _ensure_column(db, "sites", "source_shape", "TEXT NOT NULL DEFAULT ''")

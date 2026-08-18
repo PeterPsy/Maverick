@@ -1221,6 +1221,30 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual([asset["path"] for asset in full_map["assets"]], ["assets/logo.png"])
 
+    def test_workspace_snapshot_is_compact_versioned_and_supports_not_modified(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            _, created = handle_action(data_root, {"action": "site_create", "display_name": "Snapshot"})
+            site_id = created["site"]["id"]
+
+            status, snapshot = handle_action(data_root, {"action": "workspace_snapshot", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(snapshot["schema"], "workspace_snapshot.v1")
+            self.assertEqual(snapshot["workspace"]["active_project_id"], site_id)
+            self.assertIn("navigation", snapshot["project"])
+            self.assertIn("working_state", snapshot["project"])
+            self.assertNotIn("working_diff", snapshot["project"])
+            self.assertNotIn("assets", snapshot["project"]["navigation"])
+
+            status, unchanged = handle_action(data_root, {
+                "action": "workspace_snapshot",
+                "site_id": site_id,
+                "known_versions": snapshot["versions"],
+            })
+            self.assertEqual(status, 200)
+            self.assertTrue(unchanged["not_modified"])
+            self.assertNotIn("project", unchanged)
+
     def test_bootstrap_does_not_return_preview_after_source_version_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -2818,8 +2842,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("export const TreeProvider", tree_source)
         self.assertIn("export const TreeNodeTrigger", tree_source)
         self.assertIn("from 'lucide-react'", tree_source)
-        self.assertIn("from 'motion/react'", tree_source)
-        self.assertIn("action: 'navigation_analyze'", widget_source)
+        self.assertNotIn("from 'motion/react'", tree_source)
+        self.assertIn("cachedWorkspaceSnapshot", widget_source)
         self.assertNotIn("action: 'sitemap'", widget_source)
         self.assertNotIn("map.assets || []", widget_source)
         self.assertIn('<option value="">Select a site</option>', widget_source)
@@ -2830,9 +2854,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("maverick.widget.data-changed", widget_source)
         self.assertIn("function buildTree(navigation:", widget_source)
         self.assertNotIn("action: 'site_status'", widget_source)
-        self.assertIn("action: 'list_changes'", widget_source)
+        self.assertNotIn("action: 'list_changes'", widget_source)
         self.assertIn("modified", widget_source)
-        self.assertIn("requestedSite || persistedSite || selectableSites[0]", widget_source)
+        self.assertIn("requestedSite || persistedSite || selectableSites.find", widget_source)
         self.assertIn("groupNode('group:pages'", widget_source)
         self.assertIn("Sections", widget_source)
         self.assertIn("Components", widget_source)
@@ -2875,7 +2899,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertNotIn("website-fullscreen-preview", app_source)
         self.assertIn("runtime_status", app_source)
         self.assertIn("missing_requirements", app_source)
-        self.assertIn("action: 'bootstrap'", app_source)
+        self.assertIn("cachedWorkspaceSnapshot", app_source)
         self.assertIn("action: 'site_status'", app_source)
         self.assertIn("action: 'list_changes'", app_source)
         self.assertIn("loadSiteDetails", app_source)
@@ -2977,7 +3001,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("maverick.app.data-changed", app_source)
         self.assertIn("owner_app_id === 'website-studio'", app_source)
         self.assertIn("previewCacheRef.current.clear()", app_source)
-        self.assertIn("refresh(activeSiteIdRef.current, activePageIdRef.current, '', '', '', {}, { resetPreview: true })", app_source)
+        self.assertIn("resetPreview: resetsPreview", app_source)
 
     def test_frontend_and_sidebar_do_not_select_archived_sites(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -2986,7 +3010,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("availableSites = bootstrap.sites.filter((site) => site.status !== 'archived')", app_source)
         self.assertIn("const selectableSites = nextSites.filter((item) => item.status !== 'archived')", widget_source)
         self.assertIn("bootstrap.active_site_id || requestedSite || persistedSite || availableSites[0]?.id || ''", app_source)
-        self.assertIn("requestedSite || persistedSite || selectableSites[0]", widget_source)
+        self.assertIn("requestedSite || persistedSite || selectableSites.find", widget_source)
         self.assertNotIn("sitePayload.items[0]?.id", app_source)
         self.assertNotIn("nextSites[0]", widget_source)
         self.assertNotIn("|| sites[0]", widget_source)
@@ -3007,7 +3031,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertEqual(app_events_for_action("maintenance_prune", {"dry_run": "true"}), [])
         self.assertEqual(
             app_events_for_action("maintenance_prune", {"dry_run": False}),
-            [{"type": "maverick.app.data-changed", "owner_app_id": "website-studio", "resource": "records"}],
+            [{"type": "maverick.app.data-changed", "owner_app_id": "website-studio", "resource": "activity"}],
         )
 
     def test_frontend_new_site_screen_is_conversation_guide(self) -> None:

@@ -208,6 +208,137 @@ def bootstrap(data_root: Path, site_id: object = None, route: object = None) -> 
     }
 
 
+def workspace_snapshot(
+    data_root: Path,
+    site_id: object = None,
+    *,
+    route: object = None,
+    known_versions: object = None,
+) -> dict[str, object]:
+    """Return the compact, versioned UI read model shared by app and widgets.
+
+    Navigation and working state are materialized per source version. Operational
+    summaries remain cheap SQL reads so builds and previews do not invalidate the
+    source-dependent segments.
+    """
+    sites = list_sites(data_root)
+    available = [site for site in sites if site.get("status") != "archived"]
+    requested = str(site_id or "").strip()
+    persisted = get_active_site_id(data_root)
+    selected = next((site for site in available if site["id"] == requested), None)
+    selected = selected or next((site for site in available if site["id"] == persisted), None)
+    selected = selected or next(iter(available), None)
+    versions = _snapshot_versions(data_root, selected)
+    known = known_versions if isinstance(known_versions, dict) else {}
+    payload: dict[str, object] = {
+        "schema": "workspace_snapshot.v1",
+        "versions": versions,
+        "not_modified": bool(known and all(str(known.get(key) or "") == value for key, value in versions.items())),
+    }
+    if payload["not_modified"]:
+        return payload
+    payload["workspace"] = {
+        "projects": [_compact_site(site) for site in available],
+        "active_project_id": str((selected or {}).get("id") or ""),
+        "persisted_active_project_id": persisted,
+    }
+    if not selected:
+        payload["project"] = None
+        return payload
+    read_model = _materialized_project_read_model(data_root, selected)
+    route_text = str(route or "").strip() or str((read_model["navigation"].get("pages") or [{}])[0].get("route") or "/")
+    payload["project"] = {
+        "site": _compact_site(selected),
+        "navigation": read_model["navigation"],
+        "working_state": read_model["working_state"],
+        "activity": _activity_summary(data_root, str(selected["id"])),
+        "latest_preview": _bootstrap_latest_preview(data_root, selected, route_text) or None,
+    }
+    return payload
+
+
+def _compact_site(site: dict[str, object]) -> dict[str, object]:
+    return {key: site.get(key) for key in (
+        "id", "display_name", "slug", "status", "source_provider", "active_revision_id",
+        "published_revision_id", "is_active", "source_version",
+    )}
+
+
+def _snapshot_versions(data_root: Path, site: dict[str, object] | None) -> dict[str, str]:
+    site_id = str((site or {}).get("id") or "")
+    with connect(data_root) as db:
+        workspace = db.execute("SELECT COUNT(*) AS count, COALESCE(MAX(updated_at), '') AS version FROM sites").fetchone()
+        if site_id:
+            activity = db.execute(
+                "SELECT MAX(version) AS version FROM ("
+                "SELECT COALESCE(MAX(updated_at), '') AS version FROM builds WHERE site_id = ? UNION ALL "
+                "SELECT COALESCE(MAX(created_at), '') FROM audit_events WHERE site_id = ? UNION ALL "
+                "SELECT COALESCE(MAX(updated_at), '') FROM publish_requests WHERE site_id = ?)",
+                (site_id, site_id, site_id),
+            ).fetchone()
+            preview = db.execute("SELECT COALESCE(MAX(created_at), '') AS version FROM previews WHERE site_id = ?", (site_id,)).fetchone()
+            working = db.execute("SELECT COALESCE(MAX(updated_at), '') AS version FROM changesets WHERE site_id = ?", (site_id,)).fetchone()
+        else:
+            activity = preview = working = {"version": ""}
+    source_version = str((site or {}).get("source_version") or "")
+    return {
+        "workspace_version": f"{workspace['version']}:{workspace['count']}",
+        "project_version": str((site or {}).get("updated_at") or ""),
+        "source_version": source_version,
+        "navigation_version": source_version,
+        "working_state_version": str(working["version"] or source_version),
+        "preview_version": str(preview["version"] or ""),
+        "activity_version": str(activity["version"] or ""),
+        "settings_version": str((site or {}).get("updated_at") or ""),
+    }
+
+
+def _materialized_project_read_model(data_root: Path, site: dict[str, object]) -> dict[str, object]:
+    site_id = str(site["id"])
+    source_version = _source_version_for_site(site)
+    with connect(data_root) as db:
+        draft = db.execute(
+            "SELECT files_changed_count FROM changesets WHERE site_id = ? AND status = 'draft' ORDER BY updated_at DESC LIMIT 1",
+            (site_id,),
+        ).fetchone()
+        working = {"changed_files_count": int(draft["files_changed_count"] if draft else 0)}
+        cached = db.execute("SELECT * FROM project_read_models WHERE site_id = ?", (site_id,)).fetchone()
+        if cached and cached["source_version"] == source_version:
+            return {"navigation": json.loads(cached["navigation_json"]), "working_state": working}
+        pages = [_page_row(row) for row in db.execute(
+            "SELECT * FROM pages WHERE site_id = ? AND deleted_at IS NULL ORDER BY route", (site_id,),
+        ).fetchall()]
+        routes = [_route_row(row) for row in db.execute(
+            "SELECT * FROM routes WHERE site_id = ? AND deleted_at IS NULL ORDER BY route", (site_id,),
+        ).fetchall()]
+        counts = db.execute(
+            "SELECT (SELECT COUNT(*) FROM pages WHERE site_id = ? AND deleted_at IS NULL) AS pages, "
+            "(SELECT COUNT(*) FROM routes WHERE site_id = ? AND deleted_at IS NULL) AS routes, "
+            "(SELECT COUNT(*) FROM assets WHERE site_id = ? AND deleted_at IS NULL) AS assets",
+            (site_id, site_id, site_id),
+        ).fetchone()
+        navigation = {
+            "site_id": site_id,
+            "site": _compact_site(site),
+            "pages": pages,
+            "routes": routes,
+            "inventory_summary": {"page_count": counts["pages"], "route_count": counts["routes"], "asset_count": counts["assets"], "source_inventory_hidden": True},
+        }
+        db.execute(
+            "INSERT INTO project_read_models(site_id, source_version, navigation_json, working_state_json, updated_at) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(site_id) DO UPDATE SET source_version=excluded.source_version, navigation_json=excluded.navigation_json, working_state_json=excluded.working_state_json, updated_at=excluded.updated_at",
+            (site_id, source_version, json.dumps(navigation, sort_keys=True), json.dumps(working, sort_keys=True), now_timestamp()),
+        )
+    return {"navigation": navigation, "working_state": working}
+
+
+def _activity_summary(data_root: Path, site_id: str) -> dict[str, object]:
+    with connect(data_root) as db:
+        build = db.execute("SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site_id,)).fetchone()
+        request = db.execute("SELECT id, status, updated_at FROM publish_requests WHERE site_id = ? ORDER BY updated_at DESC LIMIT 1", (site_id,)).fetchone()
+    return {"latest_build": _build_row(build, include_logs=False) if build else None, "latest_publish_request": dict(request) if request else None}
+
+
 def _bootstrap_latest_preview(data_root: Path, site: dict[str, object], route: str) -> dict[str, object]:
     profile = _cached_source_profile(data_root, site)
     if not str(site.get("source_version") or "").strip():

@@ -118,9 +118,10 @@ class OpenRouterChatStreamDecoder:
         if self.finish_reason is not None:
             if (
                 finish_reason != self.finish_reason
+                or delta.get("role") not in {None, "assistant"}
+                or delta.get("content") not in {None, ""}
                 or any(delta.get(field) is not None for field in (
-                    "role", "content", "reasoning", "reasoning_content",
-                    "reasoning_details", "tool_calls",
+                    "reasoning", "reasoning_content", "reasoning_details", "tool_calls",
                 ))
             ):
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")

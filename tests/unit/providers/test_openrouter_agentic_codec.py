@@ -77,7 +77,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
             **_identity("generation-terminal-usage"),
             "choices": [{
                 "index": 0,
-                "delta": {"role": None, "content": None},
+                "delta": {"role": "assistant", "content": ""},
                 "finish_reason": "tool_calls",
             }],
             "usage": terminal["usage"],

@@ -32,3 +32,18 @@ describe("WidgetSlot app-scoped runtime remount", () => {
     expect(source).toContain("payload.owner_app_id === widget?.owner_app_id");
   });
 });
+
+describe("Sidebar widget frame persistence", () => {
+  it("keeps visited app widgets mounted and only hides inactive frames", () => {
+    const source = readFileSync(resolve(currentDir, "Sidebar.tsx"), "utf8");
+    expect(source).toContain("mountedWidgetAppIds");
+    expect(source).toContain("renderedWidgetAppIds.map");
+    expect(source).toContain('data-active={appId === activeAppId}');
+    expect(source).toContain("preferredOwnerAppId={appId}");
+  });
+
+  it("accepts navigation and sidebar commands only from the owning widget frame", () => {
+    const source = readFileSync(resolve(currentDir, "WidgetSlot.tsx"), "utf8");
+    expect(source).toContain("isActiveWidgetCommand(event, widgetFrameRef.current, isActive)");
+  });
+});

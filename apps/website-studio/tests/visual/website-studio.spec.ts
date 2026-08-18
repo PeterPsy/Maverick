@@ -82,6 +82,23 @@ test.describe('Website Studio visual smoke', () => {
     await expect(contentFrame!.locator('[data-testid="runtime-preview"]')).toContainText('Giuntitrail');
   });
 
+  test('starts the page-aware loader immediately when sidebar navigation is delivered', async ({ page }) => {
+    await page.setViewportSize({ width: 1180, height: 820 });
+    await installWebsiteStudioMocks(page, { delayedAction: 'build_preview', delayMs: 1_200 });
+    await page.goto('/');
+    await openSite(page);
+
+    await emitShellMessage(page, {
+      type: 'maverick.app.navigate',
+      params: { site_id: SITE_ID, app_page: 'routes/route_about', route_id: 'route_about', route: '/about' }
+    });
+
+    const loader = page.locator('.preview-loading-state.is-overlay');
+    await expect(loader).toBeVisible({ timeout: 250 });
+    await expect(loader).toContainText('Caricamento About');
+    await expect(loader).toHaveCount(0, { timeout: 4_000 });
+  });
+
   for (const viewport of [
     { name: 'desktop', width: 1440, height: 920 },
     { name: 'mobile', width: 390, height: 844 }

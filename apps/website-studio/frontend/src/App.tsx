@@ -51,6 +51,7 @@ export function App() {
   const [showNewWebsite, setShowNewWebsite] = useState(true);
   const [notice, setNotice] = useState<Notice>(null);
   const [infoPanelOpen, setInfoPanelOpen] = useState(false);
+  const [navigationLoadingLabel, setNavigationLoadingLabel] = useState('');
   const activeSiteIdRef = useRef('');
   const activePageIdRef = useRef('');
   const previewStateRef = useRef<PreviewPayload | null>(null);
@@ -341,12 +342,18 @@ export function App() {
         const route = payload.params?.route || '';
         const routeId = payload.params?.route_id || routeFromRoute;
         const assetId = payload.params?.asset_id || assetFromRoute;
+        if (pageId || route || routeId) {
+          setNavigationLoadingLabel(navigationLoadingName(sitemapRef.current, pageId, routeId, route));
+        }
         navigateLoadedSite(siteId, pageId, route, routeId, assetId, target, false)
           .then((handled) => {
             if (handled) return;
             return refresh(siteId, pageId, route, routeId, assetId, target, { resetPreview: !previewStateRef.current });
           })
-          .catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
+          .catch((error: Error) => {
+            setNavigationLoadingLabel('');
+            setNotice({ tone: 'error', text: error.message });
+          });
       }
     }
     window.addEventListener('message', handleMessage);
@@ -385,6 +392,7 @@ export function App() {
                   activeAssetId={activeAssetId}
                   activeTarget={activeTarget}
                   loadingLabel={loadingLabel}
+                  onDocumentReady={() => setNavigationLoadingLabel('')}
                 />
               ) : (
                 <InlinePreviewFrame
@@ -405,6 +413,7 @@ export function App() {
                   onClose={() => setInfoPanelOpen(false)}
                 />
               ) : null}
+              {navigationLoadingLabel ? <PreviewLoadingState label={navigationLoadingLabel} overlay /> : null}
             </>
           ) : (
             <div className="site-empty">No renderable page in this site.</div>
@@ -428,6 +437,7 @@ function WarmPreviewFrame({
   preview,
   previewUrl,
   loadingLabel,
+  onDocumentReady,
   title
 }: {
   activeAssetId: string;
@@ -436,6 +446,7 @@ function WarmPreviewFrame({
   preview: PreviewPayload;
   previewUrl: string;
   loadingLabel: string;
+  onDocumentReady: () => void;
   title: string;
 }) {
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -451,10 +462,11 @@ function WarmPreviewFrame({
       if (payload?.type !== 'website-studio.preview.document-ready' || payload.owner_app_id !== 'website-studio') return;
       if (payload.preview_id !== preview.preview_id) return;
       setReadyPreviewId(payload.preview_id);
+      onDocumentReady();
     }
     window.addEventListener('message', handleDocumentReady);
     return () => window.removeEventListener('message', handleDocumentReady);
-  }, [preview.preview_id]);
+  }, [onDocumentReady, preview.preview_id]);
 
   useEffect(() => {
     if (!previewUrl) return;
@@ -640,6 +652,12 @@ function routeDisplayName(route = ''): string {
   const segment = route.split(/[?#]/, 1)[0].split('/').filter(Boolean).pop() || '';
   if (!segment) return 'Home';
   return segment.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function navigationLoadingName(map: SitemapPayload, pageId = '', routeId = '', route = ''): string {
+  const selectedRoute = (map.routes || []).find((item) => item.id === routeId || item.route === route);
+  const selectedPage = (map.items || []).find((item) => item.id === pageId || item.id === selectedRoute?.page_id || item.route === route || item.route === selectedRoute?.route);
+  return selectedPage?.title || routeDisplayName(selectedRoute?.route || route) || 'pagina';
 }
 
 function snapshotToBootstrap(snapshot: WorkspaceSnapshot): BootstrapPayload {

@@ -66,6 +66,7 @@ export function WidgetSlot({
   contentKind,
   hostAppId,
   label,
+  isActive = true,
   onCloseSidebar,
   onActiveThreadChange,
   onCloseDock,
@@ -84,6 +85,7 @@ export function WidgetSlot({
   contentKind: string;
   hostAppId: string;
   label: string;
+  isActive?: boolean;
   onCloseDock?: () => void;
   onCloseSidebar?: () => void;
   onActiveThreadChange?: (event: { navigationScope: string; ownerAppId: string; threadId: string }) => void;
@@ -279,7 +281,11 @@ export function WidgetSlot({
         setFrameRevision((current) => current + 1);
         return;
       }
-      if (payload.type === "maverick.widget.open-app" && payload.app_id) {
+      if (
+        payload.type === "maverick.widget.open-app" &&
+        payload.app_id &&
+        isMountedWidgetFrameSource(event, widgetFrameRef.current)
+      ) {
         onOpenApp(payload.app_id, payload.params);
       }
       if (
@@ -309,10 +315,10 @@ export function WidgetSlot({
       ) {
         onCloseDock?.();
       }
-      if (payload.type === "maverick.shell.sidebar.close") {
+      if (payload.type === "maverick.shell.sidebar.close" && isActiveWidgetCommand(event, widgetFrameRef.current, isActive)) {
         onCloseSidebar?.();
       }
-      if (payload.type === "maverick.shell.sidebar.open") {
+      if (payload.type === "maverick.shell.sidebar.open" && isActiveWidgetCommand(event, widgetFrameRef.current, isActive)) {
         onOpenSidebar?.();
       }
       if (
@@ -406,11 +412,13 @@ export function WidgetSlot({
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [
+    isActive,
     onCloseDock,
     onCloseSidebar,
     onActiveThreadChange,
     onOpenApp,
     onOpenDock,
+    onOpenSidebar,
     onPrimaryActionStateChange,
     size,
     supportsPrimaryActionSlot,
@@ -673,6 +681,14 @@ function isMountedWidgetFrameMessage(
     payload.owner_app_id === widget.owner_app_id &&
     payload.widget_id === widget.widget_id
   );
+}
+
+function isMountedWidgetFrameSource(event: MessageEvent, frame: HTMLIFrameElement | null): boolean {
+  return event.source === frame?.contentWindow;
+}
+
+function isActiveWidgetCommand(event: MessageEvent, frame: HTMLIFrameElement | null, isActive: boolean): boolean {
+  return isMountedWidgetFrameSource(event, frame) || (isActive && event.source === window);
 }
 
 function overlayWidgetSizeFromMessage(payload: WidgetMessagePayload): { height: string; width: string } | null {

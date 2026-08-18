@@ -98,31 +98,41 @@ export function Sidebar({
   const isInitialLoading = isLoading && railApps.length === 0;
   const isDetailLayerOpen = isOpen || isPinned;
   const [hasMountedDetailWidgets, setHasMountedDetailWidgets] = useState(isDetailLayerOpen);
+  const [mountedWidgetAppIds, setMountedWidgetAppIds] = useState<string[]>(activeAppId ? [activeAppId] : []);
+  const renderedWidgetAppIds = activeAppId && !mountedWidgetAppIds.includes(activeAppId) ? [...mountedWidgetAppIds, activeAppId] : mountedWidgetAppIds;
   const shouldMountDetailWidgets = hasMountedDetailWidgets || isDetailLayerOpen;
   const showMobileChatThemeSwitcher = isMobileLayout && activeAppId === CHAT_APP_ID;
-  const sidebarFooterSlot = shouldMountDetailWidgets ? (
-    <WidgetSlot
-      activeWorkspaceId={activeWorkspaceId}
-      content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, placement: "sidebar-footer", user: user?.username || null }}
-      contentKind="shell.sidebar.footer"
-      hostAppId="base-shell"
-      label="App sidebar footer"
-      onCloseSidebar={onClose}
-      onOpenApp={onOpenApp}
-      onOpenSidebar={onOpenSidebar}
-      onPrimaryActionStateChange={onPrimaryActionStateChange}
-      preferredOwnerAppId={activeAppId}
-      primaryActionRequestId={mobilePrimaryActionRequestId}
-      shellTheme={shellTheme}
-      size="compact"
-    />
-  ) : null;
+  const sidebarFooterSlot = shouldMountDetailWidgets ? renderedWidgetAppIds.map((appId) => (
+    <div aria-hidden={appId !== activeAppId} className="bs-sidebar__persistent-widget" data-active={appId === activeAppId} key={`footer:${activeWorkspaceId}:${appId}`}>
+      <WidgetSlot
+        activeWorkspaceId={activeWorkspaceId}
+        content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, placement: "sidebar-footer", user: user?.username || null }}
+        contentKind="shell.sidebar.footer"
+        hostAppId="base-shell"
+        label="App sidebar footer"
+        isActive={appId === activeAppId}
+        onCloseSidebar={onClose}
+        onOpenApp={onOpenApp}
+        onOpenSidebar={onOpenSidebar}
+        onPrimaryActionStateChange={appId === activeAppId ? onPrimaryActionStateChange : undefined}
+        preferredOwnerAppId={appId}
+        primaryActionRequestId={appId === activeAppId ? mobilePrimaryActionRequestId : 0}
+        shellTheme={shellTheme}
+        size="compact"
+      />
+    </div>
+  )) : null;
 
   useEffect(() => {
     if (isDetailLayerOpen) {
       setHasMountedDetailWidgets(true);
     }
   }, [isDetailLayerOpen]);
+
+  useEffect(() => {
+    if (!activeAppId) return;
+    setMountedWidgetAppIds((current) => current.includes(activeAppId) ? current : [...current, activeAppId]);
+  }, [activeAppId]);
 
   useEffect(() => {
     if (shouldMountDetailWidgets) {
@@ -333,20 +343,23 @@ export function Sidebar({
 
         </div>
 
-        {shouldMountDetailWidgets ? (
-          <WidgetSlot
-            activeWorkspaceId={activeWorkspaceId}
-            content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, user: user?.username || null }}
-            contentKind="shell.sidebar.primary"
-            hostAppId="base-shell"
-            label="App sidebar content"
-            onCloseSidebar={onClose}
-            onOpenApp={onOpenApp}
-            onOpenSidebar={onOpenSidebar}
-            preferredOwnerAppId={activeAppId}
-            shellTheme={shellTheme}
-          />
-        ) : null}
+        {shouldMountDetailWidgets ? renderedWidgetAppIds.map((appId) => (
+          <div aria-hidden={appId !== activeAppId} className="bs-sidebar__persistent-widget bs-sidebar__persistent-widget--fill" data-active={appId === activeAppId} key={`primary:${activeWorkspaceId}:${appId}`}>
+            <WidgetSlot
+              activeWorkspaceId={activeWorkspaceId}
+              content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, user: user?.username || null }}
+              contentKind="shell.sidebar.primary"
+              hostAppId="base-shell"
+              label="App sidebar content"
+              isActive={appId === activeAppId}
+              onCloseSidebar={onClose}
+              onOpenApp={onOpenApp}
+              onOpenSidebar={onOpenSidebar}
+              preferredOwnerAppId={appId}
+              shellTheme={shellTheme}
+            />
+          </div>
+        )) : null}
 
         <div className="bs-sidebar__bottom-fixed">
           {showMobileChatThemeSwitcher ? (

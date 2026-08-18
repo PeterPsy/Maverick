@@ -87,7 +87,7 @@
     max-width: 100%;
   }
 
-  .bs-sidebar__details>.bs-widget-slot--fill {
+  .bs-sidebar__details>.bs-sidebar__persistent-widget--fill {
     grid-row: 1;
     grid-column: 1;
     z-index: 1;

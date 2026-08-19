@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import create_runtime_session, queue_runtime_turn
@@ -370,6 +371,111 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
         self.assertEqual(detail_status, 200)
         self.assertIn("system_prompt", detail_payload["thread"])
         self.assertTrue(detail_payload["thread"]["system_prompt"].startswith("Long private prompt 00"))
+
+    def test_runtime_thread_batch_delete_cleans_sessions_with_one_catalog_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            sessions = [
+                create_runtime_session(
+                    state.runtime_store,
+                    session_id=f"delete-session-{index}",
+                    workspace_id="default",
+                    agent_id="chat",
+                    source_app_id="chat",
+                    start_path=repo_root,
+                )
+                for index in range(2)
+            ]
+            for session in sessions:
+                self._create_thread_for_session(state, session)
+                runtime_root = repo_root / "workspaces" / "default" / "runtime" / "sessions" / session.session_id
+                runtime_root.mkdir(parents=True, exist_ok=True)
+                (runtime_root / "marker.txt").write_text("delete", encoding="utf-8")
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch.object(
+                state.runtime_thread_event_bus,
+                "publish",
+                wraps=state.runtime_thread_event_bus.publish,
+            ) as publish, patch.object(
+                state.runtime_store.collections.threads,
+                "delete_many",
+                wraps=state.runtime_store.collections.threads.delete_many,
+            ) as delete_many:
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/threads/delete-batch",
+                    method="POST",
+                    body={
+                        "thread_ids": [sessions[0].session_id, "missing-thread", sessions[1].session_id],
+                        "reason": "test_batch_delete",
+                    },
+                    cookie=cookie,
+                )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["deleted_thread_ids"], [sessions[0].session_id, sessions[1].session_id])
+            self.assertEqual(
+                payload["results"],
+                [
+                    {
+                        "thread_id": sessions[0].session_id,
+                        "runtime_session_id": sessions[0].session_id,
+                        "status": "deleted",
+                    },
+                    {"thread_id": "missing-thread", "status": "not_found"},
+                    {
+                        "thread_id": sessions[1].session_id,
+                        "runtime_session_id": sessions[1].session_id,
+                        "status": "deleted",
+                    },
+                ],
+            )
+            self.assertEqual(delete_many.call_count, 1)
+            self.assertEqual(publish.call_count, 1)
+            self.assertEqual(publish.call_args.kwargs["event"]["deleted_thread_ids"], payload["deleted_thread_ids"])
+            self.assertIn("timings_ms", payload["runtime_cleanup_batch"])
+            self.assertEqual(state.runtime_store.list_threads("default"), [])
+            for session in sessions:
+                with self.assertRaises(RuntimeSessionNotFoundError):
+                    state.runtime_store.get_session(session.session_id)
+                self.assertFalse((repo_root / "workspaces" / "default" / "runtime" / "sessions" / session.session_id).exists())
+
+    def test_runtime_thread_batch_delete_rejects_more_than_twenty_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            status, payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/threads/delete-batch",
+                method="POST",
+                body={"thread_ids": [f"thread-{index}" for index in range(21)]},
+                cookie=cookie,
+            )
+
+            self.assertEqual(status, 400)
+            self.assertEqual(payload, {"error": "runtime_thread_delete_batch_too_large", "maximum": 20})
 
     def test_invalid_runtime_session_visibility_is_controlled_for_raw_session_api(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

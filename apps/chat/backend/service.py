@@ -104,10 +104,6 @@ def handle_action(data_root: Path, body: dict, *, invocation_surface: str = "") 
         return _prepare_project_delete(path, body)
     if action == "projects.delete.commit":
         return _commit_project_delete(path, body, invocation_surface=invocation_surface)
-    if action == "runtime.cleanup_sessions":
-        runtime_session_ids = body.get("runtime_session_ids") if isinstance(body.get("runtime_session_ids"), list) else []
-        return 200, {"cleaned_runtime_session_ids": [str(item) for item in runtime_session_ids if str(item).strip()]}
-
     if action == "references.manifest":
         return 200, REFERENCE_MANIFEST
     if action == "references.search":

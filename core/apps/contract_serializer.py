@@ -61,6 +61,11 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             "runtime": {
                 "create_sessions": parsed.contract.permissions.runtime.create_sessions,
                 "cleanup_sessions": parsed.contract.permissions.runtime.cleanup_sessions,
+                **(
+                    {"receive_cleanup_callbacks": True}
+                    if parsed.contract.permissions.runtime.receive_cleanup_callbacks
+                    else {}
+                ),
             },
             "host": {
                 "telemetry": parsed.contract.permissions.host.telemetry,

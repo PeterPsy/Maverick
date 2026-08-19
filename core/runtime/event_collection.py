@@ -142,7 +142,9 @@ class RuntimeEventJsonCollection(RuntimeEventArchivePaginationMixin, RuntimeSess
                     continue
                 with _locked_collection_path(root):
                     for path in self._history_chunk_paths(root):
-                        history_deleted += len(self._read_documents(path))
+                        # The complete session root is purged immediately after record cleanup.
+                        # Do not decode potentially GiB-scale archives only for a telemetry count.
+                        history_deleted += self._partition_counts.get(path, 0)
                         path.unlink(missing_ok=True)
                         self._partition_counts.pop(path, None)
                     root.rmdir()
@@ -155,10 +157,13 @@ class RuntimeEventJsonCollection(RuntimeEventArchivePaginationMixin, RuntimeSess
                 if not path.is_file():
                     continue
                 with _locked_collection_path(path):
-                    history_deleted += len(self._read_documents(path))
+                    history_deleted += self._partition_counts.get(path, 0)
                     path.unlink(missing_ok=True)
                     self._partition_counts.pop(path, None)
-        return tail_deleted + history_deleted
+        # History is the complete logical stream and the hot tail duplicates its newest
+        # records, so counts must never be added together. Unknown archive counts after a
+        # restart intentionally fall back to the bounded tail rather than decoding it here.
+        return max(tail_deleted, history_deleted)
 
     def _find_chunked_event_page(
         self,

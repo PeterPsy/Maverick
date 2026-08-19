@@ -144,6 +144,7 @@ class AppContractTestCase(unittest.TestCase):
                         secret_write=["oauth-account"],
                         network_outbound=["api.vendor.example"],
                         runtime_cleanup_sessions=True,
+                        runtime_receive_cleanup_callbacks=True,
                         host_telemetry=True,
                     ),
                     entrypoints=build_app_entrypoints(
@@ -209,6 +210,7 @@ class AppContractTestCase(unittest.TestCase):
             self.assertEqual(loaded.contract.permissions.secrets.read, ["oauth-account"])
             self.assertEqual(loaded.contract.permissions.network.outbound, ["api.vendor.example"])
             self.assertTrue(loaded.contract.permissions.runtime.cleanup_sessions)
+            self.assertTrue(loaded.contract.permissions.runtime.receive_cleanup_callbacks)
             self.assertTrue(loaded.contract.permissions.host.telemetry)
 
     def test_parse_contract_preserves_frontend_presentation_role(self) -> None:

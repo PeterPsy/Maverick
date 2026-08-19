@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
-from typing import Callable
 from uuid import uuid4
 
 from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError
@@ -14,9 +13,6 @@ from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.store import RuntimeStore
 from core.runtime.thread_titles import DEFAULT_THREAD_TITLE
-
-
-RuntimeCleanupCallback = Callable[[str, str], dict[str, object]]
 
 
 @dataclass(frozen=True)
@@ -840,35 +836,3 @@ def _normalized_thread_availability(value: str) -> str:
     if normalized not in {"free", "queued", "active"}:
         raise ValueError(f"Unsupported runtime thread availability `{normalized}`.")
     return normalized
-
-
-def delete_runtime_thread_complete(
-    store: RuntimeStore,
-    *,
-    thread_id: str,
-    workspace_id: str,
-    cleanup_runtime: RuntimeCleanupCallback,
-    reason: str = "runtime_thread_deleted",
-) -> tuple[RuntimeThreadRecord | None, dict[str, object] | None]:
-    thread = store.get_thread(thread_id)
-    if thread.workspace_id != workspace_id:
-        return None, None
-    cleanup = cleanup_runtime(thread.runtime_session_id, reason) if thread.runtime_session_id else None
-    store.delete_thread(thread.thread_id)
-    return thread, cleanup
-
-
-def clear_runtime_threads_complete(
-    store: RuntimeStore,
-    *,
-    workspace_id: str,
-    cleanup_runtime: RuntimeCleanupCallback,
-    reason: str = "runtime_threads_cleared",
-) -> tuple[list[RuntimeThreadRecord], list[dict[str, object]]]:
-    threads = list_runtime_threads(store, workspace_id=workspace_id)
-    cleanups: list[dict[str, object]] = []
-    for thread in threads:
-        if thread.runtime_session_id:
-            cleanups.append(cleanup_runtime(thread.runtime_session_id, reason))
-        store.delete_thread(thread.thread_id)
-    return threads, cleanups

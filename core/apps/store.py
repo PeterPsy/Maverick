@@ -205,7 +205,11 @@ class AppDocumentStore:
                 runtime=AppRuntimePermissionDeclaration(
                     **payload.get("permissions", {}).get(
                         "runtime",
-                        {"create_sessions": False, "cleanup_sessions": False},
+                        {
+                            "create_sessions": False,
+                            "cleanup_sessions": False,
+                            "receive_cleanup_callbacks": False,
+                        },
                     )
                 ),
                 host=AppHostPermissionDeclaration(

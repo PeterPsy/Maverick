@@ -165,6 +165,7 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertFalse(parsed.contract.permissions.providers.deliver_secrets_to_app)
         self.assertTrue(parsed.contract.permissions.runtime.create_sessions)
         self.assertTrue(parsed.contract.permissions.runtime.cleanup_sessions)
+        self.assertTrue(parsed.contract.permissions.runtime.receive_cleanup_callbacks)
         self.assertEqual(parsed.contract.entrypoints.hooks["runtime_event"], "backend/app_backend.py")
         self.assertEqual(
             parsed.contract.entrypoints.hooks["backend_recovery"],

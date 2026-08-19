@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { applyThreadCatalogPayload } from "./chatProjects";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { applyThreadCatalogPayload, deleteThread, deleteThreads } from "./chatProjects";
 import type { ChatThread } from "./types";
 
 describe("applyThreadCatalogPayload", () => {
@@ -38,6 +38,63 @@ describe("applyThreadCatalogPayload", () => {
     expect(applyThreadCatalogPayload([], { threads: [older, newer] })).toEqual([newer, older]);
   });
 });
+
+describe("thread delete API", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (path: string) =>
+        okJson(
+          path.endsWith("delete-batch")
+            ? {
+                deleted_thread_ids: ["thread-1", "thread-2"],
+                deleted_runtime_session_ids: ["session-1", "session-2"],
+                results: [
+                  { thread_id: "thread-1", runtime_session_id: "session-1", status: "deleted" },
+                  { thread_id: "thread-2", runtime_session_id: "session-2", status: "deleted" },
+                ],
+              }
+            : { deleted_thread_id: "thread-1", deleted_runtime_session_id: "session-1" },
+        ),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("does not reload Chat projects after deleting one thread", async () => {
+    await deleteThread("thread-1");
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/runtime/threads/thread-1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("deletes a selection with one batch request", async () => {
+    await deleteThreads(["thread-1", "thread-2"]);
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/runtime/threads/delete-batch",
+      expect.objectContaining({
+        body: JSON.stringify({ reason: "chat_threads_deleted", thread_ids: ["thread-1", "thread-2"] }),
+        method: "POST",
+      }),
+    );
+  });
+});
+
+function okJson(payload: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => payload,
+  } as Response;
+}
 
 function thread(overrides: Partial<ChatThread>): ChatThread {
   return {

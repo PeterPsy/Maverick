@@ -25,7 +25,9 @@ export function notifyShell(thread?: ChatThread, params: Record<string, string |
 }
 
 export function updateFromSidebarPayload(payload: SidebarPayload, setProjects: (projects: ChatProject[]) => void) {
-  setProjects(payload.projects || []);
+  if (Array.isArray(payload.projects)) {
+    setProjects(payload.projects);
+  }
 }
 
 export function isMobileLayoutContext(context: unknown) {

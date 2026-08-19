@@ -21,6 +21,11 @@ from core.api.provider_api import workspace_provider_status
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.runtime_tool_confirmation_api import handle_runtime_tool_confirmation
 from core.api.session_api import RequestSession, require_session
+from core.api.runtime_thread_delete_api import (
+    delete_runtime_threads,
+    handle_thread_delete_batch,
+    thread_cleanup_forbidden_reason,
+)
 from core.apps.errors import AppHostingError
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event, dispatch_source_app_runtime_event_async
 from core.authorization.errors import AuthorizationError
@@ -37,9 +42,7 @@ from core.providers.service import effective_provider_registry, resolve_provider
 from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError, RuntimeTurnNotFoundError
 from core.runtime.client_message_claims import RuntimeClientMessageClaim, RuntimeClientMessageClaimConflictError
 from core.runtime.runtime_threads import (
-    clear_runtime_threads_complete,
     create_runtime_thread,
-    delete_runtime_thread_complete,
     find_runtime_thread_by_session,
     list_runtime_threads,
     mark_runtime_thread_completed_response_read,
@@ -1140,29 +1143,6 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
     )
 
 
-def _thread_cleanup_forbidden_reason(state: PlatformState, context: RequestSession, *, runtime_session_id: str) -> str | None:
-    if not runtime_session_id:
-        return None
-    try:
-        session = state.runtime_store.get_session(runtime_session_id)
-    except RuntimeSessionNotFoundError:
-        return None
-    except ValueError:
-        return "runtime_thread_not_found"
-    if session.workspace_id != context.workspace_id:
-        return "runtime_thread_not_found"
-    try:
-        require_runtime_session_operation(
-            workspace_store=state.workspace_store,
-            user=context.user,
-            session=session,
-            operation="cleanup",
-        )
-    except AuthorizationError as error:
-        return error.reason
-    return None
-
-
 def _handle_thread_item(
     state: PlatformState,
     context: RequestSession,
@@ -1237,7 +1217,7 @@ def _handle_thread_item(
             _thread_mutation_payload(state, updated, viewer_user_id=context.user.user_id, action="updated"),
         )
     if method == "DELETE":
-        forbidden_reason = _thread_cleanup_forbidden_reason(
+        forbidden_reason = thread_cleanup_forbidden_reason(
             state,
             context,
             runtime_session_id=thread.runtime_session_id,
@@ -1247,35 +1227,38 @@ def _handle_thread_item(
         if forbidden_reason is not None:
             return json_response(start_response, {"error": forbidden_reason}, status="403 Forbidden")
         reason = str(body.get("reason") or "runtime_thread_deleted").strip()
-
-        def cleanup(session_id: str, cleanup_reason: str) -> dict[str, object]:
-            return cleanup_runtime_session(state, session_id=session_id, reason=cleanup_reason, start_path=start_path, publish_thread_events=False)
-
-        deleted, cleanup_result = delete_runtime_thread_complete(
-            state.runtime_store,
-            thread_id=thread_id,
-            workspace_id=context.workspace_id,
-            cleanup_runtime=cleanup,
-            reason=reason,
-        )
-        if deleted is None:
-            return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
-        _publish_thread_change(
+        batch_payload = delete_runtime_threads(
             state,
-            workspace_id=context.workspace_id,
+            context,
+            threads=[thread],
+            reason=reason,
+            start_path=start_path,
             action="deleted",
-            deleted_thread_ids=[deleted.thread_id],
-            deleted_runtime_session_ids=[deleted.runtime_session_id] if deleted.runtime_session_id else [],
         )
         payload = {
-            "deleted_thread_id": deleted.thread_id,
-            "removed_thread_id": deleted.thread_id,
-            "deleted_runtime_session_id": deleted.runtime_session_id,
-            "action": "deleted",
-            "page_hint": {"sort": "recency_desc"},
+            **batch_payload,
+            "deleted_thread_id": thread.thread_id,
+            "removed_thread_id": thread.thread_id,
+            "deleted_runtime_session_id": thread.runtime_session_id,
         }
-        if cleanup_result is not None:
-            payload["runtime_cleanup"] = cleanup_result
+        cleanup_batch = batch_payload.get("runtime_cleanup_batch")
+        if isinstance(cleanup_batch, dict):
+            session_results = cleanup_batch.get("session_results")
+            if isinstance(session_results, list):
+                cleanup_result = next(
+                    (
+                        item
+                        for item in session_results
+                        if isinstance(item, dict) and item.get("session_id") == thread.runtime_session_id
+                    ),
+                    None,
+                )
+                if cleanup_result is not None:
+                    payload["runtime_cleanup"] = {
+                        **cleanup_result,
+                        "app_cleanup": cleanup_batch.get("app_cleanup", []),
+                        "inter_agent_cleanup": cleanup_batch.get("inter_agent_cleanup", []),
+                    }
         return json_response(start_response, payload)
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
 
@@ -1348,7 +1331,7 @@ def _handle_thread_clear(
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     threads = list_runtime_threads(state.runtime_store, workspace_id=context.workspace_id)
     for thread in threads:
-        forbidden_reason = _thread_cleanup_forbidden_reason(
+        forbidden_reason = thread_cleanup_forbidden_reason(
             state,
             context,
             runtime_session_id=thread.runtime_session_id,
@@ -1358,31 +1341,21 @@ def _handle_thread_clear(
         if forbidden_reason is not None:
             return json_response(start_response, {"error": forbidden_reason}, status="403 Forbidden")
     reason = str(body.get("reason") or "runtime_threads_cleared").strip()
-
-    def cleanup(session_id: str, cleanup_reason: str) -> dict[str, object]:
-        return cleanup_runtime_session(state, session_id=session_id, reason=cleanup_reason, start_path=start_path, publish_thread_events=False)
-
-    deleted_threads, cleanup_results = clear_runtime_threads_complete(
-        state.runtime_store,
-        workspace_id=context.workspace_id,
-        cleanup_runtime=cleanup,
-        reason=reason,
-    )
-    _publish_thread_change(
+    payload = delete_runtime_threads(
         state,
-        workspace_id=context.workspace_id,
+        context,
+        threads=threads,
+        reason=reason,
+        start_path=start_path,
         action="cleared",
-        deleted_thread_ids=[thread.thread_id for thread in deleted_threads],
-        deleted_runtime_session_ids=[thread.runtime_session_id for thread in deleted_threads if thread.runtime_session_id],
     )
+    cleanup_batch = payload.get("runtime_cleanup_batch")
+    cleanup_results = cleanup_batch.get("session_results", []) if isinstance(cleanup_batch, dict) else []
     return json_response(
         start_response,
         {
-            "deleted_thread_ids": [thread.thread_id for thread in deleted_threads],
-            "deleted_runtime_session_ids": [thread.runtime_session_id for thread in deleted_threads if thread.runtime_session_id],
+            **payload,
             "runtime_cleanup_results": cleanup_results,
-            "action": "cleared",
-            "page_hint": {"sort": "recency_desc"},
         },
     )
 
@@ -2248,6 +2221,15 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
 
     if path == "/api/runtime/threads":
         return _handle_thread_collection(state, context, method, body, start_response, query_string=query_string)
+    if path == "/api/runtime/threads/delete-batch":
+        return handle_thread_delete_batch(
+            state,
+            context,
+            method,
+            body,
+            start_response,
+            start_path=start_path,
+        )
     if path == "/api/runtime/threads/clear":
         return _handle_thread_clear(state, context, method, body, start_response, start_path=start_path)
     if path == "/api/runtime/sessions":

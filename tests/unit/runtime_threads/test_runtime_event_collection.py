@@ -29,6 +29,27 @@ class RuntimeEventCollectionTest(unittest.TestCase):
                 ["event-4", "event-5", "event-6"],
             )
 
+    def test_delete_session_partition_does_not_decode_history_archives_for_counting(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        collection = RuntimeEventJsonCollection(start_path=repo_root)
+        history_root = (
+            repo_root
+            / "workspaces"
+            / "default"
+            / "runtime"
+            / "sessions"
+            / "session-1"
+            / "events-history"
+        )
+        history_root.mkdir(parents=True)
+        (history_root / "000000.json").write_text("archive bytes need not be decoded", encoding="utf-8")
+
+        with patch.object(collection, "_read_documents", side_effect=AssertionError("history decoded")):
+            deleted = collection.delete_session_partition(session_id="session-1", workspace_id="default")
+
+        self.assertEqual(deleted, 0)
+        self.assertFalse(history_root.exists())
+
     @staticmethod
     def _append_event(collection: RuntimeEventJsonCollection, *, index: int, max_documents: int) -> None:
         collection.append_bounded_upsert(

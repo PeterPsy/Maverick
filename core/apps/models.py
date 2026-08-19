@@ -163,6 +163,7 @@ class AppRuntimePermissionDeclaration:
 
     create_sessions: bool
     cleanup_sessions: bool
+    receive_cleanup_callbacks: bool = False
 
 
 @dataclass(frozen=True)

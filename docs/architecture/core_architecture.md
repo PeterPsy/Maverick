@@ -1802,7 +1802,11 @@ Deleting a chat thread is also a runtime ownership operation when the thread ref
 
 The chat product model is a strict one-to-one runtime invariant for user-visible sessions: one chat is one core runtime thread, one `session_kind=chat_root` runtime session, one selected-provider app-server context, and one canonical session root under `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/`. A chat thread must not exist without a user-visible runtime session, and every `thread_visibility=user` runtime session in the active workspace must be represented by exactly one runtime thread before the chat list is returned. `thread_visibility=hidden` sessions are runtime-operational records for future inter-agent participants and must not appear as standalone chats. The runtime thread id should use the runtime session id for core-created chat/session entries so user-facing chat deletion can target the same conceptual object without a second identifier mapping.
 
-The core owns the delete operation. `DELETE /api/runtime/threads/<thread_id>` removes the core thread record and performs full cleanup of the linked runtime session. `POST /api/runtime/threads/clear` applies the same operation to every runtime thread in the active workspace.
+The core owns the delete operation. `DELETE /api/runtime/threads/<thread_id>` removes the core thread record and performs full cleanup of the linked runtime session. `POST /api/runtime/threads/delete-batch` accepts up to 20 deduplicated thread ids, authorizes every resolvable thread before mutation, expands root and active inter-agent child sessions once, and returns an explicit `deleted` or `not_found` result for every requested id. `POST /api/runtime/threads/clear` applies the same batch cleanup operation to every runtime thread in the active workspace.
+
+A synchronous thread-delete batch invokes each eligible app cleanup callback once with the complete deduplicated session-id list, deletes the selected thread records with one collection mutation, and publishes one workspace thread-catalog delta. Physical runtime cleanup remains complete before the response; batching must not weaken process termination, authorization, hidden-session policy, or canonical-root safety.
+
+Runtime persistence adapters expose multi-record deletion so shared workspace or control-plane collections are read and rewritten once per session batch rather than once per matching record. Session-partitioned event archives are removed as files; cleanup must not decode complete historical archives solely to produce a deletion counter before deleting the same canonical session root.
 
 The chat app must not implement a parallel thread delete path, return cleanup requests, or rely on hidden app-specific side effects in the platform app mount.
 
@@ -1810,8 +1814,8 @@ The runtime cleanup endpoint must remove the runtime session completely.
 That includes terminating any live provider subprocesses registered for that runtime session, cancelling queued or active turns, deleting runtime-session records, deleting linked core runtime thread records, removing canonical runtime files, and invoking app-declared cleanup hooks for app-owned data linked to that runtime session.
 Process termination remains a core runtime responsibility, but app-owned cleanup must be exposed through generic lifecycle orchestration rather than through app-specific platform-host behavior.
 
-Apps that own runtime-linked metadata or files must declare a lifecycle or capability hook such as `runtime_session_cleanup`.
-The core invokes every enabled app that declares that hook with a generic context containing `workspace_id`, `local_app_id`, `public_app_id`, `runtime_session_id`, and canonical runtime paths.
+Apps that own runtime-linked metadata or files must opt in with `permissions.runtime.receive_cleanup_callbacks` and expose the declared cleanup backend action.
+The core invokes every enabled opted-in app with a generic context containing `workspace_id`, `local_app_id`, `public_app_id`, the deduplicated `runtime_session_ids`, and canonical runtime paths.
 The app decides how to clean its own records under `data/<local_app_id>/`, and the hook must be idempotent, bounded by hook timeout, and governed by the same app contract and workspace authorization rules as other lifecycle hooks.
 
 Therefore a persisted core chat thread must not outlive its runtime event history in a way that silently appears as an empty new chat.

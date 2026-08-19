@@ -3,6 +3,7 @@ import type { ChatProject, ChatThread } from "../../api/client";
 import {
   applyThreadCatalogPayload,
   deleteThread,
+  deleteThreads,
   getChatViewFilter,
   listInterAgentRuns,
   listRuntimeSessionEvents,
@@ -88,8 +89,8 @@ export function useChatSidebarState() {
   const isBulkDeletePendingRef = useRef(isBulkDeletePending);
   const confirmSelectedThreadDeletionRef = useRef<() => Promise<void>>(async () => {});
   const searchTerm = searchQuery.trim();
-  const threadRefreshKey = useMemo(
-    () => threads.map((thread) => `${thread.thread_id}:${thread.runtime_session_id}:${thread.updated_at}:${thread.availability}`).sort().join("|"),
+  const threadCatalogIdentityKey = useMemo(
+    () => threads.map((thread) => `${thread.thread_id}:${thread.runtime_session_id}`).sort().join("|"),
     [threads],
   );
   const filteredThreads = useMemo(
@@ -252,6 +253,9 @@ export function useChatSidebarState() {
   }, []);
 
   useEffect(() => {
+    if (!workspaceId) {
+      return;
+    }
     let disposed = false;
     listInterAgentRuns()
       .then((payload) => {
@@ -268,7 +272,7 @@ export function useChatSidebarState() {
     return () => {
       disposed = true;
     };
-  }, [threadRefreshKey]);
+  }, [threadCatalogIdentityKey, workspaceId]);
 
   useEffect(() => {
     if (!hasLoadedViewFilter) {
@@ -572,12 +576,15 @@ export function useChatSidebarState() {
     setError(null);
     projectActions.cancelProjectDeletion();
     try {
-      for (const threadId of threadIds) {
-        const payload = await deleteThread(threadId);
-        deletedThreadIds.add(threadId);
-        setThreads((current) => applyThreadCatalogPayload(current, payload));
-        updateFromSidebarPayload(payload, applyProjects);
+      const payload = await deleteThreads(threadIds);
+      for (const result of payload.results) {
+        if (result.status === "deleted" || result.status === "not_found") {
+          deletedThreadIds.add(result.thread_id);
+        }
       }
+      const localPayload = { ...payload, deleted_thread_ids: Array.from(deletedThreadIds) };
+      setThreads((current) => applyThreadCatalogPayload(current, localPayload));
+      setMultiAgentThreadIds((current) => new Set(Array.from(current).filter((threadId) => !deletedThreadIds.has(threadId))));
       projectActions.clearProjectEditing();
       setError(null);
     } catch (deleteError) {

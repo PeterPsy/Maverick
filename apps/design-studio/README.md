@@ -258,7 +258,9 @@ The contract declares frontend, backend, CLI, MCP, lifecycle hooks, a bundled sk
 
 Because Design Studio can create runtime sessions, it also implements the
 trusted platform `runtime.cleanup_sessions` hook declared by
-`permissions.runtime.cleanup_sessions`. Full runtime cleanup removes only the
+`permissions.runtime.receive_cleanup_callbacks`. The separate
+`permissions.runtime.cleanup_sessions` permission allows the app to request
+cleanup of sessions it owns. Full runtime cleanup removes only the
 matching app-owned OpenDesign correlation records and conversation bindings;
 ordinary user backend calls cannot invoke that destructive hook.
 

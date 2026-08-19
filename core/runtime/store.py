@@ -142,6 +142,9 @@ class DocumentCollection(Protocol):
     def delete_one(self, query: dict[str, Any]) -> Any:
         ...
 
+    def delete_many(self, query: dict[str, Any]) -> Any:
+        ...
+
 
 @dataclass(frozen=True)
 class RuntimeCollections:
@@ -445,6 +448,9 @@ class RuntimeStore(Protocol):
     def delete_session_records(self, session_id: str) -> dict[str, int]:
         ...
 
+    def delete_session_records_batch(self, session_ids: list[str]) -> dict[str, dict[str, int]]:
+        ...
+
     def save_thread(self, record: RuntimeThreadRecord) -> RuntimeThreadRecord:
         ...
 
@@ -458,6 +464,9 @@ class RuntimeStore(Protocol):
         ...
 
     def delete_thread(self, thread_id: str) -> bool:
+        ...
+
+    def delete_threads(self, *, workspace_id: str, thread_ids: list[str]) -> int:
         ...
 
     def save_api_token(self, record: RuntimeApiTokenRecord) -> RuntimeApiTokenRecord:
@@ -924,111 +933,70 @@ class RuntimeDocumentStore:
         ]
 
     def delete_session_records(self, session_id: str) -> dict[str, int]:
-        session_document = self.collections.sessions.find_one({"session_id": session_id}) or {}
-        workspace_id = session_document.get("workspace_id") if isinstance(session_document, dict) else None
-        deleted = {
-            "sessions": 1 if session_document else 0,
-            "turns": 0,
-            "events": 0,
-            "processes": 0,
-            "states": 0,
-            "provider_states": 0,
-            "api_tokens": 0,
-            "client_messages": 0,
-            "app_streams": 0,
-            "app_stream_events": 0,
-            "tool_invocations": 0,
-            "tool_confirmation_grants": 0,
-            "egress_decisions": 0,
+        return self.delete_session_records_batch([session_id]).get(
+            session_id,
+            _empty_session_deletion_counts(),
+        )
+
+    def delete_session_records_batch(self, session_ids: list[str]) -> dict[str, dict[str, int]]:
+        normalized_ids = list(dict.fromkeys(item.strip() for item in session_ids if item.strip()))
+        if not normalized_ids:
+            return {}
+        session_documents = {
+            session_id: self.collections.sessions.find_one({"session_id": session_id}) or {}
+            for session_id in normalized_ids
         }
-        deleted["turns"] = _delete_session_records(
-            self.collections.turns,
-            session_id=session_id,
-            workspace_id=workspace_id,
-            identity_field="turn_id",
-        )
-        deleted["events"] = _delete_session_records(
-            self.collections.events,
-            session_id=session_id,
-            workspace_id=workspace_id,
-            identity_field="event_id",
-        )
-        deleted["processes"] = _delete_session_records(
-            self.collections.processes,
-            session_id=session_id,
-            workspace_id=workspace_id,
-            identity_field="process_id",
-        )
-        deleted["states"] = _delete_session_records(
-            self.collections.states,
-            session_id=session_id,
-            workspace_id=workspace_id,
+        workspace_by_session_id = {
+            session_id: (
+                str(document.get("workspace_id") or "").strip()
+                if isinstance(document, dict)
+                else ""
+            )
+            or None
+            for session_id, document in session_documents.items()
+        }
+        deleted = {
+            session_id: _empty_session_deletion_counts()
+            for session_id in normalized_ids
+        }
+        collections = [
+            ("turns", self.collections.turns, "turn_id"),
+            ("events", self.collections.events, "event_id"),
+            ("processes", self.collections.processes, "process_id"),
+            ("states", self.collections.states, "session_id"),
+            ("provider_states", self._provider_states, "session_id"),
+            ("tool_invocations", self._tool_invocations, "invocation_id"),
+            ("tool_confirmation_grants", self._tool_confirmation_grants, "grant_id"),
+            ("egress_decisions", self._egress_decisions, "decision_id"),
+        ]
+        optional_collections = [
+            ("api_tokens", self.collections.api_tokens, "token_id"),
+            ("client_messages", self.collections.client_messages, "client_message_id"),
+            ("app_stream_events", self.collections.app_stream_events, "event_id"),
+            ("app_streams", self.collections.app_streams, "stream_id"),
+        ]
+        for name, collection, identity_field in [
+            *collections,
+            *((name, collection, identity) for name, collection, identity in optional_collections if collection is not None),
+        ]:
+            counts = _delete_session_record_batch(
+                collection,
+                session_ids=normalized_ids,
+                workspace_by_session_id=workspace_by_session_id,
+                identity_field=identity_field,
+            )
+            for session_id, count in counts.items():
+                deleted[session_id][name] = count
+        _delete_session_record_batch(
+            self.collections.sessions,
+            session_ids=normalized_ids,
+            workspace_by_session_id=workspace_by_session_id,
             identity_field="session_id",
         )
-        deleted["provider_states"] = _delete_session_records(
-            self._provider_states,
-            session_id=session_id,
-            workspace_id=workspace_id,
-            identity_field="session_id",
-        )
-        deleted["tool_invocations"] = _delete_session_records(
-            self._tool_invocations,
-            session_id=session_id,
-            workspace_id=workspace_id,
-            identity_field="invocation_id",
-        )
-        deleted["tool_confirmation_grants"] = _delete_session_records(
-            self._tool_confirmation_grants,
-            session_id=session_id,
-            workspace_id=workspace_id,
-            identity_field="grant_id",
-        )
-        deleted["egress_decisions"] = _delete_session_records(
-            self._egress_decisions,
-            session_id=session_id,
-            workspace_id=workspace_id,
-            identity_field="decision_id",
-        )
-        if self.collections.api_tokens is not None:
-            deleted["api_tokens"] = _delete_session_records(
-                self.collections.api_tokens,
-                session_id=session_id,
-                workspace_id=workspace_id,
-                identity_field="token_id",
-            )
-        if self.collections.client_messages is not None:
-            deleted["client_messages"] = _delete_session_records(
-                self.collections.client_messages,
-                session_id=session_id,
-                workspace_id=workspace_id,
-                identity_field="client_message_id",
-            )
-        if self.collections.app_stream_events is not None:
-            deleted["app_stream_events"] = _delete_session_records(
-                self.collections.app_stream_events,
-                session_id=session_id,
-                workspace_id=workspace_id,
-                identity_field="event_id",
-            )
-        if self.collections.app_streams is not None:
-            stream_query = {"session_id": session_id}
-            if workspace_id:
-                stream_query["workspace_id"] = workspace_id
-            for document in self.collections.app_streams.find(stream_query):
-                stream_id = document.get("stream_id")
-                if not isinstance(stream_id, str):
-                    continue
-                delete_query = {"stream_id": stream_id}
-                if workspace_id:
-                    delete_query["workspace_id"] = workspace_id
-                self.collections.app_streams.delete_one(delete_query)
-                deleted["app_streams"] += 1
-        session_delete_query = {"session_id": session_id}
-        if workspace_id:
-            session_delete_query["workspace_id"] = workspace_id
-        self.collections.sessions.delete_one(session_delete_query)
-        self._forget_session_partition(session_id)
-        self._forget_turns_for_session(session_id)
+        for session_id, document in session_documents.items():
+            deleted[session_id]["sessions"] = 1 if document else 0
+            self._forget_session_partition(session_id)
+            self._forget_turns_for_session(session_id)
         return deleted
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
@@ -2275,6 +2243,21 @@ class RuntimeDocumentStore:
         self.collections.threads.delete_one({"thread_id": thread_id})
         return True
 
+    def delete_threads(self, *, workspace_id: str, thread_ids: list[str]) -> int:
+        normalized_ids = list(dict.fromkeys(thread_id.strip() for thread_id in thread_ids if thread_id.strip()))
+        if not normalized_ids:
+            return 0
+        query = {"workspace_id": workspace_id, "thread_id": {"$in": normalized_ids}}
+        delete_many = getattr(self.collections.threads, "delete_many", None)
+        if callable(delete_many):
+            deleted = delete_many(query)
+            return int(deleted) if isinstance(deleted, int) else 0
+        deleted = 0
+        for thread_id in normalized_ids:
+            if self.delete_thread(thread_id):
+                deleted += 1
+        return deleted
+
     def _insert_one_if_absent(
         self,
         collection: DocumentCollection,
@@ -2409,29 +2392,69 @@ def _app_stream_event_from_document(document: dict[str, Any]) -> RuntimeAppStrea
     return RuntimeAppStreamEventRecord(**document)
 
 
-def _delete_session_records(
+def _empty_session_deletion_counts() -> dict[str, int]:
+    return {
+        "sessions": 0,
+        "turns": 0,
+        "events": 0,
+        "processes": 0,
+        "states": 0,
+        "provider_states": 0,
+        "api_tokens": 0,
+        "client_messages": 0,
+        "app_streams": 0,
+        "app_stream_events": 0,
+        "tool_invocations": 0,
+        "tool_confirmation_grants": 0,
+        "egress_decisions": 0,
+    }
+
+
+def _delete_session_record_batch(
     collection: DocumentCollection,
     *,
-    session_id: str,
-    workspace_id: str | None,
+    session_ids: list[str],
+    workspace_by_session_id: dict[str, str | None],
     identity_field: str,
-) -> int:
+) -> dict[str, int]:
+    counts = {session_id: 0 for session_id in session_ids}
     delete_session_partition = getattr(collection, "delete_session_partition", None)
     if callable(delete_session_partition):
-        return int(delete_session_partition(session_id=session_id, workspace_id=workspace_id))
-    deleted = 0
-    find_query = {"session_id": session_id}
-    if workspace_id:
-        find_query["workspace_id"] = workspace_id
-    for document in collection.find(find_query):
-        identity_value = document.get(identity_field)
-        if isinstance(identity_value, str):
+        for session_id in session_ids:
+            counts[session_id] = int(
+                delete_session_partition(
+                    session_id=session_id,
+                    workspace_id=workspace_by_session_id[session_id],
+                )
+            )
+        return counts
+
+    grouped_session_ids: dict[str | None, list[str]] = {}
+    for session_id in session_ids:
+        grouped_session_ids.setdefault(workspace_by_session_id[session_id], []).append(session_id)
+    for workspace_id, grouped_ids in grouped_session_ids.items():
+        find_query: dict[str, object] = {"session_id": {"$in": grouped_ids}}
+        if workspace_id:
+            find_query["workspace_id"] = workspace_id
+        documents = collection.find(find_query)
+        for document in documents:
+            session_id = str(document.get("session_id") or "").strip()
+            if session_id in counts:
+                counts[session_id] += 1
+        delete_many = getattr(collection, "delete_many", None)
+        if callable(delete_many):
+            delete_many(find_query)
+            continue
+        for document in documents:
+            identity_value = document.get(identity_field)
+            session_id = str(document.get("session_id") or "").strip()
+            if not isinstance(identity_value, str) or session_id not in counts:
+                continue
             delete_query = {identity_field: identity_value, "session_id": session_id}
             if workspace_id:
                 delete_query["workspace_id"] = workspace_id
             collection.delete_one(delete_query)
-            deleted += 1
-    return deleted
+    return counts
 
 
 def _client_message_claim_from_document(document: dict[str, Any]) -> RuntimeClientMessageClaim:

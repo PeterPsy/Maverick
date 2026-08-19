@@ -63,5 +63,24 @@ class InMemoryCollection:
             self._documents = [
                 document
                 for document in self._documents
-                if not all(document.get(key) == value for key, value in query.items())
+                if not _matches(document, query)
             ]
+
+    def delete_many(self, query: dict[str, Any]) -> int:
+        with self._lock:
+            retained = [document for document in self._documents if not _matches(document, query)]
+            deleted = len(self._documents) - len(retained)
+            self._documents = retained
+            return deleted
+
+
+def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
+    for key, expected in query.items():
+        actual = document.get(key)
+        if isinstance(expected, dict) and set(expected) == {"$in"}:
+            candidates = expected["$in"]
+            if not isinstance(candidates, (list, tuple, set, frozenset)) or actual not in candidates:
+                return False
+        elif actual != expected:
+            return False
+    return True

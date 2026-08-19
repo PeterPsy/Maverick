@@ -357,6 +357,21 @@ export type DeleteThreadPayload = ChatSidebarPayload & {
   runtime_cleanup?: RuntimeCleanup;
 };
 
+export type DeleteThreadsPayload = ChatSidebarPayload & {
+  deleted_runtime_session_ids: string[];
+  results: Array<{
+    thread_id: string;
+    runtime_session_id?: string;
+    status: "deleted" | "not_found";
+  }>;
+  runtime_cleanup_batch?: {
+    requested_session_ids: string[];
+    expanded_session_ids: string[];
+    session_results: RuntimeCleanup[];
+    timings_ms: Record<string, number>;
+  };
+};
+
 export type RuntimeSession = {
   session_id: string;
   workspace_id: string;

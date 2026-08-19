@@ -89,6 +89,17 @@ class JsonFileCollection:
                 documents = [document for document in self._read_documents() if not _matches(document, query)]
                 self._write_documents(documents)
 
+    def delete_many(self, query: dict[str, Any]) -> int:
+        """Delete every matching document with one locked collection rewrite."""
+        with self._lock:
+            with self._process_lock(exclusive=True):
+                documents = self._read_documents()
+                retained = [document for document in documents if not _matches(document, query)]
+                deleted = len(documents) - len(retained)
+                if deleted:
+                    self._write_documents(retained)
+                return deleted
+
     def replace_all(self, documents: list[dict[str, Any]]) -> None:
         """Replace the full collection through the same lock and atomic write path."""
         if not all(isinstance(document, dict) for document in documents):
@@ -165,7 +176,14 @@ class JsonFileCollection:
 
 
 def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
-    return all(document.get(key) == value for key, value in query.items())
+    return all(_matches_value(document.get(key), value) for key, value in query.items())
+
+
+def _matches_value(actual: Any, expected: Any) -> bool:
+    if isinstance(expected, dict) and set(expected) == {"$in"}:
+        candidates = expected["$in"]
+        return isinstance(candidates, (list, tuple, set, frozenset)) and actual in candidates
+    return actual == expected
 
 
 def _query_is_contained(query: dict[str, Any], payload: dict[str, Any]) -> bool:

@@ -13,7 +13,7 @@ from core.authorization.service import require_runtime_session_operation
 from core.identity.models import UserRecord
 from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeThreadNotFoundError
 from core.runtime.runtime_session import runtime_session_allows_user_thread
-from core.runtime.runtime_threads import delete_runtime_thread_complete, thread_payload
+from core.runtime.runtime_threads import thread_payload
 
 
 def apply_runtime_cleanup_requests(
@@ -42,6 +42,7 @@ def apply_runtime_cleanup_requests(
         raise AppHostingError(f"App `{app_id}` requested runtime cleanup without declaring runtime.cleanup_sessions.")
 
     from core.api.runtime_cleanup import cleanup_runtime_session
+    from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 
     cleanup_results: list[dict[str, object]] = []
     deleted_thread_ids: list[str] = []
@@ -67,38 +68,40 @@ def apply_runtime_cleanup_requests(
                     user=user,
                     thread_id=thread_id,
                 )
+            batch_threads = []
             for thread_id in thread_ids:
                 if thread_id in seen_thread_ids:
                     continue
                 seen_thread_ids.add(thread_id)
-
-                def cleanup(session_id: str, cleanup_reason: str) -> dict[str, object]:
-                    return cleanup_runtime_session(
-                        state,
-                        session_id=session_id,
-                        reason=cleanup_reason,
-                        start_path=start_path,
-                        publish_thread_events=False,
-                    )
-
                 try:
-                    deleted, cleanup_result = delete_runtime_thread_complete(
-                        state.runtime_store,
-                        thread_id=thread_id,
-                        workspace_id=workspace_id,
-                        cleanup_runtime=cleanup,
-                        reason=reason,
-                    )
+                    thread = state.runtime_store.get_thread(thread_id)
                 except RuntimeThreadNotFoundError:
                     continue
-                if deleted is None:
+                if thread.workspace_id != workspace_id:
                     continue
-                deleted_thread_ids.append(deleted.thread_id)
-                if deleted.runtime_session_id and deleted.runtime_session_id not in deleted_runtime_session_ids:
-                    deleted_runtime_session_ids.append(deleted.runtime_session_id)
-                    seen_session_ids.add(deleted.runtime_session_id)
-                if cleanup_result is not None:
-                    cleanup_results.append(cleanup_result)
+                batch_threads.append(thread)
+            batch_session_ids = list(
+                dict.fromkeys(thread.runtime_session_id for thread in batch_threads if thread.runtime_session_id)
+            )
+            if batch_session_ids:
+                batch_cleanup = cleanup_runtime_sessions_batch(
+                    state,
+                    session_ids=batch_session_ids,
+                    workspace_id=workspace_id,
+                    reason=reason,
+                    start_path=start_path,
+                    delete_threads=False,
+                )
+                cleanup_results.extend(batch_cleanup["session_results"])
+            state.runtime_store.delete_threads(
+                workspace_id=workspace_id,
+                thread_ids=[thread.thread_id for thread in batch_threads],
+            )
+            for thread in batch_threads:
+                deleted_thread_ids.append(thread.thread_id)
+                if thread.runtime_session_id and thread.runtime_session_id not in deleted_runtime_session_ids:
+                    deleted_runtime_session_ids.append(thread.runtime_session_id)
+                    seen_session_ids.add(thread.runtime_session_id)
             continue
         session_ids = _runtime_cleanup_session_ids_for_request(
             state,

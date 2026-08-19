@@ -81,6 +81,10 @@ class MongoDocumentCollection:
     def delete_one(self, query: dict[str, Any]) -> None:
         self.collection.delete_one(deepcopy(query))
 
+    def delete_many(self, query: dict[str, Any]) -> int:
+        result = self.collection.delete_many(deepcopy(query))
+        return int(getattr(result, "deleted_count", 0))
+
     def replace_all(self, documents: list[dict[str, Any]]) -> None:
         """Replace the full collection content."""
         if not all(isinstance(document, dict) for document in documents):

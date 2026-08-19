@@ -51,6 +51,20 @@ class FakeCollection:
                 self.documents.pop(index)
                 return
 
+    def delete_many(self, query: dict) -> int:
+        retained = [document for document in self.documents if not _matches(document, query)]
+        deleted = len(self.documents) - len(retained)
+        self.documents = retained
+        return deleted
+
 
 def _matches(document: dict, query: dict) -> bool:
-    return all(document.get(key) == value for key, value in query.items())
+    for key, expected in query.items():
+        actual = document.get(key)
+        if isinstance(expected, dict) and set(expected) == {"$in"}:
+            candidates = expected["$in"]
+            if not isinstance(candidates, (list, tuple, set, frozenset)) or actual not in candidates:
+                return False
+        elif actual != expected:
+            return False
+    return True

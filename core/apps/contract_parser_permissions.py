@@ -33,7 +33,11 @@ def parse_permissions_section(payload: dict[str, object]) -> AppPermissionsDecla
     providers_payload = _expect_mapping(payload.get("providers", {}), label="permissions.providers")
     _reject_unexpected_fields(secrets_payload, {"read", "write"}, label="permissions.secrets")
     _reject_unexpected_fields(network_payload, {"outbound"}, label="permissions.network")
-    _reject_unexpected_fields(runtime_payload, {"create_sessions", "cleanup_sessions"}, label="permissions.runtime")
+    _reject_unexpected_fields(
+        runtime_payload,
+        {"create_sessions", "cleanup_sessions", "receive_cleanup_callbacks"},
+        label="permissions.runtime",
+    )
     _reject_unexpected_fields(host_payload, {"telemetry"}, label="permissions.host")
     _reject_unexpected_fields(
         providers_payload,
@@ -59,6 +63,11 @@ def parse_permissions_section(payload: dict[str, object]) -> AppPermissionsDecla
         runtime=AppRuntimePermissionDeclaration(
             create_sessions=_expect_bool(runtime_payload, "create_sessions", default=False),
             cleanup_sessions=_expect_bool(runtime_payload, "cleanup_sessions", default=False),
+            receive_cleanup_callbacks=_expect_bool(
+                runtime_payload,
+                "receive_cleanup_callbacks",
+                default=False,
+            ),
         ),
         host=AppHostPermissionDeclaration(telemetry=_expect_bool(host_payload, "telemetry", default=False)),
         providers=AppProviderPermissionDeclaration(

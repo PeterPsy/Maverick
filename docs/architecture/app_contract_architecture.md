@@ -711,7 +711,9 @@ are not part of the projection. The ASGI host asks the app backend to translate
 each bounded ordered batch and advances only after an exact acknowledgement;
 the WSGI path fails with `426` instead of buffering a stream.
 
-Apps that declare `permissions.runtime.cleanup_sessions: true` may return `runtime_cleanup_requests` from a backend result. Requests may identify a `runtime_session_id`, `thread_id`, or app-owned grouping key such as `project_id`; the core resolves those identifiers inside the active workspace and performs runtime thread/session cleanup through the same platform cleanup path used by the runtime thread delete API. The contract permission only enables the app to request cleanup; every existing runtime session is still authorized against the caller, workspace governance, and visibility policy with the normal runtime cleanup policy. Hidden inter-agent participant sessions are excluded from app-requested cleanup and are removed only by inter-agent close/root cleanup cascade. When an app-owned record must be removed only after cleanup succeeds, the result may include `runtime_cleanup_commit` with a backend action and payload; the host runs that commit action after all cleanup requests complete, and the commit remains responsible for mutating app-owned data and publishing declared app events.
+Apps that declare `permissions.runtime.cleanup_sessions: true` may return `runtime_cleanup_requests` from a backend result. Requests may identify a `runtime_session_id`, `thread_id`, or app-owned grouping key such as `project_id`; the core resolves those identifiers inside the active workspace and performs runtime thread/session cleanup through the same platform cleanup path used by the runtime thread delete API. The contract permission only enables the app to request cleanup; it does not register that app to receive cleanup callbacks. Every existing runtime session is still authorized against the caller, workspace governance, and visibility policy with the normal runtime cleanup policy. Hidden inter-agent participant sessions are excluded from app-requested cleanup and are removed only by inter-agent close/root cleanup cascade. When an app-owned record must be removed only after cleanup succeeds, the result may include `runtime_cleanup_commit` with a backend action and payload; the host runs that commit action after all cleanup requests complete, and the commit remains responsible for mutating app-owned data and publishing declared app events.
+
+Apps that own runtime-linked metadata opt in separately with `permissions.runtime.receive_cleanup_callbacks: true`. The core invokes each enabled opted-in app once per cleanup batch and supplies the complete deduplicated `runtime_session_ids` list, including active inter-agent child sessions expanded from selected roots. An app that only requests cleanup, such as Chat when deleting a project, must leave this receiver permission false and is not started for an empty callback.
 
 Apps may return `dependency_backend_requests` from backend, CLI, MCP, or hook results when they need to call the backend surface of a selected provider for one declared dependency alias. Each request includes a `dependency_alias`, optional `request_id`, app-owned `body`, and optional backend `callback`. The core resolves the consumer's selected provider for that alias, verifies that the selected candidate declares the required interface with the `backend` surface, invokes the provider-owned `surface=secret_selector` preflight with no delivered secrets, resolves only the grant-authorized secret requests declared by that preflight or by an explicit `_app_secret_request`, and then calls the provider backend with `surface=dependency_backend`. Public `dependency_backend_request_results` contain only status metadata and callback status; the provider payload is delivered only to the consumer's backend callback with `surface=dependency_backend_request_callback`. This is the generic app-to-app backend surface for cases such as a processing app resolving a Storage local path through the selected `file.local.path` provider; it is not limited to runtime system prompt materialization.
 
@@ -1152,7 +1154,8 @@ Example shape:
   },
   "runtime": {
     "create_sessions": false,
-    "cleanup_sessions": true
+    "cleanup_sessions": true,
+    "receive_cleanup_callbacks": false
   },
   "host": {
     "telemetry": false
@@ -1191,7 +1194,7 @@ The goal is to make lifecycle behavior explicit and automatable.
 
 Lifecycle and cleanup hooks are app-owned behavior declared in the contract and invoked by the core only through generic lifecycle orchestration.
 
-The core must not hardcode one app, such as Chat, into runtime cleanup. If app-owned metadata or files need cleanup when a runtime session is deleted, the app declares a lifecycle or capability hook such as `runtime_session_cleanup`, and the core invokes every enabled app that declares that hook with a generic context containing `workspace_id`, `local_app_id`, `public_app_id`, `runtime_session_id`, and canonical runtime paths. The app decides how to clean its own records under `data/<local_app_id>/`.
+The core must not hardcode one app, such as Chat, into runtime cleanup. If app-owned metadata or files need cleanup when a runtime session is deleted, the app sets `permissions.runtime.receive_cleanup_callbacks: true`, and the core invokes every enabled opted-in app with a generic context containing `workspace_id`, `local_app_id`, `public_app_id`, deduplicated `runtime_session_ids`, and canonical runtime paths. The app decides how to clean its own records under `data/<local_app_id>/`.
 
 Cleanup hooks must be idempotent, bounded by hook timeout, and authorized by the same app contract and workspace governance rules as other lifecycle hooks.
 
@@ -2039,7 +2042,8 @@ The following example shows the kind of app contract Maverick should expect at p
     },
     "runtime": {
       "create_sessions": false,
-      "cleanup_sessions": false
+      "cleanup_sessions": false,
+      "receive_cleanup_callbacks": false
     },
     "host": {
       "telemetry": false

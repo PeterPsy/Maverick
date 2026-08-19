@@ -74,7 +74,8 @@
     },
     "runtime": {
       "create_sessions": true,
-      "cleanup_sessions": true
+      "cleanup_sessions": true,
+      "receive_cleanup_callbacks": true
     },
     "host": {
       "telemetry": false

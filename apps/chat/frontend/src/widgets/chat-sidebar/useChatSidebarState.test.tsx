@@ -11,6 +11,7 @@ import type { ChatThread } from "../../api/client";
 const mocks = vi.hoisted(() => ({
   applyThreadCatalogPayload: vi.fn((current, _payload) => current),
   deleteThread: vi.fn(),
+  deleteThreads: vi.fn(),
   getChatViewFilter: vi.fn(),
   listInterAgentRuns: vi.fn(),
   listChatProjects: vi.fn(),
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../api/client", () => ({
   applyThreadCatalogPayload: mocks.applyThreadCatalogPayload,
   deleteThread: mocks.deleteThread,
+  deleteThreads: mocks.deleteThreads,
   getChatViewFilter: mocks.getChatViewFilter,
   listInterAgentRuns: mocks.listInterAgentRuns,
   listChatProjects: mocks.listChatProjects,
@@ -96,6 +98,7 @@ describe("useChatSidebarState search persistence", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     mocks.listChatProjects.mockResolvedValue({ projects: [] });
+    mocks.deleteThreads.mockResolvedValue({ deleted_thread_ids: [], deleted_runtime_session_ids: [], results: [] });
     mocks.listInterAgentRuns.mockResolvedValue({ items: [] });
     mocks.listRuntimeSessionEvents.mockResolvedValue({ items: [] });
     mocks.listRuntimeThreads.mockResolvedValue({ threads: [] });
@@ -293,6 +296,49 @@ describe("useChatSidebarState search persistence", () => {
     });
 
     expect(button?.textContent).toBe("Live hot chat");
+  });
+
+  it("does not reload inter-agent runs for status-only thread updates", async () => {
+    const initialThread = thread({
+      thread_id: "thread-identity",
+      runtime_session_id: "session-identity",
+      availability: "active",
+    });
+    let setLiveThreads: Dispatch<SetStateAction<ChatThread[]>> | null = null;
+    mocks.useRuntimeThreads.mockImplementation(
+      ({
+        onSnapshot,
+        setThreads,
+      }: {
+        onSnapshot?: (frame: { workspace_id: string }) => void;
+        setThreads: Dispatch<SetStateAction<ChatThread[]>>;
+      }) => {
+        setLiveThreads = setThreads;
+        useEffect(() => {
+          setThreads([initialThread]);
+          onSnapshot?.({ workspace_id: "default" });
+        }, []);
+      },
+    );
+
+    await act(async () => {
+      root.render(<SidebarStateProbe />);
+      await Promise.resolve();
+    });
+    expect(mocks.listInterAgentRuns).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      setLiveThreads?.((current) =>
+        current.map((item) => ({
+          ...item,
+          availability: "free",
+          updated_at: "2026-08-19T00:00:01.000Z",
+        })),
+      );
+      await Promise.resolve();
+    });
+
+    expect(mocks.listInterAgentRuns).toHaveBeenCalledTimes(1);
   });
 });
 

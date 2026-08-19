@@ -50,6 +50,7 @@ class DesignStudioRuntimeBridgeArchitectureProof(unittest.TestCase):
         }
         self.assertTrue(contract["permissions"]["runtime"]["create_sessions"])
         self.assertTrue(contract["permissions"]["runtime"]["cleanup_sessions"])
+        self.assertTrue(contract["permissions"]["runtime"]["receive_cleanup_callbacks"])
         self.assertEqual(contract["entrypoints"]["hooks"]["runtime_event"], "backend/app_backend.py")
         self.assertTrue(
             {

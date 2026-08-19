@@ -190,6 +190,7 @@ def build_app_permissions(
     network_outbound: list[str] | None = None,
     runtime_create_sessions: bool = False,
     runtime_cleanup_sessions: bool = False,
+    runtime_receive_cleanup_callbacks: bool = False,
     host_telemetry: bool = False,
     provider_model_proxy: bool = False,
     provider_credential_source: AppProviderCredentialSource = "none",
@@ -202,6 +203,7 @@ def build_app_permissions(
         runtime=AppRuntimePermissionDeclaration(
             create_sessions=runtime_create_sessions,
             cleanup_sessions=runtime_cleanup_sessions,
+            receive_cleanup_callbacks=runtime_receive_cleanup_callbacks,
         ),
         host=AppHostPermissionDeclaration(telemetry=host_telemetry),
         providers=AppProviderPermissionDeclaration(

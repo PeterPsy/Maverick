@@ -1,5 +1,12 @@
 import { ApiError, requestJson } from "./http";
-import type { ChatProject, ChatProjectsPayload, ChatSidebarPayload, ChatThread, DeleteThreadPayload } from "./types";
+import type {
+  ChatProject,
+  ChatProjectsPayload,
+  ChatSidebarPayload,
+  ChatThread,
+  DeleteThreadPayload,
+  DeleteThreadsPayload,
+} from "./types";
 
 function threadTimestamp(value: string | null | undefined): number {
   if (!value) {
@@ -138,12 +145,19 @@ export async function markThreadRead(threadId: string): Promise<{ thread: ChatTh
 }
 
 export async function deleteThread(threadId: string): Promise<ChatSidebarPayload> {
-  const payload = await requestJson<DeleteThreadPayload>(`/api/runtime/threads/${encodeURIComponent(threadId)}`, {
+  return requestJson<DeleteThreadPayload>(`/api/runtime/threads/${encodeURIComponent(threadId)}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reason: "chat_thread_deleted" }),
   });
-  return withChatProjects(payload);
+}
+
+export function deleteThreads(threadIds: string[]): Promise<DeleteThreadsPayload> {
+  return requestJson<DeleteThreadsPayload>("/api/runtime/threads/delete-batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason: "chat_threads_deleted", thread_ids: threadIds }),
+  });
 }
 
 export async function createProject(name: string): Promise<{ project: ChatProject } & ChatProjectsPayload> {

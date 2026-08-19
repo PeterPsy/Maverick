@@ -49,8 +49,11 @@ class FakeMongoCollection:
                 del self.documents[index]
                 return
 
-    def delete_many(self, query: dict[str, Any]) -> None:
-        self.documents = [document for document in self.documents if not _matches(document, query)]
+    def delete_many(self, query: dict[str, Any]):
+        retained = [document for document in self.documents if not _matches(document, query)]
+        deleted_count = len(self.documents) - len(retained)
+        self.documents = retained
+        return FakeDeleteResult(deleted_count)
 
     def insert_many(self, documents: list[dict[str, Any]]) -> None:
         self.documents.extend(deepcopy(documents))
@@ -149,6 +152,22 @@ class MongoDocumentCollectionTestCase(unittest.TestCase):
 
         self.assertEqual(collection.find_one({"secret_id": "s1"}), {"secret_id": "s1", "value_format": "mvr3secret1"})
 
+    def test_delete_many_returns_the_native_deleted_count(self) -> None:
+        fake = FakeMongoCollection()
+        fake.documents.extend(
+            [
+                {"session_id": "session-1"},
+                {"session_id": "session-2"},
+                {"session_id": "session-3"},
+            ]
+        )
+        collection = MongoDocumentCollection(fake)
+
+        deleted = collection.delete_many({"session_id": {"$in": ["session-1", "session-3"]}})
+
+        self.assertEqual(deleted, 2)
+        self.assertEqual(collection.find({}), [{"session_id": "session-2"}])
+
     def test_reads_normalize_naive_datetimes_to_utc(self) -> None:
         fake = FakeMongoCollection()
         fake.documents.append({"_id": "mongo-id", "session_id": "s1", "expires_at": datetime(2026, 4, 30, 8, 0, 0)})
@@ -161,13 +180,25 @@ class MongoDocumentCollectionTestCase(unittest.TestCase):
 
 
 def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
-    return all(document.get(key) == value for key, value in query.items())
+    for key, expected in query.items():
+        actual = document.get(key)
+        if isinstance(expected, dict) and set(expected) == {"$in"}:
+            if actual not in expected["$in"]:
+                return False
+        elif actual != expected:
+            return False
+    return True
 
 
 class FakeUpdateResult:
     def __init__(self, upserted_id: str | None, *, matched_count: int = 0) -> None:
         self.upserted_id = upserted_id
         self.matched_count = matched_count
+
+
+class FakeDeleteResult:
+    def __init__(self, deleted_count: int) -> None:
+        self.deleted_count = deleted_count
 
 
 if __name__ == "__main__":

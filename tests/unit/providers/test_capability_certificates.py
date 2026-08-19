@@ -336,6 +336,19 @@ class CapabilityCertificateTest(unittest.TestCase):
         )
         self.assertEqual(rehydrated.binding_digest, serialized["binding_digest"])
 
+        reserialized = asdict(rehydrated)
+        round_tripped = execution_binding_from_document(reserialized)
+        self.assertFalse(
+            round_tripped.profile_policy_ceiling_snapshot.allow_filesystem_list
+        )
+        self.assertEqual(round_tripped.binding_digest, serialized["binding_digest"])
+
+        reserialized["workspace_policy_ceiling_snapshot"][
+            "allow_filesystem_list"
+        ] = True
+        with self.assertRaisesRegex(ValueError, "digest"):
+            execution_binding_from_document(reserialized)
+
         serialized["model_id"] = "tampered-model"
         with self.assertRaisesRegex(ValueError, "digest"):
             execution_binding_from_document(serialized)

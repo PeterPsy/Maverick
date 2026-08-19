@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 import hashlib
+from itertools import combinations
 import json
 from typing import Any
 from uuid import uuid4
@@ -139,13 +140,16 @@ def fork_runtime_execution_binding(
 def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutionBinding:
     """Hydrate nested policy and routing records from a stored document."""
     payload = dict(document)
-    legacy_policy_fields = tuple(
+    legacy_compatible_policy_fields = tuple(
         field_name
         for field_name in (
             "profile_policy_ceiling_snapshot",
             "workspace_policy_ceiling_snapshot",
         )
-        if "allow_filesystem_list" not in payload[field_name]
+        if (
+            "allow_filesystem_list" not in payload[field_name]
+            or payload[field_name]["allow_filesystem_list"] is False
+        )
     )
     payload["routing_constraint_snapshot"] = _routing_constraint_from_document(
         payload["routing_constraint_snapshot"]
@@ -159,14 +163,30 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload.setdefault("legacy_inferred", False)
     binding = RuntimeExecutionBinding(**payload)
     digest_matches = binding.binding_digest == canonical_digest(binding)
-    if not digest_matches and legacy_policy_fields:
-        legacy_payload = asdict(binding)
-        for field_name in legacy_policy_fields:
-            legacy_payload[field_name].pop("allow_filesystem_list", None)
-        digest_matches = binding.binding_digest == canonical_digest(legacy_payload)
+    if not digest_matches:
+        digest_matches = _matches_legacy_policy_digest(
+            binding,
+            compatible_policy_fields=legacy_compatible_policy_fields,
+        )
     if not digest_matches:
         raise ValueError("Runtime execution binding digest does not match its immutable payload.")
     return binding
+
+
+def _matches_legacy_policy_digest(
+    binding: RuntimeExecutionBinding,
+    *,
+    compatible_policy_fields: tuple[str, ...],
+) -> bool:
+    """Accept an exact legacy digest after a fail-closed policy field was materialized."""
+    for field_count in range(1, len(compatible_policy_fields) + 1):
+        for field_names in combinations(compatible_policy_fields, field_count):
+            legacy_payload = asdict(binding)
+            for field_name in field_names:
+                legacy_payload[field_name].pop("allow_filesystem_list", None)
+            if binding.binding_digest == canonical_digest(legacy_payload):
+                return True
+    return False
 
 
 def canonical_digest(value: object) -> str:

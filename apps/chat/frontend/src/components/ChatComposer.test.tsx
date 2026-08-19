@@ -156,6 +156,7 @@ afterEach(() => {
 
 async function renderComposer({
   agentOptions = agents,
+  canStopTurn = false,
   onAddAttachments = () => undefined,
   onCapturePageArea,
   mentionItems = [],
@@ -175,6 +176,7 @@ async function renderComposer({
 }: {
   agentOptions?: AgentTypeSummary[];
   agentCatalogLoading?: boolean;
+  canStopTurn?: boolean;
   mentionItems?: MentionItem[];
   onAddAttachments?: (files: File[]) => void;
   onCapturePageArea?: () => void;
@@ -205,7 +207,7 @@ async function renderComposer({
         agentCatalogLoading={agentCatalogLoading}
         agents={agentOptions}
         attachments={[]}
-        canStopTurn={false}
+        canStopTurn={canStopTurn}
         disabled={false}
         error={null}
         executionMode={executionMode}
@@ -283,8 +285,9 @@ describe("delegated source app tools", () => {
 });
 
 describe("composer utilities", () => {
-  it("keeps attachment primary and groups every other composer control in the utility panel", async () => {
+  it("keeps attachment and primary actions outside the secondary utility panel", async () => {
     const { element } = await renderComposer({
+      canStopTurn: true,
       executionMode: "full-access",
       onCapturePageArea: () => undefined,
       transcriptionProviderAppId: "speech",
@@ -306,8 +309,15 @@ describe("composer utilities", () => {
     expect(utilityPanel?.contains(element.querySelector('[aria-label="Agent runner: Default Chat"]'))).toBe(true);
     expect(utilityPanel?.contains(element.querySelector('[aria-label="Model: Codex"]'))).toBe(true);
     expect(utilityPanel?.contains(element.querySelector('[aria-label="Full access runtime"]'))).toBe(true);
-    expect(utilityPanel?.contains(element.querySelector(".chatapp-composer__dictation"))).toBe(true);
-    expect(utilityPanel?.contains(element.querySelector('[aria-label="Send message"]'))).toBe(true);
+    expect(utilityPanel?.contains(element.querySelector(".chatapp-composer__dictation"))).toBe(false);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Stop chat"]'))).toBe(false);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Send message"]'))).toBe(false);
+    expect(
+      element.querySelector(".chatapp-composer__actions")?.contains(element.querySelector('[aria-label="Stop chat"]')),
+    ).toBe(true);
+    expect(
+      element.querySelector(".chatapp-composer__toolbar")?.contains(element.querySelector(".chatapp-composer__actions")),
+    ).toBe(true);
   });
 
   it("opens from the utility button and closes on Escape", async () => {
@@ -1266,7 +1276,8 @@ describe("ChatComposer reference search", () => {
     expect(dictation).toBeInstanceOf(HTMLDivElement);
     expect(send).toBeInstanceOf(HTMLButtonElement);
     expect(actions?.contains(dictation)).toBe(true);
-    expect(element.querySelector(".chatapp-composer-utilities__menu")?.contains(actions)).toBe(true);
+    expect(element.querySelector(".chatapp-composer-utilities__menu")?.contains(actions)).toBe(false);
+    expect(element.querySelector(".chatapp-composer__tools .chatapp-composer__dictation")).toBeNull();
     expect(Array.from(actions?.children || []).indexOf(dictation as Element)).toBeLessThan(
       Array.from(actions?.children || []).indexOf(send as Element),
     );

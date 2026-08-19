@@ -12,8 +12,7 @@
 .chatapp-composer-utilities__menu {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  justify-content: flex-start;
   flex: 1 1 auto;
   min-width: 0;
 }

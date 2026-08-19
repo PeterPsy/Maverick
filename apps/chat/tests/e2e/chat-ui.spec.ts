@@ -125,11 +125,13 @@ test.describe("Chat app browser smoke", () => {
 
       await expect(attachmentButton).toBeVisible();
       await expect(utilityButton).toBeVisible();
-      await expect(composer.locator("button:visible")).toHaveCount(2);
+      await expect(composer.getByRole("button", { name: "Dictate" })).toBeVisible();
+      await expect(composer.getByRole("button", { name: "Send message" })).toBeVisible();
+      await expect(composer.locator("button:visible")).toHaveCount(4);
       await expect(utilityPanel).toBeHidden();
 
       await composer.getByRole("textbox").fill("Mobile utility message");
-      await expect(composer.locator("button:visible")).toHaveCount(2);
+      await expect(composer.locator("button:visible")).toHaveCount(4);
 
       await utilityButton.tap();
 
@@ -137,7 +139,11 @@ test.describe("Chat app browser smoke", () => {
       await expect(composer.getByRole("button", { name: "Apps and references" })).toBeVisible();
       await expect(composer.getByRole("button", { name: "Multi-agent mode: Off" })).toBeVisible();
       await expect(composer.getByRole("button", { name: "Agent runner: Default Chat" })).toBeVisible();
+      await expect(composer.getByRole("button", { name: "Dictate" })).toBeVisible();
       await expect(composer.getByRole("button", { name: "Send message" })).toBeEnabled();
+      await expect(composer.locator(".chatapp-multi-agent-control__label")).toBeVisible();
+      const multiAgentButtonBox = await composer.getByRole("button", { name: "Multi-agent mode: Off" }).boundingBox();
+      expect(multiAgentButtonBox?.width || 0).toBeGreaterThan(60);
 
       const utilityBox = await utilityButton.boundingBox();
       const panelBox = await utilityPanel.boundingBox();

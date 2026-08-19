@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 
-export function ComposerUtilities({ actions, children }: { actions: ReactNode; children: ReactNode }) {
+export function ComposerUtilities({ children }: { children: ReactNode }) {
   const panelId = useId();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -77,7 +77,6 @@ export function ComposerUtilities({ actions, children }: { actions: ReactNode; c
         role="group"
       >
         <div className="chatapp-composer-utilities__tools">{children}</div>
-        {actions}
       </div>
     </div>
   );

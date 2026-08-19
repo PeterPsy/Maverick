@@ -30,7 +30,7 @@ describe("mobile chat composer layout", () => {
     const desktopComposerStyles = readStyle("composer.css");
 
     expect(responsiveStyles).toContain("@media (max-width: 720px)");
-    expect(responsiveStyles).toContain('grid-template-areas: "tools field";');
+    expect(responsiveStyles).toContain('grid-template-areas: "tools field actions";');
     expect(responsiveStyles).toContain(
       ".chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__input-shell",
     );
@@ -93,7 +93,7 @@ describe("mobile chat composer layout", () => {
     expect(sendButton).not.toContain('type="submit"');
   });
 
-  it("shows only attachment and utility launchers until the upward mobile panel opens", () => {
+  it("keeps secondary controls behind the upward mobile utility panel", () => {
     const responsiveStyles = readStyle("responsive.css");
     const utilityTriggerBlock = cssBlock(responsiveStyles, ".chatapp-composer-utilities__trigger");
     const utilityMenuBlock = cssBlock(responsiveStyles, ".chatapp-composer-utilities__menu");
@@ -103,6 +103,37 @@ describe("mobile chat composer layout", () => {
     expect(utilityMenuBlock).toContain("display: none;");
     expect(utilityMenuBlock).toContain("bottom: calc(100% + 0.55rem);");
     expect(openUtilityMenuBlock).toContain("display: grid;");
+  });
+
+  it("uses desktop control sizing and labels inside the mobile utility panel", () => {
+    const responsiveStyles = readStyle("responsive.css");
+    const toolButtonBlock = cssBlock(
+      responsiveStyles,
+      ".chatapp-composer-utilities__menu .chatapp-composer__tool-button",
+    );
+    const multiAgentButtonBlock = cssBlock(
+      responsiveStyles,
+      ".chatapp-composer-utilities__menu .chatapp-multi-agent-control__button",
+    );
+    const runtimeBadgesBlock = cssBlock(
+      responsiveStyles,
+      ".chatapp-composer-utilities__menu .chatapp-composer__runtime-badges",
+    );
+    const providerTriggerBlock = cssBlock(
+      responsiveStyles,
+      ".chatapp-composer-utilities__menu .chatapp-provider-selector__trigger",
+    );
+
+    expect(toolButtonBlock).toContain("width: 2.1rem;");
+    expect(toolButtonBlock).toContain("min-height: 2.1rem;");
+    expect(multiAgentButtonBlock).toContain("width: auto;");
+    expect(multiAgentButtonBlock).toContain("min-width: 4.4rem;");
+    expect(runtimeBadgesBlock).toContain("display: inline-flex;");
+    expect(providerTriggerBlock).toContain("width: fit-content;");
+    expect(responsiveStyles).toContain(
+      ".chatapp-composer-utilities__menu .chatapp-multi-agent-control__label",
+    );
+    expect(responsiveStyles).toContain("position: static;");
   });
 
   it("fades transcript content under installed mobile web app chrome", () => {

@@ -273,29 +273,7 @@ export function ChatComposer({
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">
                 <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
-                <ComposerUtilities
-                  actions={
-                    <ComposerActions
-                      canSend={!disabled && !hasInvalidAttachments(attachments) && Boolean(value.trim() || attachments.length)}
-                      canStopTurn={canStopTurn}
-                      dictationControl={
-                        <ComposerDictationButton
-                          chunkedDictationSupported={transcriptionChunkedDictationSupported}
-                          disabled={disabled || isSending}
-                          maxAudioBytes={transcriptionMaxAudioBytes}
-                          maxDurationSeconds={transcriptionMaxDurationSeconds}
-                          onError={setDictationError}
-                          onTranscript={insertDictationTranscript}
-                          providerAppId={transcriptionProviderAppId}
-                          providerAvailable={transcriptionProviderAvailable}
-                          supportedContentTypes={transcriptionContentTypes}
-                        />
-                      }
-                      onStopTurn={onStopTurn}
-                      onSubmit={onSubmit}
-                    />
-                  }
-                >
+                <ComposerUtilities>
                   {onCapturePageArea ? (
                     <button
                       aria-label="Capture page area"
@@ -368,6 +346,25 @@ export function ChatComposer({
                   />
                 </ComposerUtilities>
               </div>
+              <ComposerActions
+                canSend={!disabled && !hasInvalidAttachments(attachments) && Boolean(value.trim() || attachments.length)}
+                canStopTurn={canStopTurn}
+                dictationControl={
+                  <ComposerDictationButton
+                    chunkedDictationSupported={transcriptionChunkedDictationSupported}
+                    disabled={disabled || isSending}
+                    maxAudioBytes={transcriptionMaxAudioBytes}
+                    maxDurationSeconds={transcriptionMaxDurationSeconds}
+                    onError={setDictationError}
+                    onTranscript={insertDictationTranscript}
+                    providerAppId={transcriptionProviderAppId}
+                    providerAvailable={transcriptionProviderAvailable}
+                    supportedContentTypes={transcriptionContentTypes}
+                  />
+                }
+                onStopTurn={onStopTurn}
+                onSubmit={onSubmit}
+              />
             </div>
           </div>
           {dictationError || error ? (

@@ -33,15 +33,16 @@ class CertificationSuiteManifest:
 
 GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
     suite_id="maverick-google-interactions-agentic-contract",
-    suite_version="4",
+    suite_version="5",
     provider_id="google-ai-studio",
     matrix_path="docs/reference/google_agentic_certification_matrix.md",
-    matrix_revision="2026-08-19-r3",
+    matrix_revision="2026-08-19-r4",
     artifact_paths=(
         "core/providers/agentic_models.py",
         "core/providers/capability_models.py",
         "core/providers/google_agentic_profile.py",
         "core/providers/google_interactions_client.py",
+        "core/providers/google_interactions_models.py",
         "core/providers/google_interactions_request.py",
         "core/providers/google_interactions_stream.py",
         "core/providers/google_interactions_state.py",
@@ -75,6 +76,7 @@ GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
         "scripts/run_google_interactions_probe.py",
         "tests/unit/providers/test_google_interactions_codec.py",
         "tests/unit/providers/test_google_interactions_certification.py",
+        "tests/unit/providers/test_google_interactions_transport.py",
         "tests/unit/runtime_state/test_hosted_agentic_authority_audit.py",
         "tests/unit/runtime_state/test_hosted_agentic_loop.py",
         "tests/unit/runtime_state/test_structured_runtime_failures.py",
@@ -89,6 +91,7 @@ GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
                 "python3", "-m", "unittest",
                 "tests.unit.providers.test_google_interactions_codec",
                 "tests.unit.providers.test_google_interactions_certification",
+                "tests.unit.providers.test_google_interactions_transport",
                 "tests.unit.runtime_state.test_hosted_agentic_authority_audit",
                 "tests.unit.runtime_state.test_hosted_agentic_loop",
                 "tests.unit.runtime_state.test_structured_runtime_failures",
@@ -107,10 +110,10 @@ GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
 
 OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
     suite_id="maverick-openrouter-agentic-contract",
-    suite_version="4",
+    suite_version="5",
     provider_id="openrouter",
     matrix_path="docs/reference/openrouter_agentic_certification_matrix.md",
-    matrix_revision="2026-08-19-r3",
+    matrix_revision="2026-08-19-r4",
     artifact_paths=(
         "core/providers/agentic_models.py",
         "core/providers/capability_models.py",

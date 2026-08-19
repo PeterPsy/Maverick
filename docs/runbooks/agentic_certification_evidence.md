@@ -1,6 +1,6 @@
 # Agentic certification evidence procedure
 
-Status date: 2026-08-18
+Status date: 2026-08-19
 
 Scope: trusted CI or operator-controlled certification worker
 
@@ -40,7 +40,7 @@ and a distinct operator-only live synthetic probe step; both must pass.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 3 \
+  --suite-version 5 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -48,10 +48,10 @@ python3 scripts/run_agentic_certification.py \
   --output "$CERTIFICATION_OUTPUT/google-run.json"
 ```
 
-For OpenRouter use suite id
-`maverick-openrouter-agentic-contract`, matrix revision `2026-08-17-r2`, the
-OpenRouter manifest. The canonical matrices, artifact bundles, commands, and
-live probe entrypoints live in
+For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
+version `5`, matrix revision `2026-08-19-r4`, and the OpenRouter manifest. The
+Google suite uses matrix revision `2026-08-19-r4`. The canonical matrices,
+artifact bundles, commands, and live probe entrypoints live in
 `core/providers/certification_manifests.py`.
 Do not reuse a Google artifact bundle, result, live probe, or evidence reference.
 

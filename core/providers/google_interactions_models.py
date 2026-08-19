@@ -43,7 +43,7 @@ class GoogleInteractionsProtocolError(RuntimeError):
 def google_interaction_error_reason(code: str) -> str:
     if code in {"unauthenticated", "permission_denied"}:
         return "provider_authentication_failed"
-    if code in {"resource_exhausted", "rate_limit_exceeded"}:
+    if code in {"quota_exceeded", "resource_exhausted", "rate_limit_exceeded"}:
         return "provider_rate_limited"
     if code in {"deadline_exceeded", "gateway_timeout"}:
         return "provider_timeout"

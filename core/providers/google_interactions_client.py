@@ -81,8 +81,12 @@ class GoogleInteractionsAgenticClient:
                     for event in decoder.failure_telemetry(raw_event):
                         yield event
                     continue
+                terminal_error = False
                 for event in events:
                     yield event
+                    terminal_error = terminal_error or event.event_type == "error"
+                if terminal_error:
+                    return
             if failure is not None:
                 yield AgenticModelEvent(
                     event_type="error",

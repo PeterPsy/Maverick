@@ -8,6 +8,7 @@ import unittest
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
 from core.providers.google_interactions_probe import (
+    CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS,
     CERTIFIED_REASONING_EFFORTS,
     PROBE_TOOL_NAME,
     probe_google_interactions,
@@ -85,6 +86,16 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
                 for payload in transport.payloads
             ],
             [effort for effort in CERTIFIED_REASONING_EFFORTS for _ in range(2)],
+        )
+        self.assertEqual(
+            [
+                payload["generation_config"]["max_output_tokens"]
+                for payload in transport.payloads
+            ],
+            [
+                CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS
+                for _ in range(2 * len(CERTIFIED_REASONING_EFFORTS))
+            ],
         )
         self.assertEqual(len(result.result_summary_digest), 64)
         self.assertNotIn("OK", repr(result))

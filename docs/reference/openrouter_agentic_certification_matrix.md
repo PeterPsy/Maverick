@@ -1,6 +1,7 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-19
+Matrix revision: `2026-08-19-r4`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==4`
@@ -101,6 +102,14 @@ an immutable result bound to source commit, suite version, adapter artifact
 bundle and this matrix revision, and an Ed25519 signature from a trusted CI key.
 The executable signing and publication workflow is defined in
 `docs/runbooks/agentic_certification_evidence.md`.
+
+The operator probe on 2026-08-19 also found a live router/catalog drift: the
+catalog listed `deepinfra/fp8` as active, ZDR and tool-capable, but the exact
+request was rejected with `provider_no_eligible_endpoint` before any provider
+attempt when `require_parameters: true` and `parallel_tool_calls: false` were
+both present. Removing either control made the request eligible. Neither
+control may be relaxed for this profile, so revision `8` remains uncertified
+and must stay hidden until OpenRouter accepts the pinned combination.
 
 ## Fail-closed conditions
 

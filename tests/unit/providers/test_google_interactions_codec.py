@@ -220,7 +220,10 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
     def test_provider_error_before_acceptance_is_normalized(self) -> None:
         client = GoogleInteractionsAgenticClient(
             transport=_ScriptedTransport(
-                [[{"event_type": "error", "error": {"code": "RESOURCE_EXHAUSTED"}}]]
+                [[
+                    {"event_type": "error", "error": {"code": "quota_exceeded"}},
+                    RuntimeError("provider stream must not be drained after a terminal error"),
+                ]]
             )
         )
 
@@ -229,6 +232,54 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].event_type, "error")
         self.assertEqual(result[0].error_code, "provider_rate_limited")
+
+    def test_documented_terminal_failures_retain_usage_and_report_precise_errors(self) -> None:
+        cases = (
+            ("incomplete", "provider_output_incomplete", None),
+            ("budget_exceeded", "provider_budget_exceeded", None),
+            ("cancelled", "provider_cancelled", None),
+            ("failed", "provider_rate_limited", {"code": "resource_exhausted"}),
+            ("failed", "provider_unavailable", None),
+        )
+        for status, reason_code, provider_error in cases:
+            with self.subTest(status=status, reason_code=reason_code):
+                completed = _completed(
+                    f"interaction-{status}",
+                    status,
+                    input_tokens=20,
+                    output_tokens=128,
+                )
+                if provider_error is not None:
+                    completed["interaction"]["error"] = provider_error
+                stream = [
+                    _created(f"interaction-{status}"),
+                    {
+                        "event_type": "interaction.status_update",
+                        "interaction_id": f"interaction-{status}",
+                        "status": status,
+                    },
+                    completed,
+                ]
+                client = GoogleInteractionsAgenticClient(
+                    transport=_ScriptedTransport([stream])
+                )
+
+                result = asyncio.run(
+                    _events(client, _request(f"request-{status}"))
+                )
+
+                self.assertEqual(
+                    [event.event_type for event in result],
+                    ["accepted", "usage", "error"],
+                )
+                self.assertEqual(result[-1].error_code, reason_code)
+                self.assertEqual(result[-2].usage.output_tokens, 128)
+                self.assertFalse(
+                    any(
+                        event.event_type in {"provider_state", "text_final", "completed"}
+                        for event in result
+                    )
+                )
 
     def test_real_google_codec_runs_through_shared_tool_loop(self) -> None:
         harness = HostedAgenticHarness(

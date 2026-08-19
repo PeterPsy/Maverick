@@ -19,6 +19,7 @@ from core.runtime.execution_binding import canonical_digest
 
 PROBE_TOOL_NAME = "maverick_probe_echo"
 CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
+CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS = 2_048
 
 
 @dataclass(frozen=True)
@@ -146,7 +147,10 @@ def _probe_request(
         tool_results=tool_results,
         provider_private_state=private_state,
         routing_constraint=google_interactions_routing_constraint(),
-        max_output_tokens=128,
+        # Thinking tokens consume the same output budget. A 128-token probe can
+        # terminate as `incomplete` at medium/high before the declared tool is
+        # reached, which tests the budget rather than the function-call contract.
+        max_output_tokens=CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS,
     )
 
 

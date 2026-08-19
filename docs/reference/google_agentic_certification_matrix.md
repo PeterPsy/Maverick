@@ -1,6 +1,7 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-19
+Matrix revision: `2026-08-19-r4`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==4`
@@ -19,6 +20,7 @@ Adapter: `maverick-hosted-tool-loop==4`
 | Continuation | stateful in production; stateless exact-history codec tested |
 | Tool calls | one sequential function call per model step |
 | Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
+| Live probe output budget | 2,048 tokens per request, including thinking tokens |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public`, `workspace_internal_fake` |
 | Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |

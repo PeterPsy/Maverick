@@ -19,10 +19,13 @@ _PUBLIC_MESSAGES = {
     ),
     "profile_definition_invalid": "This model profile is not currently available.",
     "provider_authentication_failed": "The model provider rejected the configured credentials.",
+    "provider_budget_exceeded": "The model provider exhausted the configured token budget.",
+    "provider_cancelled": "The model provider cancelled the request.",
     "provider_credential_authorization_missing": "The configured provider credentials are unavailable.",
     "provider_execution_failed": "The model runtime could not complete the request.",
     "provider_mixed_text_and_tool_call": "The provider returned an incompatible text and tool-call sequence.",
     "provider_no_eligible_endpoint": "No certified provider endpoint is currently available for this model.",
+    "provider_output_incomplete": "The model provider exhausted the output budget before completing the response.",
     "provider_parallel_tool_calls_forbidden": (
         "The provider returned multiple tool calls, but this profile permits only sequential execution. "
         "Those tool calls were not executed."

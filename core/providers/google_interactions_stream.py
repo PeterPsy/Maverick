@@ -23,6 +23,22 @@ from core.providers.google_interactions_state import encode_google_interaction_s
 
 GoogleUsageCost = Callable[[int, int], int | None]
 
+_INTERACTION_STATUS_VALUES = {
+    "queued",
+    "in_progress",
+    "requires_action",
+    "completed",
+    "failed",
+    "cancelled",
+    "incomplete",
+    "budget_exceeded",
+}
+_TERMINAL_FAILURE_REASONS = {
+    "incomplete": "provider_output_incomplete",
+    "budget_exceeded": "provider_budget_exceeded",
+    "cancelled": "provider_cancelled",
+}
+
 
 @dataclass
 class _Step:
@@ -120,7 +136,7 @@ class GoogleInteractionStreamDecoder:
     def _status_update(self, payload: dict[str, object]) -> None:
         if payload.get("interaction_id") not in {None, self.interaction_id}:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
-        if payload.get("status") not in {"in_progress", "requires_action"}:
+        if payload.get("status") not in _INTERACTION_STATUS_VALUES:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
 
     def _start_step(self, payload: dict[str, object]) -> None:
@@ -224,6 +240,24 @@ class GoogleInteractionStreamDecoder:
         elif status == "completed":
             if self.function_calls or not self.output_chunks:
                 raise GoogleInteractionsProtocolError("provider_response_invalid")
+        elif status in _TERMINAL_FAILURE_REASONS:
+            return self._terminal_failure(
+                interaction,
+                reason_code=_TERMINAL_FAILURE_REASONS[status],
+            )
+        elif status == "failed":
+            error = interaction.get("error")
+            code = ""
+            if isinstance(error, dict):
+                code = str(error.get("code") or "").strip().lower()
+            return self._terminal_failure(
+                interaction,
+                reason_code=(
+                    google_interaction_error_reason(code)
+                    if code
+                    else "provider_unavailable"
+                ),
+            )
         else:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         usage = _usage(interaction.get("usage"), self.usage_cost)
@@ -248,6 +282,25 @@ class GoogleInteractionStreamDecoder:
             events.append(self._event("text_final", text="".join(self.output_chunks)))
         self.completed = True
         events.append(self._event("completed", finish_reason=str(status)))
+        return events
+
+    def _terminal_failure(
+        self,
+        interaction: dict[str, object],
+        *,
+        reason_code: str,
+    ) -> list[AgenticModelEvent]:
+        """Retain bounded usage while treating documented terminal failures as errors."""
+        events: list[AgenticModelEvent] = []
+        try:
+            usage = _usage(interaction.get("usage"), self.usage_cost)
+        except GoogleInteractionsProtocolError:
+            usage = None
+        if usage is not None:
+            self.usage_emitted = True
+            events.append(self._event("usage", usage=usage))
+        self.completed = True
+        events.append(self._event("error", error_code=reason_code))
         return events
 
     def _error(self, payload: dict[str, object]) -> AgenticModelEvent:

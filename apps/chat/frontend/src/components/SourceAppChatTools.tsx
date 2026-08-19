@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SourceAppChatMode } from "../api/client";
 import { requestJson } from "../api/http";
 import { sourceAppPresentation } from "../lib/sourceAppPresentation";
@@ -24,12 +24,43 @@ export function SourceAppChatTools({
   const [open, setOpen] = useState(false);
   const [capabilities, setCapabilities] = useState<SourceAppCapabilities | null>(null);
   const [error, setError] = useState("");
+  const controlRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     setCapabilities(null);
     setError("");
     setOpen(false);
   }, [sourceAppId]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (!target || controlRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+      setOpen(false);
+      triggerRef.current?.focus();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || capabilities || !sourceAppId) {
@@ -58,7 +89,7 @@ export function SourceAppChatTools({
   const presentation = sourceAppPresentation(sourceAppId);
   const label = capabilities?.label || presentation?.label || "Source app";
   return (
-    <div className="chatapp-source-tools">
+    <div className="chatapp-source-tools" ref={controlRef}>
       <button
         aria-expanded={open}
         aria-haspopup="menu"
@@ -66,6 +97,7 @@ export function SourceAppChatTools({
         className={`chatapp-composer__tool-button chatapp-source-tools__button ${open ? "is-active" : ""}`}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
+        ref={triggerRef}
         title={`${label} options`}
         type="button"
       >

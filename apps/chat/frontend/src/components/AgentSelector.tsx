@@ -78,8 +78,6 @@ export function AgentSelector({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeIndexRef = useRef(0);
-  const suppressNextClickRef = useRef(false);
-  const suppressClickResetRef = useRef<number | null>(null);
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentTypeId) || null;
   const label = loading && !selectedAgent ? "Loading agents..." : selectedAgent?.name || "Default Chat";
   const isDisabled = disabled || locked;
@@ -171,14 +169,6 @@ export function AgentSelector({
     setActiveIndex(nextIndex);
   }, [isOpen, menuOptions.length]);
 
-  useEffect(() => {
-    return () => {
-      if (suppressClickResetRef.current !== null) {
-        window.clearTimeout(suppressClickResetRef.current);
-      }
-    };
-  }, []);
-
   function selectAgent(agentTypeId: string) {
     onSelect(agentTypeId);
     closeMenu();
@@ -232,32 +222,11 @@ export function AgentSelector({
     if (event.pointerType === "mouse") {
       return;
     }
+    // Preserve composer focus, but wait for click before replacing this trigger with its menu.
     event.preventDefault();
-    event.stopPropagation();
-    suppressNextClickRef.current = true;
-    if (suppressClickResetRef.current !== null) {
-      window.clearTimeout(suppressClickResetRef.current);
-    }
-    suppressClickResetRef.current = window.setTimeout(() => {
-      suppressNextClickRef.current = false;
-      suppressClickResetRef.current = null;
-    }, 700);
-    if (isOpen) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
   }
 
   function handleTriggerClick() {
-    if (suppressNextClickRef.current) {
-      suppressNextClickRef.current = false;
-      if (suppressClickResetRef.current !== null) {
-        window.clearTimeout(suppressClickResetRef.current);
-        suppressClickResetRef.current = null;
-      }
-      return;
-    }
     if (isOpen) {
       closeMenu();
     } else {

@@ -241,6 +241,84 @@
     padding: 0 0.52rem;
   }
 
+  .chatapp-composer__input-shell.has-app-picker .chatapp-composer-utilities__menu.is-open {
+    display: none;
+  }
+
+  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu),
+  .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu),
+  .chatapp-composer-utilities__menu:has(.chatapp-agent-menu),
+  .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) {
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu) .chatapp-composer-utilities__tools,
+  .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu) .chatapp-composer-utilities__tools,
+  .chatapp-composer-utilities__menu:has(.chatapp-agent-menu) .chatapp-composer-utilities__tools,
+  .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-composer-utilities__tools {
+    display: block;
+    width: 100%;
+  }
+
+  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu)
+    .chatapp-composer-utilities__tools > :not(.chatapp-source-tools),
+  .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu)
+    .chatapp-composer-utilities__tools > :not(.chatapp-multi-agent-control),
+  .chatapp-composer-utilities__menu:has(.chatapp-agent-menu)
+    .chatapp-composer-utilities__tools > :not(.chatapp-agent-selector),
+  .chatapp-composer-utilities__menu:has(.chatapp-provider-menu)
+    .chatapp-composer-utilities__tools > :not(.chatapp-composer__runtime-badges) {
+    display: none;
+  }
+
+  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu) .chatapp-source-tools,
+  .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu) .chatapp-multi-agent-control,
+  .chatapp-composer-utilities__menu:has(.chatapp-agent-menu) .chatapp-agent-selector,
+  .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-provider-selector {
+    display: block;
+    width: 100%;
+    max-width: none;
+  }
+
+  .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-composer__runtime-badges {
+    display: block;
+    width: 100%;
+  }
+
+  .chatapp-composer-utilities__menu:has(.chatapp-provider-menu)
+    .chatapp-composer__runtime-badges > :not(.chatapp-provider-selector) {
+    display: none;
+  }
+
+  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu) .chatapp-source-tools__button,
+  .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu) .chatapp-multi-agent-control__button,
+  .chatapp-composer-utilities__menu:has(.chatapp-agent-menu) .chatapp-agent-selector__trigger,
+  .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-provider-selector__trigger {
+    display: none;
+  }
+
+  .chatapp-composer-utilities__menu .chatapp-source-tools__menu,
+  .chatapp-composer-utilities__menu .chatapp-multi-agent-menu,
+  .chatapp-composer-utilities__menu .chatapp-agent-menu,
+  .chatapp-composer-utilities__menu .chatapp-provider-menu {
+    position: static;
+    inset: auto;
+    z-index: auto;
+    width: 100%;
+    max-width: none;
+    max-height: min(18rem, 48dvh);
+    overflow: auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
   .chatapp-composer__icon-action,
   .chatapp-composer__icon-action.is-stop,
   .chatapp-voice-input:not(.is-recording):not(.is-transcribing) .chatapp-voice-input__control {
@@ -257,6 +335,7 @@
   .chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__input-shell,
+  .chatapp-composer:has(.chatapp-composer-utilities__menu.is-open) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-provider-menu) .chatapp-composer__input-shell,
@@ -275,6 +354,7 @@
   .chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__text-area,
+  .chatapp-composer:has(.chatapp-composer-utilities__menu.is-open) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-provider-menu) .chatapp-composer__text-area,
@@ -287,6 +367,7 @@
   .chatapp-composer:has(.chatapp-composer__editor:focus) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chat-ui-input.chatapp-composer__editor,
+  .chatapp-composer:has(.chatapp-composer-utilities__menu.is-open) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-agent-menu) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-provider-menu) .chat-ui-input.chatapp-composer__editor,
@@ -303,6 +384,7 @@
   .chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__toolbar,
+  .chatapp-composer:has(.chatapp-composer-utilities__menu.is-open) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-provider-menu) .chatapp-composer__toolbar,
@@ -316,6 +398,7 @@
   .chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__tools,
+  .chatapp-composer:has(.chatapp-composer-utilities__menu.is-open) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-provider-menu) .chatapp-composer__tools,
@@ -330,6 +413,7 @@
   .chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__actions,
+  .chatapp-composer:has(.chatapp-composer-utilities__menu.is-open) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-provider-menu) .chatapp-composer__actions,
@@ -343,6 +427,7 @@
   .chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__icon-action,
+  .chatapp-composer:has(.chatapp-composer-utilities__menu.is-open) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-provider-menu) .chatapp-composer__icon-action,
@@ -360,6 +445,7 @@
   .chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-voice-input__control,
   .chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-voice-input__control,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-voice-input__control,
+  .chatapp-composer:has(.chatapp-composer-utilities__menu.is-open) .chatapp-voice-input__control,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-voice-input__control,
   .chatapp-composer:has(.chatapp-agent-menu) .chatapp-voice-input__control,
   .chatapp-composer:has(.chatapp-provider-menu) .chatapp-voice-input__control,

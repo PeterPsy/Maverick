@@ -59,8 +59,6 @@ export function ProviderSelector({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const activeIndexRef = useRef(0);
-  const suppressNextClickRef = useRef(false);
-  const suppressClickResetRef = useRef<number | null>(null);
   const normalizedQuery = normalizeProviderQuery(query);
   const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
   const selectedLabel = selectedProvider?.label || "Select model";
@@ -159,14 +157,6 @@ export function ProviderSelector({
     setActiveIndex(nextIndex);
   }, [filteredProviders.length, isOpen]);
 
-  useEffect(() => {
-    return () => {
-      if (suppressClickResetRef.current !== null) {
-        window.clearTimeout(suppressClickResetRef.current);
-      }
-    };
-  }, []);
-
   function selectProvider(providerId: string) {
     onSelect(providerId);
     closeMenu();
@@ -227,32 +217,11 @@ export function ProviderSelector({
     if (event.pointerType === "mouse") {
       return;
     }
+    // Preserve composer focus, but wait for click before replacing this trigger with its menu.
     event.preventDefault();
-    event.stopPropagation();
-    suppressNextClickRef.current = true;
-    if (suppressClickResetRef.current !== null) {
-      window.clearTimeout(suppressClickResetRef.current);
-    }
-    suppressClickResetRef.current = window.setTimeout(() => {
-      suppressNextClickRef.current = false;
-      suppressClickResetRef.current = null;
-    }, 700);
-    if (isOpen) {
-      closeMenu();
-    } else {
-      openMenu();
-    }
   }
 
   function handleTriggerClick() {
-    if (suppressNextClickRef.current) {
-      suppressNextClickRef.current = false;
-      if (suppressClickResetRef.current !== null) {
-        window.clearTimeout(suppressClickResetRef.current);
-        suppressClickResetRef.current = null;
-      }
-      return;
-    }
     if (isOpen) {
       closeMenu();
     } else {

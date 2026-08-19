@@ -112,7 +112,7 @@ test.describe("Chat app browser smoke", () => {
   test.describe("mobile composer", () => {
     test.use({ hasTouch: true });
 
-    test("collapses controls into an upward utility panel", async ({ page }) => {
+    test("replaces the upward utility panel with each selected control", async ({ page }) => {
       await page.setViewportSize({ height: 844, width: 390 });
       await installChatMocks(page);
 
@@ -150,6 +150,51 @@ test.describe("Chat app browser smoke", () => {
       expect(utilityBox).not.toBeNull();
       expect(panelBox).not.toBeNull();
       expect((panelBox?.y || 0) + (panelBox?.height || 0)).toBeLessThan(utilityBox?.y || 0);
+
+      const appsButton = composer.getByRole("button", { name: "Apps and references" });
+      const multiAgentButton = composer.getByRole("button", { name: "Multi-agent mode: Off" });
+      const agentButton = composer.getByRole("button", { name: "Agent runner: Default Chat" });
+      const modelButton = composer.getByRole("button", { name: "Model: Codex" });
+
+      await multiAgentButton.tap();
+      const multiAgentPanel = composer.locator(".chatapp-multi-agent-menu");
+      await expect(multiAgentPanel).toBeVisible();
+      await expect(appsButton).toBeHidden();
+      await expect(agentButton).toBeHidden();
+      await expect(modelButton).toBeHidden();
+      await expect(utilityPanel).toBeVisible();
+      const replacementBox = await multiAgentPanel.boundingBox();
+      const replacedBox = await utilityPanel.boundingBox();
+      expect(replacementBox).not.toBeNull();
+      expect(replacedBox).not.toBeNull();
+      expect(Math.abs((replacementBox?.x || 0) - (replacedBox?.x || 0))).toBeLessThanOrEqual(2);
+      expect(Math.abs((replacementBox?.width || 0) - (replacedBox?.width || 0))).toBeLessThanOrEqual(2);
+
+      await page.keyboard.press("Escape");
+      await expect(multiAgentPanel).toBeHidden();
+      await expect(appsButton).toBeVisible();
+
+      await agentButton.tap();
+      await expect(composer.getByRole("listbox", { name: "Choose agent runner" })).toBeVisible();
+      await expect(appsButton).toBeHidden();
+      await expect(multiAgentButton).toBeHidden();
+
+      await page.keyboard.press("Escape");
+      await expect(composer.getByRole("listbox", { name: "Choose agent runner" })).toBeHidden();
+      await expect(appsButton).toBeVisible();
+
+      await modelButton.tap();
+      await expect(composer.getByRole("listbox", { name: "Choose model" })).toBeVisible();
+      await expect(appsButton).toBeHidden();
+      await expect(agentButton).toBeHidden();
+
+      await page.keyboard.press("Escape");
+      await expect(composer.getByRole("listbox", { name: "Choose model" })).toBeHidden();
+      await expect(appsButton).toBeVisible();
+
+      await appsButton.tap();
+      await expect(utilityPanel).toBeHidden();
+      await expect(composer.locator(".chatapp-mention-panel--app-picker")).toBeVisible();
     });
   });
 
@@ -1046,7 +1091,7 @@ function providerPayload() {
       provider_id: "codex",
       label: "Codex",
       description: "Local test provider",
-      status: "ready",
+      status: "active",
       default_model_family: "gpt",
     },
     items: [
@@ -1054,7 +1099,7 @@ function providerPayload() {
         provider_id: "codex",
         label: "Codex",
         description: "Local test provider",
-        status: "ready",
+        status: "active",
         default_model_family: "gpt",
       },
     ],

@@ -136,6 +136,31 @@ describe("mobile chat composer layout", () => {
     expect(responsiveStyles).toContain("position: static;");
   });
 
+  it("replaces the mobile utility controls with the selected utility panel", () => {
+    const responsiveStyles = readStyle("responsive.css");
+
+    expect(responsiveStyles).toContain(
+      ".chatapp-composer__input-shell.has-app-picker .chatapp-composer-utilities__menu.is-open",
+    );
+    expect(responsiveStyles).toContain(
+      ".chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu)",
+    );
+    expect(responsiveStyles).toContain(
+      ".chatapp-composer-utilities__menu:has(.chatapp-agent-menu)",
+    );
+    expect(responsiveStyles).toContain(
+      ".chatapp-composer-utilities__menu:has(.chatapp-provider-menu)",
+    );
+    expect(responsiveStyles).toContain(
+      ".chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu)",
+    );
+    expect(responsiveStyles).toContain(
+      ".chatapp-composer-utilities__menu .chatapp-multi-agent-menu",
+    );
+    expect(responsiveStyles).toContain("inset: auto;");
+    expect(responsiveStyles).toContain("width: 100%;");
+  });
+
   it("fades transcript content under installed mobile web app chrome", () => {
     const layoutStyles = readStyle("chat/layout.css");
     const responsiveStyles = readStyle("responsive.css");

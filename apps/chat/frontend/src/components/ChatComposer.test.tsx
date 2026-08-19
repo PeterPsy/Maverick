@@ -282,6 +282,35 @@ describe("delegated source app tools", () => {
 
     expect(element.querySelector('[aria-label="OpenDesign options"]')).toBeTruthy();
   });
+
+  it("returns from source app options on Escape", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(
+        JSON.stringify({ label: "OpenDesign", modes: ["design", "plan"] }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        },
+      )),
+    );
+    const { element } = await renderComposer({ sourceAppId: "design-studio" });
+    const sourceButton = element.querySelector('button[aria-label="OpenDesign options"]');
+    expect(sourceButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (sourceButton as HTMLButtonElement).click();
+    });
+
+    expect(element.querySelector(".chatapp-source-tools__menu")).toBeInstanceOf(HTMLDivElement);
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+    });
+
+    expect(element.querySelector(".chatapp-source-tools__menu")).toBeNull();
+    expect(document.activeElement).toBe(sourceButton);
+  });
 });
 
 describe("composer utilities", () => {
@@ -340,6 +369,29 @@ describe("composer utilities", () => {
 
     expect(utilityButton?.getAttribute("aria-expanded")).toBe("false");
     expect(utilityPanel?.classList.contains("is-open")).toBe(false);
+  });
+
+  it("keeps utilities open while Escape returns from the multi-agent panel", async () => {
+    const { element } = await renderComposer();
+    const utilityButton = element.querySelector('[aria-label="Composer utilities"]');
+    const multiAgentButton = element.querySelector('[aria-label="Multi-agent mode: Off"]');
+    expect(utilityButton).toBeInstanceOf(HTMLButtonElement);
+    expect(multiAgentButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (utilityButton as HTMLButtonElement).click();
+      (multiAgentButton as HTMLButtonElement).click();
+    });
+
+    expect(element.querySelector(".chatapp-multi-agent-menu")).toBeInstanceOf(HTMLDivElement);
+    expect(utilityButton?.getAttribute("aria-expanded")).toBe("true");
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+    });
+
+    expect(element.querySelector(".chatapp-multi-agent-menu")).toBeNull();
+    expect(utilityButton?.getAttribute("aria-expanded")).toBe("true");
   });
 });
 
@@ -1244,6 +1296,11 @@ describe("ChatComposer reference search", () => {
 
     await act(async () => {
       dispatchPointerDown(agentButton as HTMLButtonElement, "touch");
+    });
+
+    expect(agentButton?.getAttribute("aria-expanded")).toBe("false");
+
+    await act(async () => {
       (agentButton as HTMLButtonElement).click();
     });
 

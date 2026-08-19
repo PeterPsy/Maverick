@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
 import type { MultiAgentComposerMode } from "../api/client";
 import type { SourceAppChatMode } from "../api/client";
@@ -395,8 +395,40 @@ function MultiAgentModeControl({
 }) {
   const label = multiAgentModeLabel(mode);
   const modeItems: MultiAgentComposerMode[] = groupChatEnabled ? ["off", "auto", "multi", "group_chat"] : ["off", "auto", "multi"];
+  const controlRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (!target || controlRef.current?.contains(target)) {
+        return;
+      }
+      onMenuOpenChange(false);
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+      onMenuOpenChange(false);
+      triggerRef.current?.focus();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpen, onMenuOpenChange]);
+
   return (
-    <div className="chatapp-multi-agent-control">
+    <div className="chatapp-multi-agent-control" ref={controlRef}>
       <button
         aria-expanded={menuOpen}
         aria-haspopup="menu"
@@ -404,6 +436,7 @@ function MultiAgentModeControl({
         className={`chatapp-composer__tool-button chatapp-multi-agent-control__button ${mode !== "off" ? "is-active" : ""}`}
         disabled={disabled}
         onClick={() => onMenuOpenChange(!menuOpen)}
+        ref={triggerRef}
         title="Multi-agent mode"
         type="button"
       >

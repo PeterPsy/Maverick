@@ -15,6 +15,7 @@ import { AttachmentPreviewStrip } from "./AttachmentPreviewStrip";
 import { ComposerActions } from "./ComposerActions";
 import { ComposerDictationButton } from "./ComposerDictationButton";
 import { ComposerRuntimeBadges } from "./ComposerRuntimeBadges";
+import { ComposerUtilities } from "./ComposerUtilities";
 import { MentionPanel } from "./MentionPanel";
 import { QueuedMessageNotice } from "./QueuedMessageNotice";
 import { SourceAppChatTools } from "./SourceAppChatTools";
@@ -272,82 +273,101 @@ export function ChatComposer({
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">
                 <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
-                {delegatedChatSourceAppId(sourceAppId) && onSelectSourceAppChatMode ? (
-                  <SourceAppChatTools
-                    disabled={disabled || isSending}
-                    mode={sourceAppChatMode}
-                    onSelectMode={onSelectSourceAppChatMode}
-                    projectId={sourceAppProjectId}
-                    sourceAppId={sourceAppId}
-                  />
-                ) : null}
-                <button
-                  aria-expanded={isAppMentionPickerOpen}
-                  aria-haspopup="listbox"
-                  aria-label="Apps and references"
-                  className={`chatapp-composer__tool-button ${isAppMentionPickerOpen ? "is-active" : ""}`}
-                  disabled={disabled}
-                  onClick={openAppPicker}
-                  ref={appPickerButtonRef}
-                  type="button"
+                <ComposerUtilities
+                  actions={
+                    <ComposerActions
+                      canSend={!disabled && !hasInvalidAttachments(attachments) && Boolean(value.trim() || attachments.length)}
+                      canStopTurn={canStopTurn}
+                      dictationControl={
+                        <ComposerDictationButton
+                          chunkedDictationSupported={transcriptionChunkedDictationSupported}
+                          disabled={disabled || isSending}
+                          maxAudioBytes={transcriptionMaxAudioBytes}
+                          maxDurationSeconds={transcriptionMaxDurationSeconds}
+                          onError={setDictationError}
+                          onTranscript={insertDictationTranscript}
+                          providerAppId={transcriptionProviderAppId}
+                          providerAvailable={transcriptionProviderAvailable}
+                          supportedContentTypes={transcriptionContentTypes}
+                        />
+                      }
+                      onStopTurn={onStopTurn}
+                      onSubmit={onSubmit}
+                    />
+                  }
                 >
-                  <span aria-hidden="true" className="material-symbols-rounded">
-                    apps
-                  </span>
-                </button>
-                <MultiAgentModeControl
-                  budgetLabel={multiAgentBudgetLabel}
-                  disabled={disabled || isSending}
-                  groupChatEnabled={multiAgentGroupChatEnabled}
-                  menuOpen={multiAgentMenuOpen}
-                  mode={multiAgentMode}
-                  onMenuOpenChange={setMultiAgentMenuOpen}
-                  onSelect={(nextMode) => {
-                    onSelectMultiAgentMode?.(nextMode);
-                    setMultiAgentMenuOpen(false);
-                  }}
-                />
-                <AgentSelector
-                  agents={agents}
-                  disabled={disabled || isSending}
-                  loading={agentCatalogLoading}
-                  locked={agentSelectorLocked}
-                  onSelect={onSelectAgent}
-                  selectedAgentTypeId={selectedAgentTypeId}
-                />
-                <ComposerRuntimeBadges
-                  activeProviderId={activeProviderId}
-                  disabled={disabled || isSending}
-                  executionMode={executionMode}
-                  locked={providerSelectorLocked}
-                  onSelectProvider={onSelectProvider}
-                  onReasoningEffortChange={onReasoningEffortChange}
-                  providers={providers}
-                  reasoningEffort={reasoningEffort}
-                  syntheticDataConfirmationRequired={syntheticDataConfirmationRequired}
-                  syntheticDataConfirmed={syntheticDataConfirmed}
-                  onSyntheticDataConfirmedChange={onSyntheticDataConfirmedChange}
-                />
-              </div>
-              <ComposerActions
-                canSend={!disabled && !hasInvalidAttachments(attachments) && Boolean(value.trim() || attachments.length)}
-                canStopTurn={canStopTurn}
-                dictationControl={
-                  <ComposerDictationButton
-                    chunkedDictationSupported={transcriptionChunkedDictationSupported}
+                  {onCapturePageArea ? (
+                    <button
+                      aria-label="Capture page area"
+                      className="chatapp-composer__tool-button chatapp-composer-utilities__capture-button"
+                      disabled={disabled}
+                      onClick={onCapturePageArea}
+                      title="Capture page area"
+                      type="button"
+                    >
+                      <span aria-hidden="true" className="material-symbols-rounded">
+                        crop_free
+                      </span>
+                    </button>
+                  ) : null}
+                  {delegatedChatSourceAppId(sourceAppId) && onSelectSourceAppChatMode ? (
+                    <SourceAppChatTools
+                      disabled={disabled || isSending}
+                      mode={sourceAppChatMode}
+                      onSelectMode={onSelectSourceAppChatMode}
+                      projectId={sourceAppProjectId}
+                      sourceAppId={sourceAppId}
+                    />
+                  ) : null}
+                  <button
+                    aria-expanded={isAppMentionPickerOpen}
+                    aria-haspopup="listbox"
+                    aria-label="Apps and references"
+                    className={`chatapp-composer__tool-button ${isAppMentionPickerOpen ? "is-active" : ""}`}
+                    disabled={disabled}
+                    onClick={openAppPicker}
+                    ref={appPickerButtonRef}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="material-symbols-rounded">
+                      apps
+                    </span>
+                  </button>
+                  <MultiAgentModeControl
+                    budgetLabel={multiAgentBudgetLabel}
                     disabled={disabled || isSending}
-                    maxAudioBytes={transcriptionMaxAudioBytes}
-                    maxDurationSeconds={transcriptionMaxDurationSeconds}
-                    onError={setDictationError}
-                    onTranscript={insertDictationTranscript}
-                    providerAppId={transcriptionProviderAppId}
-                    providerAvailable={transcriptionProviderAvailable}
-                    supportedContentTypes={transcriptionContentTypes}
+                    groupChatEnabled={multiAgentGroupChatEnabled}
+                    menuOpen={multiAgentMenuOpen}
+                    mode={multiAgentMode}
+                    onMenuOpenChange={setMultiAgentMenuOpen}
+                    onSelect={(nextMode) => {
+                      onSelectMultiAgentMode?.(nextMode);
+                      setMultiAgentMenuOpen(false);
+                    }}
                   />
-                }
-                onStopTurn={onStopTurn}
-                onSubmit={onSubmit}
-              />
+                  <AgentSelector
+                    agents={agents}
+                    disabled={disabled || isSending}
+                    loading={agentCatalogLoading}
+                    locked={agentSelectorLocked}
+                    onSelect={onSelectAgent}
+                    selectedAgentTypeId={selectedAgentTypeId}
+                  />
+                  <ComposerRuntimeBadges
+                    activeProviderId={activeProviderId}
+                    disabled={disabled || isSending}
+                    executionMode={executionMode}
+                    locked={providerSelectorLocked}
+                    onSelectProvider={onSelectProvider}
+                    onReasoningEffortChange={onReasoningEffortChange}
+                    providers={providers}
+                    reasoningEffort={reasoningEffort}
+                    syntheticDataConfirmationRequired={syntheticDataConfirmationRequired}
+                    syntheticDataConfirmed={syntheticDataConfirmed}
+                    onSyntheticDataConfirmedChange={onSyntheticDataConfirmedChange}
+                  />
+                </ComposerUtilities>
+              </div>
             </div>
           </div>
           {dictationError || error ? (

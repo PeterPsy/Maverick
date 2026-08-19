@@ -157,6 +157,7 @@ afterEach(() => {
 async function renderComposer({
   agentOptions = agents,
   onAddAttachments = () => undefined,
+  onCapturePageArea,
   mentionItems = [],
   onReferenceAdd = () => undefined,
   onSearchReferences = async () => [],
@@ -176,6 +177,7 @@ async function renderComposer({
   agentCatalogLoading?: boolean;
   mentionItems?: MentionItem[];
   onAddAttachments?: (files: File[]) => void;
+  onCapturePageArea?: () => void;
   onReferenceAdd?: (reference: AppReference) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
   onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
@@ -213,6 +215,7 @@ async function renderComposer({
         multiAgentGroupChatEnabled={multiAgentGroupChatEnabled}
         multiAgentMode={multiAgentMode}
         onAddAttachments={onAddAttachments}
+        onCapturePageArea={onCapturePageArea}
         onChange={(nextValue) => {
           latestValue = nextValue;
           setValue(nextValue);
@@ -276,6 +279,57 @@ describe("delegated source app tools", () => {
     const { element } = await renderComposer({ sourceAppId: "design-studio" });
 
     expect(element.querySelector('[aria-label="OpenDesign options"]')).toBeTruthy();
+  });
+});
+
+describe("composer utilities", () => {
+  it("keeps attachment primary and groups every other composer control in the utility panel", async () => {
+    const { element } = await renderComposer({
+      executionMode: "full-access",
+      onCapturePageArea: () => undefined,
+      transcriptionProviderAppId: "speech",
+      transcriptionProviderAvailable: true,
+    });
+
+    const attachmentButton = element.querySelector('[aria-label="Add attachments"]');
+    const utilityButton = element.querySelector('[aria-label="Composer utilities"]');
+    const utilityPanel = element.querySelector('[aria-label="Composer utility controls"]');
+
+    expect(attachmentButton).toBeInstanceOf(HTMLButtonElement);
+    expect(utilityButton).toBeInstanceOf(HTMLButtonElement);
+    expect(utilityButton?.textContent).toContain("construction");
+    expect(utilityPanel).toBeInstanceOf(HTMLDivElement);
+    expect(utilityPanel?.contains(attachmentButton)).toBe(false);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Capture page area"]'))).toBe(true);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Apps and references"]'))).toBe(true);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Multi-agent mode: Off"]'))).toBe(true);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Agent runner: Default Chat"]'))).toBe(true);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Model: Codex"]'))).toBe(true);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Full access runtime"]'))).toBe(true);
+    expect(utilityPanel?.contains(element.querySelector(".chatapp-composer__dictation"))).toBe(true);
+    expect(utilityPanel?.contains(element.querySelector('[aria-label="Send message"]'))).toBe(true);
+  });
+
+  it("opens from the utility button and closes on Escape", async () => {
+    const { element } = await renderComposer();
+    const utilityButton = element.querySelector('[aria-label="Composer utilities"]');
+    const utilityPanel = element.querySelector('[aria-label="Composer utility controls"]');
+    expect(utilityButton).toBeInstanceOf(HTMLButtonElement);
+    expect(utilityPanel).toBeInstanceOf(HTMLDivElement);
+
+    await act(async () => {
+      (utilityButton as HTMLButtonElement).click();
+    });
+
+    expect(utilityButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(utilityPanel?.classList.contains("is-open")).toBe(true);
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+    });
+
+    expect(utilityButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(utilityPanel?.classList.contains("is-open")).toBe(false);
   });
 });
 
@@ -1211,7 +1265,8 @@ describe("ChatComposer reference search", () => {
     expect(actions).toBeInstanceOf(HTMLDivElement);
     expect(dictation).toBeInstanceOf(HTMLDivElement);
     expect(send).toBeInstanceOf(HTMLButtonElement);
-    expect(element.querySelector(".chatapp-composer__tools .chatapp-composer__dictation")).toBeNull();
+    expect(actions?.contains(dictation)).toBe(true);
+    expect(element.querySelector(".chatapp-composer-utilities__menu")?.contains(actions)).toBe(true);
     expect(Array.from(actions?.children || []).indexOf(dictation as Element)).toBeLessThan(
       Array.from(actions?.children || []).indexOf(send as Element),
     );

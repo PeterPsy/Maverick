@@ -5,5 +5,6 @@
 @import "./composer/attachments.css";
 @import "./composer/shell.css";
 @import "./composer/toolbar.css";
+@import "./composer/utilities.css";
 @import "./composer/multi-agent.css";
 @import "./composer/source-app-tools.css";

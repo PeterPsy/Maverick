@@ -12,7 +12,6 @@ export function AttachmentMenu({
   onAddAttachments: (files: File[]) => void;
   onCapturePageArea?: () => void;
 }) {
-  const attachmentMenuRef = useRef<HTMLDivElement | null>(null);
   const fileAttachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   function addFromFileList(fileList: FileList | null) {
@@ -36,7 +35,7 @@ export function AttachmentMenu({
         }}
         type="file"
       />
-      <div ref={attachmentMenuRef} className="chat-ui-dropdown chatapp-attachment-picker">
+      <div className="chat-ui-dropdown chatapp-attachment-picker">
         <button
           aria-label="Add attachments"
           className="chat-ui-dropdown__trigger chatapp-attachment-picker__trigger"
@@ -49,20 +48,6 @@ export function AttachmentMenu({
             add
           </span>
         </button>
-        {onCapturePageArea ? (
-          <button
-            aria-label="Capture page area"
-            className="chat-ui-dropdown__trigger chatapp-attachment-picker__trigger chatapp-attachment-picker__capture-trigger"
-            disabled={disabled}
-            onClick={onCapturePageArea}
-            title="Capture page area"
-            type="button"
-          >
-            <span aria-hidden="true" className="material-symbols-rounded">
-              crop_free
-            </span>
-          </button>
-        ) : null}
       </div>
     </>
   );

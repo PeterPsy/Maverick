@@ -109,6 +109,44 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.getByRole("button", { name: "Agent runner: Default Chat" })).toBeVisible();
   });
 
+  test.describe("mobile composer", () => {
+    test.use({ hasTouch: true });
+
+    test("collapses controls into an upward utility panel", async ({ page }) => {
+      await page.setViewportSize({ height: 844, width: 390 });
+      await installChatMocks(page);
+
+      await page.goto("/apps/chat/");
+
+      const composer = page.locator(".chatapp-composer");
+      const attachmentButton = composer.getByRole("button", { name: "Add attachments" });
+      const utilityButton = composer.getByRole("button", { name: "Composer utilities" });
+      const utilityPanel = composer.getByRole("group", { name: "Composer utility controls" });
+
+      await expect(attachmentButton).toBeVisible();
+      await expect(utilityButton).toBeVisible();
+      await expect(composer.locator("button:visible")).toHaveCount(2);
+      await expect(utilityPanel).toBeHidden();
+
+      await composer.getByRole("textbox").fill("Mobile utility message");
+      await expect(composer.locator("button:visible")).toHaveCount(2);
+
+      await utilityButton.tap();
+
+      await expect(utilityPanel).toBeVisible();
+      await expect(composer.getByRole("button", { name: "Apps and references" })).toBeVisible();
+      await expect(composer.getByRole("button", { name: "Multi-agent mode: Off" })).toBeVisible();
+      await expect(composer.getByRole("button", { name: "Agent runner: Default Chat" })).toBeVisible();
+      await expect(composer.getByRole("button", { name: "Send message" })).toBeEnabled();
+
+      const utilityBox = await utilityButton.boundingBox();
+      const panelBox = await utilityPanel.boundingBox();
+      expect(utilityBox).not.toBeNull();
+      expect(panelBox).not.toBeNull();
+      expect((panelBox?.y || 0) + (panelBox?.height || 0)).toBeLessThan(utilityBox?.y || 0);
+    });
+  });
+
   test("coalesces structured goal progress without presenting telemetry as tool calls", async ({ page }) => {
     const state = await installChatMocks(page);
     const turn = runtimeTurn("turn-goal", RUNTIME_SESSION_ID, "completed", "Inspect the active goal");

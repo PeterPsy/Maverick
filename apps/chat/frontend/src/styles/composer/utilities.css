@@ -1,0 +1,28 @@
+.chatapp-composer-utilities {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chatapp-composer-utilities__trigger {
+  display: none;
+}
+
+.chatapp-composer-utilities__menu {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.chatapp-composer-utilities__tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}

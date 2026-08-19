@@ -30,10 +30,12 @@ describe("mobile chat composer layout", () => {
     const desktopComposerStyles = readStyle("composer.css");
 
     expect(responsiveStyles).toContain("@media (max-width: 720px)");
-    expect(responsiveStyles).toContain('grid-template-areas: "tools field actions";');
-    expect(responsiveStyles).toContain(".chatapp-composer:focus-within .chatapp-composer__input-shell");
+    expect(responsiveStyles).toContain('grid-template-areas: "tools field";');
+    expect(responsiveStyles).toContain(
+      ".chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__input-shell",
+    );
     expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-composer__icon-action:active)");
-    expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__input-shell");
+    expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-composer__tool-button:active)");
     expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__input-shell");
     expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-provider-menu) .chatapp-composer__input-shell");
     expect(responsiveStyles).toContain("min-height: 2.48rem;");
@@ -89,6 +91,18 @@ describe("mobile chat composer layout", () => {
     expect(sendButton).toContain("onClick={onSubmit}");
     expect(sendButton).toContain('type="button"');
     expect(sendButton).not.toContain('type="submit"');
+  });
+
+  it("shows only attachment and utility launchers until the upward mobile panel opens", () => {
+    const responsiveStyles = readStyle("responsive.css");
+    const utilityTriggerBlock = cssBlock(responsiveStyles, ".chatapp-composer-utilities__trigger");
+    const utilityMenuBlock = cssBlock(responsiveStyles, ".chatapp-composer-utilities__menu");
+    const openUtilityMenuBlock = cssBlock(responsiveStyles, ".chatapp-composer-utilities__menu.is-open");
+
+    expect(utilityTriggerBlock).toContain("display: inline-flex;");
+    expect(utilityMenuBlock).toContain("display: none;");
+    expect(utilityMenuBlock).toContain("bottom: calc(100% + 0.55rem);");
+    expect(openUtilityMenuBlock).toContain("display: grid;");
   });
 
   it("fades transcript content under installed mobile web app chrome", () => {

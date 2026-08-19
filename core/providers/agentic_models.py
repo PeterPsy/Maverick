@@ -38,6 +38,7 @@ class AgenticRuntimePolicy:
     allowed_surface_kinds: tuple[RuntimeSurfaceKind, ...]
     tool_handle_mode: ToolHandleMode
     allowed_tool_handles: tuple[str, ...]
+    allow_filesystem_list: bool
     allow_filesystem_read: bool
     allow_filesystem_write: bool
     allow_shell: bool
@@ -153,6 +154,7 @@ def codex_runtime_policy() -> AgenticRuntimePolicy:
         allowed_surface_kinds=("cli", "mcp", "app-interface", "core-capability"),
         tool_handle_mode="all_currently_authorized",
         allowed_tool_handles=(),
+        allow_filesystem_list=True,
         allow_filesystem_read=True,
         allow_filesystem_write=True,
         allow_shell=True,

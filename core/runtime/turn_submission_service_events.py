@@ -13,6 +13,10 @@ from core.observability.service import append_platform_log
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.failure_messages import (
+    normalized_failure_reason_code,
+    runtime_failure_public_message,
+)
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.thread_catalog_events import mark_thread_response_completed, set_thread_availability
 from core.runtime.turn_terminalization import (
@@ -66,15 +70,32 @@ def _complete_turn_from_exit_code(
     provider_id: str,
     exit_code: int,
     output_text: str = "",
+    failure_reason_code: str | None = None,
+    public_error_message: str | None = None,
+    diagnostic_reference: str | None = None,
 ) -> tuple[RuntimeTurnRecord, RuntimeEventRecord]:
+    reason_code = None
+    public_message = None
     if exit_code == 0:
         turn = transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="completed")
     else:
+        reason_code = normalized_failure_reason_code(
+            failure_reason_code,
+            fallback="provider_execution_failed",
+        )
+        mapped_message = runtime_failure_public_message(reason_code)
+        public_message = (
+            str(public_error_message).strip()
+            if isinstance(public_error_message, str)
+            and 0 < len(public_error_message.strip()) <= 512
+            and public_error_message.strip() == mapped_message
+            else mapped_message
+        )
         turn = transition_runtime_turn(
             state.runtime_store,
             turn_id=turn_id,
             target_status="failed",
-            failure_reason=f"Provider exited with code {exit_code}.",
+            failure_reason=public_message,
         )
     if turn.status == "cancelled":
         terminalization = _terminalize_worker_observed_cancellation(
@@ -88,6 +109,20 @@ def _complete_turn_from_exit_code(
             raise RuntimeError(f"Cancelled runtime turn `{turn.turn_id}` has no terminal event.")
         return terminalization.turn, terminalization.event
     event_type = f"runtime.turn.{turn.status}"
+    payload: dict[str, object] = {
+        "provider_id": provider_id,
+        "exit_code": exit_code,
+        **({"reason": turn.failure_reason or "Runtime turn cancelled."} if turn.status == "cancelled" else {}),
+    }
+    if turn.status == "failed":
+        payload.update(
+            {
+                "error": public_message or runtime_failure_public_message(reason_code),
+                "failure_reason_code": reason_code or "provider_execution_failed",
+            }
+        )
+        if _safe_diagnostic_reference(diagnostic_reference) is not None:
+            payload["diagnostic_reference"] = diagnostic_reference
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -95,11 +130,7 @@ def _complete_turn_from_exit_code(
         turn_id=turn.turn_id,
         plane="turn",
         event_type=event_type,
-        payload={
-            "provider_id": provider_id,
-            "exit_code": exit_code,
-            **({"reason": turn.failure_reason or "Runtime turn cancelled."} if turn.status == "cancelled" else {}),
-        },
+        payload=payload,
         event_bus=state.runtime_event_bus,
     )
     if turn.status == "completed":
@@ -165,11 +196,31 @@ def _record_turn_failed(
     turn_id: str,
     provider_id: str,
     error: str,
+    failure_reason_code: str | None = None,
+    diagnostic_reference: str | None = None,
     reason_codes: list[str] | None = None,
 ) -> RuntimeEventRecord:
-    payload = {"error": error, "provider_id": provider_id}
+    reason_code = normalized_failure_reason_code(
+        failure_reason_code or error,
+        fallback="runtime_execution_failed",
+    )
+    payload = {
+        "error": runtime_failure_public_message(reason_code),
+        "failure_reason_code": reason_code,
+        "provider_id": provider_id,
+    }
+    if _safe_diagnostic_reference(diagnostic_reference) is not None:
+        payload["diagnostic_reference"] = diagnostic_reference
     if reason_codes:
-        payload["reason_codes"] = list(dict.fromkeys(reason_codes))
+        safe_reason_codes = [
+            normalized_failure_reason_code(value, fallback="")
+            for value in reason_codes[:32]
+        ]
+        safe_reason_codes = list(
+            dict.fromkeys(value for value in safe_reason_codes if value)
+        )
+        if safe_reason_codes:
+            payload["reason_codes"] = safe_reason_codes
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -189,6 +240,13 @@ def _record_turn_failed(
         now=event.created_at,
     )
     return event
+
+
+def _safe_diagnostic_reference(value: object) -> str | None:
+    if not isinstance(value, str) or not 1 <= len(value) <= 256:
+        return None
+    allowed = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:._-")
+    return value if all(character in allowed for character in value) else None
 
 
 

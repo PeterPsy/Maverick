@@ -14,6 +14,12 @@ from core.runtime.tool_catalog import (
     RuntimeToolActorContext,
 )
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.tool_filesystem_listing import (
+    MAX_FILESYSTEM_LIST_DEPTH,
+    MAX_FILESYSTEM_LIST_RESULTS,
+    filesystem_list_schema,
+    list_workspace_entries,
+)
 
 
 MAX_FILESYSTEM_READ_BYTES = 262_144
@@ -27,6 +33,38 @@ def build_core_runtime_tool_capabilities(
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     """Build workspace-bound Core capabilities; no app id is involved."""
     root = workspace_root.resolve(strict=True)
+
+    def filesystem_list(
+        arguments: dict[str, object], context: RuntimeToolActorContext, _idempotency_key: str | None
+    ) -> dict[str, object]:
+        _require_context(context, workspace_id)
+        path = _workspace_path(root, arguments.get("path", "."), must_exist=True)
+        if not path.is_dir():
+            raise RuntimeToolError("filesystem_path_not_directory")
+        max_depth = arguments.get("max_depth", 1)
+        max_results = arguments.get("max_results", 200)
+        if (
+            not isinstance(max_depth, int)
+            or isinstance(max_depth, bool)
+            or not 1 <= max_depth <= MAX_FILESYSTEM_LIST_DEPTH
+            or not isinstance(max_results, int)
+            or isinstance(max_results, bool)
+            or not 1 <= max_results <= MAX_FILESYSTEM_LIST_RESULTS
+        ):
+            raise RuntimeToolError("tool_arguments_invalid")
+        entries, truncated = list_workspace_entries(
+            root,
+            path,
+            max_depth=max_depth,
+            max_results=max_results,
+        )
+        relative_path = path.relative_to(root).as_posix()
+        return {
+            "path": relative_path or ".",
+            "entries": entries,
+            "result_count": len(entries),
+            "truncated": truncated,
+        }
 
     def filesystem_read(
         arguments: dict[str, object], context: RuntimeToolActorContext, _idempotency_key: str | None
@@ -134,6 +172,20 @@ def build_core_runtime_tool_capabilities(
         }
 
     return (
+        RuntimeCoreCapabilitySurface(
+            definition=RuntimeExternalToolSurface(
+                handle="core-capability:filesystem.list",
+                description=(
+                    "List bounded workspace-relative file and directory names without reading file content."
+                ),
+                input_schema=filesystem_list_schema(),
+                output_schema=None,
+                effect_class="read",
+                safe_to_retry=True,
+            ),
+            handler=filesystem_list,
+            allowed_execution_modes=("sandbox", "full-access"),
+        ),
         RuntimeCoreCapabilitySurface(
             definition=RuntimeExternalToolSurface(
                 handle="core-capability:filesystem.read",

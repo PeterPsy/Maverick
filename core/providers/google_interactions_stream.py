@@ -48,11 +48,15 @@ class GoogleInteractionStreamDecoder:
         self.state = state
         self.new_input = new_input
         self.usage_cost = usage_cost
+        self.declared_function_names = frozenset(
+            definition.name for definition in request.tool_definitions
+        )
         self.interaction_id: str | None = None
         self.active_step: _Step | None = None
         self.steps: list[dict[str, object]] = []
         self.function_calls: list[GooglePendingFunctionCall] = []
         self.output_chunks: list[str] = []
+        self.usage_emitted = False
         self.ordinal = 0
         self.completed = False
 
@@ -85,6 +89,24 @@ class GoogleInteractionStreamDecoder:
         if not self.completed or self.active_step is not None:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
 
+    def failure_telemetry(self, payload: dict[str, object]) -> list[AgenticModelEvent]:
+        """Recover only bounded usage after a terminal decode error."""
+        if self.usage_emitted or payload.get("event_type") != "interaction.completed":
+            return []
+        try:
+            interaction = _dict(payload.get("interaction"))
+            if (
+                self.interaction_id is None
+                or interaction.get("id") != self.interaction_id
+                or interaction.get("model") != self.request.model_id
+            ):
+                return []
+            usage = _usage(interaction.get("usage"), self.usage_cost)
+        except GoogleInteractionsProtocolError:
+            return []
+        self.usage_emitted = True
+        return [self._event("usage", usage=usage)]
+
     def _created(self, payload: dict[str, object]) -> AgenticModelEvent:
         if self.interaction_id is not None:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
@@ -113,7 +135,9 @@ class GoogleInteractionStreamDecoder:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         if step_type == "function_call":
             _required_text(value.get("id"))
-            _required_text(value.get("name"))
+            function_name = _required_text(value.get("name"))
+            if function_name not in self.declared_function_names:
+                raise GoogleInteractionsProtocolError("provider_tool_not_declared")
             arguments = value.get("arguments", {})
             if not isinstance(arguments, (dict, str)):
                 raise GoogleInteractionsProtocolError("provider_response_invalid")
@@ -218,6 +242,7 @@ class GoogleInteractionStreamDecoder:
             )
         )
         events = [self._event("provider_state", provider_private_state=private_state)]
+        self.usage_emitted = True
         events.append(self._event("usage", usage=usage))
         if status == "completed":
             events.append(self._event("text_final", text="".join(self.output_chunks)))

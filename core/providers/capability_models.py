@@ -16,6 +16,7 @@ class RuntimeCapabilitySet:
     cli: bool
     mcp: bool
     skill_catalog: bool
+    filesystem_list: bool
     filesystem_read: bool
     filesystem_write: bool
     shell: bool

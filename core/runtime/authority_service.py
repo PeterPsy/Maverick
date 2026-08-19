@@ -33,11 +33,16 @@ def resolve_and_record_runtime_authority(
     if binding is None:
         raise ValueError("Effective authority requires a pinned execution binding.")
     health = run_runtime_coroutine(adapter.health(RuntimeHealthContext(binding=binding)))
+    handle_resolver = getattr(adapter, "currently_authorized_tool_handles", None)
+    currently_authorized_tool_handles = (
+        tuple(handle_resolver(binding)) if callable(handle_resolver) else ()
+    )
     authority = resolve_effective_runtime_authority(
         state.provider_store,
         binding=binding,
         adapter=adapter,
         turn_id=turn_id,
+        currently_authorized_tool_handles=currently_authorized_tool_handles,
         live_execution_mode=session.effective_mode,
         health_status=health.status,
         health_revision=f"runtime-health:{canonical_digest(health)}",

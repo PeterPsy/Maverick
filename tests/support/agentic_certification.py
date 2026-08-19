@@ -106,6 +106,7 @@ def certified_test_provider_store(
                 cli=True,
                 mcp=True,
                 skill_catalog=True,
+                filesystem_list=True,
                 filesystem_read=True,
                 filesystem_write=True,
                 shell=True,

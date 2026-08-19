@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from core.providers.models import ProviderSelection, RuntimeBackendLaunchSpec
 from core.providers.provider_codex import build_codex_definition
+from core.runtime.execution import RuntimeExecutionResult
 from core.runtime.service import create_runtime_session, queue_runtime_turn
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_submission import prewarm_runtime_session_async, runtime_session_prewarm_status, submit_runtime_turn_async
@@ -22,7 +23,6 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
     def test_runtime_turn_debug_filesystem_log_is_opt_in(self) -> None:
         state = SimpleNamespace(repository_root=make_temp_repo_root(self))
         session = SimpleNamespace(session_id="sess-debug-log", workspace_id="default")
-
         with patch.dict("os.environ", {}, clear=True), patch(
             "core.runtime.turn_submission_service_events.append_platform_log"
         ) as append_log:
@@ -96,7 +96,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
                 "Timer": lambda delay, target: _CapturingTimer(delay, target, scheduled_timers),
                 "resolve_runtime_engine_for_session": Mock(return_value=(provider, None, adapter, adapter)),
                 "_build_launch_spec_for_execution": Mock(return_value=(launch_spec, {})),
-                "execute_runtime_turn": Mock(return_value=SimpleNamespace(output_text="done", exit_code=0)),
+                "execute_runtime_turn": Mock(return_value=RuntimeExecutionResult("done", 0)),
                 "release_idle_runtime_processes": Mock(return_value=0),
                 "prewarm_runtime_session_async": prewarm,
             },
@@ -189,7 +189,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
 
         def execute_turn(**_kwargs):
             calls.append("execute")
-            return SimpleNamespace(output_text="done", exit_code=0)
+            return RuntimeExecutionResult("done", 0)
 
         with patch.dict(
             submit_runtime_turn_async.__globals__,
@@ -310,7 +310,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
                 kwargs["on_provider_startup_event"](phase, {})
             kwargs["on_provider_turn_start_sent"]({"ensure_runtime_ms": 0.01})
             kwargs["on_provider_accepted"]({})
-            return SimpleNamespace(output_text="done", exit_code=0)
+            return RuntimeExecutionResult("done", 0)
 
         with patch.dict(
             submit_runtime_turn_async.__globals__,

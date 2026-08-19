@@ -78,6 +78,7 @@ def ensure_codex_preview_certificate(
             cli=True,
             mcp=True,
             skill_catalog=True,
+            filesystem_list=False,
             filesystem_read=True,
             filesystem_write=True,
             shell=True,

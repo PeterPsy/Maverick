@@ -62,6 +62,7 @@ class OpenRouterChatStreamDecoder:
         self.tool_call: _ToolCall | None = None
         self.finish_reason: str | None = None
         self.usage: AgenticUsage | None = None
+        self.usage_emitted = False
         self.saw_router_metadata = False
         self.ordinal = 0
         self.completed = False
@@ -96,6 +97,32 @@ class OpenRouterChatStreamDecoder:
         if not self.completed:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
 
+    def failure_telemetry(self, payload: dict[str, object]) -> list[AgenticModelEvent]:
+        """Recover only redaction-safe identity/usage after a terminal decode error."""
+        if self.usage_emitted:
+            return []
+        try:
+            generation_id = required_text(payload.get("id"))
+            if (
+                self.generation_id is None
+                or generation_id != self.generation_id
+                or payload.get("model") != self.request.model_id
+                or payload.get("provider") != OPENROUTER_AGENTIC_PROVIDER_NAME
+            ):
+                return []
+            raw_usage = payload.get("usage")
+            if raw_usage is not None:
+                recovered = self._usage(raw_usage)
+                if self.usage is not None and recovered != self.usage:
+                    return []
+                self.usage = recovered
+            if self.usage is None:
+                return []
+            self.usage_emitted = True
+            return [self._event("usage", usage=self.usage)]
+        except OpenRouterAgenticProtocolError:
+            return []
+
     def _identity(self, payload: dict[str, object]) -> list[AgenticModelEvent]:
         generation_id = required_text(payload.get("id"))
         if (
@@ -105,7 +132,11 @@ class OpenRouterChatStreamDecoder:
             raise OpenRouterAgenticProtocolError("provider_upstream_not_certified")
         if self.generation_id is None:
             self.generation_id = generation_id
-            return [self._event("accepted", upstream_id=OPENROUTER_AGENTIC_UPSTREAM_ID)]
+            return [self._event(
+                "accepted",
+                upstream_id=OPENROUTER_AGENTIC_UPSTREAM_ID,
+                provider_response_id=generation_id,
+            )]
         if generation_id != self.generation_id:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
         return []
@@ -132,11 +163,10 @@ class OpenRouterChatStreamDecoder:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
         content = delta.get("content")
         if content is not None:
-            if not isinstance(content, str) or (content and self.tool_call is not None):
+            if not isinstance(content, str):
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
             if content:
                 self.text_chunks.append(content)
-                events.append(self._event("text_delta", text=content))
         self._reasoning(delta)
         if delta.get("tool_calls") is not None:
             self._tool_delta(delta["tool_calls"])
@@ -155,18 +185,20 @@ class OpenRouterChatStreamDecoder:
             self.reasoning_chunks.append(raw)
 
     def _tool_delta(self, value: object) -> None:
-        if self.text_chunks or not isinstance(value, list) or len(value) != 1:
+        if not isinstance(value, list) or not value:
+            raise OpenRouterAgenticProtocolError("provider_response_invalid")
+        if len(value) != 1:
             raise OpenRouterAgenticProtocolError("provider_parallel_tool_calls_forbidden")
         item = object_field(value[0])
         if item.get("index") != 0:
-            raise OpenRouterAgenticProtocolError("provider_parallel_tool_calls_forbidden")
+            raise OpenRouterAgenticProtocolError("provider_tool_call_index_invalid")
         if self.tool_call is None:
             self.tool_call = _ToolCall()
         call_id = item.get("id")
         if call_id is not None:
             call_id = required_text(call_id)
             if self.tool_call.call_id not in {None, call_id}:
-                raise OpenRouterAgenticProtocolError("provider_response_invalid")
+                raise OpenRouterAgenticProtocolError("provider_parallel_tool_calls_forbidden")
             self.tool_call.call_id = call_id
         if item.get("type") not in {None, "function"}:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
@@ -195,14 +227,14 @@ class OpenRouterChatStreamDecoder:
 
     def _complete(self) -> list[AgenticModelEvent]:
         if self.finish_reason == "tool_calls":
-            if self.tool_call is None or self.text_chunks:
+            if self.tool_call is None:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
             call_id = required_text(self.tool_call.call_id)
             name = required_text(self.tool_call.name)
             raw_arguments = "".join(self.tool_call.argument_chunks)
             arguments = parsed_arguments(raw_arguments)
             assistant = self._assistant_message(
-                content=None,
+                content="".join(self.text_chunks) or None,
                 tool_calls=[{
                     "id": call_id,
                     "type": "function",
@@ -217,12 +249,17 @@ class OpenRouterChatStreamDecoder:
                 )
             ]
         else:
+            if self.tool_call is not None and self.text_chunks:
+                raise OpenRouterAgenticProtocolError("provider_mixed_text_and_tool_call")
             if self.tool_call is not None or not self.text_chunks:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
             text = "".join(self.text_chunks)
             assistant = self._assistant_message(content=text)
             pending = None
-            result = []
+            result = [
+                self._event("text_delta", text=chunk)
+                for chunk in self.text_chunks
+            ]
         consumed = list(self.state.consumed_tool_call_ids)
         if self.state.pending_tool_call is not None:
             consumed.append(self.state.pending_tool_call.call_id)
@@ -239,7 +276,7 @@ class OpenRouterChatStreamDecoder:
         result.extend(
             [
                 self._event("provider_state", provider_private_state=private_state),
-                self._event("usage", usage=self.usage),
+                self._usage_event(),
             ]
         )
         if pending is None:
@@ -247,6 +284,10 @@ class OpenRouterChatStreamDecoder:
         self.completed = True
         result.append(self._event("completed", finish_reason=str(self.finish_reason)))
         return result
+
+    def _usage_event(self) -> AgenticModelEvent:
+        self.usage_emitted = True
+        return self._event("usage", usage=self.usage)
 
     def _assistant_message(self, *, content, tool_calls=None) -> dict[str, object]:
         message: dict[str, object] = {"role": "assistant", "content": content}

@@ -52,6 +52,7 @@ class GoogleInteractionsAgenticClient:
         credential: EphemeralCredential | None,
     ) -> AsyncIterator[AgenticModelEvent]:
         decoder = None
+        failure: GoogleInteractionsProtocolError | None = None
         try:
             if request.model_id != GOOGLE_AGENTIC_MODEL_ID:
                 raise GoogleInteractionsProtocolError("provider_request_rejected")
@@ -69,8 +70,27 @@ class GoogleInteractionsAgenticClient:
                 usage_cost=google_36_flash_cost_microusd,
             )
             async for raw_event in self.transport.stream(payload=payload, credential=credential):
-                for event in decoder.feed(raw_event):
+                if failure is not None:
+                    for event in decoder.failure_telemetry(raw_event):
+                        yield event
+                    continue
+                try:
+                    events = decoder.feed(raw_event)
+                except GoogleInteractionsProtocolError as error:
+                    failure = error
+                    for event in decoder.failure_telemetry(raw_event):
+                        yield event
+                    continue
+                for event in events:
                     yield event
+            if failure is not None:
+                yield AgenticModelEvent(
+                    event_type="error",
+                    request_id=request.request_id,
+                    ordinal=decoder.ordinal + 1,
+                    error_code=failure.reason_code,
+                )
+                return
             decoder.finish()
         except GoogleInteractionsProtocolError as error:
             ordinal = 1 if decoder is None else decoder.ordinal + 1
@@ -86,7 +106,11 @@ class GoogleInteractionsAgenticClient:
                 event_type="error",
                 request_id=request.request_id,
                 ordinal=ordinal,
-                error_code="provider_unavailable",
+                error_code=(
+                    failure.reason_code
+                    if failure is not None
+                    else "provider_unavailable"
+                ),
             )
 
 

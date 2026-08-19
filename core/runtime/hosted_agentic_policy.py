@@ -10,6 +10,25 @@ from core.runtime.tool_orchestrator import (
 )
 
 
+HOSTED_CORE_TOOL_HANDLES = (
+    "core-capability:filesystem.list",
+    "core-capability:filesystem.read",
+    "core-capability:filesystem.write",
+    "core-capability:shell.run",
+)
+
+
+def authorized_core_tool_handles(binding) -> tuple[str, ...]:
+    """Return the exact Core candidates the hosted adapter can materialize."""
+    policy = binding.profile_policy_ceiling_snapshot
+    if policy.tool_handle_mode == "none":
+        return ()
+    if policy.tool_handle_mode == "exact":
+        allowed = set(policy.allowed_tool_handles)
+        return tuple(handle for handle in HOSTED_CORE_TOOL_HANDLES if handle in allowed)
+    return HOSTED_CORE_TOOL_HANDLES
+
+
 def destination_upstream(context) -> str | None:
     upstreams = context.binding.routing_constraint_snapshot.allowed_upstream_ids
     if not upstreams:

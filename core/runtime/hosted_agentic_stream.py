@@ -26,6 +26,7 @@ from core.runtime.hosted_agentic_models import (
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _ALLOWED_PROVIDER_ERRORS = {
     "provider_authentication_failed",
+    "provider_mixed_text_and_tool_call",
     "provider_no_eligible_endpoint",
     "provider_parallel_tool_calls_forbidden",
     "provider_private_codec_mismatch",
@@ -40,6 +41,8 @@ _ALLOWED_PROVIDER_ERRORS = {
     "provider_routing_not_certified",
     "provider_timeout",
     "provider_tool_result_pairing_invalid",
+    "provider_tool_call_index_invalid",
+    "provider_tool_not_declared",
     "provider_unavailable",
     "provider_upstream_not_certified",
 }
@@ -88,6 +91,8 @@ async def consume_hosted_provider_step(
                 payload: dict[str, object] = {"request_id": request.request_id}
                 if provider_event.upstream_id:
                     payload["upstream_id"] = provider_event.upstream_id
+                if provider_event.provider_response_id:
+                    payload["provider_response_id"] = provider_event.provider_response_id
                 yield HostedProviderStepEmission("provider.accepted", payload)
             elif provider_event.event_type == "error":
                 reason = provider_event.error_code or "provider_response_invalid"

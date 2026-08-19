@@ -24,8 +24,8 @@ from core.runtime.execution_binding import canonical_digest
 
 
 GOOGLE_CERTIFICATION_SUITE_ID = "maverick-google-interactions-agentic-contract"
-GOOGLE_CERTIFICATION_SUITE_VERSION = "3"
-GOOGLE_CERTIFICATION_MATRIX_REVISION = "2026-08-16-r2"
+GOOGLE_CERTIFICATION_SUITE_VERSION = "4"
+GOOGLE_CERTIFICATION_MATRIX_REVISION = "2026-08-19-r3"
 GOOGLE_CERTIFICATION_VALIDITY_DAYS = 45
 
 
@@ -99,7 +99,7 @@ def _validate_run(run, adapter: object) -> None:
 def _capabilities() -> RuntimeCapabilitySet:
     return RuntimeCapabilitySet(
         streaming=True, tool_orchestration=True, cli=False, mcp=False,
-        skill_catalog=False, filesystem_read=True, filesystem_write=False,
+        skill_catalog=False, filesystem_list=True, filesystem_read=True, filesystem_write=False,
         shell=False, interrupt=True, same_turn_steering=False, recovery=True,
         confirmation_resume=True, provider_private_state=True,
         attachment_modalities=(),

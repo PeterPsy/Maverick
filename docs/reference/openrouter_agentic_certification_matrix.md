@@ -1,9 +1,9 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-08-17  
+Status date: 2026-08-19
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==3`
+Adapter: `maverick-hosted-tool-loop==4`
 
 ## Candidate combination
 
@@ -11,6 +11,7 @@ Adapter: `maverick-hosted-tool-loop==3`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
+| Immutable profile revision | `8` (revision `7` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -19,9 +20,12 @@ Adapter: `maverick-hosted-tool-loop==3`
 | Quantization | `fp8` |
 | Context / endpoint completion limit | 1,048,576 / 65,536 tokens |
 | Tool calls | one sequential function call per model step |
+| Parallel request control | `parallel_tool_calls: false` on every request |
+| Mixed response handling | provisional text plus one tool call is retained privately and continued |
+| Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
 | Remote data classes | `public`, `workspace_internal_fake` |
-| Tool handles | `core-capability:filesystem.read` only |
+| Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
 | Certificate lifetime after a successful signed run | 30 days |
 
 The dated OpenRouter endpoint catalogs listed `deepinfra/fp8` as active for
@@ -30,16 +34,20 @@ DeepSeek V4 Flash, with `tools`, `tool_choice`, `reasoning`, `max_tokens`, and
 FP8 quantization. The recorded list price was $0.09 per million input tokens
 and $0.18 per million output tokens.
 
-Every agentic request sends this router object without a permissive default:
+Every agentic request sends the sequential control and this router object
+without a permissive default:
 
 ```json
 {
-  "only": ["deepinfra/fp8"],
-  "allow_fallbacks": false,
-  "require_parameters": true,
-  "data_collection": "deny",
-  "zdr": true,
-  "quantizations": ["fp8"]
+  "parallel_tool_calls": false,
+  "provider": {
+    "only": ["deepinfra/fp8"],
+    "allow_fallbacks": false,
+    "require_parameters": true,
+    "data_collection": "deny",
+    "zdr": true,
+    "quantizations": ["fp8"]
+  }
 }
 ```
 
@@ -69,10 +77,14 @@ Primary references:
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
 | No eligible endpoint | HTTP and streamed 404 normalization fixtures | not certified |
-| Tool call id/name/count | fragmented arguments, exact pairing, and parallel-call rejection | not certified |
+| Tool call id/name/count | fragmented arguments, exact pairing, invalid-index classification, and true parallel-call rejection | not certified |
+| Mixed text then tool | provisional narration is not finalized or duplicated; one call continues to the next step | not certified |
 | Multi-step continuation | two sequential tool rounds followed by a final response | not certified |
+| Filesystem discovery | bounded deterministic listing, symlink non-traversal, and workspace confinement | not certified |
+| Reasoning configuration | no-tool and tool round trips at every selectable level, including deployed `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
-| Usage and price estimate | token fixtures and integer micro-USD estimator | not certified |
+| Usage, generation id and price | success and decode-failure fixtures retain available telemetry and micro-USD estimate | not certified |
+| Failure propagation | distinct mixed/parallel/index codes, safe public message, diagnostic reference, and nonnumeric Chat UX | not certified |
 | Shared tool loop | real OpenRouter codec through deterministic hosted-loop E2E | not certified |
 | Cancel/recovery/confirmation | shared hosted runtime contract suite | not certified |
 | Outage after acceptance | terminal normalized failure with no blind retry | not certified |
@@ -96,12 +108,17 @@ The executable signing and publication workflow is defined in
   mismatch is rejected.
 - `allow_fallbacks=true`, missing parameter enforcement, collection other than
   `deny`, or missing ZDR enforcement is rejected before transport.
+- Missing `parallel_tool_calls: false` is a request-contract failure for the
+  sequential profile.
 - A 404/no-eligible-provider result is terminal and never falls back.
 - Missing, expired, revoked, or digest-mismatched certificates prevent authority.
 - Missing or disabled credential bindings prevent session pinning.
 - Unknown data classification is denied before transport.
 - Function results with a different id or name are rejected before transport.
 - Multiple tool calls in one response are rejected for this preview.
+- A single tool call preceded by text is accepted; that text remains
+  provisional, is stored with the assistant tool call in private continuation
+  state, and is not duplicated in the final answer.
 - Redirects, unexpected paths, non-SSE responses, oversized data, incomplete
   streams, and missing terminal routing metadata are rejected.
 - Credentials, raw errors, router payloads, and reasoning details never enter

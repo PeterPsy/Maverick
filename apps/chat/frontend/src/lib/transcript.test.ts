@@ -1301,4 +1301,17 @@ describe("runtime event transcript projection", () => {
     ]);
     expect(messages).toMatchObject([{ role: "system", content: "interrupted by user", status: "failed" }]);
   });
+
+  it("never renders a bare numeric exit code for failed turns", () => {
+    const messages = eventsToMessages([
+      event({
+        event_type: "runtime.turn.failed",
+        payload: { exit_code: 1 },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      { role: "system", content: "Runtime turn failed.", status: "failed" },
+    ]);
+  });
 });

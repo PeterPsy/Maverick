@@ -18,8 +18,8 @@ from core.runtime.execution_binding import canonical_digest
 
 
 OPENROUTER_CERTIFICATION_SUITE_ID = "maverick-openrouter-agentic-contract"
-OPENROUTER_CERTIFICATION_SUITE_VERSION = "3"
-OPENROUTER_CERTIFICATION_MATRIX_REVISION = "2026-08-17-r2"
+OPENROUTER_CERTIFICATION_SUITE_VERSION = "4"
+OPENROUTER_CERTIFICATION_MATRIX_REVISION = "2026-08-19-r3"
 OPENROUTER_CERTIFICATION_VALIDITY_DAYS = 30
 
 
@@ -67,7 +67,7 @@ def publish_openrouter_preview_certificate(
         routing_constraint_digest=canonical_digest(definition.routing_constraint),
         certified_capabilities=RuntimeCapabilitySet(
             streaming=True, tool_orchestration=True, cli=False, mcp=False,
-            skill_catalog=False, filesystem_read=True, filesystem_write=False,
+            skill_catalog=False, filesystem_list=True, filesystem_read=True, filesystem_write=False,
             shell=False, interrupt=True, same_turn_steering=False, recovery=True,
             confirmation_resume=True, provider_private_state=True,
             attachment_modalities=(),

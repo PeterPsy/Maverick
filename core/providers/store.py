@@ -529,6 +529,7 @@ def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
     payload["certified_upstream_ids"] = tuple(payload.get("certified_upstream_ids", ()))
     payload["evidence_refs"] = tuple(payload.get("evidence_refs", ()))
     capabilities = dict(payload["certified_capabilities"])
+    capabilities.setdefault("filesystem_list", False)
     capabilities["attachment_modalities"] = tuple(capabilities.get("attachment_modalities", ()))
     payload["certified_capabilities"] = RuntimeCapabilitySet(**capabilities)
     return CapabilityCertificate(**payload)
@@ -543,6 +544,7 @@ def _workspace_agentic_profile_binding(document: dict[str, Any]) -> WorkspaceAge
 
 def _agentic_runtime_policy(document: dict[str, Any]) -> AgenticRuntimePolicy:
     payload = dict(document)
+    payload.setdefault("allow_filesystem_list", False)
     for field_name in ("allowed_surface_kinds", "allowed_tool_handles", "allowed_remote_data_classes"):
         payload[field_name] = tuple(payload.get(field_name, ()))
     return AgenticRuntimePolicy(**payload)

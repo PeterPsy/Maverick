@@ -110,6 +110,7 @@ class AgenticModelEvent:
     provider_private_state: AgenticProviderPrivateState | None = None
     finish_reason: str | None = None
     upstream_id: str | None = None
+    provider_response_id: str | None = None
     error_code: str | None = None
 
 

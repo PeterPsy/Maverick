@@ -136,12 +136,20 @@ class PlainHostedTextAttachmentTest(unittest.TestCase):
             provider_id="openrouter",
             runtime_mode="plain_hosted_chat",
             elapsed_ms=25,
-            metadata={"acceptance_slo_scope": "hosted_http_provider"},
+            metadata={
+                "acceptance_slo_scope": "hosted_http_provider",
+                "request_id": "request-1",
+                "provider_response_id": "generation-1",
+                "upstream_id": "deepinfra/fp8",
+            },
         )
 
         self.assertEqual(sent.payload["acceptance_slo_scope"], "hosted_http_provider")
         self.assertEqual(accepted.payload["acceptance_slo_scope"], "hosted_http_provider")
         self.assertEqual(accepted.payload["turn_start_to_ack_ms"], 25)
+        self.assertEqual(accepted.payload["request_id"], "request-1")
+        self.assertEqual(accepted.payload["provider_response_id"], "generation-1")
+        self.assertEqual(accepted.payload["upstream_id"], "deepinfra/fp8")
 
     def test_rejects_oversized_attachment_before_reading_bytes(self) -> None:
         repo_root = make_temp_repo_root(self)

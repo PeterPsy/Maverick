@@ -10,7 +10,7 @@ import type { AgentRuntimeConfig } from "../hooks/useMessageSubmission";
 export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem[] {
   const options: ProviderItem[] = [];
   const agenticProfiles = (payload.agentic_profiles?.items || []).filter(
-    (profile) => profile.enabled && profile.certified !== false && profile.rollout_status !== "disabled" && profile.rollout_status !== "suspended",
+    (profile) => profile.enabled && profile.certified !== false && profile.rollout_status === "available",
   );
   if (agenticProfiles.length) {
     options.push(
@@ -37,7 +37,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           label: model?.label || profile.model_id,
           description: modelProvider?.label || profile.model_provider_id,
           status: "active",
-          agentic_rollout_status: profile.rollout_status === "preview" ? "available" : profile.rollout_status,
+          agentic_rollout_status: profile.rollout_status,
           agentic_certificate_status: profile.certificate?.effective_status || null,
           agentic_certificate_expires_at: profile.certificate?.expires_at || null,
           agentic_egress_policy_id: profile.egress_policy_id || null,

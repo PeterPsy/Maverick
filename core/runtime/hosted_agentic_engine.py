@@ -22,6 +22,7 @@ from core.providers.agentic_adapter import (
 )
 from core.runtime.hosted_agentic_loop import HostedAgenticLoop
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
+from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
 from core.runtime.provider_private_state import (
     ProviderPrivateStateError,
     public_provider_private_reason,
@@ -57,6 +58,10 @@ class HostedAgenticEngineAdapter:
             *self.loop.artifact_components,
             *self.loop.provider_runtimes.artifact_components(),
         )
+
+    def currently_authorized_tool_handles(self, binding) -> tuple[str, ...]:
+        """Expose redaction-safe candidates for the pre-execution authority audit."""
+        return authorized_core_tool_handles(binding)
 
     async def validate(self, context: RuntimeValidationContext) -> RuntimeHealth:
         binding = context.binding

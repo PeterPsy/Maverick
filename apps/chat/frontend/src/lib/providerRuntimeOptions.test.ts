@@ -141,7 +141,7 @@ describe("provider runtime options", () => {
               { effort: "high", label: "High", description: null },
               { effort: "xhigh", label: "Extra high", description: null },
             ],
-            rollout_status: "preview",
+            rollout_status: "available",
             enabled: true,
             is_default: true,
             certified: true,

@@ -582,7 +582,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     if (event.event_type === "runtime.turn.failed") {
       flushToolSegment(turnId, true);
       flushOutputSegment(turnId, true);
-      const error = readableSystemText(event.payload.error || event.payload.exit_code, "Runtime turn failed.");
+      const error = readableSystemText(event.payload.error, "Runtime turn failed.");
       pushMessage({
         id: `${turnId}:failed`,
         role: "system",

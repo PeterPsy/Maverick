@@ -352,7 +352,7 @@ def _terminal_status(event_type: str) -> tuple[str, str]:
 
 
 def _readable_status_text(payload: dict, *, fallback: str) -> str:
-    for key in ("reason", "error", "failure_reason", "exit_code"):
+    for key in ("reason", "error", "failure_reason"):
         value = payload.get(key)
         if value not in (None, ""):
             return str(value).strip().replace("_", " ")

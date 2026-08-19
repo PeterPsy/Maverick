@@ -326,6 +326,7 @@ export type AgenticRuntimePolicy = {
   allowed_surface_kinds: string[];
   tool_handle_mode: 'none' | 'all_currently_authorized' | 'exact';
   allowed_tool_handles: string[];
+  allow_filesystem_list: boolean;
   allow_filesystem_read: boolean;
   allow_filesystem_write: boolean;
   allow_shell: boolean;

@@ -165,6 +165,7 @@ class RuntimeToolOrchestratorTest(unittest.TestCase):
                 cli=True,
                 mcp=True,
                 skill_catalog=False,
+                filesystem_list=False,
                 filesystem_read=False,
                 filesystem_write=False,
                 shell=False,
@@ -375,11 +376,13 @@ class RuntimeToolOrchestratorTest(unittest.TestCase):
                 self.authority,
                 allowed_capabilities=replace(
                     self.authority.allowed_capabilities,
+                    filesystem_list=True,
                     filesystem_read=True,
                     filesystem_write=True,
                     shell=True,
                 ),
                 allowed_tool_handles=(
+                    "core-capability:filesystem.list",
                     "core-capability:filesystem.read",
                     "core-capability:filesystem.write",
                     "core-capability:shell.run",
@@ -398,7 +401,11 @@ class RuntimeToolOrchestratorTest(unittest.TestCase):
             catalog = orchestrator.materialize(authority=authority, context=self.context)
             self.assertEqual(
                 [item.handle for item in catalog.descriptors],
-                ["core-capability:filesystem.read", "core-capability:filesystem.write"],
+                [
+                    "core-capability:filesystem.list",
+                    "core-capability:filesystem.read",
+                    "core-capability:filesystem.write",
+                ],
             )
             read = orchestrator.invoke_provider_tool(
                 provider_tool_name=provider_tool_name("core-capability:filesystem.read"),

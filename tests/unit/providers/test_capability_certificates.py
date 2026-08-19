@@ -312,6 +312,34 @@ class CapabilityCertificateTest(unittest.TestCase):
         )
         self.assertEqual(validated.certificate_id, self.binding.capability_certificate_id)
 
+    def test_rehydrated_legacy_binding_defaults_new_list_capability_fail_closed(self) -> None:
+        from core.runtime.execution_binding import execution_binding_from_document
+
+        serialized = asdict(self.binding)
+        for field_name in (
+            "profile_policy_ceiling_snapshot",
+            "workspace_policy_ceiling_snapshot",
+        ):
+            serialized[field_name].pop("allow_filesystem_list")
+        serialized["tool_authority_ceiling_digest"] = canonical_digest(
+            serialized["workspace_policy_ceiling_snapshot"]
+        )
+        serialized["binding_digest"] = canonical_digest(serialized)
+
+        rehydrated = execution_binding_from_document(serialized)
+
+        self.assertFalse(
+            rehydrated.profile_policy_ceiling_snapshot.allow_filesystem_list
+        )
+        self.assertFalse(
+            rehydrated.workspace_policy_ceiling_snapshot.allow_filesystem_list
+        )
+        self.assertEqual(rehydrated.binding_digest, serialized["binding_digest"])
+
+        serialized["model_id"] = "tampered-model"
+        with self.assertRaisesRegex(ValueError, "digest"):
+            execution_binding_from_document(serialized)
+
 
 if __name__ == "__main__":
     unittest.main()

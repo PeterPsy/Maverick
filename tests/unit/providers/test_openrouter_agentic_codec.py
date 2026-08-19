@@ -112,6 +112,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         )
         self.assertEqual(payload["reasoning"], {"effort": "medium"})
         self.assertEqual(payload["stream_options"], {"include_usage": True})
+        self.assertIs(payload["parallel_tool_calls"], False)
 
     def test_any_relaxed_router_control_fails_before_transport(self) -> None:
         certified = openrouter_agentic_routing_constraint()
@@ -249,6 +250,16 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         )
         self.assertEqual(events[-1].error_code, "provider_parallel_tool_calls_forbidden")
 
+        invalid_index = _tool_stream("generation-index", "fixture_read")
+        invalid_index[0]["choices"][0]["delta"]["tool_calls"][0]["index"] = 1
+        events = asyncio.run(
+            _events(
+                OpenRouterAgenticClient(transport=_ScriptedTransport([invalid_index])),
+                _request("invalid-index"),
+            )
+        )
+        self.assertEqual(events[-1].error_code, "provider_tool_call_index_invalid")
+
     def test_no_eligible_endpoint_is_a_stable_fail_closed_error(self) -> None:
         payload = {
             "error": {
@@ -310,7 +321,10 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
 
 
 class _ScriptedTransport:
-    def __init__(self, scripts: list[list[dict[str, object]]]) -> None:
+    def __init__(
+        self,
+        scripts: list[list[dict[str, object] | BaseException]],
+    ) -> None:
         self.scripts = scripts
         self.payloads: list[dict[str, object]] = []
 
@@ -319,6 +333,8 @@ class _ScriptedTransport:
         if "fixture-openrouter-key" in repr(credential):
             raise AssertionError("credential leaked through repr")
         for event in self.scripts.pop(0):
+            if isinstance(event, BaseException):
+                raise event
             yield event
 
 

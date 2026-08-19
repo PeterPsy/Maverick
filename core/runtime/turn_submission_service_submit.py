@@ -25,8 +25,15 @@ from core.runtime.turn_submission_service_events import (
     _complete_turn_from_exit_code,
     _debug_log_runtime_turn,
     _record_final_output,
-    _record_turn_failed,
     _terminalize_worker_observed_cancellation,
+)
+from core.runtime.turn_submission_service_failures import (
+    terminalize_queued_dispatch_failure,
+    terminalize_sync_execution_failure,
+)
+from core.runtime.turn_submission_service_fence import (
+    RuntimeTurnQueueFence,
+    runtime_turn_queue_fence,
 )
 from core.runtime.turn_submission_service_output import (
     _build_launch_spec_for_execution,
@@ -38,6 +45,7 @@ from core.runtime.turn_submission_service_output import (
     _record_turn_worker_started,
 )
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
+from core.runtime.turn_submission_service_queue import _queue_turn_with_event_result
 from core.runtime.turn_submission_service_provider_callbacks import ProviderStartupCallbacks
 from core.runtime.turn_submission_service_references import (
     _materialize_app_references_for_execution,
@@ -114,17 +122,17 @@ def submit_runtime_turn(
         try:
             on_queued(turn, events)
         except Exception as error:
-            failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
+            failed, terminal_event = terminalize_queued_dispatch_failure(
+                state,
+                session_id=session.session_id,
+                turn=turn,
+                provider_id=provider_id,
+                error=error,
+            )
             if failed.status == "cancelled":
-                terminalization = _terminalize_worker_observed_cancellation(
-                    state,
-                    turn=failed,
-                    provider_id=provider_id,
-                )
-                if terminalization.event is not None:
-                    events.append(terminalization.event)
-                return terminalization.turn, events
-            _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=provider_id, error=str(error))
+                if terminal_event is not None:
+                    events.append(terminal_event)
+                return failed, events
             raise
         worker_metrics["source_app_queued_dispatch_ms"] = (time.perf_counter() - source_app_dispatch_started_at) * 1000
     if not plain_hosted:
@@ -271,57 +279,15 @@ def submit_runtime_turn(
                         event_sink=output_recorder.record,
                     )
         except Exception as error:
-            failure_reason = str(getattr(error, "reason_code", None) or error)
-            reason_codes = getattr(error, "reason_codes", None)
-            _debug_log_runtime_turn(
-                state,
-                session=session,
-                provider_id=provider_id,
-                turn_id=turn.turn_id,
-                message="Runtime turn debug: sync execution raised",
-                payload={"phase": "sync_execution_raised", "error_type": type(error).__name__, "error": failure_reason},
-            )
-            current = state.runtime_store.get_turn(turn.turn_id)
-            if current.status == "cancelled":
-                terminalization = _terminalize_worker_observed_cancellation(
-                    state,
-                    turn=current,
-                    provider_id=provider_id,
-                )
-                if terminalization.event is not None:
-                    events.append(terminalization.event)
-                return terminalization.turn, events
-            if current.status in {"completed", "failed", "cancelled", "timed-out"}:
-                return current, events
-            turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=failure_reason)
-            if turn.status == "cancelled":
-                terminalization = _terminalize_worker_observed_cancellation(
-                    state,
-                    turn=turn,
-                    provider_id=provider_id,
-                )
-                if terminalization.event is not None:
-                    events.append(terminalization.event)
-                return terminalization.turn, events
-            failed_event = _record_turn_failed(
-                state,
-                session_id=session.session_id,
-                turn_id=turn.turn_id,
-                provider_id=provider_id,
-                error=failure_reason,
-                reason_codes=reason_codes if isinstance(reason_codes, list) else None,
-            )
-            events.append(failed_event)
-            dispatch_source_app_runtime_event(
+            turn = terminalize_sync_execution_failure(
                 state,
                 session=session,
                 turn=turn,
-                event_type="runtime.turn.failed",
-                failure_reason=failure_reason,
-                runtime_event_id=failed_event.event_id,
+                provider_id=provider_id,
+                error=error,
+                events=events,
+                plain_hosted=plain_hosted,
             )
-            if not plain_hosted:
-                release_idle_runtime_processes(state, session_id=session.session_id, provider_id=provider_id, reason="sync_turn_failed", idle_ttl_seconds=0)
             return turn, events
         current = state.runtime_store.get_turn(turn.turn_id)
         if current.status == "cancelled":
@@ -372,6 +338,9 @@ def submit_runtime_turn(
             provider_id=provider_id,
             exit_code=result.exit_code,
             output_text=app_output_text,
+            failure_reason_code=result.failure_reason_code,
+            public_error_message=result.public_error_message,
+            diagnostic_reference=result.diagnostic_reference,
         )
         events.append(terminal_event)
         if turn.status != "cancelled":

@@ -29,6 +29,13 @@ from core.runtime.agentic_feature_flags import (
 from core.runtime.tool_catalog import RuntimeToolCatalog
 
 
+HOSTED_TOOL_USE_INSTRUCTION = (
+    "Use only function names declared in the current request. Never invent, rename, or infer "
+    "a function name. If the declared functions cannot perform a requested operation, explain "
+    "that limitation instead of attempting a function call."
+)
+
+
 class HostedAgenticRequestBuilder:
     """Serialize only content approved for the pinned provider and upstream."""
 
@@ -62,20 +69,22 @@ class HostedAgenticRequestBuilder:
             )
         )
         content_blocks: list[AgenticRequestContentBlock] = []
+        system_instruction = HOSTED_TOOL_USE_INSTRUCTION
         if context.session.system_prompt:
-            content_blocks.append(
-                self._content_block(
-                    context=context,
-                    request_id=request_id,
-                    index=len(content_blocks),
-                    role="system",
-                    provenance="platform_instruction",
-                    content=context.session.system_prompt,
-                    content_type="text/plain",
-                    egress_policy=egress_policy,
-                    destination_upstream_id=destination_upstream_id,
-                )
+            system_instruction = f"{system_instruction}\n\n{context.session.system_prompt}"
+        content_blocks.append(
+            self._content_block(
+                context=context,
+                request_id=request_id,
+                index=len(content_blocks),
+                role="system",
+                provenance="platform_instruction",
+                content=system_instruction,
+                content_type="text/plain",
+                egress_policy=egress_policy,
+                destination_upstream_id=destination_upstream_id,
             )
+        )
         content_blocks.append(
             self._content_block(
                 context=context,

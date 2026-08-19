@@ -276,6 +276,12 @@ class HostedAgenticLoopTest(unittest.TestCase):
         result, events, _adapter = self.execute(client)
 
         self.assertEqual(result.exit_code, 1)
+        self.assertEqual(result.failure_reason_code, "provider_unavailable")
+        self.assertEqual(
+            result.public_error_message,
+            "The model provider is temporarily unavailable.",
+        )
+        self.assertEqual(result.diagnostic_reference, "turn:turn-hosted")
         self.assertEqual(len(client.requests), 1)
         self.assertEqual(self.harness.cli_calls, 0)
         self.assertEqual(
@@ -397,6 +403,11 @@ class HostedAgenticLoopTest(unittest.TestCase):
         result, events, _adapter = self.execute(client)
 
         self.assertEqual(result.exit_code, 1)
+        self.assertEqual(result.failure_reason_code, "tool_not_found")
+        self.assertEqual(
+            result.public_error_message,
+            "The model requested a tool that is not available. The unavailable tool was not executed.",
+        )
         self.assertEqual(self.harness.cli_calls, 1)
         self.assertEqual(self.harness.mcp_calls, 0)
         self.assertNotIn(

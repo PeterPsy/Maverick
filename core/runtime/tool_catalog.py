@@ -212,6 +212,7 @@ class RuntimeToolCatalogBuilder:
     def _core_capability_allowed(handle: str, authority: EffectiveRuntimeAuthority) -> bool:
         capability = authority.allowed_capabilities
         return {
+            "core-capability:filesystem.list": capability.filesystem_list,
             "core-capability:filesystem.read": capability.filesystem_read,
             "core-capability:filesystem.write": capability.filesystem_write,
             "core-capability:shell.run": capability.shell,

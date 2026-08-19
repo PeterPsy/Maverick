@@ -47,6 +47,7 @@ from core.runtime.hosted_agentic_models import (
     HostedProviderPrivateCodec,
 )
 from core.runtime.hosted_agentic_request import HostedAgenticRequestBuilder
+from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
 from core.runtime.hosted_provider_runtime import (
     HostedProviderRuntime,
     HostedProviderRuntimeRegistry,
@@ -61,7 +62,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "3"
+HOSTED_AGENTIC_ADAPTER_VERSION = "4"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -104,7 +105,7 @@ def build_hosted_agentic_engine_adapter(
                 binding=context.binding,
                 adapter=adapter_holder["adapter"],
                 turn_id=context.correlation_id,
-                currently_authorized_tool_handles=_authorized_core_handles(context),
+                currently_authorized_tool_handles=authorized_core_tool_handles(context.binding),
                 live_execution_mode=context.session.effective_mode,
             )
         except CapabilityCertificateError as error:
@@ -194,21 +195,6 @@ def _provider_runtimes() -> HostedProviderRuntimeRegistry:
         )
     )
     return registry
-
-
-def _authorized_core_handles(context) -> tuple[str, ...]:
-    candidates = (
-        "core-capability:filesystem.read",
-        "core-capability:filesystem.write",
-        "core-capability:shell.run",
-    )
-    policy = context.binding.profile_policy_ceiling_snapshot
-    if policy.tool_handle_mode == "none":
-        return ()
-    if policy.tool_handle_mode == "exact":
-        allowed = set(policy.allowed_tool_handles)
-        return tuple(handle for handle in candidates if handle in allowed)
-    return candidates
 
 
 def _tool_orchestrator(context, *, ledger) -> RuntimeToolOrchestrator:

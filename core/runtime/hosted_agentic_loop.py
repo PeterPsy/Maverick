@@ -48,6 +48,8 @@ from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
 from core.runtime.provider_private_state import ProviderPrivateStateService
 from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
+from core.runtime.tool_filesystem_listing import list_workspace_entries
 from core.runtime.tool_orchestrator import RuntimeToolInvocationOutcome
 from core.runtime.tool_ledger import RuntimeToolLedger
 
@@ -90,6 +92,8 @@ class HostedAgenticLoop:
             HostedAgenticRequestBuilder,
             HostedAgenticStateBridge,
             HostedProviderStep,
+            build_core_runtime_tool_capabilities,
+            list_workspace_entries,
         )
 
     async def execute(

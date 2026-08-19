@@ -458,7 +458,6 @@ class ProviderApiTest(unittest.TestCase):
         )
 
         status, payload = self.invoke("/api/runtime/status", state=state)
-
         self.assertEqual(status, "200 OK")
         self.assertEqual(payload["sessions"][0]["runtime_mode"], "plain_hosted_chat")
 
@@ -487,14 +486,12 @@ class ProviderApiTest(unittest.TestCase):
             "CONTENT_TYPE": "application/json",
         }
         captured: dict[str, object] = {}
-
         def start_response(status: str, headers: list[tuple[str, str]]) -> None:
             captured["status"] = status
             captured["headers"] = headers
 
         with patch("core.api.provider_api.require_session", return_value=context):
             body = handle_provider_api(state, environ, start_response)
-
         assert body is not None
         return str(captured["status"]), json.loads(b"".join(body).decode("utf-8"))
 

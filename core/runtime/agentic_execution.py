@@ -17,6 +17,10 @@ from core.runtime.execution_events import RuntimeExecutionEvent, RuntimeExecutio
 from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.execution_binding import canonical_digest
+from core.runtime.failure_messages import (
+    normalized_failure_reason_code,
+    runtime_failure_public_message,
+)
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
@@ -76,7 +80,13 @@ async def execute_agentic_runtime_turn(
                     {"output_text": "", "exit_code": 1, "reason_code": disabled_reason},
                 )
             )
-        return RuntimeExecutionResult(output_text="", exit_code=1)
+        return RuntimeExecutionResult(
+            output_text="",
+            exit_code=1,
+            failure_reason_code=disabled_reason,
+            public_error_message=runtime_failure_public_message(disabled_reason),
+            diagnostic_reference=f"turn:{correlation_id}",
+        )
     if (
         effective_authority.execution_binding_id != binding.execution_binding_id
         or effective_authority.turn_id != correlation_id
@@ -85,7 +95,15 @@ async def execute_agentic_runtime_turn(
         raise ValueError("Effective runtime authority does not match the active turn.")
     health = await adapter.validate(RuntimeValidationContext(session=session, binding=binding))
     if health.status == "unavailable":
-        raise RuntimeError("runtime_health_unavailable")
+        return RuntimeExecutionResult(
+            output_text="",
+            exit_code=1,
+            failure_reason_code="runtime_health_unavailable",
+            public_error_message=runtime_failure_public_message(
+                "runtime_health_unavailable"
+            ),
+            diagnostic_reference=f"turn:{correlation_id}",
+        )
     prepared = await adapter.prepare(
         RuntimePrepareContext(
             session=session,
@@ -95,7 +113,17 @@ async def execute_agentic_runtime_turn(
         )
     )
     if not prepared.ready:
-        return RuntimeExecutionResult(output_text="", exit_code=1)
+        reason_code = normalized_failure_reason_code(
+            prepared.metadata.get("reason_code"),
+            fallback="provider_prepare_failed",
+        )
+        return RuntimeExecutionResult(
+            output_text="",
+            exit_code=1,
+            failure_reason_code=reason_code,
+            public_error_message=runtime_failure_public_message(reason_code),
+            diagnostic_reference=f"turn:{correlation_id}",
+        )
     provider_state = _apply_provider_state_update(
         prepared.provider_state_updates,
         on_provider_thread_id,
@@ -115,6 +143,7 @@ async def execute_agentic_runtime_turn(
     output_text = ""
     delta_output = ""
     exit_code: int | None = None
+    failure_reason_code: str | None = None
     last_ordinal = 0
     async for event in adapter.execute(context):
         _validate_event(event, correlation_id=correlation_id, last_ordinal=last_ordinal)
@@ -152,6 +181,11 @@ async def execute_agentic_runtime_turn(
         if event.event_type == "provider.execution.completed":
             output_text = str(event.payload.get("output_text") or output_text)
             exit_code = int(event.payload.get("exit_code") or 0)
+            if exit_code != 0:
+                failure_reason_code = normalized_failure_reason_code(
+                    event.payload.get("reason_code") or failure_reason_code,
+                    fallback="provider_execution_failed",
+                )
             continue
         if event.event_type == "runtime.output.final":
             output_text = str(event.payload.get("text") or output_text)
@@ -159,11 +193,27 @@ async def execute_agentic_runtime_turn(
             delta_output += str(event.payload.get("text") or "")
         elif event.event_type == "runtime.error":
             exit_code = 1
+            failure_reason_code = normalized_failure_reason_code(
+                event.payload.get("reason_code"),
+                fallback="provider_execution_failed",
+            )
         if event_sink is not None:
             event_sink(RuntimeExecutionEvent(event_type=event.event_type, payload=event.payload))
+    final_exit_code = exit_code if exit_code is not None else 1
+    if final_exit_code != 0 and failure_reason_code is None:
+        failure_reason_code = "provider_execution_failed"
     return RuntimeExecutionResult(
         output_text=output_text or delta_output,
-        exit_code=exit_code if exit_code is not None else 1,
+        exit_code=final_exit_code,
+        failure_reason_code=failure_reason_code,
+        public_error_message=(
+            runtime_failure_public_message(failure_reason_code)
+            if failure_reason_code is not None
+            else None
+        ),
+        diagnostic_reference=(
+            f"turn:{correlation_id}" if failure_reason_code is not None else None
+        ),
     )
 
 

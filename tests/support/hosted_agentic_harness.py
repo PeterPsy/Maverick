@@ -294,6 +294,7 @@ class HostedAgenticHarness:
                 cli=True,
                 mcp=True,
                 skill_catalog=False,
+                filesystem_list=False,
                 filesystem_read=False,
                 filesystem_write=False,
                 shell=False,

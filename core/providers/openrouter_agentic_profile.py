@@ -21,8 +21,8 @@ from core.providers.store import ProviderStore
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "7"
-OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6")
+OPENROUTER_AGENTIC_PROFILE_REVISION = "8"
+OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6", "7")
 OPENROUTER_AGENTIC_CERTIFICATE_ID = (
     f"capability-certificate:{OPENROUTER_AGENTIC_PROFILE_ID}:{OPENROUTER_AGENTIC_PROFILE_REVISION}"
 )
@@ -42,7 +42,11 @@ def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
         max_estimated_cost_microusd=25_000,
         allowed_surface_kinds=("core-capability",),
         tool_handle_mode="exact",
-        allowed_tool_handles=("core-capability:filesystem.read",),
+        allowed_tool_handles=(
+            "core-capability:filesystem.list",
+            "core-capability:filesystem.read",
+        ),
+        allow_filesystem_list=True,
         allow_filesystem_read=True,
         allow_filesystem_write=False,
         allow_shell=False,
@@ -83,7 +87,7 @@ def ensure_openrouter_agentic_preview_profile(
         provider_protocol="openrouter-chat-completions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==3",
+        adapter_version_constraint="==4",
         routing_constraint=openrouter_agentic_routing_constraint(),
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,

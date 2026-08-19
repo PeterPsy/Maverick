@@ -2,11 +2,25 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 import os
+from pathlib import Path
 from unittest import mock
 import unittest
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
 from core.api.platform_state import bootstrap_platform_state
+from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.certification_pipeline import (
+    execute_certification_suite,
+    sign_certification_run,
+)
 from core.providers.errors import ProviderNotFoundError
+from core.providers.openrouter_agentic_certification import (
+    OPENROUTER_CERTIFICATION_MATRIX_REVISION,
+    OPENROUTER_CERTIFICATION_SUITE_ID,
+    OPENROUTER_CERTIFICATION_SUITE_VERSION,
+    publish_openrouter_preview_certificate,
+)
 from core.providers.openrouter_agentic_profile import (
     OPENROUTER_AGENTIC_PROFILE_ID,
     OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS,
@@ -47,7 +61,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.adapter_version_constraint, "==3")
+        self.assertEqual(profile.adapter_version_constraint, "==4")
         self.assertEqual(profile.model_provider_id, "openrouter")
         self.assertEqual(profile.model_id, "deepseek/deepseek-v4-flash")
         self.assertEqual(profile.provider_protocol, "openrouter-chat-completions")
@@ -60,12 +74,61 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(routing.allowed_quantizations, ("fp8",))
         with self.assertRaises(ProviderNotFoundError):
             state.provider_store.get_capability_certificate(profile.capability_certificate_id)
+        self.assertEqual(
+            profile.policy_ceiling.allowed_tool_handles,
+            (
+                "core-capability:filesystem.list",
+                "core-capability:filesystem.read",
+            ),
+        )
         self.assertFalse(
             any(
                 binding.definition_id == profile.definition_id
                 for binding in state.provider_store.list_workspace_agentic_profile_bindings("default")
             )
         )
+
+        private_key = Ed25519PrivateKey.generate()
+        repository_root = Path(__file__).resolve().parents[3]
+        completed = mock.Mock(returncode=0, stdout=b"passed", stderr=b"")
+        with mock.patch(
+            "core.providers.certification_pipeline._require_clean_checkout"
+        ), mock.patch(
+            "core.providers.certification_pipeline._git_commit",
+            return_value="a" * 40,
+        ), mock.patch(
+            "core.providers.certification_pipeline.subprocess.run",
+            return_value=completed,
+        ):
+            run = execute_certification_suite(
+                cwd=repository_root,
+                suite_id=OPENROUTER_CERTIFICATION_SUITE_ID,
+                suite_version=OPENROUTER_CERTIFICATION_SUITE_VERSION,
+                adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
+                evidence_refs=("platform-evidence:test-run:openrouter",),
+                started_at=NOW,
+            )
+        signed = sign_certification_run(
+            run,
+            signer_key_id="test-ci",
+            private_key=private_key,
+        )
+        with mock.patch(
+            "core.providers.certification_pipeline._git_commit",
+            return_value="a" * 40,
+        ):
+            certificate = publish_openrouter_preview_certificate(
+                state.provider_store,
+                definition=profile,
+                adapter=adapter,
+                signed_run=signed,
+                trusted_keys={"test-ci": private_key.public_key()},
+            )
+        evidence = state.provider_store.get_capability_evidence(
+            certificate.evidence_digest
+        )
+        self.assertTrue(certificate.certified_capabilities.filesystem_list)
+        self.assertEqual(evidence.matrix_revision, OPENROUTER_CERTIFICATION_MATRIX_REVISION)
 
         previous_revision = OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS[-1]
         state.provider_store.save_agentic_profile_definition_status(

@@ -139,6 +139,14 @@ def fork_runtime_execution_binding(
 def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutionBinding:
     """Hydrate nested policy and routing records from a stored document."""
     payload = dict(document)
+    legacy_policy_fields = tuple(
+        field_name
+        for field_name in (
+            "profile_policy_ceiling_snapshot",
+            "workspace_policy_ceiling_snapshot",
+        )
+        if "allow_filesystem_list" not in payload[field_name]
+    )
     payload["routing_constraint_snapshot"] = _routing_constraint_from_document(
         payload["routing_constraint_snapshot"]
     )
@@ -150,7 +158,13 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     )
     payload.setdefault("legacy_inferred", False)
     binding = RuntimeExecutionBinding(**payload)
-    if binding.binding_digest != canonical_digest(binding):
+    digest_matches = binding.binding_digest == canonical_digest(binding)
+    if not digest_matches and legacy_policy_fields:
+        legacy_payload = asdict(binding)
+        for field_name in legacy_policy_fields:
+            legacy_payload[field_name].pop("allow_filesystem_list", None)
+        digest_matches = binding.binding_digest == canonical_digest(legacy_payload)
+    if not digest_matches:
         raise ValueError("Runtime execution binding digest does not match its immutable payload.")
     return binding
 
@@ -170,6 +184,7 @@ def canonical_digest(value: object) -> str:
 
 def _policy_from_document(document: dict[str, Any]) -> AgenticRuntimePolicy:
     payload = dict(document)
+    payload.setdefault("allow_filesystem_list", False)
     for key in ("allowed_surface_kinds", "allowed_tool_handles", "allowed_remote_data_classes"):
         payload[key] = tuple(payload.get(key, ()))
     return AgenticRuntimePolicy(**payload)

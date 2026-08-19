@@ -303,7 +303,10 @@ class PlainHostedRuntimeTest(unittest.TestCase):
             )
 
         self.assertEqual(turn.status, "failed")
-        self.assertEqual(turn.failure_reason, "plain_hosted_chat_model_blocks_attachments")
+        self.assertEqual(
+            turn.failure_reason,
+            "The selected model does not support image or file attachments.",
+        )
 
     def test_plain_hosted_async_turn_completes_without_codex(self) -> None:
         state = self.make_state()

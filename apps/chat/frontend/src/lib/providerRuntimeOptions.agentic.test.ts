@@ -35,7 +35,11 @@ function modelProvider(providerId: string, providerLabel: string, modelId: strin
   };
 }
 
-function agenticProfile(providerId: string, modelId: string): AgenticProfileItem {
+function agenticProfile(
+  providerId: string,
+  modelId: string,
+  rolloutStatus: AgenticProfileItem["rollout_status"] = "available",
+): AgenticProfileItem {
   return {
     workspace_profile_binding_id: `binding-${providerId}`,
     definition_id: `profile-${providerId}`,
@@ -44,7 +48,7 @@ function agenticProfile(providerId: string, modelId: string): AgenticProfileItem
     runtime_engine_id: "maverick-tool-loop",
     model_provider_id: providerId,
     model_id: modelId,
-    rollout_status: "preview",
+    rollout_status: rolloutStatus,
     enabled: true,
     is_default: false,
     certified: true,
@@ -52,6 +56,23 @@ function agenticProfile(providerId: string, modelId: string): AgenticProfileItem
 }
 
 describe("remote agentic provider runtime options", () => {
+  it("does not make preview profiles selectable in Chat", () => {
+    const modelId = "gemini-3.6-flash";
+    const providers = providerItemsFromPayload({
+      workspace_id: "default",
+      active_provider: null,
+      available_providers: [
+        modelProvider("google-ai-studio", "Google AI Studio", modelId, "Gemini 3.6 Flash"),
+      ],
+      agentic_profiles: {
+        default_binding_id: null,
+        items: [agenticProfile("google-ai-studio", modelId, "preview")],
+      },
+    });
+
+    expect(providers.some((provider) => Boolean(provider.workspace_profile_binding_id))).toBe(false);
+  });
+
   it("inherits reasoning choices exposed by Google and OpenRouter model metadata", () => {
     const googleModelId = "gemini-3.6-flash";
     const openRouterModelId = "deepseek/deepseek-v4-flash";

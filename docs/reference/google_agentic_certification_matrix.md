@@ -1,9 +1,9 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-08-16  
+Status date: 2026-08-19
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==3`
+Adapter: `maverick-hosted-tool-loop==4`
 
 ## Candidate combination
 
@@ -11,15 +11,17 @@ Adapter: `maverick-hosted-tool-loop==3`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
+| Immutable profile revision | `9` (revision `8` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
 | Endpoint | `https://generativelanguage.googleapis.com/v1/interactions` |
 | Continuation | stateful in production; stateless exact-history codec tested |
 | Tool calls | one sequential function call per model step |
+| Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public`, `workspace_internal_fake` |
-| Tool handles | `core-capability:filesystem.read` only |
+| Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
 | Certificate lifetime after a successful signed run | 45 days |
 
 Google documents Gemini 3.6 Flash as a stable model with a 1,048,576-token
@@ -45,11 +47,14 @@ Primary references:
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
-| Function call id/name/count | exact pairing and parallel-call rejection tests | not certified |
+| Function call id/name/count | exact catalog reconciliation, pairing, and parallel-call rejection tests | not certified |
+| Filesystem discovery | bounded deterministic listing, symlink non-traversal, and workspace confinement | not certified |
+| Reasoning configuration | no-tool and tool round trips at every selectable level, including deployed `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
 | Stateless continuation | exact user/thought/function history replay | not certified |
 | Thought-signature isolation | provider-private envelope and public-event assertions | not certified |
 | Usage and price estimate | token usage fixtures and integer micro-USD estimator | not certified |
+| Failure propagation | structured reason, safe public message, diagnostic reference, and nonnumeric Chat UX | not certified |
 | Shared tool loop | Google codec through the deterministic hosted-loop E2E | not certified |
 | Cancel/recovery/confirmation | shared hosted runtime contract suite | not certified |
 | Revocation and egress drift | mid-step revocation and live-policy drift fixtures | not certified |
@@ -75,6 +80,8 @@ The executable signing and publication workflow is defined in
 - Unknown data classification is denied before transport.
 - Function results with a different call id or function name are rejected
   before transport.
+- A function name not present in the exact request catalog is rejected by the
+  Google codec before it can reach the tool orchestrator.
 - Multiple function calls in one response are rejected for this preview.
 - Redirects, unexpected hosts, non-SSE responses, oversized requests/events and
   incomplete streams are rejected.

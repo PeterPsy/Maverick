@@ -654,6 +654,28 @@ catalog and encrypted invocation ledger. Provider-private protocol bytes remain
 behind the matching codec service and public events are bounded, normalized,
 and private-field-free.
 
+Sequential provider requests must explicitly disable parallel tool calls when
+the provider protocol supports that control. A provider codec reconciles every
+returned tool name with the exact request catalog before orchestration. One
+OpenAI-compatible tool call may be preceded by provisional assistant text; the
+codec keeps that text only in provider-private continuation state with the
+assistant tool call, executes the single call through the shared loop, and does
+not publish the provisional text as final output. Multiple calls and invalid
+tool-call indices remain distinct fail-closed conditions.
+
+Agentic execution failures cross the runtime boundary as a stable reason code,
+a mapped redaction-safe public message, and an optional bounded diagnostic
+reference. `runtime.turn.failed` persists those fields; numeric process exit
+codes remain diagnostics and are never the sole user-facing error.
+
+Execution-policy-owned workspace filesystem discovery is a separate read-only
+Core capability from file reads. `core-capability:filesystem.list` returns only
+bounded, deterministically ordered relative paths and entry types, limits depth
+and result count, never returns file content, never follows directory symlinks,
+and resolves its requested root inside the workspace boundary. Certification
+and policy must attest and grant listing independently from
+`core-capability:filesystem.read`.
+
 ### 8. Secret management
 
 The core owns:

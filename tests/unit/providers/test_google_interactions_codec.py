@@ -24,10 +24,6 @@ from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_CONTENT_TYPE,
     GOOGLE_INTERACTIONS_SCHEMA_VERSION,
 )
-from core.providers.google_interactions_probe import (
-    PROBE_TOOL_NAME,
-    probe_google_interactions,
-)
 from core.providers.google_interactions_state import decode_google_interaction_state
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
@@ -329,30 +325,11 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
             )
         )
 
-    def test_opt_in_capability_probe_returns_only_redaction_safe_evidence(self) -> None:
-        transport = _ScriptedTransport(
-            [
-                _tool_stream("interaction-probe-1", tool_name=PROBE_TOOL_NAME),
-                _text_stream("interaction-probe-2", "OK"),
-            ]
-        )
-
-        result = asyncio.run(
-            probe_google_interactions(
-                credential=EphemeralCredential("probe-key"),
-                client=GoogleInteractionsAgenticClient(transport=transport),
-            )
-        )
-
-        self.assertTrue(result.succeeded)
-        self.assertEqual(result.reason_code, "ok")
-        self.assertEqual(result.request_count, 2)
-        self.assertEqual(len(result.result_summary_digest), 64)
-        self.assertNotIn("OK", repr(result))
-
-
 class _ScriptedTransport:
-    def __init__(self, scripts: list[list[dict[str, object]]]) -> None:
+    def __init__(
+        self,
+        scripts: list[list[dict[str, object] | BaseException]],
+    ) -> None:
         self.scripts = scripts
         self.payloads: list[dict[str, object]] = []
 
@@ -361,6 +338,8 @@ class _ScriptedTransport:
         self.assert_credential_redacted = "test-key" not in repr(credential)
         script = self.scripts.pop(0)
         for event in script:
+            if isinstance(event, BaseException):
+                raise event
             yield event
 
 

@@ -29,6 +29,9 @@ class RuntimeExecutionResult:
 
     output_text: str
     exit_code: int
+    failure_reason_code: str | None = None
+    public_error_message: str | None = None
+    diagnostic_reference: str | None = None
 
 
 def execute_runtime_turn(
@@ -109,6 +112,8 @@ def execute_runtime_turn(
         return RuntimeExecutionResult(
             output_text=f"Provider `{provider.provider_id}` is registered but has no executable adapter in this host yet.",
             exit_code=1,
+            failure_reason_code="provider_adapter_unavailable",
+            public_error_message="The selected runtime adapter is unavailable.",
         )
     active_launch_spec = launch_spec or runtime_adapter.build_launch_spec(session)
     coalesced_sink = RuntimeOutputDeltaCoalescer(event_sink)
@@ -130,7 +135,13 @@ def execute_runtime_turn(
         result = runtime_adapter.execute_turn(**execution_kwargs)
     finally:
         coalesced_sink.flush()
-    return RuntimeExecutionResult(output_text=result.output_text, exit_code=result.exit_code)
+    return RuntimeExecutionResult(
+        output_text=result.output_text,
+        exit_code=result.exit_code,
+        failure_reason_code=getattr(result, "failure_reason_code", None),
+        public_error_message=getattr(result, "public_error_message", None),
+        diagnostic_reference=getattr(result, "diagnostic_reference", None),
+    )
 
 
 class RuntimeOutputDeltaCoalescer:

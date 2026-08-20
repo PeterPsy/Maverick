@@ -203,6 +203,51 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         self.assertEqual(final_state.consumed_tool_call_ids, ("call-1", "call-2"))
         self.assertEqual(third[-2].text, "complete")
 
+    def test_fragmented_secondary_tool_proposal_is_serialized_to_primary_call(self) -> None:
+        stream = _tool_stream("generation-serialized", "fixture_read", call_id="call-1")
+        stream.insert(1, {
+            **_identity("generation-serialized"),
+            "choices": [{
+                "index": 0,
+                "delta": {"tool_calls": [{
+                    "index": 1,
+                    "id": "call-2",
+                    "type": "function",
+                    "function": {"name": "fixture_read", "arguments": "{}"},
+                }]},
+                "finish_reason": None,
+            }],
+        })
+        transport = _ScriptedTransport([
+            stream,
+            _text_stream("generation-serialized-final", "complete"),
+        ])
+        client = OpenRouterAgenticClient(transport=transport)
+
+        events = asyncio.run(_events(client, _request("request-serialized")))
+
+        calls = [event.tool_call for event in events if event.event_type == "tool_call"]
+        self.assertEqual([call.provider_tool_call_id for call in calls], ["call-1"])
+        self.assertFalse(any(event.event_type == "error" for event in events))
+        private = decode_openrouter_chat_state(_private_state(events))
+        self.assertEqual(
+            [call["id"] for call in private.history[-1]["tool_calls"]],
+            ["call-1"],
+        )
+        final = asyncio.run(_events(
+            client,
+            _request(
+                "request-serialized-final",
+                private_state=_private_state(events),
+                tool_results=(_tool_result("call-1"),),
+            ),
+        ))
+        self.assertEqual(final[-2].text, "complete")
+        self.assertEqual(
+            [call["id"] for call in transport.payloads[1]["messages"][-2]["tool_calls"]],
+            ["call-1"],
+        )
+
     def test_mismatched_result_upstream_metadata_and_parallel_calls_fail_closed(self) -> None:
         transport = _ScriptedTransport([_tool_stream("generation-pair", "fixture_read")])
         client = OpenRouterAgenticClient(transport=transport)
@@ -229,7 +274,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
 
         parallel = _tool_stream("generation-parallel", "fixture_read")
         parallel[0]["choices"][0]["delta"]["tool_calls"].append({
-            "index": 1,
+            "index": 0,
             "id": "call-2",
             "type": "function",
             "function": {"name": "fixture_read", "arguments": "{}"},

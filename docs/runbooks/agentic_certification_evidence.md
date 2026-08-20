@@ -51,20 +51,22 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `6`, matrix revision `2026-08-19-r5`, and the OpenRouter manifest. The
-Google suite uses version `7` and matrix revision `2026-08-20-r6`. The canonical matrices,
-artifact bundles, commands, and live probe entrypoints live in
+version `7`, matrix revision `2026-08-20-r6`, and the OpenRouter manifest. The
+Google suite uses version `7` and matrix revision `2026-08-20-r6`. The
+canonical matrices, artifact bundles, commands, and live probe entrypoints live in
 `core/providers/certification_manifests.py`.
 Do not reuse a Google artifact bundle, result, live probe, or evidence reference.
 
 Both live probes must make the provider call the exact generated alias for
 `core-capability:filesystem.list`, execute the real Core handler over an
 isolated synthetic directory, and return its marker-bearing result to the
-provider at every certified reasoning effort. Requests are paced (one second by
-default) so an eight-request probe does not itself justify diagnosing a quota
-incident. A Google failure must preserve the redaction-safe distinction among
-`quota_exceeded`, `resource_exhausted`, and `rate_limit_exceeded`; do not infer a
-project-quota cause from the broader family alone.
+provider at every certified reasoning effort. The OpenRouter probe requires
+three sequential tool rounds plus a final response at every effort. Requests
+are paced (one second by default) so the probe itself does not justify
+diagnosing a quota incident. A Google failure must preserve the redaction-safe
+distinction among `quota_exceeded`, `resource_exhausted`, and
+`rate_limit_exceeded`; do not infer a project-quota cause from the broader
+family alone.
 
 Before its first completion request, the OpenRouter probe must fetch both the
 official model endpoint catalog and ZDR endpoint catalog. It fails closed unless
@@ -74,6 +76,10 @@ particular, the request must not reintroduce `parallel_tool_calls` while the
 endpoint does not declare it.
 The required set is derived from the translated completion payload rather than
 maintained as a second hard-coded parameter list.
+OpenRouter may stream more than one indexed proposal despite that omission.
+The certified decoder must retain and execute only the validated index-0 call,
+discard later indexes, and continue through a new provider step; a missing or
+conflicting primary call remains terminal.
 
 The runner records and signs the source commit, suite identity/version, matrix
 revision and digest, adapter digest, complete artifact-bundle digest, command

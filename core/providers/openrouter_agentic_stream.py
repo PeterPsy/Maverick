@@ -187,11 +187,20 @@ class OpenRouterChatStreamDecoder:
     def _tool_delta(self, value: object) -> None:
         if not isinstance(value, list) or not value:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
-        if len(value) != 1:
-            raise OpenRouterAgenticProtocolError("provider_parallel_tool_calls_forbidden")
-        item = object_field(value[0])
-        if item.get("index") != 0:
-            raise OpenRouterAgenticProtocolError("provider_tool_call_index_invalid")
+        for raw_item in value:
+            item = object_field(raw_item)
+            index = nonnegative_int(item.get("index"))
+            if index != 0:
+                if self.tool_call is None:
+                    raise OpenRouterAgenticProtocolError("provider_tool_call_index_invalid")
+                # The shared runtime executes one call per model step. DeepInfra
+                # can still stream later array entries even though the profile is
+                # sequential, so retain only the primary entry and let the model
+                # request any remaining work after its result is replayed.
+                continue
+            self._primary_tool_delta(item)
+
+    def _primary_tool_delta(self, item: dict[str, object]) -> None:
         if self.tool_call is None:
             self.tool_call = _ToolCall()
         call_id = item.get("id")

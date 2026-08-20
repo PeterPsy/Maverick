@@ -121,10 +121,10 @@ GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
 
 OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
     suite_id="maverick-openrouter-agentic-contract",
-    suite_version="6",
+    suite_version="7",
     provider_id="openrouter",
     matrix_path="docs/reference/openrouter_agentic_certification_matrix.md",
-    matrix_revision="2026-08-19-r5",
+    matrix_revision="2026-08-20-r6",
     artifact_paths=(
         "core/providers/agentic_filesystem_probe.py",
         "core/providers/agentic_models.py",

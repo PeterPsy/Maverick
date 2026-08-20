@@ -27,9 +27,10 @@ runbook begins. This runbook never manufactures or repairs a certificate.
 - OpenRouter remains pinned to `deepseek/deepseek-v4-flash` through
   `deepinfra/fp8`, with fallback disabled, required parameters, denied data
   collection, required ZDR, and verified router metadata.
-- Tool calls are sequential. Mutating and destructive work requires persisted
-  confirmation. Ambiguous side effects become `execution_unknown` and are not
-  replayed automatically.
+- Tool calls are sequential. OpenRouter later-indexed proposals are discarded
+  and never executed; only the validated primary call can advance the loop.
+  Mutating and destructive work requires persisted confirmation. Ambiguous
+  side effects become `execution_unknown` and are not replayed automatically.
 - Provider-private bytes and tool payloads remain encrypted Core state. Never
   copy them into tickets, logs, prompts, analytics, or ordinary exports.
 

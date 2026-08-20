@@ -28,6 +28,8 @@ from core.providers.openrouter_agentic_profile import (
 
 
 CERTIFIED_REASONING_EFFORTS = OPENROUTER_CERTIFIED_REASONING_EFFORTS
+TOOL_CALLS_PER_EFFORT = 3
+REQUESTS_PER_EFFORT = TOOL_CALLS_PER_EFFORT + 1
 
 
 async def _main() -> int:
@@ -62,46 +64,67 @@ async def _main() -> int:
             }, sort_keys=True))
             return 1
         for effort in CERTIFIED_REASONING_EFFORTS:
+            private = None
+            tool_results = []
+            for tool_round in range(1, TOOL_CALLS_PER_EFFORT + 1):
+                await _pace(request_count, interval)
+                response = [event async for event in client.create_response(
+                    _request(
+                        request_id=(
+                            f"openrouter-live-synthetic-probe:{effort}:{tool_round}"
+                        ),
+                        reasoning_effort=effort,
+                        tool_definition=filesystem_probe.definition,
+                        private_state=private,
+                        tool_results=tuple(tool_results),
+                    ),
+                    credential=credential,
+                )]
+                request_count += 1
+                events.extend(response)
+                call = next((
+                    event.tool_call for event in response
+                    if event.event_type == "tool_call"
+                ), None)
+                private = next((
+                    event.provider_private_state for event in response
+                    if event.event_type == "provider_state"
+                ), None)
+                if (
+                    call is None
+                    or private is None
+                    or any(event.event_type == "error" for event in response)
+                ):
+                    return _finish(
+                        events, request_count, filesystem_result_count, catalog
+                    )
+                try:
+                    tool_results.append(filesystem_probe.execute(call))
+                except (OSError, TypeError, ValueError, RuntimeError):
+                    return _finish(
+                        events, request_count, filesystem_result_count, catalog
+                    )
+                filesystem_result_count += 1
             await _pace(request_count, interval)
-            first = [event async for event in client.create_response(
+            final = [event async for event in client.create_response(
                 _request(
-                    request_id=f"openrouter-live-synthetic-probe:{effort}:1",
-                    reasoning_effort=effort,
-                    tool_definition=filesystem_probe.definition,
-                ),
-                credential=credential,
-            )]
-            request_count += 1
-            events.extend(first)
-            call = next((event.tool_call for event in first if event.event_type == "tool_call"), None)
-            private = next((
-                event.provider_private_state for event in first
-                if event.event_type == "provider_state"
-            ), None)
-            if call is None or private is None or any(event.event_type == "error" for event in first):
-                return _finish(events, request_count, filesystem_result_count, catalog)
-            try:
-                tool_result = filesystem_probe.execute(call)
-            except (OSError, TypeError, ValueError, RuntimeError):
-                return _finish(events, request_count, filesystem_result_count, catalog)
-            filesystem_result_count += 1
-            await _pace(request_count, interval)
-            second = [event async for event in client.create_response(
-                _request(
-                    request_id=f"openrouter-live-synthetic-probe:{effort}:2",
+                    request_id=(
+                        f"openrouter-live-synthetic-probe:{effort}:"
+                        f"{REQUESTS_PER_EFFORT}"
+                    ),
                     reasoning_effort=effort,
                     tool_definition=filesystem_probe.definition,
                     private_state=private,
-                    tool_results=(tool_result,),
+                    tool_results=tuple(tool_results),
                 ),
                 credential=credential,
             )]
             request_count += 1
-            events.extend(second)
+            events.extend(final)
             if (
-                not any(event.event_type == "text_final" for event in second)
-                or not any(event.event_type == "completed" for event in second)
-                or any(event.event_type == "error" for event in second)
+                not any(event.event_type == "text_final" for event in final)
+                or not any(event.event_type == "completed" for event in final)
+                or any(event.event_type == "error" for event in final)
             ):
                 return _finish(events, request_count, filesystem_result_count, catalog)
     return _finish(events, request_count, filesystem_result_count, catalog)
@@ -125,8 +148,10 @@ def _request(
             provenance="user_input", trust_level="trusted_platform",
             content_type="text/plain",
             content=(
-                f"Call {tool_definition.name} exactly once with path '.', max_depth 1, and "
-                "max_results 10. Then answer OK. Synthetic data only."
+                f"Call {tool_definition.name} exactly three times total, one call per "
+                "response, with path '.', max_depth 1, and max_results 10. After each "
+                "of the first two results, call it once again. After the third result, "
+                "answer OK. Synthetic data only."
             ).encode("utf-8"),
         ),),
         tool_definitions=(tool_definition,), tool_results=tool_results,
@@ -151,8 +176,10 @@ def _request_interval_seconds() -> float:
 
 def _finish(events, request_count: int, filesystem_result_count: int, catalog) -> int:
     succeeded = (
-        request_count == 2 * len(CERTIFIED_REASONING_EFFORTS)
-        and filesystem_result_count == len(CERTIFIED_REASONING_EFFORTS)
+        request_count == REQUESTS_PER_EFFORT * len(CERTIFIED_REASONING_EFFORTS)
+        and filesystem_result_count == (
+            TOOL_CALLS_PER_EFFORT * len(CERTIFIED_REASONING_EFFORTS)
+        )
         and sum(event.event_type == "usage" for event in events) >= request_count
         and sum(event.event_type == "provider_state" for event in events) >= request_count
         and not any(event.event_type == "error" for event in events)

@@ -26,7 +26,7 @@ class _ProbeClient:
 
     async def create_response(self, request, *, credential):
         self.requests.append(request)
-        if request.tool_results:
+        if len(request.tool_results) >= probe.TOOL_CALLS_PER_EFFORT:
             yield AgenticModelEvent(
                 "text_final",
                 request.request_id,
@@ -39,7 +39,7 @@ class _ProbeClient:
                 request.request_id,
                 1,
                 tool_call=AgenticToolCall(
-                    "probe-call",
+                    f"probe-call-{len(request.tool_results) + 1}",
                     FILESYSTEM_LIST_PROBE_TOOL_NAME,
                     {"path": ".", "max_depth": 1, "max_results": 10},
                 ),
@@ -90,26 +90,30 @@ class OpenRouterAgenticProbeTest(unittest.TestCase):
             exit_code = asyncio.run(probe._main())
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(len(client.requests), 8)
+        self.assertEqual(
+            len(client.requests),
+            probe.REQUESTS_PER_EFFORT * len(probe.CERTIFIED_REASONING_EFFORTS),
+        )
         self.assertEqual(
             [request.reasoning_effort for request in client.requests],
             [
                 effort
                 for effort in probe.CERTIFIED_REASONING_EFFORTS
-                for _ in range(2)
+                for _ in range(probe.REQUESTS_PER_EFFORT)
             ],
         )
         self.assertTrue(
             all(
-                request.request_id.endswith((":1", ":2"))
+                request.request_id.endswith((":1", ":2", ":3", ":4"))
                 for request in client.requests
             )
         )
         self.assertTrue(
             all(
                 FILESYSTEM_LIST_PROBE_MARKER.encode("utf-8")
-                in request.tool_results[0].content
-                for request in client.requests[1::2]
+                in result.content
+                for request in client.requests
+                for result in request.tool_results
             )
         )
 

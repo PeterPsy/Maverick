@@ -1,7 +1,7 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-08-19
-Matrix revision: `2026-08-19-r5`
+Status date: 2026-08-20
+Matrix revision: `2026-08-20-r6`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==5`
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==5`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `9` (revision `8` suspended) |
+| Immutable profile revision | `10` (revision `9` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -20,8 +20,8 @@ Adapter: `maverick-hosted-tool-loop==5`
 | Effective provider identity | `DeepInfra` |
 | Quantization | `fp8` |
 | Context / endpoint completion limit | 1,048,576 / 65,536 tokens |
-| Tool calls | one sequential function call per model step |
-| Parallel request control | parameter omitted because the certified endpoint catalog does not declare it; multiple returned calls still fail closed |
+| Tool calls | one executable sequential function call per model step |
+| Parallel request control | parameter omitted because the certified endpoint catalog does not declare it; later indexed proposals are discarded and never executed |
 | Mixed response handling | provisional text plus one tool call is retained privately and continued |
 | Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
@@ -83,9 +83,9 @@ Primary references:
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
 | No eligible endpoint | HTTP and streamed 404 normalization fixtures | not certified |
-| Tool call id/name/count | fragmented arguments, exact pairing, invalid-index classification, and true parallel-call rejection | not certified |
+| Tool call id/name/count | fragmented arguments, exact pairing, secondary-index serialization, and duplicate-primary rejection | not certified |
 | Mixed text then tool | provisional narration is not finalized or duplicated; one call continues to the next step | not certified |
-| Multi-step continuation | two sequential tool rounds followed by a final response | not certified |
+| Multi-step continuation | three sequential live tool rounds followed by a final response at every reasoning effort | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
@@ -113,8 +113,18 @@ The operator probe on 2026-08-19 exposed the revision-8 contract defect: it sent
 endpoint that did not declare that parameter, producing the expected
 `provider_no_eligible_endpoint`. Revision 9 removes only the unsupported
 parameter, retains strict routing, and keeps sequential execution fail-closed
-in the decoder. It remains uncertified and hidden until the complete r5 suite,
-catalog preflight, signed live probe, and publication workflow succeed.
+in the decoder.
+
+A real revision-9 canary on 2026-08-20 exposed a second interoperability edge:
+DeepInfra occasionally streamed an additional tool proposal as a later array
+index even though the shared runtime permits only one sequential execution per
+step. Revision 10 retains only the fully validated index-0 call in private
+continuation state. Later indexed proposals are neither emitted nor executed;
+after the primary result is replayed, the model can request remaining work in a
+new sequential step. A missing index-0 call or a conflicting second index-0
+identity still fails closed. Revision 10 remains uncertified and hidden until
+the complete r6 suite, catalog preflight, signed live probe, and publication
+workflow succeed.
 
 ## Fail-closed conditions
 
@@ -129,7 +139,9 @@ catalog preflight, signed live probe, and publication workflow succeed.
 - Missing or disabled credential bindings prevent session pinning.
 - Unknown data classification is denied before transport.
 - Function results with a different id or name are rejected before transport.
-- Multiple tool calls in one response are rejected for this preview.
+- Only the validated index-0 tool call can be persisted or executed. Later
+  indexed proposals are discarded; a missing or conflicting primary call is
+  rejected.
 - A requested reasoning effort outside the immutable certificate tuple, or a
   certificate/binding reasoning-contract mismatch, is rejected before use.
 - A single tool call preceded by text is accepted; that text remains

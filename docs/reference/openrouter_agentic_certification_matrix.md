@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-19
-Matrix revision: `2026-08-19-r4`
+Matrix revision: `2026-08-19-r5`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==4`
+Adapter: `maverick-hosted-tool-loop==5`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==4`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `8` (revision `7` suspended) |
+| Immutable profile revision | `9` (revision `8` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -21,7 +21,7 @@ Adapter: `maverick-hosted-tool-loop==4`
 | Quantization | `fp8` |
 | Context / endpoint completion limit | 1,048,576 / 65,536 tokens |
 | Tool calls | one sequential function call per model step |
-| Parallel request control | `parallel_tool_calls: false` on every request |
+| Parallel request control | parameter omitted because the certified endpoint catalog does not declare it; multiple returned calls still fail closed |
 | Mixed response handling | provisional text plus one tool call is retained privately and continued |
 | Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
@@ -29,18 +29,22 @@ Adapter: `maverick-hosted-tool-loop==4`
 | Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
 | Certificate lifetime after a successful signed run | 30 days |
 
-The dated OpenRouter endpoint catalogs listed `deepinfra/fp8` as active for
-DeepSeek V4 Flash, with `tools`, `tool_choice`, `reasoning`, `max_tokens`, and
-`reasoning_effort` support. It appeared in the ZDR endpoint catalog and exposed
-FP8 quantization. The recorded list price was $0.09 per million input tokens
-and $0.18 per million output tokens.
+The dated OpenRouter model and ZDR endpoint catalogs listed `deepinfra/fp8` as
+active for DeepSeek V4 Flash, with `tools`, `tool_choice`, `reasoning`,
+`max_tokens`, and `reasoning_effort` support. Neither catalog declared
+`parallel_tool_calls`. The endpoint exposed FP8 quantization; the recorded list
+price was $0.09 per million input tokens and $0.18 per million output tokens.
+The certification probe fetches both official catalogs immediately before any
+completion request and fails unless this exact record is active, ZDR-listed,
+large enough for the requested completion budget, and supports every parameter
+the translated payload sends that participates in endpoint parameter routing.
 
-Every agentic request sends the sequential control and this router object
-without a permissive default:
+Every agentic request sends this router object without a permissive default.
+It intentionally omits `parallel_tool_calls`, because `require_parameters=true`
+would otherwise make every currently catalogued endpoint ineligible:
 
 ```json
 {
-  "parallel_tool_calls": false,
   "provider": {
     "only": ["deepinfra/fp8"],
     "allow_fallbacks": false,
@@ -74,15 +78,16 @@ Primary references:
 
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
-| Exact request translation | deterministic payload and relaxed-control rejection fixtures | not certified |
+| Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
+| Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
 | No eligible endpoint | HTTP and streamed 404 normalization fixtures | not certified |
 | Tool call id/name/count | fragmented arguments, exact pairing, invalid-index classification, and true parallel-call rejection | not certified |
 | Mixed text then tool | provisional narration is not finalized or duplicated; one call continues to the next step | not certified |
 | Multi-step continuation | two sequential tool rounds followed by a final response | not certified |
-| Filesystem discovery | bounded deterministic listing, symlink non-traversal, and workspace confinement | not certified |
-| Reasoning configuration | no-tool and tool round trips at every selectable level, including deployed `high` | not certified |
+| Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
+| Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
 | Usage, generation id and price | success and decode-failure fixtures retain available telemetry and micro-USD estimate | not certified |
 | Failure propagation | distinct mixed/parallel/index codes, safe public message, diagnostic reference, and nonnumeric Chat UX | not certified |
@@ -103,13 +108,13 @@ bundle and this matrix revision, and an Ed25519 signature from a trusted CI key.
 The executable signing and publication workflow is defined in
 `docs/runbooks/agentic_certification_evidence.md`.
 
-The operator probe on 2026-08-19 also found a live router/catalog drift: the
-catalog listed `deepinfra/fp8` as active, ZDR and tool-capable, but the exact
-request was rejected with `provider_no_eligible_endpoint` before any provider
-attempt when `require_parameters: true` and `parallel_tool_calls: false` were
-both present. Removing either control made the request eligible. Neither
-control may be relaxed for this profile, so revision `8` remains uncertified
-and must stay hidden until OpenRouter accepts the pinned combination.
+The operator probe on 2026-08-19 exposed the revision-8 contract defect: it sent
+`parallel_tool_calls:false` while `require_parameters:true` excluded every
+endpoint that did not declare that parameter, producing the expected
+`provider_no_eligible_endpoint`. Revision 9 removes only the unsupported
+parameter, retains strict routing, and keeps sequential execution fail-closed
+in the decoder. It remains uncertified and hidden until the complete r5 suite,
+catalog preflight, signed live probe, and publication workflow succeed.
 
 ## Fail-closed conditions
 
@@ -117,14 +122,16 @@ and must stay hidden until OpenRouter accepts the pinned combination.
   mismatch is rejected.
 - `allow_fallbacks=true`, missing parameter enforcement, collection other than
   `deny`, or missing ZDR enforcement is rejected before transport.
-- Missing `parallel_tool_calls: false` is a request-contract failure for the
-  sequential profile.
+- Sending `parallel_tool_calls` while the pinned endpoint does not declare it is
+  a request-contract and catalog-preflight failure.
 - A 404/no-eligible-provider result is terminal and never falls back.
 - Missing, expired, revoked, or digest-mismatched certificates prevent authority.
 - Missing or disabled credential bindings prevent session pinning.
 - Unknown data classification is denied before transport.
 - Function results with a different id or name are rejected before transport.
 - Multiple tool calls in one response are rejected for this preview.
+- A requested reasoning effort outside the immutable certificate tuple, or a
+  certificate/binding reasoning-contract mismatch, is rejected before use.
 - A single tool call preceded by text is accepted; that text remains
   provisional, is stored with the assistant tool call in private continuation
   state, and is not duplicated in the final answer.

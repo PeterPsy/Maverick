@@ -101,6 +101,14 @@ class AgenticProfileApiTest(unittest.TestCase):
             session_payload["execution_binding"]["reasoning_effort"],
             runtime_binding.reasoning_effort,
         )
+        self.assertEqual(
+            session_payload["execution_binding"]["certified_reasoning_efforts"],
+            runtime_binding.certified_reasoning_efforts,
+        )
+        self.assertEqual(
+            session_payload["execution_binding"]["default_reasoning_effort"],
+            runtime_binding.default_reasoning_effort,
+        )
 
     def test_status_exposes_remote_model_reasoning_choices(self) -> None:
         provider_store = ProviderDocumentStore(

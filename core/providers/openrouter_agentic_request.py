@@ -36,7 +36,6 @@ def openrouter_chat_payload(
             for tool in request.tool_definitions
         ],
         "tool_choice": "auto" if request.tool_definitions else "none",
-        "parallel_tool_calls": False,
         "stream": True,
         "stream_options": {"include_usage": True},
         "max_tokens": request.max_output_tokens,

@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
+import importlib.util
+import inspect
+import sys
 import unittest
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.certificate_service import (
@@ -14,8 +18,11 @@ from core.providers.certificate_service import (
 )
 from core.providers.errors import CapabilityCertificateConflictError, CapabilityCertificateError
 from core.providers.evidence_store import CapabilityEvidenceBlobStore
+from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
+from core.providers.openrouter_agentic_client import OpenRouterAgenticClient
 from core.runtime.authority import resolve_effective_runtime_authority
 from core.runtime.execution_binding import build_runtime_execution_binding, canonical_digest
+from core.runtime.hosted_agentic_loop import HostedAgenticLoop
 from tests.support.agentic_certification import (
     certified_test_provider_store,
     fake_capability_evidence,
@@ -58,7 +65,9 @@ class CapabilityCertificateTest(unittest.TestCase):
             provider_api_version="v1",
             routing_constraint=routing,
             credential_binding_id=None,
-            reasoning_effort=None,
+            reasoning_effort=updates.pop("reasoning_effort", None),
+            certified_reasoning_efforts=updates.pop("certified_reasoning_efforts", ()),
+            default_reasoning_effort=updates.pop("default_reasoning_effort", None),
             execution_mode="full-access",
             profile_policy_ceiling=updates.pop("profile_policy", codex_runtime_policy()),
             workspace_policy_ceiling=updates.pop("workspace_policy", codex_runtime_policy()),
@@ -174,13 +183,80 @@ class CapabilityCertificateTest(unittest.TestCase):
 
         tampered = replace(self.binding, adapter_artifact_digest="0" * 64, binding_digest="")
         tampered = replace(tampered, binding_digest=canonical_digest(tampered))
-        with self.assertRaisesRegex(CapabilityCertificateError, "certificate_adapter_artifact_digest_mismatch"):
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "certificate_adapter_artifact_digest_mismatch",
+        ):
             validate_certificate_for_binding(
                 self.store,
                 binding=tampered,
                 adapter=self.adapter,
                 now=NOW,
             )
+
+    def test_function_and_module_source_changes_invalidate_artifact_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "digest_component.py"
+            source_path.write_text("def operation():\n    return 1\n", encoding="utf-8")
+            spec = importlib.util.spec_from_file_location("digest_component", source_path)
+            self.assertIsNotNone(spec)
+            self.assertIsNotNone(spec.loader)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            self.addCleanup(sys.modules.pop, spec.name, None)
+            spec.loader.exec_module(module)
+
+            class FunctionAdapter(FakeHostedAgenticAdapter):
+                artifact_components = (module.operation,)
+
+            class ModuleAdapter(FakeHostedAgenticAdapter):
+                artifact_components = (module,)
+
+            function_digest = runtime_adapter_artifact_digest(FunctionAdapter())
+            module_digest = runtime_adapter_artifact_digest(ModuleAdapter())
+            source_path.write_text("def operation():\n    return 2\n", encoding="utf-8")
+
+            self.assertNotEqual(
+                runtime_adapter_artifact_digest(FunctionAdapter()),
+                function_digest,
+            )
+            self.assertNotEqual(
+                runtime_adapter_artifact_digest(ModuleAdapter()),
+                module_digest,
+            )
+
+    def test_each_declared_operational_module_affects_artifact_digest(self) -> None:
+        loop = object.__new__(HostedAgenticLoop)
+        google = object.__new__(GoogleInteractionsAgenticClient)
+        openrouter = object.__new__(OpenRouterAgenticClient)
+        components = (
+            *loop.artifact_components,
+            *google.artifact_components,
+            *openrouter.artifact_components,
+        )
+        adapter_type = type(
+            "OperationalArtifactAdapter",
+            (FakeHostedAgenticAdapter,),
+            {"artifact_components": components},
+        )
+        adapter = adapter_type()
+        baseline = runtime_adapter_artifact_digest(adapter)
+        source_paths = {
+            Path(source).resolve()
+            for component in components
+            if (source := inspect.getsourcefile(component)) is not None
+        }
+        original_read_bytes = Path.read_bytes
+
+        self.assertGreater(len(source_paths), 10)
+        for source_path in source_paths:
+            with self.subTest(source_path=source_path.name):
+                def modified_read_bytes(path: Path, *, target=source_path) -> bytes:
+                    payload = original_read_bytes(path)
+                    return payload + b"\n# simulated source mutation\n" if path.resolve() == target else payload
+
+                with patch.object(Path, "read_bytes", modified_read_bytes):
+                    self.assertNotEqual(runtime_adapter_artifact_digest(adapter), baseline)
 
     def test_effective_upstream_must_be_certified(self) -> None:
         routing = replace(
@@ -207,6 +283,45 @@ class CapabilityCertificateTest(unittest.TestCase):
                 binding=binding,
                 adapter=self.adapter,
                 observed_upstream_id="upstream-b",
+                now=NOW,
+            )
+
+    def test_reasoning_contract_is_immutable_and_verified_live(self) -> None:
+        binding = self._binding(
+            reasoning_effort="high",
+            certified_reasoning_efforts=("low", "high"),
+            default_reasoning_effort="high",
+        )
+        store = certified_test_provider_store(
+            binding,
+            self.adapter,
+            evidence=self.evidence,
+            now=NOW,
+        )
+
+        certificate = validate_certificate_for_binding(
+            store,
+            binding=binding,
+            adapter=self.adapter,
+            now=NOW,
+        )
+        self.assertEqual(certificate.certified_reasoning_efforts, ("low", "high"))
+        self.assertEqual(certificate.default_reasoning_effort, "high")
+
+        drifted = replace(
+            binding,
+            certified_reasoning_efforts=("minimal", "low", "high"),
+            binding_digest="",
+        )
+        drifted = replace(drifted, binding_digest=canonical_digest(drifted))
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "certificate_certified_reasoning_efforts_mismatch",
+        ):
+            validate_certificate_for_binding(
+                store,
+                binding=drifted,
+                adapter=self.adapter,
                 now=NOW,
             )
 
@@ -352,6 +467,31 @@ class CapabilityCertificateTest(unittest.TestCase):
         serialized["model_id"] = "tampered-model"
         with self.assertRaisesRegex(ValueError, "digest"):
             execution_binding_from_document(serialized)
+
+    def test_rehydrated_legacy_binding_round_trips_reasoning_defaults_fail_closed(self) -> None:
+        from core.runtime.execution_binding import execution_binding_from_document
+
+        serialized = asdict(self.binding)
+        serialized.pop("certified_reasoning_efforts")
+        serialized.pop("default_reasoning_effort")
+        serialized["binding_digest"] = canonical_digest(serialized)
+
+        rehydrated = execution_binding_from_document(serialized)
+        self.assertEqual(rehydrated.certified_reasoning_efforts, ())
+        self.assertIsNone(rehydrated.default_reasoning_effort)
+
+        reserialized = asdict(rehydrated)
+        round_tripped = execution_binding_from_document(reserialized)
+        self.assertEqual(round_tripped.binding_digest, serialized["binding_digest"])
+
+        reserialized["certified_reasoning_efforts"] = ["high"]
+        with self.assertRaisesRegex(ValueError, "digest"):
+            execution_binding_from_document(reserialized)
+
+        reserialized["certified_reasoning_efforts"] = []
+        reserialized["default_reasoning_effort"] = "high"
+        with self.assertRaisesRegex(ValueError, "digest"):
+            execution_binding_from_document(reserialized)
 
 
 if __name__ == "__main__":

@@ -68,6 +68,8 @@ class CapabilityCertificate:
     certified_upstream_ids: tuple[str, ...]
     routing_constraint_digest: str
     certified_capabilities: RuntimeCapabilitySet
+    certified_reasoning_efforts: tuple[str, ...]
+    default_reasoning_effort: str | None
     suite_id: str
     suite_version: str
     test_run_id: str

@@ -117,6 +117,8 @@ def certified_test_provider_store(
                 provider_private_state=True,
                 attachment_modalities=(),
             ),
+            certified_reasoning_efforts=binding.certified_reasoning_efforts,
+            default_reasoning_effort=binding.default_reasoning_effort,
             suite_id=evidence.suite_id,
             suite_version=evidence.suite_version,
             test_run_id=evidence.test_run_id,

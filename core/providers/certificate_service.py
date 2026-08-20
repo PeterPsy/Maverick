@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import hashlib
 import inspect
 from pathlib import Path
+from types import ModuleType
 
 from core.observability.service import record_platform_audit
 from core.providers.capability_models import (
@@ -41,23 +42,22 @@ _EXECUTED_EVIDENCE_FIELDS = (
 
 
 def runtime_adapter_artifact_digest(adapter: object) -> str:
-    """Hash the concrete adapter class bundle, unwrapping compatibility bridges."""
+    """Hash every declared class, function, and module in the adapter bundle."""
     concrete = getattr(adapter, "legacy_adapter", adapter)
     digest = hashlib.sha256()
     source_count = 0
     seen_paths: set[Path] = set()
     components = (concrete, *tuple(getattr(concrete, "artifact_components", ())))
     for component in components:
-        component_type = component if inspect.isclass(component) else type(component)
-        for adapter_type in component_type.__mro__:
+        for source_component in _artifact_source_components(component):
             try:
-                source_path = inspect.getsourcefile(adapter_type)
+                source_path = inspect.getsourcefile(source_component)
             except TypeError:
                 source_path = None
             if not source_path:
                 continue
-            path = Path(source_path)
-            digest.update(f"{adapter_type.__module__}:{adapter_type.__qualname__}\0".encode())
+            path = Path(source_path).resolve()
+            digest.update(_artifact_component_identity(source_component))
             if path in seen_paths:
                 continue
             seen_paths.add(path)
@@ -67,6 +67,27 @@ def runtime_adapter_artifact_digest(adapter: object) -> str:
     if not source_count:
         raise CapabilityCertificateError("adapter_artifact_unavailable")
     return digest.hexdigest()
+
+
+def _artifact_source_components(component: object) -> tuple[object, ...]:
+    if isinstance(component, ModuleType) or inspect.isfunction(component):
+        return (component,)
+    if inspect.ismethod(component):
+        return (component.__func__,)
+    component_type = component if inspect.isclass(component) else type(component)
+    return tuple(component_type.__mro__)
+
+
+def _artifact_component_identity(component: object) -> bytes:
+    if isinstance(component, ModuleType):
+        identity = f"module:{component.__name__}"
+    else:
+        module_name = str(getattr(component, "__module__", ""))
+        qualified_name = str(
+            getattr(component, "__qualname__", getattr(component, "__name__", ""))
+        )
+        identity = f"{type(component).__name__}:{module_name}:{qualified_name}"
+    return f"{identity}\0".encode("utf-8")
 
 
 def build_capability_evidence(
@@ -245,6 +266,8 @@ def validate_certificate_for_binding(
         "provider_protocol": binding.provider_protocol,
         "provider_api_version": binding.provider_api_version,
         "evidence_digest": binding.certificate_evidence_digest,
+        "certified_reasoning_efforts": binding.certified_reasoning_efforts,
+        "default_reasoning_effort": binding.default_reasoning_effort,
     }
     for field_name, value in expected.items():
         if getattr(certificate, field_name) != value:
@@ -257,6 +280,11 @@ def validate_certificate_for_binding(
         raise CapabilityCertificateError("certificate_upstream_constraint_mismatch")
     if observed_upstream_id and observed_upstream_id not in certificate.certified_upstream_ids:
         raise CapabilityCertificateError("provider_upstream_not_certified")
+    if (
+        binding.reasoning_effort is not None
+        and binding.reasoning_effort not in certificate.certified_reasoning_efforts
+    ):
+        raise CapabilityCertificateError("certificate_reasoning_effort_mismatch")
     adapter_id = str(getattr(adapter, "adapter_id", ""))
     adapter_version = str(getattr(adapter, "adapter_version", ""))
     if adapter_id != binding.adapter_id or adapter_version != binding.adapter_version:
@@ -305,6 +333,18 @@ def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:
         raise CapabilityCertificateError("certificate_expiry_invalid")
     if len(set(certificate.certified_upstream_ids)) != len(certificate.certified_upstream_ids):
         raise CapabilityCertificateError("certificate_upstream_duplicate")
+    efforts = tuple(str(value or "").strip() for value in certificate.certified_reasoning_efforts)
+    if (
+        any(not value for value in efforts)
+        or len(set(efforts)) != len(efforts)
+        or efforts != certificate.certified_reasoning_efforts
+    ):
+        raise CapabilityCertificateError("certificate_reasoning_efforts_invalid")
+    default_effort = str(certificate.default_reasoning_effort or "").strip() or None
+    if default_effort != certificate.default_reasoning_effort or (
+        default_effort is not None and default_effort not in efforts
+    ):
+        raise CapabilityCertificateError("certificate_default_reasoning_effort_invalid")
     _evidence_refs(certificate.evidence_refs)
 
 

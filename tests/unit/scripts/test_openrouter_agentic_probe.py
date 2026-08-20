@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest import mock
 import unittest
 
+from core.providers.agentic_filesystem_probe import (
+    FILESYSTEM_LIST_PROBE_MARKER,
+    FILESYSTEM_LIST_PROBE_TOOL_NAME,
+)
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
     AgenticProviderPrivateState,
@@ -35,8 +40,8 @@ class _ProbeClient:
                 1,
                 tool_call=AgenticToolCall(
                     "probe-call",
-                    "maverick_probe_echo",
-                    {"ok": True},
+                    FILESYSTEM_LIST_PROBE_TOOL_NAME,
+                    {"path": ".", "max_depth": 1, "max_results": 10},
                 ),
             )
         yield AgenticModelEvent(
@@ -65,11 +70,22 @@ class OpenRouterAgenticProbeTest(unittest.TestCase):
         client = _ProbeClient()
         with mock.patch.dict(
             "os.environ",
-            {"MAVERICK_OPENROUTER_CERTIFICATION_API_KEY": "synthetic-key"},
+            {
+                "MAVERICK_OPENROUTER_CERTIFICATION_API_KEY": "synthetic-key",
+                "MAVERICK_CERTIFICATION_PROBE_INTERVAL_SECONDS": "0",
+            },
         ), mock.patch.object(
             probe,
             "OpenRouterAgenticClient",
             return_value=client,
+        ), mock.patch.object(
+            probe,
+            "preflight_openrouter_agentic_catalog",
+            return_value=SimpleNamespace(
+                upstream_id="deepinfra/fp8",
+                model_catalog_record_digest="a" * 64,
+                zdr_catalog_record_digest="b" * 64,
+            ),
         ):
             exit_code = asyncio.run(probe._main())
 
@@ -87,6 +103,13 @@ class OpenRouterAgenticProbeTest(unittest.TestCase):
             all(
                 request.request_id.endswith((":1", ":2"))
                 for request in client.requests
+            )
+        )
+        self.assertTrue(
+            all(
+                FILESYSTEM_LIST_PROBE_MARKER.encode("utf-8")
+                in request.tool_results[0].content
+                for request in client.requests[1::2]
             )
         )
 

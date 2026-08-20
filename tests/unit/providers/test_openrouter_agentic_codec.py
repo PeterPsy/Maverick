@@ -14,22 +14,14 @@ from core.providers.agentic_protocol import (
 )
 from core.providers.openrouter_agentic_client import (
     OpenRouterAgenticClient,
-    openrouter_deepinfra_v4_flash_request_ceiling_microusd,
 )
 from core.providers.openrouter_agentic_models import (
-    OPENROUTER_AGENTIC_CODEC_ID,
-    OPENROUTER_AGENTIC_CODEC_VERSION,
-    OPENROUTER_AGENTIC_CONTENT_TYPE,
     OPENROUTER_AGENTIC_MODEL_ID,
     OPENROUTER_AGENTIC_RESOLVED_MODEL_ID,
-    OPENROUTER_AGENTIC_SCHEMA_VERSION,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
 )
 from core.providers.openrouter_agentic_profile import openrouter_agentic_routing_constraint
 from core.providers.openrouter_agentic_state import decode_openrouter_chat_state
-from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
-from core.runtime.execution import execute_runtime_turn
-from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
 
 REASONING_DETAIL = {
@@ -112,7 +104,7 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         )
         self.assertEqual(payload["reasoning"], {"effort": "medium"})
         self.assertEqual(payload["stream_options"], {"include_usage": True})
-        self.assertIs(payload["parallel_tool_calls"], False)
+        self.assertNotIn("parallel_tool_calls", payload)
 
     def test_any_relaxed_router_control_fails_before_transport(self) -> None:
         certified = openrouter_agentic_routing_constraint()
@@ -276,50 +268,6 @@ class OpenRouterAgenticCodecTest(unittest.TestCase):
         )
         self.assertEqual(events[0].error_code, "provider_no_eligible_endpoint")
 
-    def test_real_codec_runs_through_shared_tool_loop(self) -> None:
-        harness = HostedAgenticHarness(
-            self,
-            model_provider_id="openrouter",
-            model_id=OPENROUTER_AGENTIC_MODEL_ID,
-            provider_protocol="openrouter-chat-completions",
-            routing_constraint=openrouter_agentic_routing_constraint(),
-        )
-        transport = _ScriptedTransport([
-            _tool_stream("generation-loop-1", harness.read_tool_name),
-            _text_stream("generation-loop-2", "OpenRouter fixture answer"),
-        ])
-        adapter = harness.adapter(
-            OpenRouterAgenticClient(transport=transport),
-            private_codec=HostedProviderPrivateCodec(
-                OPENROUTER_AGENTIC_CODEC_ID,
-                OPENROUTER_AGENTIC_CODEC_VERSION,
-                OPENROUTER_AGENTIC_SCHEMA_VERSION,
-                OPENROUTER_AGENTIC_CONTENT_TYPE,
-            ),
-            credential=EphemeralCredential("fixture-openrouter-key"),
-            cost_estimator=openrouter_deepinfra_v4_flash_request_ceiling_microusd,
-        )
-        public_events = []
-
-        result = execute_runtime_turn(
-            session=harness.session,
-            provider=harness.provider,
-            input_text="Use only synthetic fixture data.",
-            agentic_adapter=adapter,
-            provider_state=harness.store.get_provider_state("session-hosted"),
-            correlation_id="turn-hosted",
-            effective_authority=harness.authority,
-            event_sink=public_events.append,
-        )
-
-        self.assertEqual(result.output_text, "OpenRouter fixture answer")
-        self.assertEqual(harness.cli_calls, 1)
-        self.assertEqual(transport.payloads[1]["provider"]["only"], ["deepinfra/fp8"])
-        serialized = json.dumps([event.payload for event in public_events], default=str)
-        self.assertNotIn("private fixture reasoning", serialized)
-        self.assertNotIn("private-signature", serialized)
-
-
 class _ScriptedTransport:
     def __init__(
         self,
@@ -445,7 +393,13 @@ def _tool_stream(
     tool_name: str,
     *,
     call_id: str = "call-1",
+    arguments: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
+    encoded_arguments = json.dumps(
+        {"value": 4} if arguments is None else arguments,
+        separators=(",", ":"),
+    )
+    split_at = max(1, len(encoded_arguments) // 2)
     return [
         {
             **_identity(generation_id),
@@ -458,7 +412,10 @@ def _tool_stream(
                         "index": 0,
                         "id": call_id,
                         "type": "function",
-                        "function": {"name": tool_name, "arguments": '{"value":'},
+                        "function": {
+                            "name": tool_name,
+                            "arguments": encoded_arguments[:split_at],
+                        },
                     }],
                 },
                 "finish_reason": None,
@@ -470,7 +427,7 @@ def _tool_stream(
                 "index": 0,
                 "delta": {"tool_calls": [{
                     "index": 0,
-                    "function": {"arguments": "4}"},
+                    "function": {"arguments": encoded_arguments[split_at:]},
                 }]},
                 "finish_reason": "tool_calls",
             }],

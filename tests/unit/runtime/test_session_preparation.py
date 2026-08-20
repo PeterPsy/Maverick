@@ -74,6 +74,8 @@ class RuntimeSessionPreparationTestCase(unittest.TestCase):
             routing_constraint=codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
+            certified_reasoning_efforts=(),
+            default_reasoning_effort=None,
             execution_mode="sandbox",
             profile_policy_ceiling=codex_runtime_policy(),
             workspace_policy_ceiling=codex_runtime_policy(),

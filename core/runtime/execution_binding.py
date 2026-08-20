@@ -38,6 +38,8 @@ class RuntimeExecutionBinding:
     routing_constraint_snapshot: RoutingConstraint
     credential_binding_id: str | None
     reasoning_effort: str | None
+    certified_reasoning_efforts: tuple[str, ...]
+    default_reasoning_effort: str | None
     execution_mode: ExecutionMode
     profile_policy_ceiling_snapshot: AgenticRuntimePolicy
     workspace_policy_ceiling_snapshot: AgenticRuntimePolicy
@@ -69,6 +71,8 @@ def build_runtime_execution_binding(
     routing_constraint: RoutingConstraint,
     credential_binding_id: str | None,
     reasoning_effort: str | None,
+    certified_reasoning_efforts: tuple[str, ...],
+    default_reasoning_effort: str | None,
     execution_mode: ExecutionMode,
     profile_policy_ceiling: AgenticRuntimePolicy,
     workspace_policy_ceiling: AgenticRuntimePolicy,
@@ -85,6 +89,13 @@ def build_runtime_execution_binding(
     ):
         if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest.lower()):
             raise ValueError(f"Runtime execution binding {label} digest must be SHA-256.")
+    normalized_efforts, normalized_default_effort = _reasoning_contract(
+        certified_reasoning_efforts,
+        default_reasoning_effort,
+    )
+    normalized_reasoning = str(reasoning_effort or "").strip() or None
+    if normalized_reasoning is not None and normalized_reasoning not in normalized_efforts:
+        raise ValueError("Runtime execution binding reasoning effort is not certified.")
     policy_digest = canonical_digest(workspace_policy_ceiling)
     record = RuntimeExecutionBinding(
         execution_binding_id=f"runtime-binding-{uuid4().hex}",
@@ -106,7 +117,9 @@ def build_runtime_execution_binding(
         provider_api_version=provider_api_version,
         routing_constraint_snapshot=routing_constraint,
         credential_binding_id=credential_binding_id,
-        reasoning_effort=reasoning_effort,
+        reasoning_effort=normalized_reasoning,
+        certified_reasoning_efforts=normalized_efforts,
+        default_reasoning_effort=normalized_default_effort,
         execution_mode=execution_mode,
         profile_policy_ceiling_snapshot=profile_policy_ceiling,
         workspace_policy_ceiling_snapshot=workspace_policy_ceiling,
@@ -140,6 +153,21 @@ def fork_runtime_execution_binding(
 def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutionBinding:
     """Hydrate nested policy and routing records from a stored document."""
     payload = dict(document)
+    legacy_compatible_binding_fields = tuple(
+        field_name
+        for field_name in ("certified_reasoning_efforts", "default_reasoning_effort")
+        if (
+            field_name not in payload
+            or (
+                field_name == "certified_reasoning_efforts"
+                and payload[field_name] in ([], ())
+            )
+            or (
+                field_name == "default_reasoning_effort"
+                and payload[field_name] is None
+            )
+        )
+    )
     legacy_compatible_policy_fields = tuple(
         field_name
         for field_name in (
@@ -160,32 +188,50 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload["workspace_policy_ceiling_snapshot"] = _policy_from_document(
         payload["workspace_policy_ceiling_snapshot"]
     )
+    payload["certified_reasoning_efforts"] = tuple(
+        payload.get("certified_reasoning_efforts", ())
+    )
+    payload.setdefault("default_reasoning_effort", None)
     payload.setdefault("legacy_inferred", False)
     binding = RuntimeExecutionBinding(**payload)
     digest_matches = binding.binding_digest == canonical_digest(binding)
     if not digest_matches:
-        digest_matches = _matches_legacy_policy_digest(
+        digest_matches = _matches_legacy_digest(
             binding,
             compatible_policy_fields=legacy_compatible_policy_fields,
+            compatible_binding_fields=legacy_compatible_binding_fields,
         )
     if not digest_matches:
         raise ValueError("Runtime execution binding digest does not match its immutable payload.")
     return binding
 
 
-def _matches_legacy_policy_digest(
+def _matches_legacy_digest(
     binding: RuntimeExecutionBinding,
     *,
     compatible_policy_fields: tuple[str, ...],
+    compatible_binding_fields: tuple[str, ...],
 ) -> bool:
-    """Accept an exact legacy digest after a fail-closed policy field was materialized."""
-    for field_count in range(1, len(compatible_policy_fields) + 1):
-        for field_names in combinations(compatible_policy_fields, field_count):
-            legacy_payload = asdict(binding)
-            for field_name in field_names:
-                legacy_payload[field_name].pop("allow_filesystem_list", None)
-            if binding.binding_digest == canonical_digest(legacy_payload):
-                return True
+    """Accept only exact legacy digests after fail-closed defaults were materialized."""
+    for binding_field_count in range(len(compatible_binding_fields) + 1):
+        for binding_field_names in combinations(
+            compatible_binding_fields,
+            binding_field_count,
+        ):
+            for policy_field_count in range(len(compatible_policy_fields) + 1):
+                if binding_field_count == 0 and policy_field_count == 0:
+                    continue
+                for policy_field_names in combinations(
+                    compatible_policy_fields,
+                    policy_field_count,
+                ):
+                    legacy_payload = asdict(binding)
+                    for field_name in binding_field_names:
+                        legacy_payload.pop(field_name, None)
+                    for field_name in policy_field_names:
+                        legacy_payload[field_name].pop("allow_filesystem_list", None)
+                    if binding.binding_digest == canonical_digest(legacy_payload):
+                        return True
     return False
 
 
@@ -215,6 +261,19 @@ def _routing_constraint_from_document(document: dict[str, Any]) -> RoutingConstr
     for key in ("allowed_upstream_ids", "allowed_quantizations"):
         payload[key] = tuple(payload.get(key, ()))
     return RoutingConstraint(**payload)
+
+
+def _reasoning_contract(
+    efforts: tuple[str, ...],
+    default_effort: str | None,
+) -> tuple[tuple[str, ...], str | None]:
+    normalized = tuple(str(value or "").strip() for value in efforts)
+    if any(not value for value in normalized) or len(set(normalized)) != len(normalized):
+        raise ValueError("Runtime execution binding certified reasoning efforts are invalid.")
+    normalized_default = str(default_effort or "").strip() or None
+    if normalized_default is not None and normalized_default not in normalized:
+        raise ValueError("Runtime execution binding default reasoning effort is not certified.")
+    return normalized, normalized_default
 
 
 def _canonical_value(value: object) -> object:

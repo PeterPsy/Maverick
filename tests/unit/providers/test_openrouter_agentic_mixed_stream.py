@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import unittest
 
 from core.providers.openrouter_agentic_client import OpenRouterAgenticClient
@@ -119,6 +120,8 @@ def _mixed_tool_stream(
     narration: str,
 ) -> list[dict[str, object]]:
     stream = _tool_stream(generation_id, tool_name)
+    encoded_arguments = json.dumps({"value": 4}, separators=(",", ":"))
+    split_at = max(1, len(encoded_arguments) // 2)
     stream[0] = {
         **_identity(generation_id),
         "choices": [{
@@ -144,7 +147,7 @@ def _mixed_tool_stream(
                         "type": "function",
                         "function": {
                             "name": tool_name,
-                            "arguments": '{"value":',
+                            "arguments": encoded_arguments[:split_at],
                         },
                     }],
                 },

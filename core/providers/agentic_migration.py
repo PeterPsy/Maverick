@@ -90,6 +90,7 @@ def migrate_agentic_runtime_schema(
             ensure_codex_preview_certificate(
                 provider_store,
                 definition=definition,
+                provider_definition=registry.get_provider_definition("codex"),
                 adapter=codex_adapter,
             )
 

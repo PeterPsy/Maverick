@@ -9,10 +9,15 @@ from unittest.mock import patch
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.providers.agentic_migration import migrate_agentic_runtime_schema
 from core.providers.agentic_profiles import (
+    _validated_reasoning_effort,
     build_pinned_execution_binding,
     ensure_codex_workspace_profile,
 )
-from core.providers.errors import AgenticProfileConflictError, CapabilityCertificateError
+from core.providers.errors import (
+    AgenticProfileConflictError,
+    AgenticProfileError,
+    CapabilityCertificateError,
+)
 from core.providers.certificate_service import validate_certificate_for_binding
 from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.agentic_workspace_policy import egress_policy_for_definition
@@ -98,6 +103,7 @@ class AgenticProfilesTest(unittest.TestCase):
         ensure_codex_preview_certificate(
             self.provider_store,
             definition=profile,
+            provider_definition=self.codex,
             adapter=self.registry.get_agentic_runtime_adapter("codex"),
         )
         binding = build_pinned_execution_binding(
@@ -108,7 +114,8 @@ class AgenticProfilesTest(unittest.TestCase):
             execution_mode="full-access",
             now=NOW,
         )
-        self.assertIsNone(binding.reasoning_effort)
+        self.assertEqual(binding.reasoning_effort, binding.default_reasoning_effort)
+        self.assertIn(binding.reasoning_effort, binding.certified_reasoning_efforts)
         changed = replace(original, model_id="gpt-5.6-mini", updated_at=replace_time(NOW))
         self.provider_store.save_provider_selection(changed)
         ensure_codex_workspace_profile(
@@ -161,7 +168,7 @@ class AgenticProfilesTest(unittest.TestCase):
                 now=NOW,
             )
 
-    def test_remote_reasoning_is_validated_against_the_model_provider(self) -> None:
+    def test_remote_reasoning_is_validated_against_the_certificate(self) -> None:
         profile = SimpleNamespace(
             definition_id="profile-google",
             revision="1",
@@ -202,7 +209,11 @@ class AgenticProfilesTest(unittest.TestCase):
             patch.object(
                 self.provider_store,
                 "get_capability_certificate",
-                return_value=SimpleNamespace(evidence_digest="evidence-google"),
+                return_value=SimpleNamespace(
+                    evidence_digest="evidence-google",
+                    certified_reasoning_efforts=("minimal", "low", "medium", "high"),
+                    default_reasoning_effort="high",
+                ),
             ),
             patch(
                 "core.providers.agentic_profiles.runtime_adapter_artifact_digest",
@@ -228,6 +239,23 @@ class AgenticProfilesTest(unittest.TestCase):
         self.assertIs(resolved, expected)
         self.assertEqual(build_binding.call_args.kwargs["model_provider_id"], "google-ai-studio")
         self.assertEqual(build_binding.call_args.kwargs["reasoning_effort"], "high")
+        self.assertEqual(
+            build_binding.call_args.kwargs["certified_reasoning_efforts"],
+            ("minimal", "low", "medium", "high"),
+        )
+
+    def test_reasoning_selection_uses_only_the_immutable_certificate_contract(self) -> None:
+        certificate = SimpleNamespace(
+            certified_reasoning_efforts=("low", "high"),
+            default_reasoning_effort="high",
+        )
+
+        self.assertEqual(
+            _validated_reasoning_effort(certificate, reasoning_effort=None),
+            "high",
+        )
+        with self.assertRaisesRegex(AgenticProfileError, "profile_reasoning_effort_unsupported"):
+            _validated_reasoning_effort(certificate, reasoning_effort="medium")
 
     def test_migration_is_idempotent_and_preserves_legacy_continuation(self) -> None:
         selection = self.selection()
@@ -289,9 +317,9 @@ class AgenticProfilesTest(unittest.TestCase):
             selection=selection,
             now=NOW,
         )
-        self.assertEqual(profile.revision, "4")
+        self.assertEqual(profile.revision, "5")
 
-        for rev in ("1", "2", "3"):
+        for rev in ("1", "2", "3", "4"):
             self.provider_store.save_agentic_profile_definition_status(
                 AgenticProfileDefinitionStatus(
                     definition_id=profile.definition_id,
@@ -310,7 +338,7 @@ class AgenticProfilesTest(unittest.TestCase):
             now=replace_time(NOW),
         )
 
-        for rev in ("1", "2", "3"):
+        for rev in ("1", "2", "3", "4"):
             status = self.provider_store.get_agentic_profile_definition_status(
                 profile.definition_id,
                 rev,

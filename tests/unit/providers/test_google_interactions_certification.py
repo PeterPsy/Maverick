@@ -63,6 +63,7 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
                     _tool_stream(
                         f"interaction-probe-{effort}-1",
                         tool_name=PROBE_TOOL_NAME,
+                        arguments={"path": ".", "max_depth": 1, "max_results": 10},
                     ),
                     _text_stream(f"interaction-probe-{effort}-2", "OK"),
                 ]
@@ -73,6 +74,7 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
             probe_google_interactions(
                 credential=EphemeralCredential("probe-key"),
                 client=GoogleInteractionsAgenticClient(transport=transport),
+                request_interval_seconds=0,
             )
         )
 
@@ -80,6 +82,7 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
         self.assertEqual(result.reason_code, "ok")
         self.assertEqual(result.request_count, 8)
         self.assertEqual(result.reasoning_efforts, CERTIFIED_REASONING_EFFORTS)
+        self.assertTrue(result.saw_filesystem_list)
         self.assertEqual(
             [
                 payload["generation_config"]["thinking_level"]

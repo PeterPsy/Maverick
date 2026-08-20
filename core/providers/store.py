@@ -527,6 +527,10 @@ def _migrate_legacy_agentic_profile_egress(payload: dict[str, Any]) -> None:
 def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
     payload = dict(document)
     payload["certified_upstream_ids"] = tuple(payload.get("certified_upstream_ids", ()))
+    payload["certified_reasoning_efforts"] = tuple(
+        payload.get("certified_reasoning_efforts", ())
+    )
+    payload.setdefault("default_reasoning_effort", None)
     payload["evidence_refs"] = tuple(payload.get("evidence_refs", ()))
     capabilities = dict(payload["certified_capabilities"])
     capabilities.setdefault("filesystem_list", False)

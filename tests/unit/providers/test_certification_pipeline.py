@@ -21,7 +21,7 @@ class CertificationPipelineTest(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(__file__).resolve().parents[3]
         self.suite_id = "maverick-google-interactions-agentic-contract"
-        self.suite_version = "5"
+        self.suite_version = "6"
         self.digest = "a" * 64
         self.started_at = datetime(2026, 8, 17, tzinfo=UTC)
 

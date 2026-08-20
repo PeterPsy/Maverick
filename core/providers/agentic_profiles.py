@@ -37,8 +37,8 @@ from core.runtime.agentic_feature_flags import (
 )
 
 
-CODEX_PROFILE_REVISION = "4"
-CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3")
+CODEX_PROFILE_REVISION = "5"
+CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4")
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"
 CAPABILITY_CERTIFICATE_PREFIX = "capability-certificate"
@@ -242,8 +242,7 @@ def build_pinned_execution_binding(
     except ProviderNotFoundError as error:
         raise CapabilityCertificateError("certificate_missing") from error
     normalized_reasoning_effort = _validated_reasoning_effort(
-        model_provider,
-        model_id=definition.model_id,
+        certificate,
         reasoning_effort=reasoning_effort,
     )
     selection = _selection_projection(
@@ -271,6 +270,8 @@ def build_pinned_execution_binding(
         routing_constraint=definition.routing_constraint,
         credential_binding_id=binding.credential_binding_id,
         reasoning_effort=selection.model_reasoning_effort,
+        certified_reasoning_efforts=certificate.certified_reasoning_efforts,
+        default_reasoning_effort=certificate.default_reasoning_effort,
         execution_mode=execution_mode,
         profile_policy_ceiling=definition.policy_ceiling,
         workspace_policy_ceiling=binding.workspace_policy_ceiling,
@@ -290,19 +291,18 @@ def build_pinned_execution_binding(
 
 
 def _validated_reasoning_effort(
-    provider: ProviderDefinition,
+    certificate,
     *,
-    model_id: str,
     reasoning_effort: str | None,
 ) -> str | None:
-    normalized = str(reasoning_effort or "").strip() or None
+    normalized = (
+        str(reasoning_effort or "").strip()
+        or certificate.default_reasoning_effort
+        or None
+    )
     if normalized is None:
         return None
-    model = next((item for item in provider.model_options if item.model_id == model_id), None)
-    if model is None:
-        raise AgenticProfileError("profile_model_unavailable")
-    supported = {item.effort for item in model.supported_reasoning_efforts}
-    if normalized not in supported:
+    if normalized not in certificate.certified_reasoning_efforts:
         raise AgenticProfileError("profile_reasoning_effort_unsupported")
     return normalized
 

@@ -39,6 +39,7 @@ from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.session_provider_state import initial_runtime_state
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolCatalogBuilder
+from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_ledger import RuntimeToolLedger
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
 from core.runtime.tool_private_payloads import EncryptedRuntimeToolPrivatePayloadStore
@@ -67,8 +68,18 @@ class HostedAgenticHarness:
         provider_protocol: str = "fake-agentic-v1",
         provider_api_version: str | None = "v1",
         routing_constraint=None,
+        filesystem_list: bool = False,
     ) -> None:
         self.root = make_temp_repo_root(test_case)
+        self.filesystem_list = filesystem_list
+        self.filesystem_marker = "hosted-loop-filesystem-marker.txt"
+        if filesystem_list:
+            workspace_root = self.root / "workspaces" / "default"
+            workspace_root.mkdir(parents=True, exist_ok=True)
+            (workspace_root / self.filesystem_marker).write_text(
+                "synthetic hosted-loop marker",
+                encoding="utf-8",
+            )
         self.cli_calls = 0
         self.mcp_calls = 0
         self.read_result: dict[str, object] | None = None
@@ -97,8 +108,16 @@ class HostedAgenticHarness:
             max_total_tool_result_bytes=8192,
             max_input_tokens=4096,
             max_output_tokens=1024,
+            allowed_surface_kinds=(
+                ("core-capability",) if filesystem_list else ("cli", "mcp")
+            ),
             tool_handle_mode="exact",
-            allowed_tool_handles=("cli:fixture.read", "mcp:fixture_mutate"),
+            allowed_tool_handles=(
+                ("core-capability:filesystem.list",)
+                if filesystem_list
+                else ("cli:fixture.read", "mcp:fixture_mutate")
+            ),
+            allow_filesystem_list=filesystem_list,
             require_confirmation_for_mutating=True,
             require_confirmation_for_destructive=True,
             allowed_remote_data_classes=("workspace_internal_fake",),
@@ -123,6 +142,8 @@ class HostedAgenticHarness:
             routing_constraint=routing_constraint or codex_routing_constraint(),
             credential_binding_id=None,
             reasoning_effort=None,
+            certified_reasoning_efforts=(),
+            default_reasoning_effort=None,
             execution_mode="full-access",
             profile_policy_ceiling=self.policy,
             workspace_policy_ceiling=self.policy,
@@ -291,10 +312,10 @@ class HostedAgenticHarness:
             allowed_capabilities=RuntimeCapabilitySet(
                 streaming=True,
                 tool_orchestration=True,
-                cli=True,
-                mcp=True,
+                cli=not self.filesystem_list,
+                mcp=not self.filesystem_list,
                 skill_catalog=False,
-                filesystem_list=False,
+                filesystem_list=self.filesystem_list,
                 filesystem_read=False,
                 filesystem_write=False,
                 shell=False,
@@ -305,7 +326,11 @@ class HostedAgenticHarness:
                 provider_private_state=True,
                 attachment_modalities=(),
             ),
-            allowed_tool_handles=("cli:fixture.read", "mcp:fixture_mutate"),
+            allowed_tool_handles=(
+                ("core-capability:filesystem.list",)
+                if self.filesystem_list
+                else ("cli:fixture.read", "mcp:fixture_mutate")
+            ),
             execution_mode="full-access",
             egress_policy_id=self.binding.egress_policy_id,
             policy_revision_set=("policy:test:1",),
@@ -367,7 +392,18 @@ class HostedAgenticHarness:
             digest_key=b"hosted-agentic-tool-ledger-test-key",
         )
         return RuntimeToolOrchestrator(
-            catalog_builder=RuntimeToolCatalogBuilder(cli_registry=cli, mcp_registry=mcp),
+            catalog_builder=RuntimeToolCatalogBuilder(
+                cli_registry=cli,
+                mcp_registry=mcp,
+                core_capabilities=(
+                    build_core_runtime_tool_capabilities(
+                        workspace_id="default",
+                        workspace_root=self.root / "workspaces" / "default",
+                    )
+                    if self.filesystem_list
+                    else ()
+                ),
+            ),
             ledger=ledger,
         )
 
@@ -386,3 +422,7 @@ class HostedAgenticHarness:
     @property
     def mutate_tool_name(self) -> str:
         return provider_tool_name("mcp:fixture_mutate")
+
+    @property
+    def filesystem_list_tool_name(self) -> str:
+        return provider_tool_name("core-capability:filesystem.list")

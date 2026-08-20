@@ -19,13 +19,17 @@ from core.providers.certification_pipeline import (
     SignedCertificationRun, validate_run_against_manifest, verify_certification_run,
 )
 from core.providers.errors import CapabilityCertificateError
+from core.providers.google_agentic_profile import (
+    GOOGLE_CERTIFIED_REASONING_EFFORTS,
+    GOOGLE_DEFAULT_REASONING_EFFORT,
+)
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import canonical_digest
 
 
 GOOGLE_CERTIFICATION_SUITE_ID = "maverick-google-interactions-agentic-contract"
-GOOGLE_CERTIFICATION_SUITE_VERSION = "5"
-GOOGLE_CERTIFICATION_MATRIX_REVISION = "2026-08-19-r4"
+GOOGLE_CERTIFICATION_SUITE_VERSION = "6"
+GOOGLE_CERTIFICATION_MATRIX_REVISION = "2026-08-19-r5"
 GOOGLE_CERTIFICATION_VALIDITY_DAYS = 45
 
 
@@ -59,7 +63,7 @@ def publish_google_preview_certificate(
     )
     certificate = CapabilityCertificate(
         certificate_id=definition.capability_certificate_id,
-        schema_version="2",
+        schema_version="3",
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=str(getattr(adapter, "adapter_id", definition.adapter_id)),
         adapter_version=str(getattr(adapter, "adapter_version", "")),
@@ -72,6 +76,8 @@ def publish_google_preview_certificate(
         certified_upstream_ids=(),
         routing_constraint_digest=canonical_digest(definition.routing_constraint),
         certified_capabilities=_capabilities(),
+        certified_reasoning_efforts=GOOGLE_CERTIFIED_REASONING_EFFORTS,
+        default_reasoning_effort=GOOGLE_DEFAULT_REASONING_EFFORT,
         suite_id=evidence.suite_id,
         suite_version=evidence.suite_version,
         test_run_id=evidence.test_run_id,

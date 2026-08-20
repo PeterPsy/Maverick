@@ -21,6 +21,9 @@ _PUBLIC_MESSAGES = {
     "provider_authentication_failed": "The model provider rejected the configured credentials.",
     "provider_budget_exceeded": "The model provider exhausted the configured token budget.",
     "provider_cancelled": "The model provider cancelled the request.",
+    "provider_endpoint_parameters_unsupported": (
+        "The certified provider endpoint does not support every required request parameter."
+    ),
     "provider_credential_authorization_missing": "The configured provider credentials are unavailable.",
     "provider_execution_failed": "The model runtime could not complete the request.",
     "provider_mixed_text_and_tool_call": "The provider returned an incompatible text and tool-call sequence.",
@@ -30,8 +33,10 @@ _PUBLIC_MESSAGES = {
         "The provider returned multiple tool calls, but this profile permits only sequential execution. "
         "Those tool calls were not executed."
     ),
+    "provider_quota_exceeded": "The model provider reports that the configured quota is exhausted.",
     "provider_rate_limited": "The model provider is temporarily rate-limiting requests.",
     "provider_request_rejected": "The model provider rejected the request.",
+    "provider_resource_exhausted": "The model provider reports that a required resource is exhausted.",
     "provider_response_invalid": "The model provider returned an invalid response.",
     "provider_timeout": "The model provider did not respond in time.",
     "provider_tool_call_index_invalid": (

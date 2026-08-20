@@ -654,9 +654,19 @@ catalog and encrypted invocation ledger. Provider-private protocol bytes remain
 behind the matching codec service and public events are bounded, normalized,
 and private-field-free.
 
+The runtime adapter artifact digest covers the concrete adapter plus every
+declared operational class, function, and module for the shared loop and the
+installed provider codecs. Digest construction reads each resolved source file
+directly; it must never collapse a function to the built-in `function` type.
+Changing any declared codec, request builder, stream consumer, tool
+orchestrator, or filesystem module therefore invalidates the previous
+certificate at runtime.
+
 Sequential provider requests must explicitly disable parallel tool calls when
-the provider protocol supports that control. A provider codec reconciles every
-returned tool name with the exact request catalog before orchestration. One
+the selected endpoint declares that control. If it does not, the request omits
+the unsupported parameter and the decoder still rejects more than one returned
+tool call before orchestration. A provider codec reconciles every returned tool
+name with the exact request catalog before orchestration. One
 OpenAI-compatible tool call may be preceded by provisional assistant text; the
 codec keeps that text only in provider-private continuation state with the
 assistant tool call, executes the single call through the shared loop, and does
@@ -672,8 +682,11 @@ Execution-policy-owned workspace filesystem discovery is a separate read-only
 Core capability from file reads. `core-capability:filesystem.list` returns only
 bounded, deterministically ordered relative paths and entry types, limits depth
 and result count, never returns file content, never follows directory symlinks,
-and resolves its requested root inside the workspace boundary. Certification
-and policy must attest and grant listing independently from
+and resolves its requested root inside the workspace boundary. Recursive
+traversal opens the root and every child descriptor-relative with
+`O_NOFOLLOW | O_DIRECTORY`; it never reopens a verified child by pathname, so a
+concurrent directory-to-symlink swap fails closed. Certification and policy
+must attest and grant listing independently from
 `core-capability:filesystem.read`.
 
 ### 8. Secret management
@@ -1626,7 +1639,7 @@ The sanitized runtime config must remove inherited MCP server and plugin section
 
 The Codex adapter owns Maverick's managed Codex model selection for runtime agents. It should discover the visible Codex model catalog through the configured Codex binary, expose the viable model and reasoning-effort options through generic provider settings, and write the workspace-selected `model` and `model_reasoning_effort` into each runtime-scoped Codex config instead of inheriting those values from the operator home. The fallback model is `gpt-5.6-sol`. New sessions default to the deepest supported single-agent reasoning effort: `max` when the model exposes it, otherwise the next deepest advertised effort. Codex `ultra` is a multi-agent execution mode rather than a reasoning effort and must not appear in the reasoning selector. Persisted model catalogs are normalized to this contract without requiring code changes when Codex adds or removes visible models.
 
-Selectable agentic profiles use the same provider-declared reasoning metadata regardless of runtime engine. `/api/providers` projects the exact profile model's default and supported reasoning efforts, with new Google and OpenRouter agentic sessions defaulting to the deepest advertised effort. Chat renders a per-session reasoning selector only when that list is non-empty. When a profile payload lacks the duplicated reasoning fields, Chat may recover them only from the exact `model_provider_id` and `model_id` entry in the provider catalog; it must not infer choices from another model or from a generic fallback list. Runtime binding validation must likewise validate the chosen effort against that model provider, not against the separate runtime engine that executes it. A behavior-changing built-in Codex adapter update publishes a new immutable profile revision and certificate, rebinds the workspace default to it, and suspends prior revisions whose adapter artifact digest is no longer current; an enabled model must not remain stranded behind `adapter_artifact_mismatch`. In Chat's model menu each row presents the model label as its title, the provider label as its only subtitle, and the reasoning control inline at the right; rollout, certificate, tool-count, and technical profile badges do not belong in this compact picker.
+Selectable agentic profiles bind their supported reasoning efforts and default into the immutable capability certificate and copy that exact contract into the session execution binding. `/api/providers` may use provider model metadata only for labels and descriptions; selectable values come from the active certificate. Chat renders a per-session reasoning selector only when that certified list is non-empty and does not recover missing choices from mutable model metadata. Before session creation and on every live certificate validation, Core rejects a requested effort outside the certified tuple or any mismatch between the certificate and binding. A behavior-changing built-in Codex adapter update publishes a new immutable profile revision and certificate, rebinds the workspace default to it, and suspends prior revisions whose adapter artifact digest is no longer current; an enabled model must not remain stranded behind `adapter_artifact_mismatch`. In Chat's model menu each row presents the model label as its title, the provider label as its only subtitle, and the reasoning control inline at the right; rollout, certificate, tool-count, and technical profile badges do not belong in this compact picker.
 
 The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
 

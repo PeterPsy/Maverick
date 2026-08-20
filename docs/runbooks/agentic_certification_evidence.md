@@ -22,6 +22,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
 - the exact adapter artifact digest and a reviewed explicit list of the adapter,
   codec, transport, hosted-loop, policy, and focused-test artifacts in the
   certification bundle;
+- the exact certificate-bound reasoning-effort tuple and default represented by
+  the profile under test;
 - a platform evidence reference allocated by the authoritative evidence store.
 
 Abort if `git status --short` is non-empty, the matrix/catalog has not been
@@ -40,7 +42,7 @@ and a distinct operator-only live synthetic probe step; both must pass.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 5 \
+  --suite-version 6 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -49,11 +51,29 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `5`, matrix revision `2026-08-19-r4`, and the OpenRouter manifest. The
-Google suite uses matrix revision `2026-08-19-r4`. The canonical matrices,
+version `6`, matrix revision `2026-08-19-r5`, and the OpenRouter manifest. The
+Google suite uses matrix revision `2026-08-19-r5`. The canonical matrices,
 artifact bundles, commands, and live probe entrypoints live in
 `core/providers/certification_manifests.py`.
 Do not reuse a Google artifact bundle, result, live probe, or evidence reference.
+
+Both live probes must make the provider call the exact generated alias for
+`core-capability:filesystem.list`, execute the real Core handler over an
+isolated synthetic directory, and return its marker-bearing result to the
+provider at every certified reasoning effort. Requests are paced (one second by
+default) so an eight-request probe does not itself justify diagnosing a quota
+incident. A Google failure must preserve the redaction-safe distinction among
+`quota_exceeded`, `resource_exhausted`, and `rate_limit_exceeded`; do not infer a
+project-quota cause from the broader family alone.
+
+Before its first completion request, the OpenRouter probe must fetch both the
+official model endpoint catalog and ZDR endpoint catalog. It fails closed unless
+the exact `deepinfra/fp8` record is active, FP8, ZDR-listed, has enough completion
+capacity, and declares every endpoint-gated translated parameter. In
+particular, the request must not reintroduce `parallel_tool_calls` while the
+endpoint does not declare it.
+The required set is derived from the translated completion payload rather than
+maintained as a second hard-coded parameter list.
 
 The runner records and signs the source commit, suite identity/version, matrix
 revision and digest, adapter digest, complete artifact-bundle digest, command
@@ -81,6 +101,12 @@ fallback. A mismatch, untrusted signer, duplicate conflicting identity,
 invalid evidence reference, or publisher failure leaves the candidate
 uncertified; a binding must not be enabled until both records and active status
 read back consistently.
+
+The deployed adapter digest includes each declared operational module and
+function directly. A source change in the shared stream consumer,
+filesystem-list traversal, tool orchestration, request translation, provider
+codec, or transport must change that digest and invalidate older certificates;
+digesting the built-in `function` type is never acceptable.
 
 After publication, read the certificate and evidence back through the
 platform-authority provider surface and verify that all signed identities match

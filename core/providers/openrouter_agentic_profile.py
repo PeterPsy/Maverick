@@ -21,8 +21,10 @@ from core.providers.store import ProviderStore
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "8"
-OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6", "7")
+OPENROUTER_AGENTIC_PROFILE_REVISION = "9"
+OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6", "7", "8")
+OPENROUTER_CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
+OPENROUTER_DEFAULT_REASONING_EFFORT = "high"
 OPENROUTER_AGENTIC_CERTIFICATE_ID = (
     f"capability-certificate:{OPENROUTER_AGENTIC_PROFILE_ID}:{OPENROUTER_AGENTIC_PROFILE_REVISION}"
 )
@@ -87,7 +89,7 @@ def ensure_openrouter_agentic_preview_profile(
         provider_protocol="openrouter-chat-completions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==4",
+        adapter_version_constraint="==5",
         routing_constraint=openrouter_agentic_routing_constraint(),
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,

@@ -736,6 +736,7 @@ def configure_workspace_provider(
         ensure_codex_preview_certificate(
             store,
             definition=profile,
+            provider_definition=active_registry.get_provider_definition(provider_id),
             adapter=active_registry.get_agentic_runtime_adapter(provider_id),
         )
     if observability_store is not None:

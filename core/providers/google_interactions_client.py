@@ -5,6 +5,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 import math
 
+import core.providers.google_interactions_models as google_interactions_models_module
+import core.providers.google_interactions_request as google_interactions_request_module
+import core.providers.google_interactions_state as google_interactions_state_module
+import core.providers.google_interactions_stream as google_interactions_stream_module
+import core.providers.google_interactions_transport as google_interactions_transport_module
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
     AgenticModelRequest,
@@ -43,7 +48,13 @@ class GoogleInteractionsAgenticClient:
     @property
     def artifact_components(self) -> tuple[object, ...]:
         """Expose codec and transport modules included in capability evidence."""
-        return (GoogleInteractionStreamDecoder, GoogleInteractionsHttpTransport)
+        return (
+            google_interactions_models_module,
+            google_interactions_request_module,
+            google_interactions_state_module,
+            google_interactions_stream_module,
+            google_interactions_transport_module,
+        )
 
     async def create_response(
         self,

@@ -10,7 +10,12 @@ import type { AgentRuntimeConfig } from "../hooks/useMessageSubmission";
 export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem[] {
   const options: ProviderItem[] = [];
   const agenticProfiles = (payload.agentic_profiles?.items || []).filter(
-    (profile) => profile.enabled && profile.certified !== false && profile.rollout_status === "available",
+    (profile) =>
+      profile.enabled &&
+      profile.certified === true &&
+      profile.rollout_status === "available" &&
+      (profile.certificate?.effective_status == null ||
+        profile.certificate.effective_status === "active"),
   );
   if (agenticProfiles.length) {
     options.push(
@@ -66,15 +71,11 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
 }
 
 function reasoningForAgenticProfile(
-  payload: ProviderPayload,
+  _payload: ProviderPayload,
   profile: AgenticProfileItem,
 ): { defaultEffort: string | null; options: ProviderReasoningOption[] } {
-  const provider = providerForAgenticProfile(payload, profile);
-  const model = provider?.model_options?.find((candidate) => candidate.model_id === profile.model_id);
-  const options = profile.supported_reasoning_efforts?.length
-    ? profile.supported_reasoning_efforts
-    : model?.supported_reasoning_efforts || [];
-  const requestedDefault = profile.default_reasoning_effort || model?.default_reasoning_effort || null;
+  const options = profile.supported_reasoning_efforts || [];
+  const requestedDefault = profile.default_reasoning_effort || null;
   const defaultEffort = options.length && !options.some((option) => option.effort === requestedDefault)
     ? options[0]?.effort || null
     : requestedDefault;

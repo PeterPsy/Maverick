@@ -415,12 +415,12 @@ def workspace_agentic_profile_status(
             )
         except ProviderNotFoundError:
             continue
-        reasoning = _agentic_model_reasoning(registry, definition)
         status = state.provider_store.get_agentic_profile_definition_status(
             definition.definition_id,
             definition.revision,
         )
         certificate_payload = None
+        certificate = None
         try:
             certificate = state.provider_store.get_capability_certificate(
                 definition.capability_certificate_id
@@ -443,6 +443,11 @@ def workspace_agentic_profile_status(
                 certificate_payload["effective_status"] = "adapter_unavailable"
         except ProviderNotFoundError:
             pass
+        reasoning = _agentic_model_reasoning(
+            registry,
+            definition,
+            certificate=certificate if certificate_payload is not None else None,
+        )
         items.append(
             {
                 "workspace_profile_binding_id": binding.binding_id,
@@ -484,8 +489,13 @@ def workspace_agentic_profile_status(
     }
 
 
-def _agentic_model_reasoning(registry, definition) -> tuple[str | None, list[dict[str, object]]]:
-    """Project provider-declared per-session reasoning choices for Chat."""
+def _agentic_model_reasoning(
+    registry,
+    definition,
+    *,
+    certificate=None,
+) -> tuple[str | None, list[dict[str, object]]]:
+    """Project only certificate-bound choices, using model metadata as display copy."""
     provider = None
     for provider_id in (definition.model_provider_id, definition.runtime_engine_id):
         try:
@@ -493,19 +503,44 @@ def _agentic_model_reasoning(registry, definition) -> tuple[str | None, list[dic
             break
         except ProviderNotFoundError:
             continue
-    if provider is None:
+    if provider is None and certificate is None:
         return None, []
-    model = next((item for item in provider.model_options if item.model_id == definition.model_id), None)
-    if model is None:
+    model = (
+        None
+        if provider is None
+        else next(
+            (item for item in provider.model_options if item.model_id == definition.model_id),
+            None,
+        )
+    )
+    if certificate is None:
+        if model is None:
+            return None, []
+        return model.default_reasoning_effort, [
+            {
+                "effort": option.effort,
+                "label": option.label,
+                "description": option.description,
+            }
+            for option in model.supported_reasoning_efforts
+        ]
+    options_by_effort = {
+        option.effort: option
+        for option in (() if model is None else model.supported_reasoning_efforts)
+    }
+    if not certificate.certified_reasoning_efforts:
         return None, []
-    return model.default_reasoning_effort, [
-        {
-            "effort": option.effort,
-            "label": option.label,
-            "description": option.description,
-        }
-        for option in model.supported_reasoning_efforts
-    ]
+    values = []
+    for effort in certificate.certified_reasoning_efforts:
+        option = options_by_effort.get(effort)
+        values.append(
+            {
+                "effort": effort,
+                "label": option.label if option is not None else effort.replace("_", " ").title(),
+                "description": None if option is None else option.description,
+            }
+        )
+    return certificate.default_reasoning_effort, values
 
 
 def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
@@ -644,6 +679,8 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
         "certified_upstream_ids": certificate.certified_upstream_ids,
         "routing_constraint_digest": certificate.routing_constraint_digest,
         "certified_capabilities": asdict(certificate.certified_capabilities),
+        "certified_reasoning_efforts": certificate.certified_reasoning_efforts,
+        "default_reasoning_effort": certificate.default_reasoning_effort,
         "suite_id": certificate.suite_id,
         "suite_version": certificate.suite_version,
         "test_run_id": certificate.test_run_id,

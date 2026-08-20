@@ -52,6 +52,8 @@ function agenticProfile(
     enabled: true,
     is_default: false,
     certified: true,
+    default_reasoning_effort: "high",
+    supported_reasoning_efforts: reasoningOptions,
   };
 }
 
@@ -73,7 +75,54 @@ describe("remote agentic provider runtime options", () => {
     expect(providers.some((provider) => Boolean(provider.workspace_profile_binding_id))).toBe(false);
   });
 
-  it("inherits reasoning choices exposed by Google and OpenRouter model metadata", () => {
+  it("fails closed for missing certification or a non-active certificate", () => {
+    const modelId = "gemini-3.6-flash";
+    const missingCertification = agenticProfile("google-ai-studio", modelId);
+    missingCertification.workspace_profile_binding_id = "binding-missing-certification";
+    delete missingCertification.certified;
+    const inactiveCertificate = agenticProfile("google-ai-studio", modelId);
+    inactiveCertificate.workspace_profile_binding_id = "binding-inactive-certificate";
+    inactiveCertificate.certificate = { effective_status: "revoked" };
+    const activeCertificate = agenticProfile("google-ai-studio", modelId);
+    activeCertificate.workspace_profile_binding_id = "binding-active-certificate";
+    activeCertificate.certificate = { effective_status: "active" };
+
+    const providers = providerItemsFromPayload({
+      workspace_id: "default",
+      active_provider: null,
+      available_providers: [
+        modelProvider("google-ai-studio", "Google AI Studio", modelId, "Gemini 3.6 Flash"),
+      ],
+      agentic_profiles: {
+        default_binding_id: null,
+        items: [missingCertification, inactiveCertificate, activeCertificate],
+      },
+    });
+
+    expect(providers.filter((provider) => provider.workspace_profile_binding_id)).toHaveLength(1);
+    expect(providers[0]?.workspace_profile_binding_id).toBe(activeCertificate.workspace_profile_binding_id);
+  });
+
+  it("does not fall back to mutable model reasoning metadata", () => {
+    const modelId = "gemini-3.6-flash";
+    const profile = agenticProfile("google-ai-studio", modelId);
+    delete profile.default_reasoning_effort;
+    delete profile.supported_reasoning_efforts;
+
+    const providers = providerItemsFromPayload({
+      workspace_id: "default",
+      active_provider: null,
+      available_providers: [
+        modelProvider("google-ai-studio", "Google AI Studio", modelId, "Gemini 3.6 Flash"),
+      ],
+      agentic_profiles: { default_binding_id: null, items: [profile] },
+    });
+
+    expect(providers[0]?.default_reasoning_effort).toBeNull();
+    expect(providers[0]?.supported_reasoning_efforts).toEqual([]);
+  });
+
+  it("uses reasoning choices pinned on the certified agentic profiles", () => {
     const googleModelId = "gemini-3.6-flash";
     const openRouterModelId = "deepseek/deepseek-v4-flash";
     const payload: ProviderPayload = {

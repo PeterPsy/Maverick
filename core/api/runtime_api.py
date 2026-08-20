@@ -150,6 +150,8 @@ def _session_payload(
             "model_provider_id": binding.model_provider_id,
             "model_id": binding.model_id,
             "reasoning_effort": binding.reasoning_effort,
+            "certified_reasoning_efforts": binding.certified_reasoning_efforts,
+            "default_reasoning_effort": binding.default_reasoning_effort,
             "provider_protocol": binding.provider_protocol,
             "provider_api_version": binding.provider_api_version,
             "egress_policy_id": binding.egress_policy_id,

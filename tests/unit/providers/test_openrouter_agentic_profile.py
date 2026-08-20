@@ -61,7 +61,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.adapter_version_constraint, "==4")
+        self.assertEqual(profile.adapter_version_constraint, "==5")
         self.assertEqual(profile.model_provider_id, "openrouter")
         self.assertEqual(profile.model_id, "deepseek/deepseek-v4-flash")
         self.assertEqual(profile.provider_protocol, "openrouter-chat-completions")
@@ -128,6 +128,11 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             certificate.evidence_digest
         )
         self.assertTrue(certificate.certified_capabilities.filesystem_list)
+        self.assertEqual(
+            certificate.certified_reasoning_efforts,
+            ("minimal", "low", "medium", "high"),
+        )
+        self.assertEqual(certificate.default_reasoning_effort, "high")
         self.assertEqual(evidence.matrix_revision, OPENROUTER_CERTIFICATION_MATRIX_REVISION)
 
         previous_revision = OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS[-1]

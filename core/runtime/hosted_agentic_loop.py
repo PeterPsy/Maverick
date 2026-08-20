@@ -9,6 +9,17 @@ import json
 from threading import Event
 from typing import Callable
 
+import core.providers.agentic_reason_codes as agentic_reason_codes_module
+import core.runtime.hosted_agentic_budget as hosted_agentic_budget_module
+import core.runtime.hosted_agentic_policy as hosted_agentic_policy_module
+import core.runtime.hosted_agentic_request as hosted_agentic_request_module
+import core.runtime.hosted_agentic_state as hosted_agentic_state_module
+import core.runtime.hosted_agentic_stream as hosted_agentic_stream_module
+import core.runtime.hosted_agentic_tool_results as hosted_agentic_tool_results_module
+import core.runtime.hosted_provider_runtime as hosted_provider_runtime_module
+import core.runtime.tool_core_capabilities as tool_core_capabilities_module
+import core.runtime.tool_filesystem_listing as tool_filesystem_listing_module
+import core.runtime.tool_orchestrator as tool_orchestrator_module
 from core.providers.agentic_protocol import AgenticToolResult
 from core.providers.agentic_adapter import RuntimeProviderEvent, RuntimeTurnContext
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
@@ -88,10 +99,17 @@ class HostedAgenticLoop:
     def artifact_components(self) -> tuple[object, ...]:
         """Expose shared orchestration modules to the adapter artifact digest."""
         return (
-            HostedAgenticBudget,
-            HostedAgenticRequestBuilder,
-            HostedAgenticStateBridge,
-            HostedProviderStep,
+            agentic_reason_codes_module,
+            hosted_agentic_budget_module,
+            hosted_agentic_policy_module,
+            hosted_agentic_request_module,
+            hosted_agentic_state_module,
+            hosted_agentic_stream_module,
+            hosted_agentic_tool_results_module,
+            hosted_provider_runtime_module,
+            tool_core_capabilities_module,
+            tool_filesystem_listing_module,
+            tool_orchestrator_module,
             build_core_runtime_tool_capabilities,
             list_workspace_entries,
         )

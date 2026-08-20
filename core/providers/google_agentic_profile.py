@@ -16,9 +16,11 @@ from core.providers.store import ProviderStore
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "9"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "8"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6", "7", "8")
+GOOGLE_AGENTIC_PROFILE_REVISION = "10"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "9"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6", "7", "8", "9")
+GOOGLE_CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
+GOOGLE_DEFAULT_REASONING_EFFORT = "high"
 GOOGLE_AGENTIC_CERTIFICATE_ID = (
     f"capability-certificate:{GOOGLE_AGENTIC_PROFILE_ID}:{GOOGLE_AGENTIC_PROFILE_REVISION}"
 )
@@ -82,7 +84,7 @@ def ensure_google_agentic_preview_profile(
         provider_protocol="google-interactions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==4",
+        adapter_version_constraint="==5",
         routing_constraint=google_interactions_routing_constraint(),
         policy_ceiling=google_agentic_preview_policy(),
         capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,

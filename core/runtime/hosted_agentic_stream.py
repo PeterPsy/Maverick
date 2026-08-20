@@ -6,10 +6,10 @@ import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
 import json
-import re
 from threading import Event
 from typing import Callable
 
+from core.providers.agentic_reason_codes import normalized_agentic_provider_reason
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
     AgenticModelProviderClient,
@@ -21,31 +21,6 @@ from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     raise_if_hosted_cancelled,
 )
-
-
-_REASON_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
-_ALLOWED_PROVIDER_ERRORS = {
-    "provider_authentication_failed",
-    "provider_mixed_text_and_tool_call",
-    "provider_no_eligible_endpoint",
-    "provider_parallel_tool_calls_forbidden",
-    "provider_private_codec_mismatch",
-    "provider_private_integrity_failed",
-    "provider_private_quota_exceeded",
-    "provider_private_size_invalid",
-    "provider_private_state_invalid",
-    "provider_private_state_unavailable",
-    "provider_rate_limited",
-    "provider_request_rejected",
-    "provider_response_invalid",
-    "provider_routing_not_certified",
-    "provider_timeout",
-    "provider_tool_result_pairing_invalid",
-    "provider_tool_call_index_invalid",
-    "provider_tool_not_declared",
-    "provider_unavailable",
-    "provider_upstream_not_certified",
-}
 
 
 @dataclass(frozen=True)
@@ -95,10 +70,9 @@ async def consume_hosted_provider_step(
                     payload["provider_response_id"] = provider_event.provider_response_id
                 yield HostedProviderStepEmission("provider.accepted", payload)
             elif provider_event.event_type == "error":
-                reason = provider_event.error_code or "provider_response_invalid"
-                if not _REASON_CODE.fullmatch(reason) or reason not in _ALLOWED_PROVIDER_ERRORS:
-                    reason = "provider_response_invalid"
-                raise HostedAgenticLoopError(reason)
+                raise HostedAgenticLoopError(
+                    normalized_agentic_provider_reason(provider_event.error_code)
+                )
             elif not accepted or completed:
                 raise HostedAgenticLoopError("provider_response_invalid")
             elif provider_event.event_type == "text_delta":

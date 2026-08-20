@@ -60,7 +60,7 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.adapter_version_constraint, "==4")
+        self.assertEqual(profile.adapter_version_constraint, "==5")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.provider_api_version, "v1")
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public", "workspace_internal_fake"))
@@ -108,6 +108,11 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         self.assertEqual(evidence.matrix_revision, GOOGLE_CERTIFICATION_MATRIX_REVISION)
         self.assertEqual(evidence.certification_outcome, "passed")
         self.assertTrue(certificate.certified_capabilities.filesystem_list)
+        self.assertEqual(
+            certificate.certified_reasoning_efforts,
+            ("minimal", "low", "medium", "high"),
+        )
+        self.assertEqual(certificate.default_reasoning_effort, "high")
         self.assertFalse(
             any(
                 binding.definition_id == profile.definition_id

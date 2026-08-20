@@ -13,13 +13,17 @@ from core.providers.capability_models import CapabilityCertificate, RuntimeCapab
 from core.providers.certificate_service import build_capability_evidence, publish_capability_certificate, runtime_adapter_artifact_digest
 from core.providers.certification_pipeline import SignedCertificationRun, validate_run_against_manifest, verify_certification_run
 from core.providers.errors import CapabilityCertificateError
+from core.providers.openrouter_agentic_profile import (
+    OPENROUTER_CERTIFIED_REASONING_EFFORTS,
+    OPENROUTER_DEFAULT_REASONING_EFFORT,
+)
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import canonical_digest
 
 
 OPENROUTER_CERTIFICATION_SUITE_ID = "maverick-openrouter-agentic-contract"
-OPENROUTER_CERTIFICATION_SUITE_VERSION = "5"
-OPENROUTER_CERTIFICATION_MATRIX_REVISION = "2026-08-19-r4"
+OPENROUTER_CERTIFICATION_SUITE_VERSION = "6"
+OPENROUTER_CERTIFICATION_MATRIX_REVISION = "2026-08-19-r5"
 OPENROUTER_CERTIFICATION_VALIDITY_DAYS = 30
 
 
@@ -54,7 +58,7 @@ def publish_openrouter_preview_certificate(
         certification_started_at=run.started_at, certification_outcome=run.outcome,
     )
     certificate = CapabilityCertificate(
-        certificate_id=definition.capability_certificate_id, schema_version="2",
+        certificate_id=definition.capability_certificate_id, schema_version="3",
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=str(getattr(adapter, "adapter_id", definition.adapter_id)),
         adapter_version=str(getattr(adapter, "adapter_version", "")),
@@ -72,6 +76,8 @@ def publish_openrouter_preview_certificate(
             confirmation_resume=True, provider_private_state=True,
             attachment_modalities=(),
         ),
+        certified_reasoning_efforts=OPENROUTER_CERTIFIED_REASONING_EFFORTS,
+        default_reasoning_effort=OPENROUTER_DEFAULT_REASONING_EFFORT,
         suite_id=evidence.suite_id, suite_version=evidence.suite_version,
         test_run_id=evidence.test_run_id, evidence_digest=evidence.evidence_digest,
         evidence_refs=evidence.evidence_refs, issued_at=run.completed_at,

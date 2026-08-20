@@ -13,21 +13,8 @@ from core.providers.agentic_protocol import (
     AgenticToolResult,
     EphemeralCredential,
 )
-from core.providers.google_agentic_profile import google_interactions_routing_constraint
-from core.providers.google_interactions_client import (
-    GoogleInteractionsAgenticClient,
-    google_36_flash_request_ceiling_microusd,
-)
-from core.providers.google_interactions_models import (
-    GOOGLE_INTERACTIONS_CODEC_ID,
-    GOOGLE_INTERACTIONS_CODEC_VERSION,
-    GOOGLE_INTERACTIONS_CONTENT_TYPE,
-    GOOGLE_INTERACTIONS_SCHEMA_VERSION,
-)
+from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
 from core.providers.google_interactions_state import decode_google_interaction_state
-from core.runtime.execution import execute_runtime_turn
-from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
-from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
 
 THOUGHT_SIGNATURE = "opaque-google-thought-signature"
@@ -218,27 +205,35 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
         self.assertEqual(len(transport.payloads), 1)
 
     def test_provider_error_before_acceptance_is_normalized(self) -> None:
-        client = GoogleInteractionsAgenticClient(
-            transport=_ScriptedTransport(
-                [[
-                    {"event_type": "error", "error": {"code": "quota_exceeded"}},
-                    RuntimeError("provider stream must not be drained after a terminal error"),
-                ]]
-            )
-        )
+        for code, reason_code in (
+            ("quota_exceeded", "provider_quota_exceeded"),
+            ("resource_exhausted", "provider_resource_exhausted"),
+            ("rate_limit_exceeded", "provider_rate_limited"),
+        ):
+            with self.subTest(code=code):
+                client = GoogleInteractionsAgenticClient(
+                    transport=_ScriptedTransport(
+                        [[
+                            {"event_type": "error", "error": {"code": code}},
+                            RuntimeError("provider stream must not be drained after a terminal error"),
+                        ]]
+                    )
+                )
 
-        result = asyncio.run(_events(client, _request("request-provider-error")))
+                result = asyncio.run(
+                    _events(client, _request(f"request-provider-error:{code}"))
+                )
 
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].event_type, "error")
-        self.assertEqual(result[0].error_code, "provider_rate_limited")
+                self.assertEqual(len(result), 1)
+                self.assertEqual(result[0].event_type, "error")
+                self.assertEqual(result[0].error_code, reason_code)
 
     def test_documented_terminal_failures_retain_usage_and_report_precise_errors(self) -> None:
         cases = (
             ("incomplete", "provider_output_incomplete", None),
             ("budget_exceeded", "provider_budget_exceeded", None),
             ("cancelled", "provider_cancelled", None),
-            ("failed", "provider_rate_limited", {"code": "resource_exhausted"}),
+            ("failed", "provider_resource_exhausted", {"code": "resource_exhausted"}),
             ("failed", "provider_unavailable", None),
         )
         for status, reason_code, provider_error in cases:
@@ -280,101 +275,6 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
                         for event in result
                     )
                 )
-
-    def test_real_google_codec_runs_through_shared_tool_loop(self) -> None:
-        harness = HostedAgenticHarness(
-            self,
-            model_provider_id="google-ai-studio",
-            model_id="gemini-3.6-flash",
-            provider_protocol="google-interactions",
-            routing_constraint=google_interactions_routing_constraint(),
-        )
-        transport = _ScriptedTransport(
-            [
-                _tool_stream("interaction-loop-1", tool_name=harness.read_tool_name),
-                _text_stream("interaction-loop-2", "google fixture answer"),
-            ]
-        )
-        client = GoogleInteractionsAgenticClient(transport=transport)
-        adapter = harness.adapter(
-            client,
-            private_codec=HostedProviderPrivateCodec(
-                GOOGLE_INTERACTIONS_CODEC_ID,
-                GOOGLE_INTERACTIONS_CODEC_VERSION,
-                GOOGLE_INTERACTIONS_SCHEMA_VERSION,
-                GOOGLE_INTERACTIONS_CONTENT_TYPE,
-            ),
-            credential=EphemeralCredential("fixture-google-key"),
-            cost_estimator=google_36_flash_request_ceiling_microusd,
-        )
-        public_events = []
-
-        result = execute_runtime_turn(
-            session=harness.session,
-            provider=harness.provider,
-            input_text="Use only synthetic fixture data.",
-            agentic_adapter=adapter,
-            provider_state=harness.store.get_provider_state("session-hosted"),
-            correlation_id="turn-hosted",
-            effective_authority=harness.authority,
-            event_sink=public_events.append,
-        )
-
-        self.assertEqual(result.output_text, "google fixture answer")
-        self.assertEqual(harness.cli_calls, 1)
-        self.assertEqual(len(transport.payloads), 2)
-        self.assertEqual(transport.payloads[1]["previous_interaction_id"], "interaction-loop-1")
-        self.assertEqual(transport.payloads[1]["input"][0]["call_id"], "call-1")
-        self.assertNotIn(
-            THOUGHT_SIGNATURE,
-            json.dumps([event.payload for event in public_events], default=str),
-        )
-
-        stateless = HostedAgenticHarness(
-            self,
-            model_provider_id="google-ai-studio",
-            model_id="gemini-3.6-flash",
-            provider_protocol="google-interactions",
-            routing_constraint=google_interactions_routing_constraint(),
-        )
-        stateless_transport = _ScriptedTransport(
-            [
-                _tool_stream("stateless-loop-1", tool_name=stateless.read_tool_name),
-                _text_stream("stateless-loop-2", "stateless answer"),
-            ]
-        )
-        stateless_events = []
-        stateless_adapter = stateless.adapter(
-            GoogleInteractionsAgenticClient(
-                state_mode="stateless",
-                transport=stateless_transport,
-            ),
-            private_codec=adapter.loop.provider_runtimes.resolve(harness.binding).private_codec,
-            credential=EphemeralCredential("fixture-google-key"),
-            cost_estimator=google_36_flash_request_ceiling_microusd,
-        )
-        execute_runtime_turn(
-            session=stateless.session,
-            provider=stateless.provider,
-            input_text="Use only synthetic fixture data.",
-            agentic_adapter=stateless_adapter,
-            provider_state=stateless.store.get_provider_state("session-hosted"),
-            correlation_id="turn-hosted",
-            effective_authority=stateless.authority,
-            event_sink=stateless_events.append,
-        )
-        self.assertNotIn("previous_interaction_id", stateless_transport.payloads[1])
-        self.assertIn(THOUGHT_SIGNATURE, json.dumps(stateless_transport.payloads[1]))
-        self.assertNotIn(
-            THOUGHT_SIGNATURE,
-            json.dumps([event.payload for event in stateless_events], default=str),
-        )
-        self.assertTrue(
-            all(
-                THOUGHT_SIGNATURE.encode() not in path.read_bytes()
-                for path in stateless.root.glob("workspaces/default/runtime/sessions/**/*.json")
-            )
-        )
 
 class _ScriptedTransport:
     def __init__(
@@ -458,7 +358,12 @@ def _tool_stream(
     interaction_id: str,
     *,
     tool_name: str = "fixture_read",
+    arguments: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
+    encoded_arguments = json.dumps(
+        {"value": 4} if arguments is None else arguments,
+        separators=(",", ":"),
+    )
     return [
         _created(interaction_id),
         {"event_type": "step.start", "index": 0, "step": {"type": "thought"}},
@@ -476,7 +381,7 @@ def _tool_stream(
         {
             "event_type": "step.delta",
             "index": 1,
-            "delta": {"type": "arguments_delta", "arguments": '{"value":4}'},
+            "delta": {"type": "arguments_delta", "arguments": encoded_arguments},
         },
         {"event_type": "step.stop", "index": 1},
         _completed(interaction_id, "requires_action", input_tokens=20, output_tokens=4),

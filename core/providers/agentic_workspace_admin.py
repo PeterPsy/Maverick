@@ -75,6 +75,7 @@ def configure_workspace_agentic_default(
     ensure_codex_preview_certificate(
         store,
         definition=profile,
+        provider_definition=provider,
         adapter=registry.get_agentic_runtime_adapter(provider_id),
     )
     bindings = store.list_workspace_agentic_profile_bindings(workspace_id)

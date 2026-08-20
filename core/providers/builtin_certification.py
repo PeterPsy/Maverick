@@ -12,12 +12,13 @@ from core.providers.certificate_service import (
     runtime_adapter_artifact_digest,
 )
 from core.providers.errors import ProviderNotFoundError
+from core.providers.models import ProviderDefinition
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import canonical_digest
 
 
 CODEX_CERTIFICATION_SUITE_ID = "maverick-codex-agentic-contract"
-CODEX_CERTIFICATION_SUITE_VERSION = "1"
+CODEX_CERTIFICATION_SUITE_VERSION = "2"
 CODEX_CERTIFICATION_VALIDITY_DAYS = 90
 
 
@@ -25,6 +26,7 @@ def ensure_codex_preview_certificate(
     store: ProviderStore,
     *,
     definition: AgenticProfileDefinition,
+    provider_definition: ProviderDefinition,
     adapter: object,
 ) -> CapabilityCertificate:
     """Publish an expiring certificate backed by the packaged Codex contract suite."""
@@ -33,6 +35,18 @@ def ensure_codex_preview_certificate(
     except ProviderNotFoundError:
         pass
     artifact_digest = runtime_adapter_artifact_digest(adapter)
+    model = next(
+        (
+            item
+            for item in provider_definition.model_options
+            if item.model_id == definition.model_id
+        ),
+        None,
+    )
+    reasoning_efforts = tuple(
+        item.effort for item in (() if model is None else model.supported_reasoning_efforts)
+    )
+    default_reasoning_effort = None if model is None else model.default_reasoning_effort
     test_run_id = (
         f"packaged:{definition.definition_id}:{definition.revision}:"
         f"{artifact_digest[:16]}"
@@ -47,6 +61,8 @@ def ensure_codex_preview_certificate(
             "suite_version": CODEX_CERTIFICATION_SUITE_VERSION,
             "test_run_id": test_run_id,
             "contract": "validate-prepare-stream-cancel-recover-close",
+            "certified_reasoning_efforts": reasoning_efforts,
+            "default_reasoning_effort": default_reasoning_effort,
         }
     )
     evidence = build_capability_evidence(
@@ -60,7 +76,7 @@ def ensure_codex_preview_certificate(
     )
     certificate = CapabilityCertificate(
         certificate_id=definition.capability_certificate_id,
-        schema_version="1",
+        schema_version="2",
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=str(getattr(adapter, "adapter_id", definition.adapter_id)),
         adapter_version=str(getattr(adapter, "adapter_version", "")),
@@ -89,6 +105,8 @@ def ensure_codex_preview_certificate(
             provider_private_state=False,
             attachment_modalities=(),
         ),
+        certified_reasoning_efforts=reasoning_efforts,
+        default_reasoning_effort=default_reasoning_effort,
         suite_id=evidence.suite_id,
         suite_version=evidence.suite_version,
         test_run_id=evidence.test_run_id,

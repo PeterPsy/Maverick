@@ -1,7 +1,7 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-08-19
-Matrix revision: `2026-08-19-r5`
+Status date: 2026-08-20
+Matrix revision: `2026-08-20-r6`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==5`
@@ -12,14 +12,14 @@ Adapter: `maverick-hosted-tool-loop==5`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `10` (revision `9` suspended) |
+| Immutable profile revision | `11` (revision `10` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
 | Endpoint | `https://generativelanguage.googleapis.com/v1/interactions` |
 | Continuation | stateful in production; stateless exact-history codec tested |
 | Tool calls | one sequential function call per model step |
-| Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
+| Reasoning levels | `high`; deployed default `high` |
 | Live probe output budget | 2,048 tokens per request, including thinking tokens |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public`, `workspace_internal_fake` |
@@ -63,7 +63,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | paced operator-only two-request real-filesystem-list round trip for each of four certified reasoning efforts | available, not run at bootstrap |
+| Live capability probe | paced operator-only two-request real-filesystem-list round trip at the certificate-bound `high` effort | available, not run at bootstrap |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a

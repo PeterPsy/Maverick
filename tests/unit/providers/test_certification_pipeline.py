@@ -15,13 +15,14 @@ from core.providers.certification_pipeline import (
     verify_certification_run,
 )
 from core.providers.errors import CapabilityCertificateError
+from core.providers.google_agentic_certification import GOOGLE_CERTIFICATION_SUITE_VERSION
 
 
 class CertificationPipelineTest(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(__file__).resolve().parents[3]
         self.suite_id = "maverick-google-interactions-agentic-contract"
-        self.suite_version = "6"
+        self.suite_version = GOOGLE_CERTIFICATION_SUITE_VERSION
         self.digest = "a" * 64
         self.started_at = datetime(2026, 8, 17, tzinfo=UTC)
 

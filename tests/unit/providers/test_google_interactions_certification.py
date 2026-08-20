@@ -102,7 +102,8 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
 
         self.assertTrue(result.succeeded)
         self.assertEqual(result.reason_code, "ok")
-        self.assertEqual(result.request_count, 8)
+        self.assertEqual(CERTIFIED_REASONING_EFFORTS, ("high",))
+        self.assertEqual(result.request_count, 2 * len(CERTIFIED_REASONING_EFFORTS))
         self.assertEqual(result.reasoning_efforts, CERTIFIED_REASONING_EFFORTS)
         self.assertTrue(result.saw_filesystem_list)
         self.assertEqual(

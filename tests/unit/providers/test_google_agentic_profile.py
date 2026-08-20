@@ -110,7 +110,7 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         self.assertTrue(certificate.certified_capabilities.filesystem_list)
         self.assertEqual(
             certificate.certified_reasoning_efforts,
-            ("minimal", "low", "medium", "high"),
+            ("high",),
         )
         self.assertEqual(certificate.default_reasoning_effort, "high")
         self.assertFalse(

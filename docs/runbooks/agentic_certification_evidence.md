@@ -42,7 +42,7 @@ and a distinct operator-only live synthetic probe step; both must pass.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 6 \
+  --suite-version 7 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -52,7 +52,7 @@ python3 scripts/run_agentic_certification.py \
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
 version `6`, matrix revision `2026-08-19-r5`, and the OpenRouter manifest. The
-Google suite uses matrix revision `2026-08-19-r5`. The canonical matrices,
+Google suite uses version `7` and matrix revision `2026-08-20-r6`. The canonical matrices,
 artifact bundles, commands, and live probe entrypoints live in
 `core/providers/certification_manifests.py`.
 Do not reuse a Google artifact bundle, result, live probe, or evidence reference.

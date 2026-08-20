@@ -52,14 +52,18 @@ function agenticProfile(
     enabled: true,
     is_default: false,
     certified: true,
+    certificate: { effective_status: "active" },
     default_reasoning_effort: "high",
     supported_reasoning_efforts: reasoningOptions,
   };
 }
 
 describe("remote agentic provider runtime options", () => {
-  it("does not make preview profiles selectable in Chat", () => {
+  it("makes certified previews selectable while excluding suspended profiles", () => {
     const modelId = "gemini-3.6-flash";
+    const preview = agenticProfile("google-ai-studio", modelId, "preview");
+    const suspended = agenticProfile("google-ai-studio", modelId, "suspended");
+    suspended.workspace_profile_binding_id = "binding-suspended";
     const providers = providerItemsFromPayload({
       workspace_id: "default",
       active_provider: null,
@@ -68,11 +72,12 @@ describe("remote agentic provider runtime options", () => {
       ],
       agentic_profiles: {
         default_binding_id: null,
-        items: [agenticProfile("google-ai-studio", modelId, "preview")],
+        items: [preview, suspended],
       },
     });
 
-    expect(providers.some((provider) => Boolean(provider.workspace_profile_binding_id))).toBe(false);
+    expect(providers.filter((provider) => provider.workspace_profile_binding_id)).toHaveLength(1);
+    expect(providers[0]?.workspace_profile_binding_id).toBe(preview.workspace_profile_binding_id);
   });
 
   it("fails closed for missing certification or a non-active certificate", () => {

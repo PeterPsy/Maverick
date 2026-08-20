@@ -13,9 +13,8 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
     (profile) =>
       profile.enabled &&
       profile.certified === true &&
-      profile.rollout_status === "available" &&
-      (profile.certificate?.effective_status == null ||
-        profile.certificate.effective_status === "active"),
+      (profile.rollout_status === "preview" || profile.rollout_status === "available") &&
+      profile.certificate?.effective_status === "active",
   );
   if (agenticProfiles.length) {
     options.push(

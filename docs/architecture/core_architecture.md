@@ -97,7 +97,7 @@ This applies in particular to:
 - `service.py`
 - domain-level errors and contracts
 
-`.maverick` is rebuildable installation-local operating material. Deleting `.maverick` must not delete the authoritative control-plane database, users, workspace links, OAuth/provider credential bindings, runtime token records, or secret values.
+`.maverick` is rebuildable installation-local operating material. Deleting `.maverick` must not delete the authoritative control-plane database, users, workspace links, OAuth/provider credential bindings, runtime token records, core usage samples and rollups, or secret values.
 
 Hosted deployments use the configured durable control-plane store. The default adapter is JSON, selected with `MAVERICK_CONTROL_STORE=json` or by omitting `MAVERICK_CONTROL_STORE`. Its default root is `data/control-plane/json`, outside `.maverick`, so `.maverick` remains rebuildable installation-local operating material.
 
@@ -1463,6 +1463,16 @@ Apps that want realtime agent updates should connect to the WebSocket surface di
 
 They should not implement app-specific WebSocket routes for core runtime events.
 
+### Runtime token usage and context metering
+
+`core.usage` owns provider-neutral token metering. Provider adapters may report incremental request usage or cumulative thread snapshots, but the usage service must normalize those reports into idempotent `UsageSampleRecord` deltas before aggregation. Token categories remain additive: uncached input, cached input, cache-write input, non-reasoning output, and reasoning output are stored separately. Every sample carries provider/model attribution plus explicit token and context accuracy (`exact`, `estimated`, or `unavailable`); clients must not present an estimate as an exact provider report.
+
+Active context and cumulative consumption are different values. Active context is the latest root-session provider snapshot divided by that model's context window and may decrease after provider compaction. Chat consumption is the monotonic sum of normalized samples for the root session and every descendant runtime session reached through `creator_runtime_session_id`, with direct and delegated subtotals. Provider subscription limits are a third, separate concept: they describe account windows and must not be inferred from chat tokens or context percentage.
+
+Canonical samples, hourly/daily provider-model buckets, and redaction-safe provider-quota observations are core-owned control-plane records. The JSON adapter stores them below `data/control-plane/json/usage/`; Mongo uses dedicated indexed collections. Runtime cleanup removes detailed samples for deleted sessions. Historical coverage starts when metering is deployed; neither the API nor the UI may imply that older unobserved turns were reconstructed.
+
+The root runtime WebSocket snapshot includes an authoritative `usage` projection. Newly inserted samples publish a persisted `runtime.usage.updated` event to the root session, including when the observed work ran in a hidden delegated child, so Chat updates without polling. `GET /api/runtime/sessions/<session_id>/usage` exposes the same session-authorized projection for diagnostics. `GET /api/usage/timeseries?resolution=hour|day&periods=<n>` is platform-admin-only, derives workspace scope from the authenticated session, fills empty UTC buckets, and returns only redaction-safe aggregate data. Chat renders the current-context percentage and numeric cumulative tokens in the composer and keeps the complete single-chat breakdown behind a dialog. Settings renders the bounded 24-hour and 30-day workspace series while keeping provider subscription gauges visibly separate.
+
 ### Runtime model decomposition
 
 The runtime domain should separate at least these concepts:
@@ -1600,7 +1610,7 @@ Unknown methods should still become generic runtime events with `provider_event_
 
 Tool-like provider notifications without an explicit lifecycle state are point-in-time observations. They should be normalized as completed tool calls instead of active updates, otherwise generic notifications such as provider progress activity can leave stale spinners in transcript views.
 
-Provider lifecycle and telemetry notifications that do not represent user-visible work should be filtered before persistence and transport. Examples include account rate-limit refreshes, token-usage updates, and generic thread status changes.
+Provider lifecycle and telemetry notifications that do not represent user-visible work should be filtered from chat-facing runtime steps. Account rate-limit refreshes and generic thread status changes are discarded; token-usage notifications are consumed by `core.usage`, persisted only as normalized redaction-safe samples and root usage projections, and never shown as raw provider telemetry in the transcript.
 
 The Codex adapter must not use stateless `codex exec` for interactive chat or agent sessions.
 

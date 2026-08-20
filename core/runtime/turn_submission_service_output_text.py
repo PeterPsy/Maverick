@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -9,9 +10,14 @@ from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.output_compaction import ToolOutputCompactionContext, compact_tool_call_event
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.service import record_runtime_event
+from core.usage.payloads import chat_usage_summary_payload
+from core.usage.service import ingest_runtime_usage
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
+
+
+logger = logging.getLogger(__name__)
 
 
 class _RuntimeTurnOutputRecorder:
@@ -23,7 +29,14 @@ class _RuntimeTurnOutputRecorder:
         self.turn_id = turn_id
         self._streamed_text_parts: list[str] = []
 
-    def record(self, event: RuntimeExecutionEvent) -> RuntimeEventRecord:
+    def record(self, event: RuntimeExecutionEvent) -> RuntimeEventRecord | None:
+        if event.event_type in {"provider.usage", "runtime.usage.reported"}:
+            return _record_usage_summary_event(
+                self.state,
+                session_id=self.session_id,
+                turn_id=self.turn_id,
+                payload=event.payload,
+            )
         if event.event_type == "runtime.output.delta":
             text = event.payload.get("text")
             if isinstance(text, str) and text:
@@ -119,3 +132,37 @@ def _record_execution_event(
         payload=event.payload,
         event_bus=state.runtime_event_bus,
     )
+
+
+def _record_usage_summary_event(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    payload: dict[str, object],
+) -> RuntimeEventRecord | None:
+    """Ingest a report and publish only its authoritative root-chat projection."""
+    try:
+        result = ingest_runtime_usage(
+            state,
+            session_id=session_id,
+            turn_id=turn_id,
+            payload=payload,
+        )
+        if result is None or not result.inserted:
+            return None
+        root_turn_id = turn_id if result.summary.root_session_id == session_id else None
+        return record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=result.summary.root_session_id,
+            turn_id=root_turn_id,
+            plane="runtime",
+            event_type="runtime.usage.updated",
+            payload=chat_usage_summary_payload(result.summary),
+            now=result.sample.observed_at,
+            event_bus=state.runtime_event_bus,
+        )
+    except Exception:
+        logger.exception("Runtime usage ingestion failed for session_id=%s", session_id)
+        return None

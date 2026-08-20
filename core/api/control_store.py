@@ -17,6 +17,7 @@ from core.secrets.bootstrap import resolve_bootstrap_secret
 from core.secrets.store import SecretCollections
 from core.shared.json_file_collection import JsonFileCollection
 from core.shared.mongo_document_collection import MongoDocumentCollection
+from core.usage.store import UsageCollections
 from core.workspaces.store import WorkspaceCollections
 
 
@@ -59,6 +60,19 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "secret_values": (("secret_id",),),
     "secret_bindings": (("binding_id",),),
     "secret_grants": (("grant_id",),),
+    "usage_samples": (("sample_id",),),
+    "usage_buckets": (("bucket_id",),),
+    "provider_quota_snapshots": (("snapshot_id",),),
+}
+
+MONGO_COLLECTION_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
+    "usage_samples": (
+        ("workspace_id", "observed_at"),
+        ("root_session_id", "observed_at"),
+        ("session_id", "observed_at"),
+    ),
+    "usage_buckets": (("workspace_id", "resolution", "bucket_start"),),
+    "provider_quota_snapshots": (("workspace_id", "provider_id", "observed_at"),),
 }
 
 
@@ -115,6 +129,7 @@ class ControlPlaneCollections:
     runtime_api_tokens: Any | None
     jobs: JobCollections
     secrets: SecretCollections
+    usage: UsageCollections
 
 
 @dataclass(frozen=True)
@@ -184,6 +199,9 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
         ControlPlaneCollectionSpec("secret_values", collections.secrets.values),
         ControlPlaneCollectionSpec("secret_bindings", collections.secrets.bindings),
         ControlPlaneCollectionSpec("secret_grants", collections.secrets.grants),
+        ControlPlaneCollectionSpec("usage_samples", collections.usage.samples),
+        ControlPlaneCollectionSpec("usage_buckets", collections.usage.buckets),
+        ControlPlaneCollectionSpec("provider_quota_snapshots", collections.usage.quota_snapshots),
     ]
     return [spec for spec in specs if spec.collection is not None]
 
@@ -195,6 +213,7 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
     secret_state_root = json_root / "secrets"
     provider_state_root = json_root / "providers"
     job_state_root = json_root / "jobs"
+    usage_state_root = json_root / "usage"
     return ControlPlaneCollections(
         workspace=WorkspaceCollections(
             workspaces=JsonFileCollection(workspace_state_root / "workspaces.json"),
@@ -254,6 +273,11 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             values=JsonFileCollection(secret_state_root / "values.json"),
             bindings=JsonFileCollection(secret_state_root / "bindings.json"),
             grants=JsonFileCollection(secret_state_root / "grants.json"),
+        ),
+        usage=UsageCollections(
+            samples=JsonFileCollection(usage_state_root / "samples.json"),
+            buckets=JsonFileCollection(usage_state_root / "buckets.json"),
+            quota_snapshots=JsonFileCollection(usage_state_root / "provider_quota_snapshots.json"),
         ),
     )
 
@@ -315,6 +339,11 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             bindings=collection("secret_bindings"),
             grants=collection("secret_grants"),
         ),
+        usage=UsageCollections(
+            samples=collection("usage_samples"),
+            buckets=collection("usage_buckets"),
+            quota_snapshots=collection("provider_quota_snapshots"),
+        ),
     )
 
 
@@ -353,6 +382,10 @@ def ensure_mongo_collection_indexes(collection: Any, name: str) -> None:
         index_spec = [(field, 1) for field in fields]
         index_name = "uniq_" + "_".join(fields)
         collection.create_index(index_spec, name=index_name, unique=True)
+    for fields in MONGO_COLLECTION_INDEXES.get(name, ()):
+        index_spec = [(field, 1) for field in fields]
+        index_name = "idx_" + "_".join(fields)
+        collection.create_index(index_spec, name=index_name)
 
 
 def _database_from_mongo_uri(uri: str | None) -> str | None:

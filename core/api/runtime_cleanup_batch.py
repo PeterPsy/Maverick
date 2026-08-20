@@ -128,6 +128,10 @@ def cleanup_runtime_sessions_batch(
     roots_finished_at = time.perf_counter()
 
     deleted_records = state.runtime_store.delete_session_records_batch(existing_session_ids)
+    usage_store = getattr(state, "usage_store", None)
+    if usage_store is not None:
+        for session_id in existing_session_ids:
+            deleted_records.setdefault(session_id, {})["usage_samples"] = usage_store.delete_session(session_id)
     records_finished_at = time.perf_counter()
     deleted_threads_by_session_id: dict[str, list[str]] = {
         session_id: [] for session_id in existing_session_ids

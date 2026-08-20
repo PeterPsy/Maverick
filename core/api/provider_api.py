@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 
@@ -44,6 +45,7 @@ from core.providers.service import (
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.execution_binding import canonical_digest
+from core.usage.quota import record_provider_quota_snapshots
 
 
 def provider_model_settings_payload(definition: ProviderDefinition, selection: ProviderSelection | None) -> dict[str, object]:
@@ -1022,6 +1024,12 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             state.provider_store,
             workspace_id=context.workspace_id,
         )
+        with suppress(Exception):
+            record_provider_quota_snapshots(
+                state.usage_store,
+                workspace_id=context.workspace_id,
+                usages=usages,
+            )
         return json_response(
             start_response,
             {

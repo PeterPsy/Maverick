@@ -249,6 +249,37 @@ export type ProviderSubscriptionUsagePayload = {
   items: ProviderSubscriptionUsage[];
 };
 
+export type UsageTokenTotals = {
+  input_tokens: number;
+  cached_input_tokens: number;
+  cache_write_input_tokens: number;
+  output_tokens: number;
+  reasoning_output_tokens: number;
+  total_tokens: number;
+  estimated_cost_microusd: number | null;
+};
+
+export type UsageTimeSeriesItem = UsageTokenTotals & {
+  bucket_start: string;
+  bucket_end: string;
+  sample_count: number;
+};
+
+export type UsageTimeSeriesPayload = {
+  workspace_id: string;
+  resolution: "hour" | "day";
+  periods: number;
+  provider_id: string | null;
+  model_id: string | null;
+  timezone: "UTC" | string;
+  range_start: string;
+  range_end: string;
+  coverage_since: string | null;
+  generated_at: string;
+  items: UsageTimeSeriesItem[];
+  totals: UsageTokenTotals;
+};
+
 export type HostedProviderSelection = {
   workspace_id: string;
   profile: string;
@@ -559,6 +590,14 @@ export function getPlatformSettings(): Promise<PlatformSettings> {
 
 export function getProviderSubscriptionUsage(): Promise<ProviderSubscriptionUsagePayload> {
   return requestJson<ProviderSubscriptionUsagePayload>('/api/providers/usage');
+}
+
+export function getUsageTimeseries(
+  resolution: "hour" | "day",
+  periods: number
+): Promise<UsageTimeSeriesPayload> {
+  const query = new URLSearchParams({ resolution, periods: String(periods) });
+  return requestJson<UsageTimeSeriesPayload>(`/api/usage/timeseries?${query.toString()}`);
 }
 
 export function getRuntimeSessionInventory(): Promise<RuntimeSessionInventoryPayload> {

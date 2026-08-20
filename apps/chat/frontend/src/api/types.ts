@@ -458,6 +458,34 @@ export type RuntimeEvent = {
   created_at: string;
 };
 
+export type TokenUsageBreakdown = {
+  input_tokens: number;
+  cached_input_tokens: number;
+  cache_write_input_tokens: number;
+  output_tokens: number;
+  reasoning_output_tokens: number;
+  total_tokens: number;
+};
+
+export type ChatUsageSummary = {
+  workspace_id: string;
+  root_session_id: string;
+  tokens: TokenUsageBreakdown;
+  direct_tokens: TokenUsageBreakdown;
+  delegated_tokens: TokenUsageBreakdown;
+  context_tokens: number | null;
+  context_window_tokens: number | null;
+  context_used_percent: number | null;
+  token_accuracy: "exact" | "estimated" | "unavailable";
+  context_accuracy: "exact" | "estimated" | "unavailable";
+  provider_ids: string[];
+  model_ids: string[];
+  estimated_cost_microusd: number | null;
+  sample_count: number;
+  coverage_since: string | null;
+  updated_at: string | null;
+};
+
 export type RuntimeWebSocketFrame =
   | {
       type: "runtime.snapshot";
@@ -467,6 +495,7 @@ export type RuntimeWebSocketFrame =
       last_event_id: string | null;
       has_more_before?: boolean;
       oldest_event_id?: string | null;
+      usage?: ChatUsageSummary | null;
     }
   | {
       type: "runtime.history.page";

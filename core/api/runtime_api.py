@@ -93,6 +93,8 @@ from core.runtime.turn_submission_service_queue import (
     runtime_turn_submission_timing,
 )
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
+from core.usage.payloads import chat_usage_summary_payload
+from core.usage.service import build_chat_usage_summary, resolve_root_session_id
 from core.skills.service import SkillInvocationError, resolve_invoked_runtime_skills
 
 
@@ -1412,6 +1414,31 @@ def _handle_session_events(state: PlatformState, context: RequestSession, sessio
     )
 
 
+def _handle_session_usage(
+    state: PlatformState,
+    context: RequestSession,
+    session_id: str,
+    start_response: StartResponse,
+):
+    """Return the authoritative root-chat token and active-context snapshot."""
+    try:
+        session = state.runtime_store.get_session(session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if session.workspace_id != context.workspace_id:
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
+    root_session_id = resolve_root_session_id(state.runtime_store, session)
+    summary = build_chat_usage_summary(
+        state.usage_store,
+        workspace_id=session.workspace_id,
+        root_session_id=root_session_id,
+    )
+    return json_response(start_response, {"usage": chat_usage_summary_payload(summary)})
+
+
 def _handle_session_turns(
     state: PlatformState,
     context: RequestSession,
@@ -2260,6 +2287,8 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
         return _handle_session_item(state, context, parts[1], start_response, start_path=start_path)
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "events" and method == "GET":
         return _handle_session_events(state, context, parts[1], start_response, start_path=start_path, query_string=query_string)
+    if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "usage" and method == "GET":
+        return _handle_session_usage(state, context, parts[1], start_response)
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "turns":
         return _timed_runtime_api_response(
             state,

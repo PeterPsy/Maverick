@@ -5,6 +5,7 @@ import {
   listInterAgentRunEvents,
   listInterAgentRuns,
   resolveInterAgentApproval,
+  type ChatUsageSummary,
   type ChatThread,
   type InterAgentApprovalRecord,
   type InterAgentEventRecord,
@@ -188,6 +189,7 @@ export function useChatAppController({
   const [draftChat, setDraftChat] = useState<DraftChat | null>(null);
   const [activeSession, setActiveSession] = useState<RuntimeSession | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
+  const [chatUsage, setChatUsage] = useState<ChatUsageSummary | null>(null);
   const [composer, setComposer] = useState("");
   const selectedProvider = useMemo(() => selectedProviderForSession({ activeProviderId, activeSession, activeThread, providers }), [
     activeProviderId,
@@ -243,6 +245,10 @@ export function useChatAppController({
   interAgentRefreshScopeRef.current = interAgentRefreshScope;
   const runtimeCanStopTurn = isActiveRuntimeTurnBusyForThread(activeTurn, activeThread);
   const isRuntimeBusy = runtimeCanStopTurn;
+
+  useEffect(() => {
+    setChatUsage(null);
+  }, [activeThread?.runtime_session_id]);
 
   const { handleChatRootPointerDown } = useChatReadReceipts({
     activeThread,
@@ -595,6 +601,7 @@ export function useChatAppController({
     composer,
     composerError,
     composerMentionItems,
+    chatUsage,
     draftChat,
     enablePageCapture,
     error,
@@ -667,6 +674,7 @@ export function useChatAppController({
       hasMoreHistory,
       onRuntimeSessionUnavailable: handleUnavailableRuntimeSession,
       onRuntimeSnapshot: handleRuntimeSnapshot,
+      onUsageSnapshot: setChatUsage,
       olderHistoryRequestId,
       runtimeSessionId: activeThread?.runtime_session_id || null,
       setActiveSession,

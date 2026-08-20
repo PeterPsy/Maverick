@@ -198,7 +198,19 @@ async def execute_agentic_runtime_turn(
                 fallback="provider_execution_failed",
             )
         if event_sink is not None:
-            event_sink(RuntimeExecutionEvent(event_type=event.event_type, payload=event.payload))
+            public_payload = dict(event.payload)
+            if event.event_type == "provider.usage":
+                public_payload.update(
+                    {
+                        "provider_id": binding.model_provider_id,
+                        "model_id": binding.model_id,
+                        "source": "hosted_agentic",
+                        "semantics": "incremental",
+                        "token_accuracy": "exact",
+                        "context_accuracy": "estimated",
+                    }
+                )
+            event_sink(RuntimeExecutionEvent(event_type=event.event_type, payload=public_payload))
     final_exit_code = exit_code if exit_code is not None else 1
     if final_exit_code != 0 and failure_reason_code is None:
         failure_reason_code = "provider_execution_failed"

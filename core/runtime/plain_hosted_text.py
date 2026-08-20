@@ -21,6 +21,7 @@ from core.providers.text_generation import (
     TextGenerationContentPart,
     TextGenerationMessage,
     TextGenerationRequest,
+    TextGenerationUsage,
     execute_hosted_text_generation,
 )
 from core.runtime.execution import RuntimeExecutionResult
@@ -172,7 +173,75 @@ def execute_plain_hosted_text_turn(
             error.reason_code,
             reason_codes=[*decision.reason_codes, error.reason_code],
         ) from error
+    _emit_plain_hosted_usage(
+        event_sink,
+        session=session,
+        turn_id=turn_id,
+        decision=decision,
+        model_option=model_option,
+        usage=result.usage,
+        provider_routing=request.provider_routing,
+    )
     return RuntimeExecutionResult(output_text=result.output_text, exit_code=0), decision
+
+
+def _emit_plain_hosted_usage(
+    event_sink: Callable[[RuntimeExecutionEvent], object] | None,
+    *,
+    session: RuntimeSessionRecord,
+    turn_id: str | None,
+    decision: RoutingDecision,
+    model_option: ProviderModelOption | None,
+    usage: TextGenerationUsage | None,
+    provider_routing: dict[str, object] | None,
+) -> None:
+    if event_sink is None or usage is None:
+        return
+    event_sink(
+        RuntimeExecutionEvent(
+            event_type="provider.usage",
+            payload={
+                "usage_id": f"plain-hosted:{session.session_id}:{turn_id or 'turn'}",
+                "provider_id": decision.selected_provider_id or "",
+                "model_id": decision.selected_model_id_or_voice_id or "",
+                "source": "plain_hosted_chat",
+                "semantics": "incremental",
+                "token_accuracy": "exact",
+                "context_accuracy": "estimated",
+                "input_tokens": usage.input_tokens,
+                "cached_input_tokens": usage.cached_input_tokens,
+                "cache_write_input_tokens": usage.cache_write_input_tokens,
+                "output_tokens": usage.output_tokens,
+                "reasoning_output_tokens": usage.reasoning_output_tokens,
+                "total_tokens": usage.total_tokens,
+                "context_tokens": usage.total_tokens,
+                "context_window_tokens": _plain_hosted_context_window(model_option, provider_routing),
+            },
+        )
+    )
+
+
+def _plain_hosted_context_window(
+    model_option: ProviderModelOption | None,
+    provider_routing: dict[str, object] | None,
+) -> int | None:
+    if model_option is None:
+        return None
+    metadata_value = model_option.metadata.get("context_length")
+    if isinstance(metadata_value, int) and not isinstance(metadata_value, bool) and metadata_value > 0:
+        return metadata_value
+    selected_upstream = str((provider_routing or {}).get("provider_id") or "").strip()
+    candidates = [
+        int(option["context_length"])
+        for option in model_option.upstream_provider_options
+        if isinstance(option.get("context_length"), int)
+        and not isinstance(option.get("context_length"), bool)
+        and int(option["context_length"]) > 0
+        and (not selected_upstream or option.get("provider_id") == selected_upstream)
+    ]
+    if not candidates and selected_upstream:
+        return _plain_hosted_context_window(model_option, None)
+    return min(candidates) if candidates else None
 
 
 def _hosted_provider_sent_sink(

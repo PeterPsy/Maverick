@@ -33,6 +33,7 @@ from core.api.session_api import handle_session_api, resolve_request_session
 from core.api.sidecar_browser import handle_sidecar_browser_launch
 from core.api.secret_api import handle_secret_api
 from core.api.settings_api import handle_settings_api
+from core.api.usage_api import handle_usage_api
 from core.api.sidecar_proxy import handle_app_sidecar_proxy, parse_app_sidecar_proxy_route
 from core.api.widget_api import handle_widget_api
 from core.api.workspace_files_api import handle_workspace_files_api
@@ -118,6 +119,9 @@ class PlatformHost:
             if routed is not None:
                 return routed
             routed = handle_runtime_api(self.state, environ, start_response, start_path=self.start_path)
+            if routed is not None:
+                return routed
+            routed = handle_usage_api(self.state, environ, start_response)
             if routed is not None:
                 return routed
             routed = handle_job_api(self.state, environ, start_response)

@@ -67,6 +67,15 @@ describe("runtime event transcript projection", () => {
     expect(messages).toMatchObject([{ id: "client-message-1", role: "human", content: "hello", status: "complete" }]);
   });
 
+  it("keeps normalized usage telemetry out of the transcript", () => {
+    const messages = eventsToMessages([
+      event({ event_id: "usage-raw", event_type: "provider.usage", payload: { total_tokens: 100 } }),
+      event({ event_id: "usage-summary", event_type: "runtime.usage.updated", payload: { tokens: { total_tokens: 100 } } }),
+    ]);
+
+    expect(messages).toEqual([]);
+  });
+
   it("projects steered messages inside the active turn without merging assistant segments", () => {
     const messages = eventsToMessages([
       event({

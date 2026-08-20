@@ -48,6 +48,7 @@ from core.secrets.key_material import load_secret_store_key, load_secret_store_k
 from core.secrets.store import SecretDocumentStore
 from core.shared.in_memory_collection import InMemoryCollection
 from core.shared.repository import discover_repository_root
+from core.usage.store import UsageDocumentStore
 from core.workspaces.store import WorkspaceDocumentStore
 
 
@@ -73,6 +74,7 @@ class PlatformState:
     secret_store: SecretDocumentStore
     recovery_store: RecoveryDocumentStore
     observability_store: ObservabilityDocumentStore
+    usage_store: UsageDocumentStore
     sidecar_browser_sessions: SidecarBrowserSessionStore
     runtime_root_capabilities: RuntimeRootCapabilityStore
     root_shell_app_id: str
@@ -182,6 +184,7 @@ def bootstrap_platform_state(
             metrics=InMemoryCollection(),
         )
     )
+    usage_store = UsageDocumentStore(control_collections.usage)
     agentic_egress_evaluator = AgenticEgressEvaluator(
         digest_key=load_secret_store_key(),
         observability_store=observability_store,
@@ -236,6 +239,7 @@ def bootstrap_platform_state(
         secret_store=secret_store,
         recovery_store=recovery_store,
         observability_store=observability_store,
+        usage_store=usage_store,
         sidecar_browser_sessions=SidecarBrowserSessionStore(),
         runtime_root_capabilities=RuntimeRootCapabilityStore(),
         root_shell_app_id=os.environ.get("MAVERICK_ROOT_SHELL_APP_ID", "base-shell").strip() or "base-shell",

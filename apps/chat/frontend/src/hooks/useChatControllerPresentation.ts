@@ -4,6 +4,7 @@ import type {
   AppReference,
   ChatMessage,
   ChatThread,
+  ChatUsageSummary,
   InterAgentApprovalRecord,
   InterAgentEventRecord,
   InterAgentRunDetail,
@@ -43,6 +44,7 @@ type UseChatControllerPresentationParams = {
   composer: string;
   composerError: string | null;
   composerMentionItems: MentionItem[];
+  chatUsage: ChatUsageSummary | null;
   draftChat: DraftChat | null;
   enablePageCapture: boolean;
   error: string | null;
@@ -122,6 +124,7 @@ export function useChatControllerPresentation({
   composer,
   composerError,
   composerMentionItems,
+  chatUsage,
   draftChat,
   enablePageCapture,
   error,
@@ -242,6 +245,7 @@ export function useChatControllerPresentation({
       executionMode,
       isSending,
       mentionItems: composerMentionItems,
+      usage: chatUsage,
       multiAgentBudgetLabel,
       multiAgentMode,
       onAddAttachments: handleAddAttachments,

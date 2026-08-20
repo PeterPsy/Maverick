@@ -5,7 +5,7 @@ import { act, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RuntimeEvent, RuntimeSession, RuntimeTurn } from "../api/client";
+import type { ChatUsageSummary, RuntimeEvent, RuntimeSession, RuntimeTurn } from "../api/client";
 import type { PendingMessage } from "../lib/messageState";
 import { eventsToMessages } from "../lib/transcript";
 import { useRuntimeEvents } from "./useRuntimeEvents";
@@ -50,6 +50,7 @@ type RuntimeEventsHarnessState = {
   error: string | null;
   events: RuntimeEvent[];
   pendingUserMessages: PendingMessage[];
+  usage: ChatUsageSummary | null;
 };
 
 function event(eventId: string): RuntimeEvent {
@@ -83,15 +84,17 @@ function RuntimeEventsHarness({
   const [, setIsOlderHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingUserMessages, setPendingUserMessages] = useState<PendingMessage[]>(initialPendingUserMessages);
+  const [usage, setUsage] = useState<ChatUsageSummary | null>(null);
 
   useEffect(() => {
-    onState?.({ activeSession, activeTurn, error, events, pendingUserMessages });
-  }, [activeSession, activeTurn, error, events, onState, pendingUserMessages]);
+    onState?.({ activeSession, activeTurn, error, events, pendingUserMessages, usage });
+  }, [activeSession, activeTurn, error, events, onState, pendingUserMessages, usage]);
 
   useRuntimeEvents({
     activeTurn,
     hasMoreHistory,
     olderHistoryRequestId,
+    onUsageSnapshot: setUsage,
     runtimeSessionId,
     setActiveSession,
     setActiveTurn,
@@ -159,6 +162,58 @@ describe("useRuntimeEvents", () => {
     expect(MockWebSocket.instances[1].url).toBe(
       "ws://localhost:3000/ws/runtime/sessions/session-1?last_event_id=tail-event&initial_event_limit=500",
     );
+  });
+
+  it("applies authoritative usage from snapshots and live usage events", async () => {
+    let latestState: RuntimeEventsHarnessState | null = null;
+    const usage = {
+      workspace_id: "default",
+      root_session_id: "session-1",
+      tokens: { input_tokens: 80, cached_input_tokens: 10, cache_write_input_tokens: 0, output_tokens: 10, reasoning_output_tokens: 0, total_tokens: 100 },
+      direct_tokens: { input_tokens: 80, cached_input_tokens: 10, cache_write_input_tokens: 0, output_tokens: 10, reasoning_output_tokens: 0, total_tokens: 100 },
+      delegated_tokens: { input_tokens: 0, cached_input_tokens: 0, cache_write_input_tokens: 0, output_tokens: 0, reasoning_output_tokens: 0, total_tokens: 0 },
+      context_tokens: 50,
+      context_window_tokens: 200,
+      context_used_percent: 25,
+      token_accuracy: "exact",
+      context_accuracy: "exact",
+      provider_ids: ["codex"],
+      model_ids: ["gpt-test"],
+      estimated_cost_microusd: null,
+      sample_count: 1,
+      coverage_since: "2026-04-19T10:00:00Z",
+      updated_at: "2026-04-19T10:00:00Z",
+    } satisfies ChatUsageSummary;
+    await act(async () => {
+      root?.render(<RuntimeEventsHarness initialEvents={[]} onState={(state) => { latestState = state; }} />);
+    });
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.snapshot",
+          session,
+          events: [],
+          last_event_id: null,
+          usage,
+        }),
+      } as MessageEvent);
+    });
+    expect((latestState as RuntimeEventsHarnessState | null)?.usage?.tokens.total_tokens).toBe(100);
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.event",
+          event: {
+            ...event("usage-event"),
+            event_type: "runtime.usage.updated",
+            payload: { ...usage, tokens: { ...usage.tokens, total_tokens: 125 } },
+          },
+        }),
+      } as MessageEvent);
+    });
+    expect((latestState as RuntimeEventsHarnessState | null)?.usage?.tokens.total_tokens).toBe(125);
   });
 
   it("uses the oldest persisted event cursor after hydrating missing turn anchors", async () => {

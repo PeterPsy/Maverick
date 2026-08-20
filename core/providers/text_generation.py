@@ -141,6 +141,18 @@ class TextGenerationRequest:
 
 
 @dataclass(frozen=True)
+class TextGenerationUsage:
+    """Provider-reported usage for one hosted text request."""
+
+    input_tokens: int
+    cached_input_tokens: int
+    cache_write_input_tokens: int
+    output_tokens: int
+    reasoning_output_tokens: int
+    total_tokens: int
+
+
+@dataclass(frozen=True)
 class TextGenerationResult:
     """Normalized hosted text generation result."""
 
@@ -149,6 +161,7 @@ class TextGenerationResult:
     provider_id: str
     model_id: str
     reason_codes: list[str] = field(default_factory=list)
+    usage: TextGenerationUsage | None = None
 
 
 @dataclass(frozen=True)
@@ -160,6 +173,7 @@ class HostedTextTransportResult:
     chunks: list[str] = field(default_factory=list)
     timed_out: bool = False
     error: str | None = None
+    usage: TextGenerationUsage | None = None
 
 
 class HostedTextTransport(Protocol):
@@ -312,7 +326,13 @@ class OpenAICompatibleHttpTransport:
                         cancellation.raise_if_cancelled()
                     if stream:
                         chunks: list[str] = []
-                        for chunk in _iter_openai_sse_chunks(response):
+                        observed_usage: TextGenerationUsage | None = None
+
+                        def capture_usage(value: TextGenerationUsage) -> None:
+                            nonlocal observed_usage
+                            observed_usage = value
+
+                        for chunk in _iter_openai_sse_chunks(response, usage_sink=capture_usage):
                             if cancellation is not None:
                                 cancellation.raise_if_cancelled()
                             chunks.append(chunk)
@@ -323,6 +343,7 @@ class OpenAICompatibleHttpTransport:
                         return HostedTextTransportResult(
                             status_code=response.status,
                             chunks=chunks,
+                            usage=observed_usage,
                         )
                     try:
                         response_payload = response.read()
@@ -393,7 +414,13 @@ class GoogleAIStudioHttpTransport(OpenAICompatibleHttpTransport):
                     if cancellation is not None:
                         cancellation.raise_if_cancelled()
                     chunks: list[str] = []
-                    for chunk in _iter_gemini_sse_chunks(response):
+                    observed_usage: TextGenerationUsage | None = None
+
+                    def capture_usage(value: TextGenerationUsage) -> None:
+                        nonlocal observed_usage
+                        observed_usage = value
+
+                    for chunk in _iter_gemini_sse_chunks(response, usage_sink=capture_usage):
                         if cancellation is not None:
                             cancellation.raise_if_cancelled()
                         chunks.append(chunk)
@@ -404,6 +431,7 @@ class GoogleAIStudioHttpTransport(OpenAICompatibleHttpTransport):
                     return HostedTextTransportResult(
                         status_code=response.status,
                         chunks=chunks,
+                        usage=observed_usage,
                     )
         except HostedTextGenerationError:
             raise
@@ -486,6 +514,7 @@ class OpenAICompatibleTextGenerationClient:
             provider_id=self.provider_id,
             model_id=request.model_id,
             reason_codes=["hosted_text_generation_completed"],
+            usage=result.usage or _extract_openai_usage(result.payload),
         )
 
 
@@ -553,6 +582,7 @@ class GoogleAIStudioTextGenerationClient:
             provider_id=self.provider_id,
             model_id=request.model_id,
             reason_codes=["hosted_text_generation_completed"],
+            usage=result.usage or _extract_gemini_usage(result.payload),
         )
 
 
@@ -676,6 +706,8 @@ def _openai_payload(request: TextGenerationRequest) -> dict[str, object]:
         "messages": messages,
         "stream": request.stream,
     }
+    if request.stream:
+        payload["stream_options"] = {"include_usage": True}
     if request.max_output_tokens is not None:
         payload["max_tokens"] = request.max_output_tokens
     provider_routing = _openrouter_provider_payload(request.provider_routing)
@@ -894,7 +926,11 @@ def _extract_gemini_candidate_text(candidate: object) -> str:
     return "".join(text_parts)
 
 
-def _iter_openai_sse_chunks(response) -> Iterable[str]:
+def _iter_openai_sse_chunks(
+    response,
+    *,
+    usage_sink: Callable[[TextGenerationUsage], None] | None = None,
+) -> Iterable[str]:
     for raw_line in response:
         try:
             line = raw_line.decode("utf-8").strip()
@@ -909,6 +945,9 @@ def _iter_openai_sse_chunks(response) -> Iterable[str]:
             payload = json.loads(data)
         except json.JSONDecodeError:
             continue
+        usage = _extract_openai_usage(payload if isinstance(payload, dict) else None)
+        if usage is not None and usage_sink is not None:
+            usage_sink(usage)
         choices = payload.get("choices") if isinstance(payload, dict) else None
         if not isinstance(choices, list) or not choices:
             continue
@@ -918,7 +957,11 @@ def _iter_openai_sse_chunks(response) -> Iterable[str]:
             yield content
 
 
-def _iter_gemini_sse_chunks(response) -> Iterable[str]:
+def _iter_gemini_sse_chunks(
+    response,
+    *,
+    usage_sink: Callable[[TextGenerationUsage], None] | None = None,
+) -> Iterable[str]:
     for raw_line in response:
         try:
             line = raw_line.decode("utf-8").strip()
@@ -933,6 +976,9 @@ def _iter_gemini_sse_chunks(response) -> Iterable[str]:
             payload = json.loads(data)
         except json.JSONDecodeError:
             continue
+        usage = _extract_gemini_usage(payload if isinstance(payload, dict) else None)
+        if usage is not None and usage_sink is not None:
+            usage_sink(usage)
         candidates = payload.get("candidates") if isinstance(payload, dict) else None
         if not isinstance(candidates, list) or not candidates:
             continue
@@ -942,3 +988,45 @@ def _iter_gemini_sse_chunks(response) -> Iterable[str]:
             continue
         if text:
             yield text
+
+
+def _extract_openai_usage(payload: dict[str, object] | None) -> TextGenerationUsage | None:
+    usage = payload.get("usage") if isinstance(payload, dict) and isinstance(payload.get("usage"), dict) else None
+    if usage is None:
+        return None
+    prompt_details = usage.get("prompt_tokens_details") if isinstance(usage.get("prompt_tokens_details"), dict) else {}
+    completion_details = usage.get("completion_tokens_details") if isinstance(usage.get("completion_tokens_details"), dict) else {}
+    input_tokens = _usage_int(usage.get("prompt_tokens"))
+    output_tokens = _usage_int(usage.get("completion_tokens"))
+    return TextGenerationUsage(
+        input_tokens=input_tokens,
+        cached_input_tokens=min(input_tokens, _usage_int(prompt_details.get("cached_tokens"))),
+        cache_write_input_tokens=min(input_tokens, _usage_int(prompt_details.get("cache_write_tokens"))),
+        output_tokens=output_tokens,
+        reasoning_output_tokens=min(output_tokens, _usage_int(completion_details.get("reasoning_tokens"))),
+        total_tokens=_usage_int(usage.get("total_tokens")) or input_tokens + output_tokens,
+    )
+
+
+def _extract_gemini_usage(payload: dict[str, object] | None) -> TextGenerationUsage | None:
+    usage = payload.get("usageMetadata") if isinstance(payload, dict) and isinstance(payload.get("usageMetadata"), dict) else None
+    if usage is None:
+        return None
+    input_tokens = _usage_int(usage.get("promptTokenCount"))
+    output_tokens = _usage_int(usage.get("candidatesTokenCount"))
+    return TextGenerationUsage(
+        input_tokens=input_tokens,
+        cached_input_tokens=min(input_tokens, _usage_int(usage.get("cachedContentTokenCount"))),
+        cache_write_input_tokens=0,
+        output_tokens=output_tokens,
+        reasoning_output_tokens=min(output_tokens, _usage_int(usage.get("thoughtsTokenCount"))),
+        total_tokens=_usage_int(usage.get("totalTokenCount")) or input_tokens + output_tokens,
+    )
+
+
+def _usage_int(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int | float) and value >= 0:
+        return int(value)
+    return 0

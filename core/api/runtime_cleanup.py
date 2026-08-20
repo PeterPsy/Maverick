@@ -114,6 +114,9 @@ def cleanup_runtime_session(
     )
     if not defer_persistence_cleanup:
         deleted["tool_private_payloads"] = deleted_private_payloads
+        usage_store = getattr(state, "usage_store", None)
+        if usage_store is not None:
+            deleted["usage_samples"] = usage_store.delete_session(session.session_id)
     records_finished_at = time.perf_counter()
     deleted_threads = (
         _delete_runtime_threads_for_session(

@@ -186,10 +186,7 @@ function mergeToolCall(previous: ToolCallMessage, next: ToolCallMessage): ToolCa
 
 function stepPayload(event: RuntimeEvent): RuntimeStepMessage | null {
   if (event.event_type === "provider.usage") {
-    return {
-      label: "Provider usage",
-      detail: { ...event.payload, provider_event_type: event.event_type },
-    };
+    return null;
   }
   const label = runtimeStepLabel(event);
   if (!label) {

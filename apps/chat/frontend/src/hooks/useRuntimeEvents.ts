@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
+  ChatUsageSummary,
   RuntimeEvent,
   runtimeEventFromWebSocketFrame,
   RuntimeSession,
@@ -26,6 +27,7 @@ type RuntimeEventsArgs = {
   hasMoreHistory?: boolean;
   onRuntimeSessionUnavailable?: ((runtimeSessionId: string) => void) | null;
   onRuntimeSnapshot?: (() => void) | null;
+  onUsageSnapshot?: ((usage: ChatUsageSummary | null) => void) | null;
   olderHistoryRequestId?: number;
   setActiveSession: Dispatch<SetStateAction<RuntimeSession | null>>;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
@@ -86,6 +88,7 @@ export function useRuntimeEvents({
   hasMoreHistory = false,
   onRuntimeSessionUnavailable,
   onRuntimeSnapshot,
+  onUsageSnapshot,
   olderHistoryRequestId = 0,
   runtimeSessionId,
   setActiveSession,
@@ -100,6 +103,7 @@ export function useRuntimeEvents({
   const hasMoreHistoryRef = useRef(hasMoreHistory);
   const oldestEventIdRef = useRef<string | null>(null);
   const onRuntimeSnapshotRef = useRef<typeof onRuntimeSnapshot>(onRuntimeSnapshot);
+  const onUsageSnapshotRef = useRef<typeof onUsageSnapshot>(onUsageSnapshot);
   const onRuntimeSessionUnavailableRef = useRef<typeof onRuntimeSessionUnavailable>(onRuntimeSessionUnavailable);
   const socketRef = useRef<WebSocket | null>(null);
   useEffect(() => {
@@ -111,6 +115,9 @@ export function useRuntimeEvents({
   useEffect(() => {
     onRuntimeSnapshotRef.current = onRuntimeSnapshot;
   }, [onRuntimeSnapshot]);
+  useEffect(() => {
+    onUsageSnapshotRef.current = onUsageSnapshot;
+  }, [onUsageSnapshot]);
   useEffect(() => {
     onRuntimeSessionUnavailableRef.current = onRuntimeSessionUnavailable;
   }, [onRuntimeSessionUnavailable]);
@@ -159,6 +166,13 @@ export function useRuntimeEvents({
       const scopedIncoming = eventsForCurrentSession(incoming);
       if (!scopedIncoming.length) {
         return;
+      }
+      const usageEvent = [...scopedIncoming].reverse().find((event) => event.event_type === "runtime.usage.updated");
+      if (usageEvent) {
+        const usage = chatUsageSummaryFromPayload(usageEvent.payload);
+        if (usage) {
+          onUsageSnapshotRef.current?.(usage);
+        }
       }
       const persistedIncoming = scopedIncoming.filter((event) => !isSyntheticRuntimeEvent(event));
       lastEventId = (persistedIncoming.at(-1) || scopedIncoming[scopedIncoming.length - 1]).event_id;
@@ -235,6 +249,7 @@ export function useRuntimeEvents({
             if (!frame.events?.length) {
               oldestEventIdRef.current = frame.oldest_event_id || oldestEventIdRef.current;
             }
+            onUsageSnapshotRef.current?.(chatUsageSummaryFromPayload(frame.usage));
             onRuntimeSnapshotRef.current?.();
             return;
           }
@@ -335,4 +350,22 @@ export function useRuntimeEvents({
       }),
     );
   }, [olderHistoryRequestId, runtimeSessionId, setIsOlderHistoryLoading]);
+}
+
+export function chatUsageSummaryFromPayload(value: unknown): ChatUsageSummary | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const payload = value as Record<string, unknown>;
+  const tokens = payload.tokens;
+  if (
+    typeof payload.root_session_id !== "string"
+    || !tokens
+    || typeof tokens !== "object"
+    || Array.isArray(tokens)
+    || typeof (tokens as Record<string, unknown>).total_tokens !== "number"
+  ) {
+    return null;
+  }
+  return payload as unknown as ChatUsageSummary;
 }

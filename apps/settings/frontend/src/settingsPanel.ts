@@ -4,6 +4,7 @@ import type {
   PlatformSettings,
   ProviderModelOption,
   ProviderSubscriptionUsage,
+  UsageTimeSeriesPayload,
   ProviderUsageLimit,
   ProviderUsageWindow,
   RuntimeSessionItem
@@ -52,10 +53,14 @@ export type SettingsPanelState = {
   isSavingProvider: boolean;
   isSavingSpeechProvider: boolean;
   isLoadingProviderUsage: boolean;
+  isLoadingUsageHistory: boolean;
   savingAgenticBindings: Set<string>;
   providerError: string;
   providerUsageError: string;
   providerUsageItems: ProviderSubscriptionUsage[];
+  hourlyUsage: UsageTimeSeriesPayload | null;
+  dailyUsage: UsageTimeSeriesPayload | null;
+  usageHistoryError: string;
   speechAudioModelId: string;
   speechConversationModelId: string;
   speechProviderError: string;
@@ -97,10 +102,14 @@ export function createSettingsPanelState(): SettingsPanelState {
     isSavingProvider: false,
     isSavingSpeechProvider: false,
     isLoadingProviderUsage: false,
+    isLoadingUsageHistory: false,
     savingAgenticBindings: new Set(),
     providerError: '',
     providerUsageError: '',
     providerUsageItems: [],
+    hourlyUsage: null,
+    dailyUsage: null,
+    usageHistoryError: '',
     speechAudioModelId: '',
     speechConversationModelId: '',
     speechProviderError: ''
@@ -253,6 +262,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
 
   return `${userSettingsCardHtml(settings)}
     ${agenticRuntimeSettingsCardHtml(settings.agentic_admin?.items || [], state)}
+    ${usageHistoryCardHtml(state)}
     ${settings.agentic_admin ? '' : agenticModelSettingsCardHtml(
         provider,
         modelOptions,
@@ -301,6 +311,41 @@ function userSettingsCardHtml(settings: PlatformSettings) {
         </button>
       </div>
     </article>
+  </section>`;
+}
+
+function usageHistoryCardHtml(state: SettingsPanelState) {
+  const refreshIcon = state.isLoadingUsageHistory ? 'sync' : 'refresh';
+  return `<section class="settings-card settings-platform settings-usage-history-card" aria-labelledby="settings-usage-history-title">
+    <div class="settings-heading settings-platform-heading settings-usage-history-heading">
+      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">monitoring</span>
+      <div>
+        <p class="settings-kicker">Workspace metering</p>
+        <h2 id="settings-usage-history-title">Token usage history</h2>
+      </div>
+      <button type="button" class="settings-secondary settings-provider-usage-refresh" id="settings-refresh-usage-history" ${state.isLoadingUsageHistory ? 'disabled' : ''}>
+        <span class="material-symbols-rounded ${state.isLoadingUsageHistory ? 'is-spinning' : ''}" aria-hidden="true">${refreshIcon}</span>
+        Refresh
+      </button>
+    </div>
+    <p class="settings-card-copy">Hourly and daily totals across direct and delegated runtime sessions in this workspace. History starts when Core metering is enabled.</p>
+    ${state.usageHistoryError ? `<p class="settings-inline-error" role="alert">${escapeHtml(state.usageHistoryError)}</p>` : ''}
+    <div class="settings-usage-history-grid">
+      <article class="settings-usage-history-panel">
+        <div>
+          <p class="settings-kicker">Last 24 hours</p>
+          <h3>Hourly consumption</h3>
+        </div>
+        <div data-usage-history-chart="hour" aria-live="polite"></div>
+      </article>
+      <article class="settings-usage-history-panel">
+        <div>
+          <p class="settings-kicker">Last 30 days</p>
+          <h3>Daily consumption</h3>
+        </div>
+        <div data-usage-history-chart="day" aria-live="polite"></div>
+      </article>
+    </div>
   </section>`;
 }
 
@@ -449,6 +494,7 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   });
   document.getElementById('settings-save-provider')?.addEventListener('click', actions.onSaveProviderSettings);
   document.getElementById('settings-refresh-provider-usage')?.addEventListener('click', actions.onRefreshProviderUsage);
+  document.getElementById('settings-refresh-usage-history')?.addEventListener('click', actions.onRefreshProviderUsage);
   document.querySelectorAll<HTMLButtonElement>('[data-hosted-provider-save]').forEach((button) => {
     button.addEventListener('click', () => actions.onSaveHostedProviderSettings(button.dataset.hostedProviderSave || ''));
   });

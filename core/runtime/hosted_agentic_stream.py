@@ -103,8 +103,11 @@ async def consume_hosted_provider_step(
                 yield HostedProviderStepEmission(
                     "provider.usage",
                     {
+                        "usage_id": f"{request.request_id}:{provider_event.ordinal}",
+                        "request_id": request.request_id,
                         "input_tokens": provider_event.usage.input_tokens,
                         "output_tokens": provider_event.usage.output_tokens,
+                        "total_tokens": provider_event.usage.input_tokens + provider_event.usage.output_tokens,
                         "estimated_cost_microusd": provider_event.usage.estimated_cost_microusd,
                     },
                 )

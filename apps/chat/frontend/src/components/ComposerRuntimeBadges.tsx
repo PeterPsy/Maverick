@@ -1,4 +1,5 @@
-import type { ProviderItem } from "../api/client";
+import type { ChatUsageSummary, ProviderItem } from "../api/client";
+import { ChatUsageBadge } from "./ChatUsageBadge";
 import { ProviderSelector } from "./ProviderSelector";
 
 type ExecutionMode = "sandbox" | "full-access";
@@ -15,6 +16,7 @@ export function ComposerRuntimeBadges({
   syntheticDataConfirmationRequired = false,
   syntheticDataConfirmed = false,
   reasoningEffort = "",
+  usage = null,
 }: {
   activeProviderId: string;
   disabled: boolean;
@@ -27,6 +29,7 @@ export function ComposerRuntimeBadges({
   syntheticDataConfirmationRequired?: boolean;
   syntheticDataConfirmed?: boolean;
   reasoningEffort?: string;
+  usage?: ChatUsageSummary | null;
 }) {
   const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
   const certificateExpiring = agenticCertificateExpiringSoon(selectedProvider?.agentic_certificate_expires_at);
@@ -41,6 +44,7 @@ export function ComposerRuntimeBadges({
         providers={providers}
         reasoningEffort={reasoningEffort}
       />
+      <ChatUsageBadge usage={usage} />
       {syntheticDataConfirmationRequired ? (
         locked ? (
           <span className="chatapp-synthetic-data-chip is-pinned" title="This pinned preview session is restricted to synthetic data">

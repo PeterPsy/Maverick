@@ -30,7 +30,7 @@ import { persistenceMigrationModalHtml, persistencePageHtml } from './persistenc
 import { saveActiveProviderSettings, saveHostedProviderSettings, saveSpeechProviderSettings } from './providerSettingsActions';
 import { usersPageHtml, workspaceAccessPageHtml } from './userPages';
 import { workspaceAppsPageHtml } from './workspaceAppsPage';
-import { mountUsageLimitGauges, unmountUsageLimitGauges } from './components/usageLimitGauges';
+import { mountUsageVisualizations, unmountUsageVisualizations } from './components/usageVisualizations';
 import { createProviderUsageController } from './providerUsageController';
 import { noticeHtml, type SettingsNotice } from './notice';
 import { createAgenticBindingController } from './agenticBindingController';
@@ -473,7 +473,7 @@ function render() {
   const user = isLoading ? undefined : selectedUser();
   const page = settingsPageById(selectedPageId);
   if (!root) return;
-  unmountUsageLimitGauges();
+  unmountUsageVisualizations();
   root.innerHTML = `<main class="settings-shell">
     <section class="settings-main">
       <div class="settings-content">
@@ -495,7 +495,7 @@ function render() {
     ${persistenceMigrationModalHtml(persistenceController.viewState())}
   </main>`;
   bindEvents();
-  mountUsageLimitGauges();
+  mountUsageVisualizations({ hourly: settingsPanelState.hourlyUsage, daily: settingsPanelState.dailyUsage, isLoading: settingsPanelState.isLoadingUsageHistory });
   publishSelectedPage(page);
   if (!isLoading) {
     publishSelectedUser(user);

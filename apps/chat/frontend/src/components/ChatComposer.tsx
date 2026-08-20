@@ -1,5 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
-import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
+import type { AgentTypeSummary, AppReference, ChatUsageSummary, ProviderItem } from "../api/client";
 import type { MultiAgentComposerMode } from "../api/client";
 import type { SourceAppChatMode } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
@@ -70,6 +70,7 @@ export type ChatComposerProps = {
   transcriptionMaxAudioBytes?: number;
   transcriptionMaxDurationSeconds?: number;
   transcriptionContentTypes?: string[];
+  usage?: ChatUsageSummary | null;
   value: string;
 };
 
@@ -121,6 +122,7 @@ export function ChatComposer({
   transcriptionMaxAudioBytes = 0,
   transcriptionMaxDurationSeconds = 0,
   transcriptionContentTypes = [],
+  usage = null,
   value,
 }: ChatComposerProps) {
   const [caretIndex, setCaretIndex] = useState(value.length);
@@ -343,6 +345,7 @@ export function ChatComposer({
                     syntheticDataConfirmationRequired={syntheticDataConfirmationRequired}
                     syntheticDataConfirmed={syntheticDataConfirmed}
                     onSyntheticDataConfirmedChange={onSyntheticDataConfirmedChange}
+                    usage={usage}
                   />
                 </ComposerUtilities>
               </div>

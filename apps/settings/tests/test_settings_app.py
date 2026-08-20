@@ -253,6 +253,9 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("data-agentic-model-toggle", settings_source)
         self.assertIn("Package limits", settings_source)
         self.assertIn("Refresh limits", settings_source)
+        self.assertIn("Token usage history", settings_source)
+        self.assertIn('data-usage-history-chart="hour"', settings_source)
+        self.assertIn('data-usage-history-chart="day"', settings_source)
         self.assertIn("settings-speech-model-settings-card", settings_source)
         self.assertIn("settings-runtime-settings-card", settings_source)
         self.assertIn("configureActiveProvider", api_source)
@@ -277,6 +280,7 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("runtime engine remains Codex", settings_source)
         self.assertIn("/api/settings/runtime-sessions", api_source)
         self.assertIn("/api/settings/runtime-sessions/clear", api_source)
+        self.assertIn("/api/usage/timeseries", api_source)
 
     def test_settings_panel_renders_openrouter_hosted_models_separately_from_codex(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -916,6 +920,20 @@ function makeController() {
         self.assertIn("settings-refresh-provider-usage", panel_source)
         self.assertIn('@import "tailwindcss"', styles_source)
         self.assertEqual(components["aliases"]["ui"], "@/components/ui")
+
+    def test_platform_settings_renders_hourly_and_daily_token_charts(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        chart_source = (app_root / "frontend" / "src" / "components" / "usageHistoryCharts.tsx").read_text(encoding="utf-8")
+        visualizations_source = (app_root / "frontend" / "src" / "components" / "usageVisualizations.ts").read_text(encoding="utf-8")
+        controller_source = (app_root / "frontend" / "src" / "providerUsageController.ts").read_text(encoding="utf-8")
+        main_source = (app_root / "frontend" / "src" / "main.ts").read_text(encoding="utf-8")
+
+        self.assertIn("UsageHistoryChart", chart_source)
+        self.assertIn('role="img"', chart_source)
+        self.assertIn("getUsageTimeseries('hour', 24)", controller_source)
+        self.assertIn("getUsageTimeseries('day', 30)", controller_source)
+        self.assertIn("mountUsageVisualizations", main_source)
+        self.assertIn("mountUsageHistoryCharts", visualizations_source)
 
 
 @slow_test_class("slow settings app integration suite; run with scripts/test_suite.py --level slow")

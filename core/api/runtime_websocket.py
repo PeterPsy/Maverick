@@ -19,6 +19,8 @@ from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.store import RuntimeEventPage
 from core.shared.entrypoints import EntrypointShutdownController
+from core.usage.payloads import chat_usage_summary_payload
+from core.usage.service import build_chat_usage_summary, resolve_root_session_id
 
 
 AsgiReceive = Callable[[], Awaitable[dict[str, Any]]]
@@ -46,7 +48,7 @@ def runtime_websocket_manifest() -> dict[str, object]:
             "initial_event_limit": "optional bounded tail event count; replay may include earlier same-turn anchor events",
         },
         "frames": {
-            "runtime.snapshot": "runtime session metadata and persisted event replay after the requested cursor, anchored to avoid starting mid-turn when possible",
+            "runtime.snapshot": "runtime session metadata, authoritative token usage, and persisted event replay after the requested cursor",
             "runtime.history.page": "older persisted runtime event page requested by the client, anchored to avoid starting mid-turn when possible",
             "runtime.event": "persisted runtime event record",
             "runtime.heartbeat": "transport keepalive frame, never persisted as a runtime event",
@@ -117,6 +119,7 @@ def runtime_snapshot_frame(
     last_event_id: str | None,
     has_more_before: bool = False,
     oldest_event_id: str | None = None,
+    usage: dict[str, object] | None = None,
 ) -> dict[str, Any]:
     """Wrap the initial runtime session state in a transport frame."""
     return {
@@ -127,6 +130,7 @@ def runtime_snapshot_frame(
         "last_event_id": last_event_id,
         "has_more_before": has_more_before,
         "oldest_event_id": oldest_event_id,
+        "usage": usage,
     }
 
 
@@ -355,6 +359,7 @@ async def stream_runtime_session_events(
                 last_event_id=last_event_id,
                 has_more_before=initial_page.has_more_before,
                 oldest_event_id=initial_page.oldest_event_id,
+                usage=_runtime_usage_snapshot(state, session),
             ),
         )
 
@@ -422,6 +427,19 @@ async def stream_runtime_session_events(
                 last_heartbeat_at = now
     finally:
         state.runtime_event_bus.unsubscribe(subscription)
+
+
+def _runtime_usage_snapshot(state: PlatformState, session) -> dict[str, object] | None:
+    usage_store = getattr(state, "usage_store", None)
+    if usage_store is None:
+        return None
+    root_session_id = resolve_root_session_id(state.runtime_store, session)
+    summary = build_chat_usage_summary(
+        usage_store,
+        workspace_id=session.workspace_id,
+        root_session_id=root_session_id,
+    )
+    return chat_usage_summary_payload(summary)
 
 
 def _parse_client_frame(frame: dict[str, Any]) -> dict[str, Any] | None:

@@ -110,6 +110,28 @@ class JsonFileCollectionTestCase(unittest.TestCase):
             self.assertEqual(write.call_count, 1)
             self.assertEqual(collection.find({}), [{"record_id": "two", "session_id": "session-2"}])
 
+    def test_delete_many_documents_returns_matches_with_one_read_and_rewrite(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = JsonFileCollection(Path(temp_dir) / "records.json")
+            for record_id, session_id in (("one", "session-1"), ("two", "session-2"), ("three", "session-1")):
+                collection.update_one(
+                    {"record_id": record_id},
+                    {"$set": {"record_id": record_id, "session_id": session_id}},
+                    upsert=True,
+                )
+
+            with patch.object(collection, "_read_documents", wraps=collection._read_documents) as read, patch.object(
+                collection,
+                "_write_documents",
+                wraps=collection._write_documents,
+            ) as write:
+                deleted = collection.delete_many_documents({"session_id": "session-1"})
+
+            self.assertEqual([document["record_id"] for document in deleted], ["one", "three"])
+            self.assertEqual(read.call_count, 1)
+            self.assertEqual(write.call_count, 1)
+            self.assertEqual(collection.find({}), [{"record_id": "two", "session_id": "session-2"}])
+
     def test_concurrent_writers_do_not_share_temporary_paths_or_lose_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "events.json"

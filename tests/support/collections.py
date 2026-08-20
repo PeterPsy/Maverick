@@ -52,8 +52,11 @@ class FakeCollection:
                 return
 
     def delete_many(self, query: dict) -> int:
+        return len(self.delete_many_documents(query))
+
+    def delete_many_documents(self, query: dict) -> list[dict]:
+        deleted = [dict(document) for document in self.documents if _matches(document, query)]
         retained = [document for document in self.documents if not _matches(document, query)]
-        deleted = len(self.documents) - len(retained)
         self.documents = retained
         return deleted
 

@@ -168,6 +168,21 @@ class MongoDocumentCollectionTestCase(unittest.TestCase):
         self.assertEqual(deleted, 2)
         self.assertEqual(collection.find({}), [{"session_id": "session-2"}])
 
+    def test_delete_many_documents_returns_the_matched_snapshot(self) -> None:
+        fake = FakeMongoCollection()
+        fake.documents.extend(
+            [
+                {"_id": "one", "session_id": "session-1"},
+                {"_id": "two", "session_id": "session-2"},
+            ]
+        )
+        collection = MongoDocumentCollection(fake)
+
+        deleted = collection.delete_many_documents({"session_id": "session-1"})
+
+        self.assertEqual(deleted, [{"session_id": "session-1"}])
+        self.assertEqual(collection.find({}), [{"session_id": "session-2"}])
+
     def test_reads_normalize_naive_datetimes_to_utc(self) -> None:
         fake = FakeMongoCollection()
         fake.documents.append({"_id": "mongo-id", "session_id": "s1", "expires_at": datetime(2026, 4, 30, 8, 0, 0)})

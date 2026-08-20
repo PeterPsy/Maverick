@@ -17,7 +17,7 @@ class InMemoryCollection:
     def find_one(self, query: dict[str, Any]) -> dict[str, Any] | None:
         with self._lock:
             for document in self._documents:
-                if all(document.get(key) == value for key, value in query.items()):
+                if _matches(document, query):
                     return deepcopy(document)
         return None
 
@@ -26,14 +26,14 @@ class InMemoryCollection:
             return [
                 deepcopy(document)
                 for document in self._documents
-                if all(document.get(key) == value for key, value in query.items())
+                if _matches(document, query)
             ]
 
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> None:
         payload = deepcopy(update.get("$set", {}))
         with self._lock:
             for index, document in enumerate(self._documents):
-                if all(document.get(key) == value for key, value in query.items()):
+                if _matches(document, query):
                     self._documents[index] = {**document, **payload}
                     return
             if upsert:
@@ -44,7 +44,7 @@ class InMemoryCollection:
         payload = deepcopy(update.get("$set", {}))
         with self._lock:
             for index, document in enumerate(self._documents):
-                if all(document.get(key) == value for key, value in query.items()):
+                if _matches(document, query):
                     self._documents[index] = {**document, **payload}
                     return True
         return False
@@ -53,7 +53,7 @@ class InMemoryCollection:
         payload = {**deepcopy(query), **deepcopy(document)}
         with self._lock:
             for existing in self._documents:
-                if all(existing.get(key) == value for key, value in query.items()):
+                if _matches(existing, query):
                     return deepcopy(existing), False
             self._documents.append(payload)
             return deepcopy(payload), True
@@ -67,9 +67,12 @@ class InMemoryCollection:
             ]
 
     def delete_many(self, query: dict[str, Any]) -> int:
+        return len(self.delete_many_documents(query))
+
+    def delete_many_documents(self, query: dict[str, Any]) -> list[dict[str, Any]]:
         with self._lock:
+            deleted = [deepcopy(document) for document in self._documents if _matches(document, query)]
             retained = [document for document in self._documents if not _matches(document, query)]
-            deleted = len(self._documents) - len(retained)
             self._documents = retained
             return deleted
 

@@ -91,14 +91,18 @@ class JsonFileCollection:
 
     def delete_many(self, query: dict[str, Any]) -> int:
         """Delete every matching document with one locked collection rewrite."""
+        return len(self.delete_many_documents(query))
+
+    def delete_many_documents(self, query: dict[str, Any]) -> list[dict[str, Any]]:
+        """Delete and return matches without a separate collection read."""
         with self._lock:
             with self._process_lock(exclusive=True):
                 documents = self._read_documents()
-                retained = [document for document in documents if not _matches(document, query)]
-                deleted = len(documents) - len(retained)
+                deleted = [document for document in documents if _matches(document, query)]
                 if deleted:
+                    retained = [document for document in documents if not _matches(document, query)]
                     self._write_documents(retained)
-                return deleted
+                return deepcopy(deleted)
 
     def replace_all(self, documents: list[dict[str, Any]]) -> None:
         """Replace the full collection through the same lock and atomic write path."""

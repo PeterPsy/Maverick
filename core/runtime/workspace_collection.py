@@ -63,7 +63,13 @@ class WorkspaceRuntimeJsonCollection:
             return
 
     def delete_many(self, query: dict[str, Any]) -> int:
-        return sum(JsonFileCollection(path).delete_many(query) for path in self._candidate_paths(query))
+        return len(self.delete_many_documents(query))
+
+    def delete_many_documents(self, query: dict[str, Any]) -> list[dict[str, Any]]:
+        deleted: list[dict[str, Any]] = []
+        for path in self._candidate_paths(query):
+            deleted.extend(JsonFileCollection(path).delete_many_documents(query))
+        return deleted
 
     def _candidate_paths(self, query: dict[str, Any]) -> list[Path]:
         workspace_id = str(query.get("workspace_id") or "").strip()

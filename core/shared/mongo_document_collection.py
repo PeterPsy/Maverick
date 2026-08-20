@@ -85,6 +85,12 @@ class MongoDocumentCollection:
         result = self.collection.delete_many(deepcopy(query))
         return int(getattr(result, "deleted_count", 0))
 
+    def delete_many_documents(self, query: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return the matched snapshot while retaining Mongo's native batch delete."""
+        documents = self.find(query)
+        self.collection.delete_many(deepcopy(query))
+        return documents
+
     def replace_all(self, documents: list[dict[str, Any]]) -> None:
         """Replace the full collection content."""
         if not all(isinstance(document, dict) for document in documents):

@@ -9,16 +9,26 @@ from tests.support.collections import FakeCollection
 class CountingCollection(FakeCollection):
     def __init__(self) -> None:
         super().__init__()
-        self.delete_many_calls: list[dict] = []
+        self.delete_many_documents_calls: list[dict] = []
 
-    def delete_many(self, query: dict) -> int:
-        self.delete_many_calls.append(query)
-        return super().delete_many(query)
+    def delete_many_documents(self, query: dict) -> list[dict]:
+        self.delete_many_documents_calls.append(query)
+        return super().delete_many_documents(query)
+
+
+class SessionCollection(FakeCollection):
+    def __init__(self) -> None:
+        super().__init__()
+        self.find_one_calls: list[dict] = []
+
+    def find_one(self, query: dict) -> dict | None:
+        self.find_one_calls.append(query)
+        return super().find_one(query)
 
 
 class RuntimeStoreBatchDeleteTest(unittest.TestCase):
     def test_batch_deletes_shared_collection_records_with_one_mutation(self) -> None:
-        sessions = FakeCollection()
+        sessions = SessionCollection()
         client_messages = CountingCollection()
         store = RuntimeDocumentStore(
             RuntimeCollections(
@@ -48,10 +58,13 @@ class RuntimeStoreBatchDeleteTest(unittest.TestCase):
                 },
                 upsert=True,
             )
+        store._remember_session_partition("session-1", "default")
+        store._remember_session_partition("session-2", "default")
 
         deleted = store.delete_session_records_batch(["session-1", "session-2"])
 
-        self.assertEqual(client_messages.delete_many_calls, [{"session_id": {"$in": ["session-1", "session-2"]}, "workspace_id": "default"}])
+        self.assertEqual(sessions.find_one_calls, [])
+        self.assertEqual(client_messages.delete_many_documents_calls, [{"session_id": {"$in": ["session-1", "session-2"]}, "workspace_id": "default"}])
         self.assertEqual(deleted["session-1"]["client_messages"], 1)
         self.assertEqual(deleted["session-2"]["client_messages"], 1)
         self.assertEqual(

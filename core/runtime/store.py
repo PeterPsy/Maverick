@@ -942,19 +942,16 @@ class RuntimeDocumentStore:
         normalized_ids = list(dict.fromkeys(item.strip() for item in session_ids if item.strip()))
         if not normalized_ids:
             return {}
-        session_documents = {
-            session_id: self.collections.sessions.find_one({"session_id": session_id}) or {}
-            for session_id in normalized_ids
-        }
-        workspace_by_session_id = {
-            session_id: (
-                str(document.get("workspace_id") or "").strip()
-                if isinstance(document, dict)
-                else ""
-            )
-            or None
-            for session_id, document in session_documents.items()
-        }
+        with self._partition_index_lock:
+            workspace_by_session_id = {
+                session_id: self._session_workspace_index.get(session_id)
+                for session_id in normalized_ids
+            }
+        for session_id in normalized_ids:
+            if workspace_by_session_id[session_id]:
+                continue
+            document = self.collections.sessions.find_one({"session_id": session_id}) or {}
+            workspace_by_session_id[session_id] = str(document.get("workspace_id") or "").strip() or None
         deleted = {
             session_id: _empty_session_deletion_counts()
             for session_id in normalized_ids
@@ -987,14 +984,14 @@ class RuntimeDocumentStore:
             )
             for session_id, count in counts.items():
                 deleted[session_id][name] = count
-        _delete_session_record_batch(
+        session_counts = _delete_session_record_batch(
             self.collections.sessions,
             session_ids=normalized_ids,
             workspace_by_session_id=workspace_by_session_id,
             identity_field="session_id",
         )
-        for session_id, document in session_documents.items():
-            deleted[session_id]["sessions"] = 1 if document else 0
+        for session_id, count in session_counts.items():
+            deleted[session_id]["sessions"] = count
             self._forget_session_partition(session_id)
             self._forget_turns_for_session(session_id)
         return deleted
@@ -2436,11 +2433,19 @@ def _delete_session_record_batch(
         find_query: dict[str, object] = {"session_id": {"$in": grouped_ids}}
         if workspace_id:
             find_query["workspace_id"] = workspace_id
-        documents = collection.find(find_query)
+        delete_many_documents = getattr(collection, "delete_many_documents", None)
+        deleted_atomically = callable(delete_many_documents)
+        documents = (
+            delete_many_documents(find_query)
+            if deleted_atomically
+            else collection.find(find_query)
+        )
         for document in documents:
             session_id = str(document.get("session_id") or "").strip()
             if session_id in counts:
                 counts[session_id] += 1
+        if deleted_atomically:
+            continue
         delete_many = getattr(collection, "delete_many", None)
         if callable(delete_many):
             delete_many(find_query)

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import unittest
+from unittest import mock
 
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
@@ -20,9 +22,29 @@ from tests.unit.providers.test_google_interactions_codec import (
     _text_stream,
     _tool_stream,
 )
+from scripts import run_google_interactions_probe as probe_runner
 
 
 class GoogleInteractionsCertificationTest(unittest.TestCase):
+    def test_live_runner_accepts_bounded_operator_pacing(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"MAVERICK_CERTIFICATION_PROBE_INTERVAL_SECONDS": "20"},
+        ):
+            self.assertEqual(probe_runner._request_interval_seconds(), 20.0)
+
+        with mock.patch.dict(
+            os.environ,
+            {"MAVERICK_CERTIFICATION_PROBE_INTERVAL_SECONDS": "invalid"},
+        ):
+            self.assertEqual(probe_runner._request_interval_seconds(), 1.0)
+
+        with mock.patch.dict(
+            os.environ,
+            {"MAVERICK_CERTIFICATION_PROBE_INTERVAL_SECONDS": "90"},
+        ):
+            self.assertEqual(probe_runner._request_interval_seconds(), 30.0)
+
     def test_function_name_must_match_the_exact_declared_catalog(self) -> None:
         client = GoogleInteractionsAgenticClient(
             transport=_ScriptedTransport(

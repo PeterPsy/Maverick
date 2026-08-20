@@ -20,9 +20,20 @@ async def _main() -> int:
     value = os.environ.get("MAVERICK_GOOGLE_CERTIFICATION_API_KEY", "").strip()
     if not value:
         return 2
-    result = await probe_google_interactions(credential=EphemeralCredential(value))
+    result = await probe_google_interactions(
+        credential=EphemeralCredential(value),
+        request_interval_seconds=_request_interval_seconds(),
+    )
     print(json.dumps(result.__dict__, sort_keys=True))
     return 0 if result.succeeded else 1
+
+
+def _request_interval_seconds() -> float:
+    try:
+        value = float(os.environ.get("MAVERICK_CERTIFICATION_PROBE_INTERVAL_SECONDS", "1"))
+    except ValueError:
+        return 1.0
+    return max(0.0, min(value, 30.0))
 
 
 if __name__ == "__main__":

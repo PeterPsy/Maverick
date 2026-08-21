@@ -1,7 +1,7 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-08-20
-Matrix revision: `2026-08-20-r6`
+Status date: 2026-08-21
+Matrix revision: `2026-08-21-r7`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==5`
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==5`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `10` (revision `9` suspended) |
+| Immutable profile revision | `11` (revision `10` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -89,12 +89,12 @@ Primary references:
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
-| Usage, generation id and price | success and decode-failure fixtures retain available telemetry and micro-USD estimate | not certified |
+| Usage, generation id and price | success and decode-failure fixtures retain telemetry; active request reservations reconcile to reported micro-USD while missing usage remains worst-case | not certified |
 | Failure propagation | distinct mixed/parallel/index codes, safe public message, diagnostic reference, and nonnumeric Chat UX | not certified |
 | Shared tool loop | real OpenRouter codec through deterministic hosted-loop E2E | not certified |
 | Cancel/recovery/confirmation | shared hosted runtime contract suite | not certified |
 | Outage after acceptance | terminal normalized failure with no blind retry | not certified |
-| Revocation and egress drift | mid-step revocation and live-policy drift fixtures | not certified |
+| Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
@@ -125,6 +125,15 @@ new sequential step. A missing index-0 call or a conflicting second index-0
 identity still fails closed. Revision 10 remains uncertified and hidden until
 the complete r6 suite, catalog preflight, signed live probe, and publication
 workflow succeed.
+
+Revision 11 carries the corrected shared hosted-loop budget accounting and
+egress transformation contract. A provider request keeps a conservative
+reservation until priced usage replaces it; missing usage remains charged at
+the worst case. Absolute host paths found inside untrusted tool output are
+redacted after exact workspace-root rewriting, while host paths from every
+other provenance remain denied. Revision 11 remains hidden until the complete
+r7 suite, catalog preflight, signed live probe, and publication workflow
+succeed.
 
 ## Fail-closed conditions
 

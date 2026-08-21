@@ -25,6 +25,11 @@ class HostedAgenticBudget:
     streamed_output_bytes: int = 0
     estimated_cost_microusd: int = 0
     reported_cost_microusd: int = 0
+    _active_cost_reservation_microusd: int | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
     started_at: float = field(init=False)
 
     def __post_init__(self) -> None:
@@ -32,18 +37,26 @@ class HostedAgenticBudget:
 
     def begin_step(self, request: AgenticModelRequest, estimated_cost: int | None) -> None:
         self.check_time()
+        # A completed request that omitted priced usage keeps its conservative
+        # reservation. Only the currently active request can be reconciled.
+        self._active_cost_reservation_microusd = None
         if self.steps >= self.policy.max_steps_per_turn:
             raise HostedAgenticLoopError("agent_step_limit_reached")
         estimated_input = _estimate_request_tokens(request)
         if self.input_tokens + estimated_input > self.policy.max_input_tokens:
             raise HostedAgenticLoopError("agent_input_token_limit_reached")
         ceiling = self.policy.max_estimated_cost_microusd
-        if ceiling is not None:
-            if estimated_cost is None:
-                raise HostedAgenticLoopError("agent_cost_estimate_unavailable")
-            if self.estimated_cost_microusd + estimated_cost > ceiling:
+        if estimated_cost is not None and estimated_cost < 0:
+            raise HostedAgenticLoopError("agent_cost_estimate_unavailable")
+        if ceiling is not None and estimated_cost is None:
+            raise HostedAgenticLoopError("agent_cost_estimate_unavailable")
+        if estimated_cost is not None:
+            if ceiling is not None and (
+                self.estimated_cost_microusd + estimated_cost > ceiling
+            ):
                 raise HostedAgenticLoopError("agent_cost_limit_reached")
             self.estimated_cost_microusd += estimated_cost
+            self._active_cost_reservation_microusd = estimated_cost
         self.steps += 1
 
     def add_tool_call(self) -> None:
@@ -77,9 +90,18 @@ class HostedAgenticBudget:
         if usage.estimated_cost_microusd is not None and usage.estimated_cost_microusd < 0:
             raise HostedAgenticLoopError("provider_response_invalid")
         if usage.estimated_cost_microusd is not None:
-            self.reported_cost_microusd += usage.estimated_cost_microusd
+            actual_cost = usage.estimated_cost_microusd
+            self.reported_cost_microusd += actual_cost
+            if self._active_cost_reservation_microusd is None:
+                self.estimated_cost_microusd += actual_cost
+            else:
+                self.estimated_cost_microusd -= (
+                    self._active_cost_reservation_microusd
+                )
+                self.estimated_cost_microusd += actual_cost
+                self._active_cost_reservation_microusd = None
             ceiling = self.policy.max_estimated_cost_microusd
-            if ceiling is not None and self.reported_cost_microusd > ceiling:
+            if ceiling is not None and self.estimated_cost_microusd > ceiling:
                 raise HostedAgenticLoopError("agent_cost_limit_reached")
 
     def tighten(self, policy: AgenticRuntimePolicy) -> None:
@@ -96,6 +118,9 @@ class HostedAgenticBudget:
             raise HostedAgenticLoopError("agent_input_token_limit_reached")
         if self.output_tokens > self.policy.max_output_tokens:
             raise HostedAgenticLoopError("agent_output_token_limit_reached")
+        ceiling = self.policy.max_estimated_cost_microusd
+        if ceiling is not None and self.estimated_cost_microusd > ceiling:
+            raise HostedAgenticLoopError("agent_cost_limit_reached")
 
     def check_time(self) -> None:
         if self.monotonic() - self.started_at > self.policy.max_wall_time_seconds:

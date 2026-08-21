@@ -9,6 +9,9 @@ import json
 from threading import Event
 from typing import Callable
 
+import core.egress.agentic_models as agentic_egress_models_module
+import core.egress.agentic_policy as agentic_egress_policy_module
+import core.egress.agentic_transforms as agentic_egress_transforms_module
 import core.providers.agentic_reason_codes as agentic_reason_codes_module
 import core.runtime.hosted_agentic_budget as hosted_agentic_budget_module
 import core.runtime.hosted_agentic_policy as hosted_agentic_policy_module
@@ -99,6 +102,9 @@ class HostedAgenticLoop:
     def artifact_components(self) -> tuple[object, ...]:
         """Expose shared orchestration modules to the adapter artifact digest."""
         return (
+            agentic_egress_models_module,
+            agentic_egress_policy_module,
+            agentic_egress_transforms_module,
             agentic_reason_codes_module,
             hosted_agentic_budget_module,
             hosted_agentic_policy_module,

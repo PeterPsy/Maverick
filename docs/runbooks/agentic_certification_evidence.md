@@ -1,6 +1,6 @@
 # Agentic certification evidence procedure
 
-Status date: 2026-08-19
+Status date: 2026-08-21
 
 Scope: trusted CI or operator-controlled certification worker
 
@@ -42,7 +42,7 @@ and a distinct operator-only live synthetic probe step; both must pass.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 7 \
+  --suite-version 8 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -51,8 +51,8 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `7`, matrix revision `2026-08-20-r6`, and the OpenRouter manifest. The
-Google suite uses version `7` and matrix revision `2026-08-20-r6`. The
+version `8`, matrix revision `2026-08-21-r7`, and the OpenRouter manifest. The
+Google suite uses version `8` and matrix revision `2026-08-21-r7`. The
 canonical matrices, artifact bundles, commands, and live probe entrypoints live in
 `core/providers/certification_manifests.py`.
 Do not reuse a Google artifact bundle, result, live probe, or evidence reference.
@@ -61,9 +61,11 @@ Both live probes must make the provider call the exact generated alias for
 `core-capability:filesystem.list`, execute the real Core handler over an
 isolated synthetic directory, and return its marker-bearing result to the
 provider at every certified reasoning effort. The OpenRouter probe requires
-three sequential tool rounds plus a final response at every effort. Requests
-are paced (one second by default) so the probe itself does not justify
-diagnosing a quota incident. A Google failure must preserve the redaction-safe
+three sequential tool rounds plus a final response at every effort. The Google
+probe requires two sequential tool rounds plus a final response at its single
+certified effort, for exactly three provider requests. Requests are paced (one
+second by default) so the probe itself does not justify diagnosing a quota
+incident. A Google failure must preserve the redaction-safe
 distinction among `quota_exceeded`, `resource_exhausted`, and
 `rate_limit_exceeded`; do not infer a project-quota cause from the broader
 family alone.

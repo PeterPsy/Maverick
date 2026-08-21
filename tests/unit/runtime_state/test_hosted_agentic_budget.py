@@ -69,6 +69,72 @@ class HostedAgenticBudgetTest(unittest.TestCase):
             budget.begin_step(self.request, None)
         with self.assertRaisesRegex(HostedAgenticLoopError, "cost_limit"):
             budget.begin_step(self.request, 1)
+        with self.assertRaisesRegex(HostedAgenticLoopError, "estimate_unavailable"):
+            budget.begin_step(self.request, -1)
+
+    def test_reported_usage_replaces_each_active_request_reservation(self) -> None:
+        budget = HostedAgenticBudget(
+            replace(
+                self.policy,
+                max_steps_per_turn=3,
+                max_estimated_cost_microusd=250,
+            )
+        )
+
+        budget.begin_step(self.request, 125)
+        budget.add_usage(
+            AgenticUsage(
+                input_tokens=1,
+                output_tokens=1,
+                estimated_cost_microusd=5,
+            )
+        )
+        budget.begin_step(self.request, 125)
+        budget.add_usage(
+            AgenticUsage(
+                input_tokens=1,
+                output_tokens=1,
+                estimated_cost_microusd=5,
+            )
+        )
+        budget.begin_step(self.request, 125)
+
+        self.assertEqual(budget.estimated_cost_microusd, 135)
+        self.assertEqual(budget.reported_cost_microusd, 10)
+
+    def test_missing_usage_keeps_worst_case_request_reservations(self) -> None:
+        budget = HostedAgenticBudget(
+            replace(
+                self.policy,
+                max_steps_per_turn=3,
+                max_estimated_cost_microusd=250,
+            )
+        )
+
+        budget.begin_step(self.request, 125)
+        budget.begin_step(self.request, 125)
+
+        with self.assertRaisesRegex(HostedAgenticLoopError, "cost_limit"):
+            budget.begin_step(self.request, 125)
+
+    def test_later_cost_ceiling_sees_usage_recorded_without_an_initial_ceiling(self) -> None:
+        initial = replace(
+            self.policy,
+            max_steps_per_turn=2,
+            max_estimated_cost_microusd=None,
+        )
+        budget = HostedAgenticBudget(initial)
+        budget.begin_step(self.request, 125)
+        budget.add_usage(
+            AgenticUsage(
+                input_tokens=1,
+                output_tokens=1,
+                estimated_cost_microusd=5,
+            )
+        )
+
+        with self.assertRaisesRegex(HostedAgenticLoopError, "cost_limit"):
+            budget.tighten(replace(initial, max_estimated_cost_microusd=4))
 
     def test_usage_and_total_tool_result_limits_are_cumulative(self) -> None:
         budget = HostedAgenticBudget(self.policy)

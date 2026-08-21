@@ -54,7 +54,10 @@ def _new_input_steps(
 ) -> tuple[dict[str, object], ...]:
     if state.pending_function_calls:
         return tuple(_function_results(request.tool_results, state))
-    if request.tool_results:
+    if (
+        set(_tool_results_by_id(request.tool_results))
+        - set(state.consumed_function_call_ids)
+    ):
         raise GoogleInteractionsProtocolError("provider_tool_result_pairing_invalid")
     content = []
     for block in request.content_blocks:
@@ -72,8 +75,9 @@ def _function_results(
     results: tuple[AgenticToolResult, ...],
     state: GoogleInteractionState,
 ) -> list[dict[str, object]]:
-    by_id = {item.provider_tool_call_id: item for item in results}
-    if len(by_id) != len(results):
+    by_id = _tool_results_by_id(results)
+    pending_ids = {item.call_id for item in state.pending_function_calls}
+    if set(by_id) - set(state.consumed_function_call_ids) != pending_ids:
         raise GoogleInteractionsProtocolError("provider_tool_result_pairing_invalid")
     steps = []
     for pending in state.pending_function_calls:
@@ -94,9 +98,16 @@ def _function_results(
         if result.is_error:
             step["is_error"] = True
         steps.append(step)
-    if set(by_id) != {item.call_id for item in state.pending_function_calls}:
-        raise GoogleInteractionsProtocolError("provider_tool_result_pairing_invalid")
     return steps
+
+
+def _tool_results_by_id(
+    results: tuple[AgenticToolResult, ...],
+) -> dict[str, AgenticToolResult]:
+    by_id = {item.provider_tool_call_id: item for item in results}
+    if len(by_id) != len(results):
+        raise GoogleInteractionsProtocolError("provider_tool_result_pairing_invalid")
+    return by_id
 
 
 def _system_instruction(request: AgenticModelRequest) -> str:

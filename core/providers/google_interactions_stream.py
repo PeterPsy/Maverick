@@ -208,6 +208,12 @@ class GoogleInteractionStreamDecoder:
                 call_id=_required_text(step.value.get("id")),
                 name=_required_text(step.value.get("name")),
             )
+            consumed_call_ids = {
+                *self.state.consumed_function_call_ids,
+                *(item.call_id for item in self.state.pending_function_calls),
+            }
+            if call.call_id in consumed_call_ids:
+                raise GoogleInteractionsProtocolError("provider_response_invalid")
             self.function_calls.append(call)
         else:
             if not isinstance(step.value.get("signature"), str):
@@ -273,6 +279,10 @@ class GoogleInteractionStreamDecoder:
                 previous_interaction_id=(self.interaction_id if self.state.mode == "stateful" else None),
                 history=tuple(history),
                 pending_function_calls=tuple(self.function_calls),
+                consumed_function_call_ids=(
+                    *self.state.consumed_function_call_ids,
+                    *(item.call_id for item in self.state.pending_function_calls),
+                ),
             )
         )
         events = [self._event("provider_state", provider_private_state=private_state)]

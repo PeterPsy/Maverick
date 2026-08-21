@@ -21,9 +21,9 @@ from core.providers.store import ProviderStore
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "10"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "11"
 OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
-    "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
 )
 OPENROUTER_CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
 OPENROUTER_DEFAULT_REASONING_EFFORT = "high"

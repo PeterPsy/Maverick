@@ -134,6 +134,51 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
         self.assertFalse(denied.decision.export_allowed)
         self.assertEqual(denied.decision.reason_code, "egress_host_path_detected")
 
+    def test_tool_result_host_paths_are_redacted_without_weakening_user_input(self) -> None:
+        transformed = self.evaluator.evaluate(
+            block=self.block(
+                provenance="tool_result",
+                trust_level="untrusted_tool_output",
+                content_type="application/json",
+            ),
+            content={
+                "workspace_file": "/srv/maverick/workspaces/default/AGENTS.md",
+                "host_reference": (
+                    "The installation root is `/home/ubuntu/projects/maverick-v3`."
+                ),
+            },
+            destination_provider_id="fake-provider",
+            destination_upstream_id=None,
+            policy=self.policy,
+            workspace_root=Path("/srv/maverick/workspaces/default"),
+            now=NOW,
+        )
+        denied = self.evaluator.evaluate(
+            block=self.block(content_block_id="block-user-host-path"),
+            content="read /home/ubuntu/.ssh/id_ed25519",
+            destination_provider_id="fake-provider",
+            destination_upstream_id=None,
+            policy=self.policy,
+            now=NOW,
+        )
+
+        self.assertTrue(transformed.decision.export_allowed)
+        self.assertEqual(
+            json.loads(transformed.exported_content or b"{}"),
+            {
+                "host_reference": (
+                    "The installation root is `<redacted-host-path>`."
+                ),
+                "workspace_file": "workspace://default/AGENTS.md",
+            },
+        )
+        self.assertEqual(
+            transformed.decision.transformation,
+            "workspace_path_reference+host_path_redaction",
+        )
+        self.assertFalse(denied.decision.export_allowed)
+        self.assertEqual(denied.decision.reason_code, "egress_host_path_detected")
+
     def test_sensitive_text_is_transformed_but_secret_class_never_exports(self) -> None:
         content = "Authorization: Bearer provider-e2e-secret-never-export"
         transformed = self.evaluator.evaluate(

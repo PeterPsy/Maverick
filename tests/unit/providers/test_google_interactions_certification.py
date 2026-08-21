@@ -11,6 +11,7 @@ from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
 from core.providers.google_interactions_probe import (
     CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS,
+    CERTIFICATION_PROBE_TOOL_ROUNDS,
     CERTIFIED_REASONING_EFFORTS,
     PROBE_TOOL_NAME,
     probe_google_interactions,
@@ -85,9 +86,16 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
                     _tool_stream(
                         f"interaction-probe-{effort}-1",
                         tool_name=PROBE_TOOL_NAME,
+                        call_id=f"call-{effort}-1",
                         arguments={"path": ".", "max_depth": 1, "max_results": 10},
                     ),
-                    _text_stream(f"interaction-probe-{effort}-2", "OK"),
+                    _tool_stream(
+                        f"interaction-probe-{effort}-2",
+                        tool_name=PROBE_TOOL_NAME,
+                        call_id=f"call-{effort}-2",
+                        arguments={"path": ".", "max_depth": 1, "max_results": 10},
+                    ),
+                    _text_stream(f"interaction-probe-{effort}-3", "OK"),
                 ]
             )
         transport = _ScriptedTransport(scripts)
@@ -103,7 +111,11 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
         self.assertTrue(result.succeeded)
         self.assertEqual(result.reason_code, "ok")
         self.assertEqual(CERTIFIED_REASONING_EFFORTS, ("high",))
-        self.assertEqual(result.request_count, 2 * len(CERTIFIED_REASONING_EFFORTS))
+        requests_per_effort = CERTIFICATION_PROBE_TOOL_ROUNDS + 1
+        self.assertEqual(
+            result.request_count,
+            requests_per_effort * len(CERTIFIED_REASONING_EFFORTS),
+        )
         self.assertEqual(result.reasoning_efforts, CERTIFIED_REASONING_EFFORTS)
         self.assertTrue(result.saw_filesystem_list)
         self.assertEqual(
@@ -111,7 +123,11 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
                 payload["generation_config"]["thinking_level"]
                 for payload in transport.payloads
             ],
-            [effort for effort in CERTIFIED_REASONING_EFFORTS for _ in range(2)],
+            [
+                effort
+                for effort in CERTIFIED_REASONING_EFFORTS
+                for _ in range(requests_per_effort)
+            ],
         )
         self.assertEqual(
             [
@@ -120,8 +136,18 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
             ],
             [
                 CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS
-                for _ in range(2 * len(CERTIFIED_REASONING_EFFORTS))
+                for _ in range(
+                    requests_per_effort * len(CERTIFIED_REASONING_EFFORTS)
+                )
             ],
+        )
+        self.assertEqual(
+            transport.payloads[1]["input"][0]["call_id"],
+            "call-high-1",
+        )
+        self.assertEqual(
+            transport.payloads[2]["input"][0]["call_id"],
+            "call-high-2",
         )
         self.assertEqual(len(result.result_summary_digest), 64)
         self.assertNotIn("OK", repr(result))

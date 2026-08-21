@@ -26,6 +26,7 @@ def initial_google_interaction_state(mode: GoogleInteractionStateMode) -> Google
         previous_interaction_id=None,
         history=(),
         pending_function_calls=(),
+        consumed_function_call_ids=(),
     )
 
 
@@ -57,11 +58,13 @@ def decode_google_interaction_state(
             "previous_interaction_id",
             "history",
             "pending_function_calls",
+            "consumed_function_call_ids",
         }:
             raise ValueError
         mode = payload["mode"]
         history = payload["history"]
         pending = payload["pending_function_calls"]
+        consumed = payload["consumed_function_call_ids"]
         previous = payload["previous_interaction_id"]
         if (
             payload["schema_version"] != GOOGLE_INTERACTIONS_SCHEMA_VERSION
@@ -70,6 +73,9 @@ def decode_google_interaction_state(
             or not isinstance(history, list)
             or not all(isinstance(step, dict) for step in history)
             or not isinstance(pending, list)
+            or not isinstance(consumed, list)
+            or not all(isinstance(item, str) and item for item in consumed)
+            or len(set(consumed)) != len(consumed)
             or previous is not None and not isinstance(previous, str)
         ):
             raise ValueError
@@ -80,12 +86,18 @@ def decode_google_interaction_state(
         raise GoogleInteractionsProtocolError("provider_private_state_invalid")
     if mode == "stateless" and previous is not None:
         raise GoogleInteractionsProtocolError("provider_private_state_invalid")
+    if (
+        len({item.call_id for item in calls}) != len(calls)
+        or {item.call_id for item in calls}.intersection(consumed)
+    ):
+        raise GoogleInteractionsProtocolError("provider_private_state_invalid")
     return GoogleInteractionState(
         schema_version=GOOGLE_INTERACTIONS_SCHEMA_VERSION,
         mode=mode,
         previous_interaction_id=previous,
         history=tuple(dict(step) for step in history),
         pending_function_calls=calls,
+        consumed_function_call_ids=tuple(consumed),
     )
 
 
@@ -99,6 +111,7 @@ def encode_google_interaction_state(state: GoogleInteractionState) -> AgenticPro
             {"call_id": item.call_id, "name": item.name}
             for item in state.pending_function_calls
         ],
+        "consumed_function_call_ids": state.consumed_function_call_ids,
     }
     return AgenticProviderPrivateState(
         codec_id=GOOGLE_INTERACTIONS_CODEC_ID,

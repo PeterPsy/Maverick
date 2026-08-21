@@ -106,6 +106,10 @@ class AgenticEgressEvaluator:
                 workspace_id=block.workspace_id,
                 workspace_root=workspace_root,
                 allow_sensitive_transform=policy.transform_sensitive_text,
+                allow_host_path_transform=(
+                    policy.transform_sensitive_text
+                    and block.provenance == "tool_result"
+                ),
             )
         allowed = reason is None and exported is not None
         reason_code = "egress_allowed" if allowed else str(reason or "egress_denied")

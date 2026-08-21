@@ -358,6 +358,7 @@ def _tool_stream(
     interaction_id: str,
     *,
     tool_name: str = "fixture_read",
+    call_id: str = "call-1",
     arguments: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
     encoded_arguments = json.dumps(
@@ -376,7 +377,12 @@ def _tool_stream(
         {
             "event_type": "step.start",
             "index": 1,
-            "step": {"type": "function_call", "id": "call-1", "name": tool_name, "arguments": {}},
+            "step": {
+                "type": "function_call",
+                "id": call_id,
+                "name": tool_name,
+                "arguments": {},
+            },
         },
         {
             "event_type": "step.delta",

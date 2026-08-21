@@ -654,6 +654,21 @@ catalog and encrypted invocation ledger. Provider-private protocol bytes remain
 behind the matching codec service and public events are bounded, normalized,
 and private-field-free.
 
+Each hosted request reserves its conservative provider price ceiling before
+transport. When that request reports priced usage, Core replaces only the
+active reservation with the reported cost before considering the next step;
+if priced usage is absent, the worst-case reservation remains consumed. This
+keeps every next request safe against the turn ceiling without charging the
+maximum possible output repeatedly after low-cost tool steps.
+
+Textual tool results may contain absolute host paths as untrusted document
+content. Egress first rewrites the exact workspace root to its
+`workspace://<workspace_id>` identity, then redacts any remaining recognized
+host path before remote export when the policy permits sensitive transforms.
+The same remaining host path in user input, platform instructions, schemas, or
+provider state is still denied; path redaction never changes the allowed data
+class, provider, or upstream decision.
+
 The runtime adapter artifact digest covers the concrete adapter plus every
 declared operational class, function, and module for the shared loop and the
 installed provider codecs. Digest construction reads each resolved source file

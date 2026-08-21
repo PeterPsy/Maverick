@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from types import SimpleNamespace
 import unittest
@@ -212,6 +213,65 @@ class GoogleInteractionsHostedLoopTest(unittest.TestCase):
                 )
             )
         )
+
+    def test_google_budget_and_pairing_allow_two_sequential_tools_then_final(self) -> None:
+        harness = HostedAgenticHarness(
+            self,
+            model_provider_id="google-ai-studio",
+            model_id="gemini-3.6-flash",
+            provider_protocol="google-interactions",
+            routing_constraint=google_interactions_routing_constraint(),
+            filesystem_list=True,
+        )
+        harness.policy = replace(
+            harness.policy,
+            max_estimated_cost_microusd=250_000,
+            max_output_tokens=16_384,
+        )
+        transport = _ScriptedTransport(
+            [
+                _tool_stream(
+                    "interaction-budget-1",
+                    tool_name=harness.filesystem_list_tool_name,
+                    call_id="call-1",
+                    arguments={"path": ".", "max_depth": 1, "max_results": 10},
+                ),
+                _tool_stream(
+                    "interaction-budget-2",
+                    tool_name=harness.filesystem_list_tool_name,
+                    call_id="call-2",
+                    arguments={"path": ".", "max_depth": 1, "max_results": 10},
+                ),
+                _text_stream("interaction-budget-3", "google multi-step answer"),
+            ]
+        )
+        adapter = harness.adapter(
+            GoogleInteractionsAgenticClient(transport=transport),
+            private_codec=HostedProviderPrivateCodec(
+                GOOGLE_INTERACTIONS_CODEC_ID,
+                GOOGLE_INTERACTIONS_CODEC_VERSION,
+                GOOGLE_INTERACTIONS_SCHEMA_VERSION,
+                GOOGLE_INTERACTIONS_CONTENT_TYPE,
+            ),
+            credential=EphemeralCredential("fixture-google-key"),
+            cost_estimator=google_36_flash_request_ceiling_microusd,
+        )
+
+        result = execute_runtime_turn(
+            session=harness.session,
+            provider=harness.provider,
+            input_text="List the synthetic fixture twice, then answer.",
+            agentic_adapter=adapter,
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            correlation_id="turn-hosted",
+            effective_authority=harness.authority,
+        )
+
+        self.assertEqual(result.output_text, "google multi-step answer")
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(len(transport.payloads), 3)
+        self.assertEqual(transport.payloads[1]["input"][0]["call_id"], "call-1")
+        self.assertEqual(transport.payloads[2]["input"][0]["call_id"], "call-2")
 
 
 if __name__ == "__main__":

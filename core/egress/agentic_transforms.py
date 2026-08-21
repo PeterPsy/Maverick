@@ -10,7 +10,7 @@ from core.runtime.output_compaction.redaction import redact_payload, redact_text
 
 
 _HOST_PATH_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9:])/(?:home|root|etc|var|tmp|opt|srv|usr|run)/(?:[^\s\"'<>]+)"
+    r"(?<![A-Za-z0-9:])/(?:home|root|etc|var|tmp|opt|srv|usr|run)/(?:[^\s\"'<>`]+)"
 )
 
 
@@ -39,6 +39,7 @@ def transform_exportable_content(
     workspace_id: str,
     workspace_root: Path | None,
     allow_sensitive_transform: bool,
+    allow_host_path_transform: bool,
 ) -> tuple[bytes | None, str | None, str | None]:
     """Rewrite workspace paths and redact known secret patterns in memory."""
     if not content_type.startswith("text/") and content_type != "application/json":
@@ -54,7 +55,10 @@ def transform_exportable_content(
             text = text.replace(root, f"workspace://{workspace_id}")
             transformations.append("workspace_path_reference")
     if _HOST_PATH_PATTERN.search(text):
-        return None, None, "egress_host_path_detected"
+        if not allow_host_path_transform:
+            return None, None, "egress_host_path_detected"
+        text = _HOST_PATH_PATTERN.sub("<redacted-host-path>", text)
+        transformations.append("host_path_redaction")
     if content_type == "application/json":
         try:
             structured = json.loads(text)

@@ -30,6 +30,7 @@ from core.runtime.execution_binding import canonical_digest
 PROBE_TOOL_NAME = FILESYSTEM_LIST_PROBE_TOOL_NAME
 CERTIFIED_REASONING_EFFORTS = GOOGLE_CERTIFIED_REASONING_EFFORTS
 CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS = 2_048
+CERTIFICATION_PROBE_TOOL_ROUNDS = 2
 
 
 @dataclass(frozen=True)
@@ -55,11 +56,14 @@ async def probe_google_interactions(
     request_interval_seconds: float = 1.0,
     sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
 ) -> GoogleInteractionsProbeResult:
-    """Run a paced real-filesystem-list round trip per certified effort."""
+    """Run a paced two-tool continuation round trip per certified effort."""
     active_client = client or GoogleInteractionsAgenticClient(state_mode="stateful")
     test_run_id = f"google-interactions-live:{uuid4()}"
     normalized_efforts = tuple(str(value).strip().lower() for value in reasoning_efforts)
-    if not normalized_efforts or any(value not in CERTIFIED_REASONING_EFFORTS for value in normalized_efforts):
+    if not normalized_efforts or any(
+        value not in CERTIFIED_REASONING_EFFORTS
+        for value in normalized_efforts
+    ):
         return _result(
             test_run_id,
             [],
@@ -74,58 +78,103 @@ async def probe_google_interactions(
     with tempfile.TemporaryDirectory(prefix="maverick-google-agentic-probe-") as temp_dir:
         filesystem_probe = AgenticFilesystemListProbe.create(Path(temp_dir))
         for effort in normalized_efforts:
-            await _pace(request_count, request_interval_seconds, sleep)
-            first = [
-                event
-                async for event in active_client.create_response(
-                    _probe_request(
-                        f"{test_run_id}:{effort}:1",
-                        reasoning_effort=effort,
-                        tool_definition=filesystem_probe.definition,
+            private = None
+            tool_results = []
+            for tool_round in range(1, CERTIFICATION_PROBE_TOOL_ROUNDS + 1):
+                await _pace(request_count, request_interval_seconds, sleep)
+                response = [
+                    event
+                    async for event in active_client.create_response(
+                        _probe_request(
+                            f"{test_run_id}:{effort}:{tool_round}",
+                            reasoning_effort=effort,
+                            tool_definition=filesystem_probe.definition,
+                            private_state=private,
+                            tool_results=tuple(tool_results),
+                        ),
+                        credential=credential,
+                    )
+                ]
+                request_count += 1
+                events.extend(response)
+                error = next(
+                    (
+                        event.error_code
+                        for event in response
+                        if event.event_type == "error"
                     ),
-                    credential=credential,
+                    None,
                 )
-            ]
-            request_count += 1
-            events.extend(first)
-            error = next((event.error_code for event in first if event.event_type == "error"), None)
-            call = next((event.tool_call for event in first if event.event_type == "tool_call"), None)
-            private = next(
-                (event.provider_private_state for event in first if event.event_type == "provider_state"),
-                None,
-            )
-            if error or call is None or private is None or call.provider_tool_name != PROBE_TOOL_NAME:
-                return _result(
-                    test_run_id, events, error or "probe_tool_call_missing", request_count,
-                    normalized_efforts, filesystem_result_count,
+                call = next(
+                    (
+                        event.tool_call
+                        for event in response
+                        if event.event_type == "tool_call"
+                    ),
+                    None,
                 )
-            try:
-                tool_result = filesystem_probe.execute(call)
-            except (OSError, TypeError, ValueError, RuntimeError):
-                return _result(
-                    test_run_id, events, "probe_filesystem_list_failed", request_count,
-                    normalized_efforts, filesystem_result_count,
+                private = next(
+                    (
+                        event.provider_private_state
+                        for event in response
+                        if event.event_type == "provider_state"
+                    ),
+                    None,
                 )
-            filesystem_result_count += 1
+                if (
+                    error
+                    or call is None
+                    or private is None
+                    or call.provider_tool_name != PROBE_TOOL_NAME
+                ):
+                    return _result(
+                        test_run_id,
+                        events,
+                        error or "probe_tool_call_missing",
+                        request_count,
+                        normalized_efforts,
+                        filesystem_result_count,
+                    )
+                try:
+                    tool_results.append(filesystem_probe.execute(call))
+                except (OSError, TypeError, ValueError, RuntimeError):
+                    return _result(
+                        test_run_id,
+                        events,
+                        "probe_filesystem_list_failed",
+                        request_count,
+                        normalized_efforts,
+                        filesystem_result_count,
+                    )
+                filesystem_result_count += 1
             await _pace(request_count, request_interval_seconds, sleep)
-            second = [
+            final_response = [
                 event
                 async for event in active_client.create_response(
                     _probe_request(
-                        f"{test_run_id}:{effort}:2",
+                        f"{test_run_id}:{effort}:{CERTIFICATION_PROBE_TOOL_ROUNDS + 1}",
                         reasoning_effort=effort,
                         tool_definition=filesystem_probe.definition,
                         private_state=private,
-                        tool_results=(tool_result,),
+                        tool_results=tuple(tool_results),
                     ),
                     credential=credential,
                 )
             ]
             request_count += 1
-            events.extend(second)
-            error = next((event.error_code for event in second if event.event_type == "error"), None)
-            completed = any(event.event_type == "completed" for event in second)
-            final = any(event.event_type == "text_final" for event in second)
+            events.extend(final_response)
+            error = next(
+                (
+                    event.error_code
+                    for event in final_response
+                    if event.event_type == "error"
+                ),
+                None,
+            )
+            completed = any(
+                event.event_type == "completed" for event in final_response
+            )
+            final = any(event.event_type == "text_final" for event in final_response)
             if error or not (completed and final):
                 return _result(
                     test_run_id, events, error or "probe_final_response_missing", request_count,
@@ -159,8 +208,10 @@ def _probe_request(
                 trust_level="trusted_platform",
                 content_type="text/plain",
                 content=(
-                    f"Call {PROBE_TOOL_NAME} exactly once with path '.', max_depth 1, and "
-                    "max_results 10. After the function result answer with the single word OK. "
+                    f"Call {PROBE_TOOL_NAME} exactly twice in two sequential function-call "
+                    "steps, both times with path '.', max_depth 1, and max_results 10. "
+                    "Do not answer after the first result. After the second result answer "
+                    "with the single word OK. "
                     "This isolated directory contains synthetic data only."
                 ).encode("utf-8"),
             ),
@@ -189,8 +240,13 @@ def _result(
         "request_count": request_count,
         "saw_streaming": sum(event.event_type == "text_delta" for event in events) > 0,
         "saw_tool_call": any(event.event_type == "tool_call" for event in events),
-        "saw_filesystem_list": filesystem_result_count == len(reasoning_efforts),
-        "saw_usage": request_count > 0 and sum(event.event_type == "usage" for event in events) >= request_count,
+        "saw_filesystem_list": filesystem_result_count == (
+            CERTIFICATION_PROBE_TOOL_ROUNDS * len(reasoning_efforts)
+        ),
+        "saw_usage": (
+            request_count > 0
+            and sum(event.event_type == "usage" for event in events) >= request_count
+        ),
         "saw_private_state": (
             request_count > 0
             and sum(event.event_type == "provider_state" for event in events) >= request_count

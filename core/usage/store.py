@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
+from core.usage.canonical import canonical_usage_samples
 from core.usage.models import ProviderQuotaSnapshotRecord, UsageBucketRecord, UsageSampleRecord
 
 
@@ -61,7 +62,8 @@ class UsageDocumentStore:
         if session_id is not None:
             query["session_id"] = session_id
         records = [UsageSampleRecord(**document) for document in self.collections.samples.find(query)]
-        return sorted(records, key=lambda item: (item.observed_at, item.sample_id))
+        ordered = sorted(records, key=lambda item: (item.observed_at, item.sample_id))
+        return canonical_usage_samples(ordered)
 
     def save_bucket(self, record: UsageBucketRecord) -> UsageBucketRecord:
         self.collections.buckets.update_one(

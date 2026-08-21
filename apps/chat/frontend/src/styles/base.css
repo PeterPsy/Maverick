@@ -62,6 +62,7 @@
   --chatapp-full-access-chip-glow: rgba(251, 146, 60, 0.26);
   --chatapp-full-access-chip-bg: rgba(251, 113, 133, 0.12);
   --chatapp-full-access-chip-text: #ffedd5;
+  --chatapp-usage-backdrop: rgba(0, 0, 0, 0.82);
   --chatapp-diff-card-shadow:
     var(--chatapp-inner-edge),
     var(--maverick-panel-card-shadow);
@@ -151,6 +152,7 @@
   --chatapp-full-access-chip-glow: rgba(249, 115, 22, 0.16);
   --chatapp-full-access-chip-bg: rgba(255, 237, 213, 0.72);
   --chatapp-full-access-chip-text: #9a3412;
+  --chatapp-usage-backdrop: rgba(0, 0, 0, 0.55);
   --chatapp-diff-card-shadow: none;
   --maverick-bg: var(--chatapp-glass-shell);
   --maverick-bg-strong: var(--chatapp-glass-surface);

@@ -11,28 +11,28 @@ const usage: ChatUsageSummary = {
   workspace_id: "default",
   root_session_id: "runtime-1",
   tokens: {
-    input_tokens: 150,
-    cached_input_tokens: 30,
+    input_tokens: 1_000_000,
+    cached_input_tokens: 2_750_000,
     cache_write_input_tokens: 0,
-    output_tokens: 55,
-    reasoning_output_tokens: 15,
-    total_tokens: 250,
+    output_tokens: 400_000,
+    reasoning_output_tokens: 100_000,
+    total_tokens: 4_250_000,
   },
   direct_tokens: {
-    input_tokens: 130,
-    cached_input_tokens: 30,
+    input_tokens: 800_000,
+    cached_input_tokens: 1_800_000,
     cache_write_input_tokens: 0,
-    output_tokens: 50,
-    reasoning_output_tokens: 15,
-    total_tokens: 225,
+    output_tokens: 300_000,
+    reasoning_output_tokens: 100_000,
+    total_tokens: 3_000_000,
   },
   delegated_tokens: {
-    input_tokens: 20,
-    cached_input_tokens: 0,
+    input_tokens: 200_000,
+    cached_input_tokens: 950_000,
     cache_write_input_tokens: 0,
-    output_tokens: 5,
+    output_tokens: 100_000,
     reasoning_output_tokens: 0,
-    total_tokens: 25,
+    total_tokens: 1_250_000,
   },
   context_tokens: 90,
   context_window_tokens: 200,
@@ -66,18 +66,42 @@ describe("ChatUsageBadge", () => {
     act(() => root.render(<ChatUsageBadge usage={usage} />));
 
     const badge = container.querySelector<HTMLButtonElement>(".chatapp-usage-badge");
-    expect(badge?.textContent).toContain("45% context");
-    expect(badge?.textContent).toContain("250 tokens");
+    expect(badge?.textContent).toContain("45%");
+    expect(badge?.textContent).not.toContain("context");
+    expect(badge?.textContent).toContain("4.25 Mt");
 
     act(() => badge?.click());
 
     const dialog = document.body.querySelector<HTMLElement>("[role='dialog']");
     expect(dialog?.textContent).toContain("Token usage");
-    expect(dialog?.textContent).toContain("Chat total");
+    expect(dialog?.textContent).toContain("Metered total");
+    expect(dialog?.textContent).toContain("Root runtime");
     expect(dialog?.textContent).toContain("Delegated");
     expect(dialog?.textContent).toContain("Cached input");
     expect(dialog?.textContent).toContain("codex, openrouter");
     expect(dialog?.querySelector("[role='progressbar']")?.getAttribute("aria-valuenow")).toBe("45");
+  });
+
+  it("does not repeat the root total when the chat has no delegated usage", () => {
+    const noDelegatedUsage = {
+      ...usage,
+      direct_tokens: usage.tokens,
+      delegated_tokens: {
+        input_tokens: 0,
+        cached_input_tokens: 0,
+        cache_write_input_tokens: 0,
+        output_tokens: 0,
+        reasoning_output_tokens: 0,
+        total_tokens: 0,
+      },
+    };
+    act(() => root.render(<ChatUsageBadge usage={noDelegatedUsage} />));
+    act(() => container.querySelector<HTMLButtonElement>(".chatapp-usage-badge")?.click());
+
+    const dialogText = document.body.querySelector<HTMLElement>("[role='dialog']")?.textContent || "";
+    expect(dialogText).toContain("Metered total");
+    expect(dialogText).not.toContain("Root runtime");
+    expect(dialogText).not.toContain("Delegated");
   });
 
   it("closes the modal with Escape", () => {

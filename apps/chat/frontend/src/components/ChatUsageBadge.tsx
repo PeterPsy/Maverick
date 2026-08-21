@@ -22,13 +22,14 @@ export function ChatUsageBadge({ usage }: { usage: ChatUsageSummary | null }) {
   }, [open]);
 
   if (!usage) return null;
-  const contextLabel = usage.context_used_percent === null ? "Context —" : `${formatPercent(usage.context_used_percent)} context`;
-  const tokenLabel = `${formatTokens(usage.tokens.total_tokens)} tokens`;
+  const contextLabel = usage.context_used_percent === null ? "—%" : formatPercent(usage.context_used_percent);
+  const tokenLabel = formatMegaTokens(usage.tokens.total_tokens);
+  const hasDelegatedUsage = usage.delegated_tokens.total_tokens > 0;
   return (
     <>
       <button
         aria-haspopup="dialog"
-        aria-label={`Chat token usage: ${contextLabel}, ${tokenLabel}`}
+        aria-label={`Chat token usage: ${contextLabel} context used, ${tokenLabel} metered`}
         className="chatapp-usage-badge"
         onClick={() => setOpen(true)}
         ref={buttonRef}
@@ -92,9 +93,13 @@ export function ChatUsageBadge({ usage }: { usage: ChatUsageSummary | null }) {
             </section>
 
             <div className="chatapp-usage-modal__summary">
-              <UsageMetric label="Chat total" value={formatTokens(usage.tokens.total_tokens)} />
-              <UsageMetric label="Direct" value={formatTokens(usage.direct_tokens.total_tokens)} />
-              <UsageMetric label="Delegated" value={formatTokens(usage.delegated_tokens.total_tokens)} />
+              <UsageMetric label="Metered total" value={formatTokens(usage.tokens.total_tokens)} />
+              {hasDelegatedUsage ? (
+                <>
+                  <UsageMetric label="Root runtime" value={formatTokens(usage.direct_tokens.total_tokens)} />
+                  <UsageMetric label="Delegated" value={formatTokens(usage.delegated_tokens.total_tokens)} />
+                </>
+              ) : null}
               <UsageMetric
                 label="Estimated cost"
                 value={usage.estimated_cost_microusd === null ? "Unavailable" : formatCost(usage.estimated_cost_microusd)}
@@ -119,7 +124,7 @@ export function ChatUsageBadge({ usage }: { usage: ChatUsageSummary | null }) {
             </section>
 
             <p className="chatapp-usage-modal__note">
-              Active context is the latest provider snapshot and may shrink after compaction. Chat total is cumulative and includes delegated runtime sessions.
+              Active context may shrink after compaction. Metered total excludes provider usage that predates the first local baseline and includes delegated runtimes when present. Token counts are not a bill; cached input and provider plan limits are reported separately.
             </p>
           </section>
         </div>,
@@ -154,6 +159,22 @@ function UsageBreakdownTable({ tokens }: { tokens: TokenUsageBreakdown }) {
 
 function formatTokens(value: number): string {
   return tokenNumber.format(Math.max(0, Number.isFinite(value) ? value : 0));
+}
+
+function formatMegaTokens(value: number): string {
+  const millions = Math.max(0, Number.isFinite(value) ? value : 0) / 1_000_000;
+  const maximumFractionDigits = millions >= 10
+    ? 1
+    : millions >= 1
+      ? 2
+      : millions >= 0.1
+        ? 2
+        : millions >= 0.01
+          ? 3
+          : millions >= 0.001
+            ? 4
+            : 5;
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits }).format(millions)} Mt`;
 }
 
 function formatPercent(value: number): string {

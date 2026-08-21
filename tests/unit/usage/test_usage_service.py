@@ -155,6 +155,119 @@ class UsageServiceTest(unittest.TestCase):
         self.assertEqual(second.summary.context_used_percent, 45.0)
         self.assertEqual(second.summary.token_accuracy, "exact")
 
+    def test_first_codex_snapshot_uses_latest_request_instead_of_historical_total(self) -> None:
+        first = ingest_runtime_usage(
+            self.state,
+            session_id=self.root.session_id,
+            turn_id="turn-1",
+            observed_at=datetime(2026, 8, 20, 10, 5, tzinfo=UTC),
+            payload={
+                "usage_id": "codex-historical-snapshot-1",
+                "provider_id": "codex",
+                "model_id": "gpt-test",
+                "source": "codex_app_server",
+                "semantics": "cumulative",
+                "input_tokens": 52_027_036,
+                "cached_input_tokens": 51_097_088,
+                "output_tokens": 119_710,
+                "reasoning_output_tokens": 40_856,
+                "total_tokens": 52_146_746,
+                "latest_input_tokens": 238_000,
+                "latest_cached_input_tokens": 225_000,
+                "latest_output_tokens": 2_516,
+                "latest_reasoning_output_tokens": 1_000,
+                "latest_total_tokens": 240_516,
+                "context_tokens": 240_516,
+                "context_window_tokens": 258_400,
+            },
+        )
+        second = ingest_runtime_usage(
+            self.state,
+            session_id=self.root.session_id,
+            turn_id="turn-1",
+            observed_at=datetime(2026, 8, 20, 10, 6, tzinfo=UTC),
+            payload={
+                "usage_id": "codex-historical-snapshot-2",
+                "provider_id": "codex",
+                "model_id": "gpt-test",
+                "source": "codex_app_server",
+                "semantics": "cumulative",
+                "input_tokens": 52_267_000,
+                "cached_input_tokens": 51_244_288,
+                "output_tokens": 120_637,
+                "reasoning_output_tokens": 41_100,
+                "total_tokens": 52_387_637,
+                "latest_input_tokens": 239_900,
+                "latest_cached_input_tokens": 147_200,
+                "latest_output_tokens": 991,
+                "latest_reasoning_output_tokens": 250,
+                "latest_total_tokens": 240_891,
+                "context_tokens": 240_891,
+                "context_window_tokens": 258_400,
+            },
+        )
+
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        assert first is not None and second is not None
+        self.assertEqual(first.summary.tokens.total_tokens, 240_516)
+        self.assertEqual(first.sample.reported_total_tokens, 52_146_746)
+        self.assertEqual(first.sample.total_tokens, 240_516)
+        self.assertEqual(second.summary.tokens.total_tokens, 481_407)
+
+    def test_legacy_codex_full_snapshot_is_baseline_for_later_deltas(self) -> None:
+        first = ingest_runtime_usage(
+            self.state,
+            session_id=self.root.session_id,
+            turn_id="turn-legacy",
+            observed_at=datetime(2026, 8, 20, 10, 5, tzinfo=UTC),
+            payload={
+                "usage_id": "legacy-codex-snapshot",
+                "provider_id": "codex",
+                "model_id": "gpt-test",
+                "source": "codex_app_server",
+                "semantics": "cumulative",
+                "input_tokens": 52_027_036,
+                "cached_input_tokens": 51_097_088,
+                "output_tokens": 119_710,
+                "reasoning_output_tokens": 40_856,
+                "total_tokens": 52_146_746,
+                "context_tokens": 240_516,
+                "context_window_tokens": 258_400,
+            },
+        )
+
+        second = ingest_runtime_usage(
+            self.state,
+            session_id=self.root.session_id,
+            turn_id="turn-legacy",
+            observed_at=datetime(2026, 8, 20, 10, 6, tzinfo=UTC),
+            payload={
+                "usage_id": "legacy-codex-snapshot-next",
+                "provider_id": "codex",
+                "model_id": "gpt-test",
+                "source": "codex_app_server",
+                "semantics": "cumulative",
+                "input_tokens": 52_267_000,
+                "cached_input_tokens": 51_244_288,
+                "output_tokens": 120_637,
+                "reasoning_output_tokens": 41_100,
+                "total_tokens": 52_387_637,
+                "context_tokens": 240_891,
+                "context_window_tokens": 258_400,
+            },
+        )
+
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        assert first is not None and second is not None
+        self.assertEqual(first.summary.tokens.total_tokens, 0)
+        self.assertEqual(second.summary.tokens.total_tokens, 240_891)
+        canonical = self.store.list_samples(session_id=self.root.session_id)
+        self.assertEqual(canonical[0].total_tokens, 0)
+        self.assertEqual(canonical[0].reported_total_tokens, 52_146_746)
+        self.assertEqual(canonical[1].total_tokens, 240_891)
+
     def test_delegated_usage_rolls_up_to_root_and_duplicate_reports_are_idempotent(self) -> None:
         payload = {
             "usage_id": "child-request-1",

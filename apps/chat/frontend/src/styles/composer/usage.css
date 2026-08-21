@@ -4,10 +4,10 @@
   min-height: 2rem;
   gap: 0.3rem;
   padding: 0 0.55rem;
-  border: 1px solid rgba(45, 212, 191, 0.24);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.14);
   border-radius: 0.62rem;
-  background: rgba(20, 184, 166, 0.08);
-  color: var(--maverick-text-soft);
+  background: rgba(var(--maverick-contrast-rgb), 0.055);
+  color: var(--maverick-text);
   font: inherit;
   font-size: 0.68rem;
   font-weight: 650;
@@ -17,8 +17,8 @@
 }
 
 .chatapp-usage-badge:hover {
-  border-color: rgba(45, 212, 191, 0.4);
-  background: rgba(20, 184, 166, 0.14);
+  border-color: rgba(var(--maverick-contrast-rgb), 0.24);
+  background: rgba(var(--maverick-contrast-rgb), 0.1);
   color: var(--maverick-text);
 }
 
@@ -43,7 +43,7 @@
   display: grid;
   place-items: center;
   padding: 1.25rem;
-  background: rgba(2, 6, 23, 0.58);
+  background: var(--chatapp-usage-backdrop);
   backdrop-filter: blur(8px);
 }
 
@@ -56,7 +56,7 @@
   padding: 1.25rem;
   border: 1px solid rgba(var(--maverick-contrast-rgb), 0.13);
   border-radius: 1rem;
-  background: var(--maverick-popover-surface-strong);
+  background: var(--maverick-bg);
   box-shadow: var(--maverick-popover-shadow);
   color: var(--maverick-text);
 }
@@ -107,9 +107,9 @@
   display: grid;
   gap: 0.55rem;
   padding: 0.9rem;
-  border: 1px solid rgba(45, 212, 191, 0.2);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.12);
   border-radius: 0.8rem;
-  background: rgba(20, 184, 166, 0.07);
+  background: rgba(var(--maverick-contrast-rgb), 0.035);
 }
 
 .chatapp-usage-modal__context-heading span,
@@ -141,12 +141,12 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgb(20, 184, 166), rgb(45, 212, 191));
+  background: rgba(var(--maverick-contrast-rgb), 0.78);
 }
 
 .chatapp-usage-modal__summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
   gap: 0.65rem;
 }
 

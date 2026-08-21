@@ -35,7 +35,14 @@ class CodexAppServerRuntimeNotificationTestCase(unittest.TestCase):
                             "reasoningOutputTokens": 10,
                             "totalTokens": 150,
                         },
-                        "last": {"totalTokens": 75},
+                        "last": {
+                            "inputTokens": 65,
+                            "cachedInputTokens": 20,
+                            "cacheWriteInputTokens": 0,
+                            "outputTokens": 10,
+                            "reasoningOutputTokens": 5,
+                            "totalTokens": 75,
+                        },
                         "modelContextWindow": 200,
                     },
                 },
@@ -47,6 +54,8 @@ class CodexAppServerRuntimeNotificationTestCase(unittest.TestCase):
         self.assertEqual(emitted[0].payload["semantics"], "cumulative")
         self.assertEqual(emitted[0].payload["token_accuracy"], "exact")
         self.assertEqual(emitted[0].payload["total_tokens"], 150)
+        self.assertEqual(emitted[0].payload["latest_total_tokens"], 75)
+        self.assertEqual(emitted[0].payload["latest_cached_input_tokens"], 20)
         self.assertEqual(emitted[0].payload["context_tokens"], 75)
         self.assertEqual(emitted[0].payload["context_window_tokens"], 200)
 

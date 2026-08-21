@@ -33,6 +33,7 @@ def normalized_usage_sample(
     ) or _text(session.hosted_model_id) or None
     source = _text(payload.get("source")) or "runtime_provider"
     reported = _reported_breakdown(payload)
+    latest = _latest_breakdown(payload)
     context_tokens = _optional_nonnegative_int(payload.get("context_tokens"))
     if context_tokens is None and semantics == "incremental" and reported["total_tokens"] > 0:
         context_tokens = reported["total_tokens"]
@@ -49,12 +50,15 @@ def normalized_usage_sample(
         model_id=model_id,
         source=source,
     ) if semantics == "cumulative" else None
-    raw_delta = {
-        key: _cumulative_delta(value, getattr(previous, f"reported_{key}") if previous else None)
-        if semantics == "cumulative"
-        else value
-        for key, value in reported.items()
-    }
+    if semantics == "cumulative" and previous is None and latest is not None:
+        raw_delta = latest
+    else:
+        raw_delta = {
+            key: _cumulative_delta(value, getattr(previous, f"reported_{key}") if previous else None)
+            if semantics == "cumulative"
+            else value
+            for key, value in reported.items()
+        }
     cached = raw_delta["cached_input_tokens"]
     cache_write = raw_delta["cache_write_input_tokens"]
     reasoning = raw_delta["reasoning_output_tokens"]
@@ -71,6 +75,7 @@ def normalized_usage_sample(
         "source": source,
         "usage_id": _text(payload.get("usage_id")),
         "reported": reported,
+        "latest": latest,
         "context_tokens": context_tokens,
         "context_window_tokens": context_window_tokens,
     }
@@ -131,6 +136,20 @@ def _reported_breakdown(payload: dict[str, Any]) -> dict[str, int]:
         "reasoning_output_tokens": reasoning_output_tokens,
         "total_tokens": total_tokens,
     }
+
+
+def _latest_breakdown(payload: dict[str, Any]) -> dict[str, int] | None:
+    keys = (
+        "input_tokens",
+        "cached_input_tokens",
+        "cache_write_input_tokens",
+        "output_tokens",
+        "reasoning_output_tokens",
+        "total_tokens",
+    )
+    if not any(f"latest_{key}" in payload for key in keys):
+        return None
+    return _reported_breakdown({key: payload.get(f"latest_{key}") for key in keys})
 
 
 def _previous_cumulative_sample(

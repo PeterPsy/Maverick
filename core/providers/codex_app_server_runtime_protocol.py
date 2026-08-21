@@ -152,6 +152,12 @@ def _codex_usage_event(
             "output_tokens": _nonnegative_usage_int(total.get("outputTokens")),
             "reasoning_output_tokens": _nonnegative_usage_int(total.get("reasoningOutputTokens")),
             "total_tokens": cumulative_total,
+            "latest_input_tokens": _nonnegative_usage_int(last.get("inputTokens")),
+            "latest_cached_input_tokens": _nonnegative_usage_int(last.get("cachedInputTokens")),
+            "latest_cache_write_input_tokens": _nonnegative_usage_int(last.get("cacheWriteInputTokens")),
+            "latest_output_tokens": _nonnegative_usage_int(last.get("outputTokens")),
+            "latest_reasoning_output_tokens": _nonnegative_usage_int(last.get("reasoningOutputTokens")),
+            "latest_total_tokens": context_tokens,
             "context_tokens": context_tokens,
             "context_window_tokens": context_window_tokens,
             "provider_thread_id": provider_thread_id or None,
@@ -170,7 +176,6 @@ def _optional_nonnegative_usage_int(value: object) -> int | None:
     if isinstance(value, int | float) and value >= 0:
         return int(value)
     return None
-
 
 
 def _extract_error_text(params: dict[str, Any]) -> str:

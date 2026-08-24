@@ -344,7 +344,17 @@ class UsageServiceTest(unittest.TestCase):
 
         self.assertEqual([item["total_tokens"] for item in payload["items"]], [40, 0, 25])
         self.assertEqual(payload["totals"]["total_tokens"], 65)
+        self.assertEqual(
+            payload["facets"],
+            {
+                "providers": [
+                    {"provider_id": "codex", "model_ids": ["gpt-test"]},
+                    {"provider_id": "openrouter", "model_ids": ["gpt-test"]},
+                ]
+            },
+        )
         self.assertEqual([item["total_tokens"] for item in codex_payload["items"]], [40, 0, 0])
+        self.assertEqual(codex_payload["facets"], payload["facets"])
 
 
 if __name__ == "__main__":

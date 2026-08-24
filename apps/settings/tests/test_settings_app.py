@@ -317,6 +317,7 @@ function transpile(relativePath) {
 transpile('frontend/src/adminApi.ts');
 transpile('frontend/src/bouncyToggle.ts');
 transpile('frontend/src/providerModelOptions.ts');
+transpile('frontend/src/usageHistoryFilters.ts');
 transpile('frontend/src/settingsPanel.ts');
 
 const {
@@ -926,12 +927,20 @@ function makeController() {
         chart_source = (app_root / "frontend" / "src" / "components" / "usageHistoryCharts.tsx").read_text(encoding="utf-8")
         visualizations_source = (app_root / "frontend" / "src" / "components" / "usageVisualizations.ts").read_text(encoding="utf-8")
         controller_source = (app_root / "frontend" / "src" / "providerUsageController.ts").read_text(encoding="utf-8")
+        filters_source = (app_root / "frontend" / "src" / "usageHistoryFilters.ts").read_text(encoding="utf-8")
+        api_source = (app_root / "frontend" / "src" / "adminApi.ts").read_text(encoding="utf-8")
+        panel_source = (app_root / "frontend" / "src" / "settingsPanel.ts").read_text(encoding="utf-8")
         main_source = (app_root / "frontend" / "src" / "main.ts").read_text(encoding="utf-8")
 
         self.assertIn("UsageHistoryChart", chart_source)
+        self.assertIn("UsageHistoryFilterControls", chart_source)
         self.assertIn('role="img"', chart_source)
-        self.assertIn("getUsageTimeseries('hour', 24)", controller_source)
-        self.assertIn("getUsageTimeseries('day', 30)", controller_source)
+        self.assertIn("filters.hourlyPeriods", controller_source)
+        self.assertIn("filters.dailyPeriods", controller_source)
+        self.assertIn("metric: 'non_cached_tokens'", filters_source)
+        self.assertIn("provider_id", api_source)
+        self.assertIn("model_id", api_source)
+        self.assertIn("data-usage-history-filters", panel_source)
         self.assertIn("mountUsageVisualizations", main_source)
         self.assertIn("mountUsageHistoryCharts", visualizations_source)
 

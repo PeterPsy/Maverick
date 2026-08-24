@@ -65,6 +65,10 @@ class UsageApiTest(unittest.TestCase):
         self.assertEqual(payload["resolution"], "hour")
         self.assertEqual(len(payload["items"]), 2)
         self.assertEqual(payload["totals"]["total_tokens"], 100)
+        self.assertEqual(
+            payload["facets"],
+            {"providers": [{"provider_id": "codex", "model_ids": ["gpt-test"]}]},
+        )
 
     def test_non_admin_cannot_read_usage_history(self) -> None:
         status, payload = self.invoke(platform_role="member")

@@ -265,6 +265,11 @@ export type UsageTimeSeriesItem = UsageTokenTotals & {
   sample_count: number;
 };
 
+export type UsageTimeSeriesProviderFacet = {
+  provider_id: string;
+  model_ids: string[];
+};
+
 export type UsageTimeSeriesPayload = {
   workspace_id: string;
   resolution: "hour" | "day";
@@ -276,6 +281,9 @@ export type UsageTimeSeriesPayload = {
   range_end: string;
   coverage_since: string | null;
   generated_at: string;
+  facets?: {
+    providers: UsageTimeSeriesProviderFacet[];
+  };
   items: UsageTimeSeriesItem[];
   totals: UsageTokenTotals;
 };
@@ -594,9 +602,12 @@ export function getProviderSubscriptionUsage(): Promise<ProviderSubscriptionUsag
 
 export function getUsageTimeseries(
   resolution: "hour" | "day",
-  periods: number
+  periods: number,
+  filters: { providerId?: string; modelId?: string } = {}
 ): Promise<UsageTimeSeriesPayload> {
   const query = new URLSearchParams({ resolution, periods: String(periods) });
+  if (filters.providerId) query.set('provider_id', filters.providerId);
+  if (filters.modelId) query.set('model_id', filters.modelId);
   return requestJson<UsageTimeSeriesPayload>(`/api/usage/timeseries?${query.toString()}`);
 }
 

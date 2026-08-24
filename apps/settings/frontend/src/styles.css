@@ -981,6 +981,29 @@ button.settings-adapter-card {
   gap: 12px;
 }
 
+.settings-usage-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-usage-filter {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.settings-usage-filter > span {
+  color: var(--maverick-text-muted);
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.settings-usage-filter select {
+  min-height: 2.2rem;
+  font-size: 0.72rem;
+}
+
 .settings-usage-history-panel {
   display: grid;
   align-content: start;
@@ -1071,7 +1094,7 @@ button.settings-adapter-card {
 
 .settings-usage-chart-breakdown {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
   gap: 6px;
 }
 
@@ -1083,6 +1106,11 @@ button.settings-adapter-card {
   border: 1px solid var(--maverick-border);
   border-radius: 8px;
   background: var(--maverick-surface);
+}
+
+.settings-usage-chart-breakdown > span.is-selected {
+  border-color: var(--maverick-border-strong);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .settings-usage-chart-breakdown small {
@@ -1100,12 +1128,20 @@ button.settings-adapter-card {
 }
 
 @media (max-width: 860px) {
+  .settings-usage-filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .settings-usage-history-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 560px) {
+  .settings-usage-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .settings-usage-history-heading {
     grid-template-columns: 2.4rem minmax(0, 1fr);
   }

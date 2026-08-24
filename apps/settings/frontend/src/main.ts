@@ -495,7 +495,7 @@ function render() {
     ${persistenceMigrationModalHtml(persistenceController.viewState())}
   </main>`;
   bindEvents();
-  mountUsageVisualizations({ hourly: settingsPanelState.hourlyUsage, daily: settingsPanelState.dailyUsage, isLoading: settingsPanelState.isLoadingUsageHistory });
+  mountUsageVisualizations({ hourly: settingsPanelState.hourlyUsage, daily: settingsPanelState.dailyUsage, filters: settingsPanelState.usageHistoryFilters, isLoading: settingsPanelState.isLoadingUsageHistory, onFiltersChange: providerUsageController.updateUsageHistoryFilters, settings: platformSettings });
   publishSelectedPage(page);
   if (!isLoading) {
     publishSelectedUser(user);

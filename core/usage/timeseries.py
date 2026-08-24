@@ -47,11 +47,15 @@ def usage_timeseries_payload(
     step = timedelta(hours=1) if resolution == "hour" else timedelta(days=1)
     range_start = current_start - step * (bounded_periods - 1)
     range_end = current_start + step
-    matching = [
+    period_samples = [
         sample
         for sample in store.list_samples(workspace_id=workspace_id)
         if range_start <= sample.observed_at < range_end
-        and (provider_id is None or sample.provider_id == provider_id)
+    ]
+    matching = [
+        sample
+        for sample in period_samples
+        if (provider_id is None or sample.provider_id == provider_id)
         and (model_id is None or sample.model_id == model_id)
     ]
     grouped: dict[tuple[datetime, str, str | None], list[UsageSampleRecord]] = {}
@@ -81,6 +85,7 @@ def usage_timeseries_payload(
         "range_end": range_end,
         "coverage_since": min((sample.observed_at for sample in matching), default=None),
         "generated_at": generated_at,
+        "facets": _usage_facets(period_samples),
         "items": items,
         "totals": _token_totals(matching),
     }
@@ -150,4 +155,18 @@ def _token_totals(samples: Iterable[UsageSampleRecord]) -> dict[str, int | None]
         "reasoning_output_tokens": sum(sample.reasoning_output_tokens for sample in records),
         "total_tokens": sum(sample.total_tokens for sample in records),
         "estimated_cost_microusd": sum(costs) if costs else None,
+    }
+
+
+def _usage_facets(samples: Iterable[UsageSampleRecord]) -> dict[str, object]:
+    models_by_provider: dict[str, set[str]] = {}
+    for sample in samples:
+        models = models_by_provider.setdefault(sample.provider_id, set())
+        if sample.model_id:
+            models.add(sample.model_id)
+    return {
+        "providers": [
+            {"provider_id": provider_id, "model_ids": sorted(model_ids)}
+            for provider_id, model_ids in sorted(models_by_provider.items())
+        ]
     }

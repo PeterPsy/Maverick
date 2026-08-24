@@ -1,4 +1,5 @@
-import type { UsageTimeSeriesPayload } from '../adminApi';
+import type { PlatformSettings, UsageTimeSeriesPayload } from '../adminApi';
+import type { UsageHistoryFilters } from '../usageHistoryFilters';
 import { mountUsageHistoryCharts, unmountUsageHistoryCharts } from './usageHistoryCharts';
 import { mountUsageLimitGauges, unmountUsageLimitGauges } from './usageLimitGauges';
 
@@ -10,7 +11,10 @@ export function unmountUsageVisualizations() {
 export function mountUsageVisualizations(options: {
   hourly: UsageTimeSeriesPayload | null;
   daily: UsageTimeSeriesPayload | null;
+  filters: UsageHistoryFilters;
   isLoading: boolean;
+  onFiltersChange: (patch: Partial<UsageHistoryFilters>) => void;
+  settings: PlatformSettings | null;
 }) {
   mountUsageLimitGauges();
   mountUsageHistoryCharts(options);

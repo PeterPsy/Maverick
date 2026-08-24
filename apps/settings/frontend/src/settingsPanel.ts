@@ -17,6 +17,7 @@ import {
   selectedProviderDraft
 } from './providerModelOptions';
 import { bouncyToggleHtml } from './bouncyToggle';
+import { defaultUsageHistoryFilters, type UsageHistoryFilters } from './usageHistoryFilters';
 
 const ACTIVE_RUNTIME_STATUSES = new Set(['created', 'running', 'stopping']);
 
@@ -60,6 +61,7 @@ export type SettingsPanelState = {
   providerUsageItems: ProviderSubscriptionUsage[];
   hourlyUsage: UsageTimeSeriesPayload | null;
   dailyUsage: UsageTimeSeriesPayload | null;
+  usageHistoryFilters: UsageHistoryFilters;
   usageHistoryError: string;
   speechAudioModelId: string;
   speechConversationModelId: string;
@@ -109,6 +111,7 @@ export function createSettingsPanelState(): SettingsPanelState {
     providerUsageItems: [],
     hourlyUsage: null,
     dailyUsage: null,
+    usageHistoryFilters: defaultUsageHistoryFilters(),
     usageHistoryError: '',
     speechAudioModelId: '',
     speechConversationModelId: '',
@@ -328,19 +331,20 @@ function usageHistoryCardHtml(state: SettingsPanelState) {
         Refresh
       </button>
     </div>
-    <p class="settings-card-copy">Hourly and daily totals across direct and delegated runtime sessions in this workspace. History starts when Core metering is enabled.</p>
+    <p class="settings-card-copy">Hourly and daily usage across root and delegated runtime sessions. Charts default to non-cached tokens; use the filters to inspect processed totals, cache, providers, models, and time ranges.</p>
     ${state.usageHistoryError ? `<p class="settings-inline-error" role="alert">${escapeHtml(state.usageHistoryError)}</p>` : ''}
+    <div class="settings-usage-history-filters" data-usage-history-filters aria-label="Token history filters"></div>
     <div class="settings-usage-history-grid">
       <article class="settings-usage-history-panel">
         <div>
-          <p class="settings-kicker">Last 24 hours</p>
+          <p class="settings-kicker">Last ${state.usageHistoryFilters.hourlyPeriods} hours</p>
           <h3>Hourly consumption</h3>
         </div>
         <div data-usage-history-chart="hour" aria-live="polite"></div>
       </article>
       <article class="settings-usage-history-panel">
         <div>
-          <p class="settings-kicker">Last 30 days</p>
+          <p class="settings-kicker">Last ${state.usageHistoryFilters.dailyPeriods} days</p>
           <h3>Daily consumption</h3>
         </div>
         <div data-usage-history-chart="day" aria-live="polite"></div>

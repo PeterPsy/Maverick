@@ -19,6 +19,7 @@ from core.providers.errors import (
     CapabilityCertificateError,
 )
 from core.providers.certificate_service import validate_certificate_for_binding
+from core.providers.certificate_projection import certificate_profile_status
 from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.agentic_workspace_policy import egress_policy_for_definition
 from core.providers.models import ProviderSelection
@@ -317,9 +318,9 @@ class AgenticProfilesTest(unittest.TestCase):
             selection=selection,
             now=NOW,
         )
-        self.assertEqual(profile.revision, "5")
+        self.assertEqual(profile.revision, "6")
 
-        for rev in ("1", "2", "3", "4"):
+        for rev in ("1", "2", "3", "4", "5"):
             self.provider_store.save_agentic_profile_definition_status(
                 AgenticProfileDefinitionStatus(
                     definition_id=profile.definition_id,
@@ -338,13 +339,66 @@ class AgenticProfilesTest(unittest.TestCase):
             now=replace_time(NOW),
         )
 
-        for rev in ("1", "2", "3", "4"):
+        for rev in ("1", "2", "3", "4", "5"):
             status = self.provider_store.get_agentic_profile_definition_status(
                 profile.definition_id,
                 rev,
             )
             self.assertIsNotNone(status)
             self.assertEqual(status.rollout_status, "suspended")
+
+    def test_all_builtin_codex_models_have_active_certificates_matching_current_adapter(self) -> None:
+        runtime_store = RuntimeDocumentStore(
+            RuntimeCollections(
+                sessions=FakeCollection(),
+                turns=FakeCollection(),
+                events=FakeCollection(),
+                processes=FakeCollection(),
+                states=FakeCollection(),
+                threads=FakeCollection(),
+                provider_states=FakeCollection(),
+            )
+        )
+        migrate_agentic_runtime_schema(
+            self.provider_store,
+            runtime_store,
+            self.registry,
+            now=NOW,
+        )
+        codex_adapter = self.registry.get_agentic_runtime_adapter("codex")
+        self.assertTrue(len(self.codex.model_options) > 0)
+        for model in self.codex.model_options:
+            with self.subTest(model_id=model.model_id):
+                profile = next(
+                    item
+                    for item in self.provider_store.list_agentic_profile_definitions()
+                    if item.model_id == model.model_id and item.revision == "6"
+                )
+                self.assertEqual(profile.revision, "6")
+                status = self.provider_store.get_agentic_profile_definition_status(
+                    profile.definition_id,
+                    profile.revision,
+                )
+                self.assertIsNotNone(status)
+                self.assertEqual(status.rollout_status, "preview")
+                certificate = self.provider_store.get_capability_certificate(
+                    profile.capability_certificate_id
+                )
+                cert_status = self.provider_store.get_capability_certificate_status(
+                    certificate.certificate_id
+                )
+                effective = certificate_profile_status(
+                    certificate,
+                    cert_status,
+                    definition=profile,
+                    adapter=codex_adapter,
+                    now=NOW,
+                )
+                self.assertEqual(
+                    effective,
+                    "active",
+                    f"Model {model.model_id} certificate status must be 'active' but was '{effective}'",
+                )
 
 
 

@@ -73,7 +73,10 @@ class ProviderApiTest(unittest.TestCase):
             provider_store=self.make_provider_store(),
             secret_store=self.make_secret_store(),
             runtime_store=self.make_runtime_store(),
-            workspace_store=SimpleNamespace(),
+            workspace_store=SimpleNamespace(
+                get_workspace=lambda workspace_id: SimpleNamespace(workspace_id=workspace_id, status="active"),
+                get_membership=lambda user_id, workspace_id: SimpleNamespace(user_id=user_id, workspace_id=workspace_id, role_id="admin", status="active"),
+            ),
             observability_store=None,
         )
 
@@ -446,6 +449,24 @@ class ProviderApiTest(unittest.TestCase):
         self.assertEqual(status, "400 Bad Request")
         self.assertEqual(payload["error"], "binding_id_not_supported")
         self.assertEqual(state.provider_store.get_provider_binding(existing.binding_id).provider_id, "google-ai-studio")
+
+    def test_admin_can_configure_codex_active_provider_with_model_and_reasoning(self) -> None:
+        state = self.make_state()
+        status, payload = self.invoke(
+            "/api/providers/active",
+            method="POST",
+            body={
+                "provider_id": "codex",
+                "model_id": "gpt-5.6-sol",
+                "model_reasoning_effort": "high",
+            },
+            state=state,
+        )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(payload["active_provider"]["provider_id"], "codex")
+        self.assertEqual(payload["model_settings"]["selected_model_id"], "gpt-5.6-sol")
+        self.assertEqual(payload["model_settings"]["selected_reasoning_effort"], "max")
 
     def test_runtime_status_exposes_runtime_mode(self) -> None:
         state = self.make_state()

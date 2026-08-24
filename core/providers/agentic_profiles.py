@@ -37,8 +37,8 @@ from core.runtime.agentic_feature_flags import (
 )
 
 
-CODEX_PROFILE_REVISION = "5"
-CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4")
+CODEX_PROFILE_REVISION = "6"
+CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5")
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"
 CAPABILITY_CERTIFICATE_PREFIX = "capability-certificate"

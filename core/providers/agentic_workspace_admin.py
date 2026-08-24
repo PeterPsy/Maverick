@@ -26,6 +26,7 @@ from core.providers.errors import (
     ProviderCredentialBindingError,
     ProviderNotFoundError,
 )
+from core.providers.models import ProviderSelection
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
@@ -62,9 +63,26 @@ def configure_workspace_agentic_default(
     if provider.model_options and model is None:
         raise AgenticProfileError("profile_model_unavailable")
     requested_reasoning = str(model_reasoning_effort or "").strip() or None
-    default_reasoning = None if model is None else model.default_reasoning_effort
-    if requested_reasoning is not None and requested_reasoning != default_reasoning:
-        raise AgenticProfileError("agentic_reasoning_effort_is_per_session")
+    supported_efforts = {
+        item.effort for item in (() if model is None else model.supported_reasoning_efforts)
+    }
+    if requested_reasoning is not None and supported_efforts and requested_reasoning not in supported_efforts:
+        raise AgenticProfileError("profile_reasoning_effort_unsupported")
+
+    selection = store.get_provider_selection(workspace_id)
+    desired_selection = ProviderSelection(
+        selection_id=f"workspace:{workspace_id}:{provider_id}",
+        workspace_id=workspace_id,
+        provider_id=provider_id,
+        binding_id=None,
+        selection_scope="workspace_default",
+        selection_reason="workspace agentic default selection",
+        created_at=timestamp if selection is None else selection.created_at,
+        updated_at=timestamp,
+        model_id=selected_model_id,
+        model_reasoning_effort=requested_reasoning,
+    )
+    store.save_provider_selection(desired_selection)
 
     profile = publish_codex_agentic_profile(
         store,

@@ -11,6 +11,7 @@ from core.providers.agentic_models import AgenticMigrationRecord
 from core.providers.agentic_profiles import (
     build_pinned_execution_binding,
     ensure_codex_workspace_profile,
+    publish_codex_agentic_profile,
 )
 from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.models import ProviderSelection
@@ -81,7 +82,21 @@ def migrate_agentic_runtime_schema(
             now=timestamp,
         )
 
+    codex = registry.get_provider_definition("codex")
     codex_adapter = registry.get_agentic_runtime_adapter("codex")
+    for model_option in codex.model_options:
+        profile = publish_codex_agentic_profile(
+            provider_store,
+            definition=codex,
+            model_id=model_option.model_id,
+            now=timestamp,
+        )
+        ensure_codex_preview_certificate(
+            provider_store,
+            definition=profile,
+            provider_definition=codex,
+            adapter=codex_adapter,
+        )
     for definition in provider_store.list_agentic_profile_definitions():
         if (
             definition.runtime_engine_id == "codex"
@@ -90,7 +105,7 @@ def migrate_agentic_runtime_schema(
             ensure_codex_preview_certificate(
                 provider_store,
                 definition=definition,
-                provider_definition=registry.get_provider_definition("codex"),
+                provider_definition=codex,
                 adapter=codex_adapter,
             )
 

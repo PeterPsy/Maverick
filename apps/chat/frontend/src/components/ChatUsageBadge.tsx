@@ -23,13 +23,14 @@ export function ChatUsageBadge({ usage }: { usage: ChatUsageSummary | null }) {
 
   if (!usage) return null;
   const contextLabel = usage.context_used_percent === null ? "—%" : formatPercent(usage.context_used_percent);
-  const tokenLabel = formatMegaTokens(usage.tokens.total_tokens);
+  const nonCachedTokens = nonCachedTokenTotal(usage.tokens);
+  const tokenLabel = formatMegaTokens(nonCachedTokens);
   const hasDelegatedUsage = usage.delegated_tokens.total_tokens > 0;
   return (
     <>
       <button
         aria-haspopup="dialog"
-        aria-label={`Chat token usage: ${contextLabel} context used, ${tokenLabel} metered`}
+        aria-label={`Chat token usage: ${contextLabel} context used, ${tokenLabel} non-cached`}
         className="chatapp-usage-badge"
         onClick={() => setOpen(true)}
         ref={buttonRef}
@@ -93,7 +94,9 @@ export function ChatUsageBadge({ usage }: { usage: ChatUsageSummary | null }) {
             </section>
 
             <div className="chatapp-usage-modal__summary">
-              <UsageMetric label="Metered total" value={formatTokens(usage.tokens.total_tokens)} />
+              <UsageMetric label="Non-cached" value={formatTokens(nonCachedTokens)} />
+              <UsageMetric label="Cached input" value={formatTokens(usage.tokens.cached_input_tokens)} />
+              <UsageMetric label="Processed total" value={formatTokens(usage.tokens.total_tokens)} />
               {hasDelegatedUsage ? (
                 <>
                   <UsageMetric label="Root runtime" value={formatTokens(usage.direct_tokens.total_tokens)} />
@@ -124,7 +127,7 @@ export function ChatUsageBadge({ usage }: { usage: ChatUsageSummary | null }) {
             </section>
 
             <p className="chatapp-usage-modal__note">
-              Active context may shrink after compaction. Metered total excludes provider usage that predates the first local baseline and includes delegated runtimes when present. Token counts are not a bill; cached input and provider plan limits are reported separately.
+              Active context may shrink after compaction. The badge shows non-cached tokens; processed total also includes cached input. Both exclude provider usage that predates the first local baseline and include delegated runtimes when present. Token counts are not a bill, and provider plan limits are reported separately.
             </p>
           </section>
         </div>,
@@ -159,6 +162,12 @@ function UsageBreakdownTable({ tokens }: { tokens: TokenUsageBreakdown }) {
 
 function formatTokens(value: number): string {
   return tokenNumber.format(Math.max(0, Number.isFinite(value) ? value : 0));
+}
+
+function nonCachedTokenTotal(tokens: TokenUsageBreakdown): number {
+  const total = Math.max(0, Number.isFinite(tokens.total_tokens) ? tokens.total_tokens : 0);
+  const cached = Math.max(0, Number.isFinite(tokens.cached_input_tokens) ? tokens.cached_input_tokens : 0);
+  return Math.max(0, total - cached);
 }
 
 function formatMegaTokens(value: number): string {

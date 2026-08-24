@@ -62,19 +62,24 @@ describe("ChatUsageBadge", () => {
     container.remove();
   });
 
-  it("shows numeric context and cumulative usage, then opens complete chat stats", () => {
+  it("shows numeric context and non-cached usage, then opens complete chat stats", () => {
     act(() => root.render(<ChatUsageBadge usage={usage} />));
 
     const badge = container.querySelector<HTMLButtonElement>(".chatapp-usage-badge");
     expect(badge?.textContent).toContain("45%");
     expect(badge?.textContent).not.toContain("context");
-    expect(badge?.textContent).toContain("4.25 Mt");
+    expect(badge?.textContent).toContain("1.5 Mt");
+    expect(badge?.getAttribute("aria-label")).toContain("1.5 Mt non-cached");
 
     act(() => badge?.click());
 
     const dialog = document.body.querySelector<HTMLElement>("[role='dialog']");
     expect(dialog?.textContent).toContain("Token usage");
-    expect(dialog?.textContent).toContain("Metered total");
+    expect(dialog?.textContent).toContain("Non-cached");
+    expect(dialog?.textContent).toContain("1,500,000");
+    expect(dialog?.textContent).toContain("Processed total");
+    expect(dialog?.textContent).toContain("4,250,000");
+    expect(dialog?.textContent).toContain("2,750,000");
     expect(dialog?.textContent).toContain("Root runtime");
     expect(dialog?.textContent).toContain("Delegated");
     expect(dialog?.textContent).toContain("Cached input");
@@ -99,7 +104,7 @@ describe("ChatUsageBadge", () => {
     act(() => container.querySelector<HTMLButtonElement>(".chatapp-usage-badge")?.click());
 
     const dialogText = document.body.querySelector<HTMLElement>("[role='dialog']")?.textContent || "";
-    expect(dialogText).toContain("Metered total");
+    expect(dialogText).toContain("Processed total");
     expect(dialogText).not.toContain("Root runtime");
     expect(dialogText).not.toContain("Delegated");
   });

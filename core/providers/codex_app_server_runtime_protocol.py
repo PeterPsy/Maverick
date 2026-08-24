@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from core.providers.codex_app_server_skill_rehydration import schedule_codex_skill_rehydration
 from core.runtime.execution_events import RuntimeExecutionEvent, parse_provider_json_event
 
 
@@ -90,6 +91,8 @@ def _handle_notification(runtime: _CodexAppServerRuntime, payload: dict[str, Any
                 },
             )
         _handle_item_event(runtime, provider_type=method.replace("/", "."), item=item)
+        if method == "item/completed" and _is_context_compaction_item(item):
+            schedule_codex_skill_rehydration(runtime, compaction_item_id=_item_id(item))
         return
     if method == "error":
         error_text = _extract_error_text(params)
@@ -220,6 +223,10 @@ def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, i
 
 def _is_agent_message_item(item: dict[str, Any]) -> bool:
     return str(item.get("type") or "").strip() in {"agentMessage", "agent_message"}
+
+
+def _is_context_compaction_item(item: dict[str, Any]) -> bool:
+    return str(item.get("type") or "").strip() in {"contextCompaction", "context_compaction"}
 
 
 

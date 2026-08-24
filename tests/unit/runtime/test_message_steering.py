@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from core.providers.errors import ProviderLaunchError
 from core.providers.models import RuntimeSteerResult
 from core.runtime import message_admission
 from core.runtime.message_admission import runtime_message_admission_handoff
@@ -264,6 +265,32 @@ class RuntimeMessageSteeringTestCase(unittest.TestCase):
         )
         self.assertIsNotNone(claim)
         self.assertEqual(claim.status, "delivery_uncertain")
+
+    def test_provider_input_preparation_failure_releases_claim_for_queue_fallback(self) -> None:
+        adapter = _SteeringAdapter()
+        provider = SimpleNamespace(
+            provider_id="codex",
+            capabilities=SimpleNamespace(supports_same_turn_input=True),
+        )
+
+        with patch(
+            "core.runtime.message_steering.resolve_runtime_backend_for_session",
+            return_value=(provider, None, adapter),
+        ), patch.object(
+            adapter,
+            "steer_turn",
+            side_effect=ProviderLaunchError("invoked_skill_runtime_path_missing"),
+        ):
+            result = self._attempt("client-provider-input-failed")
+
+        self.assertEqual(result.status, "fallback")
+        self.assertEqual(result.reason, "provider_input_not_dispatched")
+        self.assertIsNone(
+            self.store.get_client_message_claim(
+                workspace_id="default",
+                client_message_id="client-provider-input-failed",
+            )
+        )
 
     def test_admission_registry_reuses_nested_lock_and_releases_idle_session(self) -> None:
         session_id = "session-admission-cleanup"

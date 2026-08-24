@@ -55,6 +55,8 @@ from core.runtime.turn_submission import (
     submit_runtime_turn_async,
 )
 from core.runtime.turn_terminalization import terminalize_runtime_turn_cancellation
+from core.skills.catalog import DEFAULT_SKILL_CATALOG_APP_ID
+from core.skills.service import list_available_workspace_skills
 
 
 DEFAULT_SUMMARY_EVENT_LIMIT = 1000
@@ -1126,6 +1128,18 @@ class InterAgentService:
             "input_text": message,
             "client_message_id": _clean_optional(client_message_id),
         }
+        if session.skill_activation_mode == "explicit":
+            invoked_skill_ids = list(session.skill_ids)
+            if not invoked_skill_ids:
+                invoked_skill_ids = [
+                    skill.skill_id
+                    for skill in list_available_workspace_skills(
+                        workspace_id=session.workspace_id,
+                        start_path=getattr(state, "repository_root", None),
+                        app_id=session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID,
+                    )
+                ]
+            submit_kwargs["invoked_skill_ids"] = invoked_skill_ids
         if queue_fence is not None:
             submit_kwargs["queue_fence"] = queue_fence
         try:
@@ -1147,6 +1161,11 @@ class InterAgentService:
                 "participant_id": participant.participant_id,
                 "runtime_session_id": session.session_id,
                 "runtime_turn_id": turn.turn_id,
+                **(
+                    {"invoked_skill_ids": list(submit_kwargs["invoked_skill_ids"])}
+                    if "invoked_skill_ids" in submit_kwargs
+                    else {}
+                ),
             },
             now=timestamp,
             expected_recovery_generation=(

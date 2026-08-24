@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import type { ProviderItem } from "../api/client";
+import { skillIdsVisibleInComposer } from "./skillMentionPolicy";
+
+function provider({ supportsSkills = true, plainHosted = false } = {}): ProviderItem {
+  return {
+    provider_id: plainHosted ? "hosted" : "codex",
+    label: plainHosted ? "Hosted" : "Codex",
+    description: "test provider",
+    kind: plainHosted ? "hosted_api" : "local_cli",
+    provider_role: plainHosted ? "model_provider" : "runtime_engine",
+    status: "active",
+    default_model_family: null,
+    capabilities: { supports_skills: supportsSkills },
+  };
+}
+
+describe("skill mention policy", () => {
+  it("hides skills for plain hosted providers and providers without skill support", () => {
+    const skillIds = ["storage-ops", "crm-search"];
+
+    expect(skillIdsVisibleInComposer({
+      activationMode: "explicit",
+      availableSkillIds: skillIds,
+      provider: provider({ plainHosted: true }),
+    })).toEqual([]);
+    expect(skillIdsVisibleInComposer({
+      activationMode: "explicit",
+      availableSkillIds: skillIds,
+      provider: provider({ supportsSkills: false }),
+    })).toEqual([]);
+  });
+
+  it("filters explicit skill mentions through the session or agent allowlist", () => {
+    expect(skillIdsVisibleInComposer({
+      activationMode: "explicit",
+      allowedSkillIds: ["crm-search"],
+      availableSkillIds: ["storage-ops", "crm-search"],
+      provider: provider(),
+    })).toEqual(["crm-search"]);
+  });
+
+  it("treats an empty allowlist as all skills but hides implicit sessions", () => {
+    const skillIds = ["storage-ops", "crm-search"];
+
+    expect(skillIdsVisibleInComposer({
+      activationMode: "explicit",
+      allowedSkillIds: [],
+      availableSkillIds: skillIds,
+      provider: provider(),
+    })).toEqual(skillIds);
+    expect(skillIdsVisibleInComposer({
+      activationMode: "implicit",
+      allowedSkillIds: [],
+      availableSkillIds: skillIds,
+      provider: provider(),
+    })).toEqual([]);
+  });
+
+  it("fails closed until a source app advertises structured skill invocation", () => {
+    const base = {
+      activationMode: "explicit" as const,
+      availableSkillIds: ["storage-ops"],
+      provider: provider(),
+      sourceAppId: "design-studio",
+    };
+
+    expect(skillIdsVisibleInComposer(base)).toEqual([]);
+    expect(skillIdsVisibleInComposer({ ...base, sourceAppSupportsSkillInvocations: true })).toEqual(["storage-ops"]);
+  });
+});

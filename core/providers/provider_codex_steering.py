@@ -19,6 +19,7 @@ class CodexSteeringMixin:
         client_message_id: str | None = None,
         expected_provider_turn_id: str | None = None,
         invoked_skills: list["SkillDefinition"] | None = None,
+        skill_activation_mode: str = "implicit",
     ) -> RuntimeSteerResult:
         """Admit additional text into the active Codex app-server turn."""
         from core.providers.codex_app_server import steer_codex_app_server_turn
@@ -29,4 +30,5 @@ class CodexSteeringMixin:
             client_message_id=client_message_id,
             expected_provider_turn_id=expected_provider_turn_id,
             invoked_skills=invoked_skills,
+            skill_activation_mode=skill_activation_mode,
         )

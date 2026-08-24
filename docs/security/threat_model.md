@@ -223,7 +223,13 @@ from the runtime session's selected enabled catalog, enforces the session
 allowlist, and the Codex adapter reconstructs `SKILL.md` only below the
 session-local `codex-home/skills` copy. Missing files, symlinks, non-files, and
 resolved paths outside that root fail closed before provider dispatch. Runtime
-paths are not included in public API or transcript event payloads.
+paths are not included in public API or transcript event payloads. In
+`explicit` mode Maverick also neutralizes Codex `$skill-id` mention syntax in
+the provider-only text copy, while retaining the user's original text in the
+turn and transcript. Structured, validated skill items are therefore the only
+activation authority. Automatic inter-agent turns derive their structured
+invocation set from the immutable participant skill snapshot rather than from
+model-authored task text.
 
 ### Participant output influencing the root generalist
 

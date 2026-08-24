@@ -75,6 +75,7 @@ class RuntimeBackendAdapter(Protocol):
         client_message_id: str | None = None,
         expected_provider_turn_id: str | None = None,
         invoked_skills: list["SkillDefinition"] | None = None,
+        skill_activation_mode: str = "implicit",
     ) -> RuntimeSteerResult:
         ...
 

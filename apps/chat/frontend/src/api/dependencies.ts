@@ -155,6 +155,9 @@ function normalizeAgentType(value: unknown): AgentTypeSummary {
     description: stringField(item.description),
     role_id: stringField(item.role_id),
     skill_ids: stringArrayField(item.skill_ids),
+    skill_activation_mode: stringField(item.skill_activation_mode, "implicit") === "explicit"
+      ? "explicit"
+      : "implicit",
     trace_verbosity: stringField(item.trace_verbosity, "compact"),
     enabled: item.enabled !== false,
   };

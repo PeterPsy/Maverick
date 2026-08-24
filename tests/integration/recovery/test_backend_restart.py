@@ -420,6 +420,52 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
         self.assertEqual(terminal_events[-1].payload["recovery_action"], "preserve_cancelled_turn")
         self.assertEqual(dispatch.call_args.kwargs["event_type"], "runtime.turn.cancelled")
 
+    def test_backend_restart_reinjects_interrupted_turn_skill_ids_into_resume(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-explicit-skill-recovery",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            skill_ids=["storage-ops"],
+            skill_activation_mode="explicit",
+            start_path=repo_root,
+        )
+        transition_runtime_session(
+            state.runtime_store,
+            session_id=session.session_id,
+            target_status="running",
+        )
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-explicit-skill-recovery",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="$storage-ops continue the report",
+                invoked_skill_ids=["storage-ops"],
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=NOW,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+
+        with (
+            patch.object(backend_restart, "submit_runtime_turn_async") as submit,
+            patch.object(backend_restart, "set_thread_availability"),
+            patch.object(backend_restart, "dispatch_source_app_runtime_event"),
+            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
+            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
+        ):
+            result = backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
+
+        self.assertEqual(result.queued_resume_turns, 1)
+        self.assertEqual(submit.call_args.kwargs["invoked_skill_ids"], ["storage-ops"])
+
     def test_backend_restart_reconciles_crashed_hosted_owner_and_allows_new_generation(self) -> None:
         repo_root = make_temp_repo_root(self)
         state = bootstrap_platform_state(start_path=repo_root)

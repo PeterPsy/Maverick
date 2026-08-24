@@ -4,8 +4,10 @@ import importlib
 from threading import Lock
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 importlib.import_module("core.providers.codex_app_server_runtime")
+from core.providers import codex_app_server_runtime_protocol as runtime_protocol
 from core.providers.codex_app_server_runtime_protocol import _handle_notification
 from core.providers.codex_app_server_runtime_notifications import _handle_generic_notification
 
@@ -84,6 +86,23 @@ class CodexAppServerRuntimeNotificationTestCase(unittest.TestCase):
         self.assertEqual(len(emitted), 1)
         self.assertEqual(emitted[0].event_type, "runtime.step.updated")
         self.assertEqual(emitted[0].payload["provider_event_type"], "future.capability.updated")
+
+    def test_completed_context_compaction_requests_explicit_skill_rehydration(self) -> None:
+        runtime = SimpleNamespace()
+
+        with patch.object(runtime_protocol, "_handle_item_event"), patch.object(
+            runtime_protocol,
+            "schedule_codex_skill_rehydration",
+        ) as schedule:
+            _handle_notification(
+                runtime,
+                {
+                    "method": "item/completed",
+                    "params": {"item": {"id": "compact-1", "type": "contextCompaction"}},
+                },
+            )
+
+        schedule.assert_called_once_with(runtime, compaction_item_id="compact-1")
 
 
 if __name__ == "__main__":

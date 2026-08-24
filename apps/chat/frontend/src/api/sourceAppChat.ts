@@ -11,6 +11,13 @@ import type {
 
 export type SourceAppChatMode = "chat" | "plan" | "design";
 
+export type SourceAppChatCapabilities = {
+  label?: string;
+  modes?: SourceAppChatMode[];
+  source_app_id?: string;
+  supports_skill_invocations?: boolean;
+};
+
 type RuntimeRequestResult = {
   status?: string;
   error?: string;
@@ -29,6 +36,7 @@ export async function sendSourceAppTurn({
   attachments,
   clientMessageId,
   inputText,
+  invokedSkillIds,
   mode,
   projectId,
   runtimeSessionId,
@@ -39,6 +47,7 @@ export async function sendSourceAppTurn({
   attachments: ChatMessageAttachment[];
   clientMessageId: string;
   inputText: string;
+  invokedSkillIds?: string[];
   mode: SourceAppChatMode;
   projectId: string;
   runtimeSessionId?: string;
@@ -56,6 +65,7 @@ export async function sendSourceAppTurn({
         attachments: attachments.map(({ objectUrl: _objectUrl, ...attachment }) => attachment),
         client_message_id: clientMessageId,
         input_text: inputText,
+        invoked_skill_ids: invokedSkillIds || [],
         project_id: projectId,
         runtime_session_id: runtimeSessionId || undefined,
         session_mode: mode,
@@ -73,6 +83,18 @@ export async function sendSourceAppTurn({
     listRuntimeSessionEvents(result.runtime_session_id, { limit: 500, signal }),
   ]);
   return { session, thread, turn, events: events.items };
+}
+
+export function getSourceAppChatCapabilities(
+  sourceAppId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<SourceAppChatCapabilities> {
+  return requestJson<SourceAppChatCapabilities>(`/api/apps/${encodeURIComponent(sourceAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: options.signal,
+    body: JSON.stringify({ action: "chat.capabilities" }),
+  });
 }
 
 export async function cancelSourceAppTurn({

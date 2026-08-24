@@ -241,6 +241,23 @@ export function useChatAppController({
   const interAgentRefreshScopeRef = useRef("");
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
   const activeConversationKey = conversationKeyFor(activeThread, draftChat);
+  const sourceAppId = delegatedChatSourceAppId(activeThread?.source_app_id || activeAppContext?.app_id);
+  const selectedAgent = agentOptions.find((agent) => agent.id === selectedAgentTypeId) || null;
+  const skillMentionContext = useMemo(() => ({
+    activationMode: activeThread
+      ? activeSession?.skill_activation_mode
+      : selectedAgent?.skill_activation_mode || (selectedAgent ? "implicit" : "explicit"),
+    allowedSkillIds: activeThread ? activeSession?.skill_ids : selectedAgent?.skill_ids || [],
+    provider: selectedProvider,
+    sourceAppId,
+  }), [
+    activeSession?.skill_activation_mode,
+    activeSession?.skill_ids,
+    activeThread,
+    selectedAgent,
+    selectedProvider,
+    sourceAppId,
+  ]);
   const interAgentRefreshScope = `${activeThread?.runtime_session_id || ""}:${activeInterAgentGraphRunId || ""}`;
   interAgentRefreshScopeRef.current = interAgentRefreshScope;
   const runtimeCanStopTurn = isActiveRuntimeTurnBusyForThread(activeTurn, activeThread);
@@ -270,6 +287,7 @@ export function useChatAppController({
     externalFileDrop,
     externalMentionDrop,
     navigationScope,
+    skillMentionContext,
     setComposer,
     setComposerError,
     workspaceId,
@@ -579,7 +597,6 @@ export function useChatAppController({
     queuedMessages,
   });
 
-  const sourceAppId = delegatedChatSourceAppId(activeThread?.source_app_id || activeAppContext?.app_id);
   const sourceAppProjectId = sourceAppId
     ? activeThread?.project_id
       || (typeof activeAppContext?.params?.od_project_id === "string" ? activeAppContext.params.od_project_id : "")

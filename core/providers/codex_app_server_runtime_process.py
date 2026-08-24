@@ -6,7 +6,7 @@ import subprocess
 import time
 from typing import Callable
 
-from core.providers.codex_skill_inputs import codex_skill_input_items
+from core.providers.codex_skill_inputs import codex_provider_input_text, codex_skill_input_items
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.codex_app_server_runtime_state import _RUNTIMES, _RUNTIMES_LOCK
 from core.runtime.execution_events import RuntimeExecutionEventSink
@@ -87,6 +87,16 @@ def execute_codex_app_server_turn(
                 "provider_thread_id": provider_thread_id,
             },
         )
+    turn_input = [
+        {
+            "type": "text",
+            "text": codex_provider_input_text(
+                input_text,
+                skill_activation_mode=getattr(session, "skill_activation_mode", "implicit"),
+            ),
+        },
+        *codex_skill_input_items(runtime.runtime_root, invoked_skills),
+    ]
     if on_provider_startup_event is not None:
         on_provider_startup_event("event_sink_reset_started", {})
     event_sink_reset_started_at = time.perf_counter()
@@ -99,6 +109,10 @@ def execute_codex_app_server_turn(
         runtime.current_error_text = None
         runtime.current_completion_received = False
         runtime.completion_queue = queue.Queue(maxsize=1)
+    with runtime.skill_rehydration_lock:
+        runtime.current_invoked_skills = tuple(invoked_skills or ())
+        runtime.rehydrated_compaction_items = set()
+        runtime.skill_rehydration_sequence = 0
     event_sink_reset_ms = (time.perf_counter() - event_sink_reset_started_at) * 1000
     if on_provider_startup_event is not None:
         on_provider_startup_event("event_sink_reset_completed", {"event_sink_reset_ms": event_sink_reset_ms})
@@ -133,23 +147,32 @@ def execute_codex_app_server_turn(
             on_provider_turn_start_sent(enriched_metadata)
 
     turn_start_request_started_at = time.perf_counter()
-    turn_input = [
-        {"type": "text", "text": input_text},
-        *codex_skill_input_items(runtime.runtime_root, invoked_skills),
-    ]
-    turn = _send_request(
-        runtime,
-        "turn/start",
-        {
-            "threadId": provider_thread_id,
-            "input": turn_input,
-            "approvalPolicy": "never",
-            "sandboxPolicy": _turn_sandbox_policy(launch_spec),
-            "cwd": launch_spec.working_directory,
-        },
-        timeout=20.0,
-        on_sent=record_turn_start_sent if on_provider_startup_event is not None or on_provider_turn_start_sent is not None else None,
-    ).get("turn")
+    try:
+        turn = _send_request(
+            runtime,
+            "turn/start",
+            {
+                "threadId": provider_thread_id,
+                "input": turn_input,
+                "approvalPolicy": "never",
+                "sandboxPolicy": _turn_sandbox_policy(launch_spec),
+                "cwd": launch_spec.working_directory,
+            },
+            timeout=20.0,
+            on_sent=(
+                record_turn_start_sent
+                if on_provider_startup_event is not None or on_provider_turn_start_sent is not None
+                else None
+            ),
+        ).get("turn")
+    except Exception:
+        with runtime.event_lock:
+            runtime.current_event_sink = None
+        with runtime.skill_rehydration_lock:
+            runtime.current_invoked_skills = ()
+            runtime.rehydrated_compaction_items = set()
+            runtime.skill_rehydration_sequence = 0
+        raise
     turn_start_request_ack_ms = (
         time.perf_counter() - (turn_start_sent_at or turn_start_request_started_at)
     ) * 1000
@@ -234,6 +257,10 @@ def execute_codex_app_server_turn(
             runtime.emitted_structured_keys = set()
             runtime.current_error_text = None
             runtime.current_completion_received = False
+        with runtime.skill_rehydration_lock:
+            runtime.current_invoked_skills = ()
+            runtime.rehydrated_compaction_items = set()
+            runtime.skill_rehydration_sequence = 0
         with runtime.active_turn_lock:
             if runtime.current_provider_turn_id == provider_turn_id:
                 runtime.current_provider_turn_id = None

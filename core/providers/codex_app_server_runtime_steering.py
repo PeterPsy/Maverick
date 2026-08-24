@@ -12,7 +12,7 @@ from core.providers.codex_app_server_runtime_errors import (
 from core.providers.codex_app_server_runtime_state import _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
 from core.providers.models import RuntimeSteerResult
-from core.providers.codex_skill_inputs import codex_skill_input_items
+from core.providers.codex_skill_inputs import codex_provider_input_text, codex_skill_input_items
 from core.skills.models import SkillDefinition
 
 
@@ -26,6 +26,7 @@ def steer_codex_app_server_turn(
     client_message_id: str | None = None,
     expected_provider_turn_id: str | None = None,
     invoked_skills: list[SkillDefinition] | None = None,
+    skill_activation_mode: str = "implicit",
 ) -> RuntimeSteerResult:
     """Admit one user message into the live regular Codex turn."""
     with _RUNTIMES_LOCK:
@@ -53,7 +54,13 @@ def steer_codex_app_server_turn(
                 "threadId": provider_thread_id,
                 "expectedTurnId": expected_turn_id,
                 "input": [
-                    {"type": "text", "text": input_text},
+                    {
+                        "type": "text",
+                        "text": codex_provider_input_text(
+                            input_text,
+                            skill_activation_mode=skill_activation_mode,
+                        ),
+                    },
                     *codex_skill_input_items(runtime.runtime_root, invoked_skills),
                 ],
             }
@@ -106,6 +113,12 @@ def steer_codex_app_server_turn(
                 return RuntimeSteerResult(status="failed", provider_turn_id=actual_turn_id, reason=error.message)
 
             response_turn_id = str(result.get("turnId") or result.get("turn_id") or expected_turn_id).strip()
+            if invoked_skills:
+                with runtime.skill_rehydration_lock:
+                    skills_by_id = {skill.skill_id: skill for skill in runtime.current_invoked_skills}
+                    for skill in invoked_skills:
+                        skills_by_id[skill.skill_id] = skill
+                    runtime.current_invoked_skills = tuple(skills_by_id.values())
             return RuntimeSteerResult(status="steered", provider_turn_id=response_turn_id or expected_turn_id)
 
 

@@ -8,6 +8,7 @@ import subprocess
 import threading
 
 from core.runtime.execution_events import RuntimeExecutionEventSink
+from core.skills.models import SkillDefinition
 
 
 @dataclass
@@ -25,6 +26,7 @@ class _CodexAppServerRuntime:
     event_lock: threading.Lock = field(default_factory=threading.Lock)
     provider_thread_lock: threading.Lock = field(default_factory=threading.Lock)
     generated_system_skills_lock: threading.Lock = field(default_factory=threading.Lock)
+    skill_rehydration_lock: threading.Lock = field(default_factory=threading.Lock)
     response_waiters: dict[int, queue.Queue] = field(default_factory=dict)
     next_request_id: int = 1
     provider_thread_id: str | None = None
@@ -39,6 +41,9 @@ class _CodexAppServerRuntime:
     completion_queue: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=1))
     reader_thread: threading.Thread | None = None
     generated_system_skills_cleaned_home: str | None = None
+    current_invoked_skills: tuple[SkillDefinition, ...] = ()
+    rehydrated_compaction_items: set[str] = field(default_factory=set)
+    skill_rehydration_sequence: int = 0
 
 
 _RUNTIMES: dict[str, _CodexAppServerRuntime] = {}

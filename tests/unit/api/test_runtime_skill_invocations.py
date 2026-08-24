@@ -180,6 +180,56 @@ class RuntimeSkillInvocationApiTestCase(AppReferenceApiTestSupport, unittest.Tes
         self.assertEqual(captured["invoked_skill_ids"], ["storage-ops"])
         self.assertNotIn("path", captured)
 
+    def test_free_form_marker_without_ids_stays_visible_but_has_no_structured_activation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_skill(repo_root, "storage-ops", enabled=True)
+            state = self._state(repo_root)
+            session = create_runtime_session(
+                state.runtime_store,
+                session_id="skill-marker-only-session",
+                workspace_id="default",
+                agent_id="chat",
+                owner_user_id="user:admin",
+                skill_activation_mode="explicit",
+                start_path=repo_root,
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            captured: dict[str, object] = {}
+
+            def fake_submit(_state, **kwargs):
+                captured.update(kwargs)
+                now = datetime.now(tz=UTC)
+                return RuntimeTurnRecord(
+                    turn_id="turn-marker-only",
+                    session_id=session.session_id,
+                    workspace_id=session.workspace_id,
+                    status="queued",
+                    input_text=kwargs["input_text"],
+                    created_at=now,
+                    updated_at=now,
+                    started_at=None,
+                    completed_at=None,
+                    failure_reason=None,
+                    invoked_skill_ids=list(kwargs["invoked_skill_ids"]),
+                ), []
+
+            with patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=fake_submit):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path=f"/api/runtime/sessions/{session.session_id}/turns",
+                    method="POST",
+                    body={"input_text": "$storage-ops run", "async": True},
+                    cookie=cookie,
+                )
+
+        self.assertEqual(status, 202)
+        self.assertEqual(captured["input_text"], "$storage-ops run")
+        self.assertEqual(captured["invoked_skill_ids"], [])
+        self.assertEqual(payload["turn"]["input_text"], "$storage-ops run")
+        self.assertEqual(payload["turn"]["invoked_skill_ids"], [])
+
     def _state(self, repo_root):
         with patch.dict(
             "os.environ",

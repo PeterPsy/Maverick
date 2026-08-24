@@ -379,6 +379,7 @@ export type RuntimeSession = {
   status: string;
   effective_mode: string;
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
+  skill_ids?: string[];
   skill_catalog_app_id?: string | null;
   skill_activation_mode?: "implicit" | "explicit" | string;
   provider_id?: string;

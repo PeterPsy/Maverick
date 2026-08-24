@@ -235,8 +235,11 @@ rewriting or deleting historical runtime threads.
 
 The composer exposes one generic source-app tools button. Only the actionable
 Chat, Plan and Design modes are listed; informational capabilities without an
-end-to-end action are not advertised. Submit, cancel and retry still use the
-source app owner and its persisted runtime-session binding.
+end-to-end action are not advertised. Design Studio advertises structured
+skill invocation, forwards Chat's validated `invoked_skill_ids` into its
+generic runtime request, and creates new source-app sessions in `explicit`
+activation mode. Submit, cancel and retry still use the source app owner and
+its persisted runtime-session binding.
 
 ## SDK Flow
 

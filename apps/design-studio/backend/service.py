@@ -939,6 +939,7 @@ def _create_runtime_bridge_run(payload: dict[str, Any], body: dict[str, Any]) ->
         "project_id": project_id,
         "requested_mode": "sandbox",
         "system_prompt": _runtime_system_prompt(str(body.get("sessionMode") or "design")),
+        "skill_activation_mode": "explicit",
         "input_text": message,
         "project_root": {"scope": "app_data", "relative_path": project_root},
         "callback": {
@@ -954,6 +955,9 @@ def _create_runtime_bridge_run(payload: dict[str, Any], body: dict[str, Any]) ->
     app_references = body.get("appReferences")
     if isinstance(app_references, list):
         runtime_request["app_references"] = app_references
+    invoked_skill_ids = body.get("invokedSkillIds")
+    if isinstance(invoked_skill_ids, list):
+        runtime_request["invoked_skill_ids"] = invoked_skill_ids
     return {
         "status_code": 202,
         "json": response,
@@ -1071,6 +1075,7 @@ def chat_capabilities(payload: dict[str, Any]) -> dict[str, Any]:
         "source_app_id": str(payload.get("app_id") or "design-studio"),
         "label": "OpenDesign",
         "modes": ["chat", "plan", "design"],
+        "supports_skill_invocations": True,
     }
 
 
@@ -1203,6 +1208,7 @@ def chat_submit_turn(payload: dict[str, Any], arguments: dict[str, Any]) -> dict
             "resultVisibility": "public",
             "attachments": arguments.get("attachments"),
             "appReferences": arguments.get("app_references"),
+            "invokedSkillIds": arguments.get("invoked_skill_ids"),
         },
     )
     bridge_json = bridge.get("json") if isinstance(bridge.get("json"), dict) else {}

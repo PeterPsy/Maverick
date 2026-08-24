@@ -1219,6 +1219,7 @@ export function useMessageSubmission({
             attachments: message.attachments,
             clientMessageId: message.clientMessageId,
             inputText: message.content,
+            invokedSkillIds: message.invokedSkillIds,
             mode: sourceAppChatMode,
             projectId,
             runtimeSessionId: thread?.runtime_session_id || undefined,

@@ -120,7 +120,20 @@ class InterAgentRuntimeServiceTest(unittest.TestCase):
         now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
         runtime_store.save_session(self._runtime_session("root-session", repo_root=repo_root))
         runtime_store.save_state(self._runtime_state("root-session"))
-        run = service.create_run(_run_spec(idempotency_key="send-message"), now=now)
+        run = service.create_run(
+            _run_spec(
+                idempotency_key="send-message",
+                researcher_snapshot=AgentParticipantSnapshot(
+                    agent_type_id="research-agent",
+                    label="Researcher",
+                    system_prompt="Use Storage when needed.",
+                    skill_ids=["storage-ops"],
+                    skill_catalog_app_id="skills",
+                    skill_activation_mode="explicit",
+                ),
+            ),
+            now=now,
+        )
         participant, child, _created = service.spawn_participant_runtime_session(
             runtime_store,
             workspace_id="default",
@@ -152,7 +165,7 @@ class InterAgentRuntimeServiceTest(unittest.TestCase):
             created_at=now,
         )
 
-        with patch("core.inter_agent.service.submit_runtime_turn", return_value=(turn, [event])):
+        with patch("core.inter_agent.service.submit_runtime_turn", return_value=(turn, [event])) as submit:
             sent_participant, sent_turn, events = service.send_runtime_message(
                 _state(runtime_store),
                 workspace_id="default",
@@ -167,6 +180,7 @@ class InterAgentRuntimeServiceTest(unittest.TestCase):
         self.assertEqual(sent_turn.turn_id, "turn-1")
         self.assertEqual(events, [event])
         self.assertIn("inter_agent.message.sent", [item.event_type for item in page.events])
+        self.assertEqual(submit.call_args.kwargs["invoked_skill_ids"], ["storage-ops"])
 
     def test_send_runtime_message_enforces_total_turn_budget(self) -> None:
         repo_root = make_temp_repo_root(self)

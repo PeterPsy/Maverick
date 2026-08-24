@@ -28,6 +28,7 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
                 session_id="session-explicit-skill",
                 workspace_id="default",
                 runtime_root=str(runtime_root),
+                skill_activation_mode="explicit",
             )
             launch_spec = RuntimeBackendLaunchSpec(
                 provider_id="codex",
@@ -81,7 +82,7 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
         self.assertEqual(
             captured["input"],
             [
-                {"type": "text", "text": "$storage-ops list files"},
+                {"type": "text", "text": "＄storage-ops list files"},
                 {"type": "skill", "name": "storage-ops", "path": str(skill_file.resolve())},
             ],
         )

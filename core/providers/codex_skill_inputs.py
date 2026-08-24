@@ -8,6 +8,48 @@ from core.providers.errors import ProviderLaunchError
 from core.skills.models import SkillDefinition
 
 
+_CODEX_SKILL_MENTION_CHARACTERS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:-"
+)
+_CODEX_COMMON_ENV_VARS = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "SHELL",
+        "PWD",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "LANG",
+        "TERM",
+        "XDG_CONFIG_HOME",
+    }
+)
+_NEUTRALIZED_DOLLAR_SIGN = "＄"
+
+
+def codex_provider_input_text(input_text: str, *, skill_activation_mode: object) -> str:
+    """Prevent Codex from deriving explicit skill activation from free-form text."""
+    text = str(input_text or "")
+    if str(skill_activation_mode or "implicit").strip().lower() != "explicit":
+        return text
+    characters = list(text)
+    index = 0
+    while index < len(characters) - 1:
+        if characters[index] != "$" or characters[index + 1] not in _CODEX_SKILL_MENTION_CHARACTERS:
+            index += 1
+            continue
+        name_end = index + 2
+        while name_end < len(characters) and characters[name_end] in _CODEX_SKILL_MENTION_CHARACTERS:
+            name_end += 1
+        mention_name = "".join(characters[index + 1 : name_end])
+        if mention_name.upper() not in _CODEX_COMMON_ENV_VARS:
+            characters[index] = _NEUTRALIZED_DOLLAR_SIGN
+        index = name_end
+    return "".join(characters)
+
+
 def codex_skill_input_items(
     runtime_root: str | Path,
     invoked_skills: list[SkillDefinition] | None,
@@ -60,4 +102,4 @@ def _safe_skill_parts(skill_id: str) -> tuple[str, ...]:
     return parts
 
 
-__all__ = ["codex_skill_input_items"]
+__all__ = ["codex_provider_input_text", "codex_skill_input_items"]

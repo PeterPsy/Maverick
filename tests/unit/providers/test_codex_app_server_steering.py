@@ -45,16 +45,18 @@ class CodexAppServerSteeringTestCase(unittest.TestCase):
                     input_text="$storage-ops continue",
                     expected_provider_turn_id="provider-turn-1",
                     invoked_skills=[invoked_skill],
+                    skill_activation_mode="explicit",
                 )
 
         self.assertEqual(result.status, "steered")
         self.assertEqual(
             send_request.call_args.args[2]["input"],
             [
-                {"type": "text", "text": "$storage-ops continue"},
+                {"type": "text", "text": "＄storage-ops continue"},
                 {"type": "skill", "name": "storage-ops", "path": str(skill_file.resolve())},
             ],
         )
+        self.assertEqual([skill.skill_id for skill in runtime.current_invoked_skills], ["storage-ops"])
 
     def tearDown(self) -> None:
         for session_id in (

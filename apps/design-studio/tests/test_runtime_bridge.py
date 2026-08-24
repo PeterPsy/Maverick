@@ -62,6 +62,7 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
         capabilities = service.chat_capabilities(payload)
         self.assertEqual(capabilities["source_app_id"], "mounted-design-studio")
         self.assertEqual(capabilities["modes"], ["chat", "plan", "design"])
+        self.assertTrue(capabilities["supports_skill_invocations"])
         self.assertNotIn("supported", capabilities)
         self.assertNotIn("unavailable", capabilities)
 
@@ -661,6 +662,7 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                         "od_conversation_id": "od_conversation_chat",
                         "input_text": "Build the hero",
                         "client_message_id": "client-floating-chat",
+                        "invoked_skill_ids": ["storage-ops"],
                         "session_mode": "plan",
                         "attachments": [
                             {
@@ -678,6 +680,8 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
             request = result["runtime_session_requests"][0]
             self.assertEqual(request["result_visibility"], "public")
             self.assertEqual(request["attachments"][0]["workspace_relative_path"], "storage/uploaded/reference.png")
+            self.assertEqual(request["invoked_skill_ids"], ["storage-ops"])
+            self.assertEqual(request["skill_activation_mode"], "explicit")
             self.assertIn("session mode is plan", request["system_prompt"])
             self.assertEqual(result["json"]["source_app_id"], "design-studio")
             self.assertEqual(result["json"]["od_conversation_id"], "od_conversation_chat")

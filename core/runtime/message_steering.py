@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
-from core.providers.errors import ProviderError
+from core.providers.errors import ProviderError, ProviderLaunchError
 from core.providers.service import resolve_runtime_backend_for_session
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.message_admission import runtime_message_admission_handoff
@@ -156,6 +156,7 @@ def _attempt_runtime_message_steer_locked(
                 client_message_id=normalized_client_message_id,
                 expected_provider_turn_id=expected_provider_turn_id,
                 invoked_skills=invoked_skills,
+                skill_activation_mode=session.skill_activation_mode,
             )
         else:
             provider_result = runtime_adapter.steer_turn(
@@ -163,7 +164,11 @@ def _attempt_runtime_message_steer_locked(
                 input_text=provider_input,
                 client_message_id=normalized_client_message_id,
                 expected_provider_turn_id=expected_provider_turn_id,
+                skill_activation_mode=session.skill_activation_mode,
             )
+    except ProviderLaunchError:
+        _release_claim(state, claim)
+        return RuntimeMessageSteerAttempt(status="fallback", reason="provider_input_not_dispatched")
     except Exception:
         return RuntimeMessageSteerAttempt(
             status="delivery_uncertain",

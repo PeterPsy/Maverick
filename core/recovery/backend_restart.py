@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -20,6 +21,7 @@ from core.runtime.turn_terminalization import (
     drain_runtime_turn_terminalization,
     migrate_legacy_cancelled_turn_terminalization,
 )
+from core.skills.service import SkillInvocationError
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -105,6 +107,8 @@ def recover_interrupted_runtime_turns_after_backend_restart(
             continue
         recovered += 1
         should_queue_resume = False
+        resume_source_turn: RuntimeTurnRecord | None = None
+        resume_source_rank: tuple[int, datetime, str] | None = None
         resume_attempts = _backend_restart_resume_attempt_count(session_events)
         has_app_stream = state.runtime_store.has_nonterminal_app_stream_for_session(
             workspace_id=session.workspace_id,
@@ -195,6 +199,11 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 updated.status == "failed"
                 and recovery_action in {"automatic_resume_turn", "retry_resume_turn"}
             )
+            if updated.status == "failed" and recovery_action in {"automatic_resume_turn", "retry_resume_turn"}:
+                candidate_rank = (1 if turn.status == "active" else 0, turn.updated_at, turn.turn_id)
+                if resume_source_rank is None or candidate_rank > resume_source_rank:
+                    resume_source_turn = updated
+                    resume_source_rank = candidate_rank
         if not should_queue_resume:
             continue
         try:
@@ -203,6 +212,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 session=state.runtime_store.get_session(session.session_id),
                 input_text=BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
                 client_message_id=f"{RESUME_CLIENT_MESSAGE_ID_PREFIX}{session.session_id}:{uuid4()}",
+                invoked_skill_ids=list(resume_source_turn.invoked_skill_ids) if resume_source_turn is not None else [],
                 on_queued=lambda queued_turn, _events, session_id=session.session_id: dispatch_source_app_runtime_event(
                     state,
                     session=state.runtime_store.get_session(session_id),
@@ -210,7 +220,15 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                     event_type="runtime.turn.queued",
                 ),
             )
-        except ProviderError as error:
+        except (ProviderError, SkillInvocationError) as error:
+            if isinstance(error, SkillInvocationError):
+                blocked_reason = error.reason_code
+            else:
+                blocked_reason = (
+                    "no_provider_configured"
+                    if str(error) == "no_provider_configured"
+                    else "provider_unavailable"
+                )
             record_runtime_event(
                 state.runtime_store,
                 event_id=str(uuid4()),
@@ -219,7 +237,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 event_type="runtime.recovery.resume_blocked",
                 payload={
                     "reason": "backend_restart",
-                    "blocked_reason": "no_provider_configured" if str(error) == "no_provider_configured" else "provider_unavailable",
+                    "blocked_reason": blocked_reason,
                     "detail": str(error),
                 },
                 event_bus=state.runtime_event_bus,
@@ -232,7 +250,11 @@ def recover_interrupted_runtime_turns_after_backend_restart(
             session_id=session.session_id,
             plane="runtime",
             event_type="runtime.recovery.resume_queued",
-            payload={"reason": "backend_restart", "input_text": BACKEND_RESTART_CONTINUATION_INPUT_TEXT},
+            payload={
+                "reason": "backend_restart",
+                "input_text": BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
+                "invoked_skill_ids": list(resume_source_turn.invoked_skill_ids) if resume_source_turn is not None else [],
+            },
             event_bus=state.runtime_event_bus,
         )
     for workspace in state.workspace_store.list_workspaces():

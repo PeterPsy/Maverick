@@ -174,6 +174,29 @@ class CodexProviderAdapter(
     adapter_version = "2"
     synchronizes_runtime_skills = True
 
+    @property
+    def artifact_components(self) -> tuple[object, ...]:
+        """Return every Codex-specific module that can affect runtime behavior."""
+        from importlib import import_module
+
+        return tuple(
+            import_module(module_name)
+            for module_name in (
+                "core.providers.codex_app_server_runtime",
+                "core.providers.codex_app_server_runtime_errors",
+                "core.providers.codex_app_server_runtime_notifications",
+                "core.providers.codex_app_server_runtime_process",
+                "core.providers.codex_app_server_runtime_protocol",
+                "core.providers.codex_app_server_runtime_state",
+                "core.providers.codex_app_server_runtime_steering",
+                "core.providers.codex_app_server_runtime_thread",
+                "core.providers.codex_app_server_runtime_transport",
+                "core.providers.codex_app_server_skill_rehydration",
+                "core.providers.codex_skill_inputs",
+                "core.providers.provider_legacy_agentic_bridge",
+            )
+        )
+
     def __init__(
         self,
         *,

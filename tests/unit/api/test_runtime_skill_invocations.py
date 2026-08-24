@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.providers.agentic_profiles import build_pinned_execution_binding
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
@@ -144,7 +145,15 @@ class RuntimeSkillInvocationApiTestCase(AppReferenceApiTestSupport, unittest.Tes
                 owner_user_id="user:admin",
                 skill_ids=["storage-ops"],
                 skill_activation_mode="explicit",
+                requested_mode="sandbox",
                 start_path=repo_root,
+                execution_binding=build_pinned_execution_binding(
+                    state.provider_store,
+                    state.provider_registry,
+                    session_id="skill-session",
+                    workspace_id="default",
+                    execution_mode="sandbox",
+                ),
             )
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
@@ -192,7 +201,15 @@ class RuntimeSkillInvocationApiTestCase(AppReferenceApiTestSupport, unittest.Tes
                 agent_id="chat",
                 owner_user_id="user:admin",
                 skill_activation_mode="explicit",
+                requested_mode="sandbox",
                 start_path=repo_root,
+                execution_binding=build_pinned_execution_binding(
+                    state.provider_store,
+                    state.provider_registry,
+                    session_id="skill-marker-only-session",
+                    workspace_id="default",
+                    execution_mode="sandbox",
+                ),
             )
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)

@@ -17,6 +17,49 @@ from core.skills.models import SkillDefinition
 
 
 class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
+    def test_resume_rejection_never_starts_a_replacement_thread(self) -> None:
+        runtime = runtime_process._CodexAppServerRuntime(
+            session_id="session-resume-failure",
+            workspace_id="default",
+            runtime_root="/tmp/runtime-resume-failure",
+            process=SimpleNamespace(pid=123, poll=lambda: None),
+        )
+        session = SimpleNamespace(
+            session_id=runtime.session_id,
+            workspace_id=runtime.workspace_id,
+            runtime_root=runtime.runtime_root,
+            provider_thread_id="provider-thread-existing",
+            system_prompt="",
+        )
+        launch_spec = RuntimeBackendLaunchSpec(
+            provider_id="codex",
+            command=["codex", "app-server"],
+            env_overrides={},
+            credential_binding_id=None,
+            resolved_secret_refs=[],
+            working_directory="/tmp",
+            execution_mode="sandbox",
+            readable_roots=[],
+            writable_roots=[],
+        )
+
+        with patch.object(
+            runtime_thread,
+            "_send_request",
+            side_effect=RuntimeError("resume rejected"),
+        ) as send_request:
+            with self.assertRaisesRegex(RuntimeError, "resume rejected"):
+                runtime_thread._ensure_provider_thread(
+                    runtime=runtime,
+                    session=session,
+                    launch_spec=launch_spec,
+                    on_provider_thread_id=None,
+                )
+
+        send_request.assert_called_once()
+        self.assertEqual(send_request.call_args.args[1], "thread/resume")
+        self.assertIsNone(runtime.provider_thread_id)
+
     def test_turn_start_sends_text_and_structured_skill_input(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             runtime_root = Path(temp_dir) / "runtime"

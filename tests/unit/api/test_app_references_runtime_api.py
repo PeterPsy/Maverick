@@ -9,6 +9,7 @@ from core.api import app_reference_payloads
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.service import install_store_app, register_app_source_from_contract
+from core.providers.agentic_profiles import build_pinned_execution_binding
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
@@ -33,7 +34,15 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 workspace_id="default",
                 agent_id="chat",
                 owner_user_id="user:admin",
+                requested_mode="sandbox",
                 start_path=repo_root,
+                execution_binding=build_pinned_execution_binding(
+                    state.provider_store,
+                    state.provider_registry,
+                    session_id="sess-empty-refs",
+                    workspace_id="default",
+                    execution_mode="sandbox",
+                ),
             )
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
@@ -90,7 +99,15 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 session_id="sess-1",
                 workspace_id="default",
                 agent_id="chat",
+                requested_mode="sandbox",
                 start_path=repo_root,
+                execution_binding=build_pinned_execution_binding(
+                    state.provider_store,
+                    state.provider_registry,
+                    session_id="sess-1",
+                    workspace_id="default",
+                    execution_mode="sandbox",
+                ),
             )
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)

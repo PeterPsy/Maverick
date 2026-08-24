@@ -155,6 +155,7 @@ export type ProviderModelOption = {
 export type ProviderModelSettings = {
   selected_model_id: string | null;
   selected_reasoning_effort: string | null;
+  default_reasoning_effort?: string | null;
   available_models: ProviderModelOption[];
 };
 
@@ -174,6 +175,9 @@ export type RuntimeSessionItem = {
   updated_at?: string | null;
   ended_at?: string | null;
   last_progress_at: string | null;
+  predecessor_session_id?: string | null;
+  lineage_root_session_id?: string | null;
+  continuation_successor_session_id?: string | null;
 };
 
 export type RuntimeThreadItem = {

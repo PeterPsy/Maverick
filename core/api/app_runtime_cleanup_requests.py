@@ -41,7 +41,6 @@ def apply_runtime_cleanup_requests(
     if not cleanup_allowed:
         raise AppHostingError(f"App `{app_id}` requested runtime cleanup without declaring runtime.cleanup_sessions.")
 
-    from core.api.runtime_cleanup import cleanup_runtime_session
     from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 
     cleanup_results: list[dict[str, object]] = []
@@ -117,17 +116,21 @@ def apply_runtime_cleanup_requests(
                 user=user,
                 session_id=session_id,
             )
-        for session_id in session_ids:
-            if session_id in seen_session_ids:
-                continue
-            seen_session_ids.add(session_id)
-            cleanup = cleanup_runtime_session(
+        pending_session_ids = [
+            session_id
+            for session_id in session_ids
+            if session_id not in seen_session_ids
+        ]
+        if pending_session_ids:
+            batch_cleanup = cleanup_runtime_sessions_batch(
                 state,
-                session_id=session_id,
+                session_ids=pending_session_ids,
+                workspace_id=workspace_id,
                 reason=reason,
                 start_path=start_path,
             )
-            cleanup_results.append(cleanup)
+            cleanup_results.extend(batch_cleanup["session_results"])
+            seen_session_ids.update(batch_cleanup["expanded_session_ids"])
     if deleted_thread_ids:
         _publish_runtime_threads_deleted(
             state,

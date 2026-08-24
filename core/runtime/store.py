@@ -35,6 +35,11 @@ from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_process import RuntimeProcessRecord
 from core.runtime.provider_state import RuntimeProviderState, runtime_provider_state_from_document
+from core.runtime.continuation_handoff import (
+    RuntimeContinuationHandoff,
+    continuation_handoff_phase_index,
+    runtime_continuation_handoff_from_document,
+)
 from core.runtime.runtime_session import RuntimeApiTokenRecord, RuntimeSessionRecord, runtime_session_allows_user_thread, runtime_session_from_document
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
@@ -164,6 +169,7 @@ class RuntimeCollections:
     tool_invocations: DocumentCollection | None = None
     tool_confirmation_grants: DocumentCollection | None = None
     egress_decisions: DocumentCollection | None = None
+    continuation_handoffs: DocumentCollection | None = None
 
 
 class RuntimeStore(Protocol):
@@ -390,6 +396,35 @@ class RuntimeStore(Protocol):
     def initialize_provider_state(self, record: RuntimeProviderState) -> RuntimeProviderState:
         ...
 
+    def initialize_continuation_handoff(
+        self, record: RuntimeContinuationHandoff
+    ) -> RuntimeContinuationHandoff:
+        ...
+
+    def get_continuation_handoff(self, handoff_id: str) -> RuntimeContinuationHandoff:
+        ...
+
+    def get_continuation_handoff_by_predecessor(
+        self, *, workspace_id: str, predecessor_session_id: str
+    ) -> RuntimeContinuationHandoff | None:
+        ...
+
+    def update_continuation_handoff(
+        self, record: RuntimeContinuationHandoff, *, expected_revision: int
+    ) -> RuntimeContinuationHandoff:
+        ...
+
+    def link_continuation_successor(
+        self,
+        *,
+        workspace_id: str,
+        predecessor_session_id: str,
+        successor_session_id: str,
+        handoff_id: str,
+        now: datetime,
+    ) -> RuntimeSessionRecord:
+        ...
+
     def get_provider_state(self, session_id: str) -> RuntimeProviderState:
         ...
 
@@ -398,6 +433,17 @@ class RuntimeStore(Protocol):
         record: RuntimeProviderState,
         *,
         expected_revision: int,
+    ) -> RuntimeProviderState:
+        ...
+
+    def fence_provider_state_for_continuation(
+        self,
+        *,
+        session_id: str,
+        expected_revision: int,
+        handoff_id: str,
+        successor_session_id: str,
+        now: datetime,
     ) -> RuntimeProviderState:
         ...
 
@@ -452,6 +498,17 @@ class RuntimeStore(Protocol):
         ...
 
     def save_thread(self, record: RuntimeThreadRecord) -> RuntimeThreadRecord:
+        ...
+
+    def rebind_runtime_thread_session(
+        self,
+        *,
+        workspace_id: str,
+        thread_id: str,
+        predecessor_session_id: str,
+        successor_session_id: str,
+        now: datetime,
+    ) -> RuntimeThreadRecord:
         ...
 
     def get_thread(self, thread_id: str) -> RuntimeThreadRecord:
@@ -596,6 +653,7 @@ class RuntimeDocumentStore:
         self._tool_invocations = collections.tool_invocations or InMemoryCollection()
         self._tool_confirmation_grants = collections.tool_confirmation_grants or InMemoryCollection()
         self._egress_decisions = collections.egress_decisions or InMemoryCollection()
+        self._continuation_handoffs = collections.continuation_handoffs or InMemoryCollection()
         self._fallback_lock = RLock()
         self._partition_index_lock = RLock()
         self._session_workspace_index: dict[str, str] = {}
@@ -617,7 +675,8 @@ class RuntimeDocumentStore:
         identity = {"session_id": record.session_id, "workspace_id": record.workspace_id}
         existing_document = self.collections.sessions.find_one(identity)
         if existing_document is not None:
-            existing_binding = runtime_session_from_document(existing_document).execution_binding
+            existing_session = runtime_session_from_document(existing_document)
+            existing_binding = existing_session.execution_binding
             binding_changed = existing_binding != record.execution_binding
             legacy_migration = (
                 existing_binding is None
@@ -627,6 +686,20 @@ class RuntimeDocumentStore:
             if binding_changed and not legacy_migration:
                 raise RuntimeProviderStateError(
                     f"Runtime session `{record.session_id}` execution binding is immutable."
+                )
+            immutable_lineage_fields = (
+                "predecessor_session_id",
+                "lineage_root_session_id",
+                "continuation_handoff_id",
+                "continuation_fork_reason",
+                "continuation_successor_session_id",
+            )
+            if any(
+                getattr(existing_session, field_name) != getattr(record, field_name)
+                for field_name in immutable_lineage_fields
+            ):
+                raise RuntimeProviderStateError(
+                    f"Runtime session `{record.session_id}` continuation lineage is immutable."
                 )
         payload = asdict(record)
         # Mutable provider continuation metadata is authoritative only in
@@ -984,6 +1057,18 @@ class RuntimeDocumentStore:
             )
             for session_id, count in counts.items():
                 deleted[session_id][name] = count
+        normalized_id_set = set(normalized_ids)
+        for document in self._continuation_handoffs.find({}):
+            predecessor_id = str(document.get("predecessor_session_id") or "").strip()
+            successor_id = str(document.get("successor_session_id") or "").strip()
+            matched_ids = normalized_id_set.intersection({predecessor_id, successor_id})
+            if not matched_ids:
+                continue
+            self._continuation_handoffs.delete_one(
+                {"handoff_id": document.get("handoff_id")}
+            )
+            for matched_id in matched_ids:
+                deleted[matched_id]["continuation_handoffs"] += 1
         session_counts = _delete_session_record_batch(
             self.collections.sessions,
             session_ids=normalized_ids,
@@ -2165,6 +2250,140 @@ class RuntimeDocumentStore:
         self._remember_session_partition(record.session_id, record.workspace_id)
         return existing
 
+    def initialize_continuation_handoff(
+        self, record: RuntimeContinuationHandoff
+    ) -> RuntimeContinuationHandoff:
+        """Insert one immutable-identity continuation handoff exactly once."""
+        if record.revision != 0 or record.phase != "planned":
+            raise RuntimeProviderStateError(
+                "Initial runtime continuation handoff must be planned at revision zero."
+            )
+        document, inserted = self._insert_one_if_absent(
+            self._continuation_handoffs,
+            {
+                "workspace_id": record.workspace_id,
+                "predecessor_session_id": record.predecessor_session_id,
+            },
+            asdict(record),
+        )
+        existing = runtime_continuation_handoff_from_document(document)
+        if not inserted and existing != record:
+            raise RuntimeProviderStateError("runtime_continuation_handoff_conflict")
+        return existing
+
+    def get_continuation_handoff(self, handoff_id: str) -> RuntimeContinuationHandoff:
+        document = self._continuation_handoffs.find_one({"handoff_id": handoff_id})
+        if document is None:
+            raise RuntimeProviderStateError(
+                f"Runtime continuation handoff `{handoff_id}` was not found."
+            )
+        return runtime_continuation_handoff_from_document(document)
+
+    def get_continuation_handoff_by_predecessor(
+        self, *, workspace_id: str, predecessor_session_id: str
+    ) -> RuntimeContinuationHandoff | None:
+        document = self._continuation_handoffs.find_one(
+            {
+                "workspace_id": workspace_id,
+                "predecessor_session_id": predecessor_session_id,
+            }
+        )
+        return (
+            None
+            if document is None
+            else runtime_continuation_handoff_from_document(document)
+        )
+
+    def update_continuation_handoff(
+        self, record: RuntimeContinuationHandoff, *, expected_revision: int
+    ) -> RuntimeContinuationHandoff:
+        if record.revision != expected_revision + 1:
+            raise RuntimeProviderStateError(
+                "Runtime continuation handoff revision must advance by one."
+            )
+        current = self.get_continuation_handoff(record.handoff_id)
+        immutable_fields = (
+            "handoff_id",
+            "workspace_id",
+            "predecessor_session_id",
+            "successor_session_id",
+            "reason_code",
+            "source_detail_code",
+            "source_binding_digest",
+            "target_binding_digest",
+            "source_provider_state_revision",
+            "source_provider_state_digest",
+            "compatible_capabilities",
+            "compatibility_digest",
+            "target_execution_binding",
+            "created_at",
+        )
+        if any(getattr(current, name) != getattr(record, name) for name in immutable_fields):
+            raise RuntimeProviderStateError(
+                "Runtime continuation handoff identity and evidence are immutable."
+            )
+        if continuation_handoff_phase_index(record.phase) != (
+            continuation_handoff_phase_index(current.phase) + 1
+        ):
+            raise RuntimeProviderStateError(
+                "Runtime continuation handoff phase must advance exactly once."
+            )
+        applied = self._continuation_handoffs.compare_and_set(
+            {
+                "handoff_id": record.handoff_id,
+                "workspace_id": record.workspace_id,
+                "revision": expected_revision,
+            },
+            {"$set": asdict(record)},
+        )
+        if not applied:
+            raise RuntimeProviderStateError("runtime_continuation_handoff_revision_conflict")
+        return record
+
+    def link_continuation_successor(
+        self,
+        *,
+        workspace_id: str,
+        predecessor_session_id: str,
+        successor_session_id: str,
+        handoff_id: str,
+        now: datetime,
+    ) -> RuntimeSessionRecord:
+        """Fence a predecessor with one immutable successor pointer through CAS."""
+        predecessor = self.get_session(predecessor_session_id)
+        if predecessor.workspace_id != workspace_id:
+            raise RuntimeProviderStateError("runtime_continuation_workspace_mismatch")
+        successor = self.get_session(successor_session_id)
+        if (
+            successor.workspace_id != workspace_id
+            or successor.predecessor_session_id != predecessor_session_id
+            or successor.continuation_handoff_id != handoff_id
+        ):
+            raise RuntimeProviderStateError("runtime_continuation_successor_mismatch")
+        if predecessor.continuation_successor_session_id == successor_session_id:
+            return predecessor
+        if predecessor.continuation_successor_session_id is not None:
+            raise RuntimeProviderStateError("runtime_continuation_successor_conflict")
+        applied = self.collections.sessions.compare_and_set(
+            {
+                "session_id": predecessor_session_id,
+                "workspace_id": workspace_id,
+                "continuation_successor_session_id": None,
+            },
+            {
+                "$set": {
+                    "continuation_successor_session_id": successor_session_id,
+                    "updated_at": now,
+                }
+            },
+        )
+        if not applied:
+            current = self.get_session(predecessor_session_id)
+            if current.continuation_successor_session_id != successor_session_id:
+                raise RuntimeProviderStateError("runtime_continuation_successor_conflict")
+            return current
+        return self.get_session(predecessor_session_id)
+
     def get_provider_state(self, session_id: str) -> RuntimeProviderState:
         """Read the mutable provider state for one runtime session."""
         query = self._session_query(session_id)
@@ -2191,6 +2410,8 @@ class RuntimeDocumentStore:
                 "Runtime provider state updates must advance the expected revision by exactly one."
             )
         current = self.get_provider_state(record.session_id)
+        if current.continuation_handoff_id is not None:
+            raise RuntimeProviderStateError("runtime_continuation_predecessor_fenced")
         if (
             current.workspace_id != record.workspace_id
             or current.runtime_engine_id != record.runtime_engine_id
@@ -2211,9 +2432,95 @@ class RuntimeDocumentStore:
             )
         return record
 
+    def fence_provider_state_for_continuation(
+        self,
+        *,
+        session_id: str,
+        expected_revision: int,
+        handoff_id: str,
+        successor_session_id: str,
+        now: datetime,
+    ) -> RuntimeProviderState:
+        """CAS-fence provider metadata before transferring its continuation ids."""
+        current = self.get_provider_state(session_id)
+        if (
+            current.continuation_handoff_id == handoff_id
+            and current.continuation_successor_session_id == successor_session_id
+        ):
+            return current
+        if current.continuation_handoff_id is not None:
+            raise RuntimeProviderStateError("runtime_continuation_provider_state_fence_conflict")
+        if current.revision != expected_revision:
+            raise RuntimeProviderStateError("runtime_continuation_provider_state_changed")
+        updated = replace(
+            current,
+            revision=current.revision + 1,
+            updated_at=now,
+            continuation_handoff_id=handoff_id,
+            continuation_successor_session_id=successor_session_id,
+        )
+        applied = self._provider_states.compare_and_set(
+            {
+                "session_id": current.session_id,
+                "workspace_id": current.workspace_id,
+                "revision": expected_revision,
+                "continuation_handoff_id": None,
+            },
+            {"$set": asdict(updated)},
+        )
+        if not applied:
+            latest = self.get_provider_state(session_id)
+            if (
+                latest.continuation_handoff_id == handoff_id
+                and latest.continuation_successor_session_id == successor_session_id
+            ):
+                return latest
+            raise RuntimeProviderStateError("runtime_continuation_provider_state_fence_conflict")
+        return updated
+
     def save_thread(self, record: RuntimeThreadRecord) -> RuntimeThreadRecord:
         self.collections.threads.update_one({"thread_id": record.thread_id}, {"$set": asdict(record)}, upsert=True)
         return record
+
+    def rebind_runtime_thread_session(
+        self,
+        *,
+        workspace_id: str,
+        thread_id: str,
+        predecessor_session_id: str,
+        successor_session_id: str,
+        now: datetime,
+    ) -> RuntimeThreadRecord:
+        """Move one logical thread pointer to its continuation through CAS."""
+        thread = self.get_thread(thread_id)
+        if thread.workspace_id != workspace_id:
+            raise RuntimeThreadNotFoundError(
+                f"Runtime thread `{thread_id}` was not found in workspace `{workspace_id}`."
+            )
+        if thread.runtime_session_id == successor_session_id:
+            return thread
+        if thread.runtime_session_id != predecessor_session_id:
+            raise RuntimeProviderStateError("runtime_continuation_thread_conflict")
+        applied = self.collections.threads.compare_and_set(
+            {
+                "workspace_id": workspace_id,
+                "thread_id": thread_id,
+                "runtime_session_id": predecessor_session_id,
+            },
+            {
+                "$set": {
+                    "runtime_session_id": successor_session_id,
+                    "availability": "free",
+                    "updated_at": now,
+                }
+            },
+        )
+        if not applied:
+            current = self.get_thread(thread_id)
+            if current.runtime_session_id != successor_session_id:
+                raise RuntimeProviderStateError("runtime_continuation_thread_conflict")
+            return current
+        return self.get_thread(thread_id)
 
     def get_thread(self, thread_id: str) -> RuntimeThreadRecord:
         document = self.collections.threads.find_one({"thread_id": thread_id})
@@ -2404,6 +2711,7 @@ def _empty_session_deletion_counts() -> dict[str, int]:
         "tool_invocations": 0,
         "tool_confirmation_grants": 0,
         "egress_decisions": 0,
+        "continuation_handoffs": 0,
     }
 
 

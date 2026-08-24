@@ -10,6 +10,7 @@ from unittest.mock import patch
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.identity.service import create_user
+from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.service import create_runtime_session
 from core.runtime.turn_submission_service_queue import _queue_turn_with_event
 from core.workspaces.service import ensure_workspace_membership
@@ -17,6 +18,209 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_existing_session_retry_reuses_predecessor_turn_after_continuation_fork(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            predecessor = create_runtime_session(
+                state.runtime_store,
+                session_id="retry-lineage-predecessor",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                owner_user_id="user:admin",
+                governance=state.workspace_store.get_governance("default"),
+                platform_allows_full_access=True,
+                start_path=repo_root,
+            )
+            with patch(
+                "core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation"
+            ):
+                original_turn, _events = _queue_turn_with_event(
+                    state,
+                    session=predecessor,
+                    input_text="persist once",
+                    provider_id="codex",
+                    client_message_id="retry-across-fork",
+                    attachments=[],
+                    app_references=[],
+                )
+            successor = create_runtime_session(
+                state.runtime_store,
+                session_id="retry-lineage-successor",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                owner_user_id="user:admin",
+                predecessor_session_id=predecessor.session_id,
+                lineage_root_session_id=predecessor.session_id,
+                continuation_handoff_id="retry-lineage-handoff",
+                governance=state.workspace_store.get_governance("default"),
+                platform_allows_full_access=True,
+                start_path=repo_root,
+            )
+            state.runtime_store.link_continuation_successor(
+                workspace_id="default",
+                predecessor_session_id=predecessor.session_id,
+                successor_session_id=successor.session_id,
+                handoff_id="retry-lineage-handoff",
+                now=datetime.now(tz=UTC),
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch(
+                "core.api.runtime_api.submit_runtime_turn_async",
+                side_effect=AssertionError("lineage retry must not queue"),
+            ):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path=f"/api/runtime/sessions/{predecessor.session_id}/turns",
+                    method="POST",
+                    body={
+                        "input_text": "persist once",
+                        "client_message_id": "retry-across-fork",
+                        "async": True,
+                    },
+                    cookie=cookie,
+                )
+            successor_turns = state.runtime_store.list_turns(successor.session_id)
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["session"]["session_id"], successor.session_id)
+        self.assertEqual(payload["turn"]["turn_id"], original_turn.turn_id)
+        self.assertEqual(successor_turns, [])
+
+    def test_session_cleanup_via_predecessor_removes_complete_continuation_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            predecessor = create_runtime_session(
+                state.runtime_store,
+                session_id="cleanup-lineage-predecessor",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                owner_user_id="user:admin",
+                governance=state.workspace_store.get_governance("default"),
+                platform_allows_full_access=True,
+                start_path=repo_root,
+            )
+            successor = create_runtime_session(
+                state.runtime_store,
+                session_id="cleanup-lineage-successor",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                owner_user_id="user:admin",
+                predecessor_session_id=predecessor.session_id,
+                lineage_root_session_id=predecessor.session_id,
+                continuation_handoff_id="cleanup-lineage-handoff",
+                governance=state.workspace_store.get_governance("default"),
+                platform_allows_full_access=True,
+                start_path=repo_root,
+            )
+            state.runtime_store.link_continuation_successor(
+                workspace_id="default",
+                predecessor_session_id=predecessor.session_id,
+                successor_session_id=successor.session_id,
+                handoff_id="cleanup-lineage-handoff",
+                now=datetime.now(tz=UTC),
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            status, payload, _headers = self._invoke(
+                app,
+                path=f"/api/runtime/sessions/{predecessor.session_id}/cleanup",
+                method="POST",
+                body={"reason": "delete logical chat"},
+                cookie=cookie,
+            )
+
+            for session_id in (predecessor.session_id, successor.session_id):
+                with self.assertRaises(RuntimeSessionNotFoundError):
+                    state.runtime_store.get_session(session_id)
+
+        self.assertEqual(status, 200)
+        lineage_cleanup = payload["continuation_lineage_cleanup"]
+        self.assertEqual(lineage_cleanup["requested_session_id"], predecessor.session_id)
+        self.assertEqual(lineage_cleanup["resolved_session_id"], successor.session_id)
+        self.assertEqual(
+            set(lineage_cleanup["cleaned_session_ids"]),
+            {predecessor.session_id, successor.session_id},
+        )
+
+    def test_existing_agentic_turn_is_rejected_before_queue_when_authority_is_invalid(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            create_runtime_session(
+                state.runtime_store,
+                session_id="invalid-authority-session",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                owner_user_id="user:admin",
+                runtime_mode="agentic",
+                governance=state.workspace_store.get_governance("default"),
+                platform_allows_full_access=True,
+                start_path=repo_root,
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch(
+                "core.api.runtime_api.submit_runtime_turn_async",
+                side_effect=AssertionError("turn must not be queued"),
+            ):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions/invalid-authority-session/turns",
+                    method="POST",
+                    body={
+                        "input_text": "do not persist this",
+                        "client_message_id": "invalid-authority-message",
+                        "async": True,
+                    },
+                    cookie=cookie,
+                )
+            persisted_turns = state.runtime_store.list_turns(
+                "invalid-authority-session"
+            )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "runtime_profile_upgrade_required")
+        self.assertEqual(payload["admission_status"], "upgrade_required")
+        self.assertEqual(
+            persisted_turns,
+            [],
+        )
+
     def test_existing_session_turn_submit_requires_owner_admin_or_grant(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

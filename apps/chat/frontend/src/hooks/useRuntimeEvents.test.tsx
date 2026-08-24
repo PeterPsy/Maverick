@@ -164,6 +164,120 @@ describe("useRuntimeEvents", () => {
     );
   });
 
+  it("accepts snapshots and live events from a resolved continuation lineage", async () => {
+    let latestState: RuntimeEventsHarnessState | null = null;
+    const successorSession: RuntimeSession = {
+      ...session,
+      session_id: "session-2",
+      predecessor_session_id: "session-1",
+      lineage_root_session_id: "session-1",
+    };
+    const acceptedEvent: RuntimeEvent = {
+      ...event("continuation-accepted"),
+      session_id: "session-2",
+      turn_id: null,
+      event_type: "runtime.continuation.accepted",
+      payload: { predecessor_session_id: "session-1" },
+    };
+    await act(async () => {
+      root?.render(
+        <RuntimeEventsHarness
+          initialEvents={[]}
+          onState={(state) => { latestState = state; }}
+        />,
+      );
+    });
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.snapshot",
+          requested_session_id: "session-1",
+          lineage_session_ids: ["session-1", "session-2"],
+          session: successorSession,
+          events: [event("predecessor-event"), acceptedEvent],
+          last_event_id: acceptedEvent.event_id,
+          has_more_before: false,
+          oldest_event_id: "predecessor-event",
+        }),
+      } as MessageEvent);
+    });
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.event",
+          event: {
+            ...event("successor-output"),
+            session_id: "session-2",
+          },
+        }),
+      } as MessageEvent);
+    });
+
+    const state = latestState as RuntimeEventsHarnessState | null;
+    expect(state?.activeSession?.session_id).toBe("session-2");
+    expect((state?.events ?? []).map((item) => item.event_id)).toEqual(expect.arrayContaining([
+      "predecessor-event",
+      "continuation-accepted",
+      "successor-output",
+    ]));
+    expect(state?.events).toHaveLength(3);
+  });
+
+  it("follows a continuation fork while the predecessor socket is open", async () => {
+    let latestState: RuntimeEventsHarnessState | null = null;
+    await act(async () => {
+      root?.render(
+        <RuntimeEventsHarness
+          initialEvents={[]}
+          onState={(state) => { latestState = state; }}
+        />,
+      );
+    });
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.snapshot",
+          requested_session_id: "session-1",
+          lineage_session_ids: ["session-1"],
+          session,
+          events: [],
+          last_event_id: null,
+        }),
+      } as MessageEvent);
+    });
+
+    const forked: RuntimeEvent = {
+      ...event("continuation-forked"),
+      turn_id: null,
+      event_type: "runtime.continuation.forked",
+      payload: { successor_session_id: "session-2" },
+    };
+    const accepted: RuntimeEvent = {
+      ...event("continuation-accepted-live"),
+      session_id: "session-2",
+      turn_id: null,
+      event_type: "runtime.continuation.accepted",
+      payload: { predecessor_session_id: "session-1" },
+    };
+    for (const runtimeEvent of [forked, accepted, { ...event("successor-live"), session_id: "session-2" }]) {
+      await act(async () => {
+        MockWebSocket.instances[0].onmessage?.({
+          data: JSON.stringify({ type: "runtime.event", event: runtimeEvent }),
+        } as MessageEvent);
+      });
+    }
+
+    const eventIds = (latestState as RuntimeEventsHarnessState | null)?.events.map((item) => item.event_id) ?? [];
+    expect(eventIds).toEqual(expect.arrayContaining([
+      "continuation-forked",
+      "continuation-accepted-live",
+      "successor-live",
+    ]));
+    expect(eventIds).toHaveLength(3);
+  });
+
   it("applies authoritative usage from snapshots and live usage events", async () => {
     let latestState: RuntimeEventsHarnessState | null = null;
     const usage = {

@@ -11,7 +11,8 @@ from uuid import uuid4
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event, dispatch_workspace_app_background_hooks
 from core.inter_agent.service import InterAgentService
 from core.providers.errors import ProviderError
-from core.runtime.errors import RuntimeTurnNotFoundError
+from core.recovery.continuation_fork import admit_runtime_session
+from core.runtime.errors import RuntimeProfileUpgradeRequiredError, RuntimeTurnNotFoundError
 from core.runtime.plain_hosted_cancellation import reconcile_stale_plain_hosted_request_owners
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION
@@ -35,7 +36,6 @@ BACKEND_RESTART_CONTINUATION_INPUT_TEXT = (
     "The backend restarted successfully. Continue from where you left off using the prior conversation and current workspace state."
 )
 RESUME_CLIENT_MESSAGE_ID_PREFIX = "backend-restart-resume:"
-MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_SESSION = 3
 NON_TERMINAL_TURN_STATUSES = {"queued", "active"}
 NON_TERMINAL_TURN_EVENTS = {
     "runtime.turn.queued": "cancelled",
@@ -130,13 +130,9 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 failure_reason = f"Interrupted by {reason}; the persisted inter-agent scheduler will retry the task."
                 recovery_action = "close_inter_agent_participant_turn"
             elif is_recovery_resume_turn:
-                if resume_attempts >= MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_SESSION:
-                    failure_reason = f"Interrupted by {reason}; recovery resume retry limit reached."
-                    recovery_action = "close_resume_turn"
-                else:
-                    failure_reason = f"Interrupted by {reason}; recovery resume retry queued."
-                    recovery_action = "retry_resume_turn"
-            if recovery_action in {"automatic_resume_turn", "retry_resume_turn"}:
+                failure_reason = f"Interrupted by {reason}; the idempotent recovery resume will not be duplicated."
+                recovery_action = "close_resume_turn"
+            if recovery_action == "automatic_resume_turn":
                 target_status = "failed"
             updated = transition_runtime_turn(
                 state.runtime_store,
@@ -156,7 +152,6 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 "detail": terminal_detail,
                 "recovery_action": recovery_action,
                 "resume_attempts": resume_attempts if is_recovery_resume_turn else None,
-                "max_resume_attempts": MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_SESSION if is_recovery_resume_turn else None,
             }
             if updated.status == "cancelled":
                 drain_runtime_turn_terminalization(
@@ -197,31 +192,39 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 )
             should_queue_resume = should_queue_resume or (
                 updated.status == "failed"
-                and recovery_action in {"automatic_resume_turn", "retry_resume_turn"}
+                and recovery_action == "automatic_resume_turn"
             )
-            if updated.status == "failed" and recovery_action in {"automatic_resume_turn", "retry_resume_turn"}:
+            if updated.status == "failed" and recovery_action == "automatic_resume_turn":
                 candidate_rank = (1 if turn.status == "active" else 0, turn.updated_at, turn.turn_id)
                 if resume_source_rank is None or candidate_rank > resume_source_rank:
                     resume_source_turn = updated
                     resume_source_rank = candidate_rank
         if not should_queue_resume:
             continue
+        source_turn_id = resume_source_turn.turn_id if resume_source_turn is not None else session.session_id
         try:
-            submit_runtime_turn_async(
+            admission = admit_runtime_session(
                 state,
                 session=state.runtime_store.get_session(session.session_id),
+            )
+            resume_session = admission.session
+            submit_runtime_turn_async(
+                state,
+                session=resume_session,
                 input_text=BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
-                client_message_id=f"{RESUME_CLIENT_MESSAGE_ID_PREFIX}{session.session_id}:{uuid4()}",
+                client_message_id=f"{RESUME_CLIENT_MESSAGE_ID_PREFIX}{session.session_id}:{source_turn_id}",
                 invoked_skill_ids=list(resume_source_turn.invoked_skill_ids) if resume_source_turn is not None else [],
-                on_queued=lambda queued_turn, _events, session_id=session.session_id: dispatch_source_app_runtime_event(
+                on_queued=lambda queued_turn, _events, session_id=resume_session.session_id: dispatch_source_app_runtime_event(
                     state,
                     session=state.runtime_store.get_session(session_id),
                     turn=queued_turn,
                     event_type="runtime.turn.queued",
                 ),
             )
-        except (ProviderError, SkillInvocationError) as error:
+        except (ProviderError, RuntimeProfileUpgradeRequiredError, SkillInvocationError) as error:
             if isinstance(error, SkillInvocationError):
+                blocked_reason = error.reason_code
+            elif isinstance(error, RuntimeProfileUpgradeRequiredError):
                 blocked_reason = error.reason_code
             else:
                 blocked_reason = (
@@ -238,6 +241,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 payload={
                     "reason": "backend_restart",
                     "blocked_reason": blocked_reason,
+                    "detail_code": getattr(error, "detail_code", None),
                     "detail": str(error),
                 },
                 event_bus=state.runtime_event_bus,
@@ -247,12 +251,15 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         record_runtime_event(
             state.runtime_store,
             event_id=str(uuid4()),
-            session_id=session.session_id,
+            session_id=resume_session.session_id,
             plane="runtime",
             event_type="runtime.recovery.resume_queued",
             payload={
                 "reason": "backend_restart",
                 "input_text": BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
+                "predecessor_session_id": (
+                    session.session_id if resume_session.session_id != session.session_id else None
+                ),
                 "invoked_skill_ids": list(resume_source_turn.invoked_skill_ids) if resume_source_turn is not None else [],
             },
             event_bus=state.runtime_event_bus,
@@ -557,6 +564,8 @@ def _backend_restart_resume_attempt_count(events: list) -> int:
 
 
 def _recovery_action_for_updated_status(*, updated_status: str, planned_action: str) -> str:
-    if updated_status == "failed":
+    if updated_status == "failed" or (
+        planned_action == "close_resume_turn" and updated_status == "cancelled"
+    ):
         return planned_action
     return f"preserve_{updated_status.replace('-', '_')}_turn"

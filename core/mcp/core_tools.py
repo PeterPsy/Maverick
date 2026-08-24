@@ -98,6 +98,7 @@ def _core_tool_specs(
             runtime_store=runtime_store,
             recovery_store=recovery_store,
             workspace_store=workspace_store,
+            provider_store=provider_store,
             provider_registry=provider_registry,
             observability_store=observability_store,
             start_path=start_path,

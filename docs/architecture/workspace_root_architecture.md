@@ -223,11 +223,15 @@ data. The following paths are private, Core-owned operational state:
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/tool_confirmation_grants.json
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/egress_decisions.json
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/private/
+/workspaces/<workspace_id>/runtime/continuation_handoffs.json
 ```
 
-`session.json` contains the immutable execution binding and its one-way
-preparation barrier. Provider state is insert-if-absent and then revisioned with
-compare-and-set. Tool invocations and confirmation grants are a private
+`session.json` contains the immutable execution binding, continuation-lineage
+identity, and its one-way preparation barrier. Provider state is
+insert-if-absent and then revisioned with compare-and-set. A continuation fork
+CAS-fences the predecessor provider state before transferring its provider
+thread ids; the workspace-scoped handoff file records immutable compatibility
+evidence and monotonic recovery phases. Tool invocations and confirmation grants are a private
 side-effect ledger; egress decisions are append-only and redaction-safe. The
 `private/` directory contains encrypted, bounded provider continuation and tool
 payloads behind opaque Core-issued locators. Apps, browser APIs, ordinary logs,

@@ -179,6 +179,7 @@ export type OpenRouterProviderRouting = {
 export type ProviderModelSettings = {
   selected_model_id: string | null;
   selected_reasoning_effort: string | null;
+  default_reasoning_effort?: string | null;
   available_models: ProviderModelOption[];
 };
 

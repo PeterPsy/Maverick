@@ -942,10 +942,6 @@ def resolve_workspace_provider_status(
             blocked_reason="provider_unavailable",
             blocked_detail=str(error),
         )
-    model_option = next(
-        (item for item in definition.model_options if item.model_id == profile.model_id),
-        None,
-    )
     resolved_selection = ProviderSelection(
         selection_id=f"binding:{binding.binding_id}:{binding.revision}",
         workspace_id=workspace_id,
@@ -956,9 +952,7 @@ def resolve_workspace_provider_status(
         created_at=binding.created_at,
         updated_at=binding.updated_at,
         model_id=profile.model_id,
-        model_reasoning_effort=(
-            None if model_option is None else model_option.default_reasoning_effort
-        ),
+        model_reasoning_effort=None,
     )
     return WorkspaceProviderStatus(
         workspace_id=workspace_id,

@@ -50,3 +50,12 @@ class RuntimeTransitionError(RuntimeDomainError):
 
 class RuntimeProviderStateError(RuntimeDomainError):
     """Raised when provider state is missing, stale, or invalid."""
+
+
+class RuntimeProfileUpgradeRequiredError(RuntimeDomainError):
+    """Raised before admission when a pinned session cannot execute safely."""
+
+    def __init__(self, reason_code: str, *, detail_code: str | None = None) -> None:
+        self.reason_code = str(reason_code or "runtime_profile_upgrade_required")
+        self.detail_code = str(detail_code or self.reason_code)
+        super().__init__(self.reason_code)

@@ -64,6 +64,17 @@ export function isActiveRuntimeTurnBusyForThread(activeTurn: RuntimeTurn | null,
   return isThreadAvailabilityBusy(activeThread.availability);
 }
 
+export function runtimeAdmissionBlockMessage(session: RuntimeSession | null): string | null {
+  const status = session?.runtime_admission?.status;
+  if (status === "provider_thread_missing") {
+    return "This chat cannot continue because its provider conversation is no longer available. Start a new chat and hand off the prior transcript.";
+  }
+  if (status === "upgrade_required") {
+    return "This chat cannot be upgraded automatically to the current runtime profile. Start a new chat and hand off the prior transcript.";
+  }
+  return null;
+}
+
 export function selectedProviderForSession({
   activeProviderId,
   activeSession,
@@ -602,6 +613,7 @@ export function useChatAppController({
       || (typeof activeAppContext?.params?.od_project_id === "string" ? activeAppContext.params.od_project_id : "")
       || (typeof activeAppContext?.params?.project_id === "string" ? activeAppContext.params.project_id : "")
     : "";
+  const runtimeAdmissionError = runtimeAdmissionBlockMessage(activeSession);
 
   const presentation = useChatControllerPresentation({
     activeProviderId: composerActiveProviderId,
@@ -616,7 +628,8 @@ export function useChatAppController({
     attachments,
     canStopTurn,
     composer,
-    composerError,
+    composerError: runtimeAdmissionError || composerError,
+    runtimeAdmissionBlocked: Boolean(runtimeAdmissionError),
     composerMentionItems,
     chatUsage,
     draftChat,

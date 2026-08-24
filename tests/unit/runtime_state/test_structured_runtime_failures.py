@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import unittest
 
 from core.runtime.event_collection import RuntimeEventJsonCollection
-from core.runtime.failure_messages import runtime_failure_details
+from core.runtime.failure_messages import runtime_failure_details, runtime_failure_public_message
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session
 from core.runtime.session_collection import RuntimeSessionJsonCollection
@@ -24,6 +24,16 @@ PUBLIC_TOOL_ERROR = (
 
 
 class StructuredRuntimeFailureTest(unittest.TestCase):
+    def test_profile_upgrade_failures_have_actionable_public_messages(self) -> None:
+        self.assertIn(
+            "older runtime profile",
+            runtime_failure_public_message("adapter_artifact_mismatch"),
+        )
+        self.assertIn(
+            "compatible runtime-profile upgrade",
+            runtime_failure_public_message("runtime_profile_upgrade_required"),
+        )
+
     def test_raw_exception_text_cannot_become_a_public_reason_code(self) -> None:
         reason_code, public_message = runtime_failure_details(
             RuntimeError("private_token_value")

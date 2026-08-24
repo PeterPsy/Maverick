@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.providers.agentic_profiles import build_pinned_execution_binding
 from core.runtime.message_steering import RuntimeMessageSteerAttempt
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.service import create_runtime_session, transition_runtime_turn
@@ -34,9 +35,17 @@ class RuntimeMessageSteeringApiTestCase(AppReferenceApiTestSupport, unittest.Tes
                 agent_id="chat",
                 source_app_id="chat",
                 owner_user_id="user:admin",
+                requested_mode="sandbox",
                 governance=state.workspace_store.get_governance("default"),
                 platform_allows_full_access=True,
                 start_path=repo_root,
+                execution_binding=build_pinned_execution_binding(
+                    state.provider_store,
+                    state.provider_registry,
+                    session_id="session-steer-api",
+                    workspace_id="default",
+                    execution_mode="sandbox",
+                ),
             )
             queued_turn, _events = _queue_turn_with_event(
                 state,
@@ -111,9 +120,17 @@ class RuntimeMessageSteeringApiTestCase(AppReferenceApiTestSupport, unittest.Tes
                 agent_id="chat",
                 source_app_id="chat",
                 owner_user_id="user:admin",
+                requested_mode="sandbox",
                 governance=state.workspace_store.get_governance("default"),
                 platform_allows_full_access=True,
                 start_path=repo_root,
+                execution_binding=build_pinned_execution_binding(
+                    state.provider_store,
+                    state.provider_registry,
+                    session_id="session-steer-uncertain-api",
+                    workspace_id="default",
+                    execution_mode="sandbox",
+                ),
             )
             queued_turn, _events = _queue_turn_with_event(
                 state,

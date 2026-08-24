@@ -28,7 +28,7 @@ from core.providers.agentic_migration import migrate_agentic_runtime_schema
 from core.providers.google_agentic_profile import ensure_google_agentic_preview_profile
 from core.providers.openrouter_agentic_profile import ensure_openrouter_agentic_preview_profile
 from core.providers.provider_registry import ProviderRegistry
-from core.providers.service import builtin_provider_registry
+from core.providers.service import builtin_provider_registry, effective_provider_registry
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
 from core.providers.store import ProviderDocumentStore
 from core.recovery.store import RecoveryDocumentStore, RecoveryCollections
@@ -125,6 +125,10 @@ def bootstrap_platform_state(
         start_path=repository_root,
         filename="egress_decisions.json",
     )
+    runtime_continuation_handoffs = WorkspaceRuntimeJsonCollection(
+        start_path=repository_root,
+        filename="continuation_handoffs.json",
+    )
     runtime_threads = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="threads.json")
     runtime_client_messages = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="client_messages.json")
     runtime_app_streams = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="app_streams.json")
@@ -147,6 +151,7 @@ def bootstrap_platform_state(
             tool_invocations=runtime_tool_invocations,
             tool_confirmation_grants=runtime_tool_confirmation_grants,
             egress_decisions=runtime_egress_decisions,
+            continuation_handoffs=runtime_continuation_handoffs,
             api_tokens=control_collections.runtime_api_tokens,
         )
     )
@@ -204,6 +209,10 @@ def bootstrap_platform_state(
         install_builtin_apps=install_builtin_apps,
         register_providers=register_builtin_provider_definitions,
         now=now,
+    )
+    provider_registry = effective_provider_registry(
+        provider_store,
+        registry=provider_registry,
     )
     migrate_agentic_runtime_schema(
         provider_store,

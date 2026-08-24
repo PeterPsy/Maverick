@@ -151,12 +151,14 @@ def _record_usage_summary_event(
         )
         if result is None or not result.inserted:
             return None
-        root_turn_id = turn_id if result.summary.root_session_id == session_id else None
+        notification_turn_id = (
+            turn_id if result.notification_session_id == session_id else None
+        )
         return record_runtime_event(
             state.runtime_store,
             event_id=str(uuid4()),
-            session_id=result.summary.root_session_id,
-            turn_id=root_turn_id,
+            session_id=result.notification_session_id,
+            turn_id=notification_turn_id,
             plane="runtime",
             event_type="runtime.usage.updated",
             payload=chat_usage_summary_payload(result.summary),

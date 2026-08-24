@@ -145,11 +145,20 @@ def record_runtime_health(
     store: RecoveryStore,
     *,
     session: RuntimeSessionRecord,
+    provider_store=None,
+    runtime_store=None,
+    provider_registry=None,
     observability_store=None,
     now=None,
 ) -> HealthCheckResult:
     """Persist one runtime health result."""
-    result = run_runtime_health_check(session, now=now)
+    result = run_runtime_health_check(
+        session,
+        provider_store=provider_store,
+        runtime_store=runtime_store,
+        provider_registry=provider_registry,
+        now=now,
+    )
     saved = store.save_health_result(result)
     if observability_store is not None:
         record_platform_event(

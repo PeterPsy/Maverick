@@ -7,6 +7,9 @@ import re
 
 _REASON_CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _PUBLIC_MESSAGES = {
+    "adapter_artifact_mismatch": (
+        "This chat uses an older runtime profile and must be upgraded before it can continue."
+    ),
     "agent_step_limit_reached": "The runtime reached its step limit before completing the request.",
     "agent_tool_call_limit_reached": "The runtime reached its tool-call limit before completing the request.",
     "certificate_revoked": "This model profile is no longer authorized.",
@@ -29,6 +32,9 @@ _PUBLIC_MESSAGES = {
     "provider_mixed_text_and_tool_call": "The provider returned an incompatible text and tool-call sequence.",
     "provider_no_eligible_endpoint": "No certified provider endpoint is currently available for this model.",
     "provider_output_incomplete": "The model provider exhausted the output budget before completing the response.",
+    "provider_thread_missing": (
+        "The provider conversation needed to continue this chat is no longer available."
+    ),
     "provider_parallel_tool_calls_forbidden": (
         "The provider returned multiple tool calls, but this profile permits only sequential execution. "
         "Those tool calls were not executed."
@@ -48,6 +54,9 @@ _PUBLIC_MESSAGES = {
     "provider_unavailable": "The model provider is temporarily unavailable.",
     "runtime_cancelled": "The runtime request was cancelled.",
     "runtime_health_unavailable": "The selected runtime is not currently healthy.",
+    "runtime_profile_upgrade_required": (
+        "This chat requires a compatible runtime-profile upgrade before it can continue."
+    ),
     "tool_execution_unknown": "The runtime could not verify whether the tool completed.",
     "tool_not_found": (
         "The model requested a tool that is not available. The unavailable tool was not executed."

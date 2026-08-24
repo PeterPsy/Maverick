@@ -45,7 +45,6 @@ export type SettingsPanelState = {
   clearingAllRuntime: boolean;
   cleaningSessionIds: Set<string>;
   draftModelId: string;
-  draftReasoningEffort: string;
   hostedDraftModelId: string;
   hostedProviderError: string;
   hostedProviderErrorModelId: string;
@@ -80,7 +79,6 @@ export type SettingsPanelActions = {
   ) => void;
   onSaveHostedProviderSettings: (modelId?: string) => void;
   onProviderModelChanged: (modelId: string) => void;
-  onProviderReasoningChanged: (reasoningEffort: string) => void;
   onRefreshProviderUsage: () => void;
   onSaveProviderSettings: () => void;
   onSaveSpeechProviderSettings: () => void;
@@ -95,7 +93,6 @@ export function createSettingsPanelState(): SettingsPanelState {
     clearingAllRuntime: false,
     cleaningSessionIds: new Set(),
     draftModelId: '',
-    draftReasoningEffort: '',
     hostedDraftModelId: '',
     hostedProviderError: '',
     hostedProviderErrorModelId: '',
@@ -120,7 +117,7 @@ export function createSettingsPanelState(): SettingsPanelState {
 }
 
 export function syncSettingsPanelDraft(state: SettingsPanelState, settings: PlatformSettings | null) {
-  const { modelId, reasoningEffort } = selectedProviderDraft(settings);
+  const { modelId } = selectedProviderDraft(settings);
   const { modelId: hostedModelId } = selectedHostedProviderDraft(settings);
   const speechDraft = selectedSpeechProviderDraft(settings);
   const hostedModelIds = new Set(hostedModelOptionsForSettings(settings).map((option) => option.model_id).filter(Boolean));
@@ -128,7 +125,6 @@ export function syncSettingsPanelDraft(state: SettingsPanelState, settings: Plat
     hostedModelIds.add(hostedModelId);
   }
   state.draftModelId = modelId;
-  state.draftReasoningEffort = reasoningEffort;
   state.hostedDraftModelId = hostedModelId;
   state.speechAudioModelId = speechDraft.audioModelId;
   state.speechConversationModelId = speechDraft.conversationModelId;
@@ -137,10 +133,8 @@ export function syncSettingsPanelDraft(state: SettingsPanelState, settings: Plat
   );
 }
 
-export function updateDraftModel(state: SettingsPanelState, settings: PlatformSettings | null, modelId: string) {
-  const option = modelOptionsForSettings(settings).find((item) => item.model_id === modelId) || null;
+export function updateDraftModel(state: SettingsPanelState, modelId: string) {
   state.draftModelId = modelId;
-  state.draftReasoningEffort = defaultReasoningForOption(option);
   state.providerError = '';
 }
 
@@ -252,15 +246,14 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   const hostedTextModelOptions = hostedModelOptions.filter(modelSupportsTextOutput);
   const hostedSpeechModelOptions = hostedModelOptions.filter(modelSupportsSpeechOutput);
   const selectedModel = selectedProviderDraft(settings).modelId;
-  const selectedReasoning = selectedProviderDraft(settings).reasoningEffort;
   const selectedOption = modelOptions.find((option) => option.model_id === state.draftModelId) || modelOptions[0] || null;
-  const reasoningOptions = selectedOption?.supported_reasoning_efforts || [];
+  const modelDefaultReasoning = defaultReasoningForOption(selectedOption);
   const openHostedModel = openHostedModelId(settings, state);
   const canSaveProvider = Boolean(
     provider &&
       state.draftModelId &&
       !state.isSavingProvider &&
-      (state.draftModelId !== selectedModel || state.draftReasoningEffort !== selectedReasoning)
+      state.draftModelId !== selectedModel
   );
 
   return `${userSettingsCardHtml(settings)}
@@ -269,7 +262,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
     ${settings.agentic_admin ? '' : agenticModelSettingsCardHtml(
         provider,
         modelOptions,
-        reasoningOptions,
+        modelDefaultReasoning,
         canSaveProvider,
         activeRuntimeSessions.length,
         runtimeSessions.length,
@@ -387,7 +380,7 @@ function modelSettingsHeadingHtml(icon: string, title: string) {
 function agenticModelSettingsCardHtml(
   provider: PlatformSettings['provider']['active_provider'] | null,
   modelOptions: ProviderModelOption[],
-  reasoningOptions: ProviderModelOption['supported_reasoning_efforts'],
+  modelDefaultReasoning: string,
   canSaveProvider: boolean,
   activeRuntimeSessionCount: number,
   runtimeSessionCount: number,
@@ -397,7 +390,7 @@ function agenticModelSettingsCardHtml(
   return `<section class="settings-card settings-platform settings-agentic-model-settings-card">
     ${modelSettingsHeadingHtml('memory', 'Agentic model settings')}
     <div class="settings-platform-provider-forms">
-      ${providerSettingsFormHtml(provider, modelOptions, reasoningOptions, canSaveProvider, activeRuntimeSessionCount, runtimeSessionCount, isOpen, state)}
+      ${providerSettingsFormHtml(provider, modelOptions, modelDefaultReasoning, canSaveProvider, activeRuntimeSessionCount, runtimeSessionCount, isOpen, state)}
       ${providerSubscriptionUsageHtml(provider, state)}
     </div>
   </section>`;
@@ -454,9 +447,6 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   });
   document.getElementById('settings-provider-model')?.addEventListener('change', (event) => {
     actions.onProviderModelChanged((event.currentTarget as HTMLSelectElement).value);
-  });
-  document.getElementById('settings-provider-reasoning')?.addEventListener('change', (event) => {
-    actions.onProviderReasoningChanged((event.currentTarget as HTMLSelectElement).value);
   });
   document.getElementById('settings-speech-audio-model')?.addEventListener('change', (event) => {
     actions.onSpeechAudioModelChanged((event.currentTarget as HTMLSelectElement).value);
@@ -667,7 +657,7 @@ function humanizeAgenticCode(value: string) {
 function providerSettingsFormHtml(
   provider: PlatformSettings['provider']['active_provider'] | null,
   modelOptions: ProviderModelOption[],
-  reasoningOptions: ProviderModelOption['supported_reasoning_efforts'],
+  modelDefaultReasoning: string,
   canSaveProvider: boolean,
   activeRuntimeSessionCount: number,
   runtimeSessionCount: number,
@@ -682,7 +672,7 @@ function providerSettingsFormHtml(
           <span class="settings-kicker">Agentic provider</span>
         </span>
         <strong>${escapeHtml(provider?.label || 'Provider not loaded')}</strong>
-        <small>${escapeHtml(state.draftModelId || 'model')} · ${escapeHtml(state.draftReasoningEffort || 'reasoning')} · Codex tools/filesystem/MCP · ${activeRuntimeSessionCount} active / ${runtimeSessionCount} in scope</small>
+        <small>${escapeHtml(state.draftModelId || 'model')} · per-chat reasoning · Codex tools/filesystem/MCP · ${activeRuntimeSessionCount} active / ${runtimeSessionCount} in scope</small>
       </span>
       <span class="settings-model-chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
     </summary>
@@ -693,12 +683,7 @@ function providerSettingsFormHtml(
         ${modelOptions.map((option) => `<option value="${escapeAttr(option.model_id)}" ${option.model_id === state.draftModelId ? 'selected' : ''}>${escapeHtml(option.label || option.model_id)}</option>`).join('')}
       </select>
     </label>
-    <label class="settings-platform-field">
-      <span>Reasoning</span>
-      <select id="settings-provider-reasoning" ${!reasoningOptions.length || state.isSavingProvider ? 'disabled' : ''}>
-        ${reasoningOptions.map((option) => `<option value="${escapeAttr(option.effort)}" ${option.effort === state.draftReasoningEffort ? 'selected' : ''}>${escapeHtml(option.label || option.effort)}</option>`).join('')}
-      </select>
-    </label>
+    <p class="settings-card-copy">Reasoning is selected per chat. This model defaults to ${escapeHtml(modelDefaultReasoning || 'provider default')}.</p>
     <button type="button" id="settings-save-provider" ${canSaveProvider ? '' : 'disabled'}>
       <span class="material-symbols-rounded" aria-hidden="true">${state.isSavingProvider ? 'sync' : 'save'}</span>
       ${state.isSavingProvider ? 'Saving' : 'Save model'}

@@ -13,14 +13,20 @@ from urllib.parse import parse_qs
 from core.api.http import json_default
 from core.api.platform_state import PlatformState
 from core.api.session_api import resolve_request_session
+from core.recovery.continuation_admission import runtime_session_admission_payload
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.continuation_lineage import (
+    resolve_latest_runtime_session,
+    runtime_lineage_events,
+    runtime_session_lineage,
+)
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.store import RuntimeEventPage
 from core.shared.entrypoints import EntrypointShutdownController
 from core.usage.payloads import chat_usage_summary_payload
-from core.usage.service import build_chat_usage_summary, resolve_root_session_id
+from core.usage.service import build_runtime_chat_usage_summary
 
 
 AsgiReceive = Callable[[], Awaitable[dict[str, Any]]]
@@ -120,6 +126,9 @@ def runtime_snapshot_frame(
     has_more_before: bool = False,
     oldest_event_id: str | None = None,
     usage: dict[str, object] | None = None,
+    admission: dict[str, object] | None = None,
+    requested_session_id: str | None = None,
+    lineage_session_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Wrap the initial runtime session state in a transport frame."""
     return {
@@ -131,6 +140,9 @@ def runtime_snapshot_frame(
         "has_more_before": has_more_before,
         "oldest_event_id": oldest_event_id,
         "usage": usage,
+        "runtime_admission": admission,
+        "requested_session_id": requested_session_id,
+        "lineage_session_ids": list(lineage_session_ids or [session.session_id]),
     }
 
 
@@ -270,7 +282,80 @@ def runtime_turns_for_events(state: PlatformState, session_id: str, events: list
     turn_ids = {event.turn_id for event in events if event.turn_id}
     if not turn_ids:
         return []
-    return [turn for turn in state.runtime_store.list_turns(session_id) if turn.turn_id in turn_ids]
+    event_session_ids = {event.session_id for event in events}
+    event_session_ids.add(session_id)
+    turns = [
+        turn
+        for event_session_id in event_session_ids
+        for turn in state.runtime_store.list_turns(event_session_id)
+        if turn.turn_id in turn_ids
+    ]
+    return sorted(turns, key=lambda turn: (turn.created_at, turn.turn_id))
+
+
+def lineage_runtime_event_page(
+    state: PlatformState,
+    session,
+    *,
+    before_event_id: str | None,
+    limit: int,
+) -> RuntimeEventPage:
+    """Page one logical transcript across immutable predecessor sessions."""
+    bounded_limit = max(1, min(int(limit), MAX_HISTORY_EVENT_LIMIT))
+    lineage = runtime_session_lineage(state.runtime_store, session)
+    if before_event_id is None:
+        selected: list[RuntimeEventRecord] = []
+        has_more_before = False
+        for lineage_index in range(len(lineage) - 1, -1, -1):
+            lineage_session = lineage[lineage_index]
+            remaining = max(1, bounded_limit - len(selected))
+            page = turn_anchored_runtime_event_page(
+                state,
+                lineage_session.session_id,
+                before_event_id=None,
+                limit=remaining,
+            )
+            selected = _merge_runtime_event_lists(page.events, selected)
+            if page.has_more_before or len(selected) >= bounded_limit:
+                has_more_before = page.has_more_before or lineage_index > 0
+                break
+        return RuntimeEventPage(
+            events=selected,
+            has_more_before=has_more_before,
+            before_event_id=None,
+            oldest_event_id=selected[0].event_id if selected else None,
+            newest_event_id=selected[-1].event_id if selected else None,
+        )
+    events = runtime_lineage_events(state.runtime_store, session)
+    cursor_index = next(
+        (index for index, event in enumerate(events) if event.event_id == before_event_id),
+        None,
+    )
+    events = events[:cursor_index] if cursor_index is not None else []
+    page_start = max(0, len(events) - bounded_limit)
+    selected = events[page_start:]
+    if selected and page_start > 0:
+        oldest_turn_id = selected[0].turn_id
+        if oldest_turn_id and not _contains_turn_anchor(selected, oldest_turn_id):
+            anchor_index = next(
+                (
+                    index
+                    for index in range(page_start - 1, -1, -1)
+                    if events[index].turn_id == oldest_turn_id
+                    and events[index].event_type in TURN_ANCHOR_EVENT_TYPES
+                ),
+                None,
+            )
+            if anchor_index is not None:
+                page_start = anchor_index
+                selected = events[page_start:]
+    return RuntimeEventPage(
+        events=selected,
+        has_more_before=page_start > 0,
+        before_event_id=before_event_id,
+        oldest_event_id=selected[0].event_id if selected else None,
+        newest_event_id=selected[-1].event_id if selected else None,
+    )
 
 
 def _bounded_positive_int(value: str | None, *, default: int, maximum: int) -> int:
@@ -320,12 +405,18 @@ async def stream_runtime_session_events(
     if context is None:
         await send({"type": "websocket.close", "code": WEBSOCKET_UNAUTHORIZED})
         return
+    requested_session_id = session_id
     try:
         session = state.runtime_store.get_session(session_id)
     except (RuntimeSessionNotFoundError, ValueError):
         await send({"type": "websocket.close", "code": WEBSOCKET_NOT_FOUND})
         return
     if session.workspace_id != context.workspace_id:
+        await send({"type": "websocket.close", "code": WEBSOCKET_NOT_FOUND})
+        return
+    try:
+        session = resolve_latest_runtime_session(state.runtime_store, session)
+    except (RuntimeSessionNotFoundError, ValueError):
         await send({"type": "websocket.close", "code": WEBSOCKET_NOT_FOUND})
         return
     if not runtime_session_allows_user_thread(session):
@@ -339,12 +430,36 @@ async def stream_runtime_session_events(
         default=DEFAULT_INITIAL_EVENT_LIMIT,
         maximum=MAX_HISTORY_EVENT_LIMIT,
     )
+    session_id = session.session_id
+    lineage = runtime_session_lineage(state.runtime_store, session)
     subscription = state.runtime_event_bus.subscribe(session_id)
     seen_event_ids: set[str] = set()
     last_heartbeat_at = datetime.now(tz=UTC)
     try:
         await send({"type": "websocket.accept", "subprotocol": None, "headers": []})
-        initial_page = initial_runtime_event_page(state, session_id, last_event_id=last_event_id, limit=initial_event_limit)
+        if len(lineage) > 1:
+            initial_page = lineage_runtime_event_page(
+                state,
+                session,
+                before_event_id=None,
+                limit=initial_event_limit,
+            )
+            if last_event_id:
+                replay = ordered_events_after(initial_page.events, last_event_id)
+                initial_page = RuntimeEventPage(
+                    events=replay or initial_page.events,
+                    has_more_before=initial_page.has_more_before,
+                    before_event_id=None,
+                    oldest_event_id=(replay or initial_page.events)[0].event_id if (replay or initial_page.events) else None,
+                    newest_event_id=(replay or initial_page.events)[-1].event_id if (replay or initial_page.events) else None,
+                )
+        else:
+            initial_page = initial_runtime_event_page(
+                state,
+                session_id,
+                last_event_id=last_event_id,
+                limit=initial_event_limit,
+            )
         replay_events = initial_page.events
         replay_turns = runtime_turns_for_events(state, session_id, replay_events)
         for event in replay_events:
@@ -360,6 +475,14 @@ async def stream_runtime_session_events(
                 has_more_before=initial_page.has_more_before,
                 oldest_event_id=initial_page.oldest_event_id,
                 usage=_runtime_usage_snapshot(state, session),
+                admission=runtime_session_admission_payload(
+                    state.provider_store,
+                    state.runtime_store,
+                    state.provider_registry,
+                    session=session,
+                ),
+                requested_session_id=requested_session_id,
+                lineage_session_ids=[item.session_id for item in lineage],
             ),
         )
 
@@ -402,11 +525,20 @@ async def stream_runtime_session_events(
                                 maximum=MAX_HISTORY_EVENT_LIMIT,
                             )
                             if isinstance(before_event_id, str) and before_event_id:
-                                page = turn_anchored_runtime_event_page(
-                                    state,
-                                    session_id,
-                                    before_event_id=before_event_id,
-                                    limit=page_limit,
+                                page = (
+                                    lineage_runtime_event_page(
+                                        state,
+                                        session,
+                                        before_event_id=before_event_id,
+                                        limit=page_limit,
+                                    )
+                                    if len(lineage) > 1
+                                    else turn_anchored_runtime_event_page(
+                                        state,
+                                        session_id,
+                                        before_event_id=before_event_id,
+                                        limit=page_limit,
+                                    )
                                 )
                                 await _send_json(
                                     send,
@@ -420,6 +552,37 @@ async def stream_runtime_session_events(
                 await _send_json(send, runtime_event_frame(event))
                 last_event_id = event.event_id
                 seen_event_ids.add(event.event_id)
+                successor_id = _continuation_successor_id(event)
+                if successor_id:
+                    try:
+                        successor = state.runtime_store.get_session(successor_id)
+                        successor = resolve_latest_runtime_session(
+                            state.runtime_store,
+                            successor,
+                        )
+                        successor_lineage = runtime_session_lineage(
+                            state.runtime_store,
+                            successor,
+                        )
+                    except (RuntimeSessionNotFoundError, ValueError):
+                        return
+                    next_subscription = state.runtime_event_bus.subscribe(
+                        successor.session_id
+                    )
+                    previous_subscription = subscription
+                    subscription = next_subscription
+                    state.runtime_event_bus.unsubscribe(previous_subscription)
+                    session = successor
+                    session_id = successor.session_id
+                    lineage = successor_lineage
+                    for persisted_event in state.runtime_store.list_events(
+                        successor.session_id
+                    ):
+                        if persisted_event.event_id in seen_event_ids:
+                            continue
+                        await _send_json(send, runtime_event_frame(persisted_event))
+                        last_event_id = persisted_event.event_id
+                        seen_event_ids.add(persisted_event.event_id)
 
             now = datetime.now(tz=UTC)
             if (now - last_heartbeat_at).total_seconds() >= heartbeat_interval_seconds:
@@ -429,15 +592,21 @@ async def stream_runtime_session_events(
         state.runtime_event_bus.unsubscribe(subscription)
 
 
+def _continuation_successor_id(event: RuntimeEventRecord) -> str | None:
+    if event.event_type != "runtime.continuation.forked":
+        return None
+    successor_id = str(event.payload.get("successor_session_id") or "").strip()
+    return successor_id or None
+
+
 def _runtime_usage_snapshot(state: PlatformState, session) -> dict[str, object] | None:
     usage_store = getattr(state, "usage_store", None)
     if usage_store is None:
         return None
-    root_session_id = resolve_root_session_id(state.runtime_store, session)
-    summary = build_chat_usage_summary(
+    summary = build_runtime_chat_usage_summary(
         usage_store,
-        workspace_id=session.workspace_id,
-        root_session_id=root_session_id,
+        runtime_store=state.runtime_store,
+        session=session,
     )
     return chat_usage_summary_payload(summary)
 

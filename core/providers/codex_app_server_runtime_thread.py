@@ -92,10 +92,12 @@ def _ensure_provider_thread(
         existing_thread_id = str(session.provider_thread_id or "").strip()
         params = _thread_params(session=session, launch_spec=launch_spec)
         if existing_thread_id:
-            try:
-                result = _send_request(runtime, "thread/resume", {"threadId": existing_thread_id, **params}, timeout=20.0)
-            except RuntimeError:
-                result = _send_request(runtime, "thread/start", params, timeout=20.0)
+            result = _send_request(
+                runtime,
+                "thread/resume",
+                {"threadId": existing_thread_id, **params},
+                timeout=20.0,
+            )
         else:
             result = _send_request(runtime, "thread/start", params, timeout=20.0)
         thread = result.get("thread") if isinstance(result.get("thread"), dict) else {}

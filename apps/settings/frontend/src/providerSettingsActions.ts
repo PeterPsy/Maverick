@@ -33,8 +33,7 @@ export async function saveActiveProviderSettings(context: ProviderSettingsAction
   try {
     await configureActiveProvider({
       provider_id: providerId,
-      model_id: context.state.draftModelId,
-      model_reasoning_effort: context.state.draftReasoningEffort || null
+      model_id: context.state.draftModelId
     });
     const settings = await getPlatformSettings();
     context.setSettings(settings);

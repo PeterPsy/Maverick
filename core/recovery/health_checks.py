@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import hashlib
 from uuid import uuid4
 
 from core.apps.service import probe_workspace_app_health
 from core.apps.store import AppStore
 from core.providers.provider_registry import ProviderRegistry
+from core.providers.store import ProviderStore
+from core.recovery.continuation_admission import assess_runtime_session_admission
 from core.recovery.models import HealthCheckResult
 from core.runtime.runtime_session import RuntimeSessionRecord
 
@@ -17,9 +20,47 @@ def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def run_runtime_health_check(session: RuntimeSessionRecord, *, now: datetime | None = None) -> HealthCheckResult:
+def run_runtime_health_check(
+    session: RuntimeSessionRecord,
+    *,
+    provider_store: ProviderStore | None = None,
+    runtime_store=None,
+    provider_registry: ProviderRegistry | None = None,
+    now: datetime | None = None,
+) -> HealthCheckResult:
     """Evaluate one runtime session's health."""
-    if session.status == "running":
+    if (
+        session.status == "running"
+        and session.runtime_mode == "agentic"
+        and provider_store is not None
+        and runtime_store is not None
+        and provider_registry is not None
+    ):
+        target_digest = hashlib.sha256(session.session_id.encode("utf-8")).hexdigest()[:24]
+        assessment = assess_runtime_session_admission(
+            provider_store,
+            runtime_store,
+            provider_registry,
+            session=session,
+            target_session_id=f"runtime-health-{target_digest}",
+            now=now,
+        )
+        if assessment.status == "direct":
+            status = "healthy"
+            detail = "Runtime session authority is directly executable."
+        elif assessment.status == "compatible_upgrade":
+            status = "degraded"
+            detail = (
+                "Runtime session requires a compatible continuation upgrade"
+                f" ({assessment.detail_code})."
+            )
+        else:
+            status = "unhealthy"
+            detail = (
+                "Runtime session cannot be admitted"
+                f" ({assessment.detail_code or assessment.reason_code})."
+            )
+    elif session.status == "running":
         status = "healthy"
         detail = "Runtime session is running."
     elif session.status in {"created", "stopping"}:

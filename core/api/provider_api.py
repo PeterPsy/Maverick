@@ -59,11 +59,12 @@ def provider_model_settings_payload(definition: ProviderDefinition, selection: P
         )
         selected_model_id = model_option.model_id
     selected_reasoning = None if selection is None else selection.model_reasoning_effort
-    if not selected_reasoning and model_option is not None:
-        selected_reasoning = model_option.default_reasoning_effort
     return {
         "selected_model_id": selected_model_id,
         "selected_reasoning_effort": selected_reasoning,
+        "default_reasoning_effort": (
+            None if model_option is None else model_option.default_reasoning_effort
+        ),
         "available_models": [provider_model_option_payload(option) for option in definition.model_options],
     }
 

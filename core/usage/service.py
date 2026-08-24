@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from core.runtime.continuation_lineage import (
+    resolve_latest_runtime_session,
+    runtime_session_lineage,
+)
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.usage.models import ChatUsageSummary, TokenUsageBreakdown, UsageAccuracy, UsageSampleRecord
 from core.usage.normalization import normalized_usage_sample
@@ -20,6 +24,7 @@ class UsageIngestResult:
     sample: UsageSampleRecord
     inserted: bool
     summary: ChatUsageSummary
+    notification_session_id: str
 
 
 def ingest_runtime_usage(
@@ -53,20 +58,32 @@ def ingest_runtime_usage(
     return UsageIngestResult(
         sample=persisted,
         inserted=inserted,
-        summary=build_chat_usage_summary(
+        summary=build_runtime_chat_usage_summary(
             store,
-            workspace_id=session.workspace_id,
-            root_session_id=root_session_id,
+            runtime_store=state.runtime_store,
+            session=session,
+        ),
+        notification_session_id=resolve_current_root_session_id(
+            state.runtime_store,
+            session,
         ),
     )
 
 
 def resolve_root_session_id(runtime_store: Any, session: RuntimeSessionRecord) -> str:
-    """Follow creator links to the root runtime session without trusting child payloads."""
+    """Follow continuation and creator links to the logical root session."""
     current = session
     visited = {current.session_id}
-    while current.creator_runtime_session_id:
-        parent_id = current.creator_runtime_session_id
+    while getattr(current, "predecessor_session_id", None) or getattr(
+        current,
+        "creator_runtime_session_id",
+        None,
+    ):
+        parent_id = getattr(current, "predecessor_session_id", None) or getattr(
+            current,
+            "creator_runtime_session_id",
+            None,
+        )
         if parent_id in visited:
             break
         visited.add(parent_id)
@@ -80,16 +97,56 @@ def resolve_root_session_id(runtime_store: Any, session: RuntimeSessionRecord) -
     return current.session_id
 
 
+def resolve_current_root_session_id(
+    runtime_store: Any,
+    session: RuntimeSessionRecord,
+) -> str:
+    """Return the current executable session for one logical root chat."""
+    root_session_id = resolve_root_session_id(runtime_store, session)
+    try:
+        root = runtime_store.get_session(root_session_id)
+        return resolve_latest_runtime_session(runtime_store, root).session_id
+    except Exception:
+        return root_session_id
+
+
+def build_runtime_chat_usage_summary(
+    store: UsageDocumentStore,
+    *,
+    runtime_store: Any,
+    session: RuntimeSessionRecord,
+) -> ChatUsageSummary:
+    """Aggregate usage with every continuation of the root counted as direct."""
+    root_session_id = resolve_root_session_id(runtime_store, session)
+    direct_session_ids = {root_session_id}
+    try:
+        root = runtime_store.get_session(root_session_id)
+        current = resolve_latest_runtime_session(runtime_store, root)
+        direct_session_ids = {
+            item.session_id for item in runtime_session_lineage(runtime_store, current)
+        }
+    except Exception:
+        pass
+    return build_chat_usage_summary(
+        store,
+        workspace_id=session.workspace_id,
+        root_session_id=root_session_id,
+        direct_session_ids=direct_session_ids,
+    )
+
+
 def build_chat_usage_summary(
     store: UsageDocumentStore,
     *,
     workspace_id: str,
     root_session_id: str,
+    direct_session_ids: set[str] | None = None,
 ) -> ChatUsageSummary:
     """Aggregate all direct and delegated samples for one root chat."""
     samples = store.list_samples(workspace_id=workspace_id, root_session_id=root_session_id)
-    direct = [sample for sample in samples if sample.session_id == root_session_id]
-    delegated = [sample for sample in samples if sample.session_id != root_session_id]
+    direct_ids = direct_session_ids or {root_session_id}
+    direct = [sample for sample in samples if sample.session_id in direct_ids]
+    delegated = [sample for sample in samples if sample.session_id not in direct_ids]
     root_context_samples = [sample for sample in direct if sample.context_tokens is not None]
     latest_context = root_context_samples[-1] if root_context_samples else None
     context_tokens = latest_context.context_tokens if latest_context else None

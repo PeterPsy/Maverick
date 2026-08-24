@@ -35,11 +35,18 @@ class _EventBus:
         self.events.append(event)
 
 
-def _session(session_id: str, *, creator_runtime_session_id: str | None = None):
+def _session(
+    session_id: str,
+    *,
+    creator_runtime_session_id: str | None = None,
+    predecessor_session_id: str | None = None,
+):
     return SimpleNamespace(
         session_id=session_id,
         workspace_id="workspace-1",
         creator_runtime_session_id=creator_runtime_session_id,
+        predecessor_session_id=predecessor_session_id,
+        continuation_successor_session_id=None,
         execution_binding=SimpleNamespace(model_provider_id="codex", model_id="gpt-test"),
         hosted_provider_id=None,
         hosted_model_id=None,
@@ -305,6 +312,51 @@ class UsageServiceTest(unittest.TestCase):
         self.assertEqual(duplicate.summary.direct_tokens.total_tokens, 0)
         self.assertEqual(duplicate.summary.delegated_tokens.total_tokens, 25)
         self.assertEqual(duplicate.summary.sample_count, 1)
+
+    def test_continuation_usage_remains_direct_and_notifies_the_current_session(self) -> None:
+        continuation = _session(
+            "root-continuation",
+            predecessor_session_id=self.root.session_id,
+        )
+        self.root.continuation_successor_session_id = continuation.session_id
+        self.state.runtime_store.sessions[continuation.session_id] = continuation
+
+        ingest_runtime_usage(
+            self.state,
+            session_id=self.root.session_id,
+            turn_id="root-turn",
+            observed_at=datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
+            payload={
+                "usage_id": "root-usage",
+                "semantics": "incremental",
+                "input_tokens": 10,
+                "total_tokens": 10,
+                "context_tokens": 10,
+                "context_window_tokens": 100,
+            },
+        )
+        continued = ingest_runtime_usage(
+            self.state,
+            session_id=continuation.session_id,
+            turn_id="continuation-turn",
+            observed_at=datetime(2026, 8, 20, 12, 5, tzinfo=UTC),
+            payload={
+                "usage_id": "continuation-usage",
+                "semantics": "incremental",
+                "input_tokens": 15,
+                "total_tokens": 15,
+                "context_tokens": 60,
+                "context_window_tokens": 100,
+            },
+        )
+
+        self.assertIsNotNone(continued)
+        assert continued is not None
+        self.assertEqual(continued.notification_session_id, continuation.session_id)
+        self.assertEqual(continued.summary.root_session_id, self.root.session_id)
+        self.assertEqual(continued.summary.direct_tokens.total_tokens, 25)
+        self.assertEqual(continued.summary.delegated_tokens.total_tokens, 0)
+        self.assertEqual(continued.summary.context_tokens, 60)
 
     def test_hourly_series_is_gap_filled_and_filterable(self) -> None:
         for usage_id, hour, provider_id, tokens in (

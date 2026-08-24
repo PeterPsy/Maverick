@@ -7,7 +7,10 @@ import unittest
 
 from core.api.platform_state import bootstrap_platform_state
 from core.providers.agentic_models import ActorSelectionPolicy
-from core.providers.agentic_workspace_admin import save_workspace_agentic_binding
+from core.providers.agentic_workspace_admin import (
+    configure_workspace_agentic_default,
+    save_workspace_agentic_binding,
+)
 from core.providers.agentic_workspace_policy import actor_selection_allowed
 from core.providers.errors import AgenticProfileError, ProviderNotFoundError
 from core.providers.google_agentic_profile import (
@@ -71,6 +74,32 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 confirm_fake_data_only_workspace=False,
                 now=NOW,
             )
+
+    def test_legacy_selection_is_not_written_before_authoritative_publication(self) -> None:
+        previous = self.state.provider_store.get_provider_selection("default")
+
+        with mock.patch(
+            "core.providers.agentic_workspace_admin.ensure_codex_preview_certificate",
+            side_effect=AgenticProfileError("simulated_certificate_failure"),
+        ):
+            with self.assertRaisesRegex(
+                AgenticProfileError,
+                "simulated_certificate_failure",
+            ):
+                configure_workspace_agentic_default(
+                    self.state.provider_store,
+                    self.state.provider_registry,
+                    workspace_id="default",
+                    provider_id="codex",
+                    model_id="gpt-5.6-sol",
+                    model_reasoning_effort="high",
+                    now=NOW,
+                )
+
+        self.assertEqual(
+            self.state.provider_store.get_provider_selection("default"),
+            previous,
+        )
 
     def test_workspace_policy_cannot_widen_profile_limits(self) -> None:
         profile = self.state.provider_store.get_agentic_profile_definition(

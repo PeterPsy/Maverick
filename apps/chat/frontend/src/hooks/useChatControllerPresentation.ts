@@ -43,6 +43,7 @@ type UseChatControllerPresentationParams = {
   canStopTurn: boolean;
   composer: string;
   composerError: string | null;
+  runtimeAdmissionBlocked: boolean;
   composerMentionItems: MentionItem[];
   chatUsage: ChatUsageSummary | null;
   draftChat: DraftChat | null;
@@ -123,6 +124,7 @@ export function useChatControllerPresentation({
   canStopTurn,
   composer,
   composerError,
+  runtimeAdmissionBlocked,
   composerMentionItems,
   chatUsage,
   draftChat,
@@ -229,7 +231,7 @@ export function useChatControllerPresentation({
     return interAgentComposerBudgetLabel(multiAgentMode);
   }, [multiAgentMode]);
   const { handleChatRootDragOver, handleChatRootDrop } = useChatRootDropHandlers({
-    disabled: isThreadLoading,
+    disabled: isThreadLoading || runtimeAdmissionBlocked,
     handleAddAttachments,
   });
   const surfaceProps: ChatSurfaceProps = {
@@ -240,7 +242,7 @@ export function useChatControllerPresentation({
       agents: agentOptions,
       attachments,
       canStopTurn,
-      disabled: isThreadLoading,
+      disabled: isThreadLoading || runtimeAdmissionBlocked,
       error: composerError,
       executionMode,
       isSending,

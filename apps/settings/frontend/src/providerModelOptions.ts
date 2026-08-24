@@ -3,7 +3,7 @@ import type { PlatformSettings, ProviderModelOption } from './adminApi';
 export function selectedProviderDraft(settings: PlatformSettings | null) {
   const provider = settings?.provider.active_provider;
   const modelSettings = settings?.provider.model_settings;
-  return selectedDraft(provider, modelSettings, modelOptionsForSettings(settings));
+  return selectedDraft(provider, modelSettings);
 }
 
 export function modelOptionsForSettings(settings: PlatformSettings | null) {
@@ -15,7 +15,7 @@ export function modelOptionsForSettings(settings: PlatformSettings | null) {
 export function selectedHostedProviderDraft(settings: PlatformSettings | null) {
   const provider = settings?.provider.hosted_text?.active_provider || null;
   const modelSettings = settings?.provider.hosted_text?.model_settings || null;
-  return selectedDraft(provider, modelSettings, hostedModelOptionsForSettings(settings));
+  return selectedDraft(provider, modelSettings);
 }
 
 export function hostedModelOptionsForSettings(settings: PlatformSettings | null) {
@@ -42,14 +42,11 @@ export function hostedModelOptionsForSettings(settings: PlatformSettings | null)
 
 function selectedDraft(
   provider: PlatformSettings['provider']['active_provider'] | null | undefined,
-  modelSettings: PlatformSettings['provider']['model_settings'] | null | undefined,
-  options: ProviderModelOption[]
+  modelSettings: PlatformSettings['provider']['model_settings'] | null | undefined
 ) {
   const selectedModel = modelSettings?.selected_model_id || provider?.default_model_family || '';
-  const selectedOption = options.find((option) => option.model_id === selectedModel) || null;
   return {
-    modelId: selectedModel,
-    reasoningEffort: modelSettings?.selected_reasoning_effort || defaultReasoningForOption(selectedOption)
+    modelId: selectedModel
   };
 }
 

@@ -82,6 +82,11 @@ class RuntimeSessionRecord:
     owner_user_id: str | None = None
     created_by_user_id: str | None = None
     creator_runtime_session_id: str | None = None
+    predecessor_session_id: str | None = None
+    lineage_root_session_id: str | None = None
+    continuation_handoff_id: str | None = None
+    continuation_fork_reason: str | None = None
+    continuation_successor_session_id: str | None = None
     grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] = field(default_factory=list)
     execution_binding: RuntimeExecutionBinding | None = None
     provider_id: str | None = None
@@ -201,6 +206,10 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
 
 def runtime_session_allows_user_thread(session: RuntimeSessionRecord) -> bool:
     """Return whether this runtime session may be represented by a user-visible thread."""
+    if str(
+        getattr(session, "continuation_successor_session_id", None) or ""
+    ).strip():
+        return False
     try:
         _kind, visibility = normalize_runtime_session_visibility(
             getattr(session, "session_kind", None),

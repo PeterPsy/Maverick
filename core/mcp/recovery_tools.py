@@ -12,6 +12,7 @@ from core.mcp.core_tool_helpers import FULL_ACCESS_WORKSPACE, OPERATOR_ONLY, WOR
 from core.mcp.errors import McpInvocationNotAllowedError
 from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.providers.provider_registry import ProviderRegistry
+from core.providers.store import ProviderStore
 from core.recovery.backend_service import restart_backend_service
 from core.recovery.service import execute_session_restart, record_app_health, record_failed_start, record_provider_health, record_runtime_health, recovery_status
 from core.recovery.store import RecoveryStore
@@ -26,6 +27,7 @@ def recovery_tool_specs(
     recovery_store: RecoveryStore | None = None,
     workspace_store: WorkspaceStore | None = None,
     provider_registry: ProviderRegistry | None = None,
+    provider_store: ProviderStore | None = None,
     observability_store=None,
     start_path: Path | None = None,
 ) -> list[tuple[McpToolDefinition, Any]]:
@@ -102,7 +104,14 @@ def recovery_tool_specs(
             if runtime_store is None:
                 return {"health": None}
             session = runtime_store.get_session(str(arguments["session_id"]))
-            result = record_runtime_health(recovery_store, session=session, observability_store=observability_store)
+            result = record_runtime_health(
+                recovery_store,
+                session=session,
+                provider_store=provider_store,
+                runtime_store=runtime_store,
+                provider_registry=provider_registry,
+                observability_store=observability_store,
+            )
         elif target_kind == "provider":
             if provider_registry is None:
                 return {"health": None}

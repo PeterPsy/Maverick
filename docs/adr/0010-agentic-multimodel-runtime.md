@@ -77,6 +77,30 @@ tool policy, app mount, health, and revocation state may only reduce or block th
 pinned ceiling. Authority expansion requires a new session or explicit fork
 with a new execution binding.
 
+An execution-authority change that is proven compatible uses a versioned
+continuation fork; it never rewrites the predecessor binding. Core creates a
+child session with the current binding, persists an idempotent handoff record,
+CAS-fences the predecessor provider state, transfers the provider thread and
+continuation ids to the child, stops the predecessor, and rebinds the existing
+logical runtime thread to the child. Compatibility requires the same profile
+identity, engine, adapter id/version, provider, model, protocol/API, routing,
+credential reference, reasoning contract, execution mode, policy ceilings,
+and egress policy. The target capability set may only be an intersection of
+the predecessor and target certificates; it may never expand authority.
+Legacy-inferred bindings, missing provider threads, revoked certificates, or
+any unproven field require an explicit new conversation instead. Automatic
+continuation forks are limited to `chat_root` sessions; hidden inter-agent and
+system sessions require a separately designed ownership handoff rather than
+silently changing their scheduler references.
+
+The predecessor and child form one logical transcript lineage. REST,
+WebSocket, transcript, usage, and cleanup surfaces traverse that lineage while
+each event and turn remains owned by the immutable session under which it was
+executed. The predecessor permanently rejects provider-state updates and new
+turns after fencing. WebSocket snapshots declare both the originally requested
+session id and the complete physical lineage so clients continue accepting
+child events after a live rebind without weakening workspace authorization.
+
 ### 3. Capability certification is evidence-backed
 
 Agentic availability is derived from an immutable `CapabilityCertificate` plus
@@ -200,6 +224,7 @@ normative so both adapters implement the same semantics.
 | Evidence blob | `data/control-plane/provider-evidence/<digest-prefix>/<digest>` or configured platform blob adapter | content-addressed, create-if-absent, digest verified |
 | Execution binding / preparation barrier | `runtime/sessions/<session_id>/session.json` | binding embedded in a single immutable aggregate insert; `unprepared -> prepared` publication uses a one-way CAS |
 | Provider state | `runtime/sessions/<session_id>/provider_state.json` | `session_id`, insert-if-absent then revision/generation CAS |
+| Continuation handoff | `runtime/continuation_handoffs.json` | one workspace-scoped record per predecessor session; immutable compatibility evidence plus monotonic phase/revision CAS |
 | Tool invocation | `runtime/sessions/<session_id>/tool_invocations.json` | `invocation_id`, revision CAS |
 | Confirmation grant | `runtime/sessions/<session_id>/tool_confirmation_grants.json` | `grant_id`, revision CAS and atomic active-to-consumed transition |
 | Private blob metadata/content | `runtime/sessions/<session_id>/private/` behind the Core private-state service | Core-issued random locator, encrypted, create-if-absent, bounded |
@@ -224,6 +249,9 @@ Store services never emulate CAS with an unlocked read followed by write.
 Revision starts at zero. Successful mutable writes increment by exactly one.
 Late provider-state writes additionally match the current turn generation and
 cannot change stopped, cancelled, failed, or recovery-required lifecycle state.
+Continuation transfer first CAS-fences the predecessor provider-state revision;
+all later ordinary provider-state updates reject that fence. Handoff phases are
+monotonic and make recovery after any intermediate process failure idempotent.
 
 Session aggregate creation remains one insert. No cross-collection transaction
 is required. Provider-state initialization is the explicit second step and is
@@ -271,6 +299,15 @@ feature, and the legacy runtime reader is removed before Definition of Done.
   to an incomplete vendor history.
 - Feature flags can stop new sessions and live-narrow existing authority, but
   cannot migrate an existing session to another engine/model/upstream.
+- Turn admission validates live adapter/certificate authority before persisting
+  a user or backend-recovery turn. A compatible mismatch completes the audited
+  continuation fork; an incompatible mismatch returns
+  `runtime_profile_upgrade_required` without queuing provider work.
+- The admin-only continuation-repair command defaults to dry-run. A mutating
+  run snapshots the provider control plane, workspace runtime indexes, and only
+  the selected sessions' JSON/event-history records before applying the exact
+  preflight-compatible scope; provider homes and other runtime caches are not
+  copied.
 
 ## Runtime bearer authority interaction
 

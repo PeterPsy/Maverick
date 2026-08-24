@@ -114,8 +114,11 @@ def _core_command_specs(
             runtime_store=runtime_store,
             recovery_store=recovery_store,
             workspace_store=workspace_store,
+            provider_store=provider_store,
             provider_registry=provider_registry,
             observability_store=observability_store,
+            runtime_event_bus=runtime_event_bus,
+            runtime_thread_event_bus=runtime_thread_event_bus,
             start_path=start_path,
         )
     )

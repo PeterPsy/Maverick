@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ChatThread, ProviderItem, RuntimeSession, RuntimeTurn } from "../api/client";
-import { isActiveRuntimeTurnBusyForThread, providersForComposer, selectedProviderForSession } from "./useChatAppController";
+import {
+  isActiveRuntimeTurnBusyForThread,
+  providersForComposer,
+  runtimeAdmissionBlockMessage,
+  selectedProviderForSession,
+} from "./useChatAppController";
 
 function thread(availability: string, overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -48,6 +53,44 @@ describe("chat runtime busy guard", () => {
 
   it("keeps existing busy behavior when the thread is not selected yet", () => {
     expect(isActiveRuntimeTurnBusyForThread(turn("active"), null)).toBe(true);
+  });
+});
+
+describe("runtime admission status", () => {
+  it("blocks unsafe and missing-thread sessions with actionable copy", () => {
+    expect(runtimeAdmissionBlockMessage(session({
+      runtime_admission: {
+        status: "upgrade_required",
+        reason_code: "runtime_profile_upgrade_required",
+        detail_code: "runtime_profile_upgrade_legacy_authority_unproven",
+        source_profile_revision: "2",
+        target_profile_revision: null,
+        provider_thread_available: true,
+      },
+    }))).toContain("cannot be upgraded automatically");
+    expect(runtimeAdmissionBlockMessage(session({
+      runtime_admission: {
+        status: "provider_thread_missing",
+        reason_code: "runtime_profile_upgrade_required",
+        detail_code: "provider_thread_missing",
+        source_profile_revision: "5",
+        target_profile_revision: null,
+        provider_thread_available: false,
+      },
+    }))).toContain("provider conversation");
+  });
+
+  it("keeps direct and compatible-upgrade sessions interactive", () => {
+    expect(runtimeAdmissionBlockMessage(session({
+      runtime_admission: {
+        status: "compatible_upgrade",
+        reason_code: "runtime_profile_upgrade_compatible",
+        detail_code: "adapter_artifact_mismatch",
+        source_profile_revision: "5",
+        target_profile_revision: "7",
+        provider_thread_available: true,
+      },
+    }))).toBeNull();
   });
 });
 

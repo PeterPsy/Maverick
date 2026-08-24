@@ -13,6 +13,7 @@ from core.api.provider_api import (
     workspace_runtime_status,
 )
 from core.api.runtime_cleanup import RuntimeCleanupError, cleanup_runtime_session
+from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 from core.api.session_api import RequestSession, public_user_payload, require_session
 from core.api.workspace_api import workspace_payload
 from core.authorization.errors import AuthorizationError
@@ -23,6 +24,7 @@ from core.authorization.service import (
 )
 from core.recovery.service import execute_session_restart, record_provider_health, record_runtime_health, recovery_status
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.continuation_lineage import runtime_session_lineage
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.workspaces.errors import WorkspaceMembershipError
 
@@ -168,7 +170,17 @@ def _record_workspace_health(state: PlatformState, context: RequestSession, body
             session = state.runtime_store.get_session(session_id)
         except (RuntimeSessionNotFoundError, ValueError):
             return {"error": "runtime_session_not_found"}
-        return {"result": asdict(record_runtime_health(state.recovery_store, session=session))}
+        return {
+            "result": asdict(
+                record_runtime_health(
+                    state.recovery_store,
+                    session=session,
+                    provider_store=state.provider_store,
+                    runtime_store=state.runtime_store,
+                    provider_registry=state.provider_registry,
+                )
+            )
+        }
     provider_id = str(body.get("provider_id") or "")
     if not provider_id:
         provider_status = workspace_provider_status(state, workspace_id=context.workspace_id)
@@ -218,37 +230,52 @@ def _clear_visible_runtime_sessions(state: PlatformState, context: RequestSessio
     results = []
     for session in sessions:
         try:
-            cleanup = cleanup_runtime_session(
-                state,
-                session_id=session.session_id,
-                reason=reason,
-                start_path=state.repository_root,
-            )
-        except RuntimeCleanupError as error:
+            lineage = runtime_session_lineage(state.runtime_store, session)
+            if len(lineage) == 1:
+                cleanups = [
+                    cleanup_runtime_session(
+                        state,
+                        session_id=session.session_id,
+                        reason=reason,
+                        start_path=state.repository_root,
+                    )
+                ]
+            else:
+                batch = cleanup_runtime_sessions_batch(
+                    state,
+                    session_ids=[session.session_id],
+                    workspace_id=session.workspace_id,
+                    reason=reason,
+                    start_path=state.repository_root,
+                )
+                cleanups = batch["session_results"]
+        except (RuntimeCleanupError, ValueError) as error:
             return 500, {"error": str(error)}
-        deleted = cleanup.get("deleted") if isinstance(cleanup.get("deleted"), dict) else {}
-        for key, value in deleted.items():
-            deleted_totals[key] = deleted_totals.get(key, 0) + int(value or 0)
-        terminated_processes += int(cleanup.get("terminated_processes") or 0)
-        cancelled_turns += int(cleanup.get("cancelled_turns") or 0)
-        deleted_threads += int(cleanup.get("deleted_threads") or 0)
-        deleted_thread_ids.extend(
-            thread_id
-            for thread_id in cleanup.get("deleted_thread_ids", [])
-            if isinstance(thread_id, str) and thread_id
-        )
-        runtime_roots_deleted += 1 if cleanup.get("runtime_root_deleted") else 0
-        results.append(
-            {
-                "session_id": session.session_id,
-                "workspace_id": session.workspace_id,
-                "deleted": deleted,
-                "deleted_threads": int(cleanup.get("deleted_threads") or 0),
-                "runtime_root_deleted": bool(cleanup.get("runtime_root_deleted")),
-            }
-        )
+        for cleanup in cleanups:
+            deleted = cleanup.get("deleted") if isinstance(cleanup.get("deleted"), dict) else {}
+            for key, value in deleted.items():
+                deleted_totals[key] = deleted_totals.get(key, 0) + int(value or 0)
+            terminated_processes += int(cleanup.get("terminated_processes") or 0)
+            cancelled_turns += int(cleanup.get("cancelled_turns") or 0)
+            deleted_threads += int(cleanup.get("deleted_threads") or 0)
+            deleted_thread_ids.extend(
+                thread_id
+                for thread_id in cleanup.get("deleted_thread_ids", [])
+                if isinstance(thread_id, str) and thread_id
+            )
+            runtime_roots_deleted += 1 if cleanup.get("runtime_root_deleted") else 0
+            results.append(
+                {
+                    "session_id": cleanup.get("session_id") or session.session_id,
+                    "workspace_id": cleanup.get("workspace_id") or session.workspace_id,
+                    "deleted": deleted,
+                    "deleted_threads": int(cleanup.get("deleted_threads") or 0),
+                    "runtime_root_deleted": bool(cleanup.get("runtime_root_deleted")),
+                }
+            )
     return 200, {
-        "cleared_sessions": len(results),
+        "cleared_sessions": len(sessions),
+        "cleaned_runtime_sessions": len(results),
         "terminated_processes": terminated_processes,
         "cancelled_turns": cancelled_turns,
         "deleted_threads": deleted_threads,

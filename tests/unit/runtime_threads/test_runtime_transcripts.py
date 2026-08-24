@@ -338,6 +338,81 @@ class RuntimeTranscriptTest(unittest.TestCase):
         self.assertEqual(denied.exception.reason, "transcript_read_forbidden")
         self.assertEqual(denied.exception.status_code, 403)
 
+    def test_continuation_thread_projects_predecessor_and_successor_as_one_transcript(self) -> None:
+        store = self.memory_store()
+        predecessor = replace(
+            self.session("session-1"),
+            continuation_successor_session_id="session-2",
+        )
+        successor = replace(
+            self.session("session-2", status="running"),
+            predecessor_session_id="session-1",
+            lineage_root_session_id="session-1",
+        )
+        store.save_session(predecessor)
+        store.save_session(successor)
+        store.save_thread(self.thread("session-2", thread_id="session-1"))
+        store.save_turn(self.turn("turn-1", session_id="session-1"))
+        store.save_event(
+            self.event(
+                "source-queued",
+                "runtime.turn.queued",
+                {"input_text": "hello", "client_message_id": "source-client"},
+                session_id="session-1",
+                turn_id="turn-1",
+            )
+        )
+        store.save_event(
+            self.event(
+                "source-final",
+                "runtime.output.final",
+                {"complete_text": "first answer", "text": "first answer"},
+                session_id="session-1",
+                turn_id="turn-1",
+                seconds=1,
+            )
+        )
+        store.save_turn(
+            self.turn(
+                "turn-2",
+                session_id="session-2",
+                input_text="continue",
+                client_message_id="successor-client",
+            )
+        )
+        store.save_event(
+            self.event(
+                "successor-queued",
+                "runtime.turn.queued",
+                {"input_text": "continue", "client_message_id": "successor-client"},
+                session_id="session-2",
+                turn_id="turn-2",
+                seconds=2,
+            )
+        )
+        store.save_event(
+            self.event(
+                "successor-final",
+                "runtime.output.final",
+                {"complete_text": "continued answer", "text": "continued answer"},
+                session_id="session-2",
+                turn_id="turn-2",
+                seconds=3,
+            )
+        )
+
+        payload = read_runtime_transcript(
+            store,
+            context=self.context(),
+            thread_id="session-1",
+        )
+
+        self.assertEqual(
+            [message["content"] for message in payload["messages"]],
+            ["hello", "first answer", "continue", "continued answer"],
+        )
+        self.assertTrue(payload["projection_complete"])
+
     def test_cross_workspace_and_hidden_sessions_are_not_found(self) -> None:
         store = self.memory_store()
         store.save_session(self.session("other", workspace_id="other", owner_user_id="alice"))

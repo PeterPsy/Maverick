@@ -44,6 +44,7 @@ export type ProviderModelOption = {
 export type ProviderModelSettings = {
   selected_model_id: string | null;
   selected_reasoning_effort: string | null;
+  default_reasoning_effort?: string | null;
   available_models: ProviderModelOption[];
 };
 
@@ -408,6 +409,19 @@ export type RuntimeSession = {
   runtime_ready?: boolean;
   prewarm_total_ms?: number;
   declared_remote_data_class?: string | null;
+  predecessor_session_id?: string | null;
+  lineage_root_session_id?: string | null;
+  continuation_successor_session_id?: string | null;
+  runtime_admission?: RuntimeAdmission | null;
+};
+
+export type RuntimeAdmission = {
+  status: "direct" | "compatible_upgrade" | "upgrade_required" | "provider_thread_missing";
+  reason_code: string | null;
+  detail_code: string | null;
+  source_profile_revision: string | null;
+  target_profile_revision: string | null;
+  provider_thread_available: boolean;
 };
 
 export type RuntimeTurn = {
@@ -497,6 +511,9 @@ export type RuntimeWebSocketFrame =
       has_more_before?: boolean;
       oldest_event_id?: string | null;
       usage?: ChatUsageSummary | null;
+      runtime_admission?: RuntimeAdmission | null;
+      requested_session_id?: string | null;
+      lineage_session_ids?: string[];
     }
   | {
       type: "runtime.history.page";

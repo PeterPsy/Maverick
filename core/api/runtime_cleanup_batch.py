@@ -16,6 +16,10 @@ from core.inter_agent.service import (
 )
 from core.inter_agent.surfaces import inter_agent_payload
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.continuation_lineage import (
+    resolve_latest_runtime_session,
+    runtime_session_lineage,
+)
 from core.runtime.paths import runtime_session_root
 
 
@@ -35,12 +39,30 @@ def cleanup_runtime_sessions_batch(
     started_at = time.perf_counter()
     repository_root = start_path or state.repository_root
     root_session_ids = list(dict.fromkeys(item.strip() for item in session_ids if item.strip()))
+    expanded_session_ids = list(root_session_ids)
+    continuation_predecessor_ids: set[str] = set()
+    for session_id in root_session_ids:
+        try:
+            session = state.runtime_store.get_session(session_id)
+            current = resolve_latest_runtime_session(state.runtime_store, session)
+            lineage = runtime_session_lineage(state.runtime_store, current)
+        except (RuntimeSessionNotFoundError, ValueError):
+            continue
+        for lineage_session in lineage:
+            if getattr(
+                lineage_session,
+                "continuation_successor_session_id",
+                None,
+            ):
+                continuation_predecessor_ids.add(lineage_session.session_id)
+            if lineage_session.session_id not in expanded_session_ids:
+                expanded_session_ids.append(lineage_session.session_id)
     active_runs = [
         run
         for run in state.inter_agent_store.list_runs(workspace_id)
-        if run.root_runtime_session_id in root_session_ids and run.status not in TERMINAL_RUN_STATUSES
+        if run.root_runtime_session_id in expanded_session_ids
+        and run.status not in TERMINAL_RUN_STATUSES
     ]
-    expanded_session_ids = list(root_session_ids)
     for run in active_runs:
         for participant in state.inter_agent_store.list_participants(run.run_id, workspace_id=workspace_id):
             if participant.execution_mode != RUNTIME_CHILD_EXECUTION_MODE or not participant.runtime_session_id:
@@ -124,7 +146,11 @@ def cleanup_runtime_sessions_batch(
     children_finished_at = time.perf_counter()
 
     for session_id in root_session_ids:
-        cleanup_once(session_id, reason, allow_hidden=False)
+        cleanup_once(
+            session_id,
+            reason,
+            allow_hidden=session_id in continuation_predecessor_ids,
+        )
     roots_finished_at = time.perf_counter()
 
     deleted_records = state.runtime_store.delete_session_records_batch(existing_session_ids)

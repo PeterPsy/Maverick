@@ -80,9 +80,8 @@ def configure_workspace_agentic_default(
         created_at=timestamp if selection is None else selection.created_at,
         updated_at=timestamp,
         model_id=selected_model_id,
-        model_reasoning_effort=requested_reasoning,
+        model_reasoning_effort=None,
     )
-    store.save_provider_selection(desired_selection)
 
     profile = publish_codex_agentic_profile(
         store,
@@ -119,7 +118,7 @@ def configure_workspace_agentic_default(
         "require_confirmation_for_mutating": policy.require_confirmation_for_mutating,
         "require_confirmation_for_destructive": policy.require_confirmation_for_destructive,
     }
-    return save_workspace_agentic_binding(
+    saved_binding = save_workspace_agentic_binding(
         store,
         registry,
         workspace_id=workspace_id,
@@ -138,6 +137,11 @@ def configure_workspace_agentic_default(
         observability_store=observability_store,
         now=timestamp,
     )
+    # This legacy projection is deliberately written last. The authoritative
+    # profile, certificate, and workspace binding must all succeed first, and
+    # reasoning remains a per-session choice rather than workspace authority.
+    store.save_provider_selection(desired_selection)
+    return saved_binding
 
 
 def save_workspace_agentic_binding(

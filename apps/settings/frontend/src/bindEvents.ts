@@ -19,7 +19,6 @@ export function bindSettingsEvents(context: {
     options?: { enabled?: boolean; confirmFakeDataOnlyWorkspace?: boolean }
   ) => Promise<void>;
   onProviderModelChanged: (modelId: string) => void;
-  onProviderReasoningChanged: (reasoningEffort: string) => void;
   refreshProviderUsageFromPanel: () => Promise<void>;
   onSpeechAudioModelChanged: (modelId: string) => void;
   onSpeechConversationModelChanged: (modelId: string) => void;
@@ -84,7 +83,6 @@ export function bindSettingsEvents(context: {
       context.saveAgenticBindingFromPanel(definitionId, definitionRevision, options).catch(context.showError);
     },
     onProviderModelChanged: context.onProviderModelChanged,
-    onProviderReasoningChanged: context.onProviderReasoningChanged,
     onRefreshProviderUsage: () => {
       context.refreshProviderUsageFromPanel().catch(context.showError);
     },

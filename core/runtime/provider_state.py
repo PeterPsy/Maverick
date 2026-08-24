@@ -39,6 +39,8 @@ class RuntimeProviderState:
     revision: int
     turn_generation: str | None
     updated_at: datetime
+    continuation_handoff_id: str | None = None
+    continuation_successor_session_id: str | None = None
 
 
 def provider_private_envelope_from_document(

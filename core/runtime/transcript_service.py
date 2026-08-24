@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.runtime.errors import RuntimeTranscriptAccessError, RuntimeTranscriptValidationError
+from core.runtime.continuation_lineage import runtime_session_lineage
 from core.runtime.store import RuntimeStore
 from core.runtime.transcript_access import resolve_authorized_transcript_thread
 from core.runtime.transcript_audit import record_runtime_transcript_audit
@@ -252,29 +253,81 @@ def _snapshot_projection(
     session_id: str,
     snapshot_cursor: str | None,
 ) -> tuple[RuntimeEventHistoryRead, RuntimeTurnHistoryRead, RuntimeTranscriptProjection, str]:
+    session = store.get_session(session_id)
+    lineage = runtime_session_lineage(store, session)
     requested = (
         decode_runtime_transcript_snapshot(snapshot_cursor, session_id=session_id)
         if str(snapshot_cursor or "").strip()
         else None
     )
-    event_history = read_runtime_event_history(
+    current_event_history = read_runtime_event_history(
         store,
         session_id,
         snapshot_position=requested.event_position if requested else None,
         snapshot_event_id=requested.event_id if requested else None,
     )
-    turn_history = read_runtime_turn_history(
+    current_turn_history = read_runtime_turn_history(
         store,
         session_id,
         snapshot_position=requested.turn_position if requested else None,
         snapshot_turn_id=requested.turn_id if requested else None,
     )
+    predecessor_event_histories = [
+        read_runtime_event_history(store, predecessor.session_id)
+        for predecessor in lineage[:-1]
+    ]
+    predecessor_turn_histories = [
+        read_runtime_turn_history(store, predecessor.session_id)
+        for predecessor in lineage[:-1]
+    ]
+    event_history = RuntimeEventHistoryRead(
+        events=sorted(
+            [
+                event
+                for history in [*predecessor_event_histories, current_event_history]
+                for event in history.events
+            ],
+            key=lambda event: (event.created_at, event.event_id),
+        ),
+        snapshot_position=current_event_history.snapshot_position,
+        snapshot_event_id=current_event_history.snapshot_event_id,
+        warnings=[
+            warning
+            for history in [*predecessor_event_histories, current_event_history]
+            for warning in history.warnings
+        ],
+        complete=all(
+            history.complete
+            for history in [*predecessor_event_histories, current_event_history]
+        ),
+    )
+    turn_history = RuntimeTurnHistoryRead(
+        turns=sorted(
+            [
+                turn
+                for history in [*predecessor_turn_histories, current_turn_history]
+                for turn in history.turns
+            ],
+            key=lambda turn: (turn.created_at, turn.turn_id),
+        ),
+        snapshot_position=current_turn_history.snapshot_position,
+        snapshot_turn_id=current_turn_history.snapshot_turn_id,
+        warnings=[
+            warning
+            for history in [*predecessor_turn_histories, current_turn_history]
+            for warning in history.warnings
+        ],
+        complete=all(
+            history.complete
+            for history in [*predecessor_turn_histories, current_turn_history]
+        ),
+    )
     snapshot = requested or RuntimeTranscriptSnapshot(
         session_id=session_id,
-        event_position=event_history.snapshot_position,
-        event_id=event_history.snapshot_event_id,
-        turn_position=turn_history.snapshot_position,
-        turn_id=turn_history.snapshot_turn_id,
+        event_position=current_event_history.snapshot_position,
+        event_id=current_event_history.snapshot_event_id,
+        turn_position=current_turn_history.snapshot_position,
+        turn_id=current_turn_history.snapshot_turn_id,
     )
     projection = project_runtime_transcript(
         event_history.events,

@@ -519,12 +519,7 @@ function bindEvents() {
     },
     saveAgenticBindingFromPanel: agenticBindingController.save,
     onProviderModelChanged: (modelId) => {
-      updateDraftModel(settingsPanelState, platformSettings, modelId);
-      render();
-    },
-    onProviderReasoningChanged: (reasoningEffort) => {
-      settingsPanelState.draftReasoningEffort = reasoningEffort;
-      settingsPanelState.providerError = '';
+      updateDraftModel(settingsPanelState, modelId);
       render();
     },
     onSpeechAudioModelChanged: (modelId) => {

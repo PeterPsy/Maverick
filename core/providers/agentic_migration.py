@@ -9,6 +9,7 @@ import json
 
 from core.providers.agentic_models import AgenticMigrationRecord
 from core.providers.agentic_profiles import (
+    CODEX_PROFILE_REVISION,
     build_pinned_execution_binding,
     ensure_codex_workspace_profile,
     publish_codex_agentic_profile,
@@ -97,9 +98,12 @@ def migrate_agentic_runtime_schema(
             provider_definition=codex,
             adapter=codex_adapter,
         )
+    live_codex_model_ids = {option.model_id for option in codex.model_options}
     for definition in provider_store.list_agentic_profile_definitions():
         if (
             definition.runtime_engine_id == "codex"
+            and definition.revision == CODEX_PROFILE_REVISION
+            and definition.model_id in live_codex_model_ids
             and definition.adapter_version_constraint == f"=={codex_adapter.adapter_version}"
         ):
             ensure_codex_preview_certificate(

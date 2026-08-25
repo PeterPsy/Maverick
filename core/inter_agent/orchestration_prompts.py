@@ -33,7 +33,8 @@ def planning_prompt(
     catalog = _catalog_block(available_agent_types, planner_catalog_page)
     return (
         "You are the sole orchestrator of a Maverick Agent nodes run. Produce only one JSON object: either a "
-        "lookup-only catalog_lookup request using an advertised cursor, or a plan with summary and tasks. "
+        "bounded lookup-only catalog_lookup request using advertised cursors/scopes or an agent prefix, or a plan "
+        "with summary and tasks. "
         'Each task requires id, label, role, objective, depends_on and may select agent_type_id '
         'and invoked_skill_ids; invoked_skill_ids must list only the task-required skills assigned to that agent; '
         f"{SKILL_SELECTION_INSTRUCTION}"
@@ -84,7 +85,7 @@ def control_prompt(
     catalog = _catalog_block(available_agent_types, planner_catalog_page)
     return (
         "You are the sole adaptive orchestrator at a persisted scheduling safe point. Respond with one JSON object: "
-        "either a lookup-only catalog_lookup request using an advertised cursor, or "
+        "either a bounded lookup-only catalog_lookup request using advertised cursors/scopes or an agent prefix, or "
         '{"summary": string, "tasks": array, "cancel_task_ids": array, "complete": boolean, '
         '"quality_passed": boolean, "final_answer": string}. New tasks use id, label, role, objective, '
         "depends_on and optional agent_type_id and invoked_skill_ids; invoked_skill_ids must list only task-required "
@@ -107,8 +108,8 @@ def catalog_lookup_followup_prompt(*, decision_kind: str, catalog_page: str) -> 
     return (
         f"Requested server-authoritative planner catalog page:\n{catalog_page}\n\n"
         f"Continue the pending {decision_kind} using the earlier request, evidence, and ledger. "
-        "Return either one lookup-only JSON object "
-        '{"catalog_lookup":{"cursor":"<advertised cursor>"}} or the complete decision JSON previously requested.'
+        "Return either one bounded lookup-only JSON object (cursor batch, agent_prefix, or an advertised "
+        "skill_scope with skill_prefix/skill_ids) or the complete decision JSON previously requested."
     )
 
 

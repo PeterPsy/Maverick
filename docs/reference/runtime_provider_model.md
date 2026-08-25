@@ -141,6 +141,27 @@ Chat may create hidden `prepare_only` runtime sessions before the first message.
 
 Codex turn startup emits separate runtime events for `ensure_runtime`, generated-system-skill cleanup, `ensure_thread`, event-sink reset, and the `turn/start` write boundary. Each start/completed pair is persisted under `runtime.provider.*`, while `runtime.provider.turn_start_sent` remains the write-complete marker and provider acceptance carries `turn_start_request_ack_ms`. This keeps cold-process, cleanup, cold-thread, local reset, request-write, and provider-ack latency distinguishable. Generated `.system` skills are removed on runtime initialization/prewarm and only checked again when that runtime home may need cleanup; a warm turn does not recursively remove an already-clean tree. Maverick owns Codex's `[skills] include_instructions` setting per runtime session: `implicit` writes `true`, while `explicit` writes `false` and supplies validated `type=skill` user-input items only on the invoking `turn/start` or `turn/steer` request.
 
+Explicit Codex threads also use Maverick's `maverick-explicit-lean-v1`
+`baseInstructions` profile instead of the general coding-agent baseline. It
+keeps the workspace, tool, destructive-action, and structured-skill rules but
+does not carry a static skill catalog or generic multi-agent operating manual.
+The automatic project-document excerpt is capped at 2 KiB; before repository
+edits the profile requires the agent to read each applicable `AGENTS.md` in
+full on demand. Implicit sessions retain Codex's legacy baseline and automatic
+project-document behavior. The explicit profile has an 8,000 non-cached input
+token budget for its first turn. Exact Codex usage snapshots add
+`prompt_profile`, `first_turn_input_token_budget`,
+`latest_non_cached_input_tokens`, `first_turn_within_input_budget`, and
+`prompt_budget_final` to `runtime.usage.reported`. At `turn/completed`, Core
+also emits the durable `runtime.prompt_budget.evaluated` event from the latest
+exact usage snapshot, including the final non-cached count and pass/fail result
+even when Codex reports usage separately from the completion notification. The
+acceptance smoke against Codex 0.144.4, with an empty system prompt, no invoked
+skills, the repository
+workspace, and a two-word reply request, measured 7,691 non-cached input tokens.
+This is a versioned acceptance datum rather than a claim that later Codex
+releases or larger app prompts will have identical tokenization.
+
 For an `explicit` session, the persisted user input remains unchanged, but the Codex-only text item neutralizes every `$` sequence that Codex could parse as a skill mention. The validated `invoked_skill_ids` are therefore authoritative. After each acknowledged same-turn steer, Maverick atomically appends the validated IDs to the persisted active-turn receipt. The live runtime retains the same union; when Codex completes a `contextCompaction` item, Maverick serializes a `turn/steer` reinjection of the runtime-local `type=skill` items and emits a bounded success or failure event. Backend-restart recovery likewise copies the interrupted active turn's complete persisted invocation receipt into its continuation turn. It never reconstructs provider paths from persisted data.
 
 Codex declares same-turn text input and maps the generic adapter operation to app-server `turn/steer`. Maverick supplies `threadId`, the provider turn id persisted by `runtime.provider.accepted`, a text input item, and the stable `clientUserMessageId`. The adapter serializes steering writes, retries only explicit app-server backpressure rejections with a small bound, and refuses a changed provider-turn correlation. Explicit no-active-turn, non-steerable-turn, mismatch, overload, or other rejection is safe for the Core to queue as the next runtime turn. A local `ProviderLaunchError` while validating provider input is also known not to have crossed the write boundary, so Core releases the message claim and queues normally. A transport write failure or acknowledgement timeout is delivery-uncertain and is never retried or queued automatically.

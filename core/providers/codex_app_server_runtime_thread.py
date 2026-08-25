@@ -14,10 +14,12 @@ from core.providers.codex_app_server_runtime_resume import (
     local_resume_archive_problem,
     resume_error_is_missing_thread,
 )
-from core.providers.errors import ProviderLaunchError
-from core.providers.models import RuntimeBackendLaunchSpec
+from core.providers.codex_app_server_runtime_thread_params import codex_thread_params as _thread_params
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
+from core.providers.codex_prompt_budget import configure_codex_prompt_budget
+from core.providers.errors import ProviderLaunchError
+from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.provider_codex import remove_codex_system_skills
 from core.runtime.process_control import (
     configure_runtime_process_oom_score,
@@ -97,6 +99,7 @@ def _ensure_provider_thread(
     on_provider_thread_id: Callable[[str], None] | None,
 ) -> str:
     with runtime.provider_thread_lock:
+        configure_codex_prompt_budget(runtime, session)
         if runtime.provider_thread_id:
             return runtime.provider_thread_id
         existing_thread_id = str(session.provider_thread_id or "").strip()
@@ -143,16 +146,6 @@ def _ensure_provider_thread(
         if on_provider_thread_id is not None and provider_thread_id != existing_thread_id:
             on_provider_thread_id(provider_thread_id)
         return provider_thread_id
-
-
-def _thread_params(*, session: RuntimeSessionRecord, launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any]:
-    return {
-        "approvalPolicy": "never",
-        "cwd": launch_spec.working_directory,
-        "sandbox": "danger-full-access" if launch_spec.execution_mode == "full-access" else "read-only",
-        "developerInstructions": session.system_prompt or "",
-        "config": {"mcp_servers": {}},
-    }
 
 
 def _remove_generated_system_skills_if_needed(

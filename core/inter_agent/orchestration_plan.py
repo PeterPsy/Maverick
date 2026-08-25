@@ -8,6 +8,10 @@ import re
 from typing import Any
 
 from core.inter_agent.errors import InterAgentValidationError
+from core.inter_agent.orchestration_planner_catalog import (
+    MAX_CATALOG_LOOKUP_CURSORS,
+    PlannerCatalogLookupRequest,
+)
 from core.inter_agent.orchestration_topology import validate_task_ids_not_reserved
 from core.skills.service import SkillInvocationError, normalize_invoked_skill_ids
 
@@ -85,20 +89,85 @@ class OrchestrationControlDecision:
     final_answer: str
 
 
-def parse_catalog_lookup_cursor(value: str) -> str | None:
-    """Return a lookup-only cursor without treating it as a persisted decision."""
+def parse_catalog_lookup_request(value: str) -> PlannerCatalogLookupRequest | None:
+    """Return a validated lookup-only request without persisting it as a decision."""
     payload = _json_object(value, decision="catalog lookup or decision")
     if "catalog_lookup" not in payload:
         return None
     if set(payload) != {"catalog_lookup"}:
         raise InterAgentValidationError("Catalog lookup responses may only contain catalog_lookup.")
     lookup = payload.get("catalog_lookup")
-    if not isinstance(lookup, dict) or set(lookup) != {"cursor"}:
-        raise InterAgentValidationError("Catalog lookup requires exactly one cursor field.")
-    cursor = str(lookup.get("cursor") or "").strip()
-    if not cursor or len(cursor) > 256:
-        raise InterAgentValidationError("Catalog lookup cursor is missing or too long.")
-    return cursor
+    allowed = {"cursor", "cursors", "agent_prefix", "skill_scope", "skill_prefix", "skill_ids"}
+    if not isinstance(lookup, dict) or not set(lookup).issubset(allowed):
+        raise InterAgentValidationError("Catalog lookup contains unsupported fields.")
+    if "cursor" in lookup and "cursors" in lookup:
+        raise InterAgentValidationError("Catalog lookup cannot combine cursor and cursors.")
+    cursors = _lookup_string_list(
+        [lookup.get("cursor")] if "cursor" in lookup else lookup.get("cursors", []),
+        field="cursors",
+        maximum=MAX_CATALOG_LOOKUP_CURSORS,
+        item_limit=256,
+    )
+    agent_prefix = _optional_lookup_text(lookup.get("agent_prefix"), field="agent_prefix", limit=128)
+    skill_scope = _optional_lookup_text(lookup.get("skill_scope"), field="skill_scope", limit=32)
+    skill_prefix = _optional_lookup_text(lookup.get("skill_prefix"), field="skill_prefix", limit=128)
+    skill_ids = _lookup_string_list(
+        lookup.get("skill_ids", []),
+        field="skill_ids",
+        maximum=32,
+        item_limit=128,
+    )
+    skill_search_requested = skill_scope is not None or skill_prefix is not None or bool(skill_ids)
+    modes = sum((bool(cursors), agent_prefix is not None, skill_search_requested))
+    if modes != 1:
+        raise InterAgentValidationError("Catalog lookup requires exactly one cursor batch, agent prefix, or skill search.")
+    if skill_scope is None and (skill_prefix is not None or skill_ids):
+        raise InterAgentValidationError("Catalog skill search requires skill_scope.")
+    if skill_scope is not None and skill_prefix is None and not skill_ids:
+        raise InterAgentValidationError("Catalog skill search requires skill_prefix or skill_ids.")
+    return PlannerCatalogLookupRequest(
+        cursors=cursors,
+        agent_prefix=agent_prefix,
+        skill_scope=skill_scope,
+        skill_prefix=skill_prefix,
+        skill_ids=skill_ids,
+    )
+
+
+def parse_catalog_lookup_cursor(value: str) -> str | None:
+    """Backward-compatible single-cursor parser used by older integrations."""
+    request = parse_catalog_lookup_request(value)
+    if request is None:
+        return None
+    if len(request.cursors) != 1 or any(
+        (request.agent_prefix, request.skill_scope, request.skill_prefix, request.skill_ids)
+    ):
+        raise InterAgentValidationError("Catalog lookup does not contain exactly one cursor.")
+    return request.cursors[0]
+
+
+def _optional_lookup_text(value: Any, *, field: str, limit: int) -> str | None:
+    if value is None:
+        return None
+    text = str(value or "").strip()
+    if not text or len(text) > limit:
+        raise InterAgentValidationError(f"Catalog lookup {field} is missing or too long.")
+    return text
+
+
+def _lookup_string_list(
+    value: Any,
+    *,
+    field: str,
+    maximum: int,
+    item_limit: int,
+) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise InterAgentValidationError(f"Catalog lookup {field} must be an array.")
+    items = tuple(dict.fromkeys(str(item or "").strip() for item in value if str(item or "").strip()))
+    if len(items) > maximum or any(len(item) > item_limit for item in items):
+        raise InterAgentValidationError(f"Catalog lookup {field} is too large or contains an invalid item.")
+    return items
 
 
 def parse_orchestration_plan(

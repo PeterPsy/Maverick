@@ -9,7 +9,7 @@ from typing import Any, Callable
 from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
 from core.inter_agent.service import InterAgentService
-from core.api.orchestration_agent_catalog import build_orchestration_agent_catalog
+from core.api.orchestration_agent_catalog import build_orchestration_agent_catalog_source
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ def start_orchestrated_execution_worker(
                 run_id=run.run_id,
             )
             root_session = state.runtime_store.get_session(run.root_runtime_session_id)
-            catalog = build_orchestration_agent_catalog(
+            catalog_source = build_orchestration_agent_catalog_source(
                 state,
                 workspace_id=workspace_id,
                 created_by_user_id=run.created_by_user_id,
@@ -53,8 +53,7 @@ def start_orchestrated_execution_worker(
                 state,
                 workspace_id=workspace_id,
                 run_id=run_id,
-                agent_snapshot_resolver=catalog.resolve,
-                planner_catalog=catalog.planner_catalog,
+                catalog_snapshot_provider=catalog_source.refresh,
             )
         except Exception:
             logger.exception("Orchestrated inter-agent worker failed for %s/%s.", workspace_id, run_id)

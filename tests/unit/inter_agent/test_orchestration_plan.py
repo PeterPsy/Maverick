@@ -6,6 +6,7 @@ import unittest
 from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.orchestration_plan import (
     parse_catalog_lookup_cursor,
+    parse_catalog_lookup_request,
     parse_control_decision,
     parse_completion_decision,
     parse_orchestration_plan,
@@ -24,6 +25,19 @@ class OrchestrationPlanTest(unittest.TestCase):
             parse_catalog_lookup_cursor(
                 '{"catalog_lookup":{"cursor":"skills:s0:42"},"tasks":[]}'
             )
+
+        request = parse_catalog_lookup_request(
+            '{"catalog_lookup":{"skill_scope":"s7","skill_prefix":"storage-",'
+            '"skill_ids":["storage-ops"]}}'
+        )
+        self.assertEqual(request.skill_scope, "s7")
+        self.assertEqual(request.skill_prefix, "storage-")
+        self.assertEqual(request.skill_ids, ("storage-ops",))
+
+        cursors = parse_catalog_lookup_request(
+            '{"catalog_lookup":{"cursors":["agents:10","skills:s0:42"]}}'
+        )
+        self.assertEqual(cursors.cursors, ("agents:10", "skills:s0:42"))
 
     def test_parses_dependency_plan_and_quality_decisions(self) -> None:
         plan = parse_orchestration_plan(

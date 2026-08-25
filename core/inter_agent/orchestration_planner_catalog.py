@@ -10,6 +10,8 @@ from core.inter_agent.errors import InterAgentValidationError
 
 MAX_PLANNER_CATALOG_PAGE_CHARS = 8192
 _SECTION_CONTENT_CHARS = 3500
+MAX_CATALOG_LOOKUP_CURSORS = 2
+MAX_CATALOG_SEARCH_RESULTS = 64
 _AGENT_CURSOR_RE = re.compile(r"^agents:(\d+)$")
 _SKILL_CURSOR_RE = re.compile(r"^skills:(s\d+):(\d+)$")
 
@@ -20,6 +22,7 @@ class PlannerCatalogPage:
 
     text: str
     next_cursors: tuple[str, ...] = ()
+    skill_scope_tokens: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,15 @@ class PlannerSkillScope:
 class PlannerAgentEntry:
     text: str
     skill_scope_token: str | None = None
+
+
+@dataclass(frozen=True)
+class PlannerCatalogLookupRequest:
+    cursors: tuple[str, ...] = ()
+    agent_prefix: str | None = None
+    skill_scope: str | None = None
+    skill_prefix: str | None = None
+    skill_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -73,6 +85,9 @@ class OrchestrationPlannerCatalog:
         page = PlannerCatalogPage(
             text="\n\n".join(part for part in parts if part),
             next_cursors=_unique(cursors),
+            skill_scope_tokens=_unique(
+                [*agent_page.skill_scope_tokens, *(skill_page.skill_scope_tokens if first_scope is not None else ())]
+            ),
         )
         _assert_page_budget(page)
         return page
@@ -94,6 +109,14 @@ class OrchestrationPlannerCatalog:
                 raise InterAgentValidationError("Unknown planner skill-catalog cursor.")
             return self._skill_page(scope, int(raw_offset))
         raise InterAgentValidationError("Invalid planner catalog cursor.")
+
+    def lookup(self, request: PlannerCatalogLookupRequest) -> PlannerCatalogPage:
+        """Resolve one bounded cursor batch or direct catalog search."""
+        from core.inter_agent.orchestration_planner_catalog_search import (
+            lookup_planner_catalog,
+        )
+
+        return lookup_planner_catalog(self, request)
 
     def _agent_page(self, offset: int) -> PlannerCatalogPage:
         if offset < 0 or (offset >= len(self.agent_entries) and (offset or self.agent_entries)):
@@ -121,13 +144,20 @@ class OrchestrationPlannerCatalog:
             cursor = f"agents:{index}"
             cursors.append(cursor)
             footer.append(f"More agent types are available with catalog cursor `{cursor}`.")
-        footer.append(
-            "To inspect another page before deciding, return only "
-            '{"catalog_lookup":{"cursor":"<cursor>"}}.'
-        )
+        footer.append(_lookup_instruction())
+        if visible_scope_cursors:
+            scope_token = visible_scope_cursors[0].split(":", 2)[1]
+            footer.append(_lookup_instruction(scope_token=scope_token))
         page = PlannerCatalogPage(
             text="\n".join(("Available agent types (server-authoritative capability page):", *lines, *footer)),
             next_cursors=_unique(cursors),
+            skill_scope_tokens=_unique(
+                [
+                    entry.skill_scope_token
+                    for entry in self.agent_entries[offset:index]
+                    if entry.skill_scope_token
+                ]
+            ),
         )
         _assert_page_budget(page)
         return page
@@ -156,11 +186,13 @@ class OrchestrationPlannerCatalog:
             cursor = f"skills:{scope.token}:{index}"
             cursors.append(cursor)
             lines.append(f"Next skill page cursor: `{cursor}`.")
-        lines.append(
-            "Use only IDs shown on retrieved pages. To inspect another page, return only "
-            '{"catalog_lookup":{"cursor":"<cursor>"}}.'
+        lines.append("Use only IDs shown on retrieved pages or direct search results.")
+        lines.append(_lookup_instruction(scope_token=scope.token))
+        page = PlannerCatalogPage(
+            text="\n".join(lines),
+            next_cursors=tuple(cursors),
+            skill_scope_tokens=(scope.token,),
         )
-        page = PlannerCatalogPage(text="\n".join(lines), next_cursors=tuple(cursors))
         _assert_page_budget(page)
         return page
 
@@ -168,6 +200,19 @@ class OrchestrationPlannerCatalog:
 def _assert_page_budget(page: PlannerCatalogPage) -> None:
     if len(page.text) > MAX_PLANNER_CATALOG_PAGE_CHARS:
         raise RuntimeError("Planner catalog page exceeded its global prompt budget.")
+
+
+def _lookup_instruction(*, scope_token: str | None = None) -> str:
+    if scope_token:
+        return (
+            "For a direct bounded search, return only "
+            f'{{"catalog_lookup":{{"skill_scope":"{scope_token}","skill_prefix":"<skill id prefix>"}}}}.'
+        )
+    return (
+        "For a bounded lookup, return only "
+        '{"catalog_lookup":{"cursors":["<advertised cursor>"]}} or '
+        '{"catalog_lookup":{"agent_prefix":"<agent id/name fragment>"}}.'
+    )
 
 
 def _unique(items: list[str]) -> tuple[str, ...]:

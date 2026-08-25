@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
+from core.providers.agentic_profiles import CODEX_PROFILE_REVISION
 from core.providers.certificate_service import (
     build_capability_evidence,
     publish_capability_certificate,
@@ -61,7 +62,7 @@ class RuntimeContinuationMultiHopTest(RuntimeContinuationFixture, unittest.TestC
         self.assertEqual(middle.status, "stopped")
         self.assertEqual(middle.execution_binding.profile_definition_revision, "8")
         self.assertEqual(final.status, "running")
-        self.assertEqual(final.execution_binding.profile_definition_revision, "9")
+        self.assertEqual(final.execution_binding.profile_definition_revision, CODEX_PROFILE_REVISION)
         self.assertEqual(final.predecessor_session_id, middle.session_id)
         self.assertEqual(
             self.state.runtime_store.get_thread(source.session_id).runtime_session_id,
@@ -77,7 +78,7 @@ class RuntimeContinuationMultiHopTest(RuntimeContinuationFixture, unittest.TestC
         source_binding = source.execution_binding
         current_definition = self.state.provider_store.get_agentic_profile_definition(
             source_binding.profile_definition_id,
-            "9",
+            CODEX_PROFILE_REVISION,
         )
         current_workspace_binding = (
             self.state.provider_store.get_workspace_agentic_profile_binding(

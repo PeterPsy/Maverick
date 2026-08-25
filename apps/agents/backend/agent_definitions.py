@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from agent_runtime_revision import agent_runtime_revision
 from models import TRACE_VERBOSITIES
 from store import (
     AgentsValidationError,
@@ -43,8 +44,18 @@ def compact_catalog(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     entity_type = _optional_entity_type(body)
     query = str(body.get("query") or body.get("q") or "").strip().casefold()
     limit = _bounded_int(body.get("limit"), default=50, minimum=1, maximum=100)
-    roles = [_compact_role(item) for item in list_roles(data_root)]
-    agent_types = [_compact_agent_type(item) for item in list_agent_types(data_root)]
+    role_records = list_roles(data_root)
+    common_prompt = read_common_prompt(data_root)
+    roles_by_id = {str(item.get("id") or ""): item for item in role_records}
+    roles = [_compact_role(item) for item in role_records]
+    agent_types = [
+        _compact_agent_type(
+            item,
+            role=roles_by_id.get(str(item.get("role_id") or "")),
+            common_prompt=common_prompt,
+        )
+        for item in list_agent_types(data_root)
+    ]
     if query:
         roles = [item for item in roles if _matches_query(item, query)]
         agent_types = [item for item in agent_types if _matches_query(item, query)]
@@ -74,7 +85,12 @@ def get_agent_definition(data_root: Path, body: dict[str, Any]) -> dict[str, Any
         raise AgentsValidationError(f"Unknown role id: {agent_type['role_id']}")
     payload = {
         "exists": True,
-        "agent_definition": _definition_payload(agent_type=agent_type, role=role, include_content=True),
+        "agent_definition": _definition_payload(
+            agent_type=agent_type,
+            role=role,
+            common_prompt=read_common_prompt(data_root),
+            include_content=True,
+        ),
     }
     if bool(body.get("include_common_prompt")):
         payload["common_prompt"] = read_common_prompt(data_root)
@@ -161,6 +177,7 @@ def upsert_agent_definition(data_root: Path, body: dict[str, Any]) -> dict[str, 
         "agent_definition": _definition_payload(
             agent_type=agent_type,
             role=role,
+            common_prompt=read_common_prompt(data_root),
             include_content=include_content,
         ),
     }
@@ -241,7 +258,12 @@ def _compact_role(role: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _compact_agent_type(agent_type: dict[str, Any]) -> dict[str, Any]:
+def _compact_agent_type(
+    agent_type: dict[str, Any],
+    *,
+    role: dict[str, Any] | None,
+    common_prompt: str,
+) -> dict[str, Any]:
     return {
         "id": agent_type["id"],
         "name": agent_type["name"],
@@ -253,10 +275,21 @@ def _compact_agent_type(agent_type: dict[str, Any]) -> dict[str, Any]:
         "trace_verbosity": agent_type.get("trace_verbosity", "compact"),
         "enabled": bool(agent_type.get("enabled", True)),
         "updated_at": agent_type.get("updated_at", ""),
+        "revision_id": agent_runtime_revision(
+            agent_type=agent_type,
+            role=role or {},
+            common_prompt=common_prompt,
+        ),
     }
 
 
-def _definition_payload(*, agent_type: dict[str, Any], role: dict[str, Any], include_content: bool) -> dict[str, Any]:
+def _definition_payload(
+    *,
+    agent_type: dict[str, Any],
+    role: dict[str, Any],
+    common_prompt: str,
+    include_content: bool,
+) -> dict[str, Any]:
     payload = {
         "id": agent_type["id"],
         "name": agent_type["name"],
@@ -270,6 +303,11 @@ def _definition_payload(*, agent_type: dict[str, Any], role: dict[str, Any], inc
         "enabled": bool(agent_type.get("enabled", True)),
         "created_at": agent_type.get("created_at", ""),
         "updated_at": agent_type.get("updated_at", ""),
+        "revision_id": agent_runtime_revision(
+            agent_type=agent_type,
+            role=role,
+            common_prompt=common_prompt,
+        ),
     }
     if include_content:
         payload["instructions"] = role.get("instructions", "")

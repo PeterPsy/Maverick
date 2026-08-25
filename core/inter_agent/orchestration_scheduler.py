@@ -8,6 +8,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from core.inter_agent.errors import InterAgentOperationError, InterAgentValidationError
+from core.inter_agent.orchestration_catalog_snapshot import (
+    OrchestrationCatalogSnapshotProvider,
+    decision_catalog_material,
+    lazy_catalog_resolver,
+)
 from core.inter_agent.orchestration_planner_catalog import OrchestrationPlannerCatalog
 from core.inter_agent.orchestration_control import (
     ControlCompletion,
@@ -50,6 +55,7 @@ def execute_orchestrated_run(
     agent_snapshot_resolver: AgentSnapshotResolver | None = None,
     available_agent_type_ids: tuple[str, ...] = (),
     planner_catalog: OrchestrationPlannerCatalog | None = None,
+    catalog_snapshot_provider: OrchestrationCatalogSnapshotProvider | None = None,
     now: datetime | None = None,
 ) -> OrchestrationExecutionResult:
     """Resume or execute one adaptive orchestration from its persisted event state."""
@@ -91,12 +97,18 @@ def execute_orchestrated_run(
             run,
             orchestrator,
             control,
-            agent_snapshot_resolver=agent_snapshot_resolver,
+            agent_snapshot_resolver=agent_snapshot_resolver or lazy_catalog_resolver(catalog_snapshot_provider),
             expected_recovery_generation=scheduler_generation,
         )
         if pending_completion is not None:
             return _execution_result(pending_completion)
         if not control.tasks:
+            decision_catalog = decision_catalog_material(
+                catalog_snapshot_provider,
+                planner_catalog=planner_catalog,
+                available_agent_type_ids=available_agent_type_ids,
+                snapshot_resolver=agent_snapshot_resolver,
+            )
             run = _transition_scheduler_run(
                 service,
                 run,
@@ -114,8 +126,8 @@ def execute_orchestrated_run(
                 execute_turn,
                 state,
                 max_initial_tasks=_initial_task_limit(budget.max_participants),
-                available_agent_type_ids=available_agent_type_ids,
-                planner_catalog=planner_catalog,
+                available_agent_type_ids=decision_catalog.available_agent_type_ids,
+                planner_catalog=decision_catalog.planner_catalog,
                 expected_recovery_generation=scheduler_generation,
             )
             record_plan(
@@ -129,7 +141,7 @@ def execute_orchestrated_run(
                 run,
                 orchestrator,
                 plan,
-                snapshot_resolver=agent_snapshot_resolver,
+                snapshot_resolver=decision_catalog.snapshot_resolver,
                 expected_recovery_generation=scheduler_generation,
             )
             control.tasks.update((task.task_id, task) for task in plan.tasks)
@@ -139,7 +151,7 @@ def execute_orchestrated_run(
                 run,
                 orchestrator,
                 tuple(control.tasks.values()),
-                snapshot_resolver=agent_snapshot_resolver,
+                snapshot_resolver=agent_snapshot_resolver or lazy_catalog_resolver(catalog_snapshot_provider),
                 expected_recovery_generation=scheduler_generation,
             )
         run = _transition_scheduler_run(
@@ -174,12 +186,19 @@ def execute_orchestrated_run(
                     agent_snapshot_resolver=agent_snapshot_resolver,
                     available_agent_type_ids=available_agent_type_ids,
                     planner_catalog=planner_catalog,
+                    catalog_snapshot_provider=catalog_snapshot_provider,
                     expected_recovery_generation=scheduler_generation,
                 )
                 if completion is not None:
                     return _execution_result(completion)
                 continue
             before = (len(control.tasks), len(control.results))
+            decision_catalog = decision_catalog_material(
+                catalog_snapshot_provider,
+                planner_catalog=planner_catalog,
+                available_agent_type_ids=available_agent_type_ids,
+                snapshot_resolver=agent_snapshot_resolver,
+            )
             recorded = next_control_decision(
                 service,
                 latest_run,
@@ -190,8 +209,8 @@ def execute_orchestrated_run(
                 execute_turn=execute_turn,
                 runtime_state=state,
                 max_participants=budget.max_participants,
-                available_agent_type_ids=available_agent_type_ids,
-                planner_catalog=planner_catalog,
+                available_agent_type_ids=decision_catalog.available_agent_type_ids,
+                planner_catalog=decision_catalog.planner_catalog,
                 expected_recovery_generation=scheduler_generation,
             )
             completion = apply_control_decision(
@@ -200,13 +219,17 @@ def execute_orchestrated_run(
                 orchestrator,
                 control,
                 recorded,
-                agent_snapshot_resolver=agent_snapshot_resolver,
+                agent_snapshot_resolver=decision_catalog.snapshot_resolver,
                 expected_recovery_generation=scheduler_generation,
             )
             if completion is not None:
                 return _execution_result(completion)
             if before == (len(control.tasks), len(control.results)):
-                reason = "No dependency-ready tasks remain." if control.pending_task_ids else "No follow-up work was scheduled."
+                reason = (
+                    "No dependency-ready tasks remain."
+                    if control.pending_task_ids
+                    else "No follow-up work was scheduled."
+                )
                 raise InterAgentOperationError(f"{reason} The orchestrator did not repair or complete the run.")
         raise InterAgentOperationError("Orchestration exceeded its adaptive control-step budget.")
     except Exception as error:
@@ -249,6 +272,7 @@ def _execute_ready_wave(
     agent_snapshot_resolver: AgentSnapshotResolver | None,
     available_agent_type_ids: tuple[str, ...],
     planner_catalog: OrchestrationPlannerCatalog | None,
+    catalog_snapshot_provider: OrchestrationCatalogSnapshotProvider | None,
     expected_recovery_generation: int,
 ) -> ControlCompletion | None:
     running_ids = {task.task_id for task in ready}
@@ -279,6 +303,12 @@ def _execute_ready_wave(
                 raise InterAgentOperationError("Orchestration stopped while task workers were unwinding.")
             if control.control_step >= max_control_steps:
                 raise InterAgentOperationError("Orchestration exceeded its adaptive control-step budget.")
+            decision_catalog = decision_catalog_material(
+                catalog_snapshot_provider,
+                planner_catalog=planner_catalog,
+                available_agent_type_ids=available_agent_type_ids,
+                snapshot_resolver=agent_snapshot_resolver,
+            )
             recorded = next_control_decision(
                 service,
                 run,
@@ -289,8 +319,8 @@ def _execute_ready_wave(
                 execute_turn=execute_turn,
                 runtime_state=runtime_state,
                 max_participants=max_participants,
-                available_agent_type_ids=available_agent_type_ids,
-                planner_catalog=planner_catalog,
+                available_agent_type_ids=decision_catalog.available_agent_type_ids,
+                planner_catalog=decision_catalog.planner_catalog,
                 non_cancellable_task_ids=running_ids,
                 expected_recovery_generation=expected_recovery_generation,
             )
@@ -300,7 +330,7 @@ def _execute_ready_wave(
                 orchestrator,
                 control,
                 recorded,
-                agent_snapshot_resolver=agent_snapshot_resolver,
+                agent_snapshot_resolver=decision_catalog.snapshot_resolver,
                 expected_recovery_generation=expected_recovery_generation,
             )
             if completion is not None:

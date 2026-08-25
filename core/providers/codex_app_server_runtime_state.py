@@ -45,6 +45,13 @@ class _CodexAppServerRuntime:
     current_invoked_skills: tuple[SkillDefinition, ...] = ()
     rehydrated_compaction_items: set[str] = field(default_factory=set)
     skill_rehydration_sequence: int = 0
+    prompt_profile: str | None = None
+    first_turn_input_token_budget: int | None = None
+    prompt_budget_configured: bool = False
+    prompt_budget_pending: bool = False
+    prompt_budget_turn_id: str | None = None
+    prompt_budget_latest_input_tokens: int | None = None
+    prompt_budget_latest_cached_input_tokens: int | None = None
 
 
 _RUNTIMES: dict[str, _CodexAppServerRuntime] = {}

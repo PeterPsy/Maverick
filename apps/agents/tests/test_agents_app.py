@@ -173,7 +173,38 @@ class AgentsAppTestCase(unittest.TestCase):
             self.assertNotIn("common_prompt", compact)
             self.assertNotIn("instructions", compact["roles"][0])
             self.assertIn("skill_ids", compact["agent_types"][0])
+            self.assertTrue(compact["agent_types"][0]["revision_id"].startswith("sha256:"))
             self.assertEqual(full_status, 200)
+
+    def test_runtime_revision_binds_compact_definition_and_prompt_material(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "agents"
+            _, compact = handle_action(
+                data_root,
+                {"action": "catalog.compact", "entity_type": "agent_type", "limit": 100},
+            )
+            item = compact["agent_types"][0]
+            _, definition = handle_action(
+                data_root,
+                {"action": "get_agent_definition", "id": item["id"]},
+            )
+            _, preview = handle_action(
+                data_root,
+                {"action": "preview_prompt", "agent_type_id": item["id"]},
+            )
+
+            self.assertEqual(
+                item["revision_id"],
+                definition["agent_definition"]["revision_id"],
+            )
+            self.assertEqual(item["revision_id"], preview["revision_id"])
+
+            handle_action(data_root, {"action": "set_common_prompt", "prompt": "Changed common prompt."})
+            _, changed = handle_action(
+                data_root,
+                {"action": "catalog.compact", "entity_type": "agent_type", "limit": 100},
+            )
+            self.assertNotEqual(item["revision_id"], changed["agent_types"][0]["revision_id"])
 
     def test_upsert_agent_definition_is_idempotent_and_compact_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

@@ -235,8 +235,11 @@ invokes no skill even when the participant allowlist or workspace catalog is
 non-empty. Static executor modes persist the invocation receipt on the
 participant task record, while HTTP, CLI, and MCP direct-send surfaces validate
 and forward it per message. Dynamic planner prompts receive only server-owned
-activation mode and allowlist metadata from the compact agent catalog; failed
-task causes are bounded before they are returned in the control ledger.
+activation mode and allowlist metadata from a revision-verified materialized
+agent catalog. The planner and task resolver use the same immutable snapshot;
+Core retries a decision if compact, definition, or prompt revision changes
+during materialization. Failed task causes are bounded before they are returned
+in the control ledger.
 
 ### Participant output influencing the root generalist
 

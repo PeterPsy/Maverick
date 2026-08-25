@@ -148,18 +148,26 @@ transcript projection behavior.
   workspace, and execution authority. Orchestrator output cannot mint grants or
   choose arbitrary prompt/skill material.
 - The hosted worker obtains a compact catalog from Chat's selected
-  `agent.catalog` provider. An orchestrator may name only one of those agent
-  type ids; the core then resolves its definition and prompt through the
-  selected provider, validates the runtime skill catalog, and persists the
-  resulting immutable participant snapshot. Missing or invalid catalogs fall
-  back to the root server snapshot rather than accepting model-authored prompt
-  or skill data.
+  `agent.catalog` provider. Every compact entry carries a runtime revision over
+  the definition, role instructions, and common prompt. Before each planning
+  or control decision, Core materializes the changed entries, verifies their
+  definition and prompt revisions, rereads the compact catalog, and retries if
+  either read changed. The planner page and task resolver then share that one
+  immutable materialized snapshot; the resolver performs no later live lookup.
+  An orchestrator may name only an id in that snapshot. Core validates its
+  runtime skill catalog and persists the selected participant snapshot.
+  Missing or invalid catalogs fall back to the root server snapshot rather
+  than accepting model-authored prompt or skill data.
 - Explicit skill capabilities are the intersection of each assigned allowlist
   and the selected provider's currently enabled workspace catalog. The planner
   sees `none available` separately from `catalog unavailable`; enabled IDs are
   deduplicated into shared scopes. Agent and skill catalog text is globally
-  bounded per planner turn, with validated lookup-only JSON cursors for every
-  omitted page. Lookup turns use deterministic message ids and do not become
+  bounded per planner turn. A decision may use at most two validated lookup-only
+  turns: one request can aggregate two advertised cursors, search the complete
+  agent index by id/name fragment, or search an advertised skill scope by exact
+  id/prefix. Direct search makes every entry reachable in a constant number of
+  provider turns instead of spending the participant budget walking every
+  preceding page. Lookup turns use deterministic message ids and do not become
   durable plan or control decisions.
 - Hidden participant sessions remain inaccessible through raw runtime HTTP,
   WebSocket, CLI, and MCP paths.

@@ -6,6 +6,8 @@ import json
 from typing import Any
 
 from core.providers.codex_app_server_skill_rehydration import schedule_codex_skill_rehydration
+from core.providers.codex_app_server_runtime_usage import codex_usage_event as _codex_usage_event
+from core.providers.codex_prompt_budget import final_prompt_budget_payload
 from core.runtime.execution_events import RuntimeExecutionEvent, parse_provider_json_event
 
 
@@ -46,9 +48,21 @@ def _handle_notification(runtime: _CodexAppServerRuntime, payload: dict[str, Any
                     "turnId": turn.get("id") or runtime.current_provider_turn_id,
                     "tokenUsage": token_usage,
                 },
+                final_snapshot=True,
             )
             if usage_event is not None:
                 _emit(runtime, usage_event)
+        if getattr(runtime, "prompt_budget_pending", False):
+            budget_payload = final_prompt_budget_payload(runtime)
+            if budget_payload is not None:
+                _emit(
+                    runtime,
+                    RuntimeExecutionEvent(
+                        event_type="runtime.prompt_budget.evaluated",
+                        payload=budget_payload,
+                    ),
+                )
+            runtime.prompt_budget_pending = False
         _debug_log(
             runtime,
             "Codex app-server debug: turn/completed notification",
@@ -115,70 +129,6 @@ def _handle_notification(runtime: _CodexAppServerRuntime, payload: dict[str, Any
             _put_completion(runtime, {"status": "failed"})
         return
     _handle_generic_notification(runtime, method=method, params=params)
-
-
-def _codex_usage_event(
-    runtime: _CodexAppServerRuntime,
-    params: dict[str, Any],
-) -> RuntimeExecutionEvent | None:
-    """Normalize one exact Codex cumulative token snapshot before noise filtering."""
-    usage = params.get("tokenUsage") if isinstance(params.get("tokenUsage"), dict) else {}
-    total = usage.get("total") if isinstance(usage.get("total"), dict) else {}
-    last = usage.get("last") if isinstance(usage.get("last"), dict) else {}
-    if not total and not last:
-        return None
-    provider_thread_id = str(params.get("threadId") or runtime.provider_thread_id or "").strip()
-    provider_turn_id = str(params.get("turnId") or runtime.current_provider_turn_id or "").strip()
-    context_tokens = _nonnegative_usage_int(last.get("totalTokens"))
-    context_window_tokens = _optional_nonnegative_usage_int(usage.get("modelContextWindow"))
-    cumulative_total = _nonnegative_usage_int(total.get("totalTokens"))
-    return RuntimeExecutionEvent(
-        event_type="runtime.usage.reported",
-        payload={
-            "usage_id": ":".join(
-                [
-                    "codex",
-                    provider_thread_id,
-                    provider_turn_id,
-                    str(cumulative_total),
-                    str(context_tokens),
-                ]
-            ),
-            "provider_id": "codex",
-            "source": "codex_app_server",
-            "semantics": "cumulative",
-            "token_accuracy": "exact",
-            "context_accuracy": "exact",
-            "input_tokens": _nonnegative_usage_int(total.get("inputTokens")),
-            "cached_input_tokens": _nonnegative_usage_int(total.get("cachedInputTokens")),
-            "cache_write_input_tokens": _nonnegative_usage_int(total.get("cacheWriteInputTokens")),
-            "output_tokens": _nonnegative_usage_int(total.get("outputTokens")),
-            "reasoning_output_tokens": _nonnegative_usage_int(total.get("reasoningOutputTokens")),
-            "total_tokens": cumulative_total,
-            "latest_input_tokens": _nonnegative_usage_int(last.get("inputTokens")),
-            "latest_cached_input_tokens": _nonnegative_usage_int(last.get("cachedInputTokens")),
-            "latest_cache_write_input_tokens": _nonnegative_usage_int(last.get("cacheWriteInputTokens")),
-            "latest_output_tokens": _nonnegative_usage_int(last.get("outputTokens")),
-            "latest_reasoning_output_tokens": _nonnegative_usage_int(last.get("reasoningOutputTokens")),
-            "latest_total_tokens": context_tokens,
-            "context_tokens": context_tokens,
-            "context_window_tokens": context_window_tokens,
-            "provider_thread_id": provider_thread_id or None,
-            "provider_turn_id": provider_turn_id or None,
-        },
-    )
-
-
-def _nonnegative_usage_int(value: object) -> int:
-    return _optional_nonnegative_usage_int(value) or 0
-
-
-def _optional_nonnegative_usage_int(value: object) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float) and value >= 0:
-        return int(value)
-    return None
 
 
 def _extract_error_text(params: dict[str, Any]) -> str:

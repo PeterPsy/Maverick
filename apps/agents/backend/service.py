@@ -10,6 +10,7 @@ from agent_definitions import (
     get_agent_definition,
     upsert_agent_definition,
 )
+from agent_runtime_revision import agent_runtime_revision
 from seeds import seed_defaults
 from store import (
     AgentsValidationError,
@@ -101,8 +102,9 @@ def prompt_preview(data_root: Path, body: dict) -> dict:
     role = get_role(data_root, agent_type["role_id"])
     if role is None:
         raise AgentsValidationError(f"Unknown role id: {agent_type['role_id']}")
+    common_prompt = read_common_prompt(data_root)
     sections = [
-        {"id": "common_prompt", "title": "Common Prompt", "content": read_common_prompt(data_root).strip()},
+        {"id": "common_prompt", "title": "Common Prompt", "content": common_prompt.strip()},
         {"id": "role", "title": role["name"], "content": role["instructions"].strip()},
         {
             "id": "agent_type",
@@ -116,7 +118,15 @@ def prompt_preview(data_root: Path, body: dict) -> dict:
         },
     ]
     rendered = "\n\n".join(f"## {section['title']}\n{section['content']}" for section in sections if section["content"])
-    return {"sections": sections, "rendered": rendered}
+    return {
+        "sections": sections,
+        "rendered": rendered,
+        "revision_id": agent_runtime_revision(
+            agent_type=agent_type,
+            role=role,
+            common_prompt=common_prompt,
+        ),
+    }
 
 
 def _reference_items(data_root: Path, entity_type: str) -> list[dict]:

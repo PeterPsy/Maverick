@@ -16,6 +16,18 @@ class OciStageError(RuntimeError):
     """Fail-closed OCI runtime-closure staging error."""
 
 
+_DAEMON_BOOTSTRAP = """\
+import { enableCompileCache, flushCompileCache } from 'node:module';
+const cacheDir = process.env.MAVERICK_OPENDESIGN_NODE_COMPILE_CACHE;
+if (cacheDir) {
+  enableCompileCache(cacheDir);
+  delete process.env.MAVERICK_OPENDESIGN_NODE_COMPILE_CACHE;
+}
+await import(process.argv[1]);
+if (cacheDir) flushCompileCache();
+"""
+
+
 def stage_runtime_closure(
     rootfs: Path,
     staging: Path,
@@ -60,9 +72,17 @@ def stage_runtime_closure(
 
 
 def runtime_command(bundle_root: Path, manifest: dict[str, Any]) -> list[str]:
+    entrypoint = _safe_stage_path(
+        bundle_root,
+        manifest["runtime_closure"]["daemon_entrypoint"],
+        directory=False,
+    )
     return [
         *runtime_node_command(bundle_root, manifest),
-        str(_safe_stage_path(bundle_root, manifest["runtime_closure"]["daemon_entrypoint"], directory=False)),
+        "--input-type=module",
+        "--eval",
+        _DAEMON_BOOTSTRAP,
+        entrypoint.as_uri(),
         "--no-open",
     ]
 
@@ -137,6 +157,9 @@ def _verify_closure(staging: Path, manifest: dict[str, Any]) -> None:
     server = staging.joinpath(*manifest["boundary_patch"]["path"].split("/"))
     if sha256_file(server) != manifest["boundary_patch"]["post_sha256"]:
         raise OciStageError("OpenDesign OCI closure does not contain the pinned boundary patch")
+    bundled = staging.joinpath(*manifest["startup_patch"]["path"].split("/"))
+    if sha256_file(bundled) != manifest["startup_patch"]["post_sha256"]:
+        raise OciStageError("OpenDesign OCI closure does not contain the pinned startup patch")
     if (staging / "app/apps/web/out").exists():
         raise OciStageError("OpenDesign runtime closure must not contain embedded web output")
 

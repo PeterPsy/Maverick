@@ -13,10 +13,12 @@ from core.apps.contracts import (
     build_app_contract,
     build_app_services,
     build_http_sidecar_browser_origin,
+    build_http_sidecar_artifact_mount,
     build_http_sidecar_entrypoint_access,
     build_http_sidecar_entrypoint_surface,
     build_http_sidecar_logs,
     build_http_sidecar_process_policy,
+    build_http_sidecar_prewarm,
     build_http_sidecar_proxy,
     build_http_sidecar_route_policy,
     build_http_sidecar_route_rule,
@@ -44,8 +46,17 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.transport, "unix_relay")
             self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.outbound, [])
             self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.limits.request_concurrency, 16)
+            self.assertEqual(
+                loaded.contract.services.http_sidecars[0].artifact_mounts[0].mount_path,
+                "/artifacts/opendesign",
+            )
+            self.assertTrue(loaded.contract.services.http_sidecars[0].prewarm.on_core_start)
             self.assertEqual(loaded.contract.services.http_sidecars[0].browser_origin.mode, "isolated")
             self.assertEqual(loaded.contract.services.http_sidecars[0].browser_origin.frame_ancestors, ["platform"])
+            self.assertEqual(
+                loaded.contract.services.http_sidecars[0].browser_origin.immutable_asset_prefixes,
+                ["/_next/static/"],
+            )
             self.assertEqual(loaded.contract.services.http_sidecars[0].entrypoint_access.ttl_seconds, 30)
             self.assertEqual(
                 [surface.surface for surface in loaded.contract.services.http_sidecars[0].entrypoint_access.surfaces],
@@ -182,6 +193,23 @@ class AppContractServiceTests(unittest.TestCase):
                 with self.assertRaisesRegex(AppContractValidationError, "env"):
                     parse_app_contract_file(app_root)
 
+    def test_artifact_mounts_are_platform_owned_and_substitutions_are_declared(self) -> None:
+        mutations = (
+            (lambda sidecar: sidecar["artifact_mounts"][0].__setitem__("mount_path", "/app/vendor"), "platform-owned"),
+            (lambda sidecar: sidecar["artifact_mounts"].append(dict(sidecar["artifact_mounts"][0])), "Duplicate"),
+            (lambda sidecar: sidecar["env"].__setitem__("EXTRA", "${artifact.unknown}"), "substitution"),
+            (lambda sidecar: sidecar["prewarm"].__setitem__("keep_alive", False), "keep_alive"),
+        )
+        for mutate, expected in mutations:
+            with self.subTest(expected=expected), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                mutate(payload["services"]["http_sidecars"][0])
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(AppContractValidationError, expected):
+                    parse_app_contract_file(app_root)
+
     def test_parse_contract_rejects_weakened_browser_origin_policy(self) -> None:
         mutations = (
             ("mode", "shared"),
@@ -197,6 +225,26 @@ class AppContractServiceTests(unittest.TestCase):
                 (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
                 with self.assertRaisesRegex(AppContractValidationError, field):
+                    parse_app_contract_file(app_root)
+
+    def test_parse_contract_rejects_unsafe_immutable_asset_prefixes(self) -> None:
+        invalid_values = (
+            ["/"],
+            ["/api/static/"],
+            ["/.well-known/assets/"],
+            ["/_next/static"],
+            ["/_next//static/"],
+            ["/_next/%2e%2e/"],
+            ["/_next/static/", "/_next/static/"],
+        )
+        for value in invalid_values:
+            with self.subTest(value=value), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                payload["services"]["http_sidecars"][0]["browser_origin"]["immutable_asset_prefixes"] = value
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(AppContractValidationError, "immutable_asset_prefixes"):
                     parse_app_contract_file(app_root)
 
     def test_parse_contract_rejects_non_loopback_sandbox_sidecar(self) -> None:
@@ -275,13 +323,18 @@ class AppContractServiceTests(unittest.TestCase):
                                 "OD_BIND_HOST": "127.0.0.1",
                                 "OD_PORT": "${service.port}",
                                 "OD_API_TOKEN": "${service.token}",
+                                "OD_ARTIFACT_ROOT": "${artifact.opendesign}",
                             },
+                            artifact_mounts=[build_http_sidecar_artifact_mount(artifact_id="opendesign")],
+                            prewarm=build_http_sidecar_prewarm(),
                             process_policy=build_http_sidecar_process_policy(
                                 memory_bytes=2 * 1024 * 1024 * 1024,
                                 open_files=512,
                                 request_concurrency=16,
                             ),
-                            browser_origin=build_http_sidecar_browser_origin(),
+                            browser_origin=build_http_sidecar_browser_origin(
+                                immutable_asset_prefixes=["/_next/static/"],
+                            ),
                             entrypoint_access=build_http_sidecar_entrypoint_access(
                                 ttl_seconds=30,
                                 request_budget=8,

@@ -8,30 +8,32 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import pwd
-import shutil
 import subprocess
 import sys
 import tempfile
 import time
 from typing import Any, Iterable
 
+from core.apps.artifact_mounts import (
+    create_artifact_namespace,
+    platform_artifact_store_root,
+)
+from core.api.sidecar_control import request_sidecar_control
 from opendesign_artifact import read_bundle_manifest
+from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_dev_changeset import (
     DevApplyError,
     PATCH_SERIES_PATH,
     assert_changeset_unchanged as _assert_changeset_unchanged,
     changed_patch_series_components as _changed_patch_series_components,
-    materialize_immutable_tree,
     materialize_changeset,
     normalize_path as _normalize_path,
     resolve_changeset,
     resolve_commit as _resolve_commit,
 )
-from opendesign_generation_control import load_generation_control
-from opendesign_materialization import discover_verified_bundles
+from opendesign_runtime import protected_activation_inventory, verified_overlay_from_store
 from opendesign_web_activation import activate_web_overlay, recover_web_activation
 from opendesign_web_builder import build_dev_overlay, build_release_overlay
-from opendesign_web_overlay import discover_verified_overlays
 
 
 ACTION_ORDER = (
@@ -416,14 +418,13 @@ def _build_and_activate_overlay(
     release: bool,
 ) -> dict[str, Any]:
     service_root = repo_root / "apps/design-studio/service"
-    publish_service_root = (publish_repo_root or repo_root) / "apps/design-studio/service"
     source_repository = _required_path(arguments, "source_repository")
     signing_key = _required_path(arguments, "web_signing_key")
     cache_root = cache_root or _cache_root(arguments, publish_repo_root or repo_root)
     work_parent = _work_parent(arguments)
     for child in (cache_root, work_parent):
         child.mkdir(parents=True, exist_ok=True)
-    registry_root = publish_service_root / "vendor/open-design-web"
+    registry_root = cache_root / "built-overlays"
     registry_root.mkdir(parents=True, exist_ok=True)
     manifest = read_bundle_manifest(service_root / "opendesign_bundle.json")
     builder = build_release_overlay if release else build_dev_overlay
@@ -439,23 +440,24 @@ def _build_and_activate_overlay(
         work_parent=work_parent,
         runtime_session_id=str(payload.get("runtime_session_id") or "") or None,
     )
-    if publish_service_root != service_root:
-        execution_overlay = service_root / "vendor/open-design-web" / result.overlay.web_overlay_sha256
-        if not execution_overlay.exists() and not execution_overlay.is_symlink():
-            materialize_immutable_tree(result.overlay.path, execution_overlay)
-        discover_verified_overlays(
-            execution_overlay.parent,
-            trust_contract=service_root / "opendesign_web_trust.json",
-            required_digests={result.overlay.web_overlay_sha256},
-        )
-    build_duration = round(time.monotonic() - build_started, 6)
-    generation_root = Path(str(payload.get("data_root") or "")) / "opendesign"
-    bundles = discover_verified_bundles(publish_service_root / "vendor/open-design")
-    verified_artifacts = {digest: bundle.opendesign_version for digest, bundle in bundles.items()}
-    overlays = discover_verified_overlays(
-        registry_root,
+    namespace = create_artifact_namespace(
+        repository_root=publish_repo_root or repo_root,
+        app_id="design-studio",
+        artifact_id="opendesign",
+    )
+    store = OpenDesignArtifactStore(namespace)
+    stored_candidate = store.publish_web_overlay(
+        result.overlay.path,
+        web_overlay_sha256=result.overlay.web_overlay_sha256,
         trust_contract=service_root / "opendesign_web_trust.json",
     )
+    build_duration = round(time.monotonic() - build_started, 6)
+    generation_root = Path(str(payload.get("data_root") or "")) / "opendesign"
+    control, verified_artifacts, overlays = protected_activation_inventory(
+        store=store,
+        generation_root=generation_root,
+    )
+    overlays[stored_candidate.artifact_sha256] = verified_overlay_from_store(stored_candidate)
     recover_web_activation(
         generation_root,
         verified_artifacts=verified_artifacts,
@@ -465,11 +467,11 @@ def _build_and_activate_overlay(
             repo_root=publish_repo_root or repo_root,
         ),
     )
-    control = load_generation_control(
-        generation_root,
-        verified_artifacts=verified_artifacts,
-        verified_overlays=overlays,
+    control, verified_artifacts, retained_overlays = protected_activation_inventory(
+        store=store,
+        generation_root=generation_root,
     )
+    overlays.update(retained_overlays)
     previous_web_overlay_sha256 = control.active.web_overlay_sha256
     activation_started = time.monotonic()
     if control.active.web_overlay_sha256 == result.overlay.web_overlay_sha256:
@@ -529,23 +531,13 @@ def _build_and_activate_overlay(
 
 
 def _restart_sidecars(arguments: dict[str, Any], *, repo_root: Path) -> dict[str, object]:
-    command = _maverick_command(
-        "core",
-        "cli",
-        "run",
-        "app.design-studio.sidecars.restart",
-        "--workspace",
-        str(arguments.get("workspace_id") or "default"),
-        "--operator",
-        "--json",
+    payload = request_sidecar_control(
+        repo_root,
+        operation="restart",
+        workspace_id=str(arguments.get("workspace_id") or "default"),
+        app_id="design-studio",
+        timeout_seconds=15,
     )
-    completed = subprocess.run(command, cwd=repo_root, text=True, capture_output=True, check=False)
-    if completed.returncode != 0:
-        raise RuntimeError("app sidecar restart capability failed")
-    try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError as error:
-        raise RuntimeError("app sidecar restart returned invalid JSON") from error
     readiness = payload.get("readiness") if isinstance(payload, dict) else None
     if not isinstance(readiness, dict) or readiness.get("ready") is not True:
         raise RuntimeError("app sidecar restart readiness failed")
@@ -575,18 +567,13 @@ def _rollback_after_post_activation_failure(
     repo_root: Path,
     previous_web_overlay_sha256: str,
 ) -> dict[str, Any]:
-    service_root = repo_root / "apps/design-studio/service"
     generation_root = Path(str(payload.get("data_root") or "")) / "opendesign"
-    bundles = discover_verified_bundles(service_root / "vendor/open-design")
-    verified_artifacts = {digest: bundle.opendesign_version for digest, bundle in bundles.items()}
-    overlays = discover_verified_overlays(
-        service_root / "vendor/open-design-web",
-        trust_contract=service_root / "opendesign_web_trust.json",
+    store = OpenDesignArtifactStore(
+        platform_artifact_store_root(repo_root) / "design-studio" / "opendesign"
     )
-    control = load_generation_control(
-        generation_root,
-        verified_artifacts=verified_artifacts,
-        verified_overlays=overlays,
+    control, verified_artifacts, overlays = protected_activation_inventory(
+        store=store,
+        generation_root=generation_root,
     )
     if control.active.web_overlay_sha256 == previous_web_overlay_sha256:
         return {
@@ -614,15 +601,6 @@ def _rollback_after_post_activation_failure(
         "restored_web_overlay_sha256": previous_web_overlay_sha256,
         "readiness": outcome.readiness,
     }
-
-
-def _maverick_command(*tokens: str) -> list[str]:
-    if str(os.environ.get("MAVERICK_ADMIN_USERNAME") or "").strip():
-        return [sys.executable, "-m", "core.app_sdk.cli", *tokens]
-    governed_cli = shutil.which("maverick")
-    if governed_cli:
-        return [governed_cli, *tokens]
-    return [sys.executable, "-m", "core.app_sdk.cli", *tokens]
 
 
 def _repo_root(arguments: dict[str, Any]) -> Path:
@@ -674,6 +652,9 @@ def _e2e_environment(
     environment["MAVERICK_OPENDESIGN_E2E_PYTHON"] = str(python)
     environment["MAVERICK_PLAYWRIGHT_BROWSERS_PATH"] = str(browsers)
     environment["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers)
+    environment["MAVERICK_APP_ARTIFACT_STORE_ROOT"] = str(
+        platform_artifact_store_root(publish_repo_root)
+    )
     return environment
 
 

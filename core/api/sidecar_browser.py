@@ -7,6 +7,7 @@ import json
 import os
 import re
 from pathlib import Path, PurePosixPath
+import time
 from typing import Any, Awaitable, Callable
 from urllib.parse import parse_qs, urlsplit
 
@@ -19,6 +20,7 @@ from core.api.sidecar_proxy import (
     ensure_authorized_sidecar_running,
     handle_app_sidecar_proxy_asgi,
     resolve_authorized_sidecar,
+    sidecar_error_payload,
 )
 from core.apps.errors import AppHostingError
 from core.apps.sidecar_browser_sessions import (
@@ -30,6 +32,7 @@ from core.apps.sidecar_browser_sessions import (
 )
 from core.identity.errors import UserNotFoundError
 from core.observability.service import record_platform_audit
+from core.observability.startup_performance import record_startup_timing
 from core.shared.entrypoints import EntrypointShutdownController
 
 
@@ -86,6 +89,7 @@ def handle_sidecar_browser_launch(
     if target.sidecar.browser_origin is None:
         return json_response(start_response, {"error": "sidecar_browser_origin_not_declared"}, status="404 Not Found")
     try:
+        launch_started = time.monotonic()
         origin, host, platform_origin, secure = _resolve_origin_configuration(environ, target=target)
         running = ensure_authorized_sidecar_running(
             target,
@@ -95,7 +99,7 @@ def handle_sidecar_browser_launch(
     except AppHostingError as error:
         return json_response(
             start_response,
-            {"error": "sidecar_origin_unavailable", "detail": str(error)},
+            sidecar_error_payload(error, default_code="sidecar_origin_unavailable"),
             status="503 Service Unavailable",
             headers=_platform_launch_headers(),
         )
@@ -114,7 +118,42 @@ def handle_sidecar_browser_launch(
         secure=secure,
         content_security_policy=_content_security_policy(platform_origin),
     )
-    ticket = state.sidecar_browser_sessions.issue_ticket(binding)
+    try:
+        ticket = state.sidecar_browser_sessions.issue_ticket(binding)
+    except Exception:
+        record_platform_audit(
+            state.observability_store,
+            action="sidecar.browser_ticket.issue",
+            status="failed",
+            source_domain="apps.sidecars.browser",
+            detail=f"Failed to issue an isolated browser launch ticket for app `{binding.app_id}`.",
+            workspace_id=binding.workspace_id,
+            app_id=binding.app_id,
+            payload={
+                "sidecar_id": binding.sidecar_id,
+                "error_code": "browser_ticket_failed",
+                "phase": "browser_ticket_issue",
+            },
+        )
+        return json_response(
+            start_response,
+            {
+                "error": "browser_ticket_failed",
+                "phase": "browser_ticket_issue",
+                "auto_repairable": False,
+                "retryable": True,
+            },
+            status="503 Service Unavailable",
+            headers=_platform_launch_headers(),
+        )
+    ticket_issue_ms = (time.monotonic() - launch_started) * 1000
+    record_startup_timing(
+        "sidecar.browser_ticket.issue",
+        duration_ms=ticket_issue_ms,
+        workspace_id=binding.workspace_id,
+        app_id=binding.app_id,
+        sidecar_id=binding.sidecar_id,
+    )
     record_platform_audit(
         state.observability_store,
         action="sidecar.browser_ticket.issue",
@@ -140,6 +179,7 @@ def handle_sidecar_browser_launch(
             "ticket_field": "ticket",
             "ticket": ticket.value,
             "expires_in_seconds": MAX_TICKET_TTL_SECONDS,
+            "sidecar_instance_id": running.instance_id,
         },
         headers=_platform_launch_headers(),
     )
@@ -231,6 +271,12 @@ async def handle_sidecar_browser_origin(
         nonlocal response_status
         if message.get("type") == "http.response.start":
             response_status = int(message.get("status") or 0)
+            message = _apply_browser_cache_policy(
+                message,
+                method=method,
+                path=path,
+                immutable_asset_prefixes=current.sidecar.browser_origin.immutable_asset_prefixes,
+            )
         await send(message)
 
     try:
@@ -469,6 +515,34 @@ def _security_headers(binding: SidecarBrowserBinding) -> list[tuple[str, str]]:
         ("Cross-Origin-Resource-Policy", "same-origin"),
         ("X-Content-Type-Options", "nosniff"),
     ]
+
+
+def _apply_browser_cache_policy(
+    message: dict[str, Any],
+    *,
+    method: str,
+    path: str,
+    immutable_asset_prefixes: list[str],
+) -> dict[str, Any]:
+    """Keep authenticated responses private while caching declared immutable assets."""
+    status = int(message.get("status") or 0)
+    immutable = (
+        method in {"GET", "HEAD"}
+        and status in {200, 206, 304}
+        and any(path.startswith(prefix) for prefix in immutable_asset_prefixes)
+    )
+    cache_control = (
+        "private, max-age=31536000, immutable"
+        if immutable
+        else "no-store"
+    )
+    headers = [
+        (name, value)
+        for name, value in message.get("headers", [])
+        if bytes(name).lower() != b"cache-control"
+    ]
+    headers.append((b"cache-control", cache_control.encode("ascii")))
+    return {**message, "headers": headers}
 
 
 def _platform_launch_headers() -> list[tuple[str, str]]:

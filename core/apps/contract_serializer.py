@@ -204,6 +204,33 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                     "working_directory": sidecar.working_directory,
                     "command": sidecar.command,
                     "env": sidecar.env,
+                    **(
+                        {
+                            "artifact_mounts": [
+                                {"id": mount.artifact_id, "mount_path": mount.mount_path}
+                                for mount in sidecar.artifact_mounts
+                            ]
+                        }
+                        if sidecar.artifact_mounts
+                        else {}
+                    ),
+                    **(
+                        {
+                            "prewarm": {
+                                "on_core_start": sidecar.prewarm.on_core_start,
+                                "on_install": sidecar.prewarm.on_install,
+                                "on_activation": sidecar.prewarm.on_activation,
+                                "keep_alive": sidecar.prewarm.keep_alive,
+                            }
+                        }
+                        if sidecar.prewarm is not None
+                        else {}
+                    ),
+                    **(
+                        {"diagnostics": {"status_file": sidecar.diagnostics.status_file}}
+                        if sidecar.diagnostics is not None
+                        else {}
+                    ),
                     "process_policy": {
                         "inherit_host_env": sidecar.process_policy.inherit_host_env,
                         "sandbox": sidecar.process_policy.sandbox,
@@ -225,6 +252,11 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                                 "csp_profile": sidecar.browser_origin.csp_profile,
                                 "frame_ancestors": sidecar.browser_origin.frame_ancestors,
                                 "connect_src": sidecar.browser_origin.connect_src,
+                                **(
+                                    {"immutable_asset_prefixes": sidecar.browser_origin.immutable_asset_prefixes}
+                                    if sidecar.browser_origin.immutable_asset_prefixes
+                                    else {}
+                                ),
                             }
                         }
                         if sidecar.browser_origin is not None

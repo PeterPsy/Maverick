@@ -28,8 +28,19 @@ MATERIALIZED_MARKER_SCHEMA_VERSION = "2"
 
 
 def create_file_manifest(root: Path, *, exclude: set[str] | None = None) -> dict[str, Any]:
+    manifest, _directories = create_file_manifest_inventory(root, exclude=exclude)
+    return manifest
+
+
+def create_file_manifest_inventory(
+    root: Path,
+    *,
+    exclude: set[str] | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Hash files once while retaining the canonical directory-mode inventory."""
     excluded = set(exclude or set())
     entries: list[dict[str, Any]] = []
+    directories: list[dict[str, Any]] = []
     regular_files: list[tuple[Path, str, int]] = []
     for path in artifact_paths(root):
         relative = path.relative_to(root).as_posix()
@@ -49,7 +60,7 @@ def create_file_manifest(root: Path, *, exclude: set[str] | None = None) -> dict
                 }
             )
         elif path.is_dir():
-            continue
+            directories.append({"path": relative, "kind": "directory", "mode": f"{mode:04o}"})
         elif path.is_file():
             regular_files.append((path, relative, mode))
         else:
@@ -59,7 +70,8 @@ def create_file_manifest(root: Path, *, exclude: set[str] | None = None) -> dict
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="od-verify") as executor:
             entries.extend(executor.map(_regular_file_manifest_entry, regular_files))
     entries.sort(key=lambda entry: str(entry["path"]))
-    return {"schema_version": "1", "self_excluded": sorted(excluded), "files": entries}
+    directories.sort(key=lambda entry: str(entry["path"]))
+    return {"schema_version": "1", "self_excluded": sorted(excluded), "files": entries}, directories
 
 
 def _regular_file_manifest_entry(item: tuple[Path, str, int]) -> dict[str, Any]:
@@ -110,6 +122,12 @@ def validated_archive_members(bundle: tarfile.TarFile) -> list[tarfile.TarInfo]:
 
 
 def verify_file_manifest(root: Path) -> dict[str, Any]:
+    expected, _directories = verify_file_manifest_inventory(root)
+    return expected
+
+
+def verify_file_manifest_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Verify the signed file manifest and return directory modes from the same scan."""
     manifest_path = root / FILE_MANIFEST_PATH
     try:
         expected = json.loads(
@@ -124,11 +142,16 @@ def verify_file_manifest(root: Path) -> dict[str, Any]:
     if not isinstance(excluded_value, list) or not all(isinstance(item, str) for item in excluded_value):
         raise ArtifactError("OpenDesign file manifest exclusions are invalid")
     excluded = set(excluded_value)
-    actual = create_file_manifest(root, exclude=excluded | {MATERIALIZED_MARKER_PATH})
+    if excluded != {FILE_MANIFEST_PATH}:
+        raise ArtifactError("OpenDesign file manifest exclusions are not canonical")
+    actual, directories = create_file_manifest_inventory(
+        root,
+        exclude=excluded | {MATERIALIZED_MARKER_PATH},
+    )
     actual["self_excluded"] = sorted(excluded)
     if actual != expected:
         raise ArtifactError("OpenDesign materialized file manifest mismatch")
-    return expected
+    return expected, directories
 
 
 def verify_materialized_bundle(

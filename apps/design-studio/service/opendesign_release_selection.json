@@ -1,0 +1,6 @@
+{
+  "schema_version": "1",
+  "active_web_overlay_sha256": "76465d47b848595d0144ca93461b898f63a83603d4d7fcf10e4c008474369aad",
+  "rollback_web_overlay_sha256": "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2",
+  "quarantine_retention_days": 14
+}

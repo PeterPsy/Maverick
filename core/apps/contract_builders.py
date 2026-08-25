@@ -36,12 +36,15 @@ from core.apps.models import (
     AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
     HttpSidecarBindSpec,
+    HttpSidecarDiagnosticsSpec,
+    HttpSidecarArtifactMountSpec,
     HttpSidecarBrowserOriginSpec,
     HttpSidecarEntrypointAccessSpec,
     HttpSidecarEntrypointSurfaceSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
     HttpSidecarProcessPolicy,
+    HttpSidecarPrewarmSpec,
     HttpSidecarProxySpec,
     HttpSidecarResourceLimits,
     HttpSidecarRoutePolicy,
@@ -362,6 +365,9 @@ def build_http_sidecar_spec(
     package_manager: str | None = None,
     env: dict[str, str] | None = None,
     process_policy: HttpSidecarProcessPolicy | None = None,
+    artifact_mounts: list[HttpSidecarArtifactMountSpec] | None = None,
+    prewarm: HttpSidecarPrewarmSpec | None = None,
+    diagnostics: HttpSidecarDiagnosticsSpec | None = None,
     browser_origin: HttpSidecarBrowserOriginSpec | None = None,
     entrypoint_access: HttpSidecarEntrypointAccessSpec | None = None,
     bind: HttpSidecarBindSpec | None = None,
@@ -378,6 +384,9 @@ def build_http_sidecar_spec(
         command=command,
         env=env or {},
         process_policy=process_policy or build_http_sidecar_process_policy(),
+        artifact_mounts=artifact_mounts or [],
+        prewarm=prewarm,
+        diagnostics=diagnostics,
         browser_origin=browser_origin,
         entrypoint_access=entrypoint_access,
         bind=bind or HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
@@ -385,6 +394,35 @@ def build_http_sidecar_spec(
         proxy=proxy,
         logs=logs,
     )
+
+
+def build_http_sidecar_artifact_mount(*, artifact_id: str) -> HttpSidecarArtifactMountSpec:
+    """Build one fixed platform-owned sidecar artifact mount."""
+    return HttpSidecarArtifactMountSpec(
+        artifact_id=artifact_id,
+        mount_path=f"/artifacts/{artifact_id}",
+    )
+
+
+def build_http_sidecar_prewarm(
+    *,
+    on_core_start: bool = True,
+    on_install: bool = True,
+    on_activation: bool = True,
+    keep_alive: bool = True,
+) -> HttpSidecarPrewarmSpec:
+    """Build one declarative keep-alive prewarm policy."""
+    return HttpSidecarPrewarmSpec(
+        on_core_start=on_core_start,
+        on_install=on_install,
+        on_activation=on_activation,
+        keep_alive=keep_alive,
+    )
+
+
+def build_http_sidecar_diagnostics(*, status_file: str) -> HttpSidecarDiagnosticsSpec:
+    """Build one generic data-relative sidecar startup diagnostic declaration."""
+    return HttpSidecarDiagnosticsSpec(status_file=status_file)
 
 
 def build_http_sidecar_process_policy(
@@ -410,13 +448,17 @@ def build_http_sidecar_process_policy(
     )
 
 
-def build_http_sidecar_browser_origin() -> HttpSidecarBrowserOriginSpec:
+def build_http_sidecar_browser_origin(
+    *,
+    immutable_asset_prefixes: list[str] | None = None,
+) -> HttpSidecarBrowserOriginSpec:
     """Build the strict isolated-origin policy supported by core."""
     return HttpSidecarBrowserOriginSpec(
         mode="isolated",
         csp_profile="self_hosted_web_app",
         frame_ancestors=["platform"],
         connect_src=["self"],
+        immutable_asset_prefixes=list(immutable_asset_prefixes or []),
     )
 
 

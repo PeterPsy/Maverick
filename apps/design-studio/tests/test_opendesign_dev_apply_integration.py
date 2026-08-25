@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -18,6 +19,22 @@ from opendesign_dev_changeset import materialize_changeset, resolve_changeset  #
 
 class DevApplyIsolatedGateIntegrationTests(unittest.TestCase):
     def test_real_quick_e2e_runs_from_materialized_checkout(self) -> None:
+        committed_release = subprocess.run(
+            [
+                "git",
+                "cat-file",
+                "-e",
+                "HEAD:apps/design-studio/service/opendesign_release_selection.json",
+            ],
+            cwd=ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if committed_release.returncode != 0:
+            self.skipTest(
+                "the isolated gate requires the protected-store release baseline to be committed"
+            )
         changed_files = (
             "apps/design-studio/service/opendesign_launcher.py",
             "apps/design-studio/service/opendesign_web_activation.py",

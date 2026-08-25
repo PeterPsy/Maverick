@@ -5,8 +5,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+
+#include "codex_resume_archive_fixture.h"
 
 
 static pthread_mutex_t output_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -19,6 +22,107 @@ struct turn_work {
     char turn_id[64];
     bool long_running;
 };
+
+
+static bool ensure_directory(const char *path) {
+    char buffer[4096];
+    size_t length = strlen(path);
+    if (length == 0 || length >= sizeof(buffer)) return false;
+    memcpy(buffer, path, length + 1);
+    for (char *cursor = buffer + 1; *cursor != '\0'; cursor += 1) {
+        if (*cursor != '/') continue;
+        *cursor = '\0';
+        if (mkdir(buffer, 0700) != 0 && access(buffer, F_OK) != 0) return false;
+        *cursor = '/';
+    }
+    return mkdir(buffer, 0700) == 0 || access(buffer, F_OK) == 0;
+}
+
+
+static bool build_rollout_path(const char *home, char *output, size_t output_size) {
+    const char *suffix = "turn.jsonl";
+    int prefix_length = snprintf(output, output_size, "%s/rollouts/", home);
+    if (prefix_length < 0 || (size_t)prefix_length >= output_size) return false;
+    size_t cursor = (size_t)prefix_length;
+    size_t suffix_length = strlen(suffix);
+    if (cursor + suffix_length >= maverick_resume_rollout_path_size) return false;
+    size_t remaining = maverick_resume_rollout_path_size - cursor - suffix_length;
+    size_t component_count = 1;
+    while (remaining < component_count || remaining - component_count > component_count * 200) {
+        component_count += 1;
+        if (component_count > 16) return false;
+    }
+    size_t characters = remaining - component_count;
+    for (size_t component = 0; component < component_count; component += 1) {
+        size_t components_left = component_count - component;
+        size_t count = characters / components_left;
+        if (count > 200) count = 200;
+        memset(output + cursor, 'r', count);
+        cursor += count;
+        characters -= count;
+        output[cursor++] = '/';
+    }
+    memcpy(output + cursor, suffix, suffix_length);
+    cursor += suffix_length;
+    output[cursor] = '\0';
+    return cursor == maverick_resume_rollout_path_size;
+}
+
+
+static bool write_resume_archive(void) {
+    const char *home = getenv("CODEX_HOME");
+    if (home == NULL || *home == '\0' || !ensure_directory(home)) return false;
+    char rollout_path[513];
+    if (!build_rollout_path(home, rollout_path, sizeof(rollout_path))) return false;
+    char rollout_directory[513];
+    memcpy(rollout_directory, rollout_path, sizeof(rollout_directory));
+    char *separator = strrchr(rollout_directory, '/');
+    if (separator == NULL) return false;
+    *separator = '\0';
+    if (!ensure_directory(rollout_directory)) return false;
+    FILE *rollout = fopen(rollout_path, "w");
+    if (rollout == NULL) return false;
+    fputs("{\"fixture\":\"maverick-wp10\"}\n", rollout);
+    if (fclose(rollout) != 0) return false;
+
+    unsigned char *database = malloc(maverick_resume_archive_template_size);
+    if (database == NULL) return false;
+    memcpy(database, maverick_resume_archive_template, maverick_resume_archive_template_size);
+    size_t marker_offset = maverick_resume_archive_template_size;
+    for (size_t index = 0; index + maverick_resume_rollout_path_size <= maverick_resume_archive_template_size; index += 1) {
+        bool matches = true;
+        for (size_t marker = 0; marker < maverick_resume_rollout_path_size; marker += 1) {
+            if (database[index + marker] != 'Z') {
+                matches = false;
+                break;
+            }
+        }
+        if (matches) {
+            marker_offset = index;
+            break;
+        }
+    }
+    if (marker_offset == maverick_resume_archive_template_size) {
+        free(database);
+        return false;
+    }
+    memcpy(database + marker_offset, rollout_path, maverick_resume_rollout_path_size);
+    char database_path[4096];
+    int database_path_length = snprintf(database_path, sizeof(database_path), "%s/state_maverick.sqlite", home);
+    if (database_path_length < 0 || (size_t)database_path_length >= sizeof(database_path)) {
+        free(database);
+        return false;
+    }
+    FILE *handle = fopen(database_path, "wb");
+    if (handle == NULL) {
+        free(database);
+        return false;
+    }
+    bool written = fwrite(database, 1, maverick_resume_archive_template_size, handle)
+        == maverick_resume_archive_template_size;
+    free(database);
+    return fclose(handle) == 0 && written;
+}
 
 
 static void send_line(const char *line) {
@@ -171,6 +275,7 @@ int main(void) {
             strcmp(method, "thread/start") == 0
             || strcmp(method, "thread/resume") == 0
         ) {
+            if (!write_resume_archive()) return 4;
             response(id, "{\"thread\":{\"id\":\"thread-maverick-wp10\"}}");
         } else if (strcmp(method, "turn/start") == 0) {
             struct turn_work *work = calloc(1, sizeof(*work));

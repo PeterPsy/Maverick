@@ -71,45 +71,19 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         )
         self.assertFalse(any(path.name.startswith(".materialize-") for path in registry.iterdir()))
 
-    def test_launcher_requires_opt_in_when_internal_symlink_resolves_outside_app(self) -> None:
-        app_root = self.root / "app"
-        vendor = app_root / "service/vendor"
+    def test_launcher_accepts_only_the_declared_artifact_capability_mount(self) -> None:
         external = self.root / "operational-registry"
-        vendor.mkdir(parents=True)
         external.mkdir()
-        linked = vendor / "open-design"
-        linked.symlink_to(external, target_is_directory=True)
-
-        with (
-            patch.object(self.launcher, "APP_ROOT", app_root),
-            patch.dict("os.environ", {}, clear=True),
+        with patch.dict(
+            "os.environ",
+            {
+                "MAVERICK_OPENDESIGN_STORE_ROOT": str(external),
+                "MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE": "1",
+            },
+            clear=True,
         ):
-            with self.assertRaisesRegex(SystemExit, "must stay inside"):
-                self.launcher._verified_registry_path(
-                    linked,
-                    variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
-                )
-            with self.assertRaisesRegex(SystemExit, "must stay inside"):
-                self.launcher._verified_registry_path(
-                    external,
-                    variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
-                )
-
-        with (
-            patch.object(self.launcher, "APP_ROOT", app_root),
-            patch.dict(
-                "os.environ",
-                {"MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE": "1"},
-                clear=True,
-            ),
-        ):
-            self.assertEqual(
-                self.launcher._verified_registry_path(
-                    linked,
-                    variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
-                ),
-                external.resolve(),
-            )
+            with self.assertRaisesRegex(self.launcher.LauncherError, "declared artifact capability mount"):
+                self.launcher._store_root()
 
     def test_launcher_finalizes_recovery_only_after_verified_readiness(self) -> None:
         plan = self.launcher.LaunchPlan("test", ["daemon"], self.root, "test")
@@ -125,8 +99,10 @@ class OpenDesignMaterializationTests(unittest.TestCase):
                 "_wait_for_sidecar_readiness",
                 return_value=readiness,
             ) as wait_for_readiness,
-            patch.object(self.launcher, "_finalize_pending_web_activation") as finalize,
-            self.assertRaises(SystemExit) as exited,
+            patch.object(self.launcher, "_finalize_pending_activations") as finalize,
+            patch.object(self.launcher, "_write_readiness_marker") as write_marker,
+            patch.object(self.launcher, "_wait_for_maverick_readiness") as wait_for_maverick,
+            self.assertRaises(self.launcher.LauncherError) as exited,
         ):
             self.launcher._run_daemon(
                 plan,
@@ -134,9 +110,12 @@ class OpenDesignMaterializationTests(unittest.TestCase):
                 generation_root=self.root / "generation",
                 binding=binding,
                 web_registry_root=self.root / "web-registry",
+                startup_id="startup-test",
+                timings={},
             )
 
-        self.assertEqual(exited.exception.code, 0)
+        self.assertEqual(exited.exception.code, "daemon_spawn_failed")
+        self.assertEqual(exited.exception.phase, "daemon_exit")
         wait_for_readiness.assert_called_once_with(
             daemon,
             env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
@@ -146,6 +125,15 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             binding=binding,
             web_registry_root=self.root / "web-registry",
             readiness=readiness,
+        )
+        write_marker.assert_called_once_with(
+            self.root / "generation",
+            binding=binding,
+            startup_nonce="startup-test",
+        )
+        wait_for_maverick.assert_called_once_with(
+            daemon,
+            env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
         )
 
     def test_existing_digest_directory_is_never_replaced_after_tampering(self) -> None:
@@ -203,6 +191,34 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         self.assertFalse((self.root / "escape").exists())
         self.assertEqual(list(registry.iterdir()), [])
 
+    def test_archive_symlink_ancestor_pivot_is_rejected_before_fast_extraction(self) -> None:
+        malicious = self.root / "symlink-pivot.tar.gz"
+        with tarfile.open(malicious, mode="w:gz") as bundle:
+            pivot = tarfile.TarInfo("pivot")
+            pivot.type = tarfile.SYMTYPE
+            pivot.linkname = "target"
+            bundle.addfile(pivot)
+            nested = tarfile.TarInfo("pivot/escaped.txt")
+            nested.size = len(b"escaped")
+            import io
+
+            bundle.addfile(nested, io.BytesIO(b"escaped"))
+        digest = self.artifact.sha256_file(malicious)
+        registry = self.root / "registry-symlink-pivot"
+
+        with self.assertRaisesRegex(self.artifact.ArtifactError, "traverses a symlink"):
+            self.materialization.materialize_archive(
+                malicious,
+                registry,
+                expected_artifact_sha256=digest,
+                expected_file_manifest_sha256="a" * 64,
+                opendesign_version="0.16.1",
+                upstream_commit=UPSTREAM_COMMIT,
+            )
+
+        self.assertFalse((registry / "target/escaped.txt").exists())
+        self.assertFalse(any(registry.iterdir()))
+
     def test_runtime_binding_uses_only_the_controlled_bundle_data_pair(self) -> None:
         registry = self.root / "registry"
         installed = self._materialize(registry)
@@ -254,7 +270,10 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             data_dir=binding.data_dir,
             media_config_dir=binding.data_dir / "media-config",
             static_dir=binding.overlay.static_dir,
-            static_registry_root=self.root / "web-registry",
+            static_registry_root=binding.overlay.path,
+            generation_root=generation_root,
+            binding=binding,
+            startup_nonce="startup-test",
         )
 
         self.assertEqual(binding.bundle, installed)
@@ -266,7 +285,14 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         self.assertEqual(plan.command[3], str(installed.path / "runtime/bin/node"))
         self.assertEqual(daemon_env["OD_DATA_DIR"], str(data_dir))
         self.assertEqual(daemon_env["OD_STATIC_DIR"], str(binding.overlay.static_dir))
-        self.assertEqual(daemon_env["OD_STATIC_REGISTRY_ROOT"], str(self.root / "web-registry"))
+        self.assertEqual(daemon_env["OD_STATIC_REGISTRY_ROOT"], str(binding.overlay.path))
+        self.assertEqual(daemon_env["OD_MAVERICK_STARTUP_NONCE"], "startup-test")
+        self.assertEqual(daemon_env["OD_RUNTIME_ARTIFACT_SHA256"], self.archive_sha256)
+        self.assertEqual(daemon_env["OD_WEB_OVERLAY_SHA256"], WEB_DIGEST)
+        self.assertEqual(
+            daemon_env["MAVERICK_OPENDESIGN_NODE_COMPILE_CACHE"],
+            str(data_dir / "cache" / "node-compile" / self.archive_sha256),
+        )
         self.assertEqual(daemon_env["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"], "1")
         self.assertEqual(daemon_env["DO_NOT_TRACK"], "1")
         self.assertEqual(daemon_env["NEXT_TELEMETRY_DISABLED"], "1")
@@ -328,11 +354,22 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             },
             clear=True,
         ):
+            binding = SimpleNamespace(
+                active=SimpleNamespace(
+                    runtime_artifact_sha256="a" * 64,
+                    web_overlay_sha256="b" * 64,
+                    data_generation="gen_current",
+                ),
+                control=SimpleNamespace(runtime_activation_id=None, web_activation_id=None),
+            )
             environment = self.launcher._daemon_env(
                 data_dir=self.root / "data",
                 media_config_dir=self.root / "data/media-config",
                 static_dir=self.root / "static",
                 static_registry_root=self.root,
+                generation_root=self.root / "generation",
+                binding=binding,
+                startup_nonce="startup-test",
             )
         self.assertEqual(environment["OD_API_TOKEN"], "technical-token")
         self.assertEqual(environment["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"], "1")
@@ -348,6 +385,23 @@ class OpenDesignMaterializationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(SystemExit, "must be a real directory"):
             self.launcher._ensure_runtime_dirs(data_dir, data_dir / "media-config")
+
+    def test_launcher_rejects_compile_cache_symlinks_and_invalid_runtime_digest(self) -> None:
+        data_dir = self.root / "active-cache-data"
+        outside = self.root / "outside-cache"
+        (data_dir / "cache").mkdir(parents=True)
+        outside.mkdir()
+        (data_dir / "cache/node-compile").symlink_to(outside, target_is_directory=True)
+        cache_dir = data_dir / "cache/node-compile" / self.archive_sha256
+
+        with self.assertRaisesRegex(SystemExit, "must be a real directory"):
+            self.launcher._ensure_runtime_dirs(
+                data_dir,
+                data_dir / "media-config",
+                node_compile_cache_dir=cache_dir,
+            )
+        with self.assertRaisesRegex(self.launcher.LauncherError, "digest is invalid"):
+            self.launcher._node_compile_cache_dir(data_dir, "not-a-digest")
 
     def test_empty_bootstrap_refuses_legacy_or_unknown_data(self) -> None:
         generation_root = self.root / "data-root"

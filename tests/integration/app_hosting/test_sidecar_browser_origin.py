@@ -16,6 +16,34 @@ from core.apps.sidecar_browser_sessions import SESSION_IDLE_TTL_SECONDS
 from core.shared.entrypoints import EntrypointShutdownController
 from tests.integration.app_hosting.sidecar_browser_origin_support import SidecarBrowserOriginTestSupport
 class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unittest.TestCase):
+    def test_ticket_store_failure_is_typed_only_after_transactional_health(self) -> None:
+        asyncio.run(self._assert_ticket_store_failure_is_typed())
+
+    async def _assert_ticket_store_failure_is_typed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(Path(temp_dir))
+            state = self._state_with_sidecar(repo_root)
+            shutdown = EntrypointShutdownController()
+            self.addCleanup(shutdown.begin_shutdown)
+            app = PlatformAsgiHost(state, shutdown_controller=shutdown)
+            cookie = await self._login(app, host="maverick.localhost:8000")
+            with patch.object(
+                state.sidecar_browser_sessions,
+                "issue_ticket",
+                side_effect=RuntimeError("ticket store unavailable"),
+            ):
+                status, payload, _headers = await self._launch(
+                    app,
+                    platform_cookie=cookie,
+                    host="maverick.localhost:8000",
+                    origin="http://maverick.localhost:8000",
+                )
+
+            self.assertEqual(status, 503)
+            self.assertEqual(payload["error"], "browser_ticket_failed")
+            self.assertEqual(payload["phase"], "browser_ticket_issue")
+            self.assertIs(payload["auto_repairable"], False)
+
     def test_cold_launch_after_host_restart_waits_for_declared_health_budget(self) -> None:
         asyncio.run(self._assert_cold_launch_after_host_restart())
     async def _assert_cold_launch_after_host_restart(self) -> None:
@@ -77,7 +105,9 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
                 origin="http://localhost:8000",
             )
             self.assertEqual(bare_local_status, 503)
-            self.assertIn("SameSite=Strict", bare_local_payload["detail"])
+            self.assertEqual(bare_local_payload["error"], "sidecar_origin_unavailable")
+            self.assertEqual(bare_local_payload["phase"], "sidecar")
+            self.assertNotIn("detail", bare_local_payload)
 
             unavailable_status, unavailable_payload, _headers = await self._launch(
                 app,
@@ -104,7 +134,9 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
                     origin=platform_origin,
                 )
             self.assertEqual(hosted_status, 503)
-            self.assertIn("require", hosted_payload["detail"].lower())
+            self.assertEqual(hosted_payload["error"], "sidecar_origin_unavailable")
+            self.assertEqual(hosted_payload["phase"], "sidecar")
+            self.assertNotIn("detail", hosted_payload)
 
             launch_status, launch, launch_headers = await self._launch(
                 app,
@@ -191,6 +223,28 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             self.assertIn("connect-src 'self'", csp)
             self.assertIn(f"frame-ancestors {platform_origin}", csp)
             self.assertNotIn("frame-ancestors *", csp)
+
+            asset_status, asset_body, asset_headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/_next/static/chunks/app-deadbeef.js",
+                headers={"cookie": sidecar_cookie},
+            )
+            self.assertEqual(asset_status, 200)
+            self.assertIn(b"__sidecarAsset", asset_body)
+            self.assertEqual(
+                asset_headers["cache-control"],
+                "private, max-age=31536000, immutable",
+            )
+
+            missing_asset_status, _missing_asset_body, missing_asset_headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/_next/static/chunks/missing-deadbeef.js",
+                headers={"cookie": sidecar_cookie},
+            )
+            self.assertEqual(missing_asset_status, 404)
+            self.assertEqual(missing_asset_headers["cache-control"], "no-store")
 
             core_status, _core_body, core_headers = await self._invoke(
                 app,

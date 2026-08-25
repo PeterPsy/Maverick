@@ -49,12 +49,14 @@ def bootstrap_empty_generation(
             raise BootstrapError("existing OpenDesign control selects a different generation")
         return control, root / "instances" / generation_id / "data"
 
-    allowed = {"instances", "backups", "migrations", "web-activations"}
+    allowed = {"instances", "backups", "migrations", "web-activations", "runtime-activations"}
     existing = {child.name for child in root.iterdir()}
     if not existing.issubset(allowed):
         raise BootstrapError("OpenDesign root contains legacy or unknown data; controlled migration is required")
     for name in allowed:
         directory = root / name
+        if name == "runtime-activations" and not directory.exists():
+            directory.mkdir(mode=0o700)
         _require_empty_real_directory(directory, label=name)
 
     generation = root / "instances" / generation_id

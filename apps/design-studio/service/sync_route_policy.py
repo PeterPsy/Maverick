@@ -25,6 +25,7 @@ _STATIC_RULES = (
     {"method": "GET", "path_template": "/projects/{id}"},
 )
 _MAVERICK_EXTENSION_RULES = (
+    ("pass_through", {"method": "GET", "path_template": "/api/maverick-ready"}),
     # The upstream raw route is multi-segment and therefore remains blocked.
     # Maverick exposes only the exact one-segment read used to verify a bounded
     # Storage import; nested project exports use the governed batch archive API.

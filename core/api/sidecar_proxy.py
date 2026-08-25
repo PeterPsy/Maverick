@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import Future
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 import json
 import http.client
 import logging
 import os
 from pathlib import Path
+import re
 import secrets
 import signal
 import socket
 import subprocess
-from threading import BoundedSemaphore, Lock
+from threading import BoundedSemaphore, Event, Lock
 import time
 from typing import Any, AsyncIterator, Callable, Iterable, Iterator
 from urllib.parse import quote
@@ -27,7 +30,10 @@ from core.api.sidecar_core_routes import (
     handle_core_sidecar_route_asgi,
 )
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
+from core.apps.artifact_mounts import ResolvedArtifactMount, resolve_artifact_mounts
 from core.apps.models import HttpSidecarSpec, ParsedAppContract, WorkspaceAppBindingRecord
+from core.apps.lifecycle import run_lifecycle_hook
+from core.apps.service_common import _build_workspace_hook_payload
 from core.apps.sidecar_route_policy import (
     canonicalize_sidecar_path,
     route_policy_mode,
@@ -44,6 +50,7 @@ from core.authorization.errors import AuthorizationError
 from core.authorization.service import can_mount_app_visibility, require_workspace_admin, require_workspace_membership
 from core.identity.models import UserRecord
 from core.shared.entrypoints import EntrypointShutdownController
+from core.shared.repository import discover_repository_root
 from core.workspaces.paths import workspace_paths
 
 
@@ -63,6 +70,10 @@ _DEFAULT_PROXY_TIMEOUT_SECONDS = 60
 _PROXY_CHUNK_SIZE = 64 * 1024
 _REQUEST_BODY_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _SIDECAR_MANAGER = None
+_AUTO_REPAIR_LOCK = Lock()
+_AUTO_REPAIRS: dict[tuple[str, str, str], Future[None]] = {}
+_AUTO_REPAIR_BACKOFFS: dict[tuple[str, str, str], float] = {}
+_AUTO_REPAIR_BACKOFF_SECONDS = 60.0
 AsgiReceive = Any
 AsgiSend = Any
 
@@ -84,6 +95,52 @@ class RunningSidecar:
     shutdown_controller: EntrypointShutdownController | None = None
     cleanup_lock: Lock = field(default_factory=Lock)
     cleaned: bool = False
+
+
+@dataclass
+class SidecarStartup:
+    """One shared, cancellable startup operation for an exact sidecar key."""
+
+    future: Future[RunningSidecar] = field(default_factory=Future)
+    cancel_event: Event = field(default_factory=Event)
+    phase: str = "startup_registered"
+    started_at: float = field(default_factory=time.monotonic)
+
+
+class SidecarStartupError(AppHostingError):
+    """Typed and redaction-safe sidecar startup failure."""
+
+    def __init__(
+        self,
+        code: str,
+        phase: str,
+        detail: str,
+        *,
+        duration_ms: float = 0.0,
+        auto_repairable: bool = False,
+        startup_id: str = "",
+        difference_count: int = 0,
+    ) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.phase = phase
+        self.duration_ms = max(0.0, round(duration_ms, 3))
+        self.auto_repairable = auto_repairable
+        self.startup_id = startup_id
+        self.difference_count = max(0, difference_count)
+
+    def public_payload(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "code": self.code,
+            "phase": self.phase,
+            "duration_ms": self.duration_ms,
+            "auto_repairable": self.auto_repairable,
+        }
+        if self.startup_id:
+            payload["startup_id"] = self.startup_id
+        if self.difference_count:
+            payload["difference_count"] = self.difference_count
+        return payload
 
 
 @dataclass(frozen=True)
@@ -188,6 +245,8 @@ class HttpSidecarManager:
     def __init__(self) -> None:
         self._lock = Lock()
         self._running: dict[tuple[str, str, str, str], RunningSidecar] = {}
+        self._starting: dict[tuple[str, str, str, str], SidecarStartup] = {}
+        self._status: dict[tuple[str, str, str, str], dict[str, object]] = {}
 
     def ensure_running(
         self,
@@ -201,13 +260,33 @@ class HttpSidecarManager:
         shutdown_controller: EntrypointShutdownController | None,
     ) -> RunningSidecar:
         key = (workspace_id, app_id, sidecar.service_id, data_root)
+        stale: RunningSidecar | None = None
+        owner = False
         with self._lock:
             running = self._running.get(key)
             if running is not None and running.process.poll() is None:
                 return running
             if running is not None:
-                self._cleanup_sidecar(running)
                 self._running.pop(key, None)
+                stale = running
+            startup = self._starting.get(key)
+            if startup is None:
+                startup = SidecarStartup()
+                self._starting[key] = startup
+                self._status[key] = _startup_status_payload(startup, state="starting")
+                owner = True
+        if stale is not None:
+            self._cleanup_sidecar(stale)
+        if not owner:
+            return startup.future.result()
+
+        def record_phase(phase: str) -> None:
+            with self._lock:
+                if self._starting.get(key) is startup:
+                    startup.phase = phase
+                    self._status[key] = _startup_status_payload(startup, state="starting")
+
+        try:
             running = self._start_sidecar(
                 workspace_id=workspace_id,
                 app_id=app_id,
@@ -216,9 +295,56 @@ class HttpSidecarManager:
                 sidecar=sidecar,
                 start_path=start_path,
                 shutdown_controller=shutdown_controller,
+                cancel_event=startup.cancel_event,
+                record_phase=record_phase,
             )
-            self._running[key] = running
+            with self._lock:
+                if self._starting.get(key) is not startup or startup.cancel_event.is_set():
+                    cancelled = True
+                else:
+                    cancelled = False
+                    self._starting.pop(key, None)
+                    self._running[key] = running
+                    self._status[key] = {
+                        "state": "ready",
+                        "phase": "health_ready",
+                        "instance_id": running.instance_id,
+                        "duration_ms": _startup_elapsed_ms(startup),
+                        "updated_at": _utc_timestamp(),
+                        "last_failure": None,
+                    }
+            if cancelled:
+                self._cleanup_sidecar(running)
+                raise SidecarStartupError(
+                    "startup_cancelled",
+                    startup.phase,
+                    "HTTP sidecar startup was cancelled.",
+                    duration_ms=_startup_elapsed_ms(startup),
+                )
+            startup.future.set_result(running)
             return running
+        except Exception as error:
+            declared_failure = (
+                None
+                if startup.cancel_event.is_set()
+                else _read_declared_startup_failure(sidecar, data_root=data_root)
+            )
+            failure = declared_failure or _normalize_startup_error(error, startup=startup)
+            with self._lock:
+                if self._starting.get(key) is startup:
+                    self._starting.pop(key, None)
+                self._status[key] = {
+                    "state": "failed",
+                    "phase": failure.phase,
+                    "duration_ms": failure.duration_ms,
+                    "updated_at": _utc_timestamp(),
+                    "last_failure": failure.public_payload(),
+                }
+            if not startup.future.done():
+                startup.future.set_exception(failure)
+            if failure is error:
+                raise failure
+            raise failure from error
 
     def _start_sidecar(
         self,
@@ -230,11 +356,23 @@ class HttpSidecarManager:
         sidecar: HttpSidecarSpec,
         start_path: Path,
         shutdown_controller: EntrypointShutdownController | None,
+        cancel_event: Event,
+        record_phase: Callable[[str], None],
     ) -> RunningSidecar:
+        _raise_if_startup_cancelled(cancel_event, phase="artifact_mount_resolve")
+        record_phase("artifact_mount_resolve")
         host = sidecar.bind.host
         port = _allocate_loopback_port(host) if sidecar.bind.port == "auto" else int(sidecar.bind.port)
         token = secrets.token_urlsafe(32)
         workspace = workspace_paths(workspace_id, start_path=start_path)
+        repository_root = discover_repository_root(start_path=start_path)
+        artifact_mounts = resolve_artifact_mounts(
+            repository_root=repository_root,
+            app_id=app_id,
+            declarations=sidecar.artifact_mounts,
+        )
+        _raise_if_startup_cancelled(cancel_event, phase="sandbox_prepare")
+        record_phase("sandbox_prepare")
         stdout_file = _open_sidecar_log(workspace.root, sidecar.logs.stdout if sidecar.logs else None)
         stderr_file = _open_sidecar_log(workspace.root, sidecar.logs.stderr if sidecar.logs else None)
         try:
@@ -248,6 +386,7 @@ class HttpSidecarManager:
                 token=token,
                 sidecar=sidecar,
                 start_path=start_path,
+                artifact_mounts=artifact_mounts,
             )
             confined_launch = prepare_confined_sidecar_launch(
                 workspace_id=workspace_id,
@@ -258,10 +397,18 @@ class HttpSidecarManager:
                 sidecar=sidecar,
                 port=port,
                 env=env,
+                artifact_mounts=artifact_mounts,
             )
         except Exception:
             _close_sidecar_logs(stdout_file, stderr_file)
             raise
+        try:
+            _raise_if_startup_cancelled(cancel_event, phase="process_spawn")
+        except SidecarStartupError:
+            confined_launch.cleanup()
+            _close_sidecar_logs(stdout_file, stderr_file)
+            raise
+        record_phase("process_spawn")
         try:
             process = subprocess.Popen(
                 confined_launch.command,
@@ -300,7 +447,8 @@ class HttpSidecarManager:
             running.cleanup_callback = cleanup_callback
             shutdown_controller.register_cleanup(cleanup_callback)
         try:
-            _wait_for_sidecar_health(running, sidecar=sidecar)
+            record_phase("health_wait")
+            _wait_for_sidecar_health(running, sidecar=sidecar, cancel_event=cancel_event)
         except AppHostingError:
             self._cleanup_sidecar(running)
             raise
@@ -311,9 +459,34 @@ class HttpSidecarManager:
         with self._lock:
             keys = [key for key in self._running if key[:2] == (workspace_id, app_id)]
             running_sidecars = [self._running.pop(key) for key in keys]
-            for running in running_sidecars:
-                self._cleanup_sidecar(running)
-            return len(running_sidecars)
+            startups = [
+                startup
+                for key, startup in self._starting.items()
+                if key[:2] == (workspace_id, app_id)
+            ]
+            for startup in startups:
+                startup.cancel_event.set()
+        for running in running_sidecars:
+            self._cleanup_sidecar(running)
+        for startup in startups:
+            try:
+                startup.future.result()
+            except Exception:
+                pass
+        return len(running_sidecars) + len(startups)
+
+    def startup_status(
+        self,
+        *,
+        workspace_id: str,
+        app_id: str,
+        sidecar_id: str,
+        data_root: str,
+    ) -> dict[str, object]:
+        """Return the latest redaction-safe lifecycle state without starting a sidecar."""
+        key = (workspace_id, app_id, sidecar_id, data_root)
+        with self._lock:
+            return dict(self._status.get(key, {"state": "not_started", "phase": "idle"}))
 
     def current_instance_id(
         self,
@@ -358,6 +531,18 @@ def stop_app_sidecars(*, workspace_id: str, app_id: str) -> int:
     if manager is not None:
         return manager.stop_app(workspace_id=workspace_id, app_id=app_id)
     return 0
+
+
+def sidecar_error_payload(error: AppHostingError, *, default_code: str) -> dict[str, object]:
+    """Return a bounded startup diagnostic without leaking runtime inputs or paths."""
+    if isinstance(error, SidecarStartupError):
+        return {"error": error.code, **error.public_payload()}
+    return {
+        "error": default_code,
+        "code": default_code,
+        "phase": "sidecar",
+        "auto_repairable": False,
+    }
 
 
 def restart_declared_app_sidecars(
@@ -468,7 +653,11 @@ def handle_app_sidecar_proxy(
         )
     except AppHostingError as error:
         logger.warning("App `%s` sidecar `%s` unavailable: %s", app_id, sidecar_id, error)
-        return json_response(start_response, {"error": "sidecar_unavailable", "detail": str(error)}, status="503 Service Unavailable")
+        return json_response(
+            start_response,
+            sidecar_error_payload(error, default_code="sidecar_unavailable"),
+            status="503 Service Unavailable",
+        )
     except Exception:
         logger.exception("App `%s` sidecar `%s` proxy failed.", app_id, sidecar_id)
         return json_response(start_response, {"error": "sidecar_proxy_failed"}, status="502 Bad Gateway")
@@ -566,7 +755,7 @@ async def handle_app_sidecar_proxy_asgi(
         logger.warning("App `%s` sidecar `%s` unavailable: %s", app_id, sidecar_id, error)
         await _send_asgi_json(
             send,
-            {"error": "sidecar_unavailable", "detail": str(error)},
+            sidecar_error_payload(error, default_code="sidecar_unavailable"),
             status="503 Service Unavailable",
             headers=enforced_response_headers,
         )
@@ -717,15 +906,119 @@ def ensure_authorized_sidecar_running(
     shutdown_controller: EntrypointShutdownController | None,
 ) -> RunningSidecar:
     """Start or reuse an already-authorized sidecar for browser bootstrap."""
-    return _sidecar_manager().ensure_running(
-        workspace_id=target.binding.workspace_id,
-        app_id=target.binding.app_id,
+    return ensure_sidecar_with_declared_auto_repair(
+        binding=target.binding,
         source_root=target.source_root,
-        data_root=target.binding.data_root,
+        parsed=target.parsed,
         sidecar=target.sidecar,
         start_path=start_path,
         shutdown_controller=shutdown_controller,
     )
+
+
+def ensure_sidecar_with_declared_auto_repair(
+    *,
+    binding: WorkspaceAppBindingRecord,
+    source_root: Path,
+    parsed: ParsedAppContract,
+    sidecar: HttpSidecarSpec,
+    start_path: Path,
+    shutdown_controller: EntrypointShutdownController | None,
+) -> RunningSidecar:
+    """Start a sidecar and perform at most one declared, singleflight repair."""
+    manager = _sidecar_manager()
+    try:
+        return manager.ensure_running(
+            workspace_id=binding.workspace_id,
+            app_id=binding.app_id,
+            source_root=source_root,
+            data_root=binding.data_root,
+            sidecar=sidecar,
+            start_path=start_path,
+            shutdown_controller=shutdown_controller,
+        )
+    except SidecarStartupError as error:
+        if not error.auto_repairable or "artifact_repair" not in parsed.contract.entrypoints.hooks:
+            raise
+        _run_declared_artifact_repair_singleflight(
+            binding=binding,
+            source_root=source_root,
+            parsed=parsed,
+            sidecar=sidecar,
+            start_path=start_path,
+        )
+    return manager.ensure_running(
+        workspace_id=binding.workspace_id,
+        app_id=binding.app_id,
+        source_root=source_root,
+        data_root=binding.data_root,
+        sidecar=sidecar,
+        start_path=start_path,
+        shutdown_controller=shutdown_controller,
+    )
+
+
+def _run_declared_artifact_repair_singleflight(
+    *,
+    binding: WorkspaceAppBindingRecord,
+    source_root: Path,
+    parsed: ParsedAppContract,
+    sidecar: HttpSidecarSpec,
+    start_path: Path,
+) -> None:
+    key = (binding.workspace_id, binding.app_id, sidecar.service_id)
+    owner = False
+    with _AUTO_REPAIR_LOCK:
+        retry_after = _AUTO_REPAIR_BACKOFFS.get(key, 0.0)
+        if retry_after > time.monotonic():
+            raise SidecarStartupError(
+                "artifact_repair_failed",
+                "artifact_repair_backoff",
+                "Declared artifact repair is in bounded backoff.",
+            )
+        _AUTO_REPAIR_BACKOFFS.pop(key, None)
+        future = _AUTO_REPAIRS.get(key)
+        if future is None:
+            future = Future()
+            _AUTO_REPAIRS[key] = future
+            owner = True
+    if not owner:
+        future.result()
+        return
+    try:
+        payload = _build_workspace_hook_payload(
+            workspace_id=binding.workspace_id,
+            app_id=binding.app_id,
+            data_root=Path(binding.data_root),
+            source_kind=binding.source_kind,
+            source_record_id=binding.source_record_id,
+            hook_name="artifact_repair",
+            start_path=start_path,
+        )
+        run_lifecycle_hook(
+            source_root,
+            parsed.contract,
+            hook_name="artifact_repair",
+            payload=payload,
+        )
+    except Exception as error:
+        failure = SidecarStartupError(
+            "artifact_repair_failed",
+            "artifact_repair",
+            "Declared artifact repair failed.",
+        )
+        with _AUTO_REPAIR_LOCK:
+            _AUTO_REPAIR_BACKOFFS[key] = time.monotonic() + _AUTO_REPAIR_BACKOFF_SECONDS
+        future.set_exception(failure)
+        raise failure from error
+    else:
+        with _AUTO_REPAIR_LOCK:
+            _AUTO_REPAIR_BACKOFFS.pop(key, None)
+        future.set_result(None)
+    finally:
+        with _AUTO_REPAIR_LOCK:
+            if _AUTO_REPAIRS.get(key) is future:
+                _AUTO_REPAIRS.pop(key, None)
 
 
 def current_sidecar_instance_id(target: AuthorizedSidecarTarget) -> str | None:
@@ -1225,10 +1518,11 @@ def _sidecar_env(
     token: str,
     sidecar: HttpSidecarSpec,
     start_path: Path,
+    artifact_mounts: tuple[ResolvedArtifactMount, ...] = (),
 ) -> dict[str, str]:
     del data_root, source_root, workspace_root, start_path
     env = dict(MINIMAL_SIDECAR_ENV)
-    substitutions = sandbox_substitutions(port=port, token=token)
+    substitutions = sandbox_substitutions(port=port, token=token, artifact_mounts=artifact_mounts)
     for key, value in sidecar.env.items():
         env[key] = _replace_substitutions(value, substitutions)
     env["MAVERICK_APP_ID"] = app_id
@@ -1247,12 +1541,27 @@ def _replace_substitutions(value: str, substitutions: dict[str, str]) -> str:
     return result
 
 
-def _wait_for_sidecar_health(running: RunningSidecar, *, sidecar: HttpSidecarSpec) -> None:
+def _wait_for_sidecar_health(
+    running: RunningSidecar,
+    *,
+    sidecar: HttpSidecarSpec,
+    cancel_event: Event | None = None,
+) -> None:
     deadline = time.monotonic() + (sidecar.health.timeout_ms / 1000)
     last_error = "not ready"
     while time.monotonic() < deadline:
+        if cancel_event is not None and cancel_event.is_set():
+            raise SidecarStartupError(
+                "startup_cancelled",
+                "health_wait",
+                "HTTP sidecar startup was cancelled.",
+            )
         if running.process.poll() is not None:
-            raise AppHostingError(f"HTTP sidecar exited with code {running.process.returncode}.")
+            raise SidecarStartupError(
+                "daemon_spawn_failed",
+                "health_wait",
+                f"HTTP sidecar exited with code {running.process.returncode}.",
+            )
         connection = UnixRelayHTTPConnection(running, timeout=1.5)
         try:
             connection.request(
@@ -1272,8 +1581,125 @@ def _wait_for_sidecar_health(running: RunningSidecar, *, sidecar: HttpSidecarSpe
             last_error = str(error)
         finally:
             connection.close()
-        time.sleep(0.1)
-    raise AppHostingError(f"HTTP sidecar `{sidecar.service_id}` did not become ready: {last_error}")
+        if cancel_event is None:
+            time.sleep(0.1)
+        else:
+            cancel_event.wait(0.1)
+    raise SidecarStartupError(
+        "daemon_ready_timeout",
+        "health_wait",
+        f"HTTP sidecar `{sidecar.service_id}` did not become ready: {last_error}",
+    )
+
+
+def _raise_if_startup_cancelled(cancel_event: Event, *, phase: str) -> None:
+    if cancel_event.is_set():
+        raise SidecarStartupError(
+            "startup_cancelled",
+            phase,
+            "HTTP sidecar startup was cancelled.",
+        )
+
+
+def _normalize_startup_error(error: Exception, *, startup: SidecarStartup) -> SidecarStartupError:
+    duration_ms = _startup_elapsed_ms(startup)
+    if isinstance(error, SidecarStartupError):
+        if error.duration_ms:
+            return error
+        return SidecarStartupError(
+            error.code,
+            error.phase,
+            str(error),
+            duration_ms=duration_ms,
+            auto_repairable=error.auto_repairable,
+            startup_id=error.startup_id,
+            difference_count=error.difference_count,
+        )
+    detail = str(error)
+    if startup.phase == "artifact_mount_resolve":
+        lowered = detail.lower()
+        code = "artifact_permissions_invalid" if any(
+            fragment in lowered for fragment in ("protection", "protected", "ownership", "read-only")
+        ) else "artifact_missing"
+    elif startup.phase == "sandbox_prepare":
+        code = "runtime_binding_invalid"
+    elif startup.phase == "process_spawn":
+        code = "daemon_spawn_failed"
+    else:
+        code = "daemon_ready_timeout"
+    return SidecarStartupError(
+        code,
+        startup.phase,
+        detail or "HTTP sidecar startup failed.",
+        duration_ms=duration_ms,
+        auto_repairable=code in {"artifact_missing", "artifact_integrity_mismatch"},
+    )
+
+
+def _startup_status_payload(startup: SidecarStartup, *, state: str) -> dict[str, object]:
+    return {
+        "state": state,
+        "phase": startup.phase,
+        "duration_ms": _startup_elapsed_ms(startup),
+        "updated_at": _utc_timestamp(),
+        "last_failure": None,
+    }
+
+
+def _read_declared_startup_failure(sidecar: HttpSidecarSpec, *, data_root: str) -> SidecarStartupError | None:
+    declaration = sidecar.diagnostics
+    if declaration is None:
+        return None
+    root = Path(data_root)
+    try:
+        root = root.resolve(strict=True)
+        path = root.joinpath(*declaration.status_file.split("/"))
+        resolved = path.resolve(strict=True)
+        resolved.relative_to(root)
+        metadata = path.lstat()
+        if path.is_symlink() or not path.is_file() or metadata.st_size > 64 * 1024:
+            return None
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    failure = payload.get("last_failure") if isinstance(payload, dict) else None
+    if payload.get("schema_version") != "3" or not isinstance(failure, dict):
+        return None
+    code = failure.get("code")
+    phase = failure.get("phase")
+    startup_id = failure.get("startup_id")
+    duration = failure.get("duration_ms")
+    differences = failure.get("difference_count", 0)
+    if (
+        not isinstance(code, str)
+        or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code) is None
+        or not isinstance(phase, str)
+        or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", phase) is None
+        or not isinstance(startup_id, str)
+        or re.fullmatch(r"[0-9a-f]{32}", startup_id) is None
+        or isinstance(duration, bool)
+        or not isinstance(duration, (int, float))
+        or isinstance(differences, bool)
+        or not isinstance(differences, int)
+    ):
+        return None
+    return SidecarStartupError(
+        code,
+        phase,
+        f"HTTP sidecar startup failed during {phase}.",
+        duration_ms=float(duration),
+        auto_repairable=failure.get("auto_repairable") is True,
+        startup_id=startup_id,
+        difference_count=differences,
+    )
+
+
+def _startup_elapsed_ms(startup: SidecarStartup) -> float:
+    return round((time.monotonic() - startup.started_at) * 1000, 3)
+
+
+def _utc_timestamp() -> str:
+    return datetime.now(tz=UTC).isoformat().replace("+00:00", "Z")
 
 
 def _signal_process_group(process: subprocess.Popen[bytes], signum: signal.Signals) -> None:

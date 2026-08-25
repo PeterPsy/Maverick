@@ -4,23 +4,33 @@
     {
       "component": "runtime",
       "path": "0001-maverick-runtime-boundary.patch",
-      "sha256": "cdab3706aa4535f6eeb27c242b12ddb8f463e0a3b4e6b87abb788a176b4ef544",
-      "reason": "Require OD_STATIC_DIR inside the externally verified OD_STATIC_REGISTRY_ROOT with no embedded-web fallback, require the technical bearer on the hosted loopback relay, test both boundaries, and include node-pty in the reviewed runtime build graph.",
+      "sha256": "6871adef798fb3b8ead3efdc8c41b21a1bca9545484dc32400708798c314c2b6",
+      "reason": "Require protected static and bearer boundaries, transactional Maverick readiness, node-pty in the reviewed runtime graph, bundled-plugin startup bound to the fully audited protected runtime identity, and a cancellable post-readiness catalog refresh for the Maverick sidecar profile.",
       "files": [
         {
           "path": "apps/daemon/src/server.ts",
           "pre_sha256": "3fee60a6afde66056419bb6618ac8a6ce6ade7e54b5285720a6838735bc73b44",
-          "post_sha256": "40799f41b07799055bb2d95a42a98c8a1f0e9a14646f078ca4016df0808684f1"
+          "post_sha256": "41f4d3f92df1ee45a973dae3caab36655a9434e7f902632720c9cb194095e760"
         },
         {
           "path": "apps/daemon/tests/api-token-guard.test.ts",
           "pre_sha256": "08bdab2ed1ebd4216954c35490c09f89e6207e9613b8f7bf7f11036aff652f24",
-          "post_sha256": "4f8dad941055fa1724695f342a48caeb6cae400491b9ef2280e264d9cbe3e462"
+          "post_sha256": "c66269a052886a98beac1e51fddc82b70fb412999886ba2196e8716b22c2bff3"
         },
         {
           "path": "package.json",
           "pre_sha256": "958b1467e1397714a10473330bae598a602c170385e30035e8cecdc8517ae923",
           "post_sha256": "fd1e49c72bc51d635f3b8736b0f8caa352a805c8424fac86cda9c8ff93b07069"
+        },
+        {
+          "path": "apps/daemon/src/plugins/bundled.ts",
+          "pre_sha256": "30ec34752cabb701bb3fe9ddcf0899319d814b58442997681ae6bcebe0d69ad9",
+          "post_sha256": "b339f744f1f77d383b3b45980e7356bc31ca82e45eae5fedce9b1809d79f43a6"
+        },
+        {
+          "path": "apps/daemon/tests/plugins-bundled.test.ts",
+          "pre_sha256": "61afb6faf3826b48bb0784286e9bc4a927ae8e18bd4926403b733e24b65587e6",
+          "post_sha256": "ec647a6db2d03e90ebc431e66ff2f555e534a8eade380efe6cc4e003607ec923"
         }
       ]
     },

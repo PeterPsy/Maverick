@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from pathlib import Path, PurePosixPath
 import re
 import stat
 from typing import Any
 
 from opendesign_attestation import verify_signature
+from opendesign_store_manifest import StoreManifestError, verify_store_manifest
 from opendesign_supply_chain import read_json, sha256_file
 
 
-OVERLAY_SCHEMA_VERSION = "1"
+OVERLAY_SCHEMA_VERSION = "2"
+SUPPORTED_OVERLAY_SCHEMA_VERSIONS = frozenset({"1", OVERLAY_SCHEMA_VERSION})
 TRUST_SCHEMA_VERSION = "1"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _MANIFEST_FIELDS = {
@@ -50,6 +54,31 @@ class VerifiedWebOverlay:
     compatible_runtime_artifact_sha256: frozenset[str]
     file_manifest_sha256: str
     toolchain_sha256: str
+
+
+def web_overlay_identity(
+    *,
+    static_archive_sha256: str,
+    file_manifest_sha256: str,
+    sbom_sha256: str,
+    licenses_sha256: str,
+    notice_sha256: str,
+    compatibility: dict[str, Any],
+    inputs: dict[str, Any],
+) -> str:
+    """Bind v2 overlay identity to content, modes, provenance inputs, and compatibility."""
+    payload = {
+        "schema_version": OVERLAY_SCHEMA_VERSION,
+        "static_archive_sha256": static_archive_sha256,
+        "file_manifest_sha256": file_manifest_sha256,
+        "sbom_sha256": sbom_sha256,
+        "licenses_sha256": licenses_sha256,
+        "notice_sha256": notice_sha256,
+        "compatibility": compatibility,
+        "inputs": inputs,
+    }
+    encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def discover_verified_overlays(
@@ -144,14 +173,17 @@ def _verify_web_overlay(
         raise WebOverlayError("web overlay signature is not trusted") from exc
 
     manifest = read_json(manifest_path)
-    if set(manifest) != _MANIFEST_FIELDS or manifest.get("schema_version") != OVERLAY_SCHEMA_VERSION:
+    schema_version = manifest.get("schema_version")
+    if set(manifest) != _MANIFEST_FIELDS or schema_version not in SUPPORTED_OVERLAY_SCHEMA_VERSIONS:
         raise WebOverlayError("web overlay manifest schema is invalid")
     if manifest.get("web_overlay_sha256") != expected_digest:
         raise WebOverlayError("web overlay digest does not match its registry directory")
 
     archive = _descriptor(manifest.get("static_archive"), "static archive")
-    if archive["path"] != "static.tar.gz" or archive["sha256"] != expected_digest:
+    if archive["path"] != "static.tar.gz":
         raise WebOverlayError("web overlay archive descriptor is invalid")
+    if schema_version == "1" and archive["sha256"] != expected_digest:
+        raise WebOverlayError("web overlay v1 archive identity is invalid")
     _verify_descriptor(overlay, archive, label="static archive")
     file_manifest = _descriptor(manifest.get("file_manifest"), "file manifest")
     if file_manifest["path"] != "files.json":
@@ -212,8 +244,27 @@ def _verify_web_overlay(
     _trimmed_text(inputs.get("node"), "Node version")
     _trimmed_text(inputs.get("pnpm"), "pnpm version")
 
+    if schema_version == OVERLAY_SCHEMA_VERSION:
+        identity = web_overlay_identity(
+            static_archive_sha256=archive["sha256"],
+            file_manifest_sha256=file_manifest["sha256"],
+            sbom_sha256=_descriptor(manifest["sbom"], "sbom")["sha256"],
+            licenses_sha256=_descriptor(manifest["licenses"], "licenses")["sha256"],
+            notice_sha256=_descriptor(manifest["notice"], "notice")["sha256"],
+            compatibility=compatibility,
+            inputs=inputs,
+        )
+        if identity != expected_digest:
+            raise WebOverlayError("web overlay v2 identity does not match its protected inputs")
+
     static_dir = _real_directory(overlay / "static", label="web overlay static directory")
-    _verify_file_manifest(static_dir, files_path)
+    if schema_version == "1":
+        _verify_file_manifest(static_dir, files_path)
+    else:
+        try:
+            verify_store_manifest(static_dir, read_json(files_path))
+        except StoreManifestError as exc:
+            raise WebOverlayError("web overlay manifest-v2 content or modes are invalid") from exc
     _verify_evidence_documents(descriptors, expected_digest=expected_digest)
     _reject_unknown_top_level(overlay)
     return VerifiedWebOverlay(

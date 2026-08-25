@@ -1,4 +1,4 @@
-"""Validate the redaction-safe WP10 product evidence and global gate map."""
+"""Validate the redaction-safe protected-store production evidence."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ SERVICE_ROOT = APP_ROOT / "service"
 PRODUCT_EVIDENCE = SERVICE_ROOT / "opendesign_product_acceptance_0_16_1.json"
 HOSTED_EVIDENCE = SERVICE_ROOT / "opendesign_hosted_acceptance_0_16_1.json"
 GLOBAL_ACCEPTANCE = SERVICE_ROOT / "opendesign_production_acceptance_0_16_1.json"
+RELEASE_EVIDENCE = SERVICE_ROOT / "opendesign_release_acceptance_0_16_1.json"
+MIGRATION_EVIDENCE = SERVICE_ROOT / "opendesign_migration_acceptance_0_16_1.json"
 CORRELATION_KEYS = {
     "workspace_id",
     "local_app_id",
@@ -38,7 +40,6 @@ SCENARIO_IDS = {
     "workspace_isolation",
     "forbidden_routes",
     "secret_boundary",
-    "upgrade_rollback",
 }
 
 
@@ -46,17 +47,20 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
     def test_product_evidence_covers_real_pinned_path_and_all_scenarios(self) -> None:
         evidence = _read_json(PRODUCT_EVIDENCE)
 
-        self.assertEqual(evidence["gate"], "WP10")
+        self.assertEqual(evidence["gate"], "design-studio-e2e-release")
+        self.assertEqual(evidence["profile"], "release")
         self.assertEqual(evidence["status"], "passed")
         self.assertEqual(evidence["opendesign"]["version"], "0.16.1")
         self.assertEqual(evidence["opendesign"]["oci_reference"], "ghcr.io/nexu-io/od:0.16.1")
+        bundle = _read_json(SERVICE_ROOT / "opendesign_bundle.json")
+        release = _read_json(SERVICE_ROOT / "opendesign_release_selection.json")
         self.assertEqual(
             evidence["opendesign"]["runtime_artifact_sha256"],
-            "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
+            bundle["artifact"]["assets"]["linux-x86_64"]["sha256"],
         )
         self.assertEqual(
             evidence["opendesign"]["web_overlay_sha256"],
-            "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2",
+            release["active_web_overlay_sha256"],
         )
         product_path = evidence["product_path"]
         for key in (
@@ -73,7 +77,7 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
 
         scenarios = evidence["scenarios"]
         self.assertEqual({item["id"] for item in scenarios}, SCENARIO_IDS)
-        self.assertEqual(len(scenarios), 14)
+        self.assertEqual(len(scenarios), 13)
         for scenario in scenarios:
             self.assertEqual(scenario["status"], "passed", scenario["id"])
             correlation = scenario["correlation"]
@@ -85,6 +89,45 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         canceled = next(item for item in scenarios if item["id"] == "cancel_long_run")
         self.assertNotEqual(canceled["correlation"]["od_run_id"], evidence["canonical_entity"]["od_run_id"])
         self.assertTrue(canceled["proof"]["repeated_cancel_safe"])
+
+        performance = evidence["performance"]
+        self.assertIs(performance["targets_met"], True)
+        self.assertEqual(performance["warm_browser_ticket"]["count"], 30)
+        self.assertLessEqual(performance["warm_browser_ticket"]["p95_ms"], 300)
+        self.assertLessEqual(performance["warm_browser_ticket"]["p99_ms"], 750)
+        self.assertEqual(performance["warm_interface"]["count"], 30)
+        self.assertLessEqual(performance["warm_interface"]["p95_ms"], 1500)
+        self.assertLessEqual(performance["warm_interface"]["p99_ms"], 2500)
+        self.assertEqual(performance["cold_maverick_ready"]["count"], 10)
+        self.assertLessEqual(performance["cold_maverick_ready"]["p95_ms"], 4000)
+        self.assertLessEqual(performance["cold_maverick_ready"]["max_ms"], 8000)
+        self.assertEqual(performance["core_restart_count"], 10)
+        self.assertEqual(len(performance["samples"]), 10)
+        self.assertGreater(performance["resources"]["rss_kib_max"], 0)
+        self.assertGreater(performance["resources"]["process_count_max"], 0)
+
+    def test_migration_and_rollback_are_a_separate_real_gate(self) -> None:
+        migration = _read_json(MIGRATION_EVIDENCE)
+        self.assertEqual(migration["schema_version"], "1")
+        self.assertIs(migration["workspace_data_migrated"], False)
+        source = migration["forward_fixture_migration"]["source"]
+        self.assertEqual(source["tree_sha256_before"], source["tree_sha256_after"])
+        self.assertIs(
+            migration["forward_fixture_migration"]["target"]["real_materialized_daemon"],
+            True,
+        )
+        self.assertIs(migration["rollback"]["forward_generation_preserved"], True)
+        self.assertEqual(
+            migration["rollback"]["real_daemon_health_database_and_project_smoke"],
+            "passed",
+        )
+
+        release = _read_json(RELEASE_EVIDENCE)
+        self.assertEqual(release["schema_version"], "4")
+        self.assertEqual(release["gate"], "design-studio-opendesign-release")
+        self.assertEqual(release["scenario_count"], 14)
+        self.assertEqual(release["scenarios"][-1]["id"], "upgrade_rollback")
+        self.assertTrue(release["rollback_gate_separate"])
 
     def test_product_evidence_is_redaction_safe(self) -> None:
         evidence = _read_json(PRODUCT_EVIDENCE)
@@ -135,7 +178,7 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
     def test_all_global_acceptance_criteria_have_stable_evidence(self) -> None:
         acceptance = _read_json(GLOBAL_ACCEPTANCE)
 
-        self.assertEqual(acceptance["gate"], "WP10")
+        self.assertEqual(acceptance["gate"], "design-studio-opendesign-production")
         self.assertEqual(acceptance["status"], "passed")
         criteria = acceptance["criteria"]
         self.assertEqual([item["criterion_id"] for item in criteria], [f"AG{index:02d}" for index in range(1, 25)])

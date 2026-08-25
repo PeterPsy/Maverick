@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import ctypes
 import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import shutil
 import stat
+import subprocess
 import tarfile
 import tempfile
 
@@ -15,8 +18,9 @@ from opendesign_archive import (
     MATERIALIZED_MARKER_PATH,
     MATERIALIZED_MARKER_SCHEMA_VERSION,
     read_materialized_marker,
+    validate_archive_member,
     validated_archive_members,
-    verify_file_manifest,
+    verify_file_manifest_inventory,
     verify_materialized_bundle,
 )
 from opendesign_artifact import ArtifactError, is_sha256, sha256_file, write_canonical_json
@@ -29,6 +33,8 @@ class MaterializedBundle:
     opendesign_version: str
     upstream_commit: str
     path: Path
+    verified_file_manifest: dict[str, Any] | None = field(default=None, compare=False, repr=False)
+    verified_directory_entries: tuple[dict[str, Any], ...] = field(default=(), compare=False, repr=False)
 
 
 def materialize_archive(
@@ -39,6 +45,8 @@ def materialize_archive(
     expected_file_manifest_sha256: str,
     opendesign_version: str,
     upstream_commit: str,
+    fsync: bool = True,
+    verified_archive_identity: tuple[int, int, int, int, int] | None = None,
 ) -> MaterializedBundle:
     """Extract one verified archive into its immutable digest directory."""
     _validate_pin_set(
@@ -49,8 +57,11 @@ def materialize_archive(
     )
     archive_path = Path(archive_path)
     _require_regular_file(archive_path, label="OpenDesign archive")
-    if sha256_file(archive_path) != expected_artifact_sha256:
-        raise ArtifactError("OpenDesign archive digest does not match the pin")
+    if verified_archive_identity is None:
+        if sha256_file(archive_path) != expected_artifact_sha256:
+            raise ArtifactError("OpenDesign archive digest does not match the pin")
+    elif _regular_file_identity(archive_path) != verified_archive_identity:
+        raise ArtifactError("OpenDesign archive changed after signed-set verification")
 
     registry_root = _prepare_registry_root(Path(registry_root))
     destination = registry_root / expected_artifact_sha256
@@ -71,7 +82,7 @@ def materialize_archive(
         _require_regular_file(manifest_path, label="OpenDesign file manifest")
         if sha256_file(manifest_path) != expected_file_manifest_sha256:
             raise ArtifactError("OpenDesign file manifest digest does not match the pin")
-        verify_file_manifest(stage)
+        verified_file_manifest, verified_directories = verify_file_manifest_inventory(stage)
         marker = {
             "schema_version": MATERIALIZED_MARKER_SCHEMA_VERSION,
             "artifact_sha256": expected_artifact_sha256,
@@ -80,19 +91,17 @@ def materialize_archive(
             "upstream_commit": upstream_commit,
         }
         write_canonical_json(stage / MATERIALIZED_MARKER_PATH, marker)
-        verify_materialized_bundle(
-            stage,
-            expected_artifact_sha256=expected_artifact_sha256,
-            expected_file_manifest_sha256=expected_file_manifest_sha256,
-            expected_version=opendesign_version,
-        )
-        _fsync_tree(stage)
+        if read_materialized_marker(stage) != marker:
+            raise ArtifactError("OpenDesign materialization marker did not persist atomically")
+        if fsync:
+            _fsync_tree(stage)
         try:
             os.replace(stage, destination)
         except OSError as exc:
             raise ArtifactError("OpenDesign bundle activation failed") from exc
         activated = True
-        _fsync_directory(registry_root)
+        if fsync:
+            _fsync_directory(registry_root)
     finally:
         if not activated and stage.exists():
             _remove_owned_stage(stage, registry_root)
@@ -103,6 +112,19 @@ def materialize_archive(
         opendesign_version,
         upstream_commit,
         destination,
+        verified_file_manifest,
+        tuple(verified_directories),
+    )
+
+
+def _regular_file_identity(path: Path) -> tuple[int, int, int, int, int]:
+    metadata = path.stat()
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
     )
 
 
@@ -187,9 +209,68 @@ def _extract_archive(archive_path: Path, destination: Path) -> None:
     try:
         with tarfile.open(archive_path, mode="r:gz") as bundle:
             members = validated_archive_members(bundle)
-            bundle.extractall(destination, members=members, filter="data")
+        _validate_archive_layout(members)
+        tar_command = shutil.which("tar")
+        if tar_command:
+            completed = subprocess.run(
+                [
+                    tar_command,
+                    "--extract",
+                    "--gzip",
+                    "--file",
+                    str(archive_path),
+                    "--directory",
+                    str(destination),
+                    "--no-same-owner",
+                    "--delay-directory-restore",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            if completed.returncode != 0:
+                raise ArtifactError("OpenDesign archive extraction command failed")
+        else:
+            _extract_archive_streaming(archive_path, destination)
     except (OSError, tarfile.TarError) as exc:
         raise ArtifactError("OpenDesign archive extraction failed") from exc
+
+
+def _validate_archive_layout(members: list[tarfile.TarInfo]) -> None:
+    symlinks = {
+        validate_archive_member(member)
+        for member in members
+        if member.issym()
+    }
+    for member in members:
+        relative = PurePosixPath(validate_archive_member(member))
+        parents = relative.parents[:-1]
+        if any(parent.as_posix() in symlinks for parent in parents):
+            raise ArtifactError("OpenDesign archive member traverses a symlink")
+
+
+def _extract_archive_streaming(archive_path: Path, destination: Path) -> None:
+    seen: set[str] = set()
+    with tarfile.open(archive_path, mode="r|gz") as bundle:
+        for member in bundle:
+            relative = validate_archive_member(member)
+            if relative in seen:
+                raise ArtifactError(f"Duplicate OpenDesign archive member: {relative}")
+            seen.add(relative)
+            _reject_link_ancestor(destination, relative)
+            bundle.extract(member, destination, filter="data")
+
+
+def _reject_link_ancestor(destination: Path, relative: str) -> None:
+    cursor = destination
+    parts = Path(relative).parts
+    for part in parts[:-1]:
+        cursor /= part
+        if cursor.is_symlink():
+            raise ArtifactError("OpenDesign archive member traverses a symlink")
+    target = destination.joinpath(*parts)
+    if target.is_symlink():
+        raise ArtifactError("OpenDesign archive member replaces a symlink")
 
 
 def _prepare_registry_root(registry_root: Path) -> Path:
@@ -253,6 +334,8 @@ def _remove_owned_stage(stage: Path, registry_root: Path) -> None:
 
 
 def _fsync_tree(root: Path) -> None:
+    if _sync_filesystem(root):
+        return
     for current_root, directories, filenames in os.walk(root, topdown=False, followlinks=False):
         current = Path(current_root)
         for name in sorted(filenames):
@@ -269,6 +352,23 @@ def _fsync_tree(root: Path) -> None:
             if not path.is_symlink():
                 _fsync_directory(path)
         _fsync_directory(current)
+
+
+def _sync_filesystem(root: Path) -> bool:
+    try:
+        syncfs = ctypes.CDLL(None, use_errno=True).syncfs
+    except AttributeError:
+        return False
+    descriptor = os.open(root, os.O_RDONLY | (os.O_DIRECTORY if hasattr(os, "O_DIRECTORY") else 0))
+    try:
+        syncfs.argtypes = [ctypes.c_int]
+        syncfs.restype = ctypes.c_int
+        if syncfs(descriptor) != 0:
+            error_number = ctypes.get_errno()
+            raise OSError(error_number, os.strerror(error_number))
+    finally:
+        os.close(descriptor)
+    return True
 
 
 def _fsync_directory(path: Path) -> None:

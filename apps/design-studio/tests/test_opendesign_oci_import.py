@@ -173,6 +173,17 @@ class OpenDesignOciImportTests(unittest.TestCase):
             + b"middle\n"
             + self.boundary._LOOPBACK_BYPASS
             + self.boundary._STATIC_MOUNT
+            + self.boundary._READY_ROUTE
+            + self.boundary._BUNDLED_CATALOG_DECLARATION
+            + self.boundary._BUNDLED_CATALOG_START
+            + b"catalog-middle\n"
+            + self.boundary._BUNDLED_CATALOG_ASSIGNMENT_START
+            + self.boundary._BUNDLED_CATALOG_ASSIGNMENT_END
+            + b"catalog-seed-middle\n"
+            + self.boundary._BUNDLED_CATALOG_END
+            + self.boundary._DAEMON_BACKGROUND_CLEANUP
+            + self.boundary._DAEMON_SHUTDOWN_START
+            + self.boundary._DAEMON_LISTEN_COMMIT
         )
         with tempfile.TemporaryDirectory(prefix="maverick-od-oci-patch-") as temporary:
             stage = Path(temporary)
@@ -186,9 +197,39 @@ class OpenDesignOciImportTests(unittest.TestCase):
             self.assertEqual(evidence["path"], "app/apps/daemon/dist/server.js")
             self.assertIn(b"!requireApiTokenOnLoopback", target.read_bytes())
             self.assertIn(b"OD_STATIC_REGISTRY_ROOT", target.read_bytes())
+            self.assertIn(b"/api/maverick-ready", target.read_bytes())
+            self.assertIn(b"OD_MAVERICK_DEFER_PLUGIN_CATALOG", target.read_bytes())
+            self.assertIn(b"bundledCatalogTimer.unref", target.read_bytes())
             self.assertNotIn("web_patch", evidence)
             with self.assertRaisesRegex(self.boundary.BoundaryPatchError, "preimage"):
                 self.boundary.apply_boundary_patch(stage, manifest)
+
+    def test_compiled_startup_patch_is_bounded_and_requires_exact_preimage(self) -> None:
+        source = (
+            self.boundary._BUNDLED_REGISTRY_IMPORT
+            + self.boundary._BUNDLED_WARNINGS_DECLARATION
+            + b"middle\n"
+            + self.boundary._DIRECT_BUNDLED_REGISTRATION
+            + self.boundary._NESTED_BUNDLED_REGISTRATION
+            + self.boundary._BUNDLED_REGISTRATION_COMMIT
+            + self.boundary._BUNDLED_DIGEST_HELPER_SITE
+            + self.boundary._BUNDLED_CONTENT_DIGEST
+        )
+        with tempfile.TemporaryDirectory(prefix="maverick-od-oci-startup-patch-") as temporary:
+            stage = Path(temporary)
+            target = stage / "app/apps/daemon/dist/plugins/bundled.js"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(source)
+            manifest = copy.deepcopy(self.manifest)
+            manifest["startup_patch"]["pre_sha256"] = hashlib.sha256(source).hexdigest()
+            manifest["startup_patch"]["post_sha256"] = None
+            evidence = self.boundary.apply_startup_patch(stage, manifest)
+            self.assertEqual(evidence["max_concurrency"], 8)
+            self.assertEqual(target.read_bytes().count(b"forEachConcurrent(candidates, 8"), 1)
+            self.assertEqual(target.read_bytes().count(b"maverick-protected-runtime-v1"), 1)
+            self.assertNotIn(b"await registerOne({ folder: tierAbs", target.read_bytes())
+            with self.assertRaisesRegex(self.boundary.BoundaryPatchError, "preimage"):
+                self.boundary.apply_startup_patch(stage, manifest)
 
     def test_web_patch_is_a_rebuilt_react_boundary_without_dom_pruning(self) -> None:
         compiled_patch = (SERVICE_ROOT / "opendesign_oci_patch.py").read_text(encoding="utf-8")
@@ -230,7 +271,12 @@ class OpenDesignOciImportTests(unittest.TestCase):
             command = self.stage.runtime_command(root, self.manifest)
             self.assertEqual(command[0], str(root / "runtime/lib/ld-musl-x86_64.so.1"))
             self.assertEqual(command[3], str(root / "runtime/bin/node"))
-            self.assertEqual(command[-2:], [str(root / "app/apps/daemon/dist/cli.js"), "--no-open"])
+            self.assertEqual(command[4:6], ["--input-type=module", "--eval"])
+            self.assertIn("enableCompileCache", command[6])
+            self.assertEqual(
+                command[-2:],
+                [(root / "app/apps/daemon/dist/cli.js").as_uri(), "--no-open"],
+            )
             self.assertNotEqual(command[3], "node")
 
     def test_primary_import_has_no_docker_socket_or_embedded_web_builder(self) -> None:
@@ -260,18 +306,22 @@ class OpenDesignOciImportTests(unittest.TestCase):
         self.assertEqual(acceptance["artifact"]["size_bytes"], asset["size_bytes"])
         for field in ("path", "pre_sha256", "post_sha256"):
             self.assertEqual(acceptance["boundary_patch"][field], self.manifest["boundary_patch"][field])
+        for field in ("path", "pre_sha256", "post_sha256", "max_concurrency"):
+            self.assertEqual(acceptance["startup_patch"][field], self.manifest["startup_patch"][field])
         self.assertEqual(
             acceptance["runtime_smoke"]["web_overlay_sha256"],
             acceptance["web_overlay"]["web_overlay_sha256"],
         )
         self.assertFalse(acceptance["runtime_smoke"]["embedded_static_web"])
+        web_trust = json.loads((SERVICE_ROOT / "opendesign_web_trust.json").read_text(encoding="utf-8"))
         self.assertEqual(
             acceptance["web_overlay"]["trust_root_public_key_sha256"],
-            self.manifest["artifact"]["assets"]["linux-x86_64"]["public_key_sha256"],
+            web_trust["public_key_sha256"],
         )
         self.assertEqual(acceptance["import"]["independent_derivations"], 2)
         self.assertTrue(acceptance["import"]["reproducible"])
         self.assertTrue(acceptance["runtime_smoke"]["ready"])
+        self.assertTrue(acceptance["runtime_smoke"]["maverick_ready"])
         self.assertEqual(acceptance["runtime_smoke"]["sqlite_integrity"], "ok")
         self.assertEqual(
             acceptance["runtime_smoke"]["bearer"],

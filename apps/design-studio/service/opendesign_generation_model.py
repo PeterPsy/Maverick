@@ -8,7 +8,8 @@ from pathlib import PurePosixPath
 import re
 
 
-CONTROL_SCHEMA_VERSION = "2"
+CONTROL_SCHEMA_VERSION = "3"
+LEGACY_CONTROL_SCHEMA_VERSION = "2"
 _CONTROL_FIELDS = {
     "schema_version",
     "active",
@@ -17,7 +18,10 @@ _CONTROL_FIELDS = {
     "migration_id",
     "web_activation_id",
     "updated_at",
+    "previous_runtime",
+    "runtime_activation_id",
 }
+_LEGACY_CONTROL_FIELDS = _CONTROL_FIELDS - {"previous_runtime", "runtime_activation_id"}
 _SELECTION_FIELDS = {
     "runtime_artifact_sha256",
     "web_overlay_sha256",
@@ -46,6 +50,17 @@ _WEB_JOURNAL_FIELDS = {
     "created_at",
     "updated_at",
 }
+_RUNTIME_JOURNAL_FIELDS = {
+    "schema_version",
+    "runtime_activation_id",
+    "state",
+    "source",
+    "target",
+    "readiness",
+    "error",
+    "created_at",
+    "updated_at",
+}
 _JOURNAL_STATES = {"prepared", "cutover_committed", "aborted"}
 _WEB_JOURNAL_STATES = {
     "prepared",
@@ -58,6 +73,7 @@ _VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
 _GENERATION_RE = re.compile(r"^gen_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
 _MIGRATION_RE = re.compile(r"^migration_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
 _WEB_ACTIVATION_RE = re.compile(r"^web_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
+_RUNTIME_ACTIVATION_RE = re.compile(r"^runtime_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
 
 
 class GenerationControlError(RuntimeError):
@@ -117,16 +133,21 @@ class GenerationControl:
     migration_id: str | None
     web_activation_id: str | None
     updated_at: str
+    previous_runtime: LaunchSelection | None = None
+    runtime_activation_id: str | None = None
     schema_version: str = CONTROL_SCHEMA_VERSION
 
     @classmethod
     def from_dict(cls, payload: object) -> "GenerationControl":
         if not isinstance(payload, dict):
             raise GenerationControlError("control.json must contain an object")
-        if set(payload) != _CONTROL_FIELDS:
-            raise GenerationControlError("control.json contains unknown or missing fields")
-        if payload.get("schema_version") != CONTROL_SCHEMA_VERSION:
+        schema_version = payload.get("schema_version")
+        if schema_version not in {LEGACY_CONTROL_SCHEMA_VERSION, CONTROL_SCHEMA_VERSION}:
             raise GenerationControlError("control.json schema_version is unsupported")
+        if (schema_version == CONTROL_SCHEMA_VERSION and set(payload) != _CONTROL_FIELDS) or (
+            schema_version == LEGACY_CONTROL_SCHEMA_VERSION and set(payload) != _LEGACY_CONTROL_FIELDS
+        ):
+            raise GenerationControlError("control.json contains unknown or missing fields")
         active = LaunchSelection.from_dict(payload.get("active"), field_name="active")
         previous_release = _optional_selection(payload.get("previous_release"), "previous_release")
         previous_web = _optional_selection(payload.get("previous_web"), "previous_web")
@@ -137,6 +158,12 @@ class GenerationControl:
             _WEB_ACTIVATION_RE,
         )
         updated_at = _required_text(payload.get("updated_at"), "updated_at")
+        previous_runtime = _optional_selection(payload.get("previous_runtime"), "previous_runtime")
+        runtime_activation_id = _optional_identifier(
+            payload.get("runtime_activation_id"),
+            "runtime_activation_id",
+            _RUNTIME_ACTIVATION_RE,
+        )
         _validate_rfc3339(updated_at)
 
         if (previous_release is None) != (migration_id is None):
@@ -150,7 +177,10 @@ class GenerationControl:
             raise GenerationControlError("previous_web and web_activation_id must be set together")
         if previous_web is not None:
             _validate_web_transition(previous_web, active, label="previous_web and active")
-
+        if (previous_runtime is None) != (runtime_activation_id is None):
+            raise GenerationControlError("previous_runtime and runtime_activation_id must be set together")
+        if previous_runtime is not None:
+            _validate_runtime_transition(previous_runtime, active, label="previous_runtime and active")
         return cls(
             active,
             previous_release,
@@ -158,6 +188,8 @@ class GenerationControl:
             migration_id,
             web_activation_id,
             updated_at,
+            previous_runtime,
+            runtime_activation_id,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -171,6 +203,10 @@ class GenerationControl:
             "migration_id": self.migration_id,
             "web_activation_id": self.web_activation_id,
             "updated_at": self.updated_at,
+            "previous_runtime": (
+                self.previous_runtime.to_dict() if self.previous_runtime is not None else None
+            ),
+            "runtime_activation_id": self.runtime_activation_id,
         }
 
 
@@ -192,7 +228,7 @@ class MigrationJournal:
             raise GenerationControlError("migration journal must contain an object")
         if set(payload) != _JOURNAL_FIELDS:
             raise GenerationControlError("migration journal contains unknown or missing fields")
-        if payload.get("schema_version") != CONTROL_SCHEMA_VERSION:
+        if payload.get("schema_version") not in {LEGACY_CONTROL_SCHEMA_VERSION, CONTROL_SCHEMA_VERSION}:
             raise GenerationControlError("migration journal schema_version is unsupported")
         migration_id = _required_identifier(payload.get("migration_id"), "migration_id", _MIGRATION_RE)
         state = _required_text(payload.get("state"), "state")
@@ -241,7 +277,7 @@ class WebActivationJournal:
             raise GenerationControlError("web activation journal must contain an object")
         if set(payload) != _WEB_JOURNAL_FIELDS:
             raise GenerationControlError("web activation journal contains unknown or missing fields")
-        if payload.get("schema_version") != CONTROL_SCHEMA_VERSION:
+        if payload.get("schema_version") not in {LEGACY_CONTROL_SCHEMA_VERSION, CONTROL_SCHEMA_VERSION}:
             raise GenerationControlError("web activation journal schema_version is unsupported")
         activation_id = _required_identifier(
             payload.get("web_activation_id"),
@@ -270,6 +306,61 @@ class WebActivationJournal:
         return {
             "schema_version": self.schema_version,
             "web_activation_id": self.web_activation_id,
+            "state": self.state,
+            "source": self.source.to_dict(),
+            "target": self.target.to_dict(),
+            "readiness": self.readiness,
+            "error": self.error,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class RuntimeActivationJournal:
+    runtime_activation_id: str
+    state: str
+    source: LaunchSelection
+    target: LaunchSelection
+    readiness: dict[str, object]
+    error: str | None
+    created_at: str
+    updated_at: str
+    schema_version: str = CONTROL_SCHEMA_VERSION
+
+    @classmethod
+    def from_dict(cls, payload: object) -> "RuntimeActivationJournal":
+        if not isinstance(payload, dict) or set(payload) != _RUNTIME_JOURNAL_FIELDS:
+            raise GenerationControlError("runtime activation journal contains unknown or missing fields")
+        if payload.get("schema_version") != CONTROL_SCHEMA_VERSION:
+            raise GenerationControlError("runtime activation journal schema_version is unsupported")
+        activation_id = _required_identifier(
+            payload.get("runtime_activation_id"),
+            "runtime_activation_id",
+            _RUNTIME_ACTIVATION_RE,
+        )
+        state = _required_text(payload.get("state"), "state")
+        if state not in _WEB_JOURNAL_STATES:
+            raise GenerationControlError("runtime activation journal state is invalid")
+        source = LaunchSelection.from_dict(payload.get("source"), field_name="source")
+        target = LaunchSelection.from_dict(payload.get("target"), field_name="target")
+        _validate_runtime_transition(source, target, label="runtime activation source and target")
+        readiness = _string_keyed_mapping(payload.get("readiness"), "runtime activation readiness")
+        error_value = payload.get("error")
+        error = None if error_value is None else _required_text(error_value, "error")
+        if error is not None and len(error) > 512:
+            raise GenerationControlError("runtime activation error exceeds the size limit")
+        if state == "ready_committed" and error is not None:
+            raise GenerationControlError("ready runtime activation cannot contain an error")
+        if state in {"rollback_restart_pending", "rolled_back"} and error is None:
+            raise GenerationControlError("rollback runtime activation state requires a bounded error")
+        created_at, updated_at = _journal_timestamps(payload)
+        return cls(activation_id, state, source, target, readiness, error, created_at, updated_at)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "runtime_activation_id": self.runtime_activation_id,
             "state": self.state,
             "source": self.source.to_dict(),
             "target": self.target.to_dict(),
@@ -336,9 +427,47 @@ def reconcile_web_activation(control: GenerationControl, journal: WebActivationJ
     raise GenerationControlError("web activation journal is inconsistent with active control")
 
 
+def reconcile_runtime_activation(control: GenerationControl, journal: RuntimeActivationJournal) -> str:
+    identifier_matches = control.runtime_activation_id == journal.runtime_activation_id
+    if journal.state == "prepared":
+        if control.active == journal.source and not identifier_matches:
+            return "prepared_before_cutover"
+        if control.active == journal.target and control.previous_runtime == journal.source and identifier_matches:
+            return "activation_committed_readiness_pending"
+        if control.active == journal.source and control.previous_runtime == journal.target and identifier_matches:
+            return "rollback_committed_journal_pending"
+    elif journal.state == "ready_committed":
+        if (
+            control.active.same_runtime_and_data(journal.target)
+            and control.previous_runtime == journal.source
+            and identifier_matches
+        ):
+            return "ready_committed"
+    elif journal.state in {"rollback_restart_pending", "rolled_back"}:
+        if (
+            control.active.same_runtime_and_data(journal.source)
+            and control.previous_runtime == journal.target
+            and identifier_matches
+        ):
+            return journal.state
+    raise GenerationControlError("runtime activation journal is inconsistent with active control")
+
+
 def _validate_web_transition(source: LaunchSelection, target: LaunchSelection, *, label: str) -> None:
     if source == target or not source.same_runtime_and_data(target):
         raise GenerationControlError(f"{label} must differ only by web overlay digest")
+
+
+def _validate_runtime_transition(source: LaunchSelection, target: LaunchSelection, *, label: str) -> None:
+    if (
+        source == target
+        or source.runtime_artifact_sha256 == target.runtime_artifact_sha256
+        or source.data_generation != target.data_generation
+        or source.od_version != target.od_version
+    ):
+        raise GenerationControlError(
+            f"{label} must change runtime on the same data generation and OpenDesign version"
+        )
 
 
 def _required_digest(value: object, field_name: str) -> str:

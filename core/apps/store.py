@@ -40,12 +40,15 @@ from core.apps.models import (
     AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
     HttpSidecarBindSpec,
+    HttpSidecarArtifactMountSpec,
     HttpSidecarBrowserOriginSpec,
+    HttpSidecarDiagnosticsSpec,
     HttpSidecarEntrypointAccessSpec,
     HttpSidecarEntrypointSurfaceSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
     HttpSidecarProcessPolicy,
+    HttpSidecarPrewarmSpec,
     HttpSidecarProxySpec,
     HttpSidecarResourceLimits,
     HttpSidecarRoutePolicy,
@@ -415,6 +418,24 @@ def _app_services(payload: Any) -> AppServicesDeclaration:
                 command=list(sidecar["command"]),
                 env={str(key): str(value) for key, value in sidecar.get("env", {}).items()},
                 process_policy=_app_sidecar_process_policy(sidecar.get("process_policy")),
+                artifact_mounts=[
+                    HttpSidecarArtifactMountSpec(
+                        artifact_id=str(item.get("artifact_id") or item.get("id")),
+                        mount_path=str(item["mount_path"]),
+                    )
+                    for item in sidecar.get("artifact_mounts", [])
+                    if isinstance(item, dict)
+                ],
+                prewarm=(
+                    HttpSidecarPrewarmSpec(**sidecar["prewarm"])
+                    if isinstance(sidecar.get("prewarm"), dict)
+                    else None
+                ),
+                diagnostics=(
+                    HttpSidecarDiagnosticsSpec(**sidecar["diagnostics"])
+                    if isinstance(sidecar.get("diagnostics"), dict)
+                    else None
+                ),
                 browser_origin=_app_sidecar_browser_origin(sidecar.get("browser_origin")),
                 entrypoint_access=_app_sidecar_entrypoint_access(
                     sidecar.get("entrypoint_access"),
@@ -458,6 +479,11 @@ def _app_sidecar_browser_origin(payload: Any) -> HttpSidecarBrowserOriginSpec | 
         csp_profile="self_hosted_web_app",
         frame_ancestors=["platform"],
         connect_src=["self"],
+        immutable_asset_prefixes=[
+            str(value)
+            for value in payload.get("immutable_asset_prefixes", [])
+            if isinstance(value, str)
+        ],
     )
 
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from core.api.http import StartResponse, json_response
 from core.api.session_api import RequestSession
 from core.api.sidecar_proxy import stop_app_sidecars
+from core.api.sidecar_prewarm import start_workspace_app_sidecar_prewarms
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError, WorkspaceLocalAppProjectNotFoundError
 from core.apps.models import AppContractDescriptor, AppSourceRecord, WorkspaceAppBindingRecord, WorkspaceLocalAppProjectRecord
 from core.apps.service import install_store_app, transition_workspace_app_status, uninstall_workspace_app
@@ -154,6 +155,7 @@ def handle_admin_app_management_api(
     *,
     body: dict,
     start_path: Path,
+    shutdown_controller=None,
 ) -> list[bytes] | None:
     """Handle admin workspace app management routes."""
     del context
@@ -178,6 +180,13 @@ def handle_admin_app_management_api(
                 body=body,
                 start_path=start_path,
             )
+            if getattr(state, "repository_root", None) is not None:
+                start_workspace_app_sidecar_prewarms(
+                    state,
+                    binding=binding,
+                    trigger="install",
+                    shutdown_controller=shutdown_controller,
+                )
             return json_response(start_response, _binding_payload(binding) or {}, status="201 Created")
         if method == "PATCH":
             status = str(body.get("status") or "").strip()
@@ -193,6 +202,14 @@ def handle_admin_app_management_api(
             if status == "disabled":
                 state.sidecar_browser_sessions.revoke_app(workspace_id=workspace_id, app_id=app_id)
                 stop_app_sidecars(workspace_id=workspace_id, app_id=app_id)
+            else:
+                if getattr(state, "repository_root", None) is not None:
+                    start_workspace_app_sidecar_prewarms(
+                        state,
+                        binding=binding,
+                        trigger="activation",
+                        shutdown_controller=shutdown_controller,
+                    )
             return json_response(start_response, _binding_payload(binding) or {})
         if method == "DELETE":
             uninstall_workspace_app(

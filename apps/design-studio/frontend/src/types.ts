@@ -10,13 +10,17 @@ export type SidecarLaunch = {
   ticket_field: "ticket";
   ticket: string;
   expires_in_seconds: number;
+  sidecar_instance_id: string;
 };
 
-export type SidecarHostPhase = "launching" | "bootstrapping" | "ready" | "degraded" | "error";
+export type SidecarHostPhase = "launching" | "bootstrapping" | "repairing" | "ready" | "degraded" | "error";
 
 export type SidecarDiagnostic = {
   code: string;
   status: number;
+  phase?: string;
+  autoRepairable?: boolean;
+  retryable?: boolean;
 };
 
 export type OpenDesignLaunchTarget = {

@@ -54,7 +54,9 @@ class OpenDesignSupplyChainTests(unittest.TestCase):
             files,
             {
                 "apps/daemon/src/server.ts",
+                "apps/daemon/src/plugins/bundled.ts",
                 "apps/daemon/tests/api-token-guard.test.ts",
+                "apps/daemon/tests/plugins-bundled.test.ts",
                 "apps/web/app/layout.tsx",
                 "apps/web/src/App.tsx",
                 "apps/web/next.config.ts",

@@ -19,13 +19,15 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from opendesign_artifact import selected_asset, validate_bundle_manifest
+from opendesign_artifact import is_sha256, selected_asset, validate_bundle_manifest
+from opendesign_artifact_store import ArtifactStoreError, OpenDesignArtifactStore
 from opendesign_generation_control import load_generation_control
 from opendesign_generation_model import LaunchSelection
 from opendesign_materialization import MaterializedBundle, discover_verified_bundles
 from opendesign_migration_files import controlled_root, require_real_directory
 from opendesign_migration_runtime import MigrationError
 from opendesign_oci_stage import runtime_command
+from opendesign_runtime import materialized_bundle_from_store, verified_overlay_from_store
 from opendesign_web_overlay import VerifiedWebOverlay, discover_verified_overlays
 
 
@@ -45,24 +47,30 @@ class OciMigrationRuntime:
         manifest: Mapping[str, Any],
     ) -> None:
         self.root = controlled_root(root)
-        self.registry_root = require_real_directory(
+        supplied_registry = require_real_directory(
             registry_root,
             root=registry_root,
             label="OpenDesign verified bundle registry",
         )
         self.manifest = dict(manifest)
         validate_bundle_manifest(self.manifest, require_artifact_digest=True)
-        self.bundles = discover_verified_bundles(self.registry_root)
-        self.web_registry_root = require_real_directory(
-            web_registry_root,
-            root=web_registry_root,
-            label="OpenDesign verified web overlay registry",
-        )
-        self.overlays = discover_verified_overlays(
-            self.web_registry_root,
-            trust_contract=web_trust_contract,
-        )
         selected = selected_asset(self.manifest, require_artifact_digest=True)
+        if (supplied_registry / ".maverick-artifact-namespace.json").is_file():
+            self.registry_root, self.web_registry_root, self.bundles, self.overlays = (
+                self._protected_store_inventory(supplied_registry, selected=selected)
+            )
+        else:
+            self.registry_root = supplied_registry
+            self.bundles = discover_verified_bundles(self.registry_root)
+            self.web_registry_root = require_real_directory(
+                web_registry_root,
+                root=web_registry_root,
+                label="OpenDesign verified web overlay registry",
+            )
+            self.overlays = discover_verified_overlays(
+                self.web_registry_root,
+                trust_contract=web_trust_contract,
+            )
         if selected["sha256"] not in self.bundles:
             raise MigrationError("pinned OpenDesign migration artifact is not materialized")
         self._selected_artifact_sha256 = str(selected["sha256"])
@@ -78,6 +86,39 @@ class OciMigrationRuntime:
         self._active_data_dir: Path | None = None
         self._database_integrity: dict[str, str] = {}
         self.events: list[str] = []
+
+    def _protected_store_inventory(
+        self,
+        root: Path,
+        *,
+        selected: Mapping[str, Any],
+    ) -> tuple[Path, Path, dict[str, MaterializedBundle], dict[str, VerifiedWebOverlay]]:
+        try:
+            store = OpenDesignArtifactStore(root)
+            stored_runtime = store.fast_runtime(
+                str(selected["sha256"]),
+                file_manifest_sha256=str(selected["file_manifest_sha256"]),
+                opendesign_version=str(self.manifest["upstream"]["release_version"]),
+                upstream_commit=str(self.manifest["upstream"]["commit"]),
+            )
+            bundles = {stored_runtime.artifact_sha256: materialized_bundle_from_store(stored_runtime)}
+            overlays: dict[str, VerifiedWebOverlay] = {}
+            for candidate in (store.root / "web").iterdir():
+                if candidate.is_symlink() or not candidate.is_dir() or not is_sha256(candidate.name):
+                    continue
+                try:
+                    stored = store.fast_web_overlay(
+                        candidate.name,
+                        runtime_artifact_sha256=stored_runtime.artifact_sha256,
+                    )
+                except ArtifactStoreError:
+                    continue
+                overlays[candidate.name] = verified_overlay_from_store(stored)
+        except ArtifactStoreError as error:
+            raise MigrationError("protected OpenDesign migration store is invalid") from error
+        if not overlays:
+            raise MigrationError("protected OpenDesign migration store has no compatible web overlay")
+        return store.root / "runtime", store.root / "web", bundles, overlays
 
     def freeze_mutations(self) -> None:
         if self._frozen:
@@ -166,6 +207,9 @@ class OciMigrationRuntime:
         runtime_temp = self.root / "migrations" / "runtime-tmp"
         runtime_temp.mkdir(mode=0o700, exist_ok=True)
         require_real_directory(runtime_temp, root=self.root, label="migration runtime temp")
+        compile_cache = runtime_temp / "node-compile" / triple.runtime_artifact_sha256
+        compile_cache.mkdir(mode=0o700, parents=True, exist_ok=True)
+        require_real_directory(compile_cache, root=runtime_temp, label="migration Node compile cache")
         log_path = self.root / "migrations" / "runtime.log"
         port = _available_port()
         token = secrets.token_urlsafe(48)
@@ -186,6 +230,7 @@ class OciMigrationRuntime:
             "OD_SANDBOX_MODE": "1",
             "OD_STATIC_DIR": str(overlay.static_dir),
             "OD_STATIC_REGISTRY_ROOT": str(self.web_registry_root),
+            "MAVERICK_OPENDESIGN_NODE_COMPILE_CACHE": str(compile_cache),
             "PATH": "/usr/bin:/bin",
             "TMPDIR": str(runtime_temp),
         }

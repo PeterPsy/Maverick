@@ -186,7 +186,7 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
 
         self._write_control(self._initial_control())
         raw = path.read_text(encoding="utf-8")
-        path.write_text(raw.replace('"schema_version":"2"', '"schema_version":"2","schema_version":"2"'), encoding="utf-8")
+        path.write_text(raw.replace('"schema_version":"3"', '"schema_version":"3","schema_version":"3"'), encoding="utf-8")
         with self.assertRaisesRegex(self.model.GenerationControlError, "duplicate"):
             self._load()
 

@@ -137,7 +137,7 @@ def parse_browser_origin(payload: dict[str, Any], *, label: str) -> HttpSidecarB
     origin_label = f"{label}.browser_origin"
     _reject_unexpected_fields(
         payload,
-        {"mode", "csp_profile", "frame_ancestors", "connect_src"},
+        {"mode", "csp_profile", "frame_ancestors", "connect_src", "immutable_asset_prefixes"},
         label=origin_label,
     )
     mode = _expect_string(payload, "mode")
@@ -152,15 +152,46 @@ def parse_browser_origin(payload: dict[str, Any], *, label: str) -> HttpSidecarB
     connect_src = _expect_string_list(payload, "connect_src")
     if connect_src != ["self"]:
         raise AppContractValidationError(f"`{origin_label}.connect_src` must be [`self`].")
+    immutable_asset_prefixes = (
+        _expect_string_list(payload, "immutable_asset_prefixes")
+        if "immutable_asset_prefixes" in payload
+        else []
+    )
+    if len(immutable_asset_prefixes) > 8:
+        raise AppContractValidationError(f"`{origin_label}.immutable_asset_prefixes` may contain at most 8 values.")
+    for prefix in immutable_asset_prefixes:
+        if not _valid_immutable_asset_prefix(prefix):
+            raise AppContractValidationError(
+                f"`{origin_label}.immutable_asset_prefixes` values must be canonical non-API absolute directory prefixes."
+            )
+    if len(set(immutable_asset_prefixes)) != len(immutable_asset_prefixes):
+        raise AppContractValidationError(f"`{origin_label}.immutable_asset_prefixes` must not contain duplicates.")
     return HttpSidecarBrowserOriginSpec(
         mode="isolated",
         csp_profile="self_hosted_web_app",
         frame_ancestors=frame_ancestors,
         connect_src=connect_src,
+        immutable_asset_prefixes=immutable_asset_prefixes,
     )
 
 
-def parse_sidecar_env(payload: dict[str, Any], *, sandbox_required: bool, label: str) -> dict[str, str]:
+def _valid_immutable_asset_prefix(value: str) -> bool:
+    if not value.startswith("/") or value == "/" or not value.endswith("/"):
+        return False
+    if value.startswith("/api/") or value.startswith("/.well-known/"):
+        return False
+    if "//" in value or "\\" in value or "%" in value or "?" in value or "#" in value:
+        return False
+    return all(segment not in {"", ".", ".."} for segment in value[1:-1].split("/"))
+
+
+def parse_sidecar_env(
+    payload: dict[str, Any],
+    *,
+    sandbox_required: bool,
+    artifact_ids: set[str] | None = None,
+    label: str,
+) -> dict[str, str]:
     """Parse an explicit sidecar environment without host-secret inheritance."""
     result: dict[str, str] = {}
     for key, value in payload.items():
@@ -172,7 +203,11 @@ def parse_sidecar_env(payload: dict[str, Any], *, sandbox_required: bool, label:
         if sandbox_required and _is_forbidden_sandbox_env_name(normalized_key):
             raise AppContractValidationError(f"`{label}.env.{normalized_key}` is forbidden for sandbox-required sidecars.")
         substitutions = set(_SUBSTITUTION_PATTERN.findall(value))
-        if sandbox_required and not substitutions.issubset(_SANDBOX_SUBSTITUTIONS):
+        allowed_substitutions = _SANDBOX_SUBSTITUTIONS | {
+            f"${{artifact.{artifact_id}}}"
+            for artifact_id in (artifact_ids or set())
+        }
+        if sandbox_required and not substitutions.issubset(allowed_substitutions):
             raise AppContractValidationError(
                 f"`{label}.env.{normalized_key}` contains a substitution unavailable to sandbox-required sidecars."
             )

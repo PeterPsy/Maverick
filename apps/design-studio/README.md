@@ -18,13 +18,13 @@ The app contract is shaped for upstream `nexu-io/open-design` tag
 `276b4d8e970bc143d7ad060181a89a834e3d9caf`.
 
 Design Studio starts `service/opendesign_launcher.py` as the declared sidecar
-command. Control schema v2 selects one indivisible runtime artifact digest,
+command. Control schema v3 selects one indivisible runtime artifact digest,
 web overlay digest, OpenDesign version, and data generation. The runtime digest
-resolves an immutable closure below
-`service/vendor/open-design/<runtime-sha256>/`; the overlay digest resolves
-verified static output below
-`service/vendor/open-design-web/<web-sha256>/`; and the data generation resolves
-the only directory exported as `OD_DATA_DIR`. The daemon requires the explicit
+resolves an immutable closure in the platform-owned, content-addressed artifact
+store outside the repository. Core exposes only that namespace through the
+declared read-only capability at `/artifacts/opendesign`; runtime and web
+resolve below `runtime/<sha256>/content` and `web/<sha256>/content`. The data
+generation resolves the only directory exported as `OD_DATA_DIR`. The daemon requires the explicit
 `OD_STATIC_DIR` selected from that verified overlay registry and has no embedded
 web fallback. A successful launch writes both digests to the redaction-safe
 status under
@@ -55,14 +55,15 @@ The generated OS/architecture runtime artifact and its file manifest,
 CycloneDX SBOM, license inventory, NOTICE, signed provenance, signature, and
 public key live under ignored `service/artifacts/`. Their names, sizes, and
 SHA-256 digests are pinned in the committed canonical manifest.
-`materialize_opendesign.py`
-verifies every asset and the provenance signature before atomically installing
-the closure in its digest-named registry directory. An existing digest
-directory is immutable and is never overwritten after a verification failure.
-The launcher revalidates every file in the exact bundle selected for execution
-before each start. Retained rollback bundles are revalidated in full when a
-controlled operation selects them; unrelated registry entries are never placed
-on the execution path.
+`materialize_opendesign.py` verifies every asset and provenance signature,
+normalizes manifest-v2 modes, performs a complete content audit, writes a
+protected receipt, fsyncs, and atomically publishes the digest. An invalid
+generation is quarantined and replaced, never edited in place. Normal launch
+validates only the receipt, store generation, exact control binding,
+ownership/modes, and read-only mount; it does not hash the closure. Full audits
+run on publication, activation, repair, release certification, and background
+maintenance. Active and rollback generations are selected explicitly;
+unreferenced entries are never used as a fallback.
 
 Each immutable web overlay carries a file-level manifest, archive digest,
 runtime/upstream compatibility, lockfile and toolchain digests, CycloneDX SBOM,
@@ -113,16 +114,20 @@ The one-time v1-to-v2 rollout publishes the sole new runtime requiring
 control record atomically, and executes a controlled runtime cutover. After
 that cutover, React/CSS changes use only overlay build, materialization, and
 web activation. A web-only activation changes only
-`active.web_overlay_sha256` and
-`previous_web`: it does not clone data, run migrations, change the runtime
-digest, or touch the migration journal. Restart/readiness failure restores the
+`active.web_overlay_sha256` and `previous_web`; it preserves the declared
+`previous_runtime` rollback and its completed activation receipt. Runtime and
+web rollback receipts may therefore coexist without being treated as two
+pending cutovers. The web path does not clone data, run migrations, change the
+runtime digest, or touch the migration journal. Restart/readiness failure restores the
 previous compatible overlay automatically. A later selected gate failure also
 restores that overlay before `dev apply` reports failure. Every new cutover
 first completes any pending activation recovery. Backend restart dispatches the
 app-owned `backend_recovery` hook, which reports but does not terminalize pending
-readiness. The journal remains pending until the selected sidecar is launched
-and its real `/api/ready` response is verified; only then does the launcher
-record terminal recovery. Until that point another cutover fails closed.
+readiness. The journal remains pending until the selected sidecar reaches upstream
+`/api/ready`, the launcher atomically commits its nonce-bound activation marker,
+and the patched daemon answers `/api/maverick-ready`; only then does Core
+publish the browser remount and issue a ticket. Until that point another
+cutover fails closed.
 
 The upstream tag and official OCI image were inventoried before implementation.
 The source tree includes web,
@@ -277,14 +282,14 @@ cookies, Storage, operator paths, and other workspaces are absent. The generated
 technical token uses the generic `${service.token}` substitution and is not the
 relay capability.
 
-OpenDesign verifies the complete materialized closure before every process
-start. A cold launch after a core or sidecar restart can therefore take longer
-than a warm relaunch even though the control record and bundle are healthy.
-The sidecar health declaration gives `/api/ready` up to 120 seconds; failed
-readiness still terminates the complete process group and returns a fail-closed
-`sidecar_origin_unavailable` response. Browser-session idle expiry does not
-replay an old ticket: the wrapper requests a fresh launch while reusing the
-healthy process when it is still live.
+OpenDesign performs a receipt-only integrity check before every process start;
+full hashing is outside the launch critical path. Core prewarms the declared
+sidecar asynchronously after bootstrap, install, activation, and repair, with
+per-key singleflight so one slow app cannot convoy unrelated sidecars. The
+sidecar health gate uses only `/api/maverick-ready` with a 12-second budget;
+failed readiness terminates the complete process group and returns a typed,
+redacted failure. Browser-session idle expiry does not replay an old ticket: the
+wrapper requests a fresh launch while reusing the healthy process when live.
 
 The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
 
@@ -471,7 +476,7 @@ scenarios: login/open with the
 fixed Maverick sidebar, project creation and navigation through that sidebar,
 absence of the native home project strip and Chat pane, Storage import, runtime
 start, incremental SSE, generated-file preview, idempotent cancel, Storage
-export and manifest read-back, core/sidecar restart with explicit `/api/ready`
+export and manifest read-back, core/sidecar restart with explicit `/api/maverick-ready`
 checks, deep link, workspace A/B isolation, exact route denial, browser
 credential non-disclosure. Real-daemon migration/rollback on marked fixture
 copies is a separate gate, not repeated inside UI cases. The final aggregator

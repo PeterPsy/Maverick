@@ -77,7 +77,7 @@ def status_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "sidecar": {
             "id": "opendesign",
             "proxy_url": f"/api/apps/{app_id}/sidecars/opendesign/index.html",
-            "ready_url": f"/api/apps/{app_id}/sidecars/opendesign/api/ready",
+            "ready_url": f"/api/apps/{app_id}/sidecars/opendesign/api/maverick-ready",
             "version_url": f"/api/apps/{app_id}/sidecars/opendesign/api/version",
         },
         "opendesign": {
@@ -1602,16 +1602,27 @@ def _opendesign_bundle_summary() -> dict[str, Any]:
 def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
     status_path = Path(data_root) / "opendesign" / "launcher-status.json"
     if status_path.is_symlink() or not status_path.is_file():
-        return {"bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
+        return {"operational": False, "bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
     try:
         payload = json.loads(status_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
+        return {"operational": False, "bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
     active = payload.get("active")
     bundle = payload.get("bundle")
     web_overlay = payload.get("web_overlay")
+    health = payload.get("health")
+    repair = _opendesign_repair_state(status_path.with_name("repair-state.json"))
+    if isinstance(health, dict):
+        health = {**health, "repair_state": repair["state"]}
+    updated_at = payload.get("updated_at_epoch_ms")
+    observed_seconds = (
+        float(updated_at) / 1000
+        if isinstance(updated_at, (int, float)) and not isinstance(updated_at, bool)
+        else status_path.stat().st_mtime
+    )
+    heartbeat_fresh = time() - observed_seconds <= 5
     valid = (
-        payload.get("schema_version") == "2"
+        payload.get("schema_version") == "3"
         and payload.get("opendesign_version") == OPENDESIGN_VERSION
         and payload.get("opendesign_commit") == OPENDESIGN_COMMIT
         and isinstance(active, dict)
@@ -1628,15 +1639,53 @@ def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
         and isinstance(web_overlay, dict)
         and web_overlay.get("location") == "verified_registry"
         and web_overlay.get("relative_path") == active["web_overlay_sha256"]
+        and isinstance(health, dict)
+        and set(health) == {
+            "adapter_configured",
+            "artifact_available",
+            "artifact_verified",
+            "artifact_protected",
+            "repair_state",
+            "sidecar_process_running",
+            "daemon_ready",
+            "activation_committed",
+            "browser_ready",
+        }
     )
     if not valid:
-        return {"bundle_configured": False, "mode": "invalid-status", "detail": "", "active": {}}
+        return {"operational": False, "bundle_configured": False, "mode": "invalid-status", "detail": "", "active": {}}
+    last_failure = payload.get("last_failure") if isinstance(payload.get("last_failure"), dict) else None
+    if repair["state"] == "failed":
+        last_failure = {
+            "code": repair.get("error_code") or "artifact_repair_failed",
+            "phase": repair.get("phase") or "artifact_repair",
+            "observed_at_epoch_ms": repair.get("observed_at_epoch_ms"),
+            "auto_repairable": False,
+        }
+    operational = heartbeat_fresh and all(
+        health.get(key) is True
+        for key in (
+            "adapter_configured",
+            "artifact_available",
+            "artifact_verified",
+            "artifact_protected",
+            "sidecar_process_running",
+            "daemon_ready",
+            "activation_committed",
+            "browser_ready",
+        )
+    ) and health.get("repair_state") == "idle" and last_failure is None
     return {
+        "operational": operational,
         "bundle_configured": bool(payload.get("bundle_configured")),
         "mode": str(payload.get("mode") or "unknown"),
         "detail": str(payload.get("detail") or ""),
         "runtime_artifact_sha256": active["runtime_artifact_sha256"],
         "web_overlay_sha256": active["web_overlay_sha256"],
+        "phase": str(payload.get("phase") or "unknown"),
+        "health": health,
+        "timings_ms": payload.get("timings_ms") if isinstance(payload.get("timings_ms"), dict) else {},
+        "last_failure": last_failure,
         "active": {
             "runtime_artifact_sha256": active["runtime_artifact_sha256"],
             "web_overlay_sha256": active["web_overlay_sha256"],
@@ -1644,6 +1693,24 @@ def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
             "data_generation": str(active.get("data_generation") or ""),
         },
     }
+
+
+def _opendesign_repair_state(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        return {"state": "idle"}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"state": "failed", "error_code": "artifact_repair_failed", "phase": "repair_state"}
+    expected = {"schema_version", "state", "observed_at_epoch_ms", "error_code", "phase"}
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != expected
+        or payload.get("schema_version") != "1"
+        or payload.get("state") not in {"idle", "repairing", "failed"}
+    ):
+        return {"state": "failed", "error_code": "artifact_repair_failed", "phase": "repair_state"}
+    return payload
 
 
 def _find_job(jobs: list[dict[str, Any]], key: str, value: str) -> dict[str, Any] | None:

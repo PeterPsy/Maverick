@@ -5,9 +5,12 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict
 import json
+import os
 from pathlib import Path
 
+from core.apps.artifact_mounts import create_artifact_namespace
 from opendesign_artifact import read_bundle_manifest, selected_asset
+from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_process import activate_runtime_attachment, signal_guard
 from opendesign_web_builder import build_release_overlay
 from opendesign_web_overlay import VerifiedWebOverlay, discover_verified_overlays
@@ -15,6 +18,9 @@ from opendesign_web_overlay import VerifiedWebOverlay, discover_verified_overlay
 
 SERVICE_ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = SERVICE_ROOT.parents[2]
+DEFAULT_WORK_PARENT = Path(
+    os.environ.get("MAVERICK_OPENDESIGN_WEB_WORK_ROOT", "/var/tmp/maverick-odw")
+)
 
 
 def canonical_web_overlay(
@@ -55,7 +61,7 @@ def main() -> int:
     parser.add_argument(
         "--registry-root",
         type=Path,
-        default=SERVICE_ROOT / "vendor/open-design-web",
+        help="Verified build registry; defaults to the governed cache outside app source.",
     )
     parser.add_argument("--work-parent", type=Path)
     parser.add_argument(
@@ -67,13 +73,14 @@ def main() -> int:
     arguments = parser.parse_args()
     try:
         manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
-        runtime_digest = str(selected_asset(manifest)["sha256"])
+        runtime_digest = str(selected_asset(manifest, require_artifact_digest=True)["sha256"])
         compatible = frozenset(
             {runtime_digest, *arguments.compatible_runtime_artifact_sha256}
         )
         cache_root = arguments.cache_root
-        work_parent = arguments.work_parent or cache_root / "work"
-        for directory in (cache_root, work_parent, arguments.registry_root):
+        registry_root = arguments.registry_root or cache_root / "release-build-registry"
+        work_parent = arguments.work_parent or DEFAULT_WORK_PARENT
+        for directory in (cache_root, work_parent, registry_root):
             directory.mkdir(parents=True, exist_ok=True)
         with signal_guard():
             runtime_session_id = activate_runtime_attachment(
@@ -84,12 +91,23 @@ def main() -> int:
                 manifest=manifest,
                 service_root=SERVICE_ROOT,
                 cache_root=cache_root,
-                registry_root=arguments.registry_root,
+                registry_root=registry_root,
                 signing_key=arguments.signing_key,
                 trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
                 work_parent=work_parent,
                 runtime_session_id=runtime_session_id,
                 compatible_runtime_artifact_sha256=compatible,
+            )
+            namespace = create_artifact_namespace(
+                repository_root=REPOSITORY_ROOT,
+                app_id="design-studio",
+                artifact_id="opendesign",
+            )
+            store = OpenDesignArtifactStore(namespace)
+            stored = store.publish_web_overlay(
+                result.overlay.path,
+                web_overlay_sha256=result.overlay.web_overlay_sha256,
+                trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
             )
     except Exception as error:
         print(
@@ -114,6 +132,7 @@ def main() -> int:
                 "derivations": result.derivations,
                 "reproducible": result.reproducible,
                 "materialization_cache_hit": result.cache_hit,
+                "protected_store_generation": stored.receipt["store_generation"],
                 "cache_keys": asdict(result.keys),
                 "metrics": [asdict(metric) for metric in result.metrics],
             },

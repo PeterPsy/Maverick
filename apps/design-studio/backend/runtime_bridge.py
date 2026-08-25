@@ -16,8 +16,11 @@ import sys
 from typing import Any, Callable
 from uuid import uuid4
 
+from core.apps.artifact_mounts import platform_artifact_store_root
+
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1] / "service"
+REPOSITORY_ROOT = SERVICE_ROOT.parents[2]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
@@ -27,7 +30,7 @@ from opendesign_generation_control import (  # noqa: E402
     resolve_generation_data_dir,
 )
 from opendesign_generation_model import GenerationControlError  # noqa: E402
-from opendesign_runtime import resolve_runtime_binding  # noqa: E402
+from opendesign_runtime import resolve_protected_runtime_binding as resolve_runtime_binding  # noqa: E402
 
 
 BRIDGE_SCHEMA_VERSION = "2"
@@ -72,15 +75,12 @@ def active_data_directory(payload: dict[str, Any]) -> Path:
             return _real_directory(Path(cached_path), label="cached active OpenDesign data generation")
     app_data_root = _real_directory(Path(data_root_value), label="Design Studio data root")
     generation_root = _real_directory(app_data_root / "opendesign", label="OpenDesign generation root")
-    registry_root = SERVICE_ROOT / "vendor" / "open-design"
-    web_registry_root = SERVICE_ROOT / "vendor" / "open-design-web"
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
     binding = resolve_runtime_binding(
-        registry_root=registry_root,
-        web_registry_root=web_registry_root,
-        web_trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
+        store_root=platform_artifact_store_root(REPOSITORY_ROOT) / "design-studio" / "opendesign",
         generation_root=generation_root,
         manifest=manifest,
+        require_read_only_mount=False,
     )
     active = _real_directory(binding.data_dir, label="active OpenDesign data generation")
     payload[_ACTIVE_DATA_CACHE_KEY] = {

@@ -1,12 +1,15 @@
 {
   "schema_version": "1",
-  "gate": "WP10",
+  "gate": "design-studio-e2e-release",
+  "profile": "release",
   "status": "passed",
+  "changed_files": [],
+  "affected_categories": [],
   "opendesign": {
     "version": "0.16.1",
     "oci_reference": "ghcr.io/nexu-io/od:0.16.1",
-    "runtime_artifact_sha256": "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
-    "web_overlay_sha256": "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2"
+    "runtime_artifact_sha256": "6997f3ab7800c31c027bb1cdd9c9f7634e638b39577c74632eee3b0ce440c5fe",
+    "web_overlay_sha256": "76465d47b848595d0144ca93461b898f63a83603d4d7fcf10e4c008474369aad"
   },
   "product_path": {
     "official_oci_daemon": true,
@@ -20,8 +23,8 @@
     "remote_iframe": false
   },
   "canonical_entity": {
-    "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-    "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4"
+    "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+    "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c"
   },
   "scenarios": [
     {
@@ -32,12 +35,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "isolated_origin": true,
@@ -52,12 +55,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "project_created": true,
@@ -75,12 +78,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "imported": true
@@ -94,12 +97,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "submitted": true
@@ -113,12 +116,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "incremental": true
@@ -132,12 +135,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "previewed": true
@@ -151,12 +154,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_b9ac9ee4360840be9f9cc49fae6f193d",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "c575b9bc-94f2-46ca-9568-ac1ea881c3f0",
-        "request_id": "request_a8168ea86b9444d076def76d",
-        "correlation_id": "request_a8168ea86b9444d076def76d"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_5071d19a06e54f22b965bb1510146da7",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "f3750293-8688-48bd-9bc7-9d001e30ae62",
+        "request_id": "request_32bf9259ac9f5177bcb0b765",
+        "correlation_id": "request_32bf9259ac9f5177bcb0b765"
       },
       "proof": {
         "canceled": true,
@@ -171,12 +174,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "artifact_count": 2
@@ -190,12 +193,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "recovered": true,
@@ -210,12 +213,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "project_route": true,
@@ -230,12 +233,12 @@
         "workspace_id": "workspace-b",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_cd3dc8afba01474d94f23009",
-        "od_run_id": "od_run_4cc3ff66a74e4b239fa153cc3847b4da",
-        "runtime_session_id": "c42d48e3-513e-4856-bd03-1ad55715de60",
-        "turn_id": "77064dd7-dfe0-4fbd-8c16-55c5bb949bb4",
-        "request_id": "request_793ee02fcb27c596b9a6d875",
-        "correlation_id": "request_793ee02fcb27c596b9a6d875"
+        "od_project_id": "od_maverick_22e4e4e2a78c41688aa5433a",
+        "od_run_id": "od_run_cb2ca9949cd94e6abfccc1415be05fda",
+        "runtime_session_id": "efe0b3ff-d02a-48be-aaed-653ff58fc0a3",
+        "turn_id": "6765437f-b087-41ee-8a13-9b8089916b5f",
+        "request_id": "request_75277d4790922f425cde7f45",
+        "correlation_id": "request_75277d4790922f425cde7f45"
       },
       "proof": {
         "distinct_origins": true
@@ -249,12 +252,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "exact_deny": true
@@ -268,39 +271,302 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
+        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
+        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
+        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "request_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_ec276a5d2799a3311cb73594"
       },
       "proof": {
         "maverick_cookie_forwarded": false,
         "browser_bearer_forwarded": false,
-        "one_shot_bootstrap_count": 4
-      }
-    },
-    {
-      "id": "upgrade_rollback",
-      "name": "Upgrade and rollback the real artifact with fixture data",
-      "status": "passed",
-      "correlation": {
-        "workspace_id": "default",
-        "local_app_id": "design-studio",
-        "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
-        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
-        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
-        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
-        "request_id": "request_15321db4e259533fa8aa60d9",
-        "correlation_id": "request_15321db4e259533fa8aa60d9"
-      },
-      "proof": {
-        "migration_smoke": true
+        "one_shot_bootstrap_count": 43
       }
     }
   ],
+  "performance": {
+    "schema_version": "1",
+    "warm_browser_ticket": {
+      "count": 30,
+      "p50_ms": 24.716,
+      "p95_ms": 25.803,
+      "p99_ms": 39.726,
+      "max_ms": 39.726,
+      "same_sidecar_instance": true
+    },
+    "warm_interface": {
+      "count": 30,
+      "p50_ms": 794.54,
+      "p95_ms": 1225.859,
+      "p99_ms": 1624.103,
+      "max_ms": 1624.103,
+      "full_wrapper_remount": {
+        "count": 30,
+        "p50_ms": 1142.289,
+        "p95_ms": 1758.486,
+        "p99_ms": 2057.964,
+        "max_ms": 2057.964
+      },
+      "wrapper_dom_content_loaded": {
+        "count": 30,
+        "p50_ms": 376.041,
+        "p95_ms": 605.003,
+        "p99_ms": 671.687,
+        "max_ms": 671.687
+      },
+      "sidecar_frame_ready": {
+        "count": 30,
+        "p50_ms": 794.54,
+        "p95_ms": 1225.859,
+        "p99_ms": 1624.103,
+        "max_ms": 1624.103
+      },
+      "sidecar_navigation": {
+        "count": 30,
+        "p50_ms": 310.7,
+        "p95_ms": 481.4,
+        "p99_ms": 776.1,
+        "max_ms": 776.1
+      },
+      "sidecar_response": {
+        "count": 30,
+        "p50_ms": 172.5,
+        "p95_ms": 371.9,
+        "p99_ms": 568.4,
+        "max_ms": 568.4
+      },
+      "sidecar_resource_transfer_bytes": {
+        "count": 30,
+        "p50_ms": 324,
+        "p95_ms": 1411,
+        "p99_ms": 3071,
+        "max_ms": 3071
+      }
+    },
+    "cold_maverick_ready": {
+      "count": 10,
+      "p50_ms": 2002.879,
+      "p95_ms": 2182.815,
+      "p99_ms": 2182.815,
+      "max_ms": 2182.815
+    },
+    "daemon_internal_ready": {
+      "count": 10,
+      "p50_ms": 2351.671,
+      "p95_ms": 3731.057,
+      "p99_ms": 3731.057,
+      "max_ms": 3731.057
+    },
+    "full_core_restart": {
+      "count": 10,
+      "p50_ms": 5956.343,
+      "p95_ms": 7193.052,
+      "p99_ms": 7193.052,
+      "max_ms": 7193.052
+    },
+    "core_boot": {
+      "count": 10,
+      "p50_ms": 1644.211,
+      "p95_ms": 1782.115,
+      "p99_ms": 1782.115,
+      "max_ms": 1782.115
+    },
+    "prewarm_after_core_health": {
+      "count": 10,
+      "p50_ms": 367.867,
+      "p95_ms": 471.48,
+      "p99_ms": 471.48,
+      "max_ms": 471.48
+    },
+    "interface_after_transactional_ready": {
+      "count": 10,
+      "p50_ms": 3718.225,
+      "p95_ms": 5007.207,
+      "p99_ms": 5007.207,
+      "max_ms": 5007.207
+    },
+    "core_restart_count": 10,
+    "resources": {
+      "cpu_ticks_max": 368,
+      "rss_kib_max": 72788,
+      "disk_read_bytes_max": 4096,
+      "process_count_max": 1
+    },
+    "samples": [
+      {
+        "iteration": 1,
+        "daemon_ready_ms": 3731.057,
+        "cold_maverick_ready_ms": 1999.805,
+        "full_restart_ms": 6294.776,
+        "stop_ms": 174.101,
+        "core_boot_ms": 1644.211,
+        "prewarm_after_core_health_ms": 355.594,
+        "interface_after_core_health_ms": 4476.458,
+        "interface_after_transactional_ready_ms": 4120.864,
+        "resources": {
+          "cpu_ticks": 319,
+          "rss_kib": 72600,
+          "disk_read_bytes": 4096,
+          "process_count": 1
+        }
+      },
+      {
+        "iteration": 2,
+        "daemon_ready_ms": 2374.055,
+        "cold_maverick_ready_ms": 2182.815,
+        "full_restart_ms": 6331.471,
+        "stop_ms": 193.094,
+        "core_boot_ms": 1782.115,
+        "prewarm_after_core_health_ms": 400.7,
+        "interface_after_core_health_ms": 4356.258,
+        "interface_after_transactional_ready_ms": 3955.557,
+        "resources": {
+          "cpu_ticks": 308,
+          "rss_kib": 72584,
+          "disk_read_bytes": 0,
+          "process_count": 1
+        }
+      },
+      {
+        "iteration": 3,
+        "daemon_ready_ms": 2369.475,
+        "cold_maverick_ready_ms": 2002.453,
+        "full_restart_ms": 5956.343,
+        "stop_ms": 235.661,
+        "core_boot_ms": 1649.041,
+        "prewarm_after_core_health_ms": 353.412,
+        "interface_after_core_health_ms": 4071.637,
+        "interface_after_transactional_ready_ms": 3718.225,
+        "resources": {
+          "cpu_ticks": 304,
+          "rss_kib": 72332,
+          "disk_read_bytes": 0,
+          "process_count": 1
+        }
+      },
+      {
+        "iteration": 4,
+        "daemon_ready_ms": 2330.818,
+        "cold_maverick_ready_ms": 2001.828,
+        "full_restart_ms": 5655.808,
+        "stop_ms": 210.511,
+        "core_boot_ms": 1645.126,
+        "prewarm_after_core_health_ms": 356.701,
+        "interface_after_core_health_ms": 3800.165,
+        "interface_after_transactional_ready_ms": 3443.463,
+        "resources": {
+          "cpu_ticks": 296,
+          "rss_kib": 72464,
+          "disk_read_bytes": 4096,
+          "process_count": 1
+        }
+      },
+      {
+        "iteration": 5,
+        "daemon_ready_ms": 2130.329,
+        "cold_maverick_ready_ms": 2002.879,
+        "full_restart_ms": 5786.505,
+        "stop_ms": 246.506,
+        "core_boot_ms": 1641.845,
+        "prewarm_after_core_health_ms": 361.034,
+        "interface_after_core_health_ms": 3898.148,
+        "interface_after_transactional_ready_ms": 3537.114,
+        "resources": {
+          "cpu_ticks": 306,
+          "rss_kib": 72548,
+          "disk_read_bytes": 0,
+          "process_count": 1
+        }
+      },
+      {
+        "iteration": 6,
+        "daemon_ready_ms": 2051.097,
+        "cold_maverick_ready_ms": 2094.589,
+        "full_restart_ms": 6173.617,
+        "stop_ms": 156.264,
+        "core_boot_ms": 1646.666,
+        "prewarm_after_core_health_ms": 447.923,
+        "interface_after_core_health_ms": 4370.681,
+        "interface_after_transactional_ready_ms": 3922.758,
+        "resources": {
+          "cpu_ticks": 300,
+          "rss_kib": 72584,
+          "disk_read_bytes": 0,
+          "process_count": 1
+        }
+      },
+      {
+        "iteration": 7,
+        "daemon_ready_ms": 2351.671,
+        "cold_maverick_ready_ms": 2116.755,
+        "full_restart_ms": 6534.91,
+        "stop_ms": 137.328,
+        "core_boot_ms": 1647.651,
+        "prewarm_after_core_health_ms": 469.104,
+        "interface_after_core_health_ms": 4749.926,
+        "interface_after_transactional_ready_ms": 4280.822,
+        "resources": {
+          "cpu_ticks": 280,
+          "rss_kib": 71448,
+          "disk_read_bytes": 0,
+          "process_count": 1
+        }
+      },
+      {
+        "iteration": 8,
+        "daemon_ready_ms": 3088.143,
+        "cold_maverick_ready_ms": 2015.289,
+        "full_restart_ms": 5707.647,
+        "stop_ms": 115.258,
+        "core_boot_ms": 1642.511,
+        "prewarm_after_core_health_ms": 372.778,
+        "interface_after_core_health_ms": 3949.873,
+        "interface_after_transactional_ready_ms": 3577.095,
+        "resources": {
+          "cpu_ticks": 290,
+          "rss_kib": 72032,
+          "disk_read_bytes": 0,
+          "process_count": 1
+        }
+      },
+      {
+        "iteration": 9,
+        "daemon_ready_ms": 2025.091,
+        "cold_maverick_ready_ms": 2019.002,
+        "full_restart_ms": 7193.052,
+        "stop_ms": 166.83,
+        "core_boot_ms": 1547.521,
+        "prewarm_after_core_health_ms": 471.48,
+        "interface_after_core_health_ms": 5478.687,
+        "interface_after_transactional_ready_ms": 5007.207,
+        "resources": {
+          "cpu_ticks": 368,
+          "rss_kib": 72788,
+          "disk_read_bytes": 0,
+          "process_count": 1
+        }
+      },
+      {
+        "iteration": 10,
+        "daemon_ready_ms": 2875.145,
+        "cold_maverick_ready_ms": 1907.998,
+        "full_restart_ms": 5500.935,
+        "stop_ms": 188.017,
+        "core_boot_ms": 1540.13,
+        "prewarm_after_core_health_ms": 367.867,
+        "interface_after_core_health_ms": 3772.782,
+        "interface_after_transactional_ready_ms": 3404.915,
+        "resources": {
+          "cpu_ticks": 301,
+          "rss_kib": 72508,
+          "disk_read_bytes": 0,
+          "process_count": 1
+        }
+      }
+    ],
+    "targets_met": true
+  },
   "redaction": {
     "full_prompt_recorded": false,
     "credential_value_recorded": false,

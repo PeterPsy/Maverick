@@ -79,7 +79,14 @@ encoded traversal, and unknown routes fail closed. Safe requests still require
 the bound sidecar session.
 
 Every authenticated sidecar response uses `Referrer-Policy: no-referrer` and a
-no-store cache policy. CSP is derived from contract data, defaults to
+no-store cache policy by default. A contract may additionally declare a bounded
+set of canonical, non-API directory prefixes as `immutable_asset_prefixes`.
+Successful GET/HEAD responses below those prefixes use a private one-year
+immutable browser cache; errors, API responses, bootstrap responses, and every
+undeclared path remain `no-store`. `private` is mandatory so a shared proxy
+cannot bypass the sidecar session boundary. The opaque origin includes the app
+binding generation, and apps must use content-addressed filenames below an
+immutable prefix. CSP is derived from contract data, defaults to
 `default-src 'self'`, permits `connect-src` only to the same sidecar origin and
 declared brokers, and sets `frame-ancestors` to the expected Maverick origin.
 Wildcard frame parents and arbitrary outbound origins are invalid.

@@ -121,8 +121,11 @@ def apply_patch_series(
             f"--directory={source.resolve(strict=True)}",
             f"--input={patch_path}",
         ]
-        run_command([*patch_command, "--dry-run"], cwd=source.parent)
-        run_command(patch_command, cwd=source.parent)
+        # App CLI entrypoints must reserve stdout for their single JSON result.
+        # Capture patch diagnostics instead of letting GNU patch corrupt that
+        # transport on a successful governed build.
+        run_command([*patch_command, "--dry-run"], cwd=source.parent, capture=True)
+        run_command(patch_command, cwd=source.parent, capture=True)
         declared_files: list[str] = []
         for file_value in entry["files"]:
             if not isinstance(file_value, dict):

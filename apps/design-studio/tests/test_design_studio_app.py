@@ -14,7 +14,9 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from threading import Thread
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
@@ -183,12 +185,18 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertEqual(sidecar.env["NEXT_TELEMETRY_DISABLED"], "1")
         self.assertEqual(sidecar.env["MAVERICK_OPENDESIGN_DATA_ROOT"], "${app.data_dir}/opendesign")
         self.assertEqual(
-            sidecar.env["MAVERICK_OPENDESIGN_BUNDLE_ROOT"],
-            "${app.source_dir}/service/vendor/open-design",
+            sidecar.env["MAVERICK_OPENDESIGN_STORE_ROOT"],
+            "${artifact.opendesign}",
         )
+        self.assertEqual(sidecar.artifact_mounts[0].artifact_id, "opendesign")
+        self.assertEqual(sidecar.artifact_mounts[0].mount_path, "/artifacts/opendesign")
+        self.assertTrue(sidecar.prewarm.on_core_start)
+        self.assertTrue(sidecar.prewarm.on_install)
+        self.assertTrue(sidecar.prewarm.on_activation)
+        self.assertTrue(sidecar.prewarm.keep_alive)
         self.assertEqual(sidecar.bind.host, "127.0.0.1")
-        self.assertEqual(sidecar.health.path, "/api/ready")
-        self.assertEqual(sidecar.health.timeout_ms, 120_000)
+        self.assertEqual(sidecar.health.path, "/api/maverick-ready")
+        self.assertEqual(sidecar.health.timeout_ms, 12_000)
         self.assertTrue(sidecar.proxy.streaming)
         self.assertTrue(sidecar.proxy.sse)
         self.assertFalse(sidecar.proxy.websocket)
@@ -298,7 +306,7 @@ class DesignStudioAppTests(unittest.TestCase):
                 "OD_API_TOKEN": "launcher-test-token",
                 "OD_SANDBOX_MODE": "1",
                 "MAVERICK_OPENDESIGN_DATA_ROOT": str(data_dir),
-                "MAVERICK_OPENDESIGN_BUNDLE_ROOT": str(root / "missing-open-design"),
+                "MAVERICK_OPENDESIGN_STORE_ROOT": str(root / "missing-open-design"),
                 "MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE": "1",
                 "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "1",
             }
@@ -314,8 +322,10 @@ class DesignStudioAppTests(unittest.TestCase):
             )
 
             self.assertNotEqual(process.returncode, 0)
-            self.assertIn("Curated OpenDesign daemon unavailable", process.stderr)
-            self.assertFalse((data_dir / "launcher-status.json").exists())
+            self.assertIn("declared artifact capability mount", process.stderr)
+            status = json.loads((data_dir / "launcher-status.json").read_text(encoding="utf-8"))
+            self.assertEqual(status["last_failure"]["code"], "runtime_binding_invalid")
+            self.assertEqual(status["last_failure"]["phase"], "artifact_resolve")
 
     def test_adapter_state_preserves_sealed_legacy_catalog_and_uses_od_ids(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -423,7 +433,7 @@ class DesignStudioAppTests(unittest.TestCase):
     def test_default_e2e_command_is_the_complete_release_profile(self) -> None:
         package = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(package["scripts"]["test:e2e"], "npm run test:e2e:release")
+        self.assertEqual(package["scripts"]["test:e2e"], "npm run test:e2e:release --")
 
     def test_backend_cli_mcp_and_reference_resolve_same_opendesign_id_through_sdk(self) -> None:
         project_response = self._fixture_json("project_create_response.json")
@@ -821,7 +831,20 @@ class DesignStudioAppTests(unittest.TestCase):
                 app = PlatformHost(state, start_path=repo_root, shutdown_controller=shutdown)
                 cookie = self._login(app)
 
-            with self._repo_pythonpath():
+            missing_provider = SimpleNamespace(
+                configured=False,
+                active_provider=None,
+                selection=None,
+                blocked_reason="provider_missing",
+                blocked_detail="Maverick workspace provider is not configured.",
+            )
+            with (
+                self._repo_pythonpath(),
+                patch(
+                    "core.api.sidecar_core_routes.resolve_workspace_provider_status",
+                    return_value=missing_provider,
+                ),
+            ):
                 status, body, _headers = self._invoke(
                     app,
                     path="/api/apps/design-studio/sidecars/opendesign/api/provider/models",
@@ -967,6 +990,10 @@ class DesignStudioAppTests(unittest.TestCase):
             sidecar = contract["services"]["http_sidecars"][0]
             sidecar["working_directory"] = "."
             sidecar["command"] = ["python3", "tests/fixtures/opendesign_test_server.py"]
+            sidecar["env"].pop("MAVERICK_OPENDESIGN_STORE_ROOT", None)
+            sidecar.pop("artifact_mounts", None)
+            sidecar.pop("prewarm", None)
+            sidecar["health"] = {"path": "/api/ready", "timeout_ms": 8000}
             contract_path.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
 
     @contextmanager

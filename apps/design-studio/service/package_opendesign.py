@@ -60,6 +60,10 @@ def build_reproducible_artifact(
 ) -> dict[str, Any]:
     validate_manifest(manifest)
     validate_bundle_manifest(manifest, require_artifact_digest=False)
+    if manifest.get("distribution", {}).get("primary") == "oci_import":
+        raise PackagingError(
+            "runtime release packaging is OCI-only; use import_opendesign_oci.py"
+        )
     validate_certification_record(service_root, manifest)
     validate_patch_series(service_root, manifest)
     validate_repository(repository, manifest)

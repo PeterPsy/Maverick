@@ -483,6 +483,10 @@ def _communicate_with_limits(
         return process.communicate(input=input_text, timeout=timeout_seconds)
     except subprocess.TimeoutExpired as error:
         _terminate_process_tree_and_wait(process)
+        try:
+            process.communicate(timeout=1)
+        except (subprocess.TimeoutExpired, ValueError):
+            pass
         if shutdown_controller is not None and shutdown_controller.is_shutting_down():
             raise EntrypointInterruptedError(
                 entrypoint_path,
@@ -498,11 +502,16 @@ def _terminate_process_tree_and_wait(process: subprocess.Popen[str], *, timeout_
     try:
         process.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
-        _kill_process_tree(process)
-        try:
-            process.wait(timeout=timeout_seconds)
-        except subprocess.TimeoutExpired:
-            return
+        pass
+    # A descendant may ignore SIGTERM and outlive an entrypoint that exited
+    # promptly.  The entrypoint owns a unique session/process group, so always
+    # close that whole group after the grace period rather than only killing it
+    # while the original process is still alive.
+    _kill_process_tree(process)
+    try:
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        return
 
 
 def _terminate_process_tree(process: subprocess.Popen[str]) -> None:

@@ -16,14 +16,14 @@ import time
 from typing import Any
 import uuid
 
+from core.apps.artifact_mounts import create_artifact_namespace
 from opendesign_artifact import read_bundle_manifest, sha256_file, write_canonical_json
+from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_dev_apply import _cache_root, _repo_root, _required_path, _restart_sidecars, _work_parent
-from opendesign_generation_control import load_generation_control
-from opendesign_materialization import discover_verified_bundles
+from opendesign_runtime import protected_activation_inventory, verified_overlay_from_store
 from opendesign_source import apply_patch_series, export_source
 from opendesign_web_activation import activate_web_overlay, recover_web_activation
 from opendesign_web_builder import build_dev_overlay
-from opendesign_web_overlay import discover_verified_overlays
 
 
 BENCHMARK_FILE = "apps/design-studio/service/patches/0003-maverick-web-react.patch"
@@ -46,18 +46,22 @@ def run_change_to_live_benchmark(payload: dict[str, Any], arguments: dict[str, A
     cache_root.mkdir(parents=True, exist_ok=True)
     work_parent = _work_parent(arguments)
     work_parent.mkdir(parents=True, exist_ok=True)
-    registry_root = service_root / "vendor/open-design-web"
+    registry_root = cache_root / "benchmark-build-registry"
     registry_root.mkdir(parents=True, exist_ok=True)
     manifest = read_bundle_manifest(service_root / "opendesign_bundle.json")
     generation_root = Path(str(payload.get("data_root") or "")) / "opendesign"
     if not generation_root.is_dir() or generation_root.is_symlink():
         raise ChangeToLiveBenchmarkError("benchmark requires a real Design Studio data root")
 
-    bundles = discover_verified_bundles(service_root / "vendor/open-design")
-    verified_artifacts = {digest: bundle.opendesign_version for digest, bundle in bundles.items()}
-    overlays = discover_verified_overlays(
-        registry_root,
-        trust_contract=service_root / "opendesign_web_trust.json",
+    namespace = create_artifact_namespace(
+        repository_root=repo_root,
+        app_id="design-studio",
+        artifact_id="opendesign",
+    )
+    store = OpenDesignArtifactStore(namespace)
+    _control, verified_artifacts, overlays = protected_activation_inventory(
+        store=store,
+        generation_root=generation_root,
     )
     recover_web_activation(
         generation_root,
@@ -65,15 +69,15 @@ def run_change_to_live_benchmark(payload: dict[str, Any], arguments: dict[str, A
         verified_overlays=overlays,
         restart_sidecars=lambda: _restart_sidecars(arguments, repo_root=repo_root),
     )
-    initial = load_generation_control(
-        generation_root,
-        verified_artifacts=verified_artifacts,
-        verified_overlays=overlays,
+    initial, verified_artifacts, overlays = protected_activation_inventory(
+        store=store,
+        generation_root=generation_root,
     )
     benchmark_id = uuid.uuid4().hex[:16]
 
     with tempfile.TemporaryDirectory(prefix="od-change-to-live-", dir=work_parent) as temporary:
         root = Path(temporary)
+        session_dependency_root = root / "session-dependencies"
         warmup_started = time.monotonic()
         warmup = build_dev_overlay(
             repository,
@@ -85,6 +89,7 @@ def run_change_to_live_benchmark(payload: dict[str, Any], arguments: dict[str, A
             trust_contract=service_root / "opendesign_web_trust.json",
             work_parent=work_parent,
             runtime_session_id=str(payload.get("runtime_session_id") or "") or None,
+            session_dependency_root=session_dependency_root,
         )
         warmup_duration = round(time.monotonic() - warmup_started, 6)
         warmup_matches_active = warmup.overlay.web_overlay_sha256 == initial.active.web_overlay_sha256
@@ -115,6 +120,7 @@ def run_change_to_live_benchmark(payload: dict[str, Any], arguments: dict[str, A
             trust_contract=benchmark_service / "opendesign_web_trust.json",
             work_parent=work_parent,
             runtime_session_id=str(payload.get("runtime_session_id") or "") or None,
+            session_dependency_root=session_dependency_root,
         )
         build_duration = round(time.monotonic() - build_started, 6)
         candidate_metric = candidate.metrics[0]
@@ -127,10 +133,18 @@ def run_change_to_live_benchmark(payload: dict[str, Any], arguments: dict[str, A
         if candidate.overlay.web_overlay_sha256 == initial.active.web_overlay_sha256:
             raise ChangeToLiveBenchmarkError("benchmark patch did not produce a new web overlay")
 
-        overlays = discover_verified_overlays(
-            registry_root,
-            trust_contract=service_root / "opendesign_web_trust.json",
+        store_publish_started = time.monotonic()
+        stored_candidate = store.publish_web_overlay(
+            candidate.overlay.path,
+            web_overlay_sha256=candidate.overlay.web_overlay_sha256,
+            trust_contract=benchmark_service / "opendesign_web_trust.json",
         )
+        store_publish_duration = round(time.monotonic() - store_publish_started, 6)
+        _current, verified_artifacts, overlays = protected_activation_inventory(
+            store=store,
+            generation_root=generation_root,
+        )
+        overlays[stored_candidate.artifact_sha256] = verified_overlay_from_store(stored_candidate)
         outcome = None
         restored = None
         activation_started = time.monotonic()
@@ -150,11 +164,11 @@ def run_change_to_live_benchmark(payload: dict[str, Any], arguments: dict[str, A
             if outcome.readiness.get("browser_remount_event_emitted") is not True:
                 raise ChangeToLiveBenchmarkError("benchmark restart did not publish the browser remount event")
         finally:
-            current = load_generation_control(
-                generation_root,
-                verified_artifacts=verified_artifacts,
-                verified_overlays=overlays,
+            current, verified_artifacts, retained_overlays = protected_activation_inventory(
+                store=store,
+                generation_root=generation_root,
             )
+            overlays.update(retained_overlays)
             restoration_started = time.monotonic()
             if current.active != initial.active:
                 restored = activate_web_overlay(
@@ -205,6 +219,7 @@ def run_change_to_live_benchmark(payload: dict[str, Any], arguments: dict[str, A
             "warmup_excluded_seconds": warmup_duration,
             "mutation_seconds": mutation_duration,
             "build_seconds": build_duration,
+            "protected_store_publish_seconds": store_publish_duration,
             "activation_restart_readiness_seconds": activation_duration,
             "change_to_live_seconds": duration,
             "restoration_seconds": restoration_duration,
@@ -298,8 +313,12 @@ def validate_change_to_live_benchmark(
         phases.get("activation_restart_readiness_seconds"),
         "activation_restart_readiness_seconds",
     )
+    store_publish = _positive_number(
+        phases.get("protected_store_publish_seconds"),
+        "protected_store_publish_seconds",
+    )
     mutation = _positive_number(phases.get("mutation_seconds"), "mutation_seconds")
-    if duration + 0.001 < build + activation_seconds + mutation:
+    if duration + 0.001 < build + store_publish + activation_seconds + mutation:
         raise ValueError("benchmark phase timings are internally inconsistent")
     if evidence.get("target_ceiling_seconds") != BENCHMARK_CEILING_SECONDS:
         raise ValueError("benchmark target ceiling is not canonical")
@@ -311,6 +330,7 @@ def validate_change_to_live_benchmark(
         "baseline_web_overlay_sha256": before["web_overlay_sha256"],
         "candidate_web_overlay_sha256": candidate["web_overlay_sha256"],
         "browser_remount_event_emitted": True,
+        "protected_store_publish_seconds": store_publish,
     }
 
 

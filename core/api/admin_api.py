@@ -250,6 +250,7 @@ def handle_admin_api(
     start_response: StartResponse,
     *,
     start_path: Path,
+    shutdown_controller=None,
 ) -> list[bytes] | None:
     """Handle admin routes, returning None when the path is not owned here."""
     path = environ.get("PATH_INFO", "/")
@@ -269,6 +270,7 @@ def handle_admin_api(
         start_response,
         body=body,
         start_path=start_path,
+        shutdown_controller=shutdown_controller,
     )
     if routed is not None:
         return routed

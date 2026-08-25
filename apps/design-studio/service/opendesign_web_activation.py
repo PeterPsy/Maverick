@@ -14,6 +14,7 @@ from typing import Callable, Mapping
 
 from opendesign_generation_control import (
     load_generation_control,
+    load_runtime_generation_control,
     load_web_activation_journal,
     write_generation_control,
     write_web_activation_journal,
@@ -108,6 +109,8 @@ def activate_web_overlay(
             migration_id=control.migration_id,
             web_activation_id=web_activation_id,
             updated_at=timestamp(),
+            previous_runtime=control.previous_runtime,
+            runtime_activation_id=control.runtime_activation_id,
         )
         write_generation_control(
             root,
@@ -115,34 +118,31 @@ def activate_web_overlay(
             verified_artifacts=verified_artifacts,
             verified_overlays=verified_overlays,
         )
-        try:
-            readiness = _restart(restart_sidecars)
-        except Exception as candidate_error:
-            return _rollback_after_failed_restart(
-                root,
-                original=control,
-                candidate=target,
-                journal=prepared,
-                verified_artifacts=verified_artifacts,
-                verified_overlays=verified_overlays,
-                restart_sidecars=restart_sidecars,
-                timestamp=timestamp,
-                candidate_error=candidate_error,
-            )
-        committed = _journal_state(
-            prepared,
-            "ready_committed",
-            readiness=readiness,
-            error=None,
-            updated_at=timestamp(),
-        )
-        write_web_activation_journal(
+    try:
+        readiness = _restart(restart_sidecars)
+    except Exception as candidate_error:
+        return _rollback_after_failed_restart(
             root,
-            committed,
+            original=control,
+            candidate=target,
+            journal=prepared,
             verified_artifacts=verified_artifacts,
             verified_overlays=verified_overlays,
+            restart_sidecars=restart_sidecars,
+            timestamp=timestamp,
+            candidate_error=candidate_error,
         )
-        return WebActivationOutcome(cutover, web_activation_id, True, False, readiness)
+    final_control, final_journal = _complete_after_restart(
+        root,
+        activation_id=web_activation_id,
+        state="ready_committed",
+        readiness=readiness,
+        error=None,
+        verified_artifacts=verified_artifacts,
+        verified_overlays=verified_overlays,
+        timestamp=timestamp,
+    )
+    return WebActivationOutcome(final_control, web_activation_id, True, False, final_journal.readiness)
 
 
 def recover_web_activation(
@@ -177,77 +177,76 @@ def recover_web_activation(
                 state == "rolled_back",
                 journal.readiness,
             )
-        if state == "activation_committed_readiness_pending":
-            try:
-                readiness = _restart(restart_sidecars)
-            except Exception as candidate_error:
-                original = GenerationControl(
-                    active=journal.source,
-                    previous_release=control.previous_release,
-                    previous_web=None,
-                    migration_id=control.migration_id,
-                    web_activation_id=None,
-                    updated_at=timestamp(),
-                )
-                return _rollback_after_failed_restart(
-                    root,
-                    original=original,
-                    candidate=journal.target,
-                    journal=journal,
-                    verified_artifacts=verified_artifacts,
-                    verified_overlays=verified_overlays,
-                    restart_sidecars=restart_sidecars,
-                    timestamp=timestamp,
-                    candidate_error=candidate_error,
-                )
-            committed = _journal_state(
-                journal,
-                "ready_committed",
-                readiness=readiness,
-                error=None,
+    if state == "activation_committed_readiness_pending":
+        try:
+            readiness = _restart(restart_sidecars)
+        except Exception as candidate_error:
+            original = GenerationControl(
+                active=journal.source,
+                previous_release=control.previous_release,
+                previous_web=None,
+                migration_id=control.migration_id,
+                web_activation_id=None,
                 updated_at=timestamp(),
+                previous_runtime=control.previous_runtime,
+                runtime_activation_id=control.runtime_activation_id,
             )
-            write_web_activation_journal(
+            return _rollback_after_failed_restart(
                 root,
-                committed,
+                original=original,
+                candidate=journal.target,
+                journal=journal,
                 verified_artifacts=verified_artifacts,
                 verified_overlays=verified_overlays,
+                restart_sidecars=restart_sidecars,
+                timestamp=timestamp,
+                candidate_error=candidate_error,
             )
-            return WebActivationOutcome(control, journal.web_activation_id, True, False, readiness)
-        if state in {"rollback_committed_journal_pending", "rollback_restart_pending"}:
-            try:
-                readiness = _restart(restart_sidecars)
-            except Exception as rollback_error:
-                safe_error = f"rollback_restart_failed:{type(rollback_error).__name__}:recovery"
-                pending = _journal_state(
-                    journal,
-                    "rollback_restart_pending",
-                    readiness={"rollback": {"ready": False}},
-                    error=safe_error,
-                    updated_at=timestamp(),
-                )
+        final_control, final_journal = _complete_after_restart(
+            root,
+            activation_id=journal.web_activation_id,
+            state="ready_committed",
+            readiness=readiness,
+            error=None,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+            timestamp=timestamp,
+        )
+        return WebActivationOutcome(final_control, journal.web_activation_id, True, False, final_journal.readiness)
+    if state in {"rollback_committed_journal_pending", "rollback_restart_pending"}:
+        try:
+            readiness = _restart(restart_sidecars)
+        except Exception as rollback_error:
+            safe_error = f"rollback_restart_failed:{type(rollback_error).__name__}:recovery"
+            pending = _journal_state(
+                journal,
+                "rollback_restart_pending",
+                readiness={"rollback": {"ready": False}},
+                error=safe_error,
+                updated_at=timestamp(),
+            )
+            with _web_activation_lock(root):
                 write_web_activation_journal(
                     root,
                     pending,
                     verified_artifacts=verified_artifacts,
                     verified_overlays=verified_overlays,
                 )
-                raise WebActivationError(safe_error) from rollback_error
-            rolled_back = _journal_state(
-                journal,
-                "rolled_back",
-                readiness={"rollback": readiness},
-                error="candidate_restart_failed:recovered",
-                updated_at=timestamp(),
-            )
-            write_web_activation_journal(
-                root,
-                rolled_back,
-                verified_artifacts=verified_artifacts,
-                verified_overlays=verified_overlays,
-            )
-            return WebActivationOutcome(control, journal.web_activation_id, False, True, readiness)
-        return None
+            raise WebActivationError(safe_error) from rollback_error
+        final_control, final_journal = _complete_after_restart(
+            root,
+            activation_id=journal.web_activation_id,
+            state="rolled_back",
+            readiness={"rollback": readiness},
+            error="candidate_restart_failed:recovered",
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+            timestamp=timestamp,
+        )
+        return WebActivationOutcome(
+            final_control, journal.web_activation_id, False, True, final_journal.readiness
+        )
+    return None
 
 
 def web_activation_recovery_state(
@@ -258,7 +257,7 @@ def web_activation_recovery_state(
 ) -> str | None:
     """Inspect recovery without claiming that the backend restart made a sidecar ready."""
     with _web_activation_lock(root):
-        control = load_generation_control(
+        control = load_runtime_generation_control(
             root,
             verified_artifacts=verified_artifacts,
             verified_overlays=verified_overlays,
@@ -363,13 +362,36 @@ def _rollback_after_failed_restart(
         migration_id=original.migration_id,
         web_activation_id=journal.web_activation_id,
         updated_at=timestamp(),
+        previous_runtime=original.previous_runtime,
+        runtime_activation_id=original.runtime_activation_id,
     )
-    write_generation_control(
-        root,
-        rollback,
-        verified_artifacts=verified_artifacts,
-        verified_overlays=verified_overlays,
-    )
+    with _web_activation_lock(root):
+        current_control = load_generation_control(
+            root,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        current_journal = load_web_activation_journal(
+            root,
+            journal.web_activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        current_state = reconcile_web_activation(current_control, current_journal)
+        if current_state in {"ready_committed", "rolled_back"}:
+            return WebActivationOutcome(
+                current_control,
+                current_journal.web_activation_id,
+                current_state == "ready_committed",
+                current_state == "rolled_back",
+                current_journal.readiness,
+            )
+        write_generation_control(
+            root,
+            rollback,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
     try:
         rollback_readiness = _restart(restart_sidecars)
     except Exception as rollback_error:
@@ -384,29 +406,109 @@ def _rollback_after_failed_restart(
             error=safe_error,
             updated_at=timestamp(),
         )
-        write_web_activation_journal(
-            root,
-            pending,
-            verified_artifacts=verified_artifacts,
-            verified_overlays=verified_overlays,
-        )
+        with _web_activation_lock(root):
+            current_control = load_generation_control(
+                root,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
+            current_journal = load_web_activation_journal(
+                root,
+                journal.web_activation_id,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
+            current_state = reconcile_web_activation(current_control, current_journal)
+            if current_state in {"ready_committed", "rolled_back"}:
+                return WebActivationOutcome(
+                    current_control,
+                    current_journal.web_activation_id,
+                    current_state == "ready_committed",
+                    current_state == "rolled_back",
+                    current_journal.readiness,
+                )
+            write_web_activation_journal(
+                root,
+                pending,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
         raise WebActivationError(safe_error) from rollback_error
     safe_error = f"candidate_restart_failed:{type(candidate_error).__name__}"
     readiness = {"candidate": {"ready": False}, "rollback": rollback_readiness}
-    rolled_back = _journal_state(
-        journal,
-        "rolled_back",
+    final_control, final_journal = _complete_after_restart(
+        root,
+        activation_id=journal.web_activation_id,
+        state="rolled_back",
         readiness=readiness,
         error=safe_error,
-        updated_at=timestamp(),
-    )
-    write_web_activation_journal(
-        root,
-        rolled_back,
         verified_artifacts=verified_artifacts,
         verified_overlays=verified_overlays,
+        timestamp=timestamp,
     )
-    return WebActivationOutcome(rollback, journal.web_activation_id, False, True, readiness)
+    return WebActivationOutcome(
+        final_control, journal.web_activation_id, False, True, final_journal.readiness
+    )
+
+
+def _complete_after_restart(
+    root: Path,
+    *,
+    activation_id: str,
+    state: str,
+    readiness: dict[str, object],
+    error: str | None,
+    verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
+    timestamp: Callable[[], str],
+) -> tuple[GenerationControl, WebActivationJournal]:
+    with _web_activation_lock(root):
+        control = load_generation_control(
+            root,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        journal = load_web_activation_journal(
+            root,
+            activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        observed = reconcile_web_activation(control, journal)
+        if observed in {"ready_committed", "rolled_back"}:
+            if observed != state:
+                raise WebActivationError("terminal web activation state differs from restart outcome")
+            merged_readiness = {**journal.readiness, **readiness}
+            if merged_readiness == journal.readiness and journal.error == error:
+                return control, journal
+            completed = _journal_state(
+                journal,
+                state,
+                readiness=merged_readiness,
+                error=error,
+                updated_at=timestamp(),
+            )
+            write_web_activation_journal(
+                root,
+                completed,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
+            return control, completed
+        completed = _journal_state(
+            journal,
+            state,
+            readiness=readiness,
+            error=error,
+            updated_at=timestamp(),
+        )
+        write_web_activation_journal(
+            root,
+            completed,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        return control, completed
 
 
 def _restart(restart_sidecars: Restart) -> dict[str, object]:

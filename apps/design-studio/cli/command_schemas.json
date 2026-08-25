@@ -19,6 +19,12 @@
               "set_view_filter",
               "set_custom_view",
               "clear_custom_view",
+              "artifact_status",
+              "artifact_verify",
+              "artifact_repair",
+              "artifact_gc",
+              "sidecar_prewarm",
+              "sidecar_diagnostics",
               "references.manifest",
               "references.search",
               "references.resolve",
@@ -60,6 +66,7 @@
     },
     "dev": {
       "description": "Classify and apply an incremental Design Studio development diff.",
+      "timeout_seconds": 600,
       "argument_schema": {
         "type": "object",
         "properties": {

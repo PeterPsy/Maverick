@@ -195,6 +195,7 @@ def run_lifecycle_hook(
         "import": contract.hook_timeouts.import_seconds,
         "validate_after_import": contract.hook_timeouts.validate_after_import_seconds,
         "repair_after_import": contract.hook_timeouts.repair_after_import_seconds,
+        "artifact_repair": min(30, contract.hook_timeouts.repair_after_import_seconds),
         "health_check": contract.hook_timeouts.health_check_seconds,
     }
     timeout_seconds = timeout_by_hook.get(hook_name)

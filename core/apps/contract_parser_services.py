@@ -18,10 +18,13 @@ from core.apps.contract_validation import (
 from core.apps.errors import AppContractValidationError
 from core.apps.models import (
     AppServicesDeclaration,
+    HttpSidecarArtifactMountSpec,
     HttpSidecarBindSpec,
+    HttpSidecarDiagnosticsSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
     HttpSidecarProxySpec,
+    HttpSidecarPrewarmSpec,
     HttpSidecarSpec,
 )
 from core.apps.contract_parser_sidecar_policy import (
@@ -87,6 +90,9 @@ def _parse_http_sidecar(
             "command",
             "env",
             "process_policy",
+            "artifact_mounts",
+            "prewarm",
+            "diagnostics",
             "browser_origin",
             "entrypoint_access",
             "bind",
@@ -118,6 +124,19 @@ def _parse_http_sidecar(
     process_policy = parse_process_policy(
         _expect_mapping(process_policy_payload, label=f"{label}.process_policy"),
         label=label,
+    )
+    artifact_mounts = _parse_artifact_mounts(payload.get("artifact_mounts", []), label=label)
+    prewarm_payload = payload.get("prewarm")
+    prewarm = (
+        _parse_prewarm(_expect_mapping(prewarm_payload, label=f"{label}.prewarm"), label=label)
+        if prewarm_payload is not None
+        else None
+    )
+    diagnostics_payload = payload.get("diagnostics")
+    diagnostics = (
+        _parse_diagnostics(_expect_mapping(diagnostics_payload, label=f"{label}.diagnostics"), label=label)
+        if diagnostics_payload is not None
+        else None
     )
     browser_origin_payload = payload.get("browser_origin")
     browser_origin = (
@@ -157,9 +176,13 @@ def _parse_http_sidecar(
         env=parse_sidecar_env(
             _expect_mapping(payload.get("env", {}), label=f"{label}.env"),
             sandbox_required=process_policy.sandbox == "required",
+            artifact_ids={mount.artifact_id for mount in artifact_mounts},
             label=label,
         ),
         process_policy=process_policy,
+        artifact_mounts=artifact_mounts,
+        prewarm=prewarm,
+        diagnostics=diagnostics,
         browser_origin=browser_origin,
         entrypoint_access=entrypoint_access,
         bind=bind,
@@ -167,6 +190,61 @@ def _parse_http_sidecar(
         proxy=proxy,
         logs=logs,
     )
+
+
+def _parse_diagnostics(payload: dict[str, Any], *, label: str) -> HttpSidecarDiagnosticsSpec:
+    diagnostics_label = f"{label}.diagnostics"
+    _reject_unexpected_fields(payload, {"status_file"}, label=diagnostics_label)
+    value = _expect_string(payload, "status_file")
+    path = PurePosixPath(value)
+    if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
+        raise AppContractValidationError(f"`{diagnostics_label}.status_file` must stay inside app data.")
+    if len(value) > 256:
+        raise AppContractValidationError(f"`{diagnostics_label}.status_file` is too long.")
+    return HttpSidecarDiagnosticsSpec(status_file=path.as_posix())
+
+
+def _parse_artifact_mounts(payload: object, *, label: str) -> list[HttpSidecarArtifactMountSpec]:
+    mount_label = f"{label}.artifact_mounts"
+    if not isinstance(payload, list):
+        raise AppContractValidationError(f"`{mount_label}` must be a list.")
+    mounts: list[HttpSidecarArtifactMountSpec] = []
+    seen: set[str] = set()
+    for index, item in enumerate(payload):
+        item_label = f"{mount_label}[{index}]"
+        item_payload = _expect_mapping(item, label=item_label)
+        _reject_unexpected_fields(item_payload, {"id", "mount_path"}, label=item_label)
+        artifact_id = _expect_slug(item_payload, "id")
+        if artifact_id in seen:
+            raise AppContractValidationError(f"Duplicate HTTP sidecar artifact mount id `{artifact_id}`.")
+        mount_path = _expect_string(item_payload, "mount_path")
+        expected_path = f"/artifacts/{artifact_id}"
+        if mount_path != expected_path:
+            raise AppContractValidationError(
+                f"`{item_label}.mount_path` must be the platform-owned path `{expected_path}`."
+            )
+        seen.add(artifact_id)
+        mounts.append(HttpSidecarArtifactMountSpec(artifact_id=artifact_id, mount_path=mount_path))
+    return mounts
+
+
+def _parse_prewarm(payload: dict[str, Any], *, label: str) -> HttpSidecarPrewarmSpec:
+    prewarm_label = f"{label}.prewarm"
+    fields = {"on_core_start", "on_install", "on_activation", "keep_alive"}
+    _reject_unexpected_fields(payload, fields, label=prewarm_label)
+    if set(payload) != fields:
+        raise AppContractValidationError(f"`{prewarm_label}` must declare every prewarm policy field.")
+    prewarm = HttpSidecarPrewarmSpec(
+        on_core_start=_expect_bool(payload, "on_core_start"),
+        on_install=_expect_bool(payload, "on_install"),
+        on_activation=_expect_bool(payload, "on_activation"),
+        keep_alive=_expect_bool(payload, "keep_alive"),
+    )
+    if not (prewarm.on_core_start or prewarm.on_install or prewarm.on_activation):
+        raise AppContractValidationError(f"`{prewarm_label}` must enable at least one trigger.")
+    if not prewarm.keep_alive:
+        raise AppContractValidationError(f"`{prewarm_label}.keep_alive` must be true.")
+    return prewarm
 
 
 def _parse_bind(payload: dict[str, Any], *, sandbox_compatible: bool, label: str) -> HttpSidecarBindSpec:

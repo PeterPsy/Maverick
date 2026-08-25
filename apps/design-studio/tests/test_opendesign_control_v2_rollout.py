@@ -47,7 +47,7 @@ class OpenDesignControlV2RolloutTests(unittest.TestCase):
             self.assertTrue(outcome.converted)
             self.assertEqual(outcome.retired_migration_id, MIGRATION)
             payload = json.loads((root / "control.json").read_text(encoding="utf-8"))
-            self.assertEqual(payload["schema_version"], "2")
+            self.assertEqual(payload["schema_version"], "3")
             self.assertEqual(payload["active"]["runtime_artifact_sha256"], RUNTIME)
             self.assertEqual(payload["active"]["web_overlay_sha256"], WEB)
             self.assertIsNone(payload["previous_release"])

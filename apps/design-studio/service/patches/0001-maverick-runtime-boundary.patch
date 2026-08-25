@@ -1,5 +1,176 @@
+diff --git a/apps/daemon/src/plugins/bundled.ts b/apps/daemon/src/plugins/bundled.ts
+index bf6713dba..dc8aacbe0 100644
+--- a/apps/daemon/src/plugins/bundled.ts
++++ b/apps/daemon/src/plugins/bundled.ts
+@@ -27,6 +27,7 @@ import type Database from 'better-sqlite3';
+ import {
+   deleteInstalledPlugin,
+   getInstalledPlugin,
++  listInstalledPlugins,
+   resolvePluginFolder,
+   upsertInstalledPlugin,
+   type RegistryRoots,
+@@ -65,6 +66,7 @@ export async function registerBundledPlugins(
+ ): Promise<RegisterBundledPluginsResult> {
+   const out: InstalledPluginRecord[] = [];
+   const warnings: string[] = [];
++  const candidates: Array<{ folder: string; folderId: string }> = [];
+   // Every bundled folder we attempted this walk — including ones that
+   // failed to parse. Pruning keys off this set so a folder that still
+   // ships but has a broken manifest is warned about, not deleted.
+@@ -95,7 +97,7 @@ export async function registerBundledPlugins(
+     const tierManifest = path.join(tierAbs, 'open-design.json');
+     if (await pathExists(tierManifest)) {
+       // Direct: <bundledRoot>/<plugin-id>/open-design.json
+-      await registerOne({ folder: tierAbs, folderId: tier.name, out, warnings, seenFolderIds, input });
++      candidates.push({ folder: tierAbs, folderId: tier.name });
+       continue;
+     }
+     let inner;
+@@ -109,14 +111,105 @@ export async function registerBundledPlugins(
+       const folder = path.join(tierAbs, entry.name);
+       const manifest = path.join(folder, 'open-design.json');
+       if (!(await pathExists(manifest))) continue;
+-      await registerOne({ folder, folderId: entry.name, out, warnings, seenFolderIds, input });
++      candidates.push({ folder, folderId: entry.name });
+     }
+   }
+ 
++  candidates.sort((left, right) => left.folderId.localeCompare(right.folderId));
++  const reused = reuseProtectedRuntimeRecords(input, candidates);
++  if (reused !== null) {
++    for (const record of reused) {
++      seenFolderIds.add(record.id);
++      out.push(record);
++    }
++    const pruned = pruneRemovedBundledPlugins(input.db, seenFolderIds);
++    return { registered: out, pruned, warnings };
++  }
++  await forEachConcurrent(candidates, 8, async ({ folder, folderId }) => {
++    await registerOne({ folder, folderId, out, warnings, seenFolderIds, input });
++  });
++  out.sort((left, right) => left.id.localeCompare(right.id));
++  warnings.sort();
++
+   const pruned = pruneRemovedBundledPlugins(input.db, seenFolderIds);
+   return { registered: out, pruned, warnings };
+ }
+ 
++function reuseProtectedRuntimeRecords(
++  input: RegisterBundledPluginsInput,
++  candidates: ReadonlyArray<{ folder: string; folderId: string }>,
++): InstalledPluginRecord[] | null {
++  const runtimeDigest = protectedRuntimeIdentity();
++  if (runtimeDigest === null) return null;
++  const records: InstalledPluginRecord[] = [];
++  const seen = new Set<string>();
++  const installed = new Map(
++    listInstalledPlugins(input.db)
++      .filter((record) => record.sourceKind === 'bundled')
++      .map((record) => [record.fsPath, record]),
++  );
++  const digests = new Map(
++    (input.db
++      .prepare(`SELECT id, bundled_content_digest FROM installed_plugins WHERE source_kind = 'bundled'`)
++      .all() as Array<{ id: string; bundled_content_digest: string | null }>)
++      .map((row) => [row.id, row.bundled_content_digest]),
++  );
++  for (const { folder, folderId: rawFolderId } of candidates) {
++    const folderId = rawFolderId.toLowerCase();
++    if (!SAFE_BASENAME.test(folderId)) return null;
++    const record = installed.get(folder) ?? null;
++    const expectedDigest = protectedRuntimeBundledDigest(folderId, runtimeDigest);
++    if (
++      record === null
++      || seen.has(record.id)
++      || record.sourceKind !== 'bundled'
++      || record.source !== folder
++      || record.fsPath !== folder
++      || digests.get(record.id) !== expectedDigest
++      || !marketplaceProvenanceMatches(record, input.marketplaceProvenance)
++    ) {
++      return null;
++    }
++    seen.add(record.id);
++    records.push(record);
++  }
++  return records;
++}
++
++function marketplaceProvenanceMatches(
++  record: InstalledPluginRecord,
++  provenance: RegisterBundledPluginsInput['marketplaceProvenance'],
++): boolean {
++  if (!provenance) {
++    return record.sourceMarketplaceId === undefined
++      && record.sourceMarketplaceEntryName === undefined
++      && record.sourceMarketplaceEntryVersion === undefined
++      && record.marketplaceTrust === undefined
++      && record.resolvedSource === undefined;
++  }
++  return record.sourceMarketplaceId === provenance.sourceMarketplaceId
++    && record.sourceMarketplaceEntryName === `${provenance.entryNamePrefix}/${record.id}`
++    && record.sourceMarketplaceEntryVersion === record.version
++    && record.marketplaceTrust === provenance.marketplaceTrust
++    && record.resolvedSource === record.source;
++}
++
++async function forEachConcurrent<T>(
++  values: readonly T[],
++  concurrency: number,
++  worker: (value: T) => Promise<void>,
++): Promise<void> {
++  let cursor = 0;
++  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
++    while (cursor < values.length) {
++      const index = cursor;
++      cursor += 1;
++      await worker(values[index]!);
++    }
++  });
++  await Promise.all(workers);
++}
++
+ // Bundled rows mirror the bundled tree: spec §23 promises that bundled
+ // plugins "replace only on daemon upgrade", and removal is part of that
+ // rotation. A folder dropped from this image must also leave the
+@@ -192,6 +285,24 @@ async function computeBundledContentDigest(folder: string): Promise<string> {
+   return hash.digest('hex');
+ }
+ 
++function protectedRuntimeIdentity(): string | null {
++  const runtimeDigest = process.env.OD_RUNTIME_ARTIFACT_SHA256;
++  return runtimeDigest && /^[0-9a-f]{64}$/.test(runtimeDigest) ? runtimeDigest : null;
++}
++
++function protectedRuntimeBundledDigest(
++  folderId: string,
++  runtimeDigest = protectedRuntimeIdentity(),
++): string | null {
++  if (runtimeDigest === null) return null;
++  return createHash('sha256')
++    .update('maverick-protected-runtime-v1\0')
++    .update(runtimeDigest)
++    .update('\0')
++    .update(folderId)
++    .digest('hex');
++}
++
+ function getBundledContentDigest(db: SqliteDb, id: string): string | null {
+   const row = db
+     .prepare(`SELECT bundled_content_digest FROM installed_plugins WHERE id = ?`)
+@@ -249,7 +360,8 @@ async function registerOne(args: {
+   // fields), so a prose-only SKILL.md edit would be invisible to a
+   // manifest-equality check while still being a real content change.
+   const existing = getInstalledPlugin(args.input.db, record.id);
+-  const contentDigest = await computeBundledContentDigest(args.folder);
++  const contentDigest = protectedRuntimeBundledDigest(folderId)
++    ?? await computeBundledContentDigest(args.folder);
+   const existingDigest = existing ? getBundledContentDigest(args.input.db, record.id) : null;
+   if (existing && existingDigest === contentDigest) {
+     record = { ...record, installedAt: existing.installedAt, updatedAt: existing.updatedAt };
 diff --git a/apps/daemon/src/server.ts b/apps/daemon/src/server.ts
-index 496efdc039a10ce5eee7e8400f8d474192388d22..efd42321793812466067305b2ddab5466191e0b9 100644
+index 496efdc03..44ddf3579 100644
 --- a/apps/daemon/src/server.ts
 +++ b/apps/daemon/src/server.ts
 @@ -683,7 +683,12 @@ import {
@@ -16,7 +187,7 @@ index 496efdc039a10ce5eee7e8400f8d474192388d22..efd42321793812466067305b2ddab546
  import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
  import { createWhatsNewService } from './services/whats-new.js';
  import { execCommandViaLoginShell } from './services/login-shell.js';
-@@ -735,11 +740,38 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
+@@ -735,11 +740,68 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
      process.env.OD_INSTALLATION_DIR,
    ],
  });
@@ -57,10 +228,40 @@ index 496efdc039a10ce5eee7e8400f8d474192388d22..efd42321793812466067305b2ddab546
 +  }
 +  return staticDir;
 +}
++
++function readMaverickReadyMarker(): Record<string, unknown> | null {
++  const markerPath = process.env.OD_MAVERICK_READY_MARKER;
++  if (!markerPath || !path.isAbsolute(markerPath)) return null;
++  try {
++    const metadata = fs.lstatSync(markerPath);
++    if (metadata.isSymbolicLink() || !metadata.isFile()) return null;
++    const decoded: unknown = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
++    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) return null;
++    const marker = decoded as Record<string, unknown>;
++    const expected: Record<string, unknown> = {
++      schema_version: '1',
++      startup_nonce: process.env.OD_MAVERICK_STARTUP_NONCE,
++      runtime_artifact_sha256: process.env.OD_RUNTIME_ARTIFACT_SHA256,
++      web_overlay_sha256: process.env.OD_WEB_OVERLAY_SHA256,
++      data_generation: process.env.OD_DATA_GENERATION,
++      activation_id: process.env.OD_ACTIVATION_ID ?? '',
++    };
++    const keys = Object.keys(expected);
++    if (
++      Object.keys(marker).length !== keys.length
++      || keys.some((key) => marker[key] !== expected[key])
++    ) {
++      return null;
++    }
++    return marker;
++  } catch {
++    return null;
++  }
++}
  // Baked plugin preview clips (scripts/bake-plugin-previews.mjs). Served at
  // PLUGIN_PREVIEWS_ROUTE; their manifest rewrites html plugins' previews to a
  // cheap poster + hover-play video in the home gallery.
-@@ -2024,6 +2056,7 @@ export async function startServer({
+@@ -2024,6 +2086,7 @@ export async function startServer({
    runtime = null,
  }: StartServerOptions = {}) {
    host = normalizeDaemonBindHost(host);
@@ -68,7 +269,7 @@ index 496efdc039a10ce5eee7e8400f8d474192388d22..efd42321793812466067305b2ddab546
    let resolvedPort = port;
    let daemonShuttingDown = false;
    const extraAllowedOrigins = configuredAllowedOrigins();
-@@ -2042,6 +2075,7 @@ export async function startServer({
+@@ -2042,6 +2105,7 @@ export async function startServer({
    // are exempted so the desktop UI keeps working).
    const apiToken = apiTokenFromEnv();
    const apiAuthDisabled = isApiAuthDisabled();
@@ -76,7 +277,16 @@ index 496efdc039a10ce5eee7e8400f8d474192388d22..efd42321793812466067305b2ddab546
    if (!isLoopbackHostname(host) && apiToken.length === 0 && !apiAuthDisabled) {
      throw new Error(
        `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
-@@ -2101,11 +2135,11 @@ export async function startServer({
+@@ -2087,6 +2151,8 @@ export async function startServer({
+       '/api/health',
+       '/ready',
+       '/api/ready',
++      '/maverick-ready',
++      '/api/maverick-ready',
+       '/version',
+       '/api/version',
+     ]);
+@@ -2101,11 +2167,11 @@ export async function startServer({
            return next();
          }
        }
@@ -93,7 +303,149 @@ index 496efdc039a10ce5eee7e8400f8d474192388d22..efd42321793812466067305b2ddab546
        const auth = req.get('authorization') ?? '';
        const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
        if (!match || match[1] !== apiToken) {
-@@ -2477,9 +2511,7 @@ export async function startServer({
+@@ -2358,75 +2424,83 @@ export async function startServer({
+     console.log('[od] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
+   }
+ 
+-  let bundledMarketplaceEntries = [];
++  const bundledMarketplaceEntries = [];
++  let bundledCatalogTimer: ReturnType<typeof setTimeout> | null = null;
++  let bundledCatalogPromise: Promise<void> | null = null;
+   // Plan §3.I3 / spec §23.3.5 — register every plugin under
+   // <resourceRoot>/plugins/_official/** in packaged runs, or
+   // <projectRoot>/plugins/_official/** in workspace runs, as bundled plugins. The walker
+   // is idempotent (upserts on every boot) so a daemon upgrade rotates
+   // the bundled set in lockstep with the code. ENOENT is silent —
+   // running the daemon outside the dev tree just skips this step.
+-  try {
+-    const result = await registerBundledPlugins({
+-      db,
+-      bundledRoot: BUNDLED_PLUGINS_DIR,
+-      marketplaceProvenance: {
+-        sourceMarketplaceId: OFFICIAL_MARKETPLACE_ID,
+-        marketplaceTrust:    'official',
+-        entryNamePrefix:     'open-design',
+-      },
+-    });
+-    bundledMarketplaceEntries = result.registered.map((plugin) => ({
+-      name:        `open-design/${plugin.id}`,
+-      title:       plugin.title,
+-      title_i18n:  plugin.manifest.title_i18n,
+-      description: plugin.manifest.description,
+-      description_i18n: plugin.manifest.description_i18n,
+-      version:     plugin.version,
+-      source:      bundledPluginRegistrySource(plugin.source),
+-      publisher:   { id: 'open-design', url: 'https://open-design.ai' },
+-      homepage:    plugin.manifest.homepage,
+-      license:     plugin.manifest.license,
+-      tags:        plugin.manifest.tags,
+-      capabilitiesSummary: Array.isArray(plugin.manifest.od?.capabilities)
+-        ? plugin.manifest.od.capabilities
+-        : undefined,
+-    }));
+-    if (result.registered.length > 0) {
+-      console.log(`[plugins] registered ${result.registered.length} bundled plugin(s)`);
+-    }
+-    if (result.warnings.length > 0) {
+-      for (const w of result.warnings) console.warn(`[plugins] bundled warn: ${w}`);
++  const initializeBundledCatalog = async () => {
++    try {
++      const result = await registerBundledPlugins({
++        db,
++        bundledRoot: BUNDLED_PLUGINS_DIR,
++        marketplaceProvenance: {
++          sourceMarketplaceId: OFFICIAL_MARKETPLACE_ID,
++          marketplaceTrust:    'official',
++          entryNamePrefix:     'open-design',
++        },
++      });
++      bundledMarketplaceEntries.splice(0, bundledMarketplaceEntries.length, ...result.registered.map((plugin) => ({
++        name:        `open-design/${plugin.id}`,
++        title:       plugin.title,
++        title_i18n:  plugin.manifest.title_i18n,
++        description: plugin.manifest.description,
++        description_i18n: plugin.manifest.description_i18n,
++        version:     plugin.version,
++        source:      bundledPluginRegistrySource(plugin.source),
++        publisher:   { id: 'open-design', url: 'https://open-design.ai' },
++        homepage:    plugin.manifest.homepage,
++        license:     plugin.manifest.license,
++        tags:        plugin.manifest.tags,
++        capabilitiesSummary: Array.isArray(plugin.manifest.od?.capabilities)
++          ? plugin.manifest.od.capabilities
++          : undefined,
++      })));
++      if (result.registered.length > 0) {
++        console.log(`[plugins] registered ${result.registered.length} bundled plugin(s)`);
++      }
++      if (result.warnings.length > 0) {
++        for (const w of result.warnings) console.warn(`[plugins] bundled warn: ${w}`);
++      }
++    } catch (err) {
++      console.warn(`[plugins] bundled registration failed: ${(err)?.message ?? err}`);
+     }
+-  } catch (err) {
+-    console.warn(`[plugins] bundled registration failed: ${(err)?.message ?? err}`);
+-  }
+ 
+-  try {
+-    const seedDirs = await fs.promises.readdir(PLUGIN_REGISTRY_DIR, { withFileTypes: true }).catch((err) => {
+-      if (err?.code === 'ENOENT') return [];
+-      throw err;
+-    });
+-    const { ensureMarketplaceManifest } = await import('./plugins/marketplaces.js');
+-    for (const dirent of seedDirs) {
+-      if (!dirent.isDirectory()) continue;
+-      const id = dirent.name;
+-      const manifestText = await marketplaceSeedManifestText(id, bundledMarketplaceEntries);
+-      if (!manifestText) continue;
+-      const configured = defaultMarketplaceSeedConfig(id);
+-      const result = ensureMarketplaceManifest(db, {
+-        id,
+-        url: configured.url,
+-        trust: configured.trust,
+-        manifestText,
++    try {
++      const seedDirs = await fs.promises.readdir(PLUGIN_REGISTRY_DIR, { withFileTypes: true }).catch((err) => {
++        if (err?.code === 'ENOENT') return [];
++        throw err;
+       });
+-      if (result.ok) {
+-        console.log(`[plugins] seeded ${id} registry source (${result.row.manifest.plugins.length} plugin(s))`);
+-      } else {
+-        console.warn(`[plugins] ${id} registry seed failed: ${result.message}`);
++      const { ensureMarketplaceManifest } = await import('./plugins/marketplaces.js');
++      for (const dirent of seedDirs) {
++        if (!dirent.isDirectory()) continue;
++        const id = dirent.name;
++        const manifestText = await marketplaceSeedManifestText(id, bundledMarketplaceEntries);
++        if (!manifestText) continue;
++        const configured = defaultMarketplaceSeedConfig(id);
++        const result = ensureMarketplaceManifest(db, {
++          id,
++          url: configured.url,
++          trust: configured.trust,
++          manifestText,
++        });
++        if (result.ok) {
++          console.log(`[plugins] seeded ${id} registry source (${result.row.manifest.plugins.length} plugin(s))`);
++        } else {
++          console.warn(`[plugins] ${id} registry seed failed: ${result.message}`);
++        }
+       }
++    } catch (err) {
++      console.warn(`[plugins] registry seed failed: ${(err)?.message ?? err}`);
+     }
+-  } catch (err) {
+-    console.warn(`[plugins] registry seed failed: ${(err)?.message ?? err}`);
++  };
++  const deferBundledCatalog = isTruthyEnvFlag(process.env.OD_MAVERICK_DEFER_PLUGIN_CATALOG);
++  if (!deferBundledCatalog) {
++    await initializeBundledCatalog();
+   }
+ 
+   // Plan §3.A5 / spec §16 Phase 5 / PB2: periodic snapshot GC. Disabled
+@@ -2477,9 +2551,7 @@ export async function startServer({
      console.warn('[od] Failed to recover stale live artifact refreshes:', error);
    });
  
@@ -104,39 +456,99 @@ index 496efdc039a10ce5eee7e8400f8d474192388d22..efd42321793812466067305b2ddab546
  
    // ---- Projects (DB-backed) -------------------------------------------------
  
+@@ -2673,6 +2745,12 @@ export async function startServer({
+     });
+   });
+ 
++  app.get('/api/maverick-ready', (_req, res) => {
++    const ready = !daemonShuttingDown && readMaverickReadyMarker() !== null;
++    res.setHeader('Cache-Control', 'no-store');
++    res.status(ready ? 200 : 503).json({ ok: ready, ready });
++  });
++
+   app.get('/api/version', async (_req, res) => {
+     const version = await readCurrentAppVersionInfo();
+     res.json({ version });
+@@ -8865,6 +8943,10 @@ export async function startServer({
+   return await new Promise((resolve, reject) => {
+     let daemonShutdownStarted = false;
+     const cleanupDaemonBackgroundWork = () => {
++      if (bundledCatalogTimer) {
++        clearTimeout(bundledCatalogTimer);
++        bundledCatalogTimer = null;
++      }
+       composioConnectorProvider.stopCatalogRefreshLoop();
+       orbitService.stop();
+       routineService?.stop();
+@@ -8873,6 +8955,11 @@ export async function startServer({
+       if (daemonShutdownStarted) return;
+       daemonShutdownStarted = true;
+       daemonShuttingDown = true;
++      if (bundledCatalogTimer) {
++        clearTimeout(bundledCatalogTimer);
++        bundledCatalogTimer = null;
++      }
++      if (bundledCatalogPromise) await bundledCatalogPromise;
+       await design.runs.shutdownActive({ graceMs: resolveChatRunShutdownGraceMs() });
+       await terminalService.shutdownActive();
+       await design.analytics.shutdown();
+@@ -8930,6 +9017,13 @@ export async function startServer({
+           console.log(`[od] daemon listening on ${url}`);
+         }
+         daemonUrl = url;
++        if (deferBundledCatalog && !daemonShuttingDown && !bundledCatalogTimer && !bundledCatalogPromise) {
++          bundledCatalogTimer = setTimeout(() => {
++            bundledCatalogTimer = null;
++            if (!daemonShuttingDown) bundledCatalogPromise = initializeBundledCatalog();
++          }, 5_000);
++          bundledCatalogTimer.unref?.();
++        }
+         resolve(returnServer ? {
+           url,
+           server,
 diff --git a/apps/daemon/tests/api-token-guard.test.ts b/apps/daemon/tests/api-token-guard.test.ts
-index 23eb90cacd3abfacf791292dfac4aacae74500ea..024ad956bbd93e36bc7de9090ab4f9a78569a328 100644
+index 23eb90cac..74baae6df 100644
 --- a/apps/daemon/tests/api-token-guard.test.ts
 +++ b/apps/daemon/tests/api-token-guard.test.ts
-@@ -13,6 +13,7 @@
+@@ -13,6 +13,9 @@
  // negative case that constructs the start call directly).
  
  import type http from 'node:http';
++import fs from 'node:fs';
++import os from 'node:os';
 +import path from 'node:path';
  import { afterEach, beforeEach, describe, expect, it } from 'vitest';
  import { isApiAuthDisabled, isApiTokenMiddlewareEnabled } from '../src/api-token-auth.js';
  import { startServer } from '../src/server.js';
-@@ -20,11 +21,19 @@ import { startServer } from '../src/server.js';
+@@ -20,10 +23,27 @@ import { startServer } from '../src/server.js';
  const PREVIOUS_TOKEN = process.env.OD_API_TOKEN;
  const PREVIOUS_HOST  = process.env.OD_BIND_HOST;
  const PREVIOUS_DISABLE_API_AUTH = process.env.OD_DISABLE_API_AUTH;
 +const PREVIOUS_REQUIRE_TOKEN_ON_LOOPBACK = process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK;
 +const PREVIOUS_STATIC_DIR = process.env.OD_STATIC_DIR;
 +const PREVIOUS_STATIC_REGISTRY_ROOT = process.env.OD_STATIC_REGISTRY_ROOT;
++const PREVIOUS_READY_MARKER = process.env.OD_MAVERICK_READY_MARKER;
++const PREVIOUS_STARTUP_NONCE = process.env.OD_MAVERICK_STARTUP_NONCE;
++const PREVIOUS_RUNTIME_SHA256 = process.env.OD_RUNTIME_ARTIFACT_SHA256;
++const PREVIOUS_WEB_SHA256 = process.env.OD_WEB_OVERLAY_SHA256;
++const PREVIOUS_DATA_GENERATION = process.env.OD_DATA_GENERATION;
++const PREVIOUS_ACTIVATION_ID = process.env.OD_ACTIVATION_ID;
++const PREVIOUS_DEFER_PLUGIN_CATALOG = process.env.OD_MAVERICK_DEFER_PLUGIN_CATALOG;
  
  let server: http.Server | undefined;
  let baseUrl = '';
  let shutdown: (() => Promise<void> | void) | undefined;
- 
++let markerRoot = '';
++
 +beforeEach(() => {
++  markerRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'opendesign-ready-test-'));
 +  process.env.OD_STATIC_DIR = path.resolve(process.cwd(), '../web/public');
 +  process.env.OD_STATIC_REGISTRY_ROOT = path.resolve(process.cwd(), '..');
 +});
-+
+ 
  afterEach(async () => {
    if (shutdown) await Promise.resolve(shutdown());
-   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
-@@ -36,9 +45,29 @@ afterEach(async () => {
+@@ -36,9 +56,45 @@ afterEach(async () => {
    else process.env.OD_BIND_HOST = PREVIOUS_HOST;
    if (PREVIOUS_DISABLE_API_AUTH === undefined) delete process.env.OD_DISABLE_API_AUTH;
    else process.env.OD_DISABLE_API_AUTH = PREVIOUS_DISABLE_API_AUTH;
@@ -146,6 +558,22 @@ index 23eb90cacd3abfacf791292dfac4aacae74500ea..024ad956bbd93e36bc7de9090ab4f9a7
 +  else process.env.OD_STATIC_DIR = PREVIOUS_STATIC_DIR;
 +  if (PREVIOUS_STATIC_REGISTRY_ROOT === undefined) delete process.env.OD_STATIC_REGISTRY_ROOT;
 +  else process.env.OD_STATIC_REGISTRY_ROOT = PREVIOUS_STATIC_REGISTRY_ROOT;
++  if (PREVIOUS_READY_MARKER === undefined) delete process.env.OD_MAVERICK_READY_MARKER;
++  else process.env.OD_MAVERICK_READY_MARKER = PREVIOUS_READY_MARKER;
++  if (PREVIOUS_STARTUP_NONCE === undefined) delete process.env.OD_MAVERICK_STARTUP_NONCE;
++  else process.env.OD_MAVERICK_STARTUP_NONCE = PREVIOUS_STARTUP_NONCE;
++  if (PREVIOUS_RUNTIME_SHA256 === undefined) delete process.env.OD_RUNTIME_ARTIFACT_SHA256;
++  else process.env.OD_RUNTIME_ARTIFACT_SHA256 = PREVIOUS_RUNTIME_SHA256;
++  if (PREVIOUS_WEB_SHA256 === undefined) delete process.env.OD_WEB_OVERLAY_SHA256;
++  else process.env.OD_WEB_OVERLAY_SHA256 = PREVIOUS_WEB_SHA256;
++  if (PREVIOUS_DATA_GENERATION === undefined) delete process.env.OD_DATA_GENERATION;
++  else process.env.OD_DATA_GENERATION = PREVIOUS_DATA_GENERATION;
++  if (PREVIOUS_ACTIVATION_ID === undefined) delete process.env.OD_ACTIVATION_ID;
++  else process.env.OD_ACTIVATION_ID = PREVIOUS_ACTIVATION_ID;
++  if (PREVIOUS_DEFER_PLUGIN_CATALOG === undefined) delete process.env.OD_MAVERICK_DEFER_PLUGIN_CATALOG;
++  else process.env.OD_MAVERICK_DEFER_PLUGIN_CATALOG = PREVIOUS_DEFER_PLUGIN_CATALOG;
++  if (markerRoot) fs.rmSync(markerRoot, { recursive: true, force: true });
++  markerRoot = '';
  });
  
  describe('bound-API-token guard', () => {
@@ -166,7 +594,29 @@ index 23eb90cacd3abfacf791292dfac4aacae74500ea..024ad956bbd93e36bc7de9090ab4f9a7
    it('refuses to start with OD_BIND_HOST=0.0.0.0 when OD_API_TOKEN is unset', async () => {
      delete process.env.OD_API_TOKEN;
      await expect(startServer({ port: 0, host: '0.0.0.0', returnServer: true }))
-@@ -92,6 +121,30 @@ describe('bearer middleware', () => {
+@@ -70,6 +126,21 @@ describe('bound-API-token guard', () => {
+     server = started.server;
+     shutdown = started.shutdown;
+   });
++
++  it('can defer idempotent plugin catalog refresh until after daemon readiness', async () => {
++    process.env.OD_API_TOKEN = 'test-token-abc';
++    process.env.OD_MAVERICK_DEFER_PLUGIN_CATALOG = '1';
++    const started = (await startServer({ port: 0, host: '127.0.0.1', returnServer: true })) as {
++      url: string;
++      server: http.Server;
++      shutdown?: () => Promise<void> | void;
++    };
++    server = started.server;
++    shutdown = started.shutdown;
++    const ready = await fetch(`${started.url}/api/ready`);
++    expect(ready.status).toBe(200);
++    await expect(ready.json()).resolves.toMatchObject({ ok: true, ready: true });
++  });
+ });
+ 
+ describe('bearer middleware', () => {
+@@ -92,6 +163,30 @@ describe('bearer middleware', () => {
      expect(resp.status).toBe(200);
    });
  
@@ -197,8 +647,96 @@ index 23eb90cacd3abfacf791292dfac4aacae74500ea..024ad956bbd93e36bc7de9090ab4f9a7
    it('keeps health / readiness / version probes open without a bearer', async () => {
      for (const path of ['/api/health', '/api/ready', '/api/version']) {
        const resp = await fetch(`${baseUrl}${path}`);
+@@ -99,6 +194,43 @@ describe('bearer middleware', () => {
+     }
+   });
+ 
++  it('commits Maverick readiness only for the exact startup marker', async () => {
++    const markerPath = path.join(markerRoot, 'maverick-ready.json');
++    process.env.OD_MAVERICK_READY_MARKER = markerPath;
++    process.env.OD_MAVERICK_STARTUP_NONCE = 'startup-test';
++    process.env.OD_RUNTIME_ARTIFACT_SHA256 = 'a'.repeat(64);
++    process.env.OD_WEB_OVERLAY_SHA256 = 'b'.repeat(64);
++    process.env.OD_DATA_GENERATION = 'generation-test';
++    process.env.OD_ACTIVATION_ID = 'activation-test';
++    process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK = '1';
++
++    const missing = await fetch(`${baseUrl}/api/maverick-ready`);
++    expect(missing.status).toBe(503);
++
++    fs.writeFileSync(markerPath, JSON.stringify({
++      schema_version: '1',
++      startup_nonce: 'stale-startup',
++      runtime_artifact_sha256: 'a'.repeat(64),
++      web_overlay_sha256: 'b'.repeat(64),
++      data_generation: 'generation-test',
++      activation_id: 'activation-test',
++    }));
++    const stale = await fetch(`${baseUrl}/api/maverick-ready`);
++    expect(stale.status).toBe(503);
++
++    fs.writeFileSync(markerPath, JSON.stringify({
++      schema_version: '1',
++      startup_nonce: 'startup-test',
++      runtime_artifact_sha256: 'a'.repeat(64),
++      web_overlay_sha256: 'b'.repeat(64),
++      data_generation: 'generation-test',
++      activation_id: 'activation-test',
++    }));
++    const committed = await fetch(`${baseUrl}/api/maverick-ready`);
++    expect(committed.status).toBe(200);
++    await expect(committed.json()).resolves.toEqual({ ok: true, ready: true });
++  });
++
+   it('disables bearer middleware when OD_DISABLE_API_AUTH=1 even if OD_API_TOKEN is set', () => {
+     expect(
+       isApiTokenMiddlewareEnabled({
+diff --git a/apps/daemon/tests/plugins-bundled.test.ts b/apps/daemon/tests/plugins-bundled.test.ts
+index 7bf9f87a3..5fd636d90 100644
+--- a/apps/daemon/tests/plugins-bundled.test.ts
++++ b/apps/daemon/tests/plugins-bundled.test.ts
+@@ -37,6 +37,7 @@ beforeEach(async () => {
+ });
+ 
+ afterEach(async () => {
++  delete process.env.OD_RUNTIME_ARTIFACT_SHA256;
+   db.close();
+   await rm(tmpRoot, { recursive: true, force: true });
+ });
+@@ -157,6 +158,31 @@ describe('registerBundledPlugins', () => {
+     nowSpy.mockRestore();
+   });
+ 
++  it('reuses only records bound to the same protected runtime identity', async () => {
++    const folder = path.join(tmpRoot, 'atoms', 'sample');
++    await mkdir(folder, { recursive: true });
++    await writeFile(path.join(folder, 'open-design.json'), SAMPLE_MANIFEST('sample'));
++    await writeFile(path.join(folder, 'SKILL.md'), SAMPLE_SKILL('sample'));
++    const nowSpy = vi.spyOn(Date, 'now');
++    try {
++      process.env.OD_RUNTIME_ARTIFACT_SHA256 = 'a'.repeat(64);
++      nowSpy.mockReturnValue(1_000);
++      await registerBundledPlugins({ db, bundledRoot: tmpRoot });
++
++      await writeFile(path.join(folder, 'SKILL.md'), `${SAMPLE_SKILL('sample')}mutated\n`);
++      nowSpy.mockReturnValue(2_000);
++      await registerBundledPlugins({ db, bundledRoot: tmpRoot });
++      expect(listInstalledPlugins(db)[0]?.updatedAt).toBe(1_000);
++
++      process.env.OD_RUNTIME_ARTIFACT_SHA256 = 'b'.repeat(64);
++      nowSpy.mockReturnValue(3_000);
++      await registerBundledPlugins({ db, bundledRoot: tmpRoot });
++      expect(listInstalledPlugins(db)[0]?.updatedAt).toBe(3_000);
++    } finally {
++      nowSpy.mockRestore();
++    }
++  });
++
+   // Regression for review feedback on #5362: SKILL.md's markdown body never
+   // makes it into the parsed manifest (adaptAgentSkill keeps only frontmatter
+   // fields), so a body-only edit with no frontmatter/version bump must still
 diff --git a/package.json b/package.json
-index 412abc12af1234cc401ca2d651187e8567951afe..1cfa55a2f5351223c543a37971f8e057f50559df 100644
+index 412abc12a..1cfa55a2f 100644
 --- a/package.json
 +++ b/package.json
 @@ -62,6 +62,7 @@

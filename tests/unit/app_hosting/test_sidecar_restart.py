@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 
 from core.apps.errors import AppLifecycleError
 from core.apps.models import WorkspaceAppBindingRecord
-from core.apps.sidecar_restart import restart_workspace_app_sidecars
+from core.apps.sidecar_restart import SidecarRestartError, restart_workspace_app_sidecars
 
 
 class SidecarRestartTests(unittest.TestCase):
@@ -88,7 +88,7 @@ class SidecarRestartTests(unittest.TestCase):
             ),
             patch("core.apps.sidecar_restart.record_platform_audit", audit),
         ):
-            with self.assertRaisesRegex(AppLifecycleError, "RuntimeError") as raised:
+            with self.assertRaisesRegex(SidecarRestartError, "sidecar_restart") as raised:
                 restart_workspace_app_sidecars(
                     self.store,
                     workspace_id="workspace-a",
@@ -99,8 +99,11 @@ class SidecarRestartTests(unittest.TestCase):
                 )
 
         self.assertNotIn("private/token", str(raised.exception))
+        self.assertEqual(raised.exception.code, "daemon_spawn_failed")
+        self.assertEqual(raised.exception.phase, "sidecar_restart")
         payload = audit.call_args.kwargs["payload"]
-        self.assertEqual(payload["error_code"], "RuntimeError")
+        self.assertEqual(payload["error_code"], "daemon_spawn_failed")
+        self.assertEqual(payload["phase"], "sidecar_restart")
         self.assertNotIn("private/token", str(payload))
 
     def test_disabled_app_is_rejected_before_session_revocation(self) -> None:

@@ -97,7 +97,13 @@ class PlatformHost:
             routed = handle_workspace_api(self.state, environ, start_response, start_path=self.start_path)
             if routed is not None:
                 return routed
-            routed = handle_admin_api(self.state, environ, start_response, start_path=self.start_path)
+            routed = handle_admin_api(
+                self.state,
+                environ,
+                start_response,
+                start_path=self.start_path,
+                shutdown_controller=self.shutdown_controller,
+            )
             if routed is not None:
                 return routed
             routed = handle_app_store_api(self.state, environ, start_response, start_path=self.start_path)

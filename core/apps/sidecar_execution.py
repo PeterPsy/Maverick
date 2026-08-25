@@ -13,6 +13,7 @@ import sys
 import sysconfig
 
 from core.apps.errors import AppHostingError
+from core.apps.artifact_mounts import ResolvedArtifactMount
 from core.apps.models import HttpSidecarSpec
 
 
@@ -71,14 +72,19 @@ def sandbox_substitutions(
     *,
     port: int,
     token: str,
+    artifact_mounts: tuple[ResolvedArtifactMount, ...] = (),
 ) -> dict[str, str]:
     """Return the only path/token substitutions exposed inside the sandbox."""
-    return {
+    substitutions = {
         "${service.port}": str(port),
         "${service.token}": token,
         "${app.data_dir}": str(_SANDBOX_DATA_ROOT),
         "${app.source_dir}": str(_SANDBOX_APP_ROOT),
     }
+    substitutions.update(
+        {f"${{artifact.{mount.artifact_id}}}": mount.target.as_posix() for mount in artifact_mounts}
+    )
+    return substitutions
 
 
 def prepare_confined_sidecar_launch(
@@ -91,6 +97,7 @@ def prepare_confined_sidecar_launch(
     sidecar: HttpSidecarSpec,
     port: int,
     env: dict[str, str],
+    artifact_mounts: tuple[ResolvedArtifactMount, ...] = (),
 ) -> ConfinedSidecarLaunch:
     """Build a bubblewrap launch or raise without returning an unsafe fallback."""
     policy = sidecar.process_policy
@@ -179,6 +186,7 @@ def prepare_confined_sidecar_launch(
             "/etc",
             "/etc/ssl",
             "/app",
+            "/artifacts",
             "/data",
             "/relay",
             "/maverick",
@@ -188,6 +196,18 @@ def prepare_confined_sidecar_launch(
         ):
             command.extend(["--dir", directory])
         command.extend(runtime_mount_arguments)
+        for artifact_mount in artifact_mounts:
+            if artifact_mount.target != Path(f"/artifacts/{artifact_mount.artifact_id}"):
+                raise AppHostingError("HTTP sidecar artifact mount target is not platform-owned.")
+            command.extend(
+                [
+                    "--dir",
+                    artifact_mount.target.as_posix(),
+                    "--ro-bind",
+                    artifact_mount.source.as_posix(),
+                    artifact_mount.target.as_posix(),
+                ]
+            )
         command.extend(
             [
                 "--file",

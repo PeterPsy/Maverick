@@ -192,11 +192,12 @@ class OpenDesignArtifactTests(unittest.TestCase):
             self.artifact.write_canonical_json(root / asset["sbom"], sbom)
             self.artifact.write_canonical_json(root / asset["license_inventory"], licenses)
             (root / asset["notice"]).write_text(self.attestation.notice_text(licenses), encoding="utf-8")
-            provenance = self.attestation.provenance_payload(
+            provenance = self.attestation.oci_provenance_payload(
                 artifact_name=asset["file"],
                 artifact_sha256=self.artifact.sha256_file(archive_path),
-                lockfile_sha256="b" * 64,
-                patch_evidence=[],
+                patch_evidence=manifest["boundary_patch"],
+                startup_patch_evidence=manifest["startup_patch"],
+                rootfs_inventory_sha256="b" * 64,
                 manifest=manifest,
             )
             provenance_path = root / asset["provenance"]

@@ -3,7 +3,6 @@ from __future__ import annotations
 from contextlib import contextmanager, nullcontext
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -181,21 +180,25 @@ class DevApplyClassifierTests(unittest.TestCase):
         self.assertNotIn("opendesign_e2e_quick", result.actions)
         self.assertNotIn("opendesign_e2e_affected", result.actions)
 
-    def test_restart_invocation_uses_operator_as_a_boolean_flag(self) -> None:
-        completed = Mock(
-            returncode=0,
-            stdout=(
-                '{"readiness":{"ready":true,"service_count":1},'
-                '"event":{"type":"maverick.app.runtime-changed",'
-                '"owner_app_id":"design-studio","resource":"runtime/frontend"}}'
-            ),
-        )
-        with patch("opendesign_dev_apply.subprocess.run", return_value=completed) as run:
+    def test_restart_invocation_targets_the_live_core_manager_control_channel(self) -> None:
+        payload = {
+            "readiness": {"ready": True, "service_count": 1},
+            "event": {
+                "type": "maverick.app.runtime-changed",
+                "owner_app_id": "design-studio",
+                "resource": "runtime/frontend",
+            },
+        }
+        with patch("opendesign_dev_apply.request_sidecar_control", return_value=payload) as request:
             readiness = _restart_sidecars({}, repo_root=Path("/repo"))
 
-        command = run.call_args.args[0]
-        self.assertEqual(command.count("--operator"), 1)
-        self.assertNotIn("true", command)
+        request.assert_called_once_with(
+            Path("/repo"),
+            operation="restart",
+            workspace_id="default",
+            app_id="design-studio",
+            timeout_seconds=15,
+        )
         self.assertEqual(readiness["ready"], True)
         self.assertTrue(readiness["browser_remount_event_emitted"])
 
@@ -520,52 +523,25 @@ class DevApplyClassifierTests(unittest.TestCase):
 
             self.assertEqual(payload.read_text(encoding="utf-8"), '{"verified":true}\n')
 
-    def test_operational_snapshot_copies_only_current_release_registry_entries(self) -> None:
+    def test_operational_snapshot_never_copies_repository_vendor_artifacts(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-operational-selection-") as temporary:
             root = Path(temporary) / "repository"
             snapshot = Path(temporary) / "snapshot"
             service = root / "apps/design-studio/service"
-            source_service = SERVICE_ROOT
             snapshot_service = snapshot / "apps/design-studio/service"
             service.mkdir(parents=True)
             snapshot_service.mkdir(parents=True)
-            for name in (
-                "opendesign_bundle.json",
-                "opendesign_release_acceptance_0_16_1.json",
-            ):
-                shutil.copy2(source_service / name, service / name)
-                shutil.copy2(source_service / name, snapshot_service / name)
-            manifest = json.loads((service / "opendesign_bundle.json").read_text(encoding="utf-8"))
-            release = json.loads(
-                (service / "opendesign_release_acceptance_0_16_1.json").read_text(
-                    encoding="utf-8"
-                )
+            vendor_files = (
+                service / "vendor/open-design" / ("a" * 64) / "runtime.txt",
+                service / "vendor/open-design-web" / ("b" * 64) / "web.txt",
             )
-            runtime_digest = manifest["artifact"]["assets"]["linux-x86_64"]["sha256"]
-            web_digest = release["opendesign"]["web_overlay_sha256"]
-            selected_runtime = service / "vendor/open-design" / runtime_digest / "runtime.txt"
-            selected_web = service / "vendor/open-design-web" / web_digest / "web.txt"
-            retained_runtime = service / "vendor/open-design" / ("a" * 64) / "retained.txt"
-            for path in (selected_runtime, selected_web, retained_runtime):
+            for path in vendor_files:
                 path.parent.mkdir(parents=True)
                 path.write_text(f"{path.name}\n", encoding="utf-8")
 
             _materialize_operational_inputs(root, snapshot)
 
-            copied_runtime = (
-                snapshot / "apps/design-studio/service/vendor/open-design" / runtime_digest / "runtime.txt"
-            )
-            copied_web = (
-                snapshot
-                / "apps/design-studio/service/vendor/open-design-web"
-                / web_digest
-                / "web.txt"
-            )
-            self.assertTrue(copied_runtime.is_file())
-            self.assertTrue(copied_web.is_file())
-            self.assertFalse(
-                (snapshot / "apps/design-studio/service/vendor/open-design" / ("a" * 64)).exists()
-            )
+            self.assertFalse((snapshot_service / "vendor").exists())
 
 
 if __name__ == "__main__":

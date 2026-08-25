@@ -10,7 +10,7 @@ import subprocess
 from typing import Callable
 
 
-MANIFEST_SCHEMA_VERSION = "5"
+MANIFEST_SCHEMA_VERSION = "6"
 PATCH_SCHEMA_VERSION = "2"
 PATCH_COMPONENTS = {"runtime", "web-build", "web-react"}
 CERTIFICATION_SCHEMA_VERSION = "4"

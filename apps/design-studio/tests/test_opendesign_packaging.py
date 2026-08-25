@@ -204,7 +204,7 @@ class OpenDesignPackagingTests(unittest.TestCase):
             self.assertTrue((exported / "pnpm-lock.yaml").is_file())
             self.assertFalse((exported / ".git").exists())
 
-    def test_packager_runs_exactly_two_builds_and_publishes_verified_pins(self) -> None:
+    def test_legacy_source_packager_cannot_replace_the_pinned_oci_release(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-od-package-") as temp_dir:
             root = Path(temp_dir)
             repository = root / "source.git"
@@ -225,8 +225,8 @@ class OpenDesignPackagingTests(unittest.TestCase):
                 calls.append(len(calls) + 1)
                 return self._fixture_build_result(result_root)
 
-            with patch.object(self.packager, "validate_repository", return_value={"commit": "pinned"}):
-                result = self.packager.build_reproducible_artifact(
+            with self.assertRaisesRegex(self.packager.PackagingError, "OCI-only"):
+                self.packager.build_reproducible_artifact(
                     repository,
                     root / "output",
                     signing_key=signing_key,
@@ -237,10 +237,7 @@ class OpenDesignPackagingTests(unittest.TestCase):
                     build_function=fake_build,
                 )
 
-            self.assertEqual(calls, [1, 2])
-            self.assertEqual(result["build_artifact_sha256s"], [result["artifact_sha256"]] * 2)
-            self.assertGreater(result["artifact_size_bytes"], 0)
-            self.assertTrue(all(value is not None for value in result["artifact_pins"].values()))
+            self.assertEqual(calls, [])
 
     def test_production_packager_has_no_upstream_matrix_or_resume_framework(self) -> None:
         paths = [

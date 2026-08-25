@@ -972,7 +972,8 @@ host configuration:
     "mode": "isolated",
     "csp_profile": "self_hosted_web_app",
     "frame_ancestors": ["platform"],
-    "connect_src": ["self"]
+    "connect_src": ["self"],
+    "immutable_asset_prefixes": ["/_next/static/"]
   }
 }
 ```
@@ -988,6 +989,12 @@ workspace, binding, technical listener, or host. Logout, workspace switch,
 disable/uninstall, sidecar restart, generation change, and core restart revoke
 the corresponding in-memory authority.
 
+`immutable_asset_prefixes` is optional and limited to canonical absolute
+directory prefixes outside `/api` and `/.well-known`. Successful GET/HEAD
+responses under a declared prefix receive a private immutable browser-cache
+policy. The app is responsible for using content-addressed filenames there;
+all other responses, including errors under that tree, remain `no-store`.
+
 The core-owned lifecycle command `app.<local_app_id>.sidecars.restart` is the
 only general hot-restart surface. It resolves the enabled binding and declared
 services rather than accepting process ids or ports. Before stopping anything,
@@ -995,6 +1002,11 @@ it revokes only the isolated-origin launch tickets and sessions bound to the
 current workspace/app. It then stops only those declared sidecars, starts them,
 waits for each declared readiness contract, emits redaction-safe audit records,
 and publishes `maverick.app.runtime-changed` with the owner app and workspace.
+The owner-authenticated local control channel preserves typed startup codes and
+phases (for example `runtime_binding_invalid/sidecar_contract_resolve` or a
+typed daemon startup failure); it must not collapse contract, spawn, or health
+failures into an unphased generic launch error. Host paths and underlying
+exception messages are never returned across that channel.
 Apps may orchestrate this capability after changing app-owned selection state,
 but cannot expand its process or browser-session scope. The core must remain
 unaware of app-specific runtime artifacts, data migrations, or rollback rules.

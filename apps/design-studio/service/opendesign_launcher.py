@@ -11,6 +11,7 @@ import stat
 import subprocess
 import time
 from typing import Any
+from uuid import uuid4
 
 from opendesign_artifact import (
     ArtifactError,
@@ -18,18 +19,20 @@ from opendesign_artifact import (
     validate_bundle_manifest,
     write_canonical_json,
 )
-from opendesign_runtime import RuntimeBinding, resolve_runtime_binding
+from opendesign_artifact_store import ArtifactStoreError
+from opendesign_artifact_store import OpenDesignArtifactStore
+from opendesign_runtime import RuntimeBinding, resolve_protected_runtime_binding, verified_overlay_from_store
 from opendesign_oci_stage import OciStageError, runtime_command
+from opendesign_runtime_activation import finalize_runtime_activation_after_verified_sidecar_start
 from opendesign_web_activation import finalize_web_activation_after_verified_sidecar_start
-from opendesign_web_overlay import discover_verified_overlays
+from opendesign_web_overlay import VerifiedWebOverlay
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 SERVICE_ROOT = Path(__file__).resolve().parent
-APP_ROOT = SERVICE_ROOT.parent
-DEFAULT_BUNDLE_ROOT = SERVICE_ROOT / "vendor" / "open-design"
-DEFAULT_WEB_ROOT = SERVICE_ROOT / "vendor" / "open-design-web"
-WEB_TRUST_CONTRACT = SERVICE_ROOT / "opendesign_web_trust.json"
 MANIFEST_PATH = SERVICE_ROOT / "opendesign_bundle.json"
+READY_MARKER_NAME = "maverick-ready.json"
+DAEMON_READY_TIMEOUT_SECONDS = 8.0
+STATUS_HEARTBEAT_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -40,74 +43,111 @@ class LaunchPlan:
     detail: str
 
 
+class LauncherError(RuntimeError):
+    """Typed launcher failure safe to persist and surface."""
+
+    def __init__(self, code: str, phase: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.phase = phase
+
+
 def main() -> None:
     host = os.environ.get("OD_BIND_HOST") or "127.0.0.1"
     if host not in LOOPBACK_HOSTS:
         raise SystemExit(f"OpenDesign sidecar must bind to loopback, got {host!r}.")
     _required_env("OD_API_TOKEN")
-    generation_root = _required_dir("MAVERICK_OPENDESIGN_DATA_ROOT")
-    registry_root = _registry_root()
-    web_registry_root = _web_registry_root()
-    manifest = _manifest()
-    binding = _runtime_binding(
-        registry_root=registry_root,
-        web_registry_root=web_registry_root,
-        generation_root=generation_root,
-        manifest=manifest,
-    )
-    data_dir = binding.data_dir
-    media_config_dir = data_dir / "media-config"
-    _ensure_runtime_dirs(data_dir, media_config_dir)
+    generation_root = _required_dir("MAVERICK_OPENDESIGN_DATA_ROOT", create=True)
+    startup_id = uuid4().hex
+    timings: dict[str, float] = {}
+    marker_path = generation_root / READY_MARKER_NAME
+    marker_path.unlink(missing_ok=True)
+    _write_starting_status(generation_root, startup_id=startup_id)
+    started = time.monotonic()
+    try:
+        store_root = _store_root()
+        phase_started = time.monotonic()
+        manifest = _manifest()
+        binding = _runtime_binding(
+            store_root=store_root,
+            generation_root=generation_root,
+            manifest=manifest,
+        )
+        timings["artifact_fast_verify_ms"] = _elapsed_ms(phase_started)
+        _emit_timing("artifact_fast_verify_ms", timings["artifact_fast_verify_ms"], startup_id)
+        data_dir = binding.data_dir
+        media_config_dir = data_dir / "media-config"
+        node_compile_cache_dir = _node_compile_cache_dir(
+            data_dir,
+            binding.active.runtime_artifact_sha256,
+        )
+        phase_started = time.monotonic()
+        _ensure_runtime_dirs(
+            data_dir,
+            media_config_dir,
+            node_compile_cache_dir=node_compile_cache_dir,
+        )
+        timings["sandbox_prepare_ms"] = _elapsed_ms(phase_started)
+        plan = _resolve_launch_plan(binding, manifest)
+        _write_launcher_status(
+            generation_root,
+            plan,
+            binding,
+            store_root,
+            manifest=manifest,
+            startup_id=startup_id,
+            timings=timings,
+        )
+        _run_daemon(
+            plan,
+            _daemon_env(
+                data_dir=data_dir,
+                media_config_dir=media_config_dir,
+                static_dir=binding.overlay.static_dir,
+                static_registry_root=binding.overlay.path,
+                generation_root=generation_root,
+                binding=binding,
+                startup_nonce=startup_id,
+                node_compile_cache_dir=node_compile_cache_dir,
+            ),
+            generation_root=generation_root,
+            binding=binding,
+            web_registry_root=store_root / "web",
+            startup_id=startup_id,
+            timings=timings,
+        )
+    except BaseException as error:
+        marker_path.unlink(missing_ok=True)
+        code, phase = _failure_identity(error)
+        _write_failed_status(
+            generation_root,
+            startup_id=startup_id,
+            code=code,
+            phase=phase,
+            duration_ms=_elapsed_ms(started),
+            timings=timings,
+            difference_count=getattr(error, "differences", 0),
+        )
+        raise
 
-    plan = _resolve_launch_plan(binding, manifest)
-    _write_launcher_status(
-        generation_root,
-        plan,
-        binding,
-        registry_root,
-        web_registry_root,
-        manifest=manifest,
-    )
-    _run_daemon(
-        plan,
-        _daemon_env(
-            data_dir=data_dir,
-            media_config_dir=media_config_dir,
-            static_dir=binding.overlay.static_dir,
-            static_registry_root=web_registry_root,
-        ),
-        generation_root=generation_root,
-        binding=binding,
-        web_registry_root=web_registry_root,
-    )
 
-
-def _registry_root() -> Path:
-    raw = os.environ.get("MAVERICK_OPENDESIGN_BUNDLE_ROOT")
-    path = Path(raw).expanduser() if raw else DEFAULT_BUNDLE_ROOT
-    return _verified_registry_path(
-        path,
-        variable="MAVERICK_OPENDESIGN_BUNDLE_ROOT",
-    )
-
-
-def _web_registry_root() -> Path:
-    raw = os.environ.get("MAVERICK_OPENDESIGN_WEB_ROOT")
-    path = Path(raw).expanduser() if raw else DEFAULT_WEB_ROOT
-    return _verified_registry_path(
-        path,
-        variable="MAVERICK_OPENDESIGN_WEB_ROOT",
-    )
-
-
-def _verified_registry_path(path: Path, *, variable: str) -> Path:
-    resolved = path.resolve()
-    if os.environ.get("MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE") == "1":
-        return resolved
-    app_root = APP_ROOT.resolve()
-    if app_root != resolved and app_root not in resolved.parents:
-        raise SystemExit(f"{variable} must stay inside the Design Studio app source.")
-    return resolved
+def _store_root() -> Path:
+    value = _required_env("MAVERICK_OPENDESIGN_STORE_ROOT")
+    path = Path(value)
+    if not path.is_absolute() or path.as_posix() != "/artifacts/opendesign":
+        raise LauncherError(
+            "runtime_binding_invalid",
+            "artifact_resolve",
+            "MAVERICK_OPENDESIGN_STORE_ROOT must be the declared artifact capability mount",
+        )
+    try:
+        return path.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise ArtifactStoreError(
+            "artifact_missing",
+            "artifact_resolve",
+            "The declared OpenDesign artifact capability is unavailable",
+        ) from error
 
 
 def _resolve_launch_plan(binding: RuntimeBinding, manifest: dict[str, Any]) -> LaunchPlan:
@@ -135,6 +175,10 @@ def _daemon_env(
     media_config_dir: Path,
     static_dir: Path,
     static_registry_root: Path,
+    generation_root: Path,
+    binding: RuntimeBinding,
+    startup_nonce: str,
+    node_compile_cache_dir: Path | None = None,
 ) -> dict[str, str]:
     allowed = {
         "CI",
@@ -156,6 +200,17 @@ def _daemon_env(
     env["OD_MEDIA_CONFIG_DIR"] = str(media_config_dir)
     env["OD_STATIC_DIR"] = str(static_dir)
     env["OD_STATIC_REGISTRY_ROOT"] = str(static_registry_root)
+    env["OD_MAVERICK_READY_MARKER"] = str(generation_root / READY_MARKER_NAME)
+    env["OD_MAVERICK_DEFER_PLUGIN_CATALOG"] = "1"
+    env["OD_MAVERICK_STARTUP_NONCE"] = startup_nonce
+    env["OD_RUNTIME_ARTIFACT_SHA256"] = binding.active.runtime_artifact_sha256
+    env["OD_WEB_OVERLAY_SHA256"] = binding.active.web_overlay_sha256
+    env["OD_DATA_GENERATION"] = binding.active.data_generation
+    env["OD_ACTIVATION_ID"] = _activation_id(binding)
+    env["MAVERICK_OPENDESIGN_NODE_COMPILE_CACHE"] = str(
+        node_compile_cache_dir
+        or _node_compile_cache_dir(data_dir, binding.active.runtime_artifact_sha256)
+    )
     env["OD_SANDBOX_MODE"] = "1"
     env["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"] = "1"
     env["DO_NOT_TRACK"] = "1"
@@ -165,9 +220,21 @@ def _daemon_env(
     return env
 
 
-def _required_dir(name: str) -> Path:
+def _required_dir(name: str, *, create: bool = False) -> Path:
     value = _required_env(name)
-    return Path(value).resolve()
+    path = Path(value)
+    if create:
+        try:
+            path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        except OSError as error:
+            raise LauncherError("runtime_binding_invalid", "data_prepare", f"{name} cannot be prepared") from error
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError as error:
+        raise LauncherError("runtime_binding_invalid", "data_prepare", f"{name} is missing") from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise LauncherError("runtime_binding_invalid", "data_prepare", f"{name} must be a real directory")
+    return path.resolve(strict=True)
 
 
 def _required_env(name: str) -> str:
@@ -177,13 +244,27 @@ def _required_env(name: str) -> str:
     return value
 
 
-def _ensure_runtime_dirs(data_dir: Path, media_config_dir: Path) -> None:
-    for path in (
+def _ensure_runtime_dirs(
+    data_dir: Path,
+    media_config_dir: Path,
+    *,
+    node_compile_cache_dir: Path | None = None,
+) -> None:
+    paths = [
         data_dir / "db",
         data_dir / "projects",
         data_dir / "temp",
         media_config_dir,
-    ):
+    ]
+    if node_compile_cache_dir is not None:
+        paths.extend(
+            (
+                data_dir / "cache",
+                data_dir / "cache" / "node-compile",
+                node_compile_cache_dir,
+            )
+        )
+    for path in paths:
         path.mkdir(parents=True, exist_ok=True)
         mode = path.lstat().st_mode
         if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
@@ -194,37 +275,67 @@ def _ensure_runtime_dirs(data_dir: Path, media_config_dir: Path) -> None:
             raise SystemExit(f"OpenDesign runtime path escapes the active data generation: {path.name}") from error
 
 
+def _node_compile_cache_dir(data_dir: Path, runtime_artifact_sha256: str) -> Path:
+    if (
+        len(runtime_artifact_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in runtime_artifact_sha256)
+    ):
+        raise LauncherError(
+            "runtime_binding_invalid",
+            "data_prepare",
+            "OpenDesign runtime digest is invalid for its compile cache",
+        )
+    return data_dir / "cache" / "node-compile" / runtime_artifact_sha256
+
+
 def _write_launcher_status(
     generation_root: Path,
     plan: LaunchPlan,
     binding: RuntimeBinding,
-    registry_root: Path,
-    web_registry_root: Path,
+    store_root: Path,
     *,
     manifest: dict[str, Any],
+    startup_id: str,
+    timings: dict[str, float],
 ) -> None:
     status_path = generation_root / "launcher-status.json"
     payload = {
-        "schema_version": "2",
+        "schema_version": "3",
+        "startup_id": startup_id,
         "opendesign_version": binding.active.od_version,
         "opendesign_commit": binding.bundle.upstream_commit,
         "active": binding.active.to_dict(),
         "runtime_artifact_sha256": binding.active.runtime_artifact_sha256,
         "web_overlay_sha256": binding.active.web_overlay_sha256,
-        "bundle": _bundle_status(binding.bundle.path, registry_root),
-        "web_overlay": _bundle_status(binding.overlay.path, web_registry_root),
+        "bundle": _bundle_status(binding.bundle.path, store_root / "runtime"),
+        "web_overlay": _bundle_status(binding.overlay.path, store_root / "web"),
         "bundle_configured": True,
         "mode": plan.mode,
         "detail": plan.detail,
         "manifest": _manifest_summary(manifest),
         "technical_token_present": bool(os.environ.get("OD_API_TOKEN")),
+        "health": {
+            "adapter_configured": True,
+            "artifact_available": True,
+            "artifact_verified": True,
+            "artifact_protected": True,
+            "repair_state": "idle",
+            "sidecar_process_running": False,
+            "daemon_ready": False,
+            "activation_committed": False,
+            "browser_ready": False,
+        },
+        "phase": "artifact_verified",
+        "timings_ms": dict(timings),
+        "last_failure": None,
+        "updated_at_epoch_ms": int(time.time() * 1000),
     }
     write_canonical_json(status_path, payload)
 
 
 def _bundle_status(bundle_dir: Path, registry_root: Path) -> dict[str, str]:
     try:
-        relative = bundle_dir.resolve().relative_to(registry_root.resolve()).as_posix()
+        relative = bundle_dir.parent.resolve().relative_to(registry_root.resolve()).as_posix()
     except ValueError:
         return {"location": "external", "relative_path": ""}
     return {"location": "verified_registry", "relative_path": relative}
@@ -241,21 +352,21 @@ def _manifest() -> dict[str, Any]:
 
 def _runtime_binding(
     *,
-    registry_root: Path,
-    web_registry_root: Path,
+    store_root: Path,
     generation_root: Path,
     manifest: dict[str, Any],
 ) -> RuntimeBinding:
     try:
-        return resolve_runtime_binding(
-            registry_root=registry_root,
-            web_registry_root=web_registry_root,
-            web_trust_contract=WEB_TRUST_CONTRACT,
+        return resolve_protected_runtime_binding(
+            store_root=store_root,
             generation_root=generation_root,
             manifest=manifest,
+            require_read_only_mount=True,
         )
+    except ArtifactStoreError:
+        raise
     except ArtifactError as error:
-        raise SystemExit(f"Curated OpenDesign daemon unavailable: {error}") from error
+        raise LauncherError("runtime_binding_invalid", "artifact_fast_verify", str(error)) from error
 
 
 def _manifest_summary(payload: dict[str, Any]) -> dict[str, object]:
@@ -274,21 +385,98 @@ def _run_daemon(
     generation_root: Path,
     binding: RuntimeBinding,
     web_registry_root: Path,
+    startup_id: str,
+    timings: dict[str, float],
 ) -> None:
-    daemon = subprocess.Popen(plan.command, cwd=plan.cwd, env=env)
+    phase_started = time.monotonic()
     try:
+        daemon = subprocess.Popen(plan.command, cwd=plan.cwd, env=env)
+    except OSError as error:
+        raise LauncherError("daemon_spawn_failed", "process_spawn", "OpenDesign daemon spawn failed") from error
+    timings["process_spawn_ms"] = _elapsed_ms(phase_started)
+    _emit_timing("process_spawn_ms", timings["process_spawn_ms"], startup_id)
+    _update_health_status(
+        generation_root,
+        startup_id=startup_id,
+        phase="daemon_starting",
+        timings=timings,
+        sidecar_process_running=True,
+    )
+    try:
+        phase_started = time.monotonic()
         readiness = _wait_for_sidecar_readiness(daemon, env=env)
-        _finalize_pending_web_activation(
+        timings["daemon_ready_ms"] = _elapsed_ms(phase_started)
+        _emit_timing("daemon_ready_ms", timings["daemon_ready_ms"], startup_id)
+        phase_started = time.monotonic()
+        _finalize_pending_activations(
             generation_root,
             binding=binding,
             web_registry_root=web_registry_root,
             readiness=readiness,
         )
-        return_code = daemon.wait()
+        timings["activation_commit_ms"] = _elapsed_ms(phase_started)
+        _emit_timing("activation_commit_ms", timings["activation_commit_ms"], startup_id)
+        _write_readiness_marker(generation_root, binding=binding, startup_nonce=startup_id)
+        _wait_for_maverick_readiness(daemon, env=env)
+        _update_health_status(
+            generation_root,
+            startup_id=startup_id,
+            phase="browser_ready",
+            timings=timings,
+            sidecar_process_running=True,
+            daemon_ready=True,
+            activation_committed=True,
+            browser_ready=True,
+        )
+        return_code = _wait_for_daemon_exit(
+            daemon,
+            generation_root=generation_root,
+            startup_id=startup_id,
+            timings=timings,
+        )
     except BaseException:
         _terminate_daemon(daemon)
         raise
-    raise SystemExit(return_code)
+    finally:
+        (generation_root / READY_MARKER_NAME).unlink(missing_ok=True)
+        _update_health_status(
+            generation_root,
+            startup_id=startup_id,
+            phase="daemon_stopped",
+            timings=timings,
+            sidecar_process_running=False,
+            daemon_ready=False,
+            activation_committed=False,
+            browser_ready=False,
+        )
+    raise LauncherError(
+        "daemon_spawn_failed",
+        "daemon_exit",
+        f"OpenDesign daemon exited with status {return_code}",
+    )
+
+
+def _wait_for_daemon_exit(
+    daemon: subprocess.Popen[bytes],
+    *,
+    generation_root: Path,
+    startup_id: str,
+    timings: dict[str, float],
+) -> int:
+    while True:
+        try:
+            return daemon.wait(timeout=STATUS_HEARTBEAT_SECONDS)
+        except subprocess.TimeoutExpired:
+            _update_health_status(
+                generation_root,
+                startup_id=startup_id,
+                phase="browser_ready",
+                timings=timings,
+                sidecar_process_running=True,
+                daemon_ready=True,
+                activation_committed=True,
+                browser_ready=True,
+            )
 
 
 def _wait_for_sidecar_readiness(
@@ -304,7 +492,7 @@ def _wait_for_sidecar_readiness(
     if not 1 <= port <= 65535:
         raise RuntimeError("OpenDesign sidecar port is invalid")
     token = str(env.get("OD_API_TOKEN") or "")
-    deadline = time.monotonic() + 120.0
+    deadline = time.monotonic() + DAEMON_READY_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         if daemon.poll() is not None:
             raise RuntimeError("OpenDesign daemon exited before verified readiness")
@@ -326,33 +514,258 @@ def _wait_for_sidecar_readiness(
         finally:
             connection.close()
         time.sleep(0.1)
-    raise RuntimeError("OpenDesign daemon did not reach verified readiness")
+    raise LauncherError("daemon_ready_timeout", "daemon_ready", "OpenDesign daemon did not reach readiness")
 
 
-def _finalize_pending_web_activation(
+def _wait_for_maverick_readiness(
+    daemon: subprocess.Popen[bytes],
+    *,
+    env: dict[str, str],
+) -> None:
+    payload = _wait_for_json_readiness(
+        daemon,
+        env=env,
+        path="/api/maverick-ready",
+        timeout_seconds=2.0,
+    )
+    if payload.get("ready") is not True:
+        raise LauncherError("activation_incomplete", "activation_commit", "Transactional readiness was not committed")
+
+
+def _wait_for_json_readiness(
+    daemon: subprocess.Popen[bytes],
+    *,
+    env: dict[str, str],
+    path: str,
+    timeout_seconds: float,
+) -> dict[str, object]:
+    host = str(env.get("OD_BIND_HOST") or "127.0.0.1")
+    try:
+        port = int(str(env.get("OD_PORT") or ""))
+    except ValueError as error:
+        raise LauncherError("runtime_binding_invalid", "daemon_ready", "OpenDesign sidecar port is invalid") from error
+    token = str(env.get("OD_API_TOKEN") or "")
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if daemon.poll() is not None:
+            raise LauncherError("daemon_spawn_failed", "daemon_ready", "OpenDesign daemon exited before readiness")
+        connection = http.client.HTTPConnection(host, port, timeout=0.5)
+        try:
+            connection.request(
+                "GET",
+                path,
+                headers={"Authorization": f"Bearer {token}", "Connection": "close"},
+            )
+            response = connection.getresponse()
+            body = response.read(65_537)
+            if 200 <= response.status < 300 and len(body) <= 65_536:
+                payload = json.loads(body.decode("utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+        except (OSError, http.client.HTTPException, UnicodeDecodeError, json.JSONDecodeError):
+            pass
+        finally:
+            connection.close()
+        time.sleep(0.05)
+    raise LauncherError("activation_incomplete", "activation_commit", "Transactional readiness timed out")
+
+
+def _finalize_pending_activations(
     generation_root: Path,
     *,
     binding: RuntimeBinding,
     web_registry_root: Path,
     readiness: dict[str, object],
 ) -> None:
-    if binding.control.web_activation_id is None:
+    if binding.control.web_activation_id is None and binding.control.runtime_activation_id is None:
         return
-    required_overlays = {binding.active.web_overlay_sha256}
+    store = OpenDesignArtifactStore(web_registry_root.parent, require_read_only_mount=True)
+    selections = [binding.active]
     if binding.control.previous_web is not None:
-        required_overlays.add(binding.control.previous_web.web_overlay_sha256)
-    overlays = discover_verified_overlays(
-        web_registry_root,
-        trust_contract=WEB_TRUST_CONTRACT,
-        required_digests=required_overlays,
-    )
-    finalize_web_activation_after_verified_sidecar_start(
-        generation_root,
-        readiness=readiness,
-        verified_artifacts={
-            binding.active.runtime_artifact_sha256: binding.bundle.opendesign_version,
+        selections.append(binding.control.previous_web)
+    if binding.control.previous_runtime is not None:
+        selections.append(binding.control.previous_runtime)
+    overlays: dict[str, VerifiedWebOverlay] = {}
+    for selection in selections:
+        if selection.web_overlay_sha256 in overlays:
+            continue
+        stored = store.fast_web_overlay(
+            selection.web_overlay_sha256,
+            runtime_artifact_sha256=selection.runtime_artifact_sha256,
+        )
+        overlays[selection.web_overlay_sha256] = verified_overlay_from_store(stored)
+    artifacts = {binding.active.runtime_artifact_sha256: binding.bundle.opendesign_version}
+    if binding.control.previous_runtime is not None:
+        previous = binding.control.previous_runtime
+        stored_runtime = store.fast_runtime(
+            previous.runtime_artifact_sha256,
+            file_manifest_sha256=None,
+            opendesign_version=previous.od_version,
+            upstream_commit=None,
+        )
+        artifacts[previous.runtime_artifact_sha256] = str(stored_runtime.receipt["opendesign_version"])
+    if binding.control.runtime_activation_id is not None:
+        finalize_runtime_activation_after_verified_sidecar_start(
+            generation_root,
+            readiness=readiness,
+            verified_artifacts=artifacts,
+            verified_overlays=overlays,
+        )
+    if binding.control.web_activation_id is not None:
+        finalize_web_activation_after_verified_sidecar_start(
+            generation_root,
+            readiness=readiness,
+            verified_artifacts=artifacts,
+            verified_overlays=overlays,
+        )
+
+
+def _write_readiness_marker(
+    generation_root: Path,
+    *,
+    binding: RuntimeBinding,
+    startup_nonce: str,
+) -> None:
+    write_canonical_json(
+        generation_root / READY_MARKER_NAME,
+        {
+            "schema_version": "1",
+            "startup_nonce": startup_nonce,
+            "runtime_artifact_sha256": binding.active.runtime_artifact_sha256,
+            "web_overlay_sha256": binding.active.web_overlay_sha256,
+            "data_generation": binding.active.data_generation,
+            "activation_id": _activation_id(binding),
         },
-        verified_overlays=overlays,
+    )
+
+
+def _activation_id(binding: RuntimeBinding) -> str:
+    return (
+        getattr(binding.control, "runtime_activation_id", None)
+        or getattr(binding.control, "web_activation_id", None)
+        or ""
+    )
+
+
+def _write_starting_status(generation_root: Path, *, startup_id: str) -> None:
+    write_canonical_json(
+        generation_root / "launcher-status.json",
+        {
+            "schema_version": "3",
+            "startup_id": startup_id,
+            "phase": "bootstrap",
+            "health": {
+                "adapter_configured": True,
+                "artifact_available": False,
+                "artifact_verified": False,
+                "artifact_protected": False,
+                "repair_state": "idle",
+                "sidecar_process_running": False,
+                "daemon_ready": False,
+                "activation_committed": False,
+                "browser_ready": False,
+            },
+            "timings_ms": {},
+            "last_failure": None,
+            "updated_at_epoch_ms": int(time.time() * 1000),
+        },
+    )
+
+
+def _update_health_status(
+    generation_root: Path,
+    *,
+    startup_id: str,
+    phase: str,
+    timings: dict[str, float],
+    **health_updates: object,
+) -> None:
+    path = generation_root / "launcher-status.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = {}
+    if payload.get("startup_id") != startup_id:
+        return
+    health = payload.get("health") if isinstance(payload.get("health"), dict) else {}
+    health.update(health_updates)
+    payload["health"] = health
+    payload["phase"] = phase
+    payload["timings_ms"] = dict(timings)
+    payload["updated_at_epoch_ms"] = int(time.time() * 1000)
+    write_canonical_json(path, payload)
+
+
+def _write_failed_status(
+    generation_root: Path,
+    *,
+    startup_id: str,
+    code: str,
+    phase: str,
+    duration_ms: float,
+    timings: dict[str, float],
+    difference_count: int = 0,
+) -> None:
+    path = generation_root / "launcher-status.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = {"schema_version": "3", "startup_id": startup_id}
+    if payload.get("startup_id") != startup_id:
+        return
+    health = payload.get("health") if isinstance(payload.get("health"), dict) else {}
+    health.update(
+        {
+            "sidecar_process_running": False,
+            "daemon_ready": False,
+            "activation_committed": False,
+            "browser_ready": False,
+        }
+    )
+    payload.update(
+        {
+            "phase": phase,
+            "health": health,
+            "timings_ms": dict(timings),
+            "last_failure": {
+                "code": code,
+                "phase": phase,
+                "startup_id": startup_id,
+                "duration_ms": round(duration_ms, 3),
+                "difference_count": max(0, int(difference_count)),
+                "auto_repairable": code in {"artifact_missing", "artifact_integrity_mismatch"},
+                "observed_at_epoch_ms": int(time.time() * 1000),
+            },
+            "updated_at_epoch_ms": int(time.time() * 1000),
+        }
+    )
+    write_canonical_json(path, payload)
+
+
+def _failure_identity(error: BaseException) -> tuple[str, str]:
+    if isinstance(error, ArtifactStoreError):
+        return error.code, error.phase
+    if isinstance(error, LauncherError):
+        return error.code, error.phase
+    if isinstance(error, ArtifactError):
+        return "runtime_binding_invalid", "artifact_fast_verify"
+    if isinstance(error, OSError):
+        return "daemon_spawn_failed", "process_spawn"
+    return "daemon_spawn_failed", "launcher_unhandled"
+
+
+def _elapsed_ms(started_at: float) -> float:
+    return round((time.monotonic() - started_at) * 1000, 3)
+
+
+def _emit_timing(metric: str, value: float, startup_id: str) -> None:
+    print(
+        json.dumps(
+            {"event": metric, "value_ms": value, "startup_id": startup_id},
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        flush=True,
     )
 
 

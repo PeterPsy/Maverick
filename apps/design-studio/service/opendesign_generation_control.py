@@ -16,8 +16,10 @@ from opendesign_generation_model import (
     GenerationControlError,
     LaunchSelection,
     MigrationJournal,
+    RuntimeActivationJournal,
     WebActivationJournal,
     reconcile_migration_control,
+    reconcile_runtime_activation,
     reconcile_web_activation,
 )
 
@@ -26,9 +28,13 @@ CONTROL_FILE_NAME = "control.json"
 MAX_CONTROL_BYTES = 64 * 1024
 _MIGRATION_RE = re.compile(r"^migration_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
 _WEB_ACTIVATION_RE = re.compile(r"^web_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
+_RUNTIME_ACTIVATION_RE = re.compile(r"^runtime_[0-9A-Za-z][0-9A-Za-z._-]{0,79}$")
 _TEMP_RE = re.compile(r"^\.control\.json\.[0-9a-f]{16}\.tmp$")
 _JOURNAL_TEMP_RE = re.compile(r"^\.migration_[0-9A-Za-z][0-9A-Za-z._-]{0,79}\.json\.[0-9a-f]{16}\.tmp$")
 _WEB_JOURNAL_TEMP_RE = re.compile(r"^\.web_[0-9A-Za-z][0-9A-Za-z._-]{0,79}\.json\.[0-9a-f]{16}\.tmp$")
+_RUNTIME_JOURNAL_TEMP_RE = re.compile(
+    r"^\.runtime_[0-9A-Za-z][0-9A-Za-z._-]{0,79}\.json\.[0-9a-f]{16}\.tmp$"
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +44,7 @@ class RecoveryResult:
     removed_stale_temps: tuple[str, ...]
     migration_reconciliations: tuple[str, ...]
     web_reconciliations: tuple[str, ...]
+    runtime_reconciliations: tuple[str, ...] = ()
 
 
 def load_generation_control(
@@ -70,6 +77,14 @@ def load_generation_control(
             verified_overlays=verified_overlays,
         )
         reconcile_web_activation(control, journal)
+    if control.runtime_activation_id is not None:
+        journal = load_runtime_activation_journal(
+            root,
+            control.runtime_activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        reconcile_runtime_activation(control, journal)
     return control
 
 
@@ -99,6 +114,8 @@ def load_runtime_generation_control(
         resolve_generation_data_dir(root, control.previous_release)
     if control.previous_web is not None:
         _verify_overlay(control.previous_web, verified_overlays, label="previous_web")
+    if control.previous_runtime is not None:
+        resolve_generation_data_dir(root, control.previous_runtime)
     if control.migration_id is not None:
         journal = load_migration_journal_metadata(root, control.migration_id)
         _validate_journal_paths(root, journal)
@@ -106,6 +123,9 @@ def load_runtime_generation_control(
     if control.web_activation_id is not None:
         journal = load_web_activation_journal_metadata(root, control.web_activation_id)
         reconcile_web_activation(control, journal)
+    if control.runtime_activation_id is not None:
+        journal = load_runtime_activation_journal_metadata(root, control.runtime_activation_id)
+        reconcile_runtime_activation(control, journal)
     return control
 
 
@@ -146,6 +166,14 @@ def write_generation_control(
             verified_overlays=verified_overlays,
         )
         reconcile_web_activation(normalized, journal)
+    if normalized.runtime_activation_id is not None:
+        journal = load_runtime_activation_journal(
+            root,
+            normalized.runtime_activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        reconcile_runtime_activation(normalized, journal)
     destination = root / CONTROL_FILE_NAME
     _atomic_write_json(destination, normalized.to_dict())
 
@@ -271,6 +299,65 @@ def write_web_activation_journal(
     )
 
 
+def load_runtime_activation_journal(
+    root: Path,
+    runtime_activation_id: str,
+    *,
+    verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
+) -> RuntimeActivationJournal:
+    journal = load_runtime_activation_journal_metadata(root, runtime_activation_id)
+    for label, selection in (("source", journal.source), ("target", journal.target)):
+        _verify_selection(
+            selection,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+            label=f"runtime activation {label}",
+        )
+        resolve_generation_data_dir(root, selection)
+    return journal
+
+
+def load_runtime_activation_journal_metadata(
+    root: Path,
+    runtime_activation_id: str,
+) -> RuntimeActivationJournal:
+    root = _validated_root(root)
+    if not _RUNTIME_ACTIVATION_RE.fullmatch(runtime_activation_id):
+        raise GenerationControlError("runtime_activation_id is invalid")
+    journals_root = _validated_child_directory(root, "runtime-activations")
+    journal = RuntimeActivationJournal.from_dict(
+        _read_strict_json_file(journals_root / f"{runtime_activation_id}.json")
+    )
+    if journal.runtime_activation_id != runtime_activation_id:
+        raise GenerationControlError("runtime activation journal id does not match its file")
+    return journal
+
+
+def write_runtime_activation_journal(
+    root: Path,
+    journal: RuntimeActivationJournal,
+    *,
+    verified_artifacts: Mapping[str, str],
+    verified_overlays: Mapping[str, object],
+) -> None:
+    root = _validated_root(root)
+    normalized = RuntimeActivationJournal.from_dict(journal.to_dict())
+    for label, selection in (("source", normalized.source), ("target", normalized.target)):
+        _verify_selection(
+            selection,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+            label=f"runtime activation {label}",
+        )
+        resolve_generation_data_dir(root, selection)
+    journals_root = _validated_child_directory(root, "runtime-activations")
+    _atomic_write_json(
+        journals_root / f"{normalized.runtime_activation_id}.json",
+        normalized.to_dict(),
+    )
+
+
 def recover_generation_control(
     root: Path,
     *,
@@ -314,6 +401,19 @@ def recover_generation_control(
         web_temp_removed = True
     if web_temp_removed:
         _fsync_directory(web_root)
+    runtime_root = _ensure_recovery_directory(root, "runtime-activations")
+    runtime_temp_removed = False
+    for candidate in sorted(runtime_root.iterdir(), key=lambda item: item.name):
+        if not _RUNTIME_JOURNAL_TEMP_RE.fullmatch(candidate.name):
+            continue
+        mode = candidate.lstat().st_mode
+        if not stat.S_ISREG(mode):
+            raise GenerationControlError(f"unsafe stale runtime activation temp: {candidate.name}")
+        candidate.unlink()
+        removed.append(f"runtime-activations/{candidate.name}")
+        runtime_temp_removed = True
+    if runtime_temp_removed:
+        _fsync_directory(runtime_root)
     control = load_generation_control(
         root,
         verified_artifacts=verified_artifacts,
@@ -348,12 +448,27 @@ def recover_generation_control(
         else:
             reconciliation = f"historical_{journal.state}"
         web_reconciliations.append(f"{activation_id}:{reconciliation}")
+    runtime_reconciliations: list[str] = []
+    for journal_path in sorted(runtime_root.glob("runtime_*.json"), key=lambda item: item.name):
+        activation_id = journal_path.stem
+        journal = load_runtime_activation_journal(
+            root,
+            activation_id,
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+        )
+        if activation_id == control.runtime_activation_id or journal.state == "prepared":
+            reconciliation = reconcile_runtime_activation(control, journal)
+        else:
+            reconciliation = f"historical_{journal.state}"
+        runtime_reconciliations.append(f"{activation_id}:{reconciliation}")
     return RecoveryResult(
         control,
         active_data_dir,
         tuple(removed),
         tuple(reconciliations),
         tuple(web_reconciliations),
+        tuple(runtime_reconciliations),
     )
 
 
@@ -391,6 +506,7 @@ def _validate_references(
         ("active", control.active),
         ("previous_release", control.previous_release),
         ("previous_web", control.previous_web),
+        ("previous_runtime", control.previous_runtime),
     ):
         if selection is None:
             continue
@@ -536,6 +652,14 @@ def _validated_child_directory(root: Path, name: str) -> Path:
     except (FileNotFoundError, ValueError) as exc:
         raise GenerationControlError(f"{name} directory escapes the app data root") from exc
     return child
+
+
+def _ensure_recovery_directory(root: Path, name: str) -> Path:
+    child = root / name
+    if not child.exists() and not child.is_symlink():
+        child.mkdir(mode=0o700)
+        _fsync_directory(root)
+    return _validated_child_directory(root, name)
 
 
 def _read_strict_json_file(path: Path) -> object:

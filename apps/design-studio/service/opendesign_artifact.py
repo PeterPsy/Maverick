@@ -49,12 +49,13 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
         "fallback_build",
         "runtime_closure",
         "boundary_patch",
+        "startup_patch",
         "web_patch",
         "artifact",
         "native_runtime_dependencies",
         "sandbox",
     }
-    if set(manifest) != expected_top_level or manifest.get("schema_version") != "5":
+    if set(manifest) != expected_top_level or manifest.get("schema_version") != "6":
         raise ArtifactError("OpenDesign bundle manifest schema or fields are unsupported")
     upstream = mapping(manifest, "upstream")
     commit = required_hex(upstream, "commit", length=40)
@@ -125,9 +126,16 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
     if required_string(boundary, "pre_sha256") != "61c966b4a3a99e7098e37a943436e8b5d52563d1bace24a0e398b200ac0135e8":
         raise ArtifactError("OpenDesign boundary patch preimage is not authorized")
     if boundary.get("required_environment") != [
+        "OD_ACTIVATION_ID",
+        "OD_DATA_GENERATION",
+        "OD_MAVERICK_READY_MARKER",
+        "OD_MAVERICK_DEFER_PLUGIN_CATALOG",
+        "OD_MAVERICK_STARTUP_NONCE",
         "OD_REQUIRE_API_TOKEN_ON_LOOPBACK",
+        "OD_RUNTIME_ARTIFACT_SHA256",
         "OD_STATIC_DIR",
         "OD_STATIC_REGISTRY_ROOT",
+        "OD_WEB_OVERLAY_SHA256",
     ]:
         raise ArtifactError("OpenDesign boundary patch environment is not authorized")
     post_sha256 = boundary.get("post_sha256")
@@ -135,6 +143,22 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
         raise ArtifactError("OpenDesign boundary patch postimage is not pinned")
     if post_sha256 is not None and not is_sha256(post_sha256):
         raise ArtifactError("OpenDesign boundary patch postimage must be null or lowercase SHA-256")
+    startup = mapping(manifest, "startup_patch")
+    if set(startup) != {"path", "pre_sha256", "post_sha256", "max_concurrency"}:
+        raise ArtifactError("OpenDesign startup patch fields are unsupported")
+    if required_string(startup, "path") != "app/apps/daemon/dist/plugins/bundled.js":
+        raise ArtifactError("OpenDesign startup patch path is not authorized")
+    if required_string(startup, "pre_sha256") != (
+        "2842427fab7f74700b735b6dad7d730fbfd105342721619aa73880fae3c35921"
+    ):
+        raise ArtifactError("OpenDesign startup patch preimage is not authorized")
+    if startup.get("max_concurrency") != 8:
+        raise ArtifactError("OpenDesign startup patch concurrency is not authorized")
+    startup_post_sha256 = startup.get("post_sha256")
+    if require_artifact_digest and not is_sha256(startup_post_sha256):
+        raise ArtifactError("OpenDesign startup patch postimage is not pinned")
+    if startup_post_sha256 is not None and not is_sha256(startup_post_sha256):
+        raise ArtifactError("OpenDesign startup patch postimage must be null or lowercase SHA-256")
     web_patch = mapping(manifest, "web_patch")
     if set(web_patch) != {
         "patch_series",
@@ -290,6 +314,14 @@ def _validate_oci_descriptor(
 
 def selected_asset(manifest: dict[str, Any], *, require_artifact_digest: bool) -> dict[str, Any]:
     artifact = mapping(manifest, "artifact")
+    if (
+        set(artifact) != {"format", "default_relative_path", "asset_directory", "assets"}
+        or artifact.get("format") != "tar.gz"
+        or artifact.get("default_relative_path")
+        != "external-capability/opendesign/runtime"
+        or artifact.get("asset_directory") != "artifacts"
+    ):
+        raise ArtifactError("OpenDesign artifact store binding is unsupported")
     assets = mapping(artifact, "assets")
     selected = mapping(assets, platform_key())
     expected_fields = {"size_bytes", *ARTIFACT_DIGEST_FIELDS, *ARTIFACT_DIGEST_FIELDS.values()}

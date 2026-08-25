@@ -7,15 +7,21 @@ import {
   navigationFromParams,
   navigationMessage,
   openSettingsMessage,
+  readCachedLaunchTarget,
   requestOpenDesignLaunch,
   SidecarLaunchError,
   themeMessage,
+  writeCachedLaunchTarget,
 } from "./api";
-import { callDesignStudioBackend } from "./backendApi";
+import { BackendRequestError, callDesignStudioBackend } from "./backendApi";
+import { startNonOverlappingPoll } from "./startupStatusPolling";
 import type { OpenDesignLaunchTarget, OpenDesignNavigation, SidecarDiagnostic, SidecarHostPhase, SidecarLaunch } from "./types";
 import "./styles/main.css";
 
-const LOAD_DEGRADED_AFTER_MS = 20_000;
+const LOADING_STATE_DELAY_MS = 500;
+const STARTUP_STATUS_POLL_DELAY_MS = 1_000;
+const STARTUP_STATUS_POLL_MS = 400;
+const MAX_RETRY_BACKOFF_MS = 8_000;
 
 export function App() {
   const appId = currentDesignStudioAppId();
@@ -23,6 +29,12 @@ export function App() {
   const frameNameRef = useRef(`opendesign-${crypto.randomUUID()}`);
   const submittedFrameRef = useRef<HTMLIFrameElement | null>(null);
   const sidecarOriginRef = useRef("");
+  const sidecarInstanceRef = useRef("");
+  const launchStartedRef = useRef(0);
+  const retryCountRef = useRef(0);
+  const retryTimerRef = useRef(0);
+  const startupFailureRef = useRef<SidecarDiagnostic | null>(null);
+  const stopStartupStatusPollRef = useRef<() => void>(() => undefined);
   const navigationRef = useRef<OpenDesignNavigation>(initialNavigation());
   const settingsRequestRef = useRef(initialSettingsRequest());
   const deliveredSettingsRequestRef = useRef("");
@@ -32,6 +44,10 @@ export function App() {
   const [phase, setPhase] = useState<SidecarHostPhase>("launching");
   const [diagnostic, setDiagnostic] = useState<SidecarDiagnostic | null>(null);
   const [launchRevision, setLaunchRevision] = useState(0);
+  const [frameRevision, setFrameRevision] = useState(0);
+  const [loadingVisible, setLoadingVisible] = useState(false);
+  const [startupLabel, setStartupLabel] = useState("Avvio runtime verificato");
+  const [retryPending, setRetryPending] = useState(false);
   const [empty, setEmpty] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -137,8 +153,20 @@ export function App() {
         return;
       }
       if (event.data.type === "maverick.opendesign.ready" && event.data.version === 1) {
+        stopStartupStatusPollRef.current();
+        stopStartupStatusPollRef.current = () => undefined;
+        if (startupFailureRef.current) {
+          setDiagnostic(startupFailureRef.current);
+          setPhase("error");
+          setLoadingVisible(false);
+          return;
+        }
         setDiagnostic(null);
         setPhase("ready");
+        setLoadingVisible(false);
+        retryCountRef.current = 0;
+        recordFirstPaint(launchStartedRef.current, "maverick.opendesign.ready", appId);
+        launchStartedRef.current = 0;
         postNavigation();
         postTheme();
         postSettings();
@@ -171,75 +199,188 @@ export function App() {
 
   useEffect(() => {
     let canceled = false;
-    let degradedTimer = 0;
-    const frame = frameRef.current;
+    const abortController = new AbortController();
+    let loadingTimer = 0;
+    let statusPollTimer = 0;
+    let stopStatusPoll: () => void = () => undefined;
+    stopStartupStatusPollRef.current();
+    stopStartupStatusPollRef.current = () => undefined;
     submittedFrameRef.current = null;
+    startupFailureRef.current = null;
     sidecarOriginRef.current = "";
     deliveredSettingsRequestRef.current = "";
     settingsDeliveryAttemptsRef.current = 0;
     setDiagnostic(null);
     setPhase("launching");
+    setLoadingVisible(false);
+    setStartupLabel("Avvio runtime verificato");
+    launchStartedRef.current = performance.now();
+    loadingTimer = window.setTimeout(() => {
+      if (canceled) {
+        return;
+      }
+      setLoadingVisible(true);
+    }, LOADING_STATE_DELAY_MS);
+    statusPollTimer = window.setTimeout(() => {
+      if (canceled) {
+        return;
+      }
+      stopStatusPoll = startNonOverlappingPoll({
+        intervalMs: STARTUP_STATUS_POLL_MS,
+        poll: () => pollStartupStatus(appId, abortController.signal),
+        onResult: (status) => {
+          if (canceled || !status) {
+            return;
+          }
+          setStartupLabel(startupPhaseLabel(status.phase, status.health?.repair_state));
+          if (status.health?.repair_state === "repairing" || status.phase === "repair") {
+            setPhase("repairing");
+          }
+        },
+      });
+      stopStartupStatusPollRef.current = stopStatusPoll;
+    }, STARTUP_STATUS_POLL_DELAY_MS);
 
-    void callDesignStudioBackend<OpenDesignLaunchTarget>(
-      "resolve_launch_target",
-      navigationRef.current.od_project_id ? { od_project_id: navigationRef.current.od_project_id } : {},
+    const requestedNavigation = navigationRef.current;
+    let failureReported = false;
+
+    function applyTarget(target: OpenDesignLaunchTarget, { authoritative }: { authoritative: boolean }) {
+      if (canceled) {
+        return;
+      }
+      const resolved = navigationFromParams({ od_project_id: target.od_project_id });
+      const shouldSyncShell = Boolean(
+        authoritative
+        && resolved.od_project_id
+        && resolved.od_project_id !== requestedNavigation.od_project_id,
+      );
+      navigationRef.current = resolved;
+      setNavigation(resolved);
+      setEmpty(target.target === "empty");
+      postNavigation();
+      if (shouldSyncShell) {
+        openInShell(resolved.od_project_id);
+      }
+    }
+
+    function reportStartupError(error: unknown, fallbackCode: string, fallbackPhase: string) {
+      if (canceled || failureReported || (error instanceof DOMException && error.name === "AbortError")) {
+        return;
+      }
+      failureReported = true;
+      const launchError = error instanceof SidecarLaunchError
+        ? error
+        : error instanceof BackendRequestError
+          ? new SidecarLaunchError(
+              error.code,
+              error.status,
+              error.phase,
+              error.autoRepairable,
+              error.retryable,
+            )
+          : new SidecarLaunchError(fallbackCode, 0, fallbackPhase);
+      const nextDiagnostic = {
+        code: launchError.code,
+        status: launchError.status,
+        phase: launchError.phase,
+        autoRepairable: launchError.autoRepairable,
+        retryable: launchError.retryable,
+      };
+      startupFailureRef.current = nextDiagnostic;
+      stopStartupStatusPollRef.current();
+      stopStartupStatusPollRef.current = () => undefined;
+      setDiagnostic(nextDiagnostic);
+      setPhase("error");
+      setLoadingVisible(false);
+    }
+
+    void requestOpenDesignLaunch(
       appId,
+      requestedNavigation,
+      window.location.origin,
+      abortController.signal,
     )
-      .then((target) => {
+      .then(async (launch) => {
         if (canceled) {
-          return null;
+          return;
         }
-        const resolved = navigationFromParams({ od_project_id: target.od_project_id });
-        const shouldSyncShell = resolved.od_project_id && resolved.od_project_id !== navigationRef.current.od_project_id;
-        navigationRef.current = resolved;
-        setNavigation(resolved);
-        setEmpty(target.target === "empty");
-        if (shouldSyncShell) {
-          openInShell(resolved.od_project_id);
+        const requestedTarget: OpenDesignLaunchTarget | null = requestedNavigation.od_project_id
+          ? {
+              target: "project",
+              od_project_id: requestedNavigation.od_project_id,
+              project: { id: requestedNavigation.od_project_id },
+            }
+          : null;
+        const cachedTarget = requestedTarget
+          || readCachedLaunchTarget(sessionStorage, appId, launch.origin);
+        if (cachedTarget) {
+          applyTarget(cachedTarget, { authoritative: false });
+          writeCachedLaunchTarget(sessionStorage, appId, launch.origin, cachedTarget);
         }
-        return requestOpenDesignLaunch(appId, resolved);
-      })
-      .then((launch) => {
-        if (canceled || !frame || !launch) {
+        const instanceChanged = Boolean(
+          sidecarInstanceRef.current
+          && sidecarInstanceRef.current !== launch.sidecar_instance_id,
+        );
+        sidecarInstanceRef.current = launch.sidecar_instance_id;
+        if (instanceChanged) {
+          setFrameRevision((value) => value + 1);
+          await nextAnimationFrame();
+        }
+        const frame = frameRef.current;
+        if (canceled || !frame) {
           return;
         }
         sidecarOriginRef.current = launch.origin;
         setPhase("bootstrapping");
+        setStartupLabel("Attivazione transazionale dell’interfaccia");
         submittedFrameRef.current = frame;
         submitBootstrapForm(frame, launch);
-        degradedTimer = window.setTimeout(() => {
-          setPhase((current) => {
-            if (current !== "bootstrapping") {
-              return current;
-            }
-            setDiagnostic({ code: "sidecar_load_delayed", status: 0 });
-            return "degraded";
-          });
-        }, LOAD_DEGRADED_AFTER_MS);
-      })
-      .catch((error: unknown) => {
-        if (canceled) {
-          return;
+        if (!cachedTarget) {
+          void callDesignStudioBackend<OpenDesignLaunchTarget>(
+            "resolve_launch_target",
+            {},
+            appId,
+            { signal: abortController.signal },
+          )
+            .then((target) => {
+              applyTarget(target, { authoritative: true });
+              writeCachedLaunchTarget(sessionStorage, appId, launch.origin, target);
+            })
+            .catch((error: unknown) => reportStartupError(error, "launch_target_failed", "launch_target_resolution"));
         }
-        const launchError = error instanceof SidecarLaunchError
-          ? error
-          : new SidecarLaunchError("sidecar_launch_failed", 0);
-        setDiagnostic({ code: launchError.code, status: launchError.status });
-        setPhase("error");
-      });
+      })
+      .catch((error: unknown) => reportStartupError(error, "browser_ticket_failed", "browser_ticket_issue"));
 
     return () => {
       canceled = true;
-      window.clearTimeout(degradedTimer);
+      abortController.abort();
+      window.clearTimeout(loadingTimer);
+      window.clearTimeout(statusPollTimer);
+      stopStatusPoll();
+      stopStartupStatusPollRef.current = () => undefined;
     };
   }, [appId, launchRevision, openInShell]);
+
+  useEffect(() => () => window.clearTimeout(retryTimerRef.current), []);
 
   function handleFrameLoad() {
     if (submittedFrameRef.current !== frameRef.current) {
       return;
     }
+    if (startupFailureRef.current) {
+      setDiagnostic(startupFailureRef.current);
+      setPhase("error");
+      setLoadingVisible(false);
+      return;
+    }
+    stopStartupStatusPollRef.current();
+    stopStartupStatusPollRef.current = () => undefined;
     setDiagnostic(null);
     setPhase("ready");
+    setLoadingVisible(false);
+    retryCountRef.current = 0;
+    recordFirstPaint(launchStartedRef.current, "iframe.load", appId);
+    launchStartedRef.current = 0;
     postNavigation();
     postTheme();
   }
@@ -248,12 +389,27 @@ export function App() {
     if (submittedFrameRef.current !== frameRef.current) {
       return;
     }
-    setDiagnostic({ code: "sidecar_frame_load_failed", status: 0 });
+    setDiagnostic({
+      code: "sidecar_frame_load_failed",
+      status: 0,
+      phase: "browser",
+      autoRepairable: false,
+      retryable: true,
+    });
     setPhase("error");
   }
 
   function retry() {
-    setLaunchRevision((value) => value + 1);
+    if (retryPending || diagnostic?.retryable === false) {
+      return;
+    }
+    const delay = Math.min(500 * (2 ** retryCountRef.current), MAX_RETRY_BACKOFF_MS);
+    retryCountRef.current += 1;
+    setRetryPending(true);
+    retryTimerRef.current = window.setTimeout(() => {
+      setRetryPending(false);
+      setLaunchRevision((value) => value + 1);
+    }, delay);
   }
 
   async function createProject() {
@@ -276,6 +432,13 @@ export function App() {
       navigationRef.current = next;
       setNavigation(next);
       setEmpty(false);
+      if (sidecarOriginRef.current) {
+        writeCachedLaunchTarget(sessionStorage, appId, sidecarOriginRef.current, {
+          target: "project",
+          od_project_id: projectId,
+          project: payload.project || { id: projectId },
+        });
+      }
       postNavigation();
       openInShell(projectId);
     } catch (error) {
@@ -288,25 +451,26 @@ export function App() {
   async function enterFullscreen() {
     const target = frameRef.current?.parentElement;
     if (!target?.requestFullscreen) {
-      setDiagnostic({ code: "fullscreen_unavailable", status: 0 });
+      setDiagnostic({ code: "fullscreen_unavailable", status: 0, retryable: false });
       setPhase("degraded");
       return;
     }
     try {
       await target.requestFullscreen();
     } catch {
-      setDiagnostic({ code: "fullscreen_denied", status: 0 });
+      setDiagnostic({ code: "fullscreen_denied", status: 0, retryable: false });
       setPhase("degraded");
     }
   }
 
-  const loading = phase === "launching" || phase === "bootstrapping";
+  const loading = loadingVisible && (phase === "launching" || phase === "bootstrapping" || phase === "repairing");
   const showRecovery = phase === "degraded" || phase === "error";
+  const retryAllowed = diagnostic?.retryable !== false;
 
   return (
     <main className={`design-studio-host ${empty ? "is-empty" : ""} ${settingsOpen ? "is-settings-open" : ""}`} data-phase={phase}>
       <iframe
-        key={launchRevision}
+        key={frameRevision}
         ref={frameRef}
         name={frameNameRef.current}
         className="design-studio-frame"
@@ -321,8 +485,8 @@ export function App() {
       {loading ? (
         <div className="design-studio-state" role="status" aria-live="polite">
           <LoaderCircle className="spin" aria-hidden="true" />
-          <strong>{phase === "launching" ? "Opening OpenDesign" : "Starting isolated session"}</strong>
-          <span>The verified local runtime is preparing its workspace.</span>
+          <strong>{phase === "repairing" ? "Ripristino sicuro del runtime" : startupLabel}</strong>
+          <span>{phase === "repairing" ? "La nuova generazione sarà pubblicata atomicamente." : "Preparazione dello spazio di lavoro isolato."}</span>
         </div>
       ) : null}
 
@@ -331,10 +495,12 @@ export function App() {
           <TriangleAlert aria-hidden="true" />
           <strong>{phase === "error" ? "OpenDesign is unavailable" : "OpenDesign is taking longer than expected"}</strong>
           <span>{diagnosticLabel(diagnostic)}</span>
-          <button type="button" onClick={retry}>
-            <RefreshCw size={17} aria-hidden="true" />
-            Retry securely
-          </button>
+          {retryAllowed ? (
+            <button data-testid="opendesign-retry" type="button" disabled={retryPending} onClick={retry}>
+              <RefreshCw size={17} aria-hidden="true" />
+              {retryPending ? "Attesa prima del nuovo tentativo" : "Riprova in sicurezza"}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -404,8 +570,71 @@ function diagnosticLabel(diagnostic: SidecarDiagnostic | null): string {
   if (!diagnostic) {
     return "The isolated session did not become ready.";
   }
-  const status = diagnostic.status ? ` · HTTP ${diagnostic.status}` : "";
-  return `Diagnostic: ${diagnostic.code}${status}`;
+  const labels: Record<string, string> = {
+    artifact_missing: "Il runtime verificato non è disponibile.",
+    artifact_integrity_mismatch: "L’integrità del runtime non corrisponde all’attestazione.",
+    artifact_permissions_invalid: "Le protezioni dello store runtime non sono valide.",
+    artifact_repairing: "È in corso un ripristino sicuro del runtime.",
+    artifact_repair_failed: "Il ripristino del runtime non ha superato la verifica.",
+    runtime_binding_invalid: "Runtime, interfaccia e dati non sono compatibili.",
+    daemon_spawn_failed: "Il processo OpenDesign non si è avviato.",
+    daemon_ready_timeout: "OpenDesign non ha raggiunto la readiness transazionale.",
+    activation_incomplete: "L’attivazione dell’interfaccia non è stata completata.",
+    browser_ticket_failed: "Non è stato possibile emettere il ticket browser one-shot.",
+  };
+  const status = diagnostic.status ? ` HTTP ${diagnostic.status}.` : "";
+  return `${labels[diagnostic.code] || `Diagnostica: ${diagnostic.code}.`}${status}`;
+}
+
+type StartupRuntimeStatus = {
+  phase?: string;
+  health?: { repair_state?: string };
+};
+
+async function pollStartupStatus(appId: string, signal: AbortSignal): Promise<StartupRuntimeStatus | null> {
+  try {
+    const payload = await callDesignStudioBackend<{
+      opendesign?: { runtime?: StartupRuntimeStatus };
+    }>("state", {}, appId, { signal });
+    return payload.opendesign?.runtime || null;
+  } catch {
+    return null;
+  }
+}
+
+function startupPhaseLabel(phase = "", repairState = ""): string {
+  if (repairState === "repairing" || phase.includes("repair")) {
+    return "Ripristino sicuro del runtime";
+  }
+  const labels: Record<string, string> = {
+    bootstrap: "Preparazione dell’avvio verificato",
+    artifact_verified: "Avvio runtime verificato",
+    daemon_starting: "Avvio del daemon OpenDesign",
+    activation_commit: "Attivazione transazionale dell’interfaccia",
+    browser_ready: "Preparazione del ticket browser",
+  };
+  return labels[phase] || "Avvio runtime verificato";
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+function recordFirstPaint(startedAt: number, source: string, appId: string): void {
+  if (!(startedAt > 0)) {
+    return;
+  }
+  const durationMs = Math.max(0, performance.now() - startedAt);
+  performance.mark("maverick.opendesign.first-paint");
+  const event = {
+    type: "maverick.app.telemetry",
+    app_id: appId,
+    metric: "first_paint_ms",
+    value_ms: Math.round(durationMs * 1000) / 1000,
+    source,
+  };
+  console.info("maverick.opendesign.first-paint", event);
+  window.parent?.postMessage(event, window.location.origin);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

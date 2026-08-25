@@ -23,6 +23,8 @@ from core.api.runtime_thread_websocket import RUNTIME_THREADS_WS_PATH, stream_ru
 from core.api.runtime_websocket import RUNTIME_SESSION_WS_PREFIX, stream_runtime_session_events
 from core.api.session_api import resolve_request_session
 from core.api.sidecar_browser import handle_sidecar_browser_origin, is_reserved_sidecar_browser_host
+from core.api.sidecar_prewarm import start_declared_sidecar_prewarms
+from core.api.sidecar_control import start_sidecar_control_server
 from core.api.sidecar_proxy import handle_app_sidecar_proxy_asgi, parse_app_sidecar_proxy_route
 from core.api.http import HttpRequestError, enforce_same_origin_for_unsafe_request
 from core.shared.entrypoints import EntrypointShutdownController
@@ -50,6 +52,15 @@ class PlatformAsgiHost:
         if state is None:
             start_backend_restart_recovery(self.state)
             start_background_hook_scheduler(self.state, shutdown_controller=self.shutdown_controller)
+            start_declared_sidecar_prewarms(
+                self.state,
+                trigger="core_start",
+                shutdown_controller=self.shutdown_controller,
+            )
+            start_sidecar_control_server(
+                self.state,
+                shutdown_controller=self.shutdown_controller,
+            )
         self.http_host = PlatformHost(
             self.state,
             start_path=self.state.repository_root,

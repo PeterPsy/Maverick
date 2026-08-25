@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import queue
+import subprocess
 import tempfile
 from threading import Thread
 import time
@@ -22,6 +23,38 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class SharedEntrypointTests(unittest.TestCase):
+    def test_timeout_kills_descendants_that_ignore_sigterm(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            child_pid = temp_root / "child.pid"
+            entrypoint = temp_root / "tree_entrypoint.py"
+            child_source = (
+                "import os, pathlib, signal, time; "
+                "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+                f"pathlib.Path({str(child_pid)!r}).write_text(str(os.getpid())); "
+                "time.sleep(30)"
+            )
+            entrypoint.write_text(
+                "\n".join(
+                    [
+                        "import subprocess, sys, time",
+                        f"subprocess.Popen([sys.executable, '-c', {child_source!r}])",
+                        "time.sleep(30)",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(subprocess.TimeoutExpired):
+                run_json_entrypoint(entrypoint, payload={}, cwd=REPO_ROOT, timeout_seconds=1)
+
+            self.assertTrue(child_pid.is_file())
+            pid = int(child_pid.read_text(encoding="utf-8"))
+            deadline = time.time() + 2
+            while Path(f"/proc/{pid}").exists() and time.time() < deadline:
+                time.sleep(0.05)
+            self.assertFalse(Path(f"/proc/{pid}").exists())
+
     def test_shutdown_controller_runs_registered_cleanup_once(self) -> None:
         controller = EntrypointShutdownController()
         calls: list[str] = []

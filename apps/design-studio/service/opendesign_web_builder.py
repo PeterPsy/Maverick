@@ -26,9 +26,10 @@ from opendesign_attestation import cyclonedx_sbom, license_inventory, notice_tex
 from opendesign_build import build_environment, verify_toolchain
 from opendesign_process import run_command
 from opendesign_source import apply_patch_series, export_source
+from opendesign_store_manifest import create_store_manifest
 from opendesign_supply_chain import read_json
 from opendesign_web_materialization import publish_web_overlay
-from opendesign_web_overlay import VerifiedWebOverlay
+from opendesign_web_overlay import VerifiedWebOverlay, web_overlay_identity
 
 
 CACHE_SCHEMA_VERSION = "3"
@@ -83,31 +84,37 @@ def build_dev_overlay(
     work_parent: Path,
     runtime_session_id: str | None = None,
     compatible_runtime_artifact_sha256: frozenset[str] | None = None,
+    session_dependency_root: Path | None = None,
 ) -> WebBuildResult:
     with tempfile.TemporaryDirectory(prefix="od-web-dev-", dir=_real_directory(work_parent)) as temporary:
-        derivation, keys, metrics = _derive_once(
-            repository,
-            Path(temporary) / "derive",
-            manifest=manifest,
-            service_root=service_root,
-            cache_root=cache_root,
-            signing_key=signing_key,
-            runtime_session_id=runtime_session_id,
-            build_cpus=2,
-            build_profile=DEV_BUILD_PROFILE,
-            fast_dev_build=True,
-            allow_dependency_cache=True,
-            allow_source_cache=True,
-            allow_next_cache=True,
-            compatible_runtime_artifact_sha256=compatible_runtime_artifact_sha256,
-        )
-        digest = sha256_file(derivation / "static.tar.gz")
-        overlay, cache_hit = publish_web_overlay(
-            derivation,
-            registry_root=registry_root,
-            expected_digest=digest,
-            trust_contract=trust_contract,
-        )
+        temporary_root = Path(temporary)
+        try:
+            derivation, keys, metrics = _derive_once(
+                repository,
+                temporary_root / "derive",
+                manifest=manifest,
+                service_root=service_root,
+                cache_root=cache_root,
+                signing_key=signing_key,
+                runtime_session_id=runtime_session_id,
+                build_cpus=2,
+                build_profile=DEV_BUILD_PROFILE,
+                fast_dev_build=True,
+                allow_dependency_cache=True,
+                allow_source_cache=True,
+                allow_next_cache=True,
+                compatible_runtime_artifact_sha256=compatible_runtime_artifact_sha256,
+                session_dependency_root=session_dependency_root,
+            )
+            digest = _derived_overlay_digest(derivation)
+            overlay, cache_hit = publish_web_overlay(
+                derivation,
+                registry_root=registry_root,
+                expected_digest=digest,
+                trust_contract=trust_contract,
+            )
+        finally:
+            _make_build_tree_discardable(temporary_root)
     return WebBuildResult(overlay, cache_hit, 1, False, keys, (metrics,))
 
 
@@ -126,39 +133,43 @@ def build_release_overlay(
 ) -> WebBuildResult:
     with tempfile.TemporaryDirectory(prefix="od-web-release-", dir=_real_directory(work_parent)) as temporary:
         root = Path(temporary)
-        results = []
-        keys: WebCacheKeys | None = None
-        metrics: list[WebBuildMetrics] = []
-        for sequence in (1, 2):
-            derivation, observed_keys, observed_metrics = _derive_once(
-                repository,
-                root / f"derive-{sequence}",
-                manifest=manifest,
-                service_root=service_root,
-                cache_root=cache_root,
-                signing_key=signing_key,
-                runtime_session_id=runtime_session_id,
-                build_cpus=1,
-                build_profile=RELEASE_BUILD_PROFILE,
-                fast_dev_build=False,
-                allow_dependency_cache=False,
-                allow_source_cache=False,
-                allow_next_cache=False,
-                compatible_runtime_artifact_sha256=compatible_runtime_artifact_sha256,
+        try:
+            results = []
+            keys: WebCacheKeys | None = None
+            metrics: list[WebBuildMetrics] = []
+            for sequence in (1, 2):
+                derivation, observed_keys, observed_metrics = _derive_once(
+                    repository,
+                    root / f"derive-{sequence}",
+                    manifest=manifest,
+                    service_root=service_root,
+                    cache_root=cache_root,
+                    signing_key=signing_key,
+                    runtime_session_id=runtime_session_id,
+                    build_cpus=1,
+                    build_profile=RELEASE_BUILD_PROFILE,
+                    fast_dev_build=False,
+                    allow_dependency_cache=False,
+                    allow_source_cache=False,
+                    allow_next_cache=False,
+                    compatible_runtime_artifact_sha256=compatible_runtime_artifact_sha256,
+                    session_dependency_root=None,
+                )
+                keys = observed_keys if keys is None else keys
+                if observed_keys != keys:
+                    raise WebBuildError("release derivations resolved different build inputs")
+                results.append(derivation)
+                metrics.append(observed_metrics)
+            _assert_byte_reproducible(results[0], results[1])
+            digest = _derived_overlay_digest(results[0])
+            overlay, cache_hit = publish_web_overlay(
+                results[0],
+                registry_root=registry_root,
+                expected_digest=digest,
+                trust_contract=trust_contract,
             )
-            keys = observed_keys if keys is None else keys
-            if observed_keys != keys:
-                raise WebBuildError("release derivations resolved different build inputs")
-            results.append(derivation)
-            metrics.append(observed_metrics)
-        _assert_byte_reproducible(results[0], results[1])
-        digest = sha256_file(results[0] / "static.tar.gz")
-        overlay, cache_hit = publish_web_overlay(
-            results[0],
-            registry_root=registry_root,
-            expected_digest=digest,
-            trust_contract=trust_contract,
-        )
+        finally:
+            _make_build_tree_discardable(root)
     assert keys is not None
     return WebBuildResult(overlay, cache_hit, 2, True, keys, tuple(metrics))
 
@@ -241,6 +252,7 @@ def _derive_once(
     allow_source_cache: bool,
     allow_next_cache: bool,
     compatible_runtime_artifact_sha256: frozenset[str] | None,
+    session_dependency_root: Path | None,
 ) -> tuple[Path, WebCacheKeys, WebBuildMetrics]:
     started = time.monotonic()
     if build_cpus < 1 or build_cpus > 4:
@@ -287,7 +299,14 @@ def _derive_once(
     next_root = cache / "next" / keys.next
     workspace_root = cache / "workspace-build" / keys.next
 
-    dependency_hit = allow_dependency_cache and _restore_dependency_cache(source, dependency_root, keys)
+    session_dependency_hit = bool(
+        allow_dependency_cache
+        and session_dependency_root is not None
+        and _restore_session_dependency_cache(source, session_dependency_root, keys)
+    )
+    dependency_hit = session_dependency_hit or (
+        allow_dependency_cache and _restore_dependency_cache(source, dependency_root, keys)
+    )
     if not dependency_hit:
         build = manifest["fallback_build"]["build"]
         run_command(
@@ -359,6 +378,8 @@ def _derive_once(
         compatible_runtime_artifact_sha256=compatible_runtime_artifact_sha256,
         service_root=service_root,
     )
+    if allow_dependency_cache and session_dependency_root is not None and not session_dependency_hit:
+        _write_session_dependency_cache(source, session_dependency_root, keys)
     metrics = WebBuildMetrics(
         round(time.monotonic() - started, 6),
         dependency_hit,
@@ -387,21 +408,10 @@ def _assemble_overlay(
     root.mkdir()
     static = root / "static"
     shutil.copytree(static_output, static)
-    files = {
-        "schema_version": "1",
-        "files": [
-            {
-                "path": path.relative_to(static).as_posix(),
-                "sha256": sha256_file(path),
-                "size_bytes": path.stat().st_size,
-            }
-            for path in sorted(static.rglob("*"))
-            if path.is_file() and not path.is_symlink()
-        ],
-    }
-    write_canonical_json(root / "files.json", files)
+    _normalize_static_modes(static)
+    write_canonical_json(root / "files.json", create_store_manifest(static))
     write_deterministic_archive(static, root / "static.tar.gz")
-    overlay_digest = sha256_file(root / "static.tar.gz")
+    static_archive_digest = sha256_file(root / "static.tar.gz")
 
     packages = package_inventory(source)
     licenses = license_inventory(packages, upstream=manifest["upstream"])
@@ -411,10 +421,51 @@ def _assemble_overlay(
     )
     write_canonical_json(root / "licenses.json", licenses)
     (root / "NOTICE").write_text(notice_text(licenses), encoding="utf-8")
+    series = read_json(service_root / manifest["fallback_build"]["patch_series"])
+    patch_digest = {entry["component"]: entry["sha256"] for entry in series["patches"]}
+    runtime_digest = manifest["artifact"]["assets"][platform_key()]["sha256"]
+    compatible_runtime_digests = sorted(
+        compatible_runtime_artifact_sha256 or frozenset({runtime_digest})
+    )
+    if runtime_digest not in compatible_runtime_digests:
+        raise WebBuildError("web overlay compatibility must include the selected runtime artifact")
+    compatibility = {
+        "runtime_artifact_sha256": compatible_runtime_digests,
+        "od_version": manifest["upstream"]["release_version"],
+        "upstream_commit": manifest["upstream"]["commit"],
+        "platform": manifest["distribution"]["platform"],
+    }
+    inputs = {
+        "lockfile_sha256": keys.lockfile,
+        "package_graph_sha256": keys.package_graph,
+        "web_build_patch_sha256": patch_digest["web-build"],
+        "web_react_patch_sha256": patch_digest["web-react"],
+        "node": node_version,
+        "pnpm": pnpm_version,
+        "toolchain_sha256": keys.toolchain,
+    }
+    evidence_descriptors = {
+        name: _file_descriptor(root / path, path)
+        for name, path in {
+            "file_manifest": "files.json",
+            "sbom": "sbom.cdx.json",
+            "licenses": "licenses.json",
+            "notice": "NOTICE",
+        }.items()
+    }
+    overlay_digest = web_overlay_identity(
+        static_archive_sha256=static_archive_digest,
+        file_manifest_sha256=str(evidence_descriptors["file_manifest"]["sha256"]),
+        sbom_sha256=str(evidence_descriptors["sbom"]["sha256"]),
+        licenses_sha256=str(evidence_descriptors["licenses"]["sha256"]),
+        notice_sha256=str(evidence_descriptors["notice"]["sha256"]),
+        compatibility=compatibility,
+        inputs=inputs,
+    )
     write_canonical_json(
         root / "provenance.json",
         {
-            "schema_version": "1",
+            "schema_version": "2",
             "subject": {"web_overlay_sha256": overlay_digest},
             "upstream": {
                 "commit": manifest["upstream"]["commit"],
@@ -425,48 +476,45 @@ def _assemble_overlay(
             "reproducible_environment": manifest["fallback_build"]["build"]["environment"],
         },
     )
-    descriptors = {
-        name: _file_descriptor(root / path, path)
-        for name, path in {
-            "static_archive": "static.tar.gz",
-            "file_manifest": "files.json",
-            "sbom": "sbom.cdx.json",
-            "licenses": "licenses.json",
-            "notice": "NOTICE",
-            "provenance": "provenance.json",
-        }.items()
-    }
-    series = read_json(service_root / manifest["fallback_build"]["patch_series"])
-    patch_digest = {entry["component"]: entry["sha256"] for entry in series["patches"]}
-    runtime_digest = manifest["artifact"]["assets"][platform_key()]["sha256"]
-    compatible_runtime_digests = sorted(
-        compatible_runtime_artifact_sha256 or frozenset({runtime_digest})
-    )
-    if runtime_digest not in compatible_runtime_digests:
-        raise WebBuildError("web overlay compatibility must include the selected runtime artifact")
     overlay_manifest = {
-        "schema_version": "1",
+        "schema_version": "2",
         "web_overlay_sha256": overlay_digest,
-        **descriptors,
-        "compatibility": {
-            "runtime_artifact_sha256": compatible_runtime_digests,
-            "od_version": manifest["upstream"]["release_version"],
-            "upstream_commit": manifest["upstream"]["commit"],
-            "platform": manifest["distribution"]["platform"],
-        },
-        "inputs": {
-            "lockfile_sha256": keys.lockfile,
-            "package_graph_sha256": keys.package_graph,
-            "web_build_patch_sha256": patch_digest["web-build"],
-            "web_react_patch_sha256": patch_digest["web-react"],
-            "node": node_version,
-            "pnpm": pnpm_version,
-            "toolchain_sha256": keys.toolchain,
-        },
+        "static_archive": _file_descriptor(root / "static.tar.gz", "static.tar.gz"),
+        **evidence_descriptors,
+        "compatibility": compatibility,
+        "inputs": inputs,
+        "provenance": _file_descriptor(root / "provenance.json", "provenance.json"),
         "signature": {"algorithm": "Ed25519", "path": "manifest.sig"},
     }
     write_canonical_json(root / "manifest.json", overlay_manifest)
     _sign_manifest(root / "manifest.json", signing_key, root / "manifest.sig")
+
+
+def _derived_overlay_digest(root: Path) -> str:
+    manifest = read_json(root / "manifest.json")
+    digest = manifest.get("web_overlay_sha256")
+    if not isinstance(digest, str) or len(digest) != 64 or any(
+        character not in "0123456789abcdef" for character in digest
+    ):
+        raise WebBuildError("derived web overlay identity is invalid")
+    return digest
+
+
+def _normalize_static_modes(root: Path) -> None:
+    for path in sorted(root.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+        if path.is_symlink():
+            raise WebBuildError("web static output must not contain symlinks")
+        path.chmod(0o555 if path.is_dir() else 0o444)
+    root.chmod(0o555)
+
+
+def _make_build_tree_discardable(root: Path) -> None:
+    if not root.exists() or root.is_symlink():
+        return
+    for path in root.rglob("*"):
+        if path.is_dir() and not path.is_symlink():
+            path.chmod(0o755)
+    root.chmod(0o755)
 
 
 def _restore_dependency_cache(source: Path, root: Path, keys: WebCacheKeys) -> bool:
@@ -515,6 +563,78 @@ def _dependency_cache_paths(source: Path) -> list[str]:
         and not path.is_symlink()
         and path.relative_to(source).parts.count("node_modules") == 1
     )
+
+
+def _restore_session_dependency_cache(source: Path, root: Path, keys: WebCacheKeys) -> bool:
+    """Restore a private, same-benchmark dependency snapshot without a second 1.9 GiB unpack."""
+    root = Path(root) / keys.dependency
+    if root.is_symlink() or not root.is_dir():
+        return False
+    try:
+        receipt = read_json(root / "session.json")
+    except (OSError, ValueError):
+        return False
+    paths = receipt.get("paths") if isinstance(receipt, dict) else None
+    if (
+        receipt.get("schema_version") != "1"
+        or receipt.get("dependency_key") != keys.dependency
+        or not isinstance(paths, list)
+        or not paths
+        or not all(isinstance(path, str) and _safe_relative_path(path) for path in paths)
+    ):
+        return False
+    for relative in paths:
+        cached = root / "payload" / relative
+        destination = source / relative
+        if cached.is_symlink() or not cached.is_dir() or destination.exists() or destination.is_symlink():
+            return False
+    for relative in paths:
+        destination = source / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        _copy_tree_hardlinked(root / "payload" / relative, destination)
+    return True
+
+
+def _write_session_dependency_cache(source: Path, root: Path, keys: WebCacheKeys) -> None:
+    """Publish an invocation-private snapshot after warmup; it is never a persistent trust root."""
+    paths = _dependency_cache_paths(source)
+    if not paths:
+        raise WebBuildError("dependency warmup produced no session cache inputs")
+    parent = Path(root)
+    if parent.is_symlink():
+        raise WebBuildError("OpenDesign session dependency cache root is unsafe")
+    parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    destination = parent / keys.dependency
+    if destination.exists() or destination.is_symlink():
+        return
+    staging = Path(tempfile.mkdtemp(prefix=f".{keys.dependency}.publishing-", dir=parent))
+    try:
+        for relative in paths:
+            target = staging / "payload" / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _copy_tree_hardlinked(source / relative, target)
+        write_canonical_json(
+            staging / "session.json",
+            {"schema_version": "1", "dependency_key": keys.dependency, "paths": paths},
+        )
+        os.replace(staging, destination)
+        _fsync_directory(parent)
+    finally:
+        _discard_cache_tree(staging)
+
+
+def _copy_tree_hardlinked(source: Path, destination: Path) -> None:
+    if source.is_symlink() or not source.is_dir() or destination.exists() or destination.is_symlink():
+        raise WebBuildError("OpenDesign session cache copy endpoints are unsafe")
+    completed = subprocess.run(
+        ["cp", "-a", "--link", str(source), str(destination)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise WebBuildError("OpenDesign session dependency cache copy failed")
 
 
 def _write_dependency_archive(source: Path, archive: Path, paths: list[str]) -> None:
@@ -664,6 +784,10 @@ def _restore_workspace_build_cache(source: Path, root: Path, keys: WebCacheKeys)
                 return False
         for relative in paths:
             destination = source / relative
+            if destination.exists() or destination.is_symlink():
+                if destination.is_symlink() or not destination.is_dir():
+                    raise WebBuildError("OpenDesign workspace cache destination is unsafe")
+                shutil.rmtree(destination)
             destination.parent.mkdir(parents=True, exist_ok=True)
             _copy_tree_cached(root / "payload" / relative, destination)
         return True

@@ -1,19 +1,47 @@
+export class BackendRequestError extends Error {
+  readonly code: string;
+  readonly status: number;
+  readonly phase: string;
+  readonly autoRepairable: boolean;
+  readonly retryable: boolean;
+
+  constructor(payload: Record<string, unknown>, status: number) {
+    const code = safeDiagnosticCode(payload.error, "backend_request_failed");
+    super(typeof payload.detail === "string" && payload.detail.trim()
+      ? payload.detail
+      : "Design Studio request failed.");
+    this.name = "BackendRequestError";
+    this.code = code;
+    this.status = status;
+    this.phase = safeDiagnosticCode(payload.phase, "backend");
+    this.autoRepairable = payload.auto_repairable === true;
+    this.retryable = typeof payload.retryable === "boolean"
+      ? payload.retryable
+      : status >= 500;
+  }
+}
+
 export async function callDesignStudioBackend<T>(
   action: string,
   argumentsPayload: Record<string, unknown> = {},
   appId = mountedAppId(),
+  options: { signal?: AbortSignal } = {},
 ): Promise<T> {
   const response = await fetch(`/api/apps/${encodeURIComponent(appId)}/backend`, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ action, arguments: argumentsPayload }),
+    signal: options.signal,
   });
-  const payload = await response.json() as { detail?: string; error?: string } & T;
-  if (!response.ok || payload.error) {
-    throw new Error(payload.detail || payload.error || "Design Studio request failed.");
+  const rawPayload = await response.json() as unknown;
+  const payload = rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)
+    ? rawPayload as Record<string, unknown> & T
+    : {} as Record<string, unknown> & T;
+  if (!response.ok || typeof payload.error === "string") {
+    throw new BackendRequestError(payload, response.status);
   }
-  return payload;
+  return payload as T;
 }
 
 export function mountedAppId(pathname = window.location.pathname): string {
@@ -72,4 +100,10 @@ export function mobileLayoutFromWidgetMessage(value: unknown): boolean | undefin
 function scalarProjectId(value: unknown): string {
   const text = typeof value === "string" ? value.trim() : "";
   return /^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/.test(text) ? text : "";
+}
+
+function safeDiagnosticCode(value: unknown, fallback: string): string {
+  return typeof value === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(value)
+    ? value
+    : fallback;
 }

@@ -164,12 +164,16 @@ def oci_provenance_payload(
     artifact_name: str,
     artifact_sha256: str,
     patch_evidence: dict[str, Any],
+    startup_patch_evidence: dict[str, Any],
     rootfs_inventory_sha256: str,
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
     distribution = manifest["distribution"]
     invocation = hashlib.sha256(
-        f"{artifact_sha256}:{distribution['index']['digest']}:{patch_evidence['post_sha256']}:".encode("utf-8")
+        (
+            f"{artifact_sha256}:{distribution['index']['digest']}:"
+            f"{patch_evidence['post_sha256']}:{startup_patch_evidence['post_sha256']}:"
+        ).encode("utf-8")
     ).hexdigest()
     dependencies = [
         {
@@ -221,6 +225,7 @@ def oci_provenance_payload(
                 },
                 "internalParameters": {
                     "boundaryPatch": patch_evidence,
+                    "startupPatch": startup_patch_evidence,
                     "rootfsInventorySha256": rootfs_inventory_sha256,
                     "runtimeClosure": manifest["runtime_closure"],
                 },
@@ -404,12 +409,12 @@ def verify_artifact_set(manifest: dict[str, Any], artifact_directory: Path) -> d
         paths[path_field] = path
     if paths["file"].stat().st_size != asset["size_bytes"]:
         raise ArtifactError("OpenDesign artifact size mismatch")
-    _validate_metadata_assets(paths)
+    _validate_metadata_assets(paths, manifest=manifest)
     verify_signature(paths["provenance"], paths["signature"], paths["public_key"])
     return asset
 
 
-def _validate_metadata_assets(paths: dict[str, Path]) -> None:
+def _validate_metadata_assets(paths: dict[str, Path], *, manifest: dict[str, Any]) -> None:
     file_manifest = read_bundle_manifest(paths["file_manifest"])
     if (
         file_manifest.get("schema_version") != "1"
@@ -430,6 +435,29 @@ def _validate_metadata_assets(paths: dict[str, Path]) -> None:
     expected = [{"name": archive_name, "digest": {"sha256": sha256_file(paths["file"])}}]
     if provenance.get("subject") != expected:
         raise ArtifactError("OpenDesign provenance subject does not match the artifact")
+    try:
+        build_definition = provenance["predicate"]["buildDefinition"]
+        external = build_definition["externalParameters"]
+        internal = build_definition["internalParameters"]
+    except (KeyError, TypeError) as error:
+        raise ArtifactError("OpenDesign provenance build definition is invalid") from error
+    if external != {"distribution": manifest["distribution"], "platform": platform_key()}:
+        raise ArtifactError("OpenDesign provenance distribution parameters differ from the pinned manifest")
+    if (
+        not isinstance(internal, dict)
+        or set(internal) != {
+            "boundaryPatch",
+            "startupPatch",
+            "rootfsInventorySha256",
+            "runtimeClosure",
+        }
+        or internal.get("boundaryPatch") != manifest["boundary_patch"]
+        or internal.get("startupPatch") != manifest["startup_patch"]
+        or internal.get("runtimeClosure") != manifest["runtime_closure"]
+        or not isinstance(internal.get("rootfsInventorySha256"), str)
+        or len(internal["rootfsInventorySha256"]) != 64
+    ):
+        raise ArtifactError("OpenDesign provenance internal parameters differ from the pinned manifest")
 
 
 def _asset_path(root: Path, relative: str) -> Path:

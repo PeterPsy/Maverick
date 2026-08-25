@@ -374,6 +374,7 @@ class HttpSidecarBrowserOriginSpec:
     csp_profile: HttpSidecarBrowserCspProfile
     frame_ancestors: list[str]
     connect_src: list[str]
+    immutable_asset_prefixes: list[str]
 
 
 @dataclass(frozen=True)
@@ -397,6 +398,31 @@ class HttpSidecarEntrypointAccessSpec:
 
 
 @dataclass(frozen=True)
+class HttpSidecarArtifactMountSpec:
+    """Declare one platform-owned artifact namespace mounted read-only."""
+
+    artifact_id: str
+    mount_path: str
+
+
+@dataclass(frozen=True)
+class HttpSidecarPrewarmSpec:
+    """Declare when Core should start and retain one sidecar."""
+
+    on_core_start: bool
+    on_install: bool
+    on_activation: bool
+    keep_alive: bool
+
+
+@dataclass(frozen=True)
+class HttpSidecarDiagnosticsSpec:
+    """Declare a bounded startup-status file inside app data."""
+
+    status_file: str
+
+
+@dataclass(frozen=True)
 class HttpSidecarSpec:
     """Describe one app-owned local HTTP sidecar process."""
 
@@ -407,6 +433,9 @@ class HttpSidecarSpec:
     package_manager: str | None
     env: dict[str, str]
     process_policy: HttpSidecarProcessPolicy
+    artifact_mounts: list[HttpSidecarArtifactMountSpec]
+    prewarm: HttpSidecarPrewarmSpec | None
+    diagnostics: HttpSidecarDiagnosticsSpec | None
     browser_origin: HttpSidecarBrowserOriginSpec | None
     entrypoint_access: HttpSidecarEntrypointAccessSpec | None
     bind: HttpSidecarBindSpec

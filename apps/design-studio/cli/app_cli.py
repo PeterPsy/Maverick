@@ -16,6 +16,45 @@ def main() -> None:
     command_id = str(payload.raw.get("command_id") or "design-studio")
     arguments = dict(payload.arguments)
     action = str(arguments.pop("action", "") or _action_from_command(command_id))
+    if action in {
+        "artifact_status",
+        "artifact_verify",
+        "artifact_repair",
+        "artifact_gc",
+        "sidecar_prewarm",
+        "sidecar_diagnostics",
+    }:
+        service_root = Path(__file__).resolve().parents[1] / "service"
+        sys.path.insert(0, str(service_root))
+        from opendesign_artifact_operations import run_artifact_operation
+
+        operation = {
+            "artifact_status": "status",
+            "artifact_verify": "verify",
+            "artifact_repair": "repair",
+            "artifact_gc": "gc",
+            "sidecar_prewarm": "prewarm",
+            "sidecar_diagnostics": "diagnostics",
+        }[action]
+        try:
+            result = run_artifact_operation(
+                operation,
+                data_root=Path(payload.data_root),
+                workspace_id=str(payload.workspace_id or "default"),
+            )
+        except Exception as error:
+            emit_json(
+                {
+                    "status_code": 503,
+                    "ok": False,
+                    "error": getattr(error, "code", "artifact_operation_failed"),
+                    "phase": getattr(error, "phase", operation),
+                    "auto_repairable": getattr(error, "code", "") in {"artifact_missing", "artifact_integrity_mismatch"},
+                }
+            )
+            return
+        emit_json({"status_code": 200, "ok": True, **result})
+        return
     if action == "dev":
         service_root = Path(__file__).resolve().parents[1] / "service"
         sys.path.insert(0, str(service_root))

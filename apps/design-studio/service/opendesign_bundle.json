@@ -1,5 +1,5 @@
 {
-  "schema_version": "5",
+  "schema_version": "6",
   "upstream": {
     "repository": "https://github.com/nexu-io/open-design.git",
     "tag": "open-design-v0.16.1",
@@ -46,32 +46,112 @@
       "size_bytes": 11762
     },
     "layers": [
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:55afa1ecc21d2bb5e5045f32dafee56272ffd89860bac26f6c32123439af26a4","size_bytes":3846391},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:7e2a5e2761f53b694faaee16c5ad1e400cb41224f693337aac52e74bee3b2f65","size_bytes":52524717},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:57eb903fc7a4b0006b1253f877823b15c51433ccd41a20392812682211c46a6c","size_bytes":1262109},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:21af007bacf625b557dda6dbce062088808612be54a955980b3d8efb8ea7d082","size_bytes":448},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:25545c635da89f0745c7cd05ada2344859915345424c5ce7e001a70cd02f2fa4","size_bytes":15018585},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:79541a8bced22b31e08376d39007eaacf3772678bde31b12f262b2e3828d7778","size_bytes":93},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:3dbb6bd7c8e91b3e78afbc2c71a910f68a662dc8e221d3b3397f34990d3736b7","size_bytes":26666992},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:8c05179197c03f1d8682a63dc8ceca10314565ee9c4427dc9c4efb51416052fb","size_bytes":24483912},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:5845ee0180d8c5685b294ec18ba73d10e771c3a9de5cc16531f052866255ee4c","size_bytes":1848208},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:92d65d0100461fdb08f13a790156f97fbff16b3e289e5b0817d26633121855a3","size_bytes":6311613},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:47f69a4f2e9ae0f903f8473d8aef34e6ea7b42d4ee574ec43af984f4827cf55d","size_bytes":44374},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:a2b9497ffdbc0ec14ea4a06453fd30d545ee3bdfc804867ea7bb0d84f839d144","size_bytes":193253},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:50c63c9cf4536752347738f841566b200add0e92a80391ba4744028b010f406b","size_bytes":5807},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:bfacca24a3bfa18537d91cddd63fddc8b22a3626422fbd528a54f5f3798a27a1","size_bytes":13367165},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:ac9d57665593a7d8e5e285b7be155d6222ee5e010d36f780c6b04094d2f5d6e5","size_bytes":53369474},
-      {"media_type":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:65f183e60eef987b7d2c80ebc9660ef9cc6bf4a8e2688a1704c424770d94b7ff","size_bytes":112}
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:55afa1ecc21d2bb5e5045f32dafee56272ffd89860bac26f6c32123439af26a4",
+        "size_bytes": 3846391
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:7e2a5e2761f53b694faaee16c5ad1e400cb41224f693337aac52e74bee3b2f65",
+        "size_bytes": 52524717
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:57eb903fc7a4b0006b1253f877823b15c51433ccd41a20392812682211c46a6c",
+        "size_bytes": 1262109
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:21af007bacf625b557dda6dbce062088808612be54a955980b3d8efb8ea7d082",
+        "size_bytes": 448
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:25545c635da89f0745c7cd05ada2344859915345424c5ce7e001a70cd02f2fa4",
+        "size_bytes": 15018585
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:79541a8bced22b31e08376d39007eaacf3772678bde31b12f262b2e3828d7778",
+        "size_bytes": 93
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:3dbb6bd7c8e91b3e78afbc2c71a910f68a662dc8e221d3b3397f34990d3736b7",
+        "size_bytes": 26666992
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:8c05179197c03f1d8682a63dc8ceca10314565ee9c4427dc9c4efb51416052fb",
+        "size_bytes": 24483912
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:5845ee0180d8c5685b294ec18ba73d10e771c3a9de5cc16531f052866255ee4c",
+        "size_bytes": 1848208
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:92d65d0100461fdb08f13a790156f97fbff16b3e289e5b0817d26633121855a3",
+        "size_bytes": 6311613
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:47f69a4f2e9ae0f903f8473d8aef34e6ea7b42d4ee574ec43af984f4827cf55d",
+        "size_bytes": 44374
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:a2b9497ffdbc0ec14ea4a06453fd30d545ee3bdfc804867ea7bb0d84f839d144",
+        "size_bytes": 193253
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:50c63c9cf4536752347738f841566b200add0e92a80391ba4744028b010f406b",
+        "size_bytes": 5807
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:bfacca24a3bfa18537d91cddd63fddc8b22a3626422fbd528a54f5f3798a27a1",
+        "size_bytes": 13367165
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:ac9d57665593a7d8e5e285b7be155d6222ee5e010d36f780c6b04094d2f5d6e5",
+        "size_bytes": 53369474
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:65f183e60eef987b7d2c80ebc9660ef9cc6bf4a8e2688a1704c424770d94b7ff",
+        "size_bytes": 112
+      }
     ],
     "attestation": {
-      "manifest": {"media_type":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:c52f7a70361eebd43ec6142a42ef77d6fff81d4be569456448151a78d60f7b6c","size_bytes":565},
-      "config": {"media_type":"application/vnd.oci.image.config.v1+json","digest":"sha256:ce5c1ecc0d9511de09d6a033e860a0d0dd423b30bab28bf731248071c69ea128","size_bytes":167},
-      "statement": {"media_type":"application/vnd.in-toto+json","predicate_type":"https://slsa.dev/provenance/v1","digest":"sha256:46c51752abc19db8f0cbf523ab59c8ba80fb2d731a0e7660043435e42ed31cfc","size_bytes":60703},
+      "manifest": {
+        "media_type": "application/vnd.oci.image.manifest.v1+json",
+        "digest": "sha256:c52f7a70361eebd43ec6142a42ef77d6fff81d4be569456448151a78d60f7b6c",
+        "size_bytes": 565
+      },
+      "config": {
+        "media_type": "application/vnd.oci.image.config.v1+json",
+        "digest": "sha256:ce5c1ecc0d9511de09d6a033e860a0d0dd423b30bab28bf731248071c69ea128",
+        "size_bytes": 167
+      },
+      "statement": {
+        "media_type": "application/vnd.in-toto+json",
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "digest": "sha256:46c51752abc19db8f0cbf523ab59c8ba80fb2d731a0e7660043435e42ed31cfc",
+        "size_bytes": 60703
+      },
       "subject_manifest_digest": "sha256:170f56cdeb3a213423af150d4095b7729814eaf0ad26a99be7fab2344f0f5cd1"
     },
     "expected_revision": "276b4d8e970bc143d7ad060181a89a834e3d9caf",
     "expected_version": "0.16.1",
-    "allowed_redirect_hosts": ["ghcr.io", "pkg-containers.githubusercontent.com"],
+    "allowed_redirect_hosts": [
+      "ghcr.io",
+      "pkg-containers.githubusercontent.com"
+    ],
     "max_blob_size_bytes": 67108864,
     "minimum_mem_available_bytes": 3221225472
   },
@@ -93,112 +173,133 @@
   "fallback_build": {
     "patch_series": "patches/series.json",
     "build": {
-    "install": [
-      "corepack",
-      "pnpm",
-      "install",
-      "--frozen-lockfile"
-    ],
-    "focused_verification": [
-      [
+      "install": [
+        "corepack",
+        "pnpm",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "focused_verification": [
+        [
+          "corepack",
+          "pnpm",
+          "--filter",
+          "@open-design/daemon",
+          "exec",
+          "vitest",
+          "run",
+          "-c",
+          "vitest.config.ts",
+          "tests/api-token-guard.test.ts"
+        ]
+      ],
+      "compile": [
+        [
+          "corepack",
+          "pnpm",
+          "--filter",
+          "@open-design/daemon...",
+          "--workspace-concurrency=4",
+          "--if-present",
+          "run",
+          "build"
+        ]
+      ],
+      "environment": {
+        "CI": "true",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "MALLOC_ARENA_MAX": "2",
+        "NODE_OPTIONS": "--max-old-space-size=896",
+        "NO_COLOR": "1",
+        "OD_REPRODUCIBLE_BUILD_ID": "open-design-v0.16.1",
+        "OD_REPRODUCIBLE_BUILD_CPUS": "1",
+        "SOURCE_DATE_EPOCH": "0",
+        "TZ": "UTC"
+      },
+      "install_environment": {
+        "MALLOC_ARENA_MAX": "1",
+        "NODE_OPTIONS": "--max-old-space-size=640",
+        "OPEN_DESIGN_POSTINSTALL_CONCURRENCY": "1"
+      },
+      "focused_verification_environment": {
+        "MALLOC_ARENA_MAX": "1",
+        "NODE_OPTIONS": "--max-old-space-size=1024"
+      },
+      "compile_environment": {
+        "DO_NOT_TRACK": "1",
+        "NEXT_TELEMETRY_DISABLED": "1",
+        "NODE_OPTIONS": "--max-old-space-size=1536"
+      }
+    },
+    "stage": {
+      "daemon_package": "@open-design/daemon",
+      "daemon_deploy": [
         "corepack",
         "pnpm",
         "--filter",
         "@open-design/daemon",
-        "exec",
-        "vitest",
-        "run",
-        "-c",
-        "vitest.config.ts",
-        "tests/api-token-guard.test.ts"
+        "--prod",
+        "deploy",
+        "--legacy"
+      ],
+      "built_entrypoint": "apps/daemon/dist/cli.js",
+      "web_static_source": "apps/web/out",
+      "web_static_dir": "apps/web/out",
+      "resource_paths": [
+        "assets",
+        "craft",
+        "design-systems",
+        "design-templates",
+        "plugins/_official",
+        "plugins/registry",
+        "prompt-templates",
+        "skills"
+      ],
+      "remove_globs": [
+        "**/*.map"
       ]
-    ],
-    "compile": [
-      [
-        "corepack",
-        "pnpm",
-        "--filter",
-        "@open-design/daemon...",
-        "--workspace-concurrency=4",
-        "--if-present",
-        "run",
-        "build"
-      ]
-    ],
-    "environment": {
-      "CI": "true",
-      "LANG": "C.UTF-8",
-      "LC_ALL": "C.UTF-8",
-      "MALLOC_ARENA_MAX": "2",
-      "NODE_OPTIONS": "--max-old-space-size=896",
-      "NO_COLOR": "1",
-      "OD_REPRODUCIBLE_BUILD_ID": "open-design-v0.16.1",
-      "OD_REPRODUCIBLE_BUILD_CPUS": "1",
-      "SOURCE_DATE_EPOCH": "0",
-      "TZ": "UTC"
-    },
-    "install_environment": {
-      "MALLOC_ARENA_MAX": "1",
-      "NODE_OPTIONS": "--max-old-space-size=640",
-      "OPEN_DESIGN_POSTINSTALL_CONCURRENCY": "1"
-    },
-    "focused_verification_environment": {
-      "MALLOC_ARENA_MAX": "1",
-      "NODE_OPTIONS": "--max-old-space-size=1024"
-    },
-    "compile_environment": {
-      "DO_NOT_TRACK": "1",
-      "NEXT_TELEMETRY_DISABLED": "1",
-      "NODE_OPTIONS": "--max-old-space-size=1536"
-    }
-    },
-    "stage": {
-    "daemon_package": "@open-design/daemon",
-    "daemon_deploy": [
-      "corepack",
-      "pnpm",
-      "--filter",
-      "@open-design/daemon",
-      "--prod",
-      "deploy",
-      "--legacy"
-    ],
-    "built_entrypoint": "apps/daemon/dist/cli.js",
-    "web_static_source": "apps/web/out",
-    "web_static_dir": "apps/web/out",
-    "resource_paths": [
-      "assets",
-      "craft",
-      "design-systems",
-      "design-templates",
-      "plugins/_official",
-      "plugins/registry",
-      "prompt-templates",
-      "skills"
-    ],
-    "remove_globs": [
-      "**/*.map"
-    ]
     }
   },
   "runtime_closure": {
     "app_root": "app",
     "node": "runtime/bin/node",
     "musl_loader": "runtime/lib/ld-musl-x86_64.so.1",
-    "library_paths": ["runtime/lib", "runtime/usr-lib"],
+    "library_paths": [
+      "runtime/lib",
+      "runtime/usr-lib"
+    ],
     "daemon_entrypoint": "app/apps/daemon/dist/cli.js",
-    "required_native_modules": ["better-sqlite3", "blake3-wasm"],
-    "blocked_optional_native_modules": ["node-pty"]
+    "required_native_modules": [
+      "better-sqlite3",
+      "blake3-wasm"
+    ],
+    "blocked_optional_native_modules": [
+      "node-pty"
+    ]
   },
   "boundary_patch": {
     "path": "app/apps/daemon/dist/server.js",
     "pre_sha256": "61c966b4a3a99e7098e37a943436e8b5d52563d1bace24a0e398b200ac0135e8",
-    "post_sha256": "21bd1a29b45114647b00171e3f60d5ca708a20329e902f2bd7fff1b2d3a45601",
+    "post_sha256": "f0eac11181ea9dd58e2e36a63b4ea6806d398e88e4ad5f47615c1f4178571a9a",
     "required_environment": [
+      "OD_ACTIVATION_ID",
+      "OD_DATA_GENERATION",
+      "OD_MAVERICK_READY_MARKER",
+      "OD_MAVERICK_DEFER_PLUGIN_CATALOG",
+      "OD_MAVERICK_STARTUP_NONCE",
       "OD_REQUIRE_API_TOKEN_ON_LOOPBACK",
+      "OD_RUNTIME_ARTIFACT_SHA256",
       "OD_STATIC_DIR",
-      "OD_STATIC_REGISTRY_ROOT"
+      "OD_STATIC_REGISTRY_ROOT",
+      "OD_WEB_OVERLAY_SHA256"
     ]
+  },
+  "startup_patch": {
+    "path": "app/apps/daemon/dist/plugins/bundled.js",
+    "pre_sha256": "2842427fab7f74700b735b6dad7d730fbfd105342721619aa73880fae3c35921",
+    "post_sha256": "69742e21ec16e24260b2fab4be920c613c60a6f5d9040d0faf14563c9559d2b5",
+    "max_concurrency": 8
   },
   "web_patch": {
     "patch_series": "patches/series.json",
@@ -225,27 +326,27 @@
   },
   "artifact": {
     "format": "tar.gz",
-    "default_relative_path": "vendor/open-design",
+    "default_relative_path": "external-capability/opendesign/runtime",
     "asset_directory": "artifacts",
     "assets": {
       "linux-x86_64": {
         "file": "open-design-v0.16.1-linux-x86_64.tar.gz",
-        "sha256": "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
-        "size_bytes": 161594149,
+        "sha256": "6997f3ab7800c31c027bb1cdd9c9f7634e638b39577c74632eee3b0ce440c5fe",
+        "size_bytes": 161589750,
         "file_manifest": "open-design-v0.16.1-linux-x86_64.manifest.json",
-        "file_manifest_sha256": "647cba762cd629e447cd6c72fd893b9b0c85eaea6abfadb3a21821448f500183",
+        "file_manifest_sha256": "9eedcef94dc16081724437f3230a1a834fda5bb62eb552887363ef0f6a43f5c9",
         "sbom": "open-design-v0.16.1-linux-x86_64.sbom.cdx.json",
         "sbom_sha256": "a1a28df1527e9208153fd036d0005364ec062c10078af6f5708b3bc9c1c1ded5",
         "license_inventory": "open-design-v0.16.1-linux-x86_64.licenses.json",
         "license_inventory_sha256": "1b717abf64b5bf6b7faac15b941acf5e95ceebc66dcdf14bc107279cb7b36750",
         "notice": "open-design-v0.16.1-linux-x86_64.NOTICE",
-        "notice_sha256": "57ca338011b9071ab4eed5cfdf25d1a62ff7774a762cd00c9537402f16116ef1",
+        "notice_sha256": "4ee8f58f26b2ae6982076085c3f72474745423e0f2c30d66dc0d722178490d31",
         "provenance": "open-design-v0.16.1-linux-x86_64.provenance.json",
-        "provenance_sha256": "b62f9b9fb3772be403e4ee2949a73f818b50967d8ea1ea322e4a7edcc82d1cda",
+        "provenance_sha256": "c5460cefd953831963191731909515ba4993148d11ce6ed8dd90a85b1f0c921f",
         "signature": "open-design-v0.16.1-linux-x86_64.provenance.sig",
-        "signature_sha256": "ee70883d4911033493056a5aa8807d55013f0318405d0eb0b5ce035b6df5d6a3",
+        "signature_sha256": "f3ac3f86d6fceaf7c19209f1241b89d52e497a4688f9bafc9d5b71563315af2b",
         "public_key": "open-design-v0.16.1-linux-x86_64.provenance.pub.pem",
-        "public_key_sha256": "418381a4da415837dd5d07b9585fbb958ef20f5c89de35f89b038c3a85f09b1b"
+        "public_key_sha256": "9a4c75451061ba4a5cd7f1261fb4a20a2c9100c197ab21ac3ad32db6b4e267dd"
       }
     }
   },
@@ -262,7 +363,7 @@
       "DO_NOT_TRACK": "1",
       "NEXT_TELEMETRY_DISABLED": "1",
       "MAVERICK_OPENDESIGN_DATA_ROOT": "${app.data_dir}/opendesign",
-      "MAVERICK_OPENDESIGN_BUNDLE_ROOT": "${app.source_dir}/service/vendor/open-design"
+      "MAVERICK_OPENDESIGN_STORE_ROOT": "/artifacts/opendesign"
     }
   }
 }

@@ -1,20 +1,17 @@
 # Design Studio OpenDesign Sidecar
 
 Design Studio starts `opendesign_launcher.py` as the declared Maverick sidecar.
-The launcher requires an immutable curated OpenDesign bundle below the verified
-registry:
+The launcher requires the platform-owned artifact capability mounted read-only
+at:
 
 ```text
-service/vendor/open-design/<artifact-sha256>/
+/artifacts/opendesign/runtime/<artifact-sha256>/content
+/artifacts/opendesign/web/<web-sha256>/content
 ```
 
-and an independently verified web overlay below:
-
-```text
-service/vendor/open-design-web/<web-sha256>/
-```
-
-Control schema v2 selects both digests plus the OpenDesign version and data
+The host namespace is content-addressed, protected, and outside the repository;
+it is never inferred from an app path or environment escape hatch. Control
+schema v3 selects both digests plus the OpenDesign version and data
 generation. The daemon requires `OD_STATIC_DIR` and
 `OD_STATIC_REGISTRY_ROOT`; both resolve to real, non-symlinked paths contained
 in the verified overlay registry. There is no fallback to web files embedded in
@@ -61,16 +58,16 @@ output must match byte-for-byte before publication. The launcher invokes only
 that imported loader and Node binary; the app contract deliberately declares no
 package manager and core therefore does not mount a host Node runtime.
 
-The launcher revalidates every file in the exact executable bundle on each new
-process, using a bounded four-worker hashing pass. Retained rollback bundles are
-fully revalidated when selected by a controlled operation, rather than on every
-ordinary launch. This remains part of the artifact trust boundary and can
-dominate a cold start when the OS page cache is cold. Design Studio therefore
-declares a 120-second startup health budget for `/api/ready`. Core keeps serving
-its own `/health` endpoint during that wait, retries the authenticated Unix-relay
-probe, and tears down the whole confined process group if readiness still fails.
-A later browser launch must start a new process cleanly; no half-started relay or
-browser session is reused.
+Publication performs the complete manifest-v2 audit, including contents,
+modes, directories, symlinks, and absence of extra files, then writes a
+protected receipt and atomically renames the generation into place. Normal
+launch checks that receipt, store identity, owner/modes, read-only mount, and
+exact runtime/overlay/data binding without scanning or hashing the closure.
+Full verification remains mandatory for install, activation, repair, audit,
+and release certification. Core prewarms asynchronously with per-key
+singleflight; its browser gate is `/api/maverick-ready` with a 12-second budget.
+A failed start tears down the complete confined process group and cannot reuse a
+relay, Future, ticket, or browser session.
 
 The complete daemon/source runtime build remains under `fallback_build` only as
 a separately reviewed fallback. The primary artifact requires the verified OCI
@@ -98,26 +95,24 @@ The generated artifact and its external file manifest, CycloneDX SBOM, license
 inventory, NOTICE, signed provenance, signature, and public key stay under
 ignored `service/artifacts/`. The committed manifest pins every digest and the
 artifact size. `materialize_opendesign.py` verifies the complete signed set and
-atomically installs it into its digest-named directory below ignored
-`service/vendor/open-design/`. An existing digest directory is immutable: it is
-accepted only when every file still verifies and is never overwritten after a
-mismatch. The launcher verifies the registry, the current manifest pin, and the
-active runtime/overlay/version/data selection before start.
+atomically publishes it into the platform artifact namespace outside the
+source tree. An invalid digest generation is moved to retained quarantine and
+replaced from staging; it is never overwritten or repaired file-by-file. The
+launcher uses the receipt fast path for the exact active
+runtime/overlay/version/data selection.
 
-Web overlays have their own archive and file-level manifest, compatible runtime
+Web overlays have their own archive and manifest-v2 file/mode inventory, compatible runtime
 digests, upstream/version pin, lockfile and toolchain digests, CycloneDX SBOM,
-license inventory, provenance, and signature. Publication and every launch
-verify them fail-closed against `opendesign_web_trust.json`, whose public-key
+license inventory, provenance, and signature. Publication and full audit verify them fail-closed against
+`opendesign_web_trust.json`, whose public-key
 digest is reviewed outside the overlay. An artifact-supplied key alone is never
 trusted. Traversal, symlinks, path escape, compatibility mismatch, signature
 failure, or a changed file prevents materialization and execution.
 
-Repository-wide Python bytecode checks must exclude `service/vendor/**`. Running
-`compileall` across the imported closure creates `__pycache__` files inside the
-otherwise immutable digest directory, which correctly makes subsequent launcher
-verification fail closed. Compile only repository-owned Python sources, for
-example with `rg --files ... -g '!apps/design-studio/service/vendor/**'` piped to
-`python3 -m py_compile`.
+Repository-wide Python bytecode checks operate only on repository-owned source.
+The runtime/overlay capability is mounted read-only and is not a Python source
+tree, so app commands and recursive repository chmod/compile operations cannot
+mutate it.
 
 A release verification must run:
 
@@ -245,9 +240,13 @@ selects the only directory exported as `OD_DATA_DIR`. It never selects a bundle,
 overlay, or data directory by name, timestamp, symlink, or fallback.
 
 `previous_release` retains the complete former runtime/version/data/overlay
-selection. `previous_web` retains only a compatible former overlay for the
-current runtime/version/data tuple. Web activation never clones or migrates
-data and never changes runtime selection or the migration journal. It atomically
+selection. `previous_runtime` retains the exact declared runtime rollback and
+`previous_web` retains a compatible former overlay for the current
+runtime/version/data tuple. A completed runtime receipt and a later web receipt
+may coexist: the web cutover preserves the runtime rollback, while journal
+reconciliation permits only the overlay component of the active runtime tuple
+to advance. Web activation never clones or migrates data and never changes the
+runtime selection or the migration journal. It atomically
 updates the overlay selection, restarts through the generic
 `app.<id>.sidecars.restart` capability, waits for declared readiness, and rolls
 back automatically on failure. `dev apply` also restores the previous overlay
@@ -257,10 +256,11 @@ If both candidate and rollback restarts fail, the activation journal remains
 transitions to terminal `rolled_back`. A new activation always completes that
 recovery before preparing another journal. The declared app-owned
 `backend_recovery` hook only reports the pending state because a host restart
-does not prove lazy sidecar readiness. The launcher retains the sidecar process,
-verifies its real `/api/ready` response, and only then terminalizes candidate or
-rollback recovery. Until that verified start, the pending activation id blocks
-every new cutover.
+does not prove lazy sidecar readiness. The launcher retains the sidecar process, waits for upstream `/api/ready`,
+commits a nonce-bound marker, and exposes `/api/maverick-ready`; Core uses only
+that transactional endpoint before terminalizing candidate or rollback recovery
+and publishing the browser remount. Until that verified start, the pending
+activation id blocks every new cutover.
 
 `opendesign_web_builder.py` persists dependency, invariant workspace-output,
 source/build, and compatible Next caches. Every cache is file/content-manifest
@@ -413,7 +413,7 @@ relay, Storage import/export, restart recovery, route policy, and browser
 sessions use their production code paths. A statically compiled
 external Codex app-server protocol fixture supplies deterministic model output
 without entering the OpenDesign or core process and without logging prompts.
-The browser asserts the isolated `/api/ready` response before onboarding and
+The browser asserts the isolated `/api/maverick-ready` response before onboarding and
 again after the core/sidecar restart, then verifies the persisted project.
 
 Run and validate the committed redaction-safe records with:

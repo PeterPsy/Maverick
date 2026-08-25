@@ -15,9 +15,6 @@ import tarfile
 import tempfile
 from typing import Any, Iterable
 
-from opendesign_artifact import ArtifactError, is_sha256, read_bundle_manifest, selected_asset
-
-
 PATCH_SERIES_PATH = "apps/design-studio/service/patches/series.json"
 _FICLONE = 0x40049409
 
@@ -226,34 +223,6 @@ def _materialize_operational_inputs(repo_root: Path, snapshot_root: Path) -> Non
         copied = _directory_content_sha256(snapshot_node_modules)
         if before != after or copied != before:
             raise DevApplyError("Node dependency inputs changed during snapshot materialization", report={})
-
-    vendor = repo_root / "apps/design-studio/service/vendor"
-    snapshot_vendor = snapshot_root / "apps/design-studio/service/vendor"
-    if vendor.is_dir() and not vendor.is_symlink() and not snapshot_vendor.exists():
-        for relative in _required_operational_registry_paths(snapshot_root):
-            materialize_immutable_tree(vendor / relative, snapshot_vendor / relative)
-
-
-def _required_operational_registry_paths(repo_root: Path) -> tuple[Path, ...]:
-    service_root = repo_root / "apps/design-studio/service"
-    try:
-        manifest = read_bundle_manifest(service_root / "opendesign_bundle.json")
-        runtime_digest = selected_asset(manifest, require_artifact_digest=True)["sha256"]
-        release = json.loads(
-            (service_root / "opendesign_release_acceptance_0_16_1.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        web_digest = release["opendesign"]["web_overlay_sha256"]
-    except (ArtifactError, KeyError, OSError, TypeError, json.JSONDecodeError) as error:
-        raise DevApplyError("operational registry selection is invalid", report={}) from error
-    if not is_sha256(runtime_digest) or not is_sha256(web_digest):
-        raise DevApplyError("operational registry selection is invalid", report={})
-    return (
-        Path("open-design") / runtime_digest,
-        Path("open-design-web") / web_digest,
-    )
-
 
 def materialize_immutable_tree(source: Path, destination: Path) -> None:
     """Materialize operational inputs as independent real paths, using COW when possible."""

@@ -27,15 +27,16 @@ def publish_web_overlay(
     registry = _registry_directory(registry_root)
     destination = registry / expected_digest
     if destination.exists() or destination.is_symlink():
-        return (
-            verify_web_overlay(
-                destination,
-                expected_digest=expected_digest,
-                registry_root=registry,
-                trust_contract=trust_contract,
-            ),
-            True,
+        existing = verify_web_overlay(
+            destination,
+            expected_digest=expected_digest,
+            registry_root=registry,
+            trust_contract=trust_contract,
         )
+        source = _real_directory(source, label="web overlay publication source")
+        if not _same_signed_identity(source, destination):
+            raise WebOverlayError("web overlay digest identity collision")
+        return existing, True
     source = _real_directory(source, label="web overlay publication source")
     staging = registry / f".{expected_digest}.{uuid4().hex}.staging"
     try:
@@ -104,3 +105,19 @@ def _fsync_directory(path: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+def _same_signed_identity(candidate: Path, published: Path) -> bool:
+    for name in ("manifest.json", "manifest.sig"):
+        candidate_file = candidate / name
+        published_file = published / name
+        try:
+            candidate_mode = candidate_file.lstat().st_mode
+            published_mode = published_file.lstat().st_mode
+            if not stat.S_ISREG(candidate_mode) or not stat.S_ISREG(published_mode):
+                return False
+            if candidate_file.read_bytes() != published_file.read_bytes():
+                return False
+        except OSError:
+            return False
+    return True

@@ -8,6 +8,7 @@ from typing import Any
 
 from opendesign_artifact import ArtifactError, selected_asset, validate_bundle_manifest
 from opendesign_generation_control import (
+    load_generation_control,
     load_generation_control_metadata,
     load_runtime_generation_control,
     resolve_generation_data_dir,
@@ -18,6 +19,7 @@ from opendesign_generation_model import (
     LaunchSelection,
 )
 from opendesign_materialization import MaterializedBundle, discover_verified_bundles
+from opendesign_artifact_store import OpenDesignArtifactStore, StoredArtifact
 from opendesign_web_overlay import VerifiedWebOverlay, discover_verified_overlays
 
 
@@ -31,6 +33,144 @@ class RuntimeBinding:
     @property
     def active(self) -> LaunchSelection:
         return self.control.active
+
+
+def materialized_bundle_from_store(stored: StoredArtifact) -> MaterializedBundle:
+    return MaterializedBundle(
+        stored.artifact_sha256,
+        str(stored.receipt["source_file_manifest_sha256"]),
+        str(stored.receipt["opendesign_version"]),
+        str(stored.receipt["upstream_commit"]),
+        stored.content_path,
+    )
+
+
+def verified_overlay_from_store(stored: StoredArtifact) -> VerifiedWebOverlay:
+    return VerifiedWebOverlay(
+        web_overlay_sha256=stored.artifact_sha256,
+        path=stored.content_path,
+        static_dir=stored.content_path / "static",
+        od_version=str(stored.receipt["opendesign_version"]),
+        upstream_commit=str(stored.receipt["upstream_commit"]),
+        compatible_runtime_artifact_sha256=frozenset(
+            str(value) for value in stored.receipt["compatible_runtime_artifact_sha256"]
+        ),
+        file_manifest_sha256=str(stored.receipt["source_file_manifest_sha256"]),
+        toolchain_sha256="protected-store-receipt",
+    )
+
+
+def protected_activation_inventory(
+    *,
+    store: OpenDesignArtifactStore,
+    generation_root: Path,
+) -> tuple[GenerationControl, dict[str, str], dict[str, VerifiedWebOverlay]]:
+    """Resolve every exact control-referenced receipt needed by activation/recovery."""
+    preliminary = load_generation_control_metadata(generation_root)
+    selections = [preliminary.active]
+    for selection in (
+        preliminary.previous_release,
+        preliminary.previous_web,
+        preliminary.previous_runtime,
+    ):
+        if selection is not None:
+            selections.append(selection)
+    artifacts: dict[str, str] = {}
+    overlays: dict[str, VerifiedWebOverlay] = {}
+    for selection in selections:
+        if selection.runtime_artifact_sha256 not in artifacts:
+            runtime = store.fast_runtime(
+                selection.runtime_artifact_sha256,
+                file_manifest_sha256=None,
+                opendesign_version=selection.od_version,
+                upstream_commit=None,
+            )
+            artifacts[selection.runtime_artifact_sha256] = str(
+                runtime.receipt["opendesign_version"]
+            )
+        if selection.web_overlay_sha256 not in overlays:
+            web = store.fast_web_overlay(
+                selection.web_overlay_sha256,
+                runtime_artifact_sha256=selection.runtime_artifact_sha256,
+            )
+            overlays[selection.web_overlay_sha256] = verified_overlay_from_store(web)
+    control = load_generation_control(
+        generation_root,
+        verified_artifacts=artifacts,
+        verified_overlays=overlays,
+    )
+    return control, artifacts, overlays
+
+
+def resolve_protected_runtime_binding(
+    *,
+    store_root: Path,
+    generation_root: Path,
+    manifest: dict[str, Any],
+    require_read_only_mount: bool = True,
+) -> RuntimeBinding:
+    """Resolve only protected receipts for the exact launch selection."""
+    validate_bundle_manifest(manifest, require_artifact_digest=True)
+    current_asset = selected_asset(manifest, require_artifact_digest=True)
+    try:
+        preliminary_control = load_generation_control_metadata(generation_root)
+    except GenerationControlError as exc:
+        raise ArtifactError(f"OpenDesign generation control is invalid: {exc}") from exc
+    store = OpenDesignArtifactStore(store_root, require_read_only_mount=require_read_only_mount)
+    runtime_digests = {
+        current_asset["sha256"],
+        preliminary_control.active.runtime_artifact_sha256,
+    }
+    bundles: dict[str, MaterializedBundle] = {}
+    for digest in runtime_digests:
+        expected_source_manifest = (
+            current_asset["file_manifest_sha256"]
+            if digest == current_asset["sha256"]
+            else None
+        )
+        stored = store.fast_runtime(
+            digest,
+            file_manifest_sha256=(str(expected_source_manifest) if expected_source_manifest is not None else None),
+            opendesign_version=(
+                manifest["upstream"]["release_version"]
+                if digest == current_asset["sha256"]
+                else preliminary_control.active.od_version
+            ),
+            upstream_commit=(manifest["upstream"]["commit"] if digest == current_asset["sha256"] else None),
+        )
+        bundles[digest] = materialized_bundle_from_store(stored)
+    current = bundles[current_asset["sha256"]]
+    if current.file_manifest_sha256 != current_asset["file_manifest_sha256"]:
+        raise ArtifactError("Pinned OpenDesign file manifest does not match its protected receipt")
+
+    overlay_selections = [preliminary_control.active]
+    if preliminary_control.previous_web is not None:
+        overlay_selections.append(preliminary_control.previous_web)
+    overlays: dict[str, VerifiedWebOverlay] = {}
+    for selection in overlay_selections:
+        if selection.web_overlay_sha256 in overlays:
+            continue
+        stored = store.fast_web_overlay(
+            selection.web_overlay_sha256,
+            runtime_artifact_sha256=selection.runtime_artifact_sha256,
+        )
+        overlays[selection.web_overlay_sha256] = verified_overlay_from_store(stored)
+    try:
+        control = load_runtime_generation_control(
+            generation_root,
+            verified_artifacts={digest: bundle.opendesign_version for digest, bundle in bundles.items()},
+            verified_overlays=overlays,
+        )
+        data_dir = resolve_generation_data_dir(generation_root, control.active)
+    except GenerationControlError as exc:
+        raise ArtifactError(f"OpenDesign generation control is invalid: {exc}") from exc
+    bundle = bundles.get(control.active.runtime_artifact_sha256)
+    overlay = overlays.get(control.active.web_overlay_sha256)
+    if bundle is None or overlay is None:
+        raise ArtifactError("Active OpenDesign runtime binding is unavailable")
+    if overlay.upstream_commit != bundle.upstream_commit:
+        raise ArtifactError("Active OpenDesign overlay upstream pin does not match the runtime")
+    return RuntimeBinding(bundle=bundle, overlay=overlay, data_dir=data_dir, control=control)
 
 
 def resolve_runtime_binding(

@@ -29,6 +29,7 @@ class AppSurfaceExecutionMetadata:
     effect_class: Literal["read", "mutating", "destructive", "unclassified"]
     supports_idempotency: bool
     safe_to_retry: bool
+    timeout_seconds: int | None = None
 
 
 CLI_COMMAND_DESCRIPTOR_FIELDS = {
@@ -40,6 +41,7 @@ CLI_COMMAND_DESCRIPTOR_FIELDS = {
     "effect_class",
     "supports_idempotency",
     "safe_to_retry",
+    "timeout_seconds",
 }
 MCP_TOOL_DESCRIPTOR_FIELDS = {
     "description",
@@ -268,7 +270,7 @@ def _app_surface_execution_metadata(
     item_name: str,
     allowed_fields: set[str],
 ) -> AppSurfaceExecutionMetadata:
-    default = AppSurfaceExecutionMetadata("unclassified", False, False)
+    default = AppSurfaceExecutionMetadata("unclassified", False, False, None)
     try:
         item = _descriptor_item(
             path,
@@ -287,7 +289,15 @@ def _app_surface_execution_metadata(
             raise ValueError("App surface replay metadata must be boolean.")
         if safe_to_retry and effect_class != "read":
             raise ValueError("Only read app surfaces may be declared safe to retry.")
-        return AppSurfaceExecutionMetadata(effect_class, supports_idempotency, safe_to_retry)
+        timeout_seconds = item.get("timeout_seconds")
+        if timeout_seconds is not None and (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, int)
+            or timeout_seconds < 1
+            or timeout_seconds > 900
+        ):
+            raise ValueError("App CLI timeout must be an integer from 1 through 900 seconds.")
+        return AppSurfaceExecutionMetadata(effect_class, supports_idempotency, safe_to_retry, timeout_seconds)
     except ValueError:
         return default
 

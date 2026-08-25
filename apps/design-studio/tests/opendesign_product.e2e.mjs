@@ -4,7 +4,7 @@
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,9 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDir, '..');
 const repoRoot = path.resolve(appRoot, '..', '..');
+const artifactStoreRoot = process.env.MAVERICK_APP_ARTIFACT_STORE_ROOT
+  || path.join(path.dirname(repoRoot), `.${path.basename(repoRoot)}-app-artifacts`);
+process.env.MAVERICK_APP_ARTIFACT_STORE_ROOT = artifactStoreRoot;
 const serverFixture = path.join(scriptDir, 'fixtures', 'opendesign_product_server.py');
 const migrationSmoke = path.join(appRoot, 'service', 'smoke_opendesign_migration.py');
 const python = process.env.MAVERICK_OPENDESIGN_E2E_PYTHON
@@ -100,7 +103,7 @@ try {
 
   await loginAndOpen(page);
   let sidecar = await waitForSidecarFrame(page, '', networkProof);
-  const initialReady = await frameRequest(sidecar, '/api/ready');
+  const initialReady = await frameRequest(sidecar, '/api/maverick-ready');
   assert(
     initialReady.status === 200 && initialReady.body?.ok === true && initialReady.body?.ready === true,
     `Initial OpenDesign readiness returned HTTP ${initialReady.status}`,
@@ -226,19 +229,50 @@ try {
     }));
   }
 
-  const bootstrapCountBeforeRestart = networkProof.bootstrapPosts;
-  await stopServer(server);
-  server = await startServer();
-  await page.goto(`${platformOrigin}/app/design-studio`, { waitUntil: 'domcontentloaded' });
+  const warmTickets = await benchmarkWarmTickets(page, 30);
+  const warmOpenings = await benchmarkWarmOpenings(page, networkProof, 30);
+  const coreRestarts = [];
+  let bootstrapCountBeforeRestart = networkProof.bootstrapPosts;
+  for (let iteration = 0; iteration < 10; iteration += 1) {
+    await page.goto(`${platformOrigin}/health`, { waitUntil: 'domcontentloaded' });
+    await delay(100);
+    const startedAt = performance.now();
+    await stopServer(server);
+    const stoppedAt = performance.now();
+    server = await startServer();
+    const coreReadyAt = server.wp10CoreReadyAt;
+    const readiness = await waitForTransactionalReadiness(page);
+    const transactionalReadyAt = performance.now();
+    await page.goto(`${platformOrigin}/app/design-studio`, { waitUntil: 'domcontentloaded' });
+    sidecar = await waitForSidecarFrame(page, '', networkProof, true);
+    const browserReadyAt = performance.now();
+    const daemonReadyMs = Number(readiness.body?.opendesign?.runtime?.timings_ms?.daemon_ready_ms);
+    assert(Number.isFinite(daemonReadyMs) && daemonReadyMs > 0, 'Core restart omitted daemon readiness timing');
+    const resources = await processResourceSnapshot(server.pid);
+    coreRestarts.push({
+      iteration: iteration + 1,
+      daemon_ready_ms: daemonReadyMs,
+      cold_maverick_ready_ms: rounded(transactionalReadyAt - server.wp10StartedAt),
+      full_restart_ms: rounded(browserReadyAt - startedAt),
+      stop_ms: rounded(stoppedAt - startedAt),
+      core_boot_ms: rounded(coreReadyAt - server.wp10StartedAt),
+      prewarm_after_core_health_ms: rounded(transactionalReadyAt - coreReadyAt),
+      interface_after_core_health_ms: rounded(browserReadyAt - coreReadyAt),
+      interface_after_transactional_ready_ms: rounded(browserReadyAt - transactionalReadyAt),
+      resources,
+    });
+    assert(networkProof.bootstrapPosts > bootstrapCountBeforeRestart, 'Restart did not mint a fresh one-shot browser session');
+    bootstrapCountBeforeRestart = networkProof.bootstrapPosts;
+  }
   sidecar = await waitForSidecarFrame(page, '', networkProof, true);
-  const restartedReady = await frameRequest(sidecar, '/api/ready');
+  const restartedReady = await frameRequest(sidecar, '/api/maverick-ready');
   assert(
     restartedReady.status === 200 && restartedReady.body?.ok === true && restartedReady.body?.ready === true,
     `Restarted OpenDesign readiness returned HTTP ${restartedReady.status}`,
   );
   const persistedProject = await frameRequest(sidecar, `/api/projects/${encodeURIComponent(projectA.projectId)}`);
   assert(persistedProject.status === 200, 'Project did not survive core/sidecar restart');
-  assert(networkProof.bootstrapPosts > bootstrapCountBeforeRestart, 'Restart did not mint a fresh one-shot browser session');
+  const performanceEvidence = validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts });
 
   await page.goto(
     `${platformOrigin}/app/design-studio?od_project_id=${encodeURIComponent(projectA.projectId)}&od_run_id=${encodeURIComponent(successful.runId)}`,
@@ -282,6 +316,7 @@ try {
     projectA,
     successful,
     profile,
+    performanceEvidence,
   });
   if (evidenceOutputPath) {
     await mkdir(path.dirname(evidenceOutputPath), { recursive: true });
@@ -342,6 +377,7 @@ async function freePort() {
 
 
 async function startServer() {
+  const startedAt = performance.now();
   const child = spawn(python, [
     serverFixture,
     '--root', installationRoot,
@@ -357,13 +393,17 @@ async function startServer() {
   child.stdout.on('data', (chunk) => { output = `${output}${String(chunk)}`.slice(-16_384); });
   child.stderr.on('data', (chunk) => { output = `${output}${String(chunk)}`.slice(-16_384); });
   child.wp10Diagnostic = () => output;
-  for (let attempt = 0; attempt < 600; attempt += 1) {
+  child.wp10StartedAt = startedAt;
+  for (let attempt = 0; attempt < 2_400; attempt += 1) {
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`Synthetic Maverick server exited before readiness: ${redactedDiagnostic(output)}`);
     }
     try {
       const response = await fetch(`http://localhost:${port}/health`);
-      if (response.ok) return child;
+      if (response.ok) {
+        child.wp10CoreReadyAt = performance.now();
+        return child;
+      }
     } catch {}
     await delay(100);
   }
@@ -410,36 +450,57 @@ async function loginAndOpen(page) {
 }
 
 
-async function waitForSidecarFrame(page, expectedPath = '', networkProof = null, requireReady = false) {
+async function waitForSidecarFrame(
+  page,
+  expectedPath = '',
+  networkProof = null,
+  requireReady = false,
+  excludedFrame = null,
+) {
   let lastRetryAt = 0;
   for (let attempt = 0; attempt < 600; attempt += 1) {
     const frame = page.frames().find((candidate) => {
       try {
         const url = new URL(candidate.url());
-        return isSidecarHostname(url.hostname) && (!expectedPath || url.pathname === expectedPath);
+        return candidate !== excludedFrame
+          && isSidecarHostname(url.hostname)
+          && (!expectedPath || url.pathname === expectedPath);
       } catch { return false; }
     });
     if (frame) {
       await frame.waitForLoadState('domcontentloaded').catch(() => {});
       if (!requireReady) return frame;
-      const ready = await frameRequest(frame, '/api/ready').catch(() => ({ status: 0, body: null }));
+      const ready = await frameRequest(frame, '/api/maverick-ready').catch(() => ({ status: 0, body: null }));
       if (ready.status === 200 && ready.body?.ok === true && ready.body?.ready === true) {
         return frame;
       }
     }
-    const retry = page.getByRole('button', { name: 'Retry securely' });
+    const retry = page.getByTestId('opendesign-retry');
     if (Date.now() - lastRetryAt >= 2_000 && await retry.isVisible().catch(() => false)) {
       await retry.click();
       lastRetryAt = Date.now();
     }
-    await delay(100);
+    if (
+      attempt >= 600
+      && await page.getByText('OpenDesign is unavailable', { exact: true }).isVisible().catch(() => false)
+      && !await retry.isVisible().catch(() => false)
+    ) break;
+    await delay(25);
   }
   const frameUrls = await Promise.all(page.frames().map(async (frame) => ({
     url: frame.url(),
     body: (await frame.locator('body').innerText().catch(() => '')).slice(0, 500),
   })));
   const bodyText = (await page.locator('body').innerText().catch(() => '')).slice(0, 1000);
-  throw new Error(`OpenDesign isolated browser frame did not become ready: ${JSON.stringify({ frameUrls, bodyText, network: networkProof?.diagnostics || [] })}`);
+  const appStatus = await platformRequest(page, '/api/apps/design-studio/backend', {
+    method: 'POST',
+    body: { action: 'status', arguments: {} },
+  }).catch(() => null);
+  const launchStatus = await platformRequest(page, '/api/app-sidecars/browser-launch', {
+    method: 'POST',
+    body: { app_id: 'design-studio', sidecar_id: 'opendesign', path: '/index.html' },
+  }).catch(() => null);
+  throw new Error(`OpenDesign isolated browser frame did not become ready: ${JSON.stringify({ frameUrls, bodyText, appStatus, launchStatus, network: networkProof?.diagnostics || [] })}`);
 }
 
 
@@ -715,6 +776,225 @@ async function platformRequest(page, requestPath, { method = 'GET', body = undef
 }
 
 
+async function benchmarkWarmTickets(page, count) {
+  const durations = [];
+  const instances = new Set();
+  for (let iteration = 0; iteration < count; iteration += 1) {
+    const startedAt = performance.now();
+    const launch = await platformRequest(page, '/api/app-sidecars/browser-launch', {
+      method: 'POST',
+      body: { app_id: 'design-studio', sidecar_id: 'opendesign', path: '/index.html' },
+    });
+    durations.push(rounded(performance.now() - startedAt));
+    assert(launch.status === 200, `Warm browser ticket ${iteration + 1} returned HTTP ${launch.status}`);
+    assert(typeof launch.body?.ticket === 'string' && launch.body.ticket.length > 20, 'Warm browser ticket is invalid');
+    instances.add(String(launch.body?.sidecar_instance_id || ''));
+  }
+  assert(instances.size === 1 && !instances.has(''), 'Warm ticket benchmark remounted or lost the sidecar instance');
+  return { ...distribution(durations), same_sidecar_instance: true };
+}
+
+
+async function benchmarkWarmOpenings(page, networkProof, count) {
+  const durations = [];
+  const wrapperDurations = [];
+  const frameDurations = [];
+  const frameNavigationDurations = [];
+  const frameResponseDurations = [];
+  const frameTransferBytes = [];
+  const wrapper = await waitForShellWidgetFrame(page, 'Design Studio viewport');
+  const wrapperUrl = wrapper.url();
+  for (let iteration = 0; iteration < count; iteration += 1) {
+    const previousSidecar = page.frames().find((candidate) => {
+      try { return isSidecarHostname(new URL(candidate.url()).hostname); } catch { return false; }
+    }) || null;
+    const startedAt = performance.now();
+    await wrapper.goto(wrapperUrl, { waitUntil: 'domcontentloaded' });
+    const wrapperReadyAt = performance.now();
+    const frame = await waitForSidecarFrame(page, '', networkProof, true, previousSidecar);
+    await frame.locator('body').waitFor({ state: 'visible', timeout: 5_000 });
+    const finishedAt = performance.now();
+    durations.push(rounded(finishedAt - startedAt));
+    wrapperDurations.push(rounded(wrapperReadyAt - startedAt));
+    frameDurations.push(rounded(finishedAt - wrapperReadyAt));
+    const framePerformance = await readSidecarPerformance(page, frame, networkProof);
+    frameNavigationDurations.push(rounded(framePerformance.duration));
+    frameResponseDurations.push(rounded(framePerformance.response_end));
+    frameTransferBytes.push(framePerformance.transfer_bytes);
+    await delay(300);
+  }
+  const interfaceDistribution = distribution(frameDurations);
+  return {
+    // The app-owned first-paint clock starts when the wrapper document is
+    // mounted. Keep Core/shell document serving visible, but do not charge it
+    // twice to the Design Studio interface SLO.
+    ...interfaceDistribution,
+    full_wrapper_remount: distribution(durations),
+    wrapper_dom_content_loaded: distribution(wrapperDurations),
+    sidecar_frame_ready: interfaceDistribution,
+    sidecar_navigation: distribution(frameNavigationDurations),
+    sidecar_response: distribution(frameResponseDurations),
+    sidecar_resource_transfer_bytes: distribution(frameTransferBytes),
+  };
+}
+
+
+async function readSidecarPerformance(page, initialFrame, networkProof) {
+  let frame = initialFrame;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      return await frame.evaluate(() => {
+        const navigation = performance.getEntriesByType('navigation')[0];
+        const resources = performance.getEntriesByType('resource');
+        return {
+          duration: Number(navigation?.duration || 0),
+          response_end: Number(navigation?.responseEnd || 0),
+          transfer_bytes: resources.reduce((total, entry) => total + Number(entry.transferSize || 0), 0),
+        };
+      });
+    } catch {
+      await delay(25);
+      frame = await waitForSidecarFrame(page, '', networkProof, true);
+    }
+  }
+  throw new Error('OpenDesign performance navigation did not stabilize');
+}
+
+
+async function waitForTransactionalReadiness(page) {
+  let lastStatus = null;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    lastStatus = await platformRequest(page, '/api/apps/design-studio/backend', {
+      method: 'POST',
+      body: { action: 'status', arguments: {} },
+    }).catch(() => null);
+    const runtime = lastStatus?.body?.opendesign?.runtime;
+    if (
+      lastStatus?.status === 200
+      && runtime?.operational === true
+      && runtime?.health?.activation_committed === true
+      && runtime?.health?.browser_ready === true
+    ) return lastStatus;
+    await delay(100);
+  }
+  throw new Error(`OpenDesign prewarm did not commit transactional readiness: ${JSON.stringify(lastStatus)}`);
+}
+
+
+function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }) {
+  const daemon = distribution(coreRestarts.map((sample) => sample.daemon_ready_ms));
+  const cold = distribution(coreRestarts.map((sample) => sample.cold_maverick_ready_ms));
+  const fullRestart = distribution(coreRestarts.map((sample) => sample.full_restart_ms));
+  const restartStop = distribution(coreRestarts.map((sample) => sample.stop_ms));
+  const coreBoot = distribution(coreRestarts.map((sample) => sample.core_boot_ms));
+  const prewarmAfterCoreHealth = distribution(
+    coreRestarts.map((sample) => sample.prewarm_after_core_health_ms),
+  );
+  const interfaceAfterCoreHealth = distribution(
+    coreRestarts.map((sample) => sample.interface_after_core_health_ms),
+  );
+  const interfaceAfterTransactionalReady = distribution(
+    coreRestarts.map((sample) => sample.interface_after_transactional_ready_ms),
+  );
+  const diagnostic = JSON.stringify({
+    warmTickets,
+    warmOpenings,
+    cold,
+    fullRestart,
+    daemon,
+    restartStop,
+    coreBoot,
+    prewarmAfterCoreHealth,
+    interfaceAfterCoreHealth,
+    interfaceAfterTransactionalReady,
+  });
+  process.stderr.write(`OpenDesign performance diagnostic: ${diagnostic}\n`);
+  assert(
+    warmTickets.count === 30 && warmTickets.p95_ms <= 300 && warmTickets.p99_ms <= 750,
+    `Warm ticket SLO failed: ${diagnostic}`,
+  );
+  assert(
+    warmOpenings.count === 30 && warmOpenings.p95_ms <= 1_500 && warmOpenings.p99_ms <= 2_500,
+    `Warm interface SLO failed: ${diagnostic}`,
+  );
+  assert(
+    cold.count === 10 && cold.p95_ms <= 4_000 && cold.max_ms <= 8_000,
+    `Cold transactional readiness SLO failed: ${diagnostic}`,
+  );
+  const resourceSamples = coreRestarts.map((sample) => sample.resources);
+  return {
+    schema_version: '1',
+    warm_browser_ticket: warmTickets,
+    warm_interface: warmOpenings,
+    cold_maverick_ready: cold,
+    daemon_internal_ready: daemon,
+    full_core_restart: fullRestart,
+    core_boot: coreBoot,
+    prewarm_after_core_health: prewarmAfterCoreHealth,
+    interface_after_transactional_ready: interfaceAfterTransactionalReady,
+    core_restart_count: coreRestarts.length,
+    resources: {
+      cpu_ticks_max: Math.max(...resourceSamples.map((sample) => sample.cpu_ticks)),
+      rss_kib_max: Math.max(...resourceSamples.map((sample) => sample.rss_kib)),
+      disk_read_bytes_max: Math.max(...resourceSamples.map((sample) => sample.disk_read_bytes)),
+      process_count_max: Math.max(...resourceSamples.map((sample) => sample.process_count)),
+    },
+    samples: coreRestarts,
+    targets_met: true,
+  };
+}
+
+
+function distribution(samples) {
+  const values = samples.map(Number).filter(Number.isFinite).sort((left, right) => left - right);
+  assert(values.length === samples.length && values.length > 0, 'Performance samples are invalid');
+  const percentile = (value) => values[Math.max(0, Math.ceil((value / 100) * values.length) - 1)];
+  return {
+    count: values.length,
+    p50_ms: rounded(percentile(50)),
+    p95_ms: rounded(percentile(95)),
+    p99_ms: rounded(percentile(99)),
+    max_ms: rounded(values.at(-1)),
+  };
+}
+
+
+async function processResourceSnapshot(rootPid) {
+  const pending = [Number(rootPid)];
+  const observed = new Set();
+  let cpuTicks = 0;
+  let rssKib = 0;
+  let diskReadBytes = 0;
+  while (pending.length > 0) {
+    const pid = pending.pop();
+    if (!Number.isInteger(pid) || pid < 1 || observed.has(pid)) continue;
+    observed.add(pid);
+    const [children, status, io, stat] = await Promise.all([
+      readFile(`/proc/${pid}/task/${pid}/children`, 'utf8').catch(() => ''),
+      readFile(`/proc/${pid}/status`, 'utf8').catch(() => ''),
+      readFile(`/proc/${pid}/io`, 'utf8').catch(() => ''),
+      readFile(`/proc/${pid}/stat`, 'utf8').catch(() => ''),
+    ]);
+    pending.push(...children.trim().split(/\s+/).filter(Boolean).map(Number));
+    rssKib += Number(/^VmRSS:\s+(\d+)\s+kB$/m.exec(status)?.[1] || 0);
+    diskReadBytes += Number(/^read_bytes:\s+(\d+)$/m.exec(io)?.[1] || 0);
+    const statFields = stat.slice(stat.lastIndexOf(') ') + 2).trim().split(/\s+/);
+    cpuTicks += Number(statFields[11] || 0) + Number(statFields[12] || 0);
+  }
+  return {
+    cpu_ticks: cpuTicks,
+    rss_kib: rssKib,
+    disk_read_bytes: diskReadBytes,
+    process_count: observed.size,
+  };
+}
+
+
+function rounded(value) {
+  return Math.round(Number(value) * 1_000) / 1_000;
+}
+
+
 async function storageRead(page, workspaceRelativePath) {
   return platformRequest(page, '/api/apps/storage/backend', {
     method: 'POST',
@@ -745,7 +1025,7 @@ async function runMigrationSmoke() {
 }
 
 
-function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful, profile }) {
+function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful, profile, performanceEvidence }) {
   const scenarios = [
     ['login_open', 'Login and open Design Studio', correlationA, { isolated_origin: true, ready_endpoint: true }],
     ['create_project_ui', 'Create and open a project from the Maverick sidebar', correlationA, {
@@ -774,6 +1054,7 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
   return buildProfileEvidence({
     profile,
     scenarios,
+    performanceEvidence,
     canonicalEntity: {
       od_project_id: projectA.projectId,
       od_run_id: successful.runId,
@@ -807,7 +1088,7 @@ function scenario(id, name, proof, correlation = null) {
 }
 
 
-function buildProfileEvidence({ profile, scenarios, canonicalEntity }) {
+function buildProfileEvidence({ profile, scenarios, canonicalEntity, performanceEvidence = null }) {
   return {
     schema_version: '1',
     gate: `design-studio-e2e-${profile}`,
@@ -834,6 +1115,7 @@ function buildProfileEvidence({ profile, scenarios, canonicalEntity }) {
     },
     canonical_entity: canonicalEntity,
     scenarios,
+    ...(performanceEvidence ? { performance: performanceEvidence } : {}),
     redaction: {
       full_prompt_recorded: false,
       credential_value_recorded: false,
@@ -863,10 +1145,10 @@ function affectedCategories(paths) {
 
 
 async function releasedOverlayDigest() {
-  const evidence = JSON.parse(
-    await readFile(path.join(appRoot, 'service', 'opendesign_release_acceptance_0_16_1.json'), 'utf8'),
+  const selection = JSON.parse(
+    await readFile(path.join(appRoot, 'service', 'opendesign_release_selection.json'), 'utf8'),
   );
-  const digest = evidence.opendesign?.web_overlay_sha256;
+  const digest = selection.active_web_overlay_sha256;
   if (!/^[a-f0-9]{64}$/.test(digest || '')) throw new Error('Canonical release web overlay digest is invalid');
   return digest;
 }
@@ -874,14 +1156,26 @@ async function releasedOverlayDigest() {
 
 async function canonicalOverlayContract(digest) {
   if (!/^[a-f0-9]{64}$/.test(digest || '')) throw new Error('Requested web overlay digest is invalid');
-  const root = path.join(appRoot, 'service', 'vendor', 'open-design-web');
-  const entries = await readdir(root, { withFileTypes: true });
+  const namespace = path.join(
+    artifactStoreRoot,
+    'design-studio',
+    'opendesign',
+  );
+  const root = path.join(namespace, 'web', digest);
+  const entries = await readdir(path.join(namespace, 'web'), { withFileTypes: true });
   if (!entries.some((entry) => entry.isDirectory() && entry.name === digest)) {
     throw new Error('Requested canonical OpenDesign web overlay is not materialized');
   }
-  const manifest = JSON.parse(await readFile(path.join(root, digest, 'manifest.json'), 'utf8'));
+  const metadata = await lstat(root);
+  if (!metadata.isDirectory() || metadata.isSymbolicLink() || (metadata.mode & 0o022) !== 0) {
+    throw new Error('Requested canonical OpenDesign web overlay is not protected');
+  }
+  const manifest = JSON.parse(await readFile(path.join(root, 'content', 'manifest.json'), 'utf8'));
+  const receipt = JSON.parse(await readFile(path.join(root, 'receipt.json'), 'utf8'));
   if (
     manifest.web_overlay_sha256 !== digest
+    || receipt.artifact_sha256 !== digest
+    || receipt.runtime_artifact_sha256 !== bundleContract.artifact.assets['linux-x86_64'].sha256
     || manifest.compatibility?.od_version !== bundleContract.upstream.release_version
     || manifest.compatibility?.upstream_commit !== bundleContract.upstream.commit
     || !manifest.compatibility?.runtime_artifact_sha256?.includes(bundleContract.artifact.assets['linux-x86_64'].sha256)

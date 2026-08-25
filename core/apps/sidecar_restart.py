@@ -17,6 +17,15 @@ from core.observability.service import record_platform_audit, record_platform_ev
 RUNTIME_CHANGED_EVENT = "maverick.app.runtime-changed"
 
 
+class SidecarRestartError(AppLifecycleError):
+    """Redaction-safe failure for one governed restart phase."""
+
+    def __init__(self, code: str, phase: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.phase = phase
+
+
 def app_supports_sidecar_restart(
     store: AppStore,
     *,
@@ -53,17 +62,30 @@ def restart_workspace_app_sidecars(
     started_at = time.monotonic()
     binding = store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
     if binding.status != "enabled":
-        raise AppLifecycleError(
-            f"App `{app_id}` must be enabled in workspace `{workspace_id}` before sidecar restart."
+        raise SidecarRestartError(
+            "runtime_binding_invalid",
+            "sidecar_contract_resolve",
+            f"App `{app_id}` must be enabled before sidecar restart.",
         )
-    source_root, parsed = resolve_workspace_app_surface(
-        store,
-        binding=binding,
-        start_path=start_path,
-    )
+    try:
+        source_root, parsed = resolve_workspace_app_surface(
+            store,
+            binding=binding,
+            start_path=start_path,
+        )
+    except Exception as error:
+        raise SidecarRestartError(
+            "runtime_binding_invalid",
+            "sidecar_contract_resolve",
+            f"App `{app_id}` sidecar contract could not be resolved.",
+        ) from error
     sidecars = tuple(parsed.contract.services.http_sidecars)
     if not sidecars:
-        raise AppLifecycleError(f"App `{app_id}` does not declare HTTP sidecars.")
+        raise SidecarRestartError(
+            "runtime_binding_invalid",
+            "sidecar_contract_resolve",
+            f"App `{app_id}` does not declare HTTP sidecars.",
+        )
 
     sidecar_browser_sessions.revoke_app(workspace_id=workspace_id, app_id=app_id)
     try:
@@ -77,6 +99,8 @@ def restart_workspace_app_sidecars(
             shutdown_controller=shutdown_controller,
         )
     except Exception as error:
+        code = str(getattr(error, "code", "daemon_spawn_failed"))
+        phase = str(getattr(error, "phase", "sidecar_restart"))
         _audit_restart(
             observability_store,
             workspace_id=workspace_id,
@@ -85,11 +109,14 @@ def restart_workspace_app_sidecars(
             status="failed",
             payload={
                 "declared_service_count": len(sidecars),
-                "error_code": type(error).__name__,
+                "error_code": code,
+                "phase": phase,
             },
         )
-        raise AppLifecycleError(
-            f"App `{app_id}` sidecar restart failed: {type(error).__name__}."
+        raise SidecarRestartError(
+            code,
+            phase,
+            f"App `{app_id}` sidecar restart failed during `{phase}`.",
         ) from error
 
     duration = round(time.monotonic() - started_at, 6)

@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "gate": "WP10",
+  "gate": "design-studio-opendesign-production",
   "status": "passed",
   "criteria": [
     {
@@ -8,8 +8,18 @@
       "requirement": "A clean checkout materializes a verified artifact without a manual sidecar build.",
       "status": "passed",
       "evidence": [
-        {"kind": "proof", "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_materialization.py"}
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_materialization.py"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_artifact_store.py"
+        }
       ]
     },
     {
@@ -17,8 +27,14 @@
       "requirement": "The artifact follows the pinned OCI index, linux/amd64 manifest, config, layers, and upstream provenance.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_oci_import.py"},
-        {"kind": "proof", "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"}
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_oci_import.py"
+        },
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"
+        }
       ]
     },
     {
@@ -26,8 +42,14 @@
       "requirement": "Two independent OCI imports produce identical archives and file manifests.",
       "status": "passed",
       "evidence": [
-        {"kind": "proof", "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_oci_import.py"}
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_oci_import.py"
+        }
       ]
     },
     {
@@ -35,8 +57,14 @@
       "requirement": "The compiled bearer patch is the only derived patch and has exact pre/post hashes plus a real loopback test.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_supply_chain.py"},
-        {"kind": "proof", "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"}
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_supply_chain.py"
+        },
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"
+        }
       ]
     },
     {
@@ -44,8 +72,18 @@
       "requirement": "The launcher uses the imported musl runtime and has no host Node or Docker socket dependency.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_artifact.py"},
-        {"kind": "proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"}
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_artifact.py"
+        },
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_runtime_activation.py"
+        }
       ]
     },
     {
@@ -53,8 +91,22 @@
       "requirement": "The sidecar starts with an allowlisted environment and verified OS sandbox.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_execution.py"},
-        {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"}
+        {
+          "kind": "test",
+          "ref": "tests/integration/app_hosting/test_sidecar_execution.py"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/unit/app_hosting/test_artifact_mounts.py"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_artifact_store.py"
+        }
       ]
     },
     {
@@ -62,8 +114,14 @@
       "requirement": "The sidecar has no direct egress or host loopback access and core reaches it only through the confined Unix relay.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_execution.py"},
-        {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_entrypoint_broker.py"}
+        {
+          "kind": "test",
+          "ref": "tests/integration/app_hosting/test_sidecar_execution.py"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/integration/app_hosting/test_sidecar_entrypoint_broker.py"
+        }
       ]
     },
     {
@@ -71,9 +129,18 @@
       "requirement": "No host/provider secret or Maverick cookie reaches OpenDesign.",
       "status": "passed",
       "evidence": [
-        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
-        {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "apps/design-studio/tests/test_design_studio_app.py"}
+        {
+          "kind": "hosted-browser-proof",
+          "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "browser-proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_design_studio_app.py"
+        }
       ]
     },
     {
@@ -81,9 +148,22 @@
       "requirement": "OpenDesign UI and API remain same-origin on an isolated browser origin.",
       "status": "passed",
       "evidence": [
-        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
-        {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"}
+        {
+          "kind": "hosted-browser-proof",
+          "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "browser-proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"
+        },
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_release_acceptance_0_16_1.json"
+        }
       ]
     },
     {
@@ -91,9 +171,22 @@
       "requirement": "Bootstrap is a one-shot POST followed by a clean redirect with no ticket/session leakage.",
       "status": "passed",
       "evidence": [
-        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
-        {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"}
+        {
+          "kind": "hosted-browser-proof",
+          "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "browser-proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/unit/app_hosting/test_sidecar_control.py"
+        }
       ]
     },
     {
@@ -101,8 +194,14 @@
       "requirement": "The isolated sidecar origin exposes no Maverick core API.",
       "status": "passed",
       "evidence": [
-        {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"}
+        {
+          "kind": "browser-proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"
+        }
       ]
     },
     {
@@ -110,8 +209,14 @@
       "requirement": "Unknown and sensitive routes are denied by exact policy.",
       "status": "passed",
       "evidence": [
-        {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "tests/unit/apps/test_sidecar_route_policy.py"}
+        {
+          "kind": "browser-proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/unit/apps/test_sidecar_route_policy.py"
+        }
       ]
     },
     {
@@ -119,8 +224,14 @@
       "requirement": "Backend, CLI, MCP, and references use ephemeral core-broker capabilities instead of OpenDesign ports or tokens.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_entrypoint_broker.py"},
-        {"kind": "test", "ref": "apps/design-studio/tests/test_design_studio_app.py"}
+        {
+          "kind": "test",
+          "ref": "tests/integration/app_hosting/test_sidecar_entrypoint_broker.py"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_design_studio_app.py"
+        }
       ]
     },
     {
@@ -128,9 +239,18 @@
       "requirement": "The real browser completes create, run, SSE, file, preview, result package, and Storage export.",
       "status": "passed",
       "evidence": [
-        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
-        {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "apps/design-studio/tests/opendesign_product.e2e.mjs"}
+        {
+          "kind": "hosted-browser-proof",
+          "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "browser-proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/opendesign_product.e2e.mjs"
+        }
       ]
     },
     {
@@ -138,8 +258,14 @@
       "requirement": "Frontend, CLI, MCP, and references resolve the same canonical OpenDesign entity.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_adapter.py"},
-        {"kind": "test", "ref": "apps/design-studio/tests/test_design_studio_app.py"}
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_adapter.py"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_design_studio_app.py"
+        }
       ]
     },
     {
@@ -147,8 +273,14 @@
       "requirement": "No parallel writable project catalog remains in state.json.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_adapter.py"},
-        {"kind": "architecture", "ref": "docs/architecture/design_studio_data_generations.md"}
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_adapter.py"
+        },
+        {
+          "kind": "architecture",
+          "ref": "docs/architecture/design_studio_data_generations.md"
+        }
       ]
     },
     {
@@ -156,9 +288,26 @@
       "requirement": "Cancel, timeout, restart, and retry behavior is idempotent.",
       "status": "passed",
       "evidence": [
-        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
-        {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "tests/unit/runtime_streams/test_app_streams.py"}
+        {
+          "kind": "hosted-browser-proof",
+          "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "browser-proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/unit/runtime_streams/test_app_streams.py"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/unit/app_hosting/test_sidecar_manager_singleflight.py"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/unit/app_hosting/test_sidecar_prewarm.py"
+        }
       ]
     },
     {
@@ -166,8 +315,14 @@
       "requirement": "Two workspaces keep sidecar processes, tokens, and data isolated.",
       "status": "passed",
       "evidence": [
-        {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_browser_workspace_isolation.py"}
+        {
+          "kind": "browser-proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "tests/integration/app_hosting/test_sidecar_browser_workspace_isolation.py"
+        }
       ]
     },
     {
@@ -175,8 +330,22 @@
       "requirement": "Upgrade and rollback restore the bundle and data generation together.",
       "status": "passed",
       "evidence": [
-        {"kind": "proof", "ref": "apps/design-studio/service/opendesign_migration_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_migration.py"}
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_migration_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_migration.py"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_runtime_activation.py"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_web_activation.py"
+        }
       ]
     },
     {
@@ -184,8 +353,14 @@
       "requirement": "LICENSE, NOTICE, SBOM, file manifest, and checksums are included.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_packaging.py"},
-        {"kind": "proof", "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"}
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_packaging.py"
+        },
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"
+        }
       ]
     },
     {
@@ -193,8 +368,14 @@
       "requirement": "Tag, commit, and patch set are verified and covered by reproducible provenance.",
       "status": "passed",
       "evidence": [
-        {"kind": "test", "ref": "apps/design-studio/tests/test_opendesign_supply_chain.py"},
-        {"kind": "proof", "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"}
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_supply_chain.py"
+        },
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_oci_acceptance_0_16_1.json"
+        }
       ]
     },
     {
@@ -202,8 +383,26 @@
       "requirement": "Audit and correlation records are complete and redaction-safe.",
       "status": "passed",
       "evidence": [
-        {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
-        {"kind": "test", "ref": "apps/design-studio/tests/test_production_acceptance.py"}
+        {
+          "kind": "browser-proof",
+          "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_production_acceptance.py"
+        },
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_release_acceptance_0_16_1.json"
+        },
+        {
+          "kind": "proof",
+          "ref": "apps/design-studio/service/opendesign_platform_benchmark_0_16_1.json"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_health.py"
+        }
       ]
     },
     {
@@ -211,8 +410,18 @@
       "requirement": "Canonical documentation, app contract, code, and tests agree.",
       "status": "passed",
       "evidence": [
-        {"kind": "documentation", "ref": "apps/design-studio/README.md"},
-        {"kind": "test", "ref": "apps/design-studio/tests/test_design_studio_app.py"}
+        {
+          "kind": "documentation",
+          "ref": "apps/design-studio/README.md"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_design_studio_app.py"
+        },
+        {
+          "kind": "documentation",
+          "ref": "apps/design-studio/service/README.md"
+        }
       ]
     },
     {
@@ -220,8 +429,14 @@
       "requirement": "Maverick pre-production limitations remain stated without overstating global readiness.",
       "status": "passed",
       "evidence": [
-        {"kind": "documentation", "ref": "SECURITY.md"},
-        {"kind": "documentation", "ref": "docs/security/production_readiness.md"}
+        {
+          "kind": "documentation",
+          "ref": "SECURITY.md"
+        },
+        {
+          "kind": "documentation",
+          "ref": "docs/security/production_readiness.md"
+        }
       ]
     }
   ]

@@ -54,7 +54,7 @@ try {
   page.on('response', (response) => {
     if (!isSidecarUrl(response.url())) return;
     const url = new URL(response.url());
-    if (url.pathname === '/api/ready' && response.status() === 200) {
+    if (url.pathname === '/api/maverick-ready' && response.status() === 200) {
       proof.readyHeaders = response.headers();
     }
   });
@@ -72,7 +72,7 @@ try {
   await page.goto(`${platformOrigin}/app/design-studio`, { waitUntil: 'domcontentloaded' });
   let frame = await waitForSidecarFrame(page);
   const origin = new URL(frame.url()).origin;
-  const ready = await frameRequest(frame, '/api/ready');
+  const ready = await frameRequest(frame, '/api/maverick-ready');
   assert(ready.status === 200 && ready.body?.ok === true && ready.body?.ready === true, `Hosted readiness returned HTTP ${ready.status}`);
   const projects = await frameRequest(frame, '/api/projects');
   assert(projects.status === 200, `Hosted project listing returned HTTP ${projects.status}`);
@@ -98,7 +98,7 @@ try {
   const bootstrapBeforeReload = proof.bootstrapPosts;
   await page.reload({ waitUntil: 'domcontentloaded' });
   frame = await waitForSidecarFrame(page);
-  const reloaded = await frameRequest(frame, '/api/ready');
+  const reloaded = await frameRequest(frame, '/api/maverick-ready');
   assert(reloaded.status === 200 && proof.bootstrapPosts > bootstrapBeforeReload, 'Hosted reload did not mint a fresh ready session');
 
   if (projectId) {

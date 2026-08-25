@@ -16,7 +16,6 @@ from typing import Any, Iterator
 REPO_ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = REPO_ROOT / "apps" / "design-studio"
 SERVICE_ROOT = APP_ROOT / "service"
-BUNDLE_REGISTRY = SERVICE_ROOT / "vendor" / "open-design"
 WORKSPACE_ID = "default"
 APP_ID = "design-studio"
 
@@ -26,6 +25,7 @@ sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from core.api.platform_host import PlatformHost  # noqa: E402
 from core.api.platform_state import bootstrap_platform_state  # noqa: E402
+from core.apps.artifact_mounts import platform_artifact_store_root  # noqa: E402
 from core.apps.dependencies import save_app_dependency_selection  # noqa: E402
 from core.apps.service import install_store_app, register_app_source_from_contract  # noqa: E402
 from core.shared.entrypoints import EntrypointShutdownController  # noqa: E402
@@ -35,9 +35,7 @@ from opendesign_artifact import (  # noqa: E402
     selected_asset,
     validate_bundle_manifest,
 )
-from opendesign_bootstrap import bootstrap_empty_generation  # noqa: E402
-from opendesign_materialization import discover_verified_bundles  # noqa: E402
-from opendesign_web_release import canonical_web_overlay  # noqa: E402
+from opendesign_artifact_store import OpenDesignArtifactStore  # noqa: E402
 from runtime_bridge import build_result_package, reserve_run, store_for_payload  # noqa: E402
 
 
@@ -56,7 +54,7 @@ def main() -> None:
             _install_platform_app(state, repo_root, "storage")
             _install_platform_app(state, repo_root, APP_ID)
             _select_storage_dependencies(state, repo_root)
-            _prepare_smoke_generation(repo_root, bundle_summary)
+            _assert_smoke_generation(repo_root, bundle_summary)
             shutdown = EntrypointShutdownController()
             try:
                 app = PlatformHost(state, start_path=repo_root, shutdown_controller=shutdown)
@@ -102,16 +100,18 @@ def _assert_bundle_materialized() -> tuple[dict[str, Any], Path, Path]:
         asset = selected_asset(manifest, require_artifact_digest=True)
     except ArtifactError as error:
         raise SystemExit(f"Pinned OpenDesign artifact is unavailable: {error}") from error
-    bundles = discover_verified_bundles(BUNDLE_REGISTRY)
-    bundle = bundles.get(asset["sha256"])
-    if bundle is None:
-        raise SystemExit("Pinned OpenDesign artifact is not materialized.")
-    if (
-        bundle.file_manifest_sha256 != asset["file_manifest_sha256"]
-        or bundle.opendesign_version != manifest["upstream"]["release_version"]
-        or bundle.upstream_commit != manifest["upstream"]["commit"]
-    ):
-        raise SystemExit("Pinned OpenDesign materialization metadata does not match the manifest.")
+    store = OpenDesignArtifactStore(platform_artifact_store_root(REPO_ROOT) / APP_ID / "opendesign")
+    bundle = store.fast_runtime(
+        str(asset["sha256"]),
+        file_manifest_sha256=str(asset["file_manifest_sha256"]),
+        opendesign_version=str(manifest["upstream"]["release_version"]),
+        upstream_commit=str(manifest["upstream"]["commit"]),
+    )
+    selection = json.loads((SERVICE_ROOT / "opendesign_release_selection.json").read_text(encoding="utf-8"))
+    overlay = store.fast_web_overlay(
+        str(selection["active_web_overlay_sha256"]),
+        runtime_artifact_sha256=bundle.artifact_sha256,
+    )
     required = [
         "maverick/materialized.json",
         "maverick/manifest.json",
@@ -126,7 +126,7 @@ def _assert_bundle_materialized() -> tuple[dict[str, Any], Path, Path]:
         "app/apps/daemon/node_modules",
         "app/apps/daemon/dist/cli.js",
     ]
-    missing = [relative for relative in required if not (bundle.path / relative).exists()]
+    missing = [relative for relative in required if not (bundle.content_path / relative).exists()]
     forbidden = [
         "app/apps/desktop",
         "app/apps/landing-page",
@@ -139,7 +139,7 @@ def _assert_bundle_materialized() -> tuple[dict[str, Any], Path, Path]:
         "plugins/marketplaces",
         "tools",
     ]
-    present_forbidden = [relative for relative in forbidden if (bundle.path / relative).exists()]
+    present_forbidden = [relative for relative in forbidden if (bundle.content_path / relative).exists()]
     if missing or present_forbidden:
         raise SystemExit(
             json.dumps(
@@ -151,40 +151,31 @@ def _assert_bundle_materialized() -> tuple[dict[str, Any], Path, Path]:
                 indent=2,
             )
         )
-    overlay, _overlays = canonical_web_overlay(
-        SERVICE_ROOT / "vendor/open-design-web",
-        trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
-        runtime_artifact_sha256=bundle.artifact_sha256,
-        od_version=bundle.opendesign_version,
-        upstream_commit=bundle.upstream_commit,
-    )
     return {
-        "path": str(bundle.path.relative_to(REPO_ROOT)),
-        "mode": "verified-materialized-artifact",
+        "path": f"protected-store/runtime/{bundle.artifact_sha256}",
+        "mode": "protected-content-addressed-artifact",
         "release_version": manifest["upstream"]["release_version"],
         "runtime_reported_version": manifest["upstream"]["root_package_version"],
         "upstream_commit": manifest["upstream"]["commit"],
         "artifact_sha256": bundle.artifact_sha256,
-        "web_overlay_sha256": overlay.web_overlay_sha256,
-        "file_manifest_sha256": bundle.file_manifest_sha256,
-    }, bundle.path, overlay.static_dir
+        "web_overlay_sha256": overlay.artifact_sha256,
+        "file_manifest_sha256": bundle.receipt["source_file_manifest_sha256"],
+    }, bundle.content_path, overlay.content_path / "static"
 
 
-def _prepare_smoke_generation(repo_root: Path, bundle_summary: dict[str, Any]) -> None:
+def _assert_smoke_generation(repo_root: Path, bundle_summary: dict[str, Any]) -> None:
     generation_root = repo_root / "workspaces" / WORKSPACE_ID / "data" / APP_ID / "opendesign"
-    bootstrap_empty_generation(
-        generation_root,
-        artifact_sha256=bundle_summary["artifact_sha256"],
-        web_overlay_sha256=bundle_summary["web_overlay_sha256"],
-        opendesign_version=bundle_summary["release_version"],
-        verified_artifacts={bundle_summary["artifact_sha256"]: bundle_summary["release_version"]},
-        verified_overlays={
-            bundle_summary["web_overlay_sha256"]: {
-                "od_version": bundle_summary["release_version"],
-                "compatible_runtime_artifact_sha256": [bundle_summary["artifact_sha256"]],
-            }
-        },
-    )
+    control = json.loads((generation_root / "control.json").read_text(encoding="utf-8"))
+    active = control.get("active") if isinstance(control, dict) else None
+    if not isinstance(active, dict) or any(
+        active.get(key) != bundle_summary[value]
+        for key, value in (
+            ("runtime_artifact_sha256", "artifact_sha256"),
+            ("web_overlay_sha256", "web_overlay_sha256"),
+            ("od_version", "release_version"),
+        )
+    ):
+        raise SystemExit("Install hook did not bootstrap the protected OpenDesign selection")
 
 
 def _prepare_temporary_repo(repo_root: Path) -> None:
@@ -198,11 +189,17 @@ def _prepare_temporary_repo(repo_root: Path) -> None:
 
 @contextmanager
 def _test_platform_env() -> Iterator[None]:
-    keys = ("MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS", "MAVERICK_ADMIN_USERNAME", "MAVERICK_ADMIN_PASSWORD")
+    keys = (
+        "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS",
+        "MAVERICK_ADMIN_USERNAME",
+        "MAVERICK_ADMIN_PASSWORD",
+        "MAVERICK_APP_ARTIFACT_STORE_ROOT",
+    )
     previous = {key: os.environ.get(key) for key in keys}
     os.environ["MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS"] = "1"
     os.environ["MAVERICK_ADMIN_USERNAME"] = "admin"
     os.environ["MAVERICK_ADMIN_PASSWORD"] = "maverick"
+    os.environ["MAVERICK_APP_ARTIFACT_STORE_ROOT"] = str(platform_artifact_store_root(REPO_ROOT))
     try:
         yield
     finally:
@@ -265,7 +262,7 @@ def _smoke_proxy_routes(
     checks = [
         ("/api/apps/design-studio/sidecars/opendesign/index.html", "GET", 200),
         (f"/api/apps/design-studio/sidecars/opendesign/{next_asset}", "GET", 200),
-        ("/api/apps/design-studio/sidecars/opendesign/api/ready", "GET", 200),
+        ("/api/apps/design-studio/sidecars/opendesign/api/maverick-ready", "GET", 200),
         ("/api/apps/design-studio/sidecars/opendesign/api/version", "GET", 200),
         ("/api/apps/design-studio/sidecars/opendesign/api/import/folder", "POST", 403),
         ("/api/apps/design-studio/sidecars/opendesign/api/media/config", "GET", 200),
@@ -283,7 +280,7 @@ def _smoke_proxy_routes(
         if status != expected_status:
             raise SystemExit(f"{path} returned HTTP {status}, expected {expected_status}: {body[:500]!r}")
         decoded = _decode_json_object(body)
-        if path.endswith("/api/ready") and not decoded.get("ready"):
+        if path.endswith("/api/maverick-ready") and not decoded.get("ready"):
             raise SystemExit(f"{path} did not return ready=true: {decoded}")
         version = decoded.get("version")
         version_text = version.get("version") if isinstance(version, dict) else version
@@ -464,6 +461,9 @@ def _launcher_status(repo_root: Path, *, expected_artifact_sha256: str) -> dict[
     active = payload.get("active")
     if not isinstance(active, dict) or active.get("runtime_artifact_sha256") != expected_artifact_sha256:
         raise SystemExit(f"Launcher did not bind the expected artifact generation: {payload}")
+    health = payload.get("health")
+    if not isinstance(health, dict) or health.get("browser_ready") is not True:
+        raise SystemExit(f"Launcher did not commit transactional browser readiness: {payload}")
     return payload
 
 

@@ -79,6 +79,7 @@ def default_state() -> dict[str, Any]:
                 "/assets",
                 "/favicon.ico",
                 "/api/health",
+                "/api/maverick-ready",
                 "/api/ready",
                 "/api/version",
                 "/api/media/models",

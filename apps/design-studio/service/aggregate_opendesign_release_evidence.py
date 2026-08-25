@@ -8,13 +8,14 @@ import json
 from pathlib import Path
 import re
 
+from core.apps.artifact_mounts import platform_artifact_store_root
 from benchmark_opendesign_change_to_live import (
     BENCHMARK_FILE,
     validate_change_to_live_benchmark,
 )
 from opendesign_artifact import read_bundle_manifest, selected_asset, sha256_file
+from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_supply_chain import read_json
-from opendesign_web_overlay import discover_verified_overlays
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 CANONICAL_UI_SCENARIOS = (
@@ -58,19 +59,9 @@ def aggregate(
         or ui.get("restart_covered", True) is not True
     ):
         raise ValueError("release UI evidence must contain the 13 unique canonical passed scenarios")
-    if migration.get("ok") is not True or migration.get("workspace_data_migrated") is not False:
-        raise ValueError("migration/rollback smoke evidence did not pass independently")
-    source_generation_preserved = (
-        isinstance(migration.get("source_tree_sha256_before"), str)
-        and SHA256.fullmatch(str(migration["source_tree_sha256_before"])) is not None
-        and migration.get("source_tree_sha256_before") == migration.get("source_tree_sha256_after")
-        and migration.get("source_generation_preserved", True) is True
-    )
-    real_rollback = migration.get("real_rollback")
-    forward_generation_preserved = (
-        isinstance(real_rollback, dict)
-        and real_rollback.get("forward_generation_preserved") is True
-        and migration.get("forward_generation_preserved", True) is True
+    performance = _validate_launch_performance(ui.get("performance"))
+    source_generation_preserved, forward_generation_preserved = _migration_preservation_proofs(
+        migration
     )
     if not source_generation_preserved or not forward_generation_preserved:
         raise ValueError("migration/rollback preservation proofs must all be true")
@@ -121,6 +112,7 @@ def aggregate(
         "restart_covered": "restart_reload" in identifiers,
         "rollback_gate_separate": True,
         "change_to_live_benchmark": benchmark_summary,
+        "launch_performance": performance,
         "scenarios": aggregated,
         "sources": {
             "ui_gate": ui.get("gate"),
@@ -128,6 +120,74 @@ def aggregate(
             "benchmark_gate": benchmark.get("gate"),
         },
     }
+
+
+def _validate_launch_performance(value: object) -> dict:
+    if not isinstance(value, dict) or value.get("schema_version") != "1" or value.get("targets_met") is not True:
+        raise ValueError("release launch performance evidence is missing or invalid")
+    warm_ticket = value.get("warm_browser_ticket")
+    warm_interface = value.get("warm_interface")
+    cold = value.get("cold_maverick_ready")
+    resources = value.get("resources")
+    if not all(isinstance(item, dict) for item in (warm_ticket, warm_interface, cold, resources)):
+        raise ValueError("release launch performance evidence is missing or invalid")
+    if (
+        warm_ticket.get("count") != 30
+        or _metric(warm_ticket.get("p95_ms")) > 300
+        or _metric(warm_ticket.get("p99_ms")) > 750
+        or warm_interface.get("count") != 30
+        or _metric(warm_interface.get("p95_ms")) > 1500
+        or _metric(warm_interface.get("p99_ms")) > 2500
+        or cold.get("count") != 10
+        or _metric(cold.get("p95_ms")) > 4000
+        or _metric(cold.get("max_ms")) > 8000
+        or value.get("core_restart_count") != 10
+        or not isinstance(value.get("samples"), list)
+        or len(value["samples"]) != 10
+        or not 0 < _metric(resources.get("rss_kib_max")) < float("inf")
+        or not 0 < _metric(resources.get("process_count_max")) < float("inf")
+    ):
+        raise ValueError("release launch performance SLOs did not pass")
+    return value
+
+
+def _metric(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return float("inf")
+    return float(value)
+
+
+def _migration_preservation_proofs(migration: object) -> tuple[bool, bool]:
+    """Validate the stable, redaction-safe real migration evidence schema."""
+    if not isinstance(migration, dict) or migration.get("schema_version") != "1":
+        raise ValueError("migration/rollback smoke evidence did not pass independently")
+    forward = migration.get("forward_fixture_migration")
+    rollback = migration.get("rollback")
+    if (
+        migration.get("workspace_data_migrated") is not False
+        or not isinstance(forward, dict)
+        or not isinstance(rollback, dict)
+        or forward.get("api_import_read_back") != "byte_identical"
+    ):
+        raise ValueError("migration/rollback smoke evidence did not pass independently")
+    source = forward.get("source")
+    target = forward.get("target")
+    if not isinstance(source, dict) or not isinstance(target, dict):
+        raise ValueError("migration/rollback smoke evidence did not pass independently")
+    before = source.get("tree_sha256_before")
+    after = source.get("tree_sha256_after")
+    source_generation_preserved = (
+        isinstance(before, str)
+        and SHA256.fullmatch(before) is not None
+        and before == after
+        and target.get("real_materialized_daemon") is True
+    )
+    forward_generation_preserved = (
+        rollback.get("forward_generation_preserved") is True
+        and rollback.get("distinct_0_10_1_to_0_16_1_triple_atomicity") == "passed"
+        and rollback.get("real_daemon_health_database_and_project_smoke") == "passed"
+    )
+    return source_generation_preserved, forward_generation_preserved
 
 
 def verified_release_provenance(
@@ -148,13 +208,12 @@ def verified_release_provenance(
     }
     if set(web_patches) != {"web-build", "web-react"}:
         raise ValueError("current patch series web component inventory is incomplete")
-    overlays = discover_verified_overlays(
-        service_root / "vendor/open-design-web",
-        trust_contract=service_root / "opendesign_web_trust.json",
-        required_digests={web_digest},
+    repository_root = service_root.parents[2]
+    store = OpenDesignArtifactStore(
+        platform_artifact_store_root(repository_root) / "design-studio" / "opendesign"
     )
-    overlay = overlays[web_digest]
-    signed_manifest = read_json(overlay.path / "manifest.json")
+    overlay = store.fast_web_overlay(web_digest, runtime_artifact_sha256=runtime_digest)
+    signed_manifest = read_json(overlay.content_path / "manifest.json")
     compatibility = signed_manifest.get("compatibility")
     inputs = signed_manifest.get("inputs")
     if not isinstance(compatibility, dict) or not isinstance(inputs, dict):

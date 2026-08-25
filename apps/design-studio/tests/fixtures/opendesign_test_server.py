@@ -50,7 +50,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
-        if path in {"/api/ready", "/api/health"}:
+        if path in {"/api/ready", "/api/maverick-ready", "/api/health"}:
             return self._json(200, {"ready": True})
         if path == "/api/version":
             return self._json(200, {"version": "0.16.1"})

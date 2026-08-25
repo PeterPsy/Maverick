@@ -21,6 +21,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
     def test_aggregator_requires_thirteen_ui_scenarios_plus_separate_rollback(self) -> None:
         ui = {
             "profile": "release",
+            "performance": self._performance(),
             "status": "passed",
             "gate": "design-studio-e2e-release",
             "opendesign": {
@@ -46,13 +47,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 )
             ],
         }
-        migration = {
-            "ok": True,
-            "workspace_data_migrated": False,
-            "source_tree_sha256_before": "c" * 64,
-            "source_tree_sha256_after": "c" * 64,
-            "real_rollback": {"forward_generation_preserved": True},
-        }
+        migration = self._migration()
         benchmark = self._benchmark()
 
         provenance = self._provenance()
@@ -92,6 +87,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         ]
         ui = {
             "profile": "release",
+            "performance": self._performance(),
             "status": "passed",
             "opendesign": {
                 "runtime_artifact_sha256": "a" * 64,
@@ -99,13 +95,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             },
             "scenarios": scenarios,
         }
-        migration = {
-            "ok": True,
-            "workspace_data_migrated": False,
-            "source_tree_sha256_before": "c" * 64,
-            "source_tree_sha256_after": "c" * 64,
-            "real_rollback": {"forward_generation_preserved": True},
-        }
+        migration = self._migration()
         arbitrary = copy.deepcopy(ui)
         arbitrary["scenarios"] = [
             {"id": f"arbitrary_{index}", "status": "passed"} for index in range(13)
@@ -128,24 +118,29 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 release_provenance=self._provenance(),
             )
 
-        for field, target in (
-            ("source_generation_preserved", migration),
-            ("forward_generation_preserved", migration),
-        ):
-            with self.subTest(field=field):
-                rejected = copy.deepcopy(target)
-                rejected[field] = False
-                with self.assertRaisesRegex(ValueError, "preservation proofs"):
-                    aggregate(
-                        ui,
-                        rejected,
-                        self._benchmark(),
-                        release_provenance=self._provenance(),
-                    )
+        rejected_source = copy.deepcopy(migration)
+        rejected_source["forward_fixture_migration"]["source"]["tree_sha256_after"] = "f" * 64
+        with self.assertRaisesRegex(ValueError, "preservation proofs"):
+            aggregate(
+                ui,
+                rejected_source,
+                self._benchmark(),
+                release_provenance=self._provenance(),
+            )
+        rejected_rollback = copy.deepcopy(migration)
+        rejected_rollback["rollback"]["forward_generation_preserved"] = False
+        with self.assertRaisesRegex(ValueError, "preservation proofs"):
+            aggregate(
+                ui,
+                rejected_rollback,
+                self._benchmark(),
+                release_provenance=self._provenance(),
+            )
 
     def test_aggregator_rejects_signed_overlay_inputs_from_an_older_patch_series(self) -> None:
         ui = {
             "profile": "release",
+            "performance": self._performance(),
             "status": "passed",
             "opendesign": {
                 "runtime_artifact_sha256": "a" * 64,
@@ -170,13 +165,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 )
             ],
         }
-        migration = {
-            "ok": True,
-            "workspace_data_migrated": False,
-            "source_tree_sha256_before": "c" * 64,
-            "source_tree_sha256_after": "c" * 64,
-            "real_rollback": {"forward_generation_preserved": True},
-        }
+        migration = self._migration()
         stale = self._provenance()
         stale["web_patch_sha256"]["web-build"] = "9" * 64
 
@@ -212,7 +201,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(evidence["schema_version"], "3")
+        self.assertEqual(evidence["schema_version"], "4")
         self.assertEqual(evidence["status"], "passed")
         self.assertEqual(evidence["scenario_count"], 14)
         self.assertTrue(evidence["rollback_gate_separate"])
@@ -258,6 +247,47 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.assertEqual(css["post_sha256"], prepared_sha256)
 
     @staticmethod
+    def _performance() -> dict:
+        distribution = {"count": 30, "p50_ms": 100, "p95_ms": 200, "p99_ms": 250, "max_ms": 260}
+        cold = {"count": 10, "p50_ms": 1000, "p95_ms": 2000, "p99_ms": 2000, "max_ms": 2000}
+        return {
+            "schema_version": "1",
+            "warm_browser_ticket": dict(distribution),
+            "warm_interface": dict(distribution),
+            "cold_maverick_ready": cold,
+            "daemon_internal_ready": cold,
+            "core_restart_count": 10,
+            "resources": {
+                "cpu_ticks_max": 10,
+                "rss_kib_max": 100,
+                "disk_read_bytes_max": 0,
+                "process_count_max": 2,
+            },
+            "samples": [{"iteration": index + 1} for index in range(10)],
+            "targets_met": True,
+        }
+
+    @staticmethod
+    def _migration() -> dict:
+        return {
+            "schema_version": "1",
+            "workspace_data_migrated": False,
+            "forward_fixture_migration": {
+                "api_import_read_back": "byte_identical",
+                "source": {
+                    "tree_sha256_before": "c" * 64,
+                    "tree_sha256_after": "c" * 64,
+                },
+                "target": {"real_materialized_daemon": True},
+            },
+            "rollback": {
+                "forward_generation_preserved": True,
+                "distinct_0_10_1_to_0_16_1_triple_atomicity": "passed",
+                "real_daemon_health_database_and_project_smoke": "passed",
+            },
+        }
+
+    @staticmethod
     def _benchmark() -> dict:
         before = {
             "runtime_artifact_sha256": "a" * 64,
@@ -296,7 +326,8 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 "warmup_excluded_seconds": 1.0,
                 "mutation_seconds": 0.1,
                 "build_seconds": 70.0,
-                "activation_restart_readiness_seconds": 9.0,
+                "protected_store_publish_seconds": 0.5,
+                "activation_restart_readiness_seconds": 8.5,
                 "change_to_live_seconds": 80.0,
                 "restoration_seconds": 8.0,
             },

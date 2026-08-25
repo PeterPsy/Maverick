@@ -183,6 +183,7 @@ def _workspace_app_command_specs(
                 _uploaded_storage_root: str = str(paths.uploaded_storage),
                 _generated_storage_root: str = str(paths.generated_storage),
                 _command_name: str = command_name,
+                _command_timeout_seconds: int | None = execution_metadata.timeout_seconds,
                 _secret_selectors: list[AppSurfaceSecretSelector] = secret_selectors,
                 _declared_event_resources: list[str] = declared_data_event_resources(
                     parsed.contract.capabilities.data_events
@@ -266,6 +267,11 @@ def _workspace_app_command_specs(
                     actor_user_id=context.user_id,
                     runtime_session_id=context.runtime_session_id,
                     observability_store=_observability_store,
+                    timeout_seconds=(
+                        _command_timeout_seconds
+                        if _command_timeout_seconds is not None
+                        else _parsed.contract.hook_timeouts.backend_seconds
+                    ),
                 )
                 publish_declared_app_events(
                     _app_event_bus,

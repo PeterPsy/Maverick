@@ -10,15 +10,24 @@ import unittest
 ROOT = Path(__file__).resolve().parents[3]
 SERVICE_ROOT = ROOT / "apps/design-studio/service"
 RUNTIME = "a" * 64
+RUNTIME_OLD = "d" * 64
 WEB_A = "b" * 64
 WEB_B = "c" * 64
-VERIFIED_ARTIFACTS = {RUNTIME: "0.16.1"}
+WEB_OLD = "e" * 64
+VERIFIED_ARTIFACTS = {RUNTIME: "0.16.1", RUNTIME_OLD: "0.16.1"}
 VERIFIED_OVERLAYS = {
-    digest: {
+    WEB_A: {
         "od_version": "0.16.1",
         "compatible_runtime_artifact_sha256": [RUNTIME],
-    }
-    for digest in (WEB_A, WEB_B)
+    },
+    WEB_B: {
+        "od_version": "0.16.1",
+        "compatible_runtime_artifact_sha256": [RUNTIME],
+    },
+    WEB_OLD: {
+        "od_version": "0.16.1",
+        "compatible_runtime_artifact_sha256": [RUNTIME_OLD],
+    },
 }
 
 
@@ -40,7 +49,13 @@ class WebActivationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="maverick-web-activation-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / "opendesign"
-        for child in ("instances/gen_current/data", "backups", "migrations", "web-activations"):
+        for child in (
+            "instances/gen_current/data",
+            "backups",
+            "migrations",
+            "runtime-activations",
+            "web-activations",
+        ):
             (self.root / child).mkdir(parents=True, exist_ok=True)
         self.data_file = self.root / "instances/gen_current/data/design.db"
         self.data_file.write_bytes(b"immutable active data bytes")
@@ -98,6 +113,137 @@ class WebActivationTests(unittest.TestCase):
         self.assertEqual(journal.state, "ready_committed")
         self.assertEqual(journal.readiness["service_count"], 1)
         self.assertNotIn("ignored", journal.readiness)
+
+    def test_web_cutover_preserves_declared_runtime_rollback(self) -> None:
+        previous_runtime = self.model.LaunchSelection(
+            RUNTIME_OLD,
+            WEB_OLD,
+            "0.16.1",
+            "gen_current",
+        )
+        runtime_journal = self.model.RuntimeActivationJournal(
+            runtime_activation_id="runtime_release_retained_001",
+            state="ready_committed",
+            source=previous_runtime,
+            target=self.source,
+            readiness={"ready": True, "service_count": 1},
+            error=None,
+            created_at="2026-08-12T09:59:00Z",
+            updated_at="2026-08-12T09:59:01Z",
+        )
+        self.control.write_runtime_activation_journal(
+            self.root,
+            runtime_journal,
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+        retained = self.model.GenerationControl(
+            active=self.source,
+            previous_release=None,
+            previous_web=None,
+            migration_id=None,
+            web_activation_id=None,
+            updated_at="2026-08-12T10:00:00Z",
+            previous_runtime=previous_runtime,
+            runtime_activation_id="runtime_release_retained_001",
+        )
+        self.control.write_generation_control(
+            self.root,
+            retained,
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+
+        outcome = self.activation.activate_web_overlay(
+            self.root,
+            target_web_overlay_sha256=WEB_B,
+            web_activation_id="web_with_runtime_rollback_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+            restart_sidecars=lambda: {"ready": True, "service_count": 1},
+            now=lambda: "2026-08-12T10:00:01Z",
+        )
+
+        self.assertTrue(outcome.activated)
+        self.assertEqual(outcome.control.previous_runtime, previous_runtime)
+        self.assertEqual(
+            outcome.control.runtime_activation_id,
+            "runtime_release_retained_001",
+        )
+        self.assertEqual(
+            outcome.control.web_activation_id,
+            "web_with_runtime_rollback_001",
+        )
+        reparsed = self.model.GenerationControl.from_dict(outcome.control.to_dict())
+        self.assertEqual(reparsed.previous_runtime, previous_runtime)
+
+    def test_core_remount_proof_is_merged_after_launcher_commits_readiness(self) -> None:
+        def restart():
+            launcher = self.activation.finalize_web_activation_after_verified_sidecar_start(
+                self.root,
+                readiness={"ready": True, "service_count": 1},
+                verified_artifacts=VERIFIED_ARTIFACTS,
+                verified_overlays=VERIFIED_OVERLAYS,
+                now=lambda: "2026-08-12T10:00:02Z",
+            )
+            self.assertIsNotNone(launcher)
+            return {
+                "ready": True,
+                "service_count": 1,
+                "browser_remount_event_emitted": True,
+            }
+
+        outcome = self.activation.activate_web_overlay(
+            self.root,
+            target_web_overlay_sha256=WEB_B,
+            web_activation_id="web_transactional_remount_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+            restart_sidecars=restart,
+            now=lambda: "2026-08-12T10:00:01Z",
+        )
+
+        self.assertTrue(outcome.readiness["browser_remount_event_emitted"])
+        journal = self.control.load_web_activation_journal(
+            self.root,
+            "web_transactional_remount_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+        self.assertTrue(journal.readiness["browser_remount_event_emitted"])
+
+    def test_callback_failure_cannot_rollback_launcher_finalized_activation(self) -> None:
+        def restart():
+            finalized = self.activation.finalize_web_activation_after_verified_sidecar_start(
+                self.root,
+                readiness={"ready": True, "service_count": 1},
+                verified_artifacts=VERIFIED_ARTIFACTS,
+                verified_overlays=VERIFIED_OVERLAYS,
+                now=lambda: "2026-08-12T10:00:02Z",
+            )
+            self.assertIsNotNone(finalized)
+            raise RuntimeError("core callback failed after launcher readiness")
+
+        outcome = self.activation.activate_web_overlay(
+            self.root,
+            target_web_overlay_sha256=WEB_B,
+            web_activation_id="web_launcher_won_race_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+            restart_sidecars=restart,
+            now=lambda: "2026-08-12T10:00:01Z",
+        )
+
+        self.assertTrue(outcome.activated)
+        self.assertFalse(outcome.rolled_back)
+        self.assertEqual(outcome.control.active.web_overlay_sha256, WEB_B)
+        journal = self.control.load_web_activation_journal(
+            self.root,
+            "web_launcher_won_race_001",
+            verified_artifacts=VERIFIED_ARTIFACTS,
+            verified_overlays=VERIFIED_OVERLAYS,
+        )
+        self.assertEqual(journal.state, "ready_committed")
 
     def test_failed_candidate_readiness_restores_previous_overlay_without_data_change(self) -> None:
         outcomes = iter(

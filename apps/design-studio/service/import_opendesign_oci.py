@@ -38,7 +38,7 @@ from opendesign_attestation import (
     verify_artifact_set,
 )
 from opendesign_oci_layout import OciLayoutError, apply_layers
-from opendesign_oci_patch import BoundaryPatchError, apply_boundary_patch
+from opendesign_oci_patch import BoundaryPatchError, apply_boundary_patch, apply_startup_patch
 from opendesign_oci_registry import OciRegistryError, RegistryClient
 from opendesign_oci_stage import OciStageError, runtime_node_command, stage_runtime_closure
 from opendesign_process import activate_runtime_attachment, signal_guard
@@ -61,6 +61,7 @@ class DerivationResult:
     file_manifest_sha256: str
     rootfs_inventory_sha256: str
     patch_evidence: dict[str, Any]
+    startup_patch_evidence: dict[str, Any]
 
 
 def import_reproducible_artifact(
@@ -115,6 +116,7 @@ def import_reproducible_artifact(
         "file_manifest_sha256": pins["file_manifest_sha256"],
         "rootfs_inventory_sha256": results[0].rootfs_inventory_sha256,
         "boundary_patch": results[0].patch_evidence,
+        "startup_patch": results[0].startup_patch_evidence,
         "oci_index_digest": manifest["distribution"]["index"]["digest"],
         "oci_manifest_digest": manifest["distribution"]["manifest"]["digest"],
         "reproducible_imports": 2,
@@ -139,6 +141,7 @@ def derive_once(
     rootfs_inventory = create_file_manifest(rootfs)
     rootfs_inventory_sha256 = _canonical_payload_sha256(rootfs_inventory)
     patch_evidence = apply_boundary_patch(rootfs, manifest)
+    startup_patch_evidence = apply_startup_patch(rootfs, manifest)
     staging = result_root / "staging"
     stage_runtime_closure(rootfs, staging, manifest=manifest, service_root=SERVICE_ROOT)
     native_probe = _probe_native_runtime(staging, manifest)
@@ -157,12 +160,14 @@ def derive_once(
     }
     write_canonical_json(metadata_root / "oci.json", oci_evidence)
     write_canonical_json(metadata_root / "boundary-patch.json", patch_evidence)
+    write_canonical_json(metadata_root / "startup-patch.json", startup_patch_evidence)
     packages = package_inventory(staging)
     sbom = cyclonedx_sbom(packages, version=manifest["upstream"]["release_version"])
     licenses = license_inventory(packages, upstream=manifest["upstream"])
     notice = notice_text(licenses) + (
         "\nMaverick derived patch notice:\n"
         f"- {patch_evidence['path']} was modified to require the technical bearer on loopback.\n"
+        f"- {startup_patch_evidence['path']} uses bounded startup I/O concurrency.\n"
         "- Embedded apps/web/out was excluded; signed static web overlays are released independently.\n"
     )
     write_canonical_json(metadata_root / "sbom.cdx.json", sbom)
@@ -183,6 +188,7 @@ def derive_once(
         artifact_name=asset["file"],
         artifact_sha256=sha256_file(artifact_path),
         patch_evidence=patch_evidence,
+        startup_patch_evidence=startup_patch_evidence,
         rootfs_inventory_sha256=rootfs_inventory_sha256,
         manifest=manifest,
     )
@@ -201,6 +207,7 @@ def derive_once(
         file_manifest_sha256=sha256_file(output_root / asset["file_manifest"]),
         rootfs_inventory_sha256=rootfs_inventory_sha256,
         patch_evidence=patch_evidence,
+        startup_patch_evidence=startup_patch_evidence,
     )
     shutil.rmtree(pull_root)
     shutil.rmtree(rootfs)
@@ -279,6 +286,7 @@ def _assert_reproducible(results: list[DerivationResult], asset: dict[str, Any])
         or first.file_manifest_sha256 != second.file_manifest_sha256
         or first.rootfs_inventory_sha256 != second.rootfs_inventory_sha256
         or first.patch_evidence != second.patch_evidence
+        or first.startup_patch_evidence != second.startup_patch_evidence
     ):
         raise OciImportError("OpenDesign independent OCI derivations are not byte-reproducible")
     for path_field in ARTIFACT_DIGEST_FIELDS:

@@ -4,25 +4,35 @@
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
 import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import sys
 from tempfile import TemporaryDirectory
 
-from opendesign_artifact import read_bundle_manifest, selected_asset, validate_bundle_manifest
+SERVICE_ROOT = Path(__file__).resolve().parent
+REPOSITORY_ROOT = SERVICE_ROOT.parents[2]
+sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from core.apps.artifact_mounts import platform_artifact_store_root
+from opendesign_artifact import (
+    read_bundle_manifest,
+    selected_asset,
+    validate_bundle_manifest,
+    write_canonical_json,
+)
+from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_generation_control import load_generation_control, write_generation_control
 from opendesign_generation_model import GenerationControl, LaunchSelection
-from opendesign_materialization import discover_verified_bundles
 from opendesign_migration import migrate_controlled_copy, rollback_controlled_copy
 from opendesign_migration_files import mark_controlled_copy, tree_sha256
 from opendesign_migration_oci_runtime import OciMigrationRuntime
-from opendesign_web_overlay import discover_verified_overlays
+from opendesign_runtime import materialized_bundle_from_store, verified_overlay_from_store
 
 
-SERVICE_ROOT = Path(__file__).resolve().parent
-REGISTRY_ROOT = SERVICE_ROOT / "vendor/open-design"
-WEB_REGISTRY_ROOT = SERVICE_ROOT / "vendor/open-design-web"
+STORE_ROOT = platform_artifact_store_root(REPOSITORY_ROOT) / "design-studio" / "opendesign"
 WEB_TRUST_CONTRACT = SERVICE_ROOT / "opendesign_web_trust.json"
 OLD_FIXTURE_DIGEST = "0101" * 16
 OLD_FIXTURE_WEB_DIGEST = "0102" * 16
@@ -36,19 +46,20 @@ def main() -> None:
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
     validate_bundle_manifest(manifest, require_artifact_digest=True)
     asset = selected_asset(manifest, require_artifact_digest=True)
-    bundles = discover_verified_bundles(REGISTRY_ROOT)
-    target_bundle = bundles.get(asset["sha256"])
-    if target_bundle is None:
-        raise SystemExit("Pinned OpenDesign OCI artifact is not materialized")
-    overlays = discover_verified_overlays(WEB_REGISTRY_ROOT, trust_contract=WEB_TRUST_CONTRACT)
-    compatible = [
-        overlay
-        for overlay in overlays.values()
-        if asset["sha256"] in overlay.compatible_runtime_artifact_sha256
-    ]
-    if len(compatible) != 1:
-        raise SystemExit("Migration smoke requires one compatible canonical web overlay")
-    target_overlay = compatible[0]
+    store = OpenDesignArtifactStore(STORE_ROOT)
+    stored_runtime = store.fast_runtime(
+        str(asset["sha256"]),
+        file_manifest_sha256=str(asset["file_manifest_sha256"]),
+        opendesign_version=str(manifest["upstream"]["release_version"]),
+        upstream_commit=str(manifest["upstream"]["commit"]),
+    )
+    release = json.loads((SERVICE_ROOT / "opendesign_release_selection.json").read_text(encoding="utf-8"))
+    stored_overlay = store.fast_web_overlay(
+        str(release["active_web_overlay_sha256"]),
+        runtime_artifact_sha256=stored_runtime.artifact_sha256,
+    )
+    target_bundle = materialized_bundle_from_store(stored_runtime)
+    target_overlay = verified_overlay_from_store(stored_overlay)
 
     with TemporaryDirectory(prefix="maverick-od-migration-smoke-") as temporary:
         app_data = Path(temporary) / "design-studio"
@@ -59,6 +70,7 @@ def main() -> None:
             root / "backups",
             root / "migrations",
             root / "web-activations",
+            root / "runtime-activations",
         ):
             path.mkdir(parents=True, exist_ok=True)
         mark_controlled_copy(root)
@@ -140,8 +152,8 @@ def main() -> None:
         timestamps = iter(f"2026-08-05T00:00:{second:02d}Z" for second in range(60))
         runtime = OciMigrationRuntime(
             root,
-            REGISTRY_ROOT,
-            WEB_REGISTRY_ROOT,
+            STORE_ROOT,
+            STORE_ROOT / "web",
             WEB_TRUST_CONTRACT,
             manifest,
         )
@@ -211,12 +223,62 @@ def main() -> None:
             "real_rollback": rollback_evidence,
         }
         if arguments.evidence_output is not None:
-            arguments.evidence_output.parent.mkdir(parents=True, exist_ok=True)
-            arguments.evidence_output.write_text(
-                json.dumps(result, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            write_canonical_json(arguments.evidence_output, _acceptance_evidence(result))
         print(json.dumps(result, indent=2, sort_keys=True))
+
+
+def _acceptance_evidence(result: dict[str, object]) -> dict[str, object]:
+    source = result["source"]
+    target = result["target"]
+    rollback = result["real_rollback"]
+    if not isinstance(source, dict) or not isinstance(target, dict) or not isinstance(rollback, dict):
+        raise SystemExit("OpenDesign migration smoke produced malformed evidence")
+    rollback_active = rollback.get("active")
+    if not isinstance(rollback_active, dict):
+        raise SystemExit("OpenDesign rollback smoke produced malformed active selection")
+    return {
+        "schema_version": "1",
+        "executed_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+        "forward_fixture_migration": {
+            "api_import_read_back": "byte_identical",
+            "legacy_mapping_sha256": result["mapping_sha256"],
+            "migrated_imports": result["migrated_imports"],
+            "migrated_projects": result["migrated_projects"],
+            "source": {
+                "data_generation": source["data_generation"],
+                "fixture_artifact_sha256": source["runtime_artifact_sha256"],
+                "od_version": source["od_version"],
+                "tree_sha256_before": result["source_tree_sha256_before"],
+                "tree_sha256_after": result["source_tree_sha256_after"],
+            },
+            "target": {
+                "artifact_sha256": target["runtime_artifact_sha256"],
+                "data_generation": target["data_generation"],
+                "database_integrity": result["target_database_integrity"],
+                "od_version": target["od_version"],
+                "real_materialized_daemon": True,
+                "web_overlay_sha256": target["web_overlay_sha256"],
+            },
+        },
+        "rollback": {
+            "distinct_0_10_1_to_0_16_1_triple_atomicity": "passed",
+            "forward_generation_preserved": rollback["forward_generation_preserved"],
+            "previous_database_integrity": rollback["previous_database_integrity"],
+            "previous_generation_reactivated": rollback_active["data_generation"],
+            "real_daemon_health_database_and_project_smoke": "passed",
+            "real_round_trip_artifact_sha256": rollback_active[
+                "runtime_artifact_sha256"
+            ],
+            "real_round_trip_web_overlay_sha256": rollback_active[
+                "web_overlay_sha256"
+            ],
+        },
+        "runtime_evidence": {
+            "forward": result["runtime"],
+            "rollback": rollback["runtime"],
+        },
+        "workspace_data_migrated": False,
+    }
 
 
 def _real_rollback_smoke(
@@ -234,6 +296,7 @@ def _real_rollback_smoke(
         root / "backups",
         root / "migrations",
         root / "web-activations",
+        root / "runtime-activations",
     ):
         path.mkdir(parents=True, exist_ok=True)
     mark_controlled_copy(root)
@@ -252,11 +315,11 @@ def _real_rollback_smoke(
     previous_data = root / "instances" / previous.data_generation / "data"
     previous_data.mkdir(parents=True)
     verified = {artifact_sha256: "0.16.1"}
-    overlays = discover_verified_overlays(
-        WEB_REGISTRY_ROOT,
-        trust_contract=WEB_TRUST_CONTRACT,
-        required_digests={web_overlay_sha256},
+    stored_overlay = OpenDesignArtifactStore(STORE_ROOT).fast_web_overlay(
+        web_overlay_sha256,
+        runtime_artifact_sha256=artifact_sha256,
     )
+    overlays = {web_overlay_sha256: verified_overlay_from_store(stored_overlay)}
     write_generation_control(
         root,
         GenerationControl(
@@ -272,8 +335,8 @@ def _real_rollback_smoke(
     )
     runtime = OciMigrationRuntime(
         root,
-        REGISTRY_ROOT,
-        WEB_REGISTRY_ROOT,
+        STORE_ROOT,
+        STORE_ROOT / "web",
         WEB_TRUST_CONTRACT,
         manifest,
     )

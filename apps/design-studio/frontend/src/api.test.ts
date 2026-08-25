@@ -3,14 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   currentDesignStudioAppId,
   isTrustedSidecarMessage,
+  launchErrorIsRetryable,
   navigationFromParams,
   navigationMessage,
   openDesignPath,
   openSettingsMessage,
+  readCachedLaunchTarget,
   SidecarLaunchError,
   validateSidecarLaunch,
+  writeCachedLaunchTarget,
 } from "./api";
-import { mobileLayoutFromWidgetMessage, mountedAppId, projectCreatedAt, projectIdFromWidgetMessage } from "./backendApi";
+import { BackendRequestError, mobileLayoutFromWidgetMessage, mountedAppId, projectCreatedAt, projectIdFromWidgetMessage } from "./backendApi";
 
 const VALID_LAUNCH = {
   origin: "https://sc-proof.sidecars.example",
@@ -19,6 +22,7 @@ const VALID_LAUNCH = {
   ticket_field: "ticket" as const,
   ticket: "one-shot-ticket",
   expires_in_seconds: 30,
+  sidecar_instance_id: "instance_12345678",
 };
 
 describe("currentDesignStudioAppId", () => {
@@ -85,6 +89,62 @@ describe("isolated browser launch validation", () => {
     ]) {
       expect(() => validateSidecarLaunch(candidate, "https://maverick.example")).toThrow(SidecarLaunchError);
     }
+  });
+
+  it("separates safe retry from artifact auto-repair semantics", () => {
+    expect(launchErrorIsRetryable("browser_ticket_failed", false)).toBe(true);
+    expect(launchErrorIsRetryable("sidecar_origin_unavailable", false)).toBe(true);
+    expect(launchErrorIsRetryable("artifact_integrity_mismatch", false)).toBe(false);
+    expect(launchErrorIsRetryable("artifact_integrity_mismatch", true)).toBe(true);
+  });
+});
+
+describe("isolated launch target cache", () => {
+  it("partitions non-secret target hints by the exact isolated origin", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) || null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    };
+    writeCachedLaunchTarget(storage, "design-studio", VALID_LAUNCH.origin, {
+      target: "project",
+      od_project_id: "od_project_1",
+      project: { id: "od_project_1" },
+    });
+    expect(readCachedLaunchTarget(storage, "design-studio", VALID_LAUNCH.origin)).toEqual({
+      target: "project",
+      od_project_id: "od_project_1",
+      project: { id: "od_project_1" },
+    });
+    expect(readCachedLaunchTarget(storage, "design-studio", "https://sc-other.sidecars.example")).toBeNull();
+  });
+
+  it("drops malformed target hints and preserves typed backend diagnostics", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) || null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    };
+    writeCachedLaunchTarget(storage, "design-studio", VALID_LAUNCH.origin, {
+      target: "project",
+      od_project_id: "../invalid",
+      project: null,
+    });
+    expect(readCachedLaunchTarget(storage, "design-studio", VALID_LAUNCH.origin)).toBeNull();
+    const error = new BackendRequestError({
+      error: "artifact_integrity_mismatch",
+      phase: "artifact_fast_verify",
+      auto_repairable: false,
+      retryable: false,
+    }, 503);
+    expect(error).toMatchObject({
+      code: "artifact_integrity_mismatch",
+      phase: "artifact_fast_verify",
+      status: 503,
+      retryable: false,
+    });
   });
 });
 

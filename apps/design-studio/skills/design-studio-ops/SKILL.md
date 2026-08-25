@@ -97,10 +97,14 @@ Incremental development:
   timings.
 
 The exact upstream release, commit, patch set, artifact digest, and file
-manifest come only from `service/opendesign_bundle.json`. Materialized bundles
-live in immutable `service/vendor/open-design/<artifact-sha256>/` directories.
-The declared runtime fails closed without a verified bundle and matching active
-data generation; there is no compatibility fallback.
+manifest come only from `service/opendesign_bundle.json`. Materialized runtime
+and overlay generations live in the platform-owned content-addressed artifact
+store outside the repository and enter the sandbox only through the declared
+read-only `/artifacts/opendesign` capability. Normal launch validates its
+protected receipt and exact control binding without full hashing; use governed
+`artifact verify --full` or `artifact repair` for full audit/rematerialization.
+The runtime fails closed without a verified generation and matching active data
+generation; there is no compatibility fallback.
 
 Release verification uses `service/smoke_opendesign_runtime.py` for the real
 imported daemon and `service/smoke_opendesign_sidecar.py` for launcher/core

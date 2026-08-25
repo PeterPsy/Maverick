@@ -182,6 +182,8 @@
       "migrate": "hooks/migrate.py",
       "health_check": "hooks/health_check.py",
       "backend_recovery": "hooks/backend_recovery.py",
+      "artifact_repair": "hooks/artifact_repair.py",
+      "background_tick": "hooks/background_tick.py",
       "runtime_event": "backend/app_backend.py"
     },
     "backend": "backend/app_backend.py",
@@ -298,7 +300,22 @@
           "DO_NOT_TRACK": "1",
           "NEXT_TELEMETRY_DISABLED": "1",
           "MAVERICK_OPENDESIGN_DATA_ROOT": "${app.data_dir}/opendesign",
-          "MAVERICK_OPENDESIGN_BUNDLE_ROOT": "${app.source_dir}/service/vendor/open-design"
+          "MAVERICK_OPENDESIGN_STORE_ROOT": "${artifact.opendesign}"
+        },
+        "artifact_mounts": [
+          {
+            "id": "opendesign",
+            "mount_path": "/artifacts/opendesign"
+          }
+        ],
+        "prewarm": {
+          "on_core_start": true,
+          "on_install": true,
+          "on_activation": true,
+          "keep_alive": true
+        },
+        "diagnostics": {
+          "status_file": "opendesign/launcher-status.json"
         },
         "process_policy": {
           "inherit_host_env": false,
@@ -322,6 +339,9 @@
           ],
           "connect_src": [
             "self"
+          ],
+          "immutable_asset_prefixes": [
+            "/_next/static/"
           ]
         },
         "entrypoint_access": {
@@ -446,8 +466,8 @@
           "port": "auto"
         },
         "health": {
-          "path": "/api/ready",
-          "timeout_ms": 120000
+          "path": "/api/maverick-ready",
+          "timeout_ms": 12000
         },
         "proxy": {
           "mount": "/opendesign",
@@ -556,6 +576,10 @@
               {
                 "method": "GET",
                 "path_template": "/api/health"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/maverick-ready"
               },
               {
                 "method": "GET",

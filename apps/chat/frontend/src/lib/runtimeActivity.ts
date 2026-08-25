@@ -1,5 +1,6 @@
 import type { RuntimeEvent, RuntimeTurn } from "../api/client";
 import { isNonChatFacingProviderEvent, runtimeStepLabel } from "./runtimeStepLabels";
+import { toolActivityLabel } from "./toolPresentation";
 
 export type RuntimeActivityLabelOptions = {
   activeTurn?: RuntimeTurn | null;
@@ -84,7 +85,7 @@ function eventActivityLabel(event: RuntimeEvent): string | null {
     return "Thinking";
   }
   if (event.event_type.startsWith("runtime.tool_call.")) {
-    return toolActivityLabel(event);
+    return runtimeToolActivityLabel(event);
   }
   const stepLabel = runtimeStepLabel(event);
   if (stepLabel) {
@@ -93,7 +94,7 @@ function eventActivityLabel(event: RuntimeEvent): string | null {
   return null;
 }
 
-function toolActivityLabel(event: RuntimeEvent): string | null {
+function runtimeToolActivityLabel(event: RuntimeEvent): string | null {
   if (isNonChatFacingProviderEvent(event.payload.provider_event_type) || isNonChatFacingProviderEvent(event.payload.name)) {
     return null;
   }
@@ -102,7 +103,7 @@ function toolActivityLabel(event: RuntimeEvent): string | null {
     return "Thinking";
   }
   if (status === "failed") {
-    return "Tool failed";
+    return toolActivityLabel({ detail: event.payload, name: toolName(event.payload), status: "failed" });
   }
   if (status === "awaiting_confirmation") {
     return "Waiting for tool confirmation";
@@ -110,52 +111,11 @@ function toolActivityLabel(event: RuntimeEvent): string | null {
   if (status !== "started" && status !== "updated") {
     return null;
   }
-  return activeToolLabel(event.payload);
+  return toolActivityLabel({ detail: event.payload, name: toolName(event.payload), status });
 }
 
-function activeToolLabel(payload: Record<string, unknown>): string {
-  const toolKind = stringValue(payload.tool_kind);
-  if (toolKind === "web_search") {
-    return "Searching web";
-  }
-  if (toolKind === "file_change") {
-    return "Editing files";
-  }
-  if (toolKind === "skill_change") {
-    return "Updating skills";
-  }
-  if (toolKind === "command") {
-    return commandActivityLabel(stringValue(payload.command));
-  }
-  const command = stringValue(payload.command);
-  if (command) {
-    return commandActivityLabel(command);
-  }
-  const name = (stringValue(payload.name) || stringValue(payload.tool_name) || stringValue(payload.tool)).toLowerCase();
-  if (name.includes("web")) {
-    return "Searching web";
-  }
-  if (name.includes("file")) {
-    return "Working with files";
-  }
-  return "Using tool";
-}
-
-function commandActivityLabel(command: string): string {
-  if (!command) {
-    return "Running command";
-  }
-  const normalized = command.toLowerCase();
-  if (/(^|\s)(rg|find|ls|pwd)(\s|$)/.test(normalized) || normalized.includes("rg --files")) {
-    return "Searching files";
-  }
-  if (/(^|\s)(cat|sed|tail|head|nl)(\s|$)/.test(normalized)) {
-    return "Reading files";
-  }
-  if (/(^|\s)(cp|mv|mkdir|touch)(\s|$)/.test(normalized) || normalized.includes("apply_patch")) {
-    return "Editing files";
-  }
-  return "Running command";
+function toolName(payload: Record<string, unknown>): string {
+  return stringValue(payload.name) || stringValue(payload.tool_name) || stringValue(payload.tool) || stringValue(payload.tool_handle);
 }
 
 function stringValue(value: unknown): string {

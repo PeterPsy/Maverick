@@ -269,7 +269,7 @@ test.describe("Chat app browser smoke", () => {
     await expect(disclosure).toBeVisible();
     await expect(page.getByRole("button", { name: /Goal status/ })).toHaveCount(1);
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
-    await expect(page.getByRole("button", { name: /Tool Used/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Actions/ })).toHaveCount(0);
 
     await disclosure.click();
     await expect(disclosure).toHaveAttribute("aria-expanded", "true");
@@ -447,8 +447,8 @@ test.describe("Chat app browser smoke", () => {
     const participantTranscript = page.getByRole("complementary", { name: "Reviewer transcript" });
     await expect(participantTranscript.getByText("Reviewing launch sources.")).toBeVisible();
     await expect(participantTranscript.getByText("Final risk review ready.")).toBeVisible();
-    await expect(participantTranscript.getByText("Tool Used")).toBeVisible();
-    await expect(participantTranscript.getByText("Web search")).toBeVisible();
+    await expect(participantTranscript.getByText("Actions")).toBeVisible();
+    await expect(participantTranscript.getByText("Searched the web for “launch risks”")).toBeVisible();
     await expect(participantTranscript.locator(".chatapp-tool-inline__row")).toBeVisible();
     await expect(participantTranscript.locator(".chatapp-agent-block")).toHaveCount(2);
     const participantHeaderBox = await participantTranscript.locator(".chatapp-inter-agent-graph__transcript-title summary").boundingBox();

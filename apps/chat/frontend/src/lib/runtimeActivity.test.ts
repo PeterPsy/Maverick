@@ -114,7 +114,7 @@ describe("runtimeActivityLabel", () => {
         ],
         isRuntimeBusy: true,
       }),
-    ).toBe("Searching web");
+    ).toBe("Searching the web");
     expect(
       runtimeActivityLabel({
         activeTurn: turn("active"),
@@ -126,7 +126,22 @@ describe("runtimeActivityLabel", () => {
         ],
         isRuntimeBusy: true,
       }),
-    ).toBe("Reading files");
+    ).toBe("Reading apps/chat/frontend/src/App.tsx");
+  });
+
+  it("keeps failed tool activity specific", () => {
+    expect(
+      runtimeActivityLabel({
+        activeTurn: turn("active"),
+        events: [
+          event({
+            event_type: "runtime.tool_call.failed",
+            payload: { name: "command", tool_kind: "command", command: "npm test" },
+          }),
+        ],
+        isRuntimeBusy: true,
+      }),
+    ).toBe("Tests failed");
   });
 
   it("returns to thinking after a tool completes and the model has control again", () => {

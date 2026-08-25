@@ -47,7 +47,7 @@ describe("ToolCallInlineMessage", () => {
     });
 
     const disclosure = container.querySelector<HTMLButtonElement>(".chatapp-tool-inline__toggle");
-    expect(disclosure?.textContent).toContain("Tool Used");
+    expect(disclosure?.textContent).toContain("Actions");
     expect(disclosure?.getAttribute("aria-expanded")).toBe("false");
 
     act(() => {
@@ -56,7 +56,7 @@ describe("ToolCallInlineMessage", () => {
     expect(disclosure?.getAttribute("aria-expanded")).toBe("true");
 
     const toolRow = container.querySelector<HTMLButtonElement>(".chatapp-tool-inline__row");
-    expect(toolRow?.textContent).toContain("File search");
+    expect(toolRow?.textContent).toContain("Listed files in apps/chat");
     act(() => {
       toolRow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });

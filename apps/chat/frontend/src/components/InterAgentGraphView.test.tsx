@@ -478,8 +478,8 @@ describe("InterAgentGraphView", () => {
 
     const transcript = element.querySelector('[aria-label="Researcher transcript"]');
     expect(transcript?.textContent).toContain("Research complete.");
-    expect(transcript?.textContent).toContain("Tool Used");
-    expect(transcript?.textContent).toContain("Web search");
+    expect(transcript?.textContent).toContain("Actions");
+    expect(transcript?.textContent).toContain("Searched the web for “Maverick launch”");
     expect(transcript?.querySelectorAll(".chatapp-bubble").length).toBe(2);
     expect(transcript?.querySelector(".chatapp-tool-inline__row")).not.toBeNull();
     expect(transcript?.querySelector(".chatapp-agent-block")).not.toBeNull();

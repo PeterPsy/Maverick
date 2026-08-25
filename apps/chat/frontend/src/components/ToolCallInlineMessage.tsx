@@ -6,6 +6,7 @@ import {
   type ToolCallMessage,
 } from "../api/client";
 import { isNoisyRuntimeLabel } from "../lib/runtimeStepLabels";
+import { toolActivityLabel } from "../lib/toolPresentation";
 import { ActivityDisclosure } from "./ActivityDisclosure";
 
 type ToolCallInlineMessageProps = {
@@ -37,7 +38,7 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
     <ActivityDisclosure
       createdAt={activityCreatedAt}
       defaultExpanded={defaultExpanded}
-      label={`${toolCalls.some((item) => item.status === "awaiting_confirmation") ? "Tool confirmation required" : "Tool Used"}${toolCount > 1 ? ` (${toolCount})` : ""}`}
+      label={`${toolCalls.some((item) => item.status === "awaiting_confirmation") ? "Tool confirmation required" : "Actions"}${toolCount > 1 ? ` (${toolCount})` : ""}`}
     >
       {toolCalls.map((toolCall, index) => {
         const renderKey = toolRenderKey(toolCall, index);
@@ -173,7 +174,7 @@ function ToolConfirmationPanel({ toolCall }: { toolCall: ToolCallMessage }) {
         </span>
       </div>
       <dl className="chatapp-tool-confirmation__facts">
-        <div><dt>Tool</dt><dd>{invocation?.tool_handle || displayToolName(toolCall)}</dd></div>
+        <div><dt>Tool</dt><dd>{invocation?.tool_handle || stringValue(toolCall.detail.tool_handle) || toolCall.name}</dd></div>
         <div><dt>Effect</dt><dd>{invocation?.effect_class || stringValue(toolCall.detail.effect_class) || "unclassified"}</dd></div>
         <div><dt>Scope</dt><dd>Current invocation only</dd></div>
         <div><dt>Policy</dt><dd>{invocation?.policy_revision || "Current effective authority"}</dd></div>
@@ -299,54 +300,7 @@ function toolSummary(detail: Record<string, unknown>): string {
 }
 
 function displayToolName(toolCall: ToolCallMessage): string {
-  const toolKind = stringValue(toolCall.detail.tool_kind);
-  if (toolKind === "web_search") {
-    return "Web search";
-  }
-  if (toolKind === "file_change") {
-    return "File changes";
-  }
-  if (toolKind === "skill_change") {
-    return "Skills changed";
-  }
-  if (toolKind === "command") {
-    return commandLabel(stringValue(toolCall.detail.command));
-  }
-  const command = stringValue(toolCall.detail.command);
-  if (command) {
-    return commandLabel(command);
-  }
-  const providerEventType = stringValue(toolCall.detail.provider_event_type);
-  if (providerEventType.includes("web_search")) {
-    return "Web search";
-  }
-  if (providerEventType.includes("file")) {
-    return "File operation";
-  }
-  if (toolCall.name.includes("web")) {
-    return "Web search";
-  }
-  return toolCall.name;
-}
-
-function commandLabel(command: string): string {
-  if (!command) {
-    return "Command";
-  }
-  const normalized = command.toLowerCase();
-  if (/(^|\s)(rg|find|ls|pwd)(\s|$)/.test(normalized) || normalized.includes("rg --files")) {
-    return "File search";
-  }
-  if (/(^|\s)(cat|sed|tail|head|nl)(\s|$)/.test(normalized)) {
-    return "File read";
-  }
-  if (normalized.includes("apply_patch") || normalized.includes("npm run build") || normalized.includes("python3.12 -m unittest")) {
-    return "Command";
-  }
-  if (/(^|\s)(cp|mv|mkdir|touch)(\s|$)/.test(normalized)) {
-    return "File change";
-  }
-  return "Shell command";
+  return toolActivityLabel({ detail: toolCall.detail, name: toolCall.name, status: toolCall.status });
 }
 
 function stringValue(value: unknown): string {

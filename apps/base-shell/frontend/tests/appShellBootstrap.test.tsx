@@ -44,7 +44,22 @@ vi.mock("../src/components/WorkspaceView", () => ({
   ),
 }));
 vi.mock("../src/components/Sidebar", () => ({
-  Sidebar: () => <aside data-testid="sidebar" />,
+  Sidebar: ({
+    isLoading,
+    isWorkspacesLoading,
+    workspaces,
+  }: {
+    isLoading: boolean;
+    isWorkspacesLoading: boolean;
+    workspaces: WorkspaceItem[];
+  }) => (
+    <aside
+      data-apps-loading={String(isLoading)}
+      data-testid="sidebar"
+      data-workspace-count={String(workspaces.length)}
+      data-workspaces-loading={String(isWorkspacesLoading)}
+    />
+  ),
 }));
 vi.mock("../src/components/FloatingChatHost", () => ({
   FloatingChatHost: () => <div data-testid="floating-chat-host" />,
@@ -90,6 +105,27 @@ describe("AppShell bootstrap", () => {
     expect(api.getPlatformStatus).not.toHaveBeenCalled();
     expect(api.getPlatformSettings).not.toHaveBeenCalled();
     expect(api.getProviderSetupSettings).toHaveBeenCalled();
+  });
+
+  it("keeps app and workspace navigation usable while optional app and provider state stalls", async () => {
+    api.listPinnedApps.mockReturnValue(new Promise(() => undefined));
+    api.getProviderSetupSettings.mockReturnValue(new Promise(() => undefined));
+
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const view = container.querySelector("[data-testid='workspace-view']");
+    const sidebar = container.querySelector("[data-testid='sidebar']");
+    expect(view?.getAttribute("data-loading")).toBe("false");
+    expect(sidebar?.getAttribute("data-apps-loading")).toBe("false");
+    expect(sidebar?.getAttribute("data-workspaces-loading")).toBe("false");
+    expect(sidebar?.getAttribute("data-workspace-count")).toBe("1");
+    expect(api.listPinnedApps).toHaveBeenCalledOnce();
+    expect(api.listWorkspaces).toHaveBeenCalledOnce();
   });
 });
 

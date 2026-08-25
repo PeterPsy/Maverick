@@ -84,6 +84,7 @@ export function AppShell() {
   const [isFloatingChatResizing, setIsFloatingChatResizing] = useState(false);
   const [dismissedProviderSetupWorkspaceId, setDismissedProviderSetupWorkspaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isWorkspacesLoading, setIsWorkspacesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mobilePrimaryAction, setMobilePrimaryAction] = useState<WidgetPrimaryActionState>({
     available: false,
@@ -222,61 +223,116 @@ export function AppShell() {
     const loadStartedAt = performance.now();
     markStartupMetric("shell.bootstrap.start");
     setIsLoading(true);
+    setIsWorkspacesLoading(true);
     try {
       const sessionStartedAt = performance.now();
       const currentSession = await getSession();
       measureStartupMetric("shell.bootstrap.session", sessionStartedAt, { authenticated: currentSession.authenticated });
+      if (shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
       setSession(currentSession);
       if (!currentSession.authenticated) {
         setApps([]);
         setWorkspaces([]);
         setSettings(null);
         setError(null);
+        setIsWorkspacesLoading(false);
         measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: false });
         return;
       }
+      void loadWorkspaceState(loadVersion);
+      void loadProviderSetupState(loadVersion);
       const blockingStartedAt = performance.now();
-      const [registry, pinnedApps] = await Promise.all([
-        listApps(),
-        listPinnedApps().catch(() => ({ pinned_apps: ["chat"] })),
-      ]);
+      const registry = await listApps();
+      if (shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
       setApps(registry.items);
-      applyPersistedPinnedApps(pinnedApps.pinned_apps);
       setError(null);
       measureStartupMetric("shell.bootstrap.blocking_payloads", blockingStartedAt, {
         app_count: registry.items.length,
-        pinned_app_count: pinnedApps.pinned_apps.length,
       });
       measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: true });
-      void loadDeferredShellState(loadVersion);
+      void loadPinnedAppsState(loadVersion);
     } catch (loadError) {
+      if (shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
       setError(loadError instanceof Error ? loadError.message : "Errore sconosciuto.");
       measureStartupMetric("shell.bootstrap.error", loadStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
       });
     } finally {
-      setIsLoading(false);
+      if (shellLoadVersionRef.current === loadVersion) {
+        setIsLoading(false);
+      }
     }
   }
 
-  async function loadDeferredShellState(loadVersion: number) {
+  async function loadWorkspaceState(loadVersion: number) {
     const deferredStartedAt = performance.now();
     try {
-      const [workspacePayload, providerSetupSettings] = await Promise.all([
-        listWorkspaces(),
-        getProviderSetupSettings(),
-      ]);
+      const workspacePayload = await listWorkspaces();
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
       setWorkspaces(workspacePayload.items);
-      setSettings(providerSetupSettings);
       measureStartupMetric("shell.bootstrap.deferred_payloads", deferredStartedAt, {
+        resource: "workspaces",
         workspace_count: workspacePayload.items.length,
       });
     } catch (loadError) {
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
+        resource: "workspaces",
+      });
+    } finally {
+      if (shellLoadVersionRef.current === loadVersion) {
+        setIsWorkspacesLoading(false);
+      }
+    }
+  }
+
+  async function loadProviderSetupState(loadVersion: number) {
+    const deferredStartedAt = performance.now();
+    try {
+      const providerSetupSettings = await getProviderSetupSettings();
+      if (shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+      setSettings(providerSetupSettings);
+      measureStartupMetric("shell.bootstrap.deferred_payloads", deferredStartedAt, {
+        resource: "provider_setup",
+      });
+    } catch (loadError) {
+      measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
+        message: loadError instanceof Error ? loadError.message : "unknown",
+        resource: "provider_setup",
+      });
+    }
+  }
+
+  async function loadPinnedAppsState(loadVersion: number) {
+    const deferredStartedAt = performance.now();
+    const pinnedStateVersion = pinnedAppsSaveVersionRef.current;
+    try {
+      const pinnedApps = await listPinnedApps();
+      if (
+        shellLoadVersionRef.current !== loadVersion
+        || pinnedAppsSaveVersionRef.current !== pinnedStateVersion
+      ) {
+        return;
+      }
+      applyPersistedPinnedApps(pinnedApps.pinned_apps, pinnedStateVersion);
+      measureStartupMetric("shell.bootstrap.deferred_payloads", deferredStartedAt, {
+        pinned_app_count: pinnedApps.pinned_apps.length,
+        resource: "pinned_apps",
+      });
+    } catch (loadError) {
+      measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
+        message: loadError instanceof Error ? loadError.message : "unknown",
+        resource: "pinned_apps",
       });
     }
   }
@@ -672,6 +728,7 @@ export function AppShell() {
         activeWorkspaceId={activeWorkspaceId}
         apps={apps}
         isLoading={isLoading}
+        isWorkspacesLoading={isWorkspacesLoading}
         isOpen={isSidebarOpen}
         isMobileLayout={isMobileLayout}
         isPinned={isSidebarPinned}

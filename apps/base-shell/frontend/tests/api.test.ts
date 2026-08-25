@@ -4,6 +4,7 @@ import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
 
 describe("base-shell api normalization", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -46,7 +47,28 @@ describe("base-shell api normalization", () => {
     await expect(listApps()).resolves.toEqual({
       items: [expect.objectContaining({ app_id: "chat", name: "Chat" })],
     });
-    expect(fetch).toHaveBeenCalledWith("/api/apps", { credentials: "same-origin", headers: { Accept: "application/json" } });
+    expect(fetch).toHaveBeenCalledWith("/api/apps", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it("aborts a stalled request instead of leaving shell loaders pending", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => (
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("The operation was aborted.", "AbortError")),
+          { once: true },
+        );
+      })
+    ));
+
+    const assertion = expect(listApps()).rejects.toThrow("Request timed out after 15000 ms: /api/apps");
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
   });
 
   it("reads and saves ordered pinned apps through the App Store backend", async () => {
@@ -71,12 +93,14 @@ describe("base-shell api normalization", () => {
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       method: "POST",
       body: JSON.stringify({ action: "pinned_apps.list" }),
+      signal: expect.any(AbortSignal),
     });
     expect(fetch).toHaveBeenNthCalledWith(2, "/api/apps/app-store/backend", {
       credentials: "same-origin",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       method: "POST",
       body: JSON.stringify({ action: "pinned_apps.set", app_ids: ["agents", "chat"] }),
+      signal: expect.any(AbortSignal),
     });
   });
 

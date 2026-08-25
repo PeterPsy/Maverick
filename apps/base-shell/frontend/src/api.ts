@@ -257,16 +257,41 @@ export type PinnedAppsPayload = {
   pinned_apps: string[];
 };
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    ...init,
-    headers: { Accept: "application/json", ...(init.headers || {}) },
-  });
-  if (!response.ok) {
-    throw new Error(`Request failed ${response.status}: ${path}`);
+  const requestController = new AbortController();
+  const relayAbort = () => requestController.abort();
+  if (init.signal?.aborted) {
+    relayAbort();
+  } else {
+    init.signal?.addEventListener("abort", relayAbort, { once: true });
   }
-  return (await response.json()) as T;
+  let didTimeout = false;
+  const timeoutId = globalThis.setTimeout(() => {
+    didTimeout = true;
+    requestController.abort();
+  }, REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(path, {
+      credentials: "same-origin",
+      ...init,
+      headers: { Accept: "application/json", ...(init.headers || {}) },
+      signal: requestController.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Request failed ${response.status}: ${path}`);
+    }
+    return (await response.json()) as T;
+  } catch (requestError) {
+    if (didTimeout) {
+      throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS} ms: ${path}`, { cause: requestError });
+    }
+    throw requestError;
+  } finally {
+    globalThis.clearTimeout(timeoutId);
+    init.signal?.removeEventListener("abort", relayAbort);
+  }
 }
 
 function stringField(value: unknown, fallback = ""): string {

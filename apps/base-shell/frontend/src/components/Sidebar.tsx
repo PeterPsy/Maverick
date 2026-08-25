@@ -32,6 +32,7 @@ export function Sidebar({
   apps,
   activeWorkspaceId,
   isLoading = false,
+  isWorkspacesLoading = false,
   isOpen,
   isMobileLayout,
   isPinned,
@@ -62,6 +63,7 @@ export function Sidebar({
   activeWorkspaceId: string;
   isOpen: boolean;
   isLoading?: boolean;
+  isWorkspacesLoading?: boolean;
   isMobileLayout: boolean;
   isPinned: boolean;
   mode: SidebarMode;
@@ -335,7 +337,7 @@ export function Sidebar({
             <WorkspaceSwitcher
               activeWorkspaceId={activeWorkspaceId}
               canCreateWorkspace={user?.platform_role === "admin"}
-              isLoading={isLoading}
+              isLoading={isWorkspacesLoading}
               onChanged={onWorkspaceChanged}
               workspaces={workspaces}
             />

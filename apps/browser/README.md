@@ -153,7 +153,9 @@ The controller calls the broker at `MAVERICK_BROWSER_BROKER_URL`, defaulting to
 broker token from `MAVERICK_BROWSER_BROKER_TOKEN` or the local token file.
 Browser sessions are created with isolated non-persistent contexts,
 `acceptDownloads: false`, no storage state, no user data directory, no file
-upload support, and no automatic artifact persistence.
+upload support, and no automatic artifact persistence. Every context also sets
+Playwright `reducedMotion: "reduce"`, so pages that honor reduced-motion media
+queries use their static rendering path during automation.
 Session creation accepts bounded `viewport_width`, `viewport_height`, and
 `mobile` fields. A mobile smoke without explicit dimensions uses `390x844`.
 The controller records session metadata only after successful broker actions,
@@ -162,6 +164,17 @@ actions, derives trusted policy context from the platform caller, and audits
 navigate, snapshot, screenshot, click, type, key press, and wait attempts.
 The broker serializes actions per Browser session so observation requests do not
 race an in-flight navigation on the same Playwright page context.
+An authorized broker action updates that session's last-activity timestamp at
+the start and end of the action; background page requests do not keep abandoned
+sessions alive. A periodic reaper closes a session after 15 minutes idle or four
+hours total by default. Closure is serialized behind in-flight work and removes
+the Playwright context, its credentialed proxy policy, and its action queue.
+Operators can override the defaults with
+`MAVERICK_BROWSER_SESSION_IDLE_TTL_MS`,
+`MAVERICK_BROWSER_SESSION_HARD_TTL_MS`, and
+`MAVERICK_BROWSER_SESSION_REAPER_INTERVAL_MS` (30 seconds by default). Broker
+health reports the configured lifecycle values and current session, proxy-policy,
+and action-queue counts.
 The broker also enforces Browser P0 egress policy on Playwright requests so
 redirects and subresources cannot bypass the backend preflight path. It starts a
 credentialed proxy for browser contexts, advertised as

@@ -8,6 +8,8 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { SessionLifecycle } from "./session-lifecycle.mjs";
+
 const require = createRequire(import.meta.url);
 const appPackage = require("../package.json");
 const pinnedPlaywrightVersion = appPackage.dependencies?.playwright || "unknown";
@@ -22,6 +24,24 @@ const connectTimeoutMs = clampInt(process.env.MAVERICK_BROWSER_CONNECT_TIMEOUT_M
 const actionTimeoutMs = clampInt(process.env.MAVERICK_BROWSER_ACTION_TIMEOUT_MS, 1000, 60000, 30000);
 const dnsTimeoutMs = clampInt(process.env.MAVERICK_BROWSER_DNS_TIMEOUT_MS, 1000, 30000, 5000);
 const maxLogRecords = clampInt(process.env.MAVERICK_BROWSER_MAX_LOG_RECORDS, 20, 1000, 200);
+const sessionIdleTtlMs = clampInt(
+  process.env.MAVERICK_BROWSER_SESSION_IDLE_TTL_MS,
+  60000,
+  86400000,
+  15 * 60 * 1000,
+);
+const sessionHardTtlMs = clampInt(
+  process.env.MAVERICK_BROWSER_SESSION_HARD_TTL_MS,
+  60000,
+  7 * 86400000,
+  4 * 60 * 60 * 1000,
+);
+const sessionReaperIntervalMs = clampInt(
+  process.env.MAVERICK_BROWSER_SESSION_REAPER_INTERVAL_MS,
+  1000,
+  60 * 60 * 1000,
+  30 * 1000,
+);
 const proxyBindHost = process.env.MAVERICK_BROWSER_PROXY_BIND_HOST || "127.0.0.1";
 const proxyPort = Number.parseInt(process.env.MAVERICK_BROWSER_PROXY_PORT || "9324", 10);
 const proxyAdvertisedServer = process.env.MAVERICK_BROWSER_PROXY_SERVER || `http://127.0.0.1:${proxyPort}`;
@@ -60,9 +80,25 @@ let browserPromise = null;
 let browser = null;
 let chromiumClient = null;
 let playwrightVersion = pinnedPlaywrightVersion;
-const sessions = new Map();
-const proxyPolicies = new Map();
-const sessionActionQueues = new Map();
+let shuttingDown = false;
+let reapedSessionCount = 0;
+let lastReaperRunAt = null;
+const sessionLifecycle = new SessionLifecycle({
+  idleTtlMs: sessionIdleTtlMs,
+  hardTtlMs: sessionHardTtlMs,
+  onContextCloseError(error, session, reason) {
+    process.stderr.write(
+      JSON.stringify({
+        level: "warning",
+        event: "browser_session_context_close_failed",
+        session_id: session.id,
+        reason,
+        detail: error?.message || "Browser context close failed.",
+      }) + "\n",
+    );
+  },
+});
+const sessions = sessionLifecycle.sessions;
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -109,6 +145,9 @@ server.listen(brokerPort, brokerHost, () => {
       ws_endpoint: redactUrl(wsEndpoint),
       playwright_version: playwrightVersion,
       token_source: brokerTokenState.source,
+      session_idle_ttl_ms: sessionIdleTtlMs,
+      session_hard_ttl_ms: sessionHardTtlMs,
+      session_reaper_interval_ms: sessionReaperIntervalMs,
     }) + "\n",
   );
 });
@@ -118,24 +157,68 @@ proxyServer.listen(proxyPort, proxyBindHost);
 process.on("SIGINT", () => void shutdown(0));
 process.on("SIGTERM", () => void shutdown(0));
 
+let sessionReaperPromise = null;
+const sessionReaperTimer = setInterval(() => {
+  if (sessionReaperPromise || shuttingDown) {
+    return;
+  }
+  sessionReaperPromise = reapExpiredSessions()
+    .catch((error) => {
+      process.stderr.write(
+        JSON.stringify({
+          level: "error",
+          event: "browser_session_reaper_failed",
+          detail: error?.message || "Browser session reaper failed.",
+        }) + "\n",
+      );
+    })
+    .finally(() => {
+      sessionReaperPromise = null;
+    });
+}, sessionReaperIntervalMs);
+sessionReaperTimer.unref();
+
 async function handleAction(action, payload) {
   if (action !== "session.create" && typeof payload?.session_id === "string" && payload.session_id.trim()) {
-    return enqueueSessionAction(payload.session_id, () => handleActionDirect(action, payload));
+    return enqueueSessionAction(payload.session_id, async () => {
+      const session = requireSession(payload);
+      assertSessionAccessAllowed(session, payload);
+      if (action !== "session.close") {
+        sessionLifecycle.touch(session);
+      }
+      try {
+        return await handleActionDirect(action, payload);
+      } finally {
+        if (action !== "session.close") {
+          sessionLifecycle.touch(session);
+        }
+      }
+    });
   }
   return handleActionDirect(action, payload);
 }
 
 async function enqueueSessionAction(sessionId, operation) {
-  const key = String(sessionId).trim();
-  const previous = sessionActionQueues.get(key) || Promise.resolve();
-  const queued = previous.catch(() => undefined).then(operation);
-  const tracked = queued.catch(() => undefined).finally(() => {
-    if (sessionActionQueues.get(key) === tracked) {
-      sessionActionQueues.delete(key);
-    }
-  });
-  sessionActionQueues.set(key, tracked);
-  return queued;
+  return sessionLifecycle.enqueue(sessionId, operation);
+}
+
+async function reapExpiredSessions() {
+  const expired = await sessionLifecycle.reapExpired();
+  lastReaperRunAt = new Date().toISOString();
+  reapedSessionCount += expired.length;
+  if (expired.length > 0) {
+    process.stdout.write(
+      JSON.stringify({
+        event: "browser_sessions_reaped",
+        count: expired.length,
+        reasons: expired.reduce((counts, record) => {
+          counts[record.reason] = (counts[record.reason] || 0) + 1;
+          return counts;
+        }, {}),
+      }) + "\n",
+    );
+  }
+  return expired;
 }
 
 async function handleActionDirect(action, payload) {
@@ -170,6 +253,9 @@ async function handleActionDirect(action, payload) {
 }
 
 async function createSession(payload) {
+  if (shuttingDown) {
+    throw brokerError(503, "broker_shutting_down", "Browser broker is shutting down.");
+  }
   assertNoPersistenceOptions(payload);
   const connectedBrowser = await getBrowser();
   const policyContext = policyContextFromPayload(payload);
@@ -178,8 +264,9 @@ async function createSession(payload) {
   }
   const viewport = viewportFromPayload(payload);
   const proxyPassword = randomUUID();
-  proxyPolicies.set(proxyPassword, policyContext);
+  sessionLifecycle.authorizeProxy(proxyPassword, policyContext);
   let context;
+  let session;
   try {
     context = await connectedBrowser.newContext({
       acceptDownloads: false,
@@ -194,37 +281,41 @@ async function createSession(payload) {
         username: "maverick",
         password: proxyPassword,
       },
+      reducedMotion: "reduce",
       serviceWorkers: "block",
       viewport: {
         width: viewport.width,
         height: viewport.height,
       },
     });
+    context.setDefaultTimeout(actionTimeoutMs);
+    session = {
+      id: randomUUID(),
+      context,
+      pages: new Set(),
+      activePage: null,
+      mode: payload.mode === "maverick_dev_inspector" ? "maverick_dev_inspector" : "read_only",
+      viewport,
+      policyContext,
+      proxyPassword,
+      lastPolicyBlock: null,
+      console: [],
+      network: [],
+    };
+    await context.route("**/*", (route) => enforceRoutePolicy(session, route));
+    const page = await context.newPage();
+    session.pages.add(page);
+    session.activePage = page;
+    attachPageListeners(session, page);
+    if (shuttingDown) {
+      throw brokerError(503, "broker_shutting_down", "Browser broker is shutting down.");
+    }
+    sessionLifecycle.register(session);
   } catch (error) {
-    proxyPolicies.delete(proxyPassword);
+    sessionLifecycle.revokeProxy(proxyPassword);
+    await context?.close().catch(() => undefined);
     throw error;
   }
-  context.setDefaultTimeout(actionTimeoutMs);
-  const session = {
-    id: randomUUID(),
-    context,
-    pages: new Set(),
-    activePage: null,
-    mode: payload.mode === "maverick_dev_inspector" ? "maverick_dev_inspector" : "read_only",
-    viewport,
-    policyContext,
-    proxyPassword,
-    lastPolicyBlock: null,
-    console: [],
-    network: [],
-    createdAt: new Date().toISOString(),
-  };
-  await context.route("**/*", (route) => enforceRoutePolicy(session, route));
-  const page = await context.newPage();
-  session.pages.add(page);
-  session.activePage = page;
-  attachPageListeners(session, page);
-  sessions.set(session.id, session);
   return {
     session_id: session.id,
     mode: session.mode,
@@ -237,15 +328,14 @@ async function createSession(payload) {
     viewport_width: viewport.width,
     viewport_height: viewport.height,
     mobile: viewport.mobile,
+    ...sessionLifecycle.timingPayload(session),
   };
 }
 
 async function closeSession(payload) {
   const session = requireSession(payload);
   assertSessionAccessAllowed(session, payload);
-  sessions.delete(session.id);
-  proxyPolicies.delete(session.proxyPassword);
-  await session.context.close().catch(() => undefined);
+  await sessionLifecycle.closeRegisteredSession(session, { reason: "explicit" });
   return { session_id: session.id, closed: true };
 }
 
@@ -328,6 +418,7 @@ function tabsPayload(payload) {
       .map((session) => ({
         session_id: session.id,
         mode: session.mode,
+        ...sessionLifecycle.timingPayload(session),
         tabs: [...session.pages].map((page) => ({
           url: redactUrl(page.url()),
           active: page === session.activePage,
@@ -514,9 +605,7 @@ async function getBrowser() {
       browser.on("disconnected", () => {
         browser = null;
         browserPromise = null;
-        sessions.clear();
-        proxyPolicies.clear();
-        sessionActionQueues.clear();
+        sessionLifecycle.discardDisconnected({ reason: "playwright_disconnected" });
       });
       return browser;
     });
@@ -851,7 +940,7 @@ function ipv6InRange(value, network, prefix) {
 
 function requireSession(payload) {
   const sessionId = requireString(payload, "session_id");
-  const session = sessions.get(sessionId);
+  const session = sessionLifecycle.getSession(sessionId);
   if (!session) {
     throw brokerError(404, "unknown_session", `Unknown Browser session: ${sessionId}.`);
   }
@@ -975,10 +1064,11 @@ function proxyPolicyContext(request) {
   const separator = decoded.indexOf(":");
   const username = separator >= 0 ? decoded.slice(0, separator) : "";
   const password = separator >= 0 ? decoded.slice(separator + 1) : "";
-  if (username !== "maverick" || !proxyPolicies.has(password)) {
+  const policyContext = sessionLifecycle.proxyPolicy(password);
+  if (username !== "maverick" || !policyContext) {
     throw brokerError(407, "proxy_auth_required", "Browser broker proxy credentials are invalid.");
   }
-  return proxyPolicies.get(password);
+  return policyContext;
 }
 
 async function resolveAllowedConnection(requestUrl, policyContext) {
@@ -1040,6 +1130,7 @@ function sendProxyConnectError(socket, error) {
 }
 
 function healthPayload() {
+  const resourceCounts = sessionLifecycle.resourceCounts();
   return {
     status: "ready",
     provider: "playwright_lab",
@@ -1049,9 +1140,19 @@ function healthPayload() {
     proxy_server: proxyAdvertisedServer,
     token_source: brokerTokenState.source,
     connected: Boolean(browser?.isConnected()),
-    session_count: sessions.size,
+    session_count: resourceCounts.sessions,
+    proxy_policy_count: resourceCounts.proxy_policies,
+    action_queue_count: resourceCounts.action_queues,
+    reaped_session_count: reapedSessionCount,
+    last_reaper_run_at: lastReaperRunAt,
+    session_lifecycle: {
+      idle_ttl_ms: sessionIdleTtlMs,
+      hard_ttl_ms: sessionHardTtlMs,
+      reaper_interval_ms: sessionReaperIntervalMs,
+    },
     constraints: {
       isolated_sessions: true,
+      reduced_motion: true,
       persistent_profiles: false,
       login_state_persistence: false,
       file_upload: false,
@@ -1331,12 +1432,16 @@ async function runPolicySelfTest() {
 }
 
 async function shutdown(code) {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+  clearInterval(sessionReaperTimer);
   server.close();
   proxyServer.close();
-  await Promise.all([...sessions.values()].map((session) => session.context.close().catch(() => undefined)));
-  sessions.clear();
-  proxyPolicies.clear();
-  sessionActionQueues.clear();
+  await sessionReaperPromise;
+  await sessionLifecycle.closeAll({ reason: "broker_shutdown" });
   await browser?.close().catch(() => undefined);
+  sessionLifecycle.discardDisconnected({ reason: "broker_shutdown" });
   process.exit(code);
 }

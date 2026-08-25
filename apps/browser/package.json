@@ -4,6 +4,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
+    "test": "node --test broker/*.test.mjs",
     "prebroker": "node ../../scripts/check-node-runtime.mjs",
     "broker": "node broker/playwright-broker.mjs",
     "prebroker:docker": "node ../../scripts/check-node-runtime.mjs",

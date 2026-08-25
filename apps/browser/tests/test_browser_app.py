@@ -62,9 +62,12 @@ class BrowserAppTests(unittest.TestCase):
         self.assertIn("sandbox_agent_allowed: false", skill_text)
         self.assertIn("browser_session_create", skill_text)
         self.assertIn("The broker serializes actions per `session_id`", skill_text)
-        self.assertIn("const sessionActionQueues = new Map();", broker_text)
-        self.assertIn("enqueueSessionAction(payload.session_id", broker_text)
+        self.assertIn("const sessionLifecycle = new SessionLifecycle", broker_text)
+        self.assertIn("return sessionLifecycle.enqueue(sessionId, operation);", broker_text)
+        self.assertIn("sessionLifecycle.touch(session);", broker_text)
+        self.assertIn('reducedMotion: "reduce"', broker_text)
         self.assertNotIn("build", package["scripts"])
+        self.assertEqual(package["scripts"]["test"], "node --test broker/*.test.mjs")
         self.assertEqual(package["scripts"]["broker"], "node broker/playwright-broker.mjs")
         self.assertEqual(package["scripts"]["broker:docker"], "node broker/playwright-server-docker.mjs")
         self.assertEqual(package["scripts"]["broker:local"], "node broker/playwright-server-local.mjs")
@@ -1175,6 +1178,15 @@ class BrowserAppTests(unittest.TestCase):
 
         output = json.loads(completed.stdout)
         self.assertEqual(output["status"], "ok")
+
+    def test_broker_session_lifecycle(self) -> None:
+        subprocess.run(
+            ["node", "--test", str(APP_ROOT / "broker" / "session-lifecycle.test.mjs")],
+            text=True,
+            capture_output=True,
+            check=True,
+            cwd=str(APP_ROOT),
+        )
 
 
 class BrokerStub:

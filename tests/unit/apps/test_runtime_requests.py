@@ -366,6 +366,74 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 app_id="video-studio",
             )
 
+    def test_app_runtime_request_pins_authorized_agentic_profile_before_publish(self) -> None:
+        governance = object()
+        provider_store = object()
+        registry = object()
+        routing = SimpleNamespace(effective_mode="sandbox")
+        binding = object()
+        workspace_binding = SimpleNamespace(
+            egress_policy_id="local-runtime-no-remote-egress",
+            workspace_policy_ceiling=SimpleNamespace(allowed_remote_data_classes=()),
+        )
+        created = SimpleNamespace(
+            session_id="runtime-app-session",
+            system_prompt="bounded app prompt",
+            started_at=datetime(2026, 8, 25, tzinfo=UTC),
+            updated_at=datetime(2026, 8, 25, tzinfo=UTC),
+        )
+        state = SimpleNamespace(
+            runtime_store=object(),
+            provider_store=provider_store,
+            provider_registry=registry,
+            app_store=object(),
+            observability_store=None,
+            workspace_store=SimpleNamespace(get_governance=lambda _workspace_id: governance),
+        )
+
+        with (
+            patch.object(runtime_requests, "_materialized_system_prompt", return_value="bounded app prompt"),
+            patch.object(runtime_requests, "build_runtime_routing", return_value=routing),
+            patch.object(runtime_requests, "effective_provider_registry", return_value=registry),
+            patch.object(
+                runtime_requests,
+                "resolve_workspace_agentic_profile",
+                return_value=(object(), workspace_binding),
+            ),
+            patch.object(
+                runtime_requests,
+                "resolve_runtime_actor_roles",
+                return_value=("admin", "user:admin", "admin"),
+            ),
+            patch.object(runtime_requests, "actor_selection_allowed", return_value=True),
+            patch.object(runtime_requests, "build_pinned_execution_binding", return_value=binding) as pin,
+            patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", return_value=None),
+            patch.object(runtime_requests, "create_runtime_session", return_value=created) as create_session,
+            patch.object(runtime_requests, "transition_runtime_session", return_value=created),
+            patch.object(runtime_requests, "create_runtime_thread"),
+        ):
+            observed = runtime_requests._runtime_session_for_request(
+                state,
+                request={
+                    "agent_id": "chat",
+                    "agent_type_id": "chat",
+                    "requested_mode": "sandbox",
+                },
+                workspace_id="default",
+                app_id="design-studio",
+                parsed=SimpleNamespace(),
+                start_path=Path("/repo"),
+                actor_user_id="user:admin",
+            )
+
+        self.assertIs(observed, created)
+        pin.assert_called_once()
+        self.assertEqual(pin.call_args.kwargs["execution_mode"], "sandbox")
+        self.assertEqual(pin.call_args.kwargs["workspace_id"], "default")
+        self.assertIs(create_session.call_args.kwargs["execution_binding"], binding)
+        self.assertIs(create_session.call_args.kwargs["routing"], routing)
+        self.assertEqual(create_session.call_args.kwargs["runtime_mode"], "agentic")
+
     def test_dependency_backend_request_result_is_only_exposed_to_callback(self) -> None:
         callback_payloads: list[dict[str, object]] = []
         callback_invocations: list[dict[str, object]] = []

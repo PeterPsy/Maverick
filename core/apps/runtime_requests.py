@@ -15,11 +15,20 @@ from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.models import ParsedAppContract
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.apps.surfaces import resolve_workspace_app_surface
+from core.authorization.errors import AuthorizationError
 from core.providers.errors import ProviderError
-from core.providers.service import resolve_provider_for_runtime_session
+from core.providers.agentic_profiles import (
+    build_pinned_execution_binding,
+    resolve_workspace_agentic_profile,
+)
+from core.providers.agentic_workspace_policy import actor_selection_allowed
+from core.providers.service import effective_provider_registry, resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.app_streams import RuntimeAppStreamError, RuntimeAppStreamRecord
 from core.runtime.runtime_session import runtime_session_allows_user_thread
+from core.runtime.runtime_session import coerce_declared_remote_data_class, coerce_runtime_mode
+from core.runtime.runtime_actor import resolve_runtime_actor_roles
+from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import (
     claim_runtime_turn_cancellation,
@@ -491,12 +500,76 @@ def _runtime_session_for_request(
         app_id=app_id,
         start_path=start_path,
     )
-    session = create_runtime_session(
-        state.runtime_store,
-        session_id=str(uuid4()),
+    session_id = str(uuid4())
+    governance = state.workspace_store.get_governance(workspace_id)
+    routing = build_runtime_routing(
+        session_id=session_id,
         workspace_id=workspace_id,
         agent_id=agent_id,
         requested_mode=request.get("requested_mode"),
+        governance=governance,
+        platform_allows_full_access=workspace_id == "default",
+        start_path=start_path,
+    )
+    runtime_mode = coerce_runtime_mode(request.get("runtime_mode"))
+    declared_remote_data_class = coerce_declared_remote_data_class(
+        request.get("declared_remote_data_class")
+    )
+    execution_binding = None
+    if runtime_mode == "agentic":
+        registry = effective_provider_registry(
+            state.provider_store,
+            registry=getattr(state, "provider_registry", None),
+        )
+        _definition, workspace_binding = resolve_workspace_agentic_profile(
+            state.provider_store,
+            workspace_id=workspace_id,
+            binding_id=_text(request.get("workspace_profile_binding_id")) or None,
+        )
+        platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
+            state,
+            user_id=_text(actor_user_id) or None,
+            workspace_id=workspace_id,
+        )
+        if not actor_selection_allowed(
+            workspace_binding,
+            user_id=user_id,
+            platform_role=platform_role,
+            workspace_role=workspace_role,
+            agent_type_id=_text(request.get("agent_type_id")) or agent_id,
+        ):
+            raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
+        if workspace_binding.egress_policy_id == "fake-data-remote-preview":
+            declared_remote_data_class = "workspace_internal_fake"
+        elif declared_remote_data_class is not None:
+            raise ProviderError("remote_data_declaration_not_applicable")
+        if (
+            declared_remote_data_class is not None
+            and declared_remote_data_class
+            not in workspace_binding.workspace_policy_ceiling.allowed_remote_data_classes
+        ):
+            raise ProviderError("remote_data_class_not_allowed")
+        execution_binding = build_pinned_execution_binding(
+            state.provider_store,
+            registry,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            execution_mode=routing.effective_mode,
+            workspace_binding_id=_text(request.get("workspace_profile_binding_id")) or None,
+            reasoning_effort=_text(request.get("reasoning_effort")) or None,
+        )
+    elif declared_remote_data_class is not None:
+        raise ProviderError("remote_data_declaration_not_applicable")
+    session = create_runtime_session(
+        state.runtime_store,
+        session_id=session_id,
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        requested_mode=request.get("requested_mode"),
+        runtime_mode=runtime_mode,
+        hosted_provider_id=request.get("hosted_provider_id"),
+        hosted_model_id=request.get("hosted_model_id"),
+        declared_remote_data_class=declared_remote_data_class,
         system_prompt=system_prompt,
         skill_ids=_list_of_text(request.get("skill_ids")),
         skill_activation_mode=request.get("skill_activation_mode"),
@@ -511,10 +584,12 @@ def _runtime_session_for_request(
         owner_user_id=_text(actor_user_id) or None,
         created_by_user_id=_text(actor_user_id) or None,
         grants=[],
-        governance=state.workspace_store.get_governance(workspace_id),
+        governance=governance,
         platform_allows_full_access=workspace_id == "default",
         start_path=start_path,
         observability_store=state.observability_store,
+        execution_binding=execution_binding,
+        routing=routing,
     )
     session = transition_runtime_session(
         state.runtime_store,

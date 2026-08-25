@@ -40,8 +40,19 @@ from core.runtime.agentic_feature_flags import (
 from core.runtime.remote_agentic_admission import require_remote_agentic_session_admission
 
 
-CODEX_PROFILE_REVISION = "10"
-CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6", "7", "8", "9")
+CODEX_PROFILE_REVISION = "11"
+CODEX_PREVIOUS_PROFILE_REVISIONS = (
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+)
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"
 _CODEX_PROFILE_ARTIFACT_MANIFEST = json.loads(

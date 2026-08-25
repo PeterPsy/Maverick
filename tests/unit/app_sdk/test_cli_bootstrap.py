@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from core.app_sdk.cli import _bootstrap_options_for_cli, _bootstrap_state_for_cli, main
 from core.app_sdk.cli_descriptors import _app_scoped_id
-from core.app_sdk.cli_surface_runners import _reject_app_cli_command_in_core_scope
+from core.app_sdk.cli_surface_runners import _reject_app_cli_command_in_core_scope, _run_core_cli
 
 
 NO_RUNTIME_ENV = {
@@ -222,6 +222,53 @@ class CliBootstrapTests(unittest.TestCase):
             _app_scoped_id("app.document-generator.", "app.document-generator.document-generator"),
             "app.document-generator.document-generator",
         )
+
+    def test_core_cli_forwards_provider_registry_from_platform_state(self) -> None:
+        provider_registry = object()
+        state = SimpleNamespace(
+            repository_root=Path("/repo"),
+            app_store=object(),
+            identity_store=object(),
+            workspace_store=object(),
+            runtime_store=object(),
+            inter_agent_store=object(),
+            provider_store=object(),
+            provider_registry=provider_registry,
+            secret_store=object(),
+            recovery_store=object(),
+            job_service=object(),
+            observability_store=object(),
+            runtime_event_bus=object(),
+            runtime_thread_event_bus=object(),
+            app_event_bus=object(),
+            sidecar_browser_sessions=object(),
+            shutdown_controller=object(),
+        )
+        command = SimpleNamespace(
+            command_id="core.recovery.repair_continuations",
+            owner_kind="core",
+            exposure_scope="core_global",
+        )
+
+        with patch(
+            "core.app_sdk.cli_contexts.list_core_cli_commands",
+            return_value=[command],
+        ) as list_commands:
+            with patch(
+                "core.app_sdk.cli_surface_runners.run_core_cli_command",
+                return_value={"available": True},
+            ) as run_command:
+                result = _run_core_cli(
+                    "run",
+                    [command.command_id],
+                    options={},
+                    workspace_id="default",
+                    state=state,
+                )
+
+        self.assertEqual(result, {"available": True})
+        self.assertIs(list_commands.call_args.kwargs["provider_registry"], provider_registry)
+        self.assertIs(run_command.call_args.kwargs["provider_registry"], provider_registry)
 
 
 if __name__ == "__main__":

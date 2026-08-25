@@ -331,6 +331,7 @@ def _run_app_frontend(
         workspace_store=state.workspace_store,
         runtime_store=state.runtime_store,
         provider_store=state.provider_store,
+        provider_registry=getattr(state, "provider_registry", None),
         secret_store=state.secret_store,
         recovery_store=state.recovery_store,
         job_service=getattr(state, "job_service", None),

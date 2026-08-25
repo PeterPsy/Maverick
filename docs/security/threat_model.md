@@ -232,7 +232,11 @@ an invocation request: each automatic task or direct participant message must
 carry its exact `invoked_skill_ids`, bounded to 32, and Core validates that set
 against the immutable participant session before dispatch. An empty request
 invokes no skill even when the participant allowlist or workspace catalog is
-non-empty.
+non-empty. Static executor modes persist the invocation receipt on the
+participant task record, while HTTP, CLI, and MCP direct-send surfaces validate
+and forward it per message. Dynamic planner prompts receive only server-owned
+activation mode and allowlist metadata from the compact agent catalog; failed
+task causes are bounded before they are returned in the control ledger.
 
 ### Participant output influencing the root generalist
 

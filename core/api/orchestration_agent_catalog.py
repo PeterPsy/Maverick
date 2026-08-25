@@ -11,6 +11,12 @@ from core.apps.errors import AppHostingError
 from core.apps.runtime_requests import invoke_dependency_backend_request
 from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.models import AgentParticipantSnapshot, InterAgentParticipantRecord
+from core.inter_agent.orchestration_agent_capabilities import (
+    catalog_prompt_entry,
+    enabled_workspace_skill_ids,
+    requires_open_explicit_catalog,
+    root_prompt_entry,
+)
 from core.skills.runtime_catalog import (
     selected_runtime_skill_catalog_app_id_for_source_app,
     validate_runtime_skill_catalog_provider_app_id,
@@ -125,9 +131,25 @@ def build_orchestration_agent_catalog(
             for item in payload.get("agent_types", [])
             if isinstance(item, dict) and item.get("enabled") is not False and str(item.get("id") or "").strip()
         ]
-        prompt_entries = tuple(
-            _catalog_prompt_entry(item)
-            for item in items
+        default_skill_ids: list[str] = []
+        if requires_open_explicit_catalog(root_snapshot, items):
+            try:
+                skill_catalog_app_id = _skill_catalog_app_id(probe, {}, {})
+            except InterAgentValidationError:
+                pass
+            else:
+                default_skill_ids = enabled_workspace_skill_ids(
+                    workspace_id=probe.workspace_id,
+                    start_path=probe.start_path,
+                    app_id=skill_catalog_app_id,
+                )
+        prompt_entries = (
+            root_prompt_entry(root_snapshot, default_skill_ids=default_skill_ids),
+            *(
+                catalog_prompt_entry(item, default_skill_ids=default_skill_ids)
+                for item in items
+                if str(item.get("id") or "").strip() != root_snapshot.agent_type_id
+            ),
         )
         probe.prompt_entries = prompt_entries
         probe.agent_type_ids = frozenset(str(item["id"]).strip() for item in items)
@@ -135,7 +157,7 @@ def build_orchestration_agent_catalog(
     except Exception:
         return OrchestrationAgentCatalog(
             root_snapshot=root_snapshot,
-            prompt_entries=(f"{root_snapshot.agent_type_id}: {root_snapshot.label}",),
+            prompt_entries=(root_prompt_entry(root_snapshot),),
             provider_app_id=None,
             agent_type_ids=frozenset({root_snapshot.agent_type_id}),
             state=state,
@@ -264,13 +286,6 @@ def _with_root_active_context(prompt: str, root_prompt: str) -> str:
     index = root_prompt.rfind(marker)
     context = root_prompt[index + 2 :] if index >= 0 else ""
     return "\n\n".join(item for item in (prompt.strip(), context.strip()) if item)
-
-
-def _catalog_prompt_entry(item: dict[str, Any]) -> str:
-    identifier = str(item.get("id") or "").strip()
-    name = " ".join(str(item.get("name") or identifier).split())
-    description = " ".join(str(item.get("description") or "").split())[:240]
-    return f"{identifier}: {name}" + (f" — {description}" if description else "")
 
 
 def _string_items(value: Any) -> list[str]:

@@ -84,11 +84,13 @@ class InterAgentApiF4TestCase(InterAgentApiF4Fixture, unittest.TestCase):
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
 
+            body = _run_payload(run_id="run-agents-root-snapshot")
+            body["participants"][1]["invoked_skill_ids"] = ["provider-storage"]
             create_status, create_payload, _headers = self._invoke(
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="run-agents-root-snapshot"),
+                body=body,
                 cookie=cookie,
             )
             participant = next(
@@ -101,6 +103,7 @@ class InterAgentApiF4TestCase(InterAgentApiF4Fixture, unittest.TestCase):
         self.assertEqual(participant["agent_snapshot"]["label"], "Provider Researcher")
         self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Provider prompt only.")
         self.assertEqual(participant["skill_ids"], ["provider-storage"])
+        self.assertEqual(participant["invoked_skill_ids"], ["provider-storage"])
         self.assertEqual(participant["agent_snapshot"]["skill_catalog_app_id"], "skills")
         self.assertEqual(participant["agent_snapshot"]["provider_id"], "agents")
         self.assertEqual(participant["agent_snapshot"]["revision_id"], "provider-revision-1")

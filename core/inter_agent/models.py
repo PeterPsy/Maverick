@@ -11,7 +11,12 @@ from typing import Any, Literal
 
 from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.events import InterAgentVisibilityPlane, validate_visibility_plane
-from core.runtime.runtime_session import RuntimeThreadVisibility, coerce_skill_activation_mode, normalize_runtime_session_visibility
+from core.runtime.runtime_session import (
+    RuntimeThreadVisibility,
+    coerce_skill_activation_mode,
+    normalize_runtime_session_visibility,
+)
+from core.skills.service import SkillInvocationError, normalize_invoked_skill_ids
 
 
 InterAgentRunMode = Literal[
@@ -146,6 +151,7 @@ class ParticipantSpec:
     agent_snapshot: AgentParticipantSnapshot | None = None
     prompt_snapshot_ref: str | None = None
     skill_ids: list[str] = field(default_factory=list)
+    invoked_skill_ids: list[str] = field(default_factory=list)
     provider_id: str | None = None
     authority_grant_ids: list[str] = field(default_factory=list)
     thread_visibility: RuntimeThreadVisibility | None = None
@@ -249,6 +255,7 @@ class InterAgentParticipantRecord:
     status: InterAgentParticipantStatus
     current_task_id: str | None
     skill_ids: list[str]
+    invoked_skill_ids: list[str]
     provider_id: str | None
     authority_grant_ids: list[str]
     thread_visibility: RuntimeThreadVisibility
@@ -445,11 +452,28 @@ def validate_participant_spec(spec: ParticipantSpec) -> ParticipantSpec:
             raise InterAgentValidationError(f"Unsupported participant thread visibility `{visibility}`.")
     if spec.agent_snapshot is not None:
         validate_agent_snapshot(spec.agent_snapshot)
+    skill_ids = _clean_string_list(spec.skill_ids)
+    try:
+        invoked_skill_ids = normalize_invoked_skill_ids(spec.invoked_skill_ids)
+    except SkillInvocationError as error:
+        raise InterAgentValidationError(str(error)) from error
+    assigned_skill_ids = spec.agent_snapshot.skill_ids if spec.agent_snapshot is not None else skill_ids
+    denied_skill_ids = [
+        skill_id
+        for skill_id in invoked_skill_ids
+        if assigned_skill_ids and skill_id not in assigned_skill_ids
+    ]
+    if denied_skill_ids:
+        raise InterAgentValidationError(
+            "Participant skill invocation is outside its assigned allowlist: "
+            + ", ".join(denied_skill_ids)
+        )
     return replace(
         spec,
         label=label,
         thread_visibility=visibility,
-        skill_ids=_clean_string_list(spec.skill_ids),
+        skill_ids=skill_ids,
+        invoked_skill_ids=invoked_skill_ids,
         authority_grant_ids=_clean_string_list(spec.authority_grant_ids),
         agent_type_id=_clean_optional(spec.agent_type_id),
         prompt_snapshot_ref=_clean_optional(spec.prompt_snapshot_ref),

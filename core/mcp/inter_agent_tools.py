@@ -18,7 +18,13 @@ from core.inter_agent.feature_flags import validate_product_inter_agent_run_mode
 from core.inter_agent.orchestration_resume import OrchestrationResume, resume_run_from_surface
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import InterAgentStore
-from core.inter_agent.surfaces import execution_result_payload, inter_agent_payload, run_detail_payload, run_spec_from_payload
+from core.inter_agent.surfaces import (
+    execution_result_payload,
+    inter_agent_payload,
+    invoked_skill_ids_from_payload,
+    run_detail_payload,
+    run_spec_from_payload,
+)
 from core.mcp.core_tool_helpers import WORKSPACE_SAFE, core_mcp_tool
 from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.providers.store import ProviderStore
@@ -164,6 +170,7 @@ def inter_agent_tool_specs(
             participant_id=_text(arguments.get("participant_id")),
             input_text=_text(arguments.get("input_text")) or _text(arguments.get("message")),
             client_message_id=_text(arguments.get("client_message_id")) or None,
+            invoked_skill_ids=invoked_skill_ids_from_payload(arguments.get("invoked_skill_ids")),
             async_requested=bool(arguments.get("async")),
         )
         return {

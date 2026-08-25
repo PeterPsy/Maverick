@@ -10,6 +10,15 @@ from core.inter_agent.orchestration_plan import OrchestrationTaskSpec
 class TaskResultLike(Protocol):
     status: str
     output_text: str
+    error: str | None
+
+
+SKILL_SELECTION_INSTRUCTION = (
+    "Catalog entries declare each agent's skill mode and allowed or assigned IDs. "
+    "For an explicit agent, set invoked_skill_ids to the exact task-required IDs from its allowed list; "
+    "use an empty list when that task needs no skill. For an implicit agent, omit invoked_skill_ids unless "
+    "the task explicitly requires a structured invocation. "
+)
 
 
 def planning_prompt(
@@ -24,6 +33,7 @@ def planning_prompt(
         "You are the sole orchestrator of a Maverick Agent nodes run. Produce only one JSON object with "
         'summary and tasks. Each task requires id, label, role, objective, depends_on and may select agent_type_id '
         'and invoked_skill_ids; invoked_skill_ids must list only the task-required skills assigned to that agent; '
+        f"{SKILL_SELECTION_INSTRUCTION}"
         "reviewer tasks also require review_of. Use safe lowercase ids. Plan only the work that is ready to start; "
         "you may add more tasks after every worker output. A reviewer must approve before completion. "
         "Never use orchestrator as a task id. "
@@ -63,14 +73,18 @@ def control_prompt(
         for task in tasks
     )
     trigger = results.get(trigger_task_id or "")
-    trigger_output = trigger.output_text[:10000] if trigger is not None else "No new worker output; inspect the ledger."
+    if trigger is None:
+        trigger_output = "No new worker output; inspect the ledger."
+    else:
+        trigger_output = trigger.output_text[:10000] or str(getattr(trigger, "error", "") or "")[:2000]
     catalog = ", ".join(available_agent_types or []) or "default orchestrator capability"
     return (
         "You are the sole adaptive orchestrator at a persisted scheduling safe point. Respond with one JSON object: "
         '{"summary": string, "tasks": array, "cancel_task_ids": array, "complete": boolean, '
         '"quality_passed": boolean, "final_answer": string}. New tasks use id, label, role, objective, '
         "depends_on and optional agent_type_id and invoked_skill_ids; invoked_skill_ids must list only task-required "
-        "skills assigned to that agent; reviewer and security_reviewer tasks must use review_of and depend "
+        f"skills assigned to that agent; {SKILL_SELECTION_INSTRUCTION}"
+        "reviewer and security_reviewer tasks must use review_of and depend "
         "on that target. Add work when evidence is insufficient, "
         "cancel only unnecessary unstarted work, and complete only after a dependent reviewer explicitly approved. "
         "Never use orchestrator as a task id. A rejected or malformed review remains blocking until completed "
@@ -81,6 +95,8 @@ def control_prompt(
         f"Safe-point trigger: {trigger_task_id or 'scheduler'}\nLatest output:\n{trigger_output}"
         f"\n{directive_block(directives)}"
     )
+
+
 def directive_block(directives: list[Any]) -> str:
     texts = [str(item.payload.get("text") or "").strip() for item in directives]
     texts = [text for text in texts if text]
@@ -90,5 +106,11 @@ def directive_block(directives: list[Any]) -> str:
 def _task_ledger_line(task: OrchestrationTaskSpec, result: TaskResultLike | None) -> str:
     status = result.status if result is not None else "pending"
     output = result.output_text[:1200].replace("\n", " ") if result is not None else ""
+    error = (
+        str(getattr(result, "error", "") or "")[:1200].replace("\n", " ")
+        if result is not None
+        else ""
+    )
     dependencies = ",".join(task.depends_on) or "none"
-    return f"- {task.task_id} role={task.role} status={status} depends_on={dependencies} output={output}"
+    error_field = f" error={error}" if error else ""
+    return f"- {task.task_id} role={task.role} status={status} depends_on={dependencies} output={output}{error_field}"

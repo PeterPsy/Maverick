@@ -7,6 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.events import InterAgentEventPage, InterAgentEventRecord
 from core.inter_agent.models import (
     AgentParticipantSnapshot,
@@ -16,6 +17,7 @@ from core.inter_agent.models import (
     ParticipantSpec,
 )
 from core.inter_agent.store import InterAgentStore
+from core.skills.service import SkillInvocationError, normalize_invoked_skill_ids
 
 
 def inter_agent_payload(value: Any) -> Any:
@@ -114,7 +116,8 @@ def run_spec_from_payload(
     skill, source-app, provider, and authority materialization must come from
     core policy or an authorized Agents snapshot. Those fields are therefore
     ignored unless an internal caller explicitly opts into trusted materialized
-    authority.
+    authority. Structured `invoked_skill_ids` remain task intent rather than
+    materialized authority and are validated independently.
     """
     participants = [
         participant_spec_from_payload(
@@ -191,6 +194,7 @@ def participant_spec_from_payload(
         agent_snapshot=agent_snapshot,
         prompt_snapshot_ref=prompt_snapshot_ref,
         skill_ids=skill_ids,
+        invoked_skill_ids=invoked_skill_ids_from_payload(payload.get("invoked_skill_ids")) or [],
         provider_id=provider_id,
         authority_grant_ids=authority_grant_ids,
         thread_visibility=(_text(payload.get("thread_visibility")) or None),  # type: ignore[arg-type]
@@ -212,6 +216,18 @@ def agent_snapshot_from_payload(payload: Any) -> AgentParticipantSnapshot | None
         revision_id=_text(payload.get("revision_id")) or None,
         metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
     )
+
+
+def invoked_skill_ids_from_payload(value: Any) -> list[str] | None:
+    """Validate one optional structured skill invocation set from a public surface."""
+    if value is None:
+        return None
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise InterAgentValidationError("Field `invoked_skill_ids` must be an array of strings.")
+    try:
+        return normalize_invoked_skill_ids(value)
+    except SkillInvocationError as error:
+        raise InterAgentValidationError(str(error)) from error
 
 
 def edge_spec_from_payload(payload: dict[str, Any]) -> EdgeSpec:

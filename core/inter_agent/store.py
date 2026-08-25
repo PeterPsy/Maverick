@@ -1485,6 +1485,7 @@ def _run_from_document(document: dict[str, Any]) -> InterAgentRunRecord:
 def _participant_from_document(document: dict[str, Any]) -> InterAgentParticipantRecord:
     payload = dict(document)
     payload.setdefault("agent_snapshot", None)
+    payload.setdefault("invoked_skill_ids", [])
     payload.setdefault("sequence_index", 0)
     return InterAgentParticipantRecord(**payload)
 

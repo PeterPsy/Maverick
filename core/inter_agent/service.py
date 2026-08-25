@@ -1761,6 +1761,7 @@ def _participant_records_from_specs(
                 status="idle",
                 current_task_id=None,
                 skill_ids=skill_ids,
+                invoked_skill_ids=list(spec.invoked_skill_ids),
                 provider_id=provider_id,
                 authority_grant_ids=list(spec.authority_grant_ids),
                 thread_visibility=spec.thread_visibility or "hidden",
@@ -1851,7 +1852,7 @@ def _run_spec_fingerprint(spec: InterAgentRunSpec) -> str:
 
 
 def _participant_spec_fingerprint_payload(spec: ParticipantSpec) -> dict[str, Any]:
-    return {
+    payload = {
         "kind": spec.kind,
         "execution_mode": spec.execution_mode,
         "label": spec.label,
@@ -1864,6 +1865,9 @@ def _participant_spec_fingerprint_payload(spec: ParticipantSpec) -> dict[str, An
         "authority_grant_ids": sorted(spec.authority_grant_ids),
         "thread_visibility": spec.thread_visibility,
     }
+    if spec.invoked_skill_ids:
+        payload["invoked_skill_ids"] = sorted(spec.invoked_skill_ids)
+    return payload
 
 
 def _canonical_fingerprint_value(value: Any) -> Any:

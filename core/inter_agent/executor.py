@@ -532,7 +532,12 @@ def _execute_one_participant(
         visibility_plane="detail",
         correlation_id=task_id,
         idempotency_key=f"{run.run_id}:executor.task.created:{task_id}",
-        payload={"task_id": task_id, "participant_id": participant.participant_id, "mode": run.mode},
+        payload={
+            "task_id": task_id,
+            "participant_id": participant.participant_id,
+            "mode": run.mode,
+            "invoked_skill_ids": list(participant.invoked_skill_ids),
+        },
         now=started_at,
     )
     service.record_event(
@@ -717,6 +722,11 @@ def _execute_runtime_participant(
             participant_id=spawned.participant_id,
             input_text=input_text,
             client_message_id=f"inter-agent:{run.run_id}:{task_id}",
+            invoked_skill_ids=(
+                list(participant.invoked_skill_ids)
+                if participant.invoked_skill_ids
+                else None
+            ),
             async_requested=async_runtime_turns,
             now=clock(),
         )

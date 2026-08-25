@@ -74,6 +74,7 @@ def create_runtime_session(
     hosted_provider_id: str | None = None,
     hosted_model_id: str | None = None,
     declared_remote_data_class: str | None = None,
+    prepared_session_fingerprint: str | None = None,
     grants: list[RuntimeSessionGrantRecord] | None = None,
     governance: WorkspaceGovernanceRecord | None = None,
     platform_allows_full_access: bool = False,
@@ -150,6 +151,7 @@ def create_runtime_session(
         hosted_provider_id=_optional_text(hosted_provider_id),
         hosted_model_id=_optional_text(hosted_model_id),
         declared_remote_data_class=coerce_declared_remote_data_class(declared_remote_data_class),
+        prepared_session_fingerprint=_optional_text(prepared_session_fingerprint),
     )
     saved, published = prepare_runtime_session(store, session, execution_binding, now=timestamp)
     if not published:

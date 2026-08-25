@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { interAgentComposerBudgetLabel, interAgentOrchestrationIntent, runtimeSessionOptionsForNewChat } from "./useMessageSubmission";
+import type { RuntimeSession } from "../api/client";
+import {
+  interAgentComposerBudgetLabel,
+  interAgentOrchestrationIntent,
+  preparedRuntimeSessionFromResponse,
+  preparedRuntimeSessionIsReady,
+  runtimeSessionOptionsForNewChat,
+} from "./useMessageSubmission";
 
 describe("interAgentOrchestrationIntent", () => {
   it("sends only the root turn identity and orchestration policy", () => {
@@ -52,5 +59,33 @@ describe("runtimeSessionOptionsForNewChat", () => {
       systemPrompt: "Review.",
     });
     expect(options.skill_activation_mode).toBe("implicit");
+  });
+});
+
+describe("prepared runtime sessions", () => {
+  it("retains the session id when the two-second prewarm wait returns pending", () => {
+    const pending = {
+      session_id: "prepared-pending",
+      prewarm_status: "pending",
+      prewarm_completed: false,
+      provider_thread_ready: false,
+      runtime_ready: false,
+    } as RuntimeSession;
+
+    const prepared = preparedRuntimeSessionFromResponse("draft:active", "config", pending);
+
+    expect(prepared.session.session_id).toBe("prepared-pending");
+    expect(preparedRuntimeSessionIsReady(prepared.session)).toBe(false);
+  });
+
+  it("reports a prepared session ready only after runtime prewarm completes", () => {
+    const ready = {
+      session_id: "prepared-ready",
+      prewarm_completed: true,
+      provider_thread_ready: true,
+      runtime_ready: true,
+    } as RuntimeSession;
+
+    expect(preparedRuntimeSessionIsReady(ready)).toBe(true);
   });
 });

@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.api.prepared_session_cleanup import run_prepared_session_cleanup_tick
 from core.api.app_reference_payloads import (
     _runtime_reference_cache_fingerprint,
     clear_runtime_app_reference_materialization_cache,
@@ -353,6 +354,7 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
             self.assertEqual(prepared.agent_type_id, "agent-type-1")
             self.assertEqual(prepared.agent_role_id, "role-1")
             self.assertEqual(prepared.project_id, "proj-1")
+            self.assertIsNotNone(prepared.prepared_session_fingerprint)
             self.assertEqual(state.runtime_store.list_threads("default"), [])
 
             def fake_submit_runtime_turn_async(
@@ -400,6 +402,7 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
             self.assertEqual(turn_status, 202)
             promoted = state.runtime_store.get_session(session_id)
             self.assertEqual(promoted.thread_visibility, "user")
+            self.assertIsNone(promoted.prepared_session_fingerprint)
             self.assertEqual(turn_payload["session"]["thread_visibility"], "user")
             self.assertEqual(turn_payload["thread"]["runtime_session_id"], session_id)
             self.assertEqual(turn_payload["thread"]["agent_label"], "Catalog Agent")
@@ -655,7 +658,12 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
                         app,
                         path="/api/runtime/sessions",
                         method="POST",
-                        body={"agent_id": "chat", "source_app_id": "chat", "prepare_only": True},
+                        body={
+                            "agent_id": "chat",
+                            "source_app_id": "chat",
+                            "prepare_only": True,
+                            "project_id": f"cache-project-{index}",
+                        },
                         cookie=cookie,
                     )
                     self.assertEqual(session_status, 201)
@@ -823,7 +831,7 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
             self.assertEqual(state.runtime_store.list_threads("default"), [])
             self.assertEqual(state.runtime_store.list_turns(session_id), [])
 
-    def test_prepare_only_ttl_uses_full_runtime_cleanup(self) -> None:
+    def test_prepare_only_ttl_uses_periodic_full_runtime_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             with patch.dict(
@@ -852,18 +860,13 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
             expired = state.runtime_store.get_session(expired_session_id)
             state.runtime_store.save_session(replace(expired, updated_at=datetime.now(tz=UTC) - timedelta(minutes=31)))
 
-            with patch("core.api.runtime_api.cleanup_runtime_session", return_value={"found": True}) as cleanup, patch(
-                "core.api.runtime_api._prewarm_new_runtime_session"
-            ):
-                status, _payload, _headers = self._invoke(
-                    app,
-                    path="/api/runtime/sessions",
-                    method="POST",
-                    body={"agent_id": "chat", "source_app_id": "chat", "prepare_only": True},
-                    cookie=cookie,
-                )
+            with patch(
+                "core.api.prepared_session_cleanup.cleanup_runtime_session",
+                return_value={"found": True},
+            ) as cleanup:
+                result = run_prepared_session_cleanup_tick(state, max_cleanups=1)
 
-            self.assertEqual(status, 201)
+            self.assertEqual(result["cleaned_session_ids"], [expired_session_id])
             cleanup.assert_called_once()
             self.assertEqual(cleanup.call_args.kwargs["session_id"], expired_session_id)
             self.assertEqual(cleanup.call_args.kwargs["reason"], "prepared_session_expired")

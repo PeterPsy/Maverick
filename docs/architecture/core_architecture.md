@@ -590,6 +590,18 @@ The core also owns the workspace chat thread catalog that points at runtime sess
 
 A chat thread is the user-visible runtime conversation record. It stores the thread id, linked `runtime_session_id`, title, availability, source app metadata, optional project id, and `last_user_message_at` timestamp. Apps such as `chat` may render or update that record through core runtime APIs, but they must not persist a second app-owned thread catalog or delete runtime sessions themselves. The core runtime owns availability transitions: queued user turns mark the linked thread as `queued`, started turns mark it as `active`, and terminal turn outcomes or interrupts mark it as `free`. A user message admitted into the active turn updates recency without changing that turn's active availability. Thread catalog reads reconcile availability from runtime turns while accepted message events preserve the newer same-turn user-message timestamp.
 
+Chat may pre-create one hidden `chat_root` through `prepare_only`. Core keys that
+prepared aggregate by workspace, owner, and a persisted hash of the normalized
+session configuration; exact repeated or concurrent requests return the same
+`session_id` even while provider prewarm is pending. The first accepted turn
+promotes that same aggregate to `thread_visibility=user` and clears its prepared
+fingerprint. A periodic bounded worker converges each workspace-owner pool to at
+most two distinct prepared configurations, removes exact duplicates and entries
+older than 30 minutes, and always invokes the canonical full runtime cleanup path.
+Its selection and cleanup revalidate under the session lifecycle handoff and
+exclude user-visible sessions, sessions with turns, and
+`inter_agent_participant` sessions.
+
 The runtime thread catalog is a bounded transport contract. `GET /api/runtime/threads` and the initial `runtime.thread.snapshot` WebSocket frame return the first recency-sorted page, currently limited to 50 user-visible threads, with `threads_page` metadata for limit, cursor, query, and `has_more`. The REST list accepts a bounded metadata query so shell search surfaces can backfill matching older threads without loading the full catalog. Mutating thread APIs return only the changed thread or removed ids plus a page hint; they must not reattach a full thread catalog to create, rename, read-receipt, delete, or clear responses.
 
 Agents read completed or active user-visible conversations through the core-owned

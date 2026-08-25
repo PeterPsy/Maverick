@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 import math
 import time
 from urllib.parse import parse_qs
@@ -87,6 +87,8 @@ from core.runtime.plain_hosted_text import (
     queue_provider_id_for_session,
     runtime_session_is_plain_hosted_chat,
 )
+from core.runtime.prepared_session_config import prepared_session_fingerprint
+from core.runtime.prepared_sessions import acquire_prepared_session
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_terminalization import (
     drain_runtime_turn_terminalization,
@@ -116,7 +118,6 @@ from core.skills.service import SkillInvocationError, resolve_invoked_runtime_sk
 
 
 IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
-PREPARED_SESSION_TTL_SECONDS = 30 * 60
 PREPARED_SESSION_PREWARM_WAIT_SECONDS = 2.0
 RUNTIME_THREAD_PAGE_DEFAULT_LIMIT = 50
 RUNTIME_THREAD_PAGE_MAX_LIMIT = 100
@@ -154,6 +155,7 @@ def _session_payload(
     admission: dict[str, object] | None = None,
 ) -> dict[str, object]:
     payload = asdict(session)
+    payload.pop("prepared_session_fingerprint", None)
     payload["provider_id"] = provider_id
     if session.execution_binding is not None:
         binding = session.execution_binding
@@ -782,29 +784,6 @@ def _create_thread_for_session(
     return thread
 
 
-def _cleanup_expired_prepared_sessions(state: PlatformState, *, context: RequestSession) -> None:
-    cutoff = datetime.now(tz=UTC) - timedelta(seconds=PREPARED_SESSION_TTL_SECONDS)
-    for session in state.runtime_store.list_sessions(context.workspace_id):
-        if (
-            session.session_kind != "chat_root"
-            or session.thread_visibility != "hidden"
-            or session.owner_user_id != context.user.user_id
-            or session.updated_at >= cutoff
-        ):
-            continue
-        with suppress(Exception):
-            if state.runtime_store.list_turns(session.session_id):
-                continue
-            cleanup_runtime_session(
-                state,
-                session_id=session.session_id,
-                reason="prepared_session_expired",
-                start_path=state.repository_root,
-                publish_thread_events=False,
-                allow_hidden_prepared_chat_cleanup=True,
-            )
-
-
 def _prepared_session_can_be_promoted(session: RuntimeSessionRecord, context: RequestSession) -> bool:
     return (
         session.session_kind == "chat_root"
@@ -820,14 +799,26 @@ def _promote_prepared_session_for_turn(
     session: RuntimeSessionRecord,
     body: dict,
 ) -> RuntimeSessionRecord:
-    visible = state.runtime_store.save_session(replace(session, thread_visibility="user", updated_at=datetime.now(tz=UTC)))
-    try:
-        state.runtime_store.get_thread(visible.session_id)
-        action = "updated"
-    except RuntimeThreadNotFoundError:
-        action = "created"
-    _create_thread_for_session(state, context=context, session=visible, body=body, action=action)
-    return visible
+    with state.runtime_store.session_lifecycle_handoff(
+        workspace_id=session.workspace_id,
+        session_id=session.session_id,
+    ):
+        current = state.runtime_store.get_session(session.session_id)
+        visible = state.runtime_store.save_session(
+            replace(
+                current,
+                thread_visibility="user",
+                prepared_session_fingerprint=None,
+                updated_at=datetime.now(tz=UTC),
+            )
+        )
+        try:
+            state.runtime_store.get_thread(visible.session_id)
+            action = "updated"
+        except RuntimeThreadNotFoundError:
+            action = "created"
+        _create_thread_for_session(state, context=context, session=visible, body=body, action=action)
+        return visible
 
 
 def _log_runtime_api_timing(
@@ -887,6 +878,7 @@ def _create_session(
     start_path,
     session_id: str | None = None,
     prepare_only: bool = False,
+    prepared_fingerprint: str | None = None,
 ) -> RuntimeSessionRecord:
     authorize_runtime_session_create(
         workspace_store=state.workspace_store,
@@ -966,6 +958,7 @@ def _create_session(
         hosted_provider_id=body.get("hosted_provider_id"),
         hosted_model_id=body.get("hosted_model_id"),
         declared_remote_data_class=declared_remote_data_class,
+        prepared_session_fingerprint=prepared_fingerprint,
         system_prompt=str(body.get("system_prompt") or "").strip() or None,
         skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
         skill_activation_mode=body.get("skill_activation_mode"),
@@ -1034,8 +1027,6 @@ def _handle_session_collection(
         prepare_only = bool(body.get("prepare_only"))
         if prepare_only and turn_requested:
             return json_response(start_response, {"error": "prepare_only_turn_not_allowed"}, status="400 Bad Request")
-        if prepare_only:
-            _cleanup_expired_prepared_sessions(state, context=context)
         submission_timing = runtime_turn_submission_timing(received_perf_counter) if turn_requested else None
         if turn_requested:
             claim_started_at = time.perf_counter()
@@ -1050,17 +1041,37 @@ def _handle_session_collection(
                 if existing_turn is not None:
                     return _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
                 return _pending_client_message_claim_response(state, context, client_message_claim, start_response)
+        prepared_acquisition = None
         try:
             session_create_started_at = time.perf_counter()
-            session = _create_session(
-                state,
-                context,
-                body,
-                agent_id=agent_id,
-                start_path=start_path,
-                session_id=client_message_claim.session_id if client_message_claim is not None else None,
-                prepare_only=prepare_only,
-            )
+            if prepare_only:
+                fingerprint = prepared_session_fingerprint(body, agent_id=agent_id)
+                prepared_acquisition = acquire_prepared_session(
+                    state,
+                    workspace_id=context.workspace_id,
+                    owner_user_id=context.user.user_id,
+                    fingerprint=fingerprint,
+                    create=lambda: _create_session(
+                        state,
+                        context,
+                        body,
+                        agent_id=agent_id,
+                        start_path=start_path,
+                        prepare_only=True,
+                        prepared_fingerprint=fingerprint,
+                    ),
+                )
+                session = prepared_acquisition.session
+            else:
+                session = _create_session(
+                    state,
+                    context,
+                    body,
+                    agent_id=agent_id,
+                    start_path=start_path,
+                    session_id=client_message_claim.session_id if client_message_claim is not None else None,
+                    prepare_only=False,
+                )
             _record_timing_duration(submission_timing, "session_create_ms", session_create_started_at)
         except AuthorizationError as error:
             _release_client_message_claim(state, client_message_claim if client_message_claim_created else None)
@@ -1107,15 +1118,14 @@ def _handle_session_collection(
                     client_message_claim if client_message_claim_created else None,
                 )
                 raise
-        return json_response(
-            start_response,
-            _session_payload(
-                session,
-                provider_id=_resolved_provider_id(state, session),
-                prewarm=prewarm_result if prepare_only else None,
-            ),
-            status="201 Created",
+        payload = _session_payload(
+            session,
+            provider_id=_resolved_provider_id(state, session),
+            prewarm=prewarm_result if prepare_only else None,
         )
+        if prepared_acquisition is not None:
+            payload["prepared_session_reused"] = prepared_acquisition.reused
+        return json_response(start_response, payload, status="201 Created")
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
 
 

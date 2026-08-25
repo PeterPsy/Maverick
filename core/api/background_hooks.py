@@ -8,6 +8,7 @@ from threading import Thread
 import time
 from typing import Any
 
+from core.api.prepared_session_cleanup import start_prepared_session_cleanup_scheduler
 from core.apps.runtime_event_hooks import dispatch_workspace_app_background_hooks
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,10 @@ DEFAULT_BACKGROUND_HOOK_INTERVAL_SECONDS = 15.0
 
 def start_background_hook_scheduler(state, *, interval_seconds: float | None = None, shutdown_controller=None) -> Thread:
     """Start the backend-owned app background hook scheduler."""
+    start_prepared_session_cleanup_scheduler(
+        state,
+        shutdown_controller=shutdown_controller,
+    )
     interval = _background_hook_interval_seconds(interval_seconds)
     thread = Thread(
         target=_run_background_hook_scheduler,

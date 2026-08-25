@@ -117,7 +117,7 @@ type SubmissionTarget = {
   threadIds: Set<string>;
 };
 
-type PreparedRuntimeSession = {
+export type PreparedRuntimeSession = {
   conversationKey: string;
   key: string;
   session: RuntimeSession;
@@ -144,8 +144,6 @@ type PreparedRuntimeSessionLookup = {
   waitOnSubmitMs: number;
 };
 
-const PREPARED_RUNTIME_SESSION_SUBMIT_WAIT_MS = 200;
-const PREPARED_RUNTIME_SESSION_PLAIN_SUBMIT_WAIT_MS = 350;
 const PREPARED_APP_REFERENCES_SUBMIT_WAIT_MS = 200;
 const NEW_CHAT_PRELOAD_CONVERSATION_KEY = "draft:active";
 
@@ -297,6 +295,19 @@ function preparedRuntimeSessionKey(conversationKey: string, options: RuntimeSess
   });
 }
 
+export function preparedRuntimeSessionIsReady(session: RuntimeSession): boolean {
+  const runtimeReady = session.runtime_ready ?? session.provider_thread_ready;
+  return Boolean(session.prewarm_completed && runtimeReady);
+}
+
+export function preparedRuntimeSessionFromResponse(
+  conversationKey: string,
+  key: string,
+  session: RuntimeSession,
+): PreparedRuntimeSession {
+  return { conversationKey, key, session };
+}
+
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableJson).join(",")}]`;
@@ -317,13 +328,6 @@ function preparedAppReferencesKey(sessionId: string, appReferences: AppReference
 
 function elapsedMs(startedAt: number): number {
   return Math.max(0, performance.now() - startedAt);
-}
-
-function preparedRuntimeSessionSubmitWaitMs(message: QueuedMessage): number {
-  if (!message.appReferences.length && !message.attachments.length) {
-    return PREPARED_RUNTIME_SESSION_PLAIN_SUBMIT_WAIT_MS;
-  }
-  return PREPARED_RUNTIME_SESSION_SUBMIT_WAIT_MS;
 }
 
 function turnIdForSubmitResponse(response: RuntimeTurnSubmitResponse | null): string {
@@ -490,7 +494,7 @@ export function useMessageSubmission({
           }
           const pending = preparedRuntimeSessionRequestRef.current;
           if (pending?.key === key) {
-            return waitForPreparedRuntimeSession(pending, abortController.signal);
+            return waitForPreparedRuntimeSession(pending.promise, abortController.signal);
           }
           return requestPreparedRuntimeSession(NEW_CHAT_PRELOAD_CONVERSATION_KEY, key, options);
         })
@@ -726,11 +730,7 @@ export function useMessageSubmission({
       { signal: abortController.signal },
     )
       .then((session) => {
-        const runtimeReady = session.runtime_ready ?? session.provider_thread_ready;
-        if (!session.prewarm_completed || !runtimeReady) {
-          return null;
-        }
-        const prepared = { conversationKey, key, session };
+        const prepared = preparedRuntimeSessionFromResponse(conversationKey, key, session);
         if (preparedRuntimeSessionRequestRef.current?.key === key) {
           preparedRuntimeSessionRef.current = prepared;
         }
@@ -760,7 +760,7 @@ export function useMessageSubmission({
   }
 
   async function waitForPreparedRuntimeSession(
-    request: PreparedRuntimeSessionRequest,
+    promise: Promise<PreparedRuntimeSession | null>,
     signal: AbortSignal,
     timeoutMs = 0,
   ): Promise<PreparedRuntimeSession | null> {
@@ -787,7 +787,7 @@ export function useMessageSubmission({
       if (timeoutMs > 0) {
         timer = window.setTimeout(() => finish(() => resolve(null)), timeoutMs);
       }
-      void request.promise.then(
+      void promise.then(
         (prepared) => finish(() => resolve(prepared)),
         (error) => finish(() => reject(error)),
       );
@@ -798,7 +798,6 @@ export function useMessageSubmission({
     conversationKey: string,
     options: RuntimeSessionOptions,
     signal: AbortSignal,
-    timeoutMs: number,
   ): Promise<PreparedRuntimeSessionLookup> {
     const preparedConversationKey = conversationKey.startsWith("draft:")
       ? NEW_CHAT_PRELOAD_CONVERSATION_KEY
@@ -809,22 +808,14 @@ export function useMessageSubmission({
       return {
         key,
         prepared,
-        readyBeforeSubmit: true,
+        readyBeforeSubmit: preparedRuntimeSessionIsReady(prepared.session),
         waitOnSubmitMs: 0,
       };
     }
     const pending = preparedRuntimeSessionRequestRef.current;
     if (pending?.key === key) {
-      if (timeoutMs <= 0) {
-        return {
-          key,
-          prepared: null,
-          readyBeforeSubmit: false,
-          waitOnSubmitMs: 0,
-        };
-      }
       const startedAt = performance.now();
-      const pendingPrepared = await waitForPreparedRuntimeSession(pending, signal, timeoutMs);
+      const pendingPrepared = await waitForPreparedRuntimeSession(pending.promise, signal);
       return {
         key,
         prepared: pendingPrepared,
@@ -832,11 +823,14 @@ export function useMessageSubmission({
         waitOnSubmitMs: elapsedMs(startedAt),
       };
     }
+    const startedAt = performance.now();
+    const requested = requestPreparedRuntimeSession(preparedConversationKey, key, options);
+    const onDemandPrepared = await waitForPreparedRuntimeSession(requested, signal);
     return {
       key,
-      prepared: null,
+      prepared: onDemandPrepared,
       readyBeforeSubmit: false,
-      waitOnSubmitMs: 0,
+      waitOnSubmitMs: elapsedMs(startedAt),
     };
   }
 
@@ -1235,7 +1229,6 @@ export function useMessageSubmission({
           target.conversationKey,
           runtimeOptions.options,
           abortController.signal,
-          preparedRuntimeSessionSubmitWaitMs(message),
         );
         clientMetrics.prepared_session_ready_before_submit = preparedLookup.readyBeforeSubmit;
         clientMetrics.prepared_session_wait_on_submit_ms = preparedLookup.waitOnSubmitMs;

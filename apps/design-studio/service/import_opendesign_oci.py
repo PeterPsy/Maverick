@@ -100,9 +100,13 @@ def import_reproducible_artifact(
             )
         _assert_reproducible(results, asset)
         first = results[0]
+        derived_pins = _artifact_pins(first.output_root, asset)
+        _assert_declared_pins(manifest, asset=asset, pins=derived_pins)
         for path_field in ARTIFACT_DIGEST_FIELDS:
             _publish_file(first.output_root / asset[path_field], output_directory / asset[path_field])
         pins = _artifact_pins(output_directory, asset)
+        if pins != derived_pins:
+            raise OciImportError("OpenDesign published OCI pins differ from the verified derivation")
         pinned_manifest = _with_artifact_pins(
             manifest,
             pins,
@@ -322,11 +326,32 @@ def _with_artifact_pins(
     return pinned
 
 
+def _assert_declared_pins(
+    manifest: dict[str, Any],
+    *,
+    asset: dict[str, Any],
+    pins: dict[str, Any],
+) -> None:
+    fields = {"size_bytes", *ARTIFACT_DIGEST_FIELDS.values()}
+    if not fields.issubset(asset) or any(asset.get(field) is None for field in fields):
+        return
+    declared = {field: asset[field] for field in fields}
+    if declared != pins:
+        raise OciImportError("OpenDesign OCI derivation differs from the canonical artifact pins")
+
+
 def _publish_file(source: Path, destination: Path) -> None:
     if source.is_symlink() or not source.is_file():
         raise OciImportError("OpenDesign OCI publish source is unsafe")
     if destination.exists() or destination.is_symlink():
-        raise OciImportError("OpenDesign OCI publish destination already exists")
+        if (
+            not destination.is_symlink()
+            and destination.is_file()
+            and destination.stat().st_size == source.stat().st_size
+            and sha256_file(destination) == sha256_file(source)
+        ):
+            return
+        raise OciImportError("OpenDesign OCI publish destination conflicts with the verified derivation")
     temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
     try:
         shutil.copy2(source, temporary)

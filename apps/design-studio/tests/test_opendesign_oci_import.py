@@ -37,6 +37,7 @@ class OpenDesignOciImportTests(unittest.TestCase):
         cls.layout = _load_module("opendesign_oci_layout", SERVICE_ROOT / "opendesign_oci_layout.py")
         cls.boundary = _load_module("opendesign_oci_patch", SERVICE_ROOT / "opendesign_oci_patch.py")
         cls.stage = _load_module("opendesign_oci_stage", SERVICE_ROOT / "opendesign_oci_stage.py")
+        cls.importer = _load_module("import_opendesign_oci", SERVICE_ROOT / "import_opendesign_oci.py")
 
     def setUp(self) -> None:
         self.manifest = self.artifact.read_bundle_manifest(MANIFEST_PATH)
@@ -296,6 +297,38 @@ class OpenDesignOciImportTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(staging.stat().st_mode), 0o755)
             self.assertEqual(stat.S_IMODE((staging / "runtime").stat().st_mode), 0o755)
             self.assertEqual(stat.S_IMODE(metadata.stat().st_mode), 0o755)
+
+    def test_oci_publish_is_idempotent_only_for_identical_verified_bytes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-od-oci-publish-") as temporary:
+            root = Path(temporary)
+            source = root / "source.tar.gz"
+            destination = root / "published.tar.gz"
+            source.write_bytes(b"verified artifact")
+            destination.write_bytes(source.read_bytes())
+            inode = destination.stat().st_ino
+
+            self.importer._publish_file(source, destination)
+            self.assertEqual(destination.stat().st_ino, inode)
+
+            source.write_bytes(b"conflicting artifact")
+            with self.assertRaisesRegex(self.importer.OciImportError, "conflicts"):
+                self.importer._publish_file(source, destination)
+            self.assertEqual(destination.read_bytes(), b"verified artifact")
+
+    def test_oci_derivation_must_match_existing_canonical_pins(self) -> None:
+        asset = self.manifest["artifact"]["assets"]["linux-x86_64"]
+        declared = {
+            "size_bytes": asset["size_bytes"],
+            **{
+                digest_field: asset[digest_field]
+                for digest_field in self.artifact.ARTIFACT_DIGEST_FIELDS.values()
+            },
+        }
+        self.importer._assert_declared_pins(self.manifest, asset=asset, pins=declared)
+        mismatched = dict(declared)
+        mismatched["sha256"] = "0" * 64
+        with self.assertRaisesRegex(self.importer.OciImportError, "canonical artifact pins"):
+            self.importer._assert_declared_pins(self.manifest, asset=asset, pins=mismatched)
 
     def test_primary_import_has_no_docker_socket_or_embedded_web_builder(self) -> None:
         sources = "\n".join(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -13,6 +14,76 @@ from core.runtime.workspace_sandbox import _resolver_read_roots, build_bwrap_com
 
 
 class WorkspaceSandboxTest(unittest.TestCase):
+    def test_bwrap_command_preserves_explicit_lineage_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp) / "workspace"
+            runtime_root = workspace_root / "runtime" / "successor"
+            lineage_home = workspace_root / "runtime" / "lineage-root" / "codex-home"
+            runtime_root.mkdir(parents=True)
+            lineage_home.mkdir(parents=True)
+
+            with patch("core.runtime.workspace_sandbox.shutil.which", return_value="/usr/bin/bwrap"):
+                command = build_bwrap_command(
+                    workspace_root=workspace_root,
+                    runtime_root=runtime_root,
+                    home_root=lineage_home,
+                    dependency_roots=[],
+                    dependency_files=[],
+                    command=["codex", "app-server"],
+                )
+
+        home_index = command.index("HOME")
+        self.assertEqual(command[home_index + 1], str(lineage_home))
+
+    def test_bwrap_command_rejects_explicit_home_outside_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp) / "workspace"
+            runtime_root = workspace_root / "runtime"
+            workspace_root.mkdir()
+
+            with self.assertRaisesRegex(ValueError, "home must remain"):
+                build_bwrap_command(
+                    workspace_root=workspace_root,
+                    runtime_root=runtime_root,
+                    home_root=Path(temp) / "outside-home",
+                    dependency_roots=[],
+                    dependency_files=[],
+                    command=["codex"],
+                )
+
+    @unittest.skipUnless(shutil.which("bwrap"), "bubblewrap is not installed")
+    def test_bwrap_process_uses_and_reads_the_lineage_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp) / "workspace"
+            runtime_root = workspace_root / "runtime" / "successor"
+            lineage_home = workspace_root / "runtime" / "lineage-root" / "codex-home"
+            runtime_root.mkdir(parents=True)
+            lineage_home.mkdir(parents=True)
+            (lineage_home / "state.sqlite").write_text("conversation-state\n", encoding="utf-8")
+            command = build_bwrap_command(
+                workspace_root=workspace_root,
+                runtime_root=runtime_root,
+                home_root=lineage_home,
+                dependency_roots=_shell_dependency_roots(),
+                dependency_files=[],
+                command=[
+                    _shell_command(),
+                    "-c",
+                    'test "$HOME" = "$CODEX_HOME" && test -f "$HOME/state.sqlite"',
+                ],
+            )
+            environment = {**os.environ, "CODEX_HOME": str(lineage_home)}
+
+            result = subprocess.run(
+                command,
+                text=True,
+                capture_output=True,
+                check=False,
+                env=environment,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
     def test_bwrap_command_mounts_workspace_without_mounting_repository_root(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo_root = Path(temp) / "maverick"

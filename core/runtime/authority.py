@@ -6,7 +6,10 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from core.execution_policy.models import ExecutionMode
-from core.providers.agentic_models import AgenticRuntimePolicy
+from core.providers.agentic_models import (
+    AgenticRuntimePolicy,
+    WorkspaceAgenticProfileBinding,
+)
 from core.providers.capability_models import RuntimeCapabilitySet
 from core.providers.certificate_service import validate_certificate_for_binding
 from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
@@ -57,32 +60,10 @@ def resolve_effective_runtime_authority(
     )
     if health_status not in {"healthy", "degraded"}:
         raise CapabilityCertificateError("runtime_health_unavailable")
-    try:
-        workspace_binding = store.get_workspace_agentic_profile_binding(binding.workspace_binding_id)
-    except ProviderNotFoundError as error:
-        raise CapabilityCertificateError("workspace_profile_binding_disabled") from error
-    if workspace_binding.workspace_id != binding.workspace_id or not workspace_binding.enabled:
-        raise CapabilityCertificateError("workspace_profile_binding_disabled")
-    if (
-        workspace_binding.egress_policy_id != binding.egress_policy_id
-        or workspace_binding.egress_policy_revision != binding.egress_policy_revision
-    ):
-        raise CapabilityCertificateError("egress_policy_drift_unresolved")
-    definition_status = store.get_agentic_profile_definition_status(
-        binding.profile_definition_id,
-        binding.profile_definition_revision,
+    workspace_binding = validate_live_runtime_binding_governance(
+        store,
+        binding=binding,
     )
-    if definition_status is None or definition_status.rollout_status in {"disabled", "suspended"}:
-        raise CapabilityCertificateError("profile_definition_invalid")
-    if binding.credential_binding_id:
-        credential = resolve_provider_binding(
-            store,
-            provider_id=binding.model_provider_id,
-            workspace_id=binding.workspace_id,
-            binding_id=binding.credential_binding_id,
-        )
-        if credential is None:
-            raise CapabilityCertificateError("credential_binding_unavailable")
     policy = intersect_runtime_policies(
         binding.profile_policy_ceiling_snapshot,
         binding.workspace_policy_ceiling_snapshot,
@@ -124,6 +105,51 @@ def resolve_effective_runtime_authority(
         computed_at=timestamp,
     )
     return replace(authority, authority_digest=canonical_digest(authority))
+
+
+def validate_live_runtime_binding_governance(
+    store: ProviderStore,
+    *,
+    binding: RuntimeExecutionBinding,
+    allow_inactive_definition: bool = False,
+) -> WorkspaceAgenticProfileBinding:
+    """Validate mutable workspace authority without rechecking certification."""
+    try:
+        workspace_binding = store.get_workspace_agentic_profile_binding(
+            binding.workspace_binding_id
+        )
+    except ProviderNotFoundError as error:
+        raise CapabilityCertificateError("workspace_profile_binding_disabled") from error
+    if workspace_binding.workspace_id != binding.workspace_id or not workspace_binding.enabled:
+        raise CapabilityCertificateError("workspace_profile_binding_disabled")
+    if (
+        workspace_binding.egress_policy_id != binding.egress_policy_id
+        or workspace_binding.egress_policy_revision != binding.egress_policy_revision
+    ):
+        raise CapabilityCertificateError("egress_policy_drift_unresolved")
+    definition_status = store.get_agentic_profile_definition_status(
+        binding.profile_definition_id,
+        binding.profile_definition_revision,
+    )
+    if definition_status is None and not allow_inactive_definition:
+        raise CapabilityCertificateError("profile_definition_invalid")
+    if definition_status is not None and definition_status.rollout_status == "disabled":
+        raise CapabilityCertificateError("profile_definition_invalid")
+    if definition_status is not None and (
+        definition_status.rollout_status == "suspended"
+        and not allow_inactive_definition
+    ):
+        raise CapabilityCertificateError("profile_definition_invalid")
+    if binding.credential_binding_id:
+        credential = resolve_provider_binding(
+            store,
+            provider_id=binding.model_provider_id,
+            workspace_id=binding.workspace_id,
+            binding_id=binding.credential_binding_id,
+        )
+        if credential is None:
+            raise CapabilityCertificateError("credential_binding_unavailable")
+    return workspace_binding
 
 
 def intersect_runtime_policies(*policies: AgenticRuntimePolicy) -> AgenticRuntimePolicy:

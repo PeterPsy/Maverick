@@ -333,6 +333,7 @@ class CodexLaunchMixin:
             command=self._build_command(
                 workspace_root=workspace_root,
                 runtime_root=runtime_root,
+                runtime_home=runtime_home,
                 runtime_bin=runtime_bin,
                 execution_mode=session.effective_mode,
                 host_command=host_command,

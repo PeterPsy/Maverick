@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from core.recovery.continuation_materialization import (
+    close_predecessor_runtime_process,
     fence_predecessor_and_start_successor,
 )
 
@@ -26,6 +27,7 @@ class RuntimeContinuationOwnershipTest(unittest.TestCase):
             successor_session_id=successor.session_id,
         )
         runtime_store = Mock()
+        runtime_store.list_turns.return_value = []
         runtime_store.get_session.side_effect = lambda session_id: {
             predecessor.session_id: predecessor,
             successor.session_id: successor,
@@ -50,7 +52,11 @@ class RuntimeContinuationOwnershipTest(unittest.TestCase):
         ) as release, patch(
             "core.recovery.continuation_materialization.transition_runtime_session",
             side_effect=transition,
+        ), patch(
+            "core.recovery.continuation_materialization.runtime_processes_alive_for_session",
+            return_value=False,
         ):
+            close_predecessor_runtime_process(state, handoff)
             fence_predecessor_and_start_successor(
                 state,
                 handoff,

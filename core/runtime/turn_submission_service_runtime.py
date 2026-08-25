@@ -70,9 +70,11 @@ from core.runtime.runtime_process_lifecycle import (
 )
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.errors import RuntimeTurnQueueRejectedError
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import record_runtime_event, transition_runtime_turn
+from core.runtime.turn_queue_admission import require_turn_queue_session_executable
 from core.skills.service import resolve_invoked_runtime_skills
 
 if TYPE_CHECKING:
@@ -162,6 +164,10 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                     status = "skipped_active_turn"
                     return
                 current_session = state.runtime_store.get_session(session.session_id)
+                require_turn_queue_session_executable(
+                    state.runtime_store,
+                    current_session,
+                )
                 if runtime_session_is_plain_hosted_chat(current_session):
                     status = "skipped_plain_hosted"
                     return
@@ -229,6 +235,9 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                         )
             finally:
                 lock.release()
+        except RuntimeTurnQueueRejectedError:
+            status = "skipped_session_not_executable"
+            return
         except Exception as error:
             status = "failed"
             _record_session_prewarm_failed(

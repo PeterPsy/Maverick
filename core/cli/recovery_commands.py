@@ -11,6 +11,7 @@ from core.authorization.service import require_backend_restart_context, require_
 from core.cli.core_command_helpers import (
     FULL_ACCESS_ADMIN,
     FULL_ACCESS_WORKSPACE,
+    OPERATOR_ONLY,
     WORKSPACE_SAFE,
     core_cli_command,
 )
@@ -25,6 +26,11 @@ from core.recovery.continuation_fork import (
     repair_compatible_runtime_continuations,
 )
 from core.recovery.continuation_snapshot import snapshot_runtime_continuation_state
+from core.recovery.health_request import (
+    RECOVERY_HEALTH_INPUT_SCHEMA,
+    RecoveryHealthArgumentError,
+    parse_recovery_health_target,
+)
 from core.recovery.service import execute_session_restart, record_app_health, record_failed_start, record_provider_health, record_runtime_health, recovery_status
 from core.recovery.store import RecoveryStore
 from core.runtime.store import RuntimeStore
@@ -124,13 +130,20 @@ def recovery_command_specs(
         }
 
     def _recovery_health_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        try:
+            target_kind, target_id = parse_recovery_health_target(arguments)
+        except RecoveryHealthArgumentError as error:
+            return {
+                "command_id": "core.recovery.health",
+                "health": None,
+                "error": error.code,
+            }
         if recovery_store is None:
-            return {"health": None}
-        target_kind = str(arguments["target_kind"])
+            return {"command_id": "core.recovery.health", "health": None}
         if target_kind == "runtime":
             if runtime_store is None:
-                return {"health": None}
-            session = runtime_store.get_session(str(arguments["session_id"]))
+                return {"command_id": "core.recovery.health", "health": None}
+            session = runtime_store.get_session(target_id)
             result = record_runtime_health(
                 recovery_store,
                 session=session,
@@ -145,7 +158,7 @@ def recovery_command_specs(
             result = record_provider_health(
                 recovery_store,
                 provider_registry=provider_registry,
-                provider_id=str(arguments["provider_id"]),
+                provider_id=target_id,
                 workspace_id=arguments.get("workspace_id") or context.workspace_id,
                 observability_store=observability_store,
             )
@@ -156,7 +169,7 @@ def recovery_command_specs(
                 recovery_store,
                 app_store=app_store,
                 workspace_id=str(arguments.get("workspace_id") or context.workspace_id),
-                app_id=str(arguments["app_id"]),
+                app_id=target_id,
                 start_path=start_path,
                 observability_store=observability_store,
             )
@@ -234,7 +247,7 @@ def recovery_command_specs(
         ("core.recovery.restart", ["core", "recovery", "restart"], "Execute one runtime-session restart recovery action when allowed.", WORKSPACE_SAFE, _recovery_restart_handler),
         ("core.recovery.restart_backend", ["core", "recovery", "backend-restart"], "Restart the Maverick backend host service and verify its health.", FULL_ACCESS_WORKSPACE, _recovery_backend_restart_handler),
         ("core.recovery.failed_start", ["core", "recovery", "failed-start"], "Record one failed-start diagnosis and plan recovery.", WORKSPACE_SAFE, _recovery_failed_start_handler),
-        ("core.recovery.health", ["core", "recovery", "health"], "Run one recovery health probe on demand.", WORKSPACE_SAFE, _recovery_health_handler),
+        ("core.recovery.health", ["core", "recovery", "health"], "Run one recovery health probe on demand.", OPERATOR_ONLY, _recovery_health_handler),
         (
             "core.recovery.repair_continuations",
             ["core", "recovery", "repair-continuations"],
@@ -244,6 +257,7 @@ def recovery_command_specs(
         ),
     ]
     argument_schemas = {
+        "core.recovery.health": RECOVERY_HEALTH_INPUT_SCHEMA,
         "core.recovery.repair_continuations": {
             "type": "object",
             "properties": {

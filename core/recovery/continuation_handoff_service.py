@@ -8,16 +8,20 @@ import hashlib
 
 from core.recovery.continuation_admission import RuntimeAdmissionAssessment
 from core.recovery.continuation_materialization import (
+    close_predecessor_runtime_process,
     ensure_successor_session,
     fence_predecessor_and_start_successor,
+    quarantine_continuation_successor,
     rebind_logical_thread,
     transfer_provider_state,
 )
+from core.recovery.continuation_validation import revalidate_continuation_handoff
 from core.runtime.continuation_handoff import (
     RuntimeContinuationHandoff,
     continuation_handoff_phase_index,
 )
 from core.runtime.errors import RuntimeProviderStateError
+from core.runtime.errors import RuntimeProfileUpgradeRequiredError
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.lifecycle import record_runtime_event
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -102,6 +106,12 @@ def complete_existing_continuation_handoff(
         or handoff.source_binding_digest != predecessor.execution_binding.binding_digest
     ):
         raise RuntimeProviderStateError("runtime_continuation_predecessor_conflict")
+    _revalidate_or_quarantine(
+        state,
+        predecessor=predecessor,
+        handoff=handoff,
+        now=now,
+    )
     assessment = RuntimeAdmissionAssessment(
         status="compatible_upgrade",
         session_id=predecessor.session_id,
@@ -113,11 +123,30 @@ def complete_existing_continuation_handoff(
     )
     successor = ensure_successor_session(state, predecessor, handoff)
     handoff = _advance_handoff(state, handoff, "successor_prepared", now=now)
+    _revalidate_or_quarantine(
+        state,
+        predecessor=predecessor,
+        handoff=handoff,
+        now=now,
+    )
+    close_predecessor_runtime_process(state, handoff)
+    _revalidate_or_quarantine(
+        state,
+        predecessor=predecessor,
+        handoff=handoff,
+        now=now,
+    )
     transfer_provider_state(state, handoff)
     handoff = _advance_handoff(
         state,
         handoff,
         "provider_state_transferred",
+        now=now,
+    )
+    _revalidate_or_quarantine(
+        state,
+        predecessor=predecessor,
+        handoff=handoff,
         now=now,
     )
     state.runtime_store.link_continuation_successor(
@@ -127,10 +156,33 @@ def complete_existing_continuation_handoff(
         handoff_id=handoff.handoff_id,
         now=now,
     )
-    fence_predecessor_and_start_successor(state, handoff, now=now)
+    target_executable = _revalidate_or_quarantine(
+        state,
+        predecessor=predecessor,
+        handoff=handoff,
+        now=now,
+    )
+    fence_predecessor_and_start_successor(
+        state,
+        handoff,
+        start_successor=target_executable,
+        now=now,
+    )
     handoff = _advance_handoff(state, handoff, "predecessor_fenced", now=now)
+    _revalidate_or_quarantine(
+        state,
+        predecessor=predecessor,
+        handoff=handoff,
+        now=now,
+    )
     thread = rebind_logical_thread(state, predecessor, successor, now=now)
     handoff = _advance_handoff(state, handoff, "thread_rebound", now=now)
+    _revalidate_or_quarantine(
+        state,
+        predecessor=predecessor,
+        handoff=handoff,
+        now=now,
+    )
     _record_handoff_events(state, handoff, now=now)
     handoff = _advance_handoff(state, handoff, "completed", now=now)
     if thread is not None and getattr(state, "runtime_thread_event_bus", None) is not None:
@@ -144,6 +196,25 @@ def complete_existing_continuation_handoff(
         assessment=assessment,
         handoff=handoff,
     )
+
+
+def _revalidate_or_quarantine(
+    state,
+    *,
+    predecessor: RuntimeSessionRecord,
+    handoff: RuntimeContinuationHandoff,
+    now: datetime,
+) -> bool:
+    try:
+        return revalidate_continuation_handoff(
+            state,
+            predecessor=predecessor,
+            handoff=handoff,
+            now=now,
+        )
+    except RuntimeProfileUpgradeRequiredError:
+        quarantine_continuation_successor(state, handoff)
+        raise
 
 
 def _advance_handoff(state, handoff, phase: str, *, now: datetime):

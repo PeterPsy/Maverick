@@ -9,12 +9,13 @@ from typing import Literal
 
 from core.providers.agentic_profiles import build_pinned_execution_binding
 from core.providers.certificate_service import validate_certificate_for_binding
-from core.providers.errors import ProviderError
+from core.providers.errors import AgenticProfileError, ProviderError
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.recovery.continuation_compatibility import (
     prove_compatible_runtime_upgrade,
 )
+from core.runtime.authority import validate_live_runtime_binding_governance
 from core.runtime.execution_binding import RuntimeExecutionBinding
 from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.provider_state import RuntimeProviderState
@@ -33,6 +34,9 @@ COMPATIBLE_UPGRADE_SOURCE_REASONS = {
     "adapter_artifact_mismatch",
     "certificate_expired",
 }
+NON_TERMINAL_CONTINUATION_TURN_STATUSES = frozenset(
+    {"queued", "active", "waiting_for_tool_confirmation"}
+)
 
 
 @dataclass(frozen=True)
@@ -110,6 +114,14 @@ def assess_runtime_session_admission(
         return _direct(session)
     if source_reason not in COMPATIBLE_UPGRADE_SOURCE_REASONS:
         return _blocked(session, source_reason)
+    try:
+        validate_live_runtime_binding_governance(
+            provider_store,
+            binding=binding,
+            allow_inactive_definition=True,
+        )
+    except ProviderError as error:
+        return _blocked(session, _provider_reason(error))
     if session.session_kind != "chat_root":
         return _blocked(
             session,
@@ -132,13 +144,20 @@ def assess_runtime_session_admission(
         return _provider_thread_missing(session, "provider_thread_missing")
     if continuation_problem is not None:
         return _blocked(session, continuation_problem)
+    if runtime_session_has_nonterminal_turns(runtime_store, session.session_id):
+        return _blocked(session, "runtime_profile_upgrade_turn_busy")
     try:
+        target_workspace_binding_id = _compatible_target_workspace_binding_id(
+            provider_store,
+            source=binding,
+        )
         target = build_pinned_execution_binding(
             provider_store,
             registry,
             session_id=target_session_id,
             workspace_id=session.workspace_id,
             execution_mode=session.effective_mode,
+            workspace_binding_id=target_workspace_binding_id,
             reasoning_effort=binding.reasoning_effort,
             now=now,
         )
@@ -180,6 +199,10 @@ def _validate_direct_authority(
         adapter=adapter,
         now=now,
     )
+    validate_live_runtime_binding_governance(
+        provider_store,
+        binding=binding,
+    )
 
 
 def _provider_continuation_problem(state: RuntimeProviderState) -> str | None:
@@ -192,6 +215,67 @@ def _provider_continuation_problem(state: RuntimeProviderState) -> str | None:
     if state.provider_private_envelope is not None:
         return "runtime_profile_upgrade_private_state_not_transferable"
     return None
+
+
+def runtime_session_has_nonterminal_turns(
+    runtime_store: RuntimeStore,
+    session_id: str,
+) -> bool:
+    """Return whether a continuation handoff must wait for persisted turn work."""
+    return any(
+        turn.status in NON_TERMINAL_CONTINUATION_TURN_STATUSES
+        for turn in runtime_store.list_turns(session_id)
+    )
+
+
+def _compatible_target_workspace_binding_id(
+    provider_store: ProviderStore,
+    *,
+    source: RuntimeExecutionBinding,
+) -> str:
+    candidates = []
+    for binding in provider_store.list_workspace_agentic_profile_bindings(
+        source.workspace_id
+    ):
+        if not binding.enabled or binding.definition_id != source.profile_definition_id:
+            continue
+        status = provider_store.get_agentic_profile_definition_status(
+            binding.definition_id,
+            binding.definition_revision,
+        )
+        if status is None or status.rollout_status in {"disabled", "suspended"}:
+            continue
+        candidates.append(binding)
+    if not candidates:
+        raise AgenticProfileError("runtime_profile_upgrade_target_binding_missing")
+    exact_candidates = [
+        binding
+        for binding in candidates
+        if binding.credential_binding_id == source.credential_binding_id
+        and binding.workspace_policy_ceiling
+        == source.workspace_policy_ceiling_snapshot
+        and binding.egress_policy_id == source.egress_policy_id
+        and binding.egress_policy_revision == source.egress_policy_revision
+    ]
+    if exact_candidates:
+        candidates = exact_candidates
+    candidates.sort(
+        key=lambda item: (
+            _numeric_revision(item.definition_revision),
+            item.revision,
+            item.updated_at,
+            item.binding_id,
+        ),
+        reverse=True,
+    )
+    return candidates[0].binding_id
+
+
+def _numeric_revision(value: str) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return -1
 
 
 def _provider_reason(error: BaseException) -> str:

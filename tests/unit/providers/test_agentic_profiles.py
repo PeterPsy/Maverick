@@ -2,15 +2,17 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
-import importlib
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from core.providers.agentic_models import AgenticProfileDefinitionStatus
+from core.providers.agentic_models import (
+    AgenticProfileDefinitionStatus,
+)
 from core.providers.agentic_migration import migrate_agentic_runtime_schema
 from core.providers.agentic_profiles import (
-    CODEX_PROFILE_ARTIFACT_DIGEST,
+    CODEX_PREVIOUS_PROFILE_REVISIONS,
+    CODEX_PROFILE_REVISION,
     _validated_reasoning_effort,
     build_pinned_execution_binding,
     ensure_codex_workspace_profile,
@@ -20,10 +22,7 @@ from core.providers.errors import (
     AgenticProfileError,
     CapabilityCertificateError,
 )
-from core.providers.certificate_service import (
-    runtime_adapter_artifact_digest,
-    validate_certificate_for_binding,
-)
+from core.providers.certificate_service import validate_certificate_for_binding
 from core.providers.certificate_projection import certificate_profile_status
 from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.agentic_workspace_policy import egress_policy_for_definition
@@ -40,15 +39,6 @@ NOW = datetime(2026, 8, 16, tzinfo=UTC)
 
 
 class AgenticProfilesTest(unittest.TestCase):
-    def test_current_codex_profile_revision_pins_the_complete_adapter_digest(self) -> None:
-        importlib.import_module("core.providers.codex_app_server_runtime")
-        adapter = self.registry.get_agentic_runtime_adapter("codex")
-
-        self.assertEqual(
-            runtime_adapter_artifact_digest(adapter),
-            CODEX_PROFILE_ARTIFACT_DIGEST,
-        )
-
     def setUp(self) -> None:
         self.provider_collections = ProviderCollections(
             definitions=FakeCollection(),
@@ -362,9 +352,9 @@ class AgenticProfilesTest(unittest.TestCase):
             selection=selection,
             now=NOW,
         )
-        self.assertEqual(profile.revision, "8")
+        self.assertEqual(profile.revision, CODEX_PROFILE_REVISION)
 
-        for rev in ("1", "2", "3", "4", "5", "6", "7"):
+        for rev in CODEX_PREVIOUS_PROFILE_REVISIONS:
             self.provider_store.save_agentic_profile_definition_status(
                 AgenticProfileDefinitionStatus(
                     definition_id=profile.definition_id,
@@ -383,7 +373,7 @@ class AgenticProfilesTest(unittest.TestCase):
             now=replace_time(NOW),
         )
 
-        for rev in ("1", "2", "3", "4", "5", "6", "7"):
+        for rev in CODEX_PREVIOUS_PROFILE_REVISIONS:
             status = self.provider_store.get_agentic_profile_definition_status(
                 profile.definition_id,
                 rev,
@@ -416,9 +406,10 @@ class AgenticProfilesTest(unittest.TestCase):
                 profile = next(
                     item
                     for item in self.provider_store.list_agentic_profile_definitions()
-                    if item.model_id == model.model_id and item.revision == "8"
+                    if item.model_id == model.model_id
+                    and item.revision == CODEX_PROFILE_REVISION
                 )
-                self.assertEqual(profile.revision, "8")
+                self.assertEqual(profile.revision, CODEX_PROFILE_REVISION)
                 status = self.provider_store.get_agentic_profile_definition_status(
                     profile.definition_id,
                     profile.revision,

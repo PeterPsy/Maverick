@@ -53,6 +53,7 @@ from core.runtime.errors import (
     RuntimeSessionHiddenError,
     RuntimeSessionNotFoundError,
     RuntimeThreadNotFoundError,
+    RuntimeTurnQueueRejectedError,
     RuntimeTurnNotFoundError,
 )
 from core.runtime.failure_messages import runtime_failure_public_message
@@ -2097,6 +2098,14 @@ def _queue_runtime_turn_response(
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)
         return json_response(start_response, {"error": error.reason_code}, status="400 Bad Request")
+    except RuntimeTurnQueueRejectedError:
+        if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
+            _release_client_message_claim(state, release_claim_on_failure)
+        return json_response(
+            start_response,
+            {"error": "runtime_session_not_executable"},
+            status="409 Conflict",
+        )
     except ProviderError as error:
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)

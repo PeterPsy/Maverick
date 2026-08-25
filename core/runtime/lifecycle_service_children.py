@@ -8,12 +8,14 @@ from pathlib import Path
 
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
+from core.runtime.errors import RuntimeTransitionError
 from core.runtime.message_admission import runtime_message_admission_handoff
 from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_session import RuntimeSessionRecord, RuntimeSessionStatus
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.runtime_threads import mark_runtime_thread_user_message
 from core.runtime.store import RuntimeStore
+from core.runtime.turn_queue_admission import require_turn_queue_session_executable
 from core.workspaces.models import WorkspaceGovernanceRecord
 
 
@@ -160,15 +162,20 @@ def queue_runtime_turn(
 ) -> RuntimeTurnRecord:
     """Create one queued runtime turn."""
     with runtime_message_admission_handoff(session_id):
-        return _queue_runtime_turn_locked(
-            store,
-            turn_id=turn_id,
-            session_id=session_id,
-            input_text=input_text,
-            client_message_id=client_message_id,
-            invoked_skill_ids=invoked_skill_ids,
-            now=now,
-        )
+        location = store.get_session(session_id)
+        with store.session_lifecycle_handoff(
+            workspace_id=location.workspace_id,
+            session_id=location.session_id,
+        ):
+            return _queue_runtime_turn_locked(
+                store,
+                turn_id=turn_id,
+                session_id=session_id,
+                input_text=input_text,
+                client_message_id=client_message_id,
+                invoked_skill_ids=invoked_skill_ids,
+                now=now,
+            )
 
 
 def _queue_runtime_turn_locked(
@@ -183,6 +190,7 @@ def _queue_runtime_turn_locked(
 ) -> RuntimeTurnRecord:
     timestamp = now or utcnow()
     session = store.get_session(session_id)
+    require_turn_queue_session_executable(store, session)
     record = store.save_turn(
         RuntimeTurnRecord(
             turn_id=turn_id,
@@ -217,16 +225,21 @@ def queue_runtime_turn_if_client_message_absent(
 ) -> tuple[RuntimeTurnRecord, bool]:
     """Create one queued runtime turn unless the client message was already queued."""
     with runtime_message_admission_handoff(session_id):
-        return _queue_runtime_turn_if_client_message_absent_locked(
-            store,
-            turn_id=turn_id,
-            session_id=session_id,
-            input_text=input_text,
-            client_message_id=client_message_id,
-            invoked_skill_ids=invoked_skill_ids,
-            client_message_claim=client_message_claim,
-            now=now,
-        )
+        location = store.get_session(session_id)
+        with store.session_lifecycle_handoff(
+            workspace_id=location.workspace_id,
+            session_id=location.session_id,
+        ):
+            return _queue_runtime_turn_if_client_message_absent_locked(
+                store,
+                turn_id=turn_id,
+                session_id=session_id,
+                input_text=input_text,
+                client_message_id=client_message_id,
+                invoked_skill_ids=invoked_skill_ids,
+                client_message_claim=client_message_claim,
+                now=now,
+            )
 
 
 def _queue_runtime_turn_if_client_message_absent_locked(
@@ -242,6 +255,7 @@ def _queue_runtime_turn_if_client_message_absent_locked(
 ) -> tuple[RuntimeTurnRecord, bool]:
     timestamp = now or utcnow()
     session = store.get_session(session_id)
+    require_turn_queue_session_executable(store, session)
     record = RuntimeTurnRecord(
         turn_id=turn_id,
         session_id=session_id,

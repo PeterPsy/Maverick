@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 import hashlib
+import json
+from pathlib import Path
 
 from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
@@ -37,13 +39,38 @@ from core.runtime.agentic_feature_flags import (
 )
 
 
-CODEX_PROFILE_REVISION = "8"
-CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6", "7")
-CODEX_PROFILE_ARTIFACT_DIGEST = (
-    "3900af3183255444be1651da59c439914cc4dae6a187d3bfcffac06f87f54b0c"
-)
+CODEX_PROFILE_REVISION = "9"
+CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6", "7", "8")
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"
+_CODEX_PROFILE_ARTIFACT_MANIFEST = json.loads(
+    Path(__file__).with_name("codex_profile_artifacts.json").read_text(encoding="utf-8")
+)
+if (
+    not isinstance(_CODEX_PROFILE_ARTIFACT_MANIFEST, dict)
+    or _CODEX_PROFILE_ARTIFACT_MANIFEST.get("schema_version") != "1"
+    or _CODEX_PROFILE_ARTIFACT_MANIFEST.get("adapter_id") != CODEX_ADAPTER_ID
+    or _CODEX_PROFILE_ARTIFACT_MANIFEST.get("current_revision")
+    != CODEX_PROFILE_REVISION
+    or not isinstance(_CODEX_PROFILE_ARTIFACT_MANIFEST.get("revisions"), dict)
+):
+    raise RuntimeError("codex_profile_artifact_manifest_revision_mismatch")
+CODEX_PROFILE_ARTIFACT_DIGESTS = {
+    str(revision): str(digest)
+    for revision, digest in _CODEX_PROFILE_ARTIFACT_MANIFEST["revisions"].items()
+}
+if CODEX_PROFILE_REVISION not in CODEX_PROFILE_ARTIFACT_DIGESTS:
+    raise RuntimeError("codex_profile_artifact_manifest_revision_mismatch")
+if any(
+    not revision.isdigit()
+    or len(digest) != 64
+    or any(character not in "0123456789abcdef" for character in digest)
+    for revision, digest in CODEX_PROFILE_ARTIFACT_DIGESTS.items()
+) or max(map(int, CODEX_PROFILE_ARTIFACT_DIGESTS)) != int(CODEX_PROFILE_REVISION):
+    raise RuntimeError("codex_profile_artifact_manifest_invalid")
+CODEX_PROFILE_ARTIFACT_DIGEST = CODEX_PROFILE_ARTIFACT_DIGESTS[
+    CODEX_PROFILE_REVISION
+]
 CAPABILITY_CERTIFICATE_PREFIX = "capability-certificate"
 DEFAULT_EGRESS_POLICY_ID = "local-runtime-no-remote-egress"
 DEFAULT_EGRESS_POLICY_REVISION = "1"

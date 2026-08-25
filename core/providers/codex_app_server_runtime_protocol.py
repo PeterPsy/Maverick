@@ -192,7 +192,6 @@ def _extract_error_text(params: dict[str, Any]) -> str:
     return "Codex app-server failed."
 
 
-
 def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, item: dict[str, Any]) -> None:
     if _is_agent_message_item(item) and provider_type.endswith("completed"):
         if _emit_completed_agent_message_output(runtime=runtime, provider_type=provider_type, item=item):
@@ -220,14 +219,12 @@ def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, i
         )
 
 
-
 def _is_agent_message_item(item: dict[str, Any]) -> bool:
     return str(item.get("type") or "").strip() in {"agentMessage", "agent_message"}
 
 
 def _is_context_compaction_item(item: dict[str, Any]) -> bool:
     return str(item.get("type") or "").strip() in {"contextCompaction", "context_compaction"}
-
 
 
 def _should_buffer_agent_json_delta(*, runtime: _CodexAppServerRuntime, item_id: str, delta: str) -> bool:
@@ -240,7 +237,6 @@ def _should_buffer_agent_json_delta(*, runtime: _CodexAppServerRuntime, item_id:
             runtime.pending_agent_json_chunks[item_id] = [delta]
             return True
     return False
-
 
 
 def _emit_completed_agent_message_output(*, runtime: _CodexAppServerRuntime, provider_type: str, item: dict[str, Any]) -> bool:
@@ -265,14 +261,12 @@ def _emit_completed_agent_message_output(*, runtime: _CodexAppServerRuntime, pro
     return False
 
 
-
 def _pop_pending_agent_json_chunk(runtime: _CodexAppServerRuntime, item_id: str) -> str:
     if not item_id:
         return ""
     with runtime.event_lock:
         chunks = runtime.pending_agent_json_chunks.pop(item_id, None)
     return "".join(chunks or [])
-
 
 
 def _emit_agent_text_output(*, runtime: _CodexAppServerRuntime, provider_event_type: str, item_id: str, text: str) -> None:
@@ -283,7 +277,6 @@ def _emit_agent_text_output(*, runtime: _CodexAppServerRuntime, provider_event_t
         if item_id:
             runtime.streamed_agent_item_ids.add(item_id)
     _emit(runtime, RuntimeExecutionEvent(event_type="runtime.output.delta", payload={"text": text, "provider_event_type": provider_event_type}))
-
 
 
 def _flush_pending_agent_json_chunks(runtime: _CodexAppServerRuntime, *, provider_event_type: str) -> None:

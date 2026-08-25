@@ -78,11 +78,13 @@ pinned ceiling. Authority expansion requires a new session or explicit fork
 with a new execution binding.
 
 An execution-authority change that is proven compatible uses a versioned
-continuation fork; it never rewrites the predecessor binding. Core creates a
-child session with the current binding, persists an idempotent handoff record,
-CAS-fences the predecessor provider state, transfers the provider thread and
-continuation ids to the child, stops the predecessor, and rebinds the existing
-logical runtime thread to the child. Compatibility requires the same profile
+continuation fork; it never rewrites the predecessor binding. Core serializes
+the fork with ordinary message admission, and queued, active, or waiting turns
+on either side block it. Core creates a child session with the current binding
+for the source profile and model, persists an idempotent handoff record,
+CAS-fences the predecessor provider state, proves the predecessor process is
+closed, transfers the provider thread and continuation ids to the child, and
+rebinds the existing logical runtime thread to the child. Compatibility requires the same profile
 identity, engine, adapter id/version, provider, model, protocol/API, routing,
 credential reference, reasoning contract, execution mode, policy ceilings,
 and egress policy. The target capability set may only be an intersection of
@@ -95,11 +97,21 @@ silently changing their scheduler references.
 
 Provider continuation state is transferred as an ownership unit, not merely as
 an identifier. For Codex, the thread database stores an absolute rollout path,
-so the executable child must use the lineage-root `CODEX_HOME`. Core closes the
-predecessor runtime before starting the child, and independent conversations
-never share that home. If the canonical lineage home is unavailable, resume
-fails explicitly as `provider_thread_missing` and never starts a replacement
-thread.
+so the executable child and its operating-system sandbox must use the
+lineage-root `CODEX_HOME` as both `CODEX_HOME` and `HOME`. Core closes the
+predecessor runtime before state transfer or child start, and independent
+conversations never share that home. If the canonical lineage home is
+unavailable, resume fails explicitly as `provider_thread_missing` and never
+starts a replacement thread. Only confirmed missing-thread/rollout failures use
+that classification; other app-server resume rejections remain
+`provider_request_rejected`.
+
+An interrupted handoff does not retain authority merely because its target was
+valid when created. Before each resumed phase Core revalidates the source and
+target certificates, live workspace binding and credential governance, current
+adapter artifact digest, and persisted compatibility proof. It may finish an artifact-stale intermediate link only to
+continue immediately through a bounded chain to the newest compatible
+revision. A revoked or incompatible target is quarantined and fails closed.
 
 The predecessor and child form one logical transcript lineage. REST,
 WebSocket, transcript, usage, and cleanup surfaces traverse that lineage while
@@ -311,11 +323,14 @@ feature, and the legacy runtime reader is removed before Definition of Done.
   a user or backend-recovery turn. A compatible mismatch completes the audited
   continuation fork; an incompatible mismatch returns
   `runtime_profile_upgrade_required` without queuing provider work.
-- The admin-only continuation-repair command defaults to dry-run. A mutating
-  run snapshots the provider control plane, workspace runtime indexes, and only
-  the selected sessions' JSON/event-history records before applying the exact
-  preflight-compatible scope; provider homes and other runtime caches are not
-  copied.
+- The admin-only continuation-repair command defaults to dry-run. Inventory
+  resolves requested roots and predecessors to their current lineage tips. A
+  mutating run snapshots the provider control plane, workspace runtime indexes,
+  every selected lineage session's JSON/event-history records, and the Codex
+  lineage-root SQLite/rollout conversation store before applying the exact
+  preflight-compatible scope. SQLite uses an online checked backup; rollout
+  files are canonical, bounded, checksummed copies. Unrelated homes and runtime
+  caches are not copied.
 
 ## Runtime bearer authority interaction
 

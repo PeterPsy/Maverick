@@ -55,8 +55,17 @@ class CodexContinuationRuntimeHomeTest(unittest.TestCase):
             )
 
             runtime_home = CodexProviderAdapter()._runtime_home(session)
+            command = CodexProviderAdapter()._build_command(
+                workspace_root=Path(temp_dir),
+                runtime_root=successor_root,
+                runtime_home=runtime_home,
+                execution_mode="sandbox",
+                host_command="/bin/echo",
+            )
 
             self.assertEqual(runtime_home, lineage_home)
+            home_index = command.index("--home")
+            self.assertEqual(command[home_index + 1], str(lineage_home))
 
     def test_continuation_runtime_home_fails_closed_when_lineage_root_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

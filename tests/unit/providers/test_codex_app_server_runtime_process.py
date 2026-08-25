@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from contextlib import closing
 import importlib
 from pathlib import Path
 import queue
+import sqlite3
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -106,6 +108,103 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
                 )
 
         self.assertEqual(caught.exception.reason_code, "provider_thread_missing")
+
+    def test_resume_non_missing_rejection_preserves_request_diagnostic(self) -> None:
+        runtime = runtime_process._CodexAppServerRuntime(
+            session_id="session-resume-invalid",
+            workspace_id="default",
+            runtime_root="/tmp/runtime-resume-invalid",
+            process=SimpleNamespace(pid=123, poll=lambda: None),
+        )
+        session = SimpleNamespace(
+            session_id=runtime.session_id,
+            workspace_id=runtime.workspace_id,
+            runtime_root=runtime.runtime_root,
+            provider_thread_id="provider-thread-existing",
+            system_prompt="",
+        )
+        launch_spec = RuntimeBackendLaunchSpec(
+            provider_id="codex",
+            command=["codex", "app-server"],
+            env_overrides={},
+            credential_binding_id=None,
+            resolved_secret_refs=[],
+            working_directory="/tmp",
+            execution_mode="sandbox",
+            readable_roots=[],
+            writable_roots=[],
+        )
+
+        with patch.object(
+            runtime_thread,
+            "_send_request",
+            side_effect=CodexAppServerRequestError(
+                "thread/resume",
+                code=-32602,
+                message="invalid sandbox policy",
+            ),
+        ):
+            with self.assertRaises(ProviderLaunchError) as caught:
+                runtime_thread._ensure_provider_thread(
+                    runtime=runtime,
+                    session=session,
+                    launch_spec=launch_spec,
+                    on_provider_thread_id=None,
+                )
+
+        self.assertEqual(caught.exception.reason_code, "provider_request_rejected")
+
+    def test_resume_preflight_reports_missing_rollout_without_provider_call(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_home = Path(temp_dir) / "codex-home"
+            runtime_home.mkdir()
+            provider_thread_id = "provider-thread-missing-rollout"
+            with closing(sqlite3.connect(runtime_home / "state_5.sqlite")) as connection:
+                connection.execute(
+                    "CREATE TABLE threads (id TEXT PRIMARY KEY, rollout_path TEXT NOT NULL)"
+                )
+                connection.execute(
+                    "INSERT INTO threads VALUES (?, ?)",
+                    (provider_thread_id, str(runtime_home / "sessions" / "missing.jsonl")),
+                )
+                connection.commit()
+            runtime = runtime_process._CodexAppServerRuntime(
+                session_id="session-resume-missing-rollout",
+                workspace_id="default",
+                runtime_root=str(Path(temp_dir) / "runtime"),
+                runtime_home=str(runtime_home),
+                process=SimpleNamespace(pid=123, poll=lambda: None),
+            )
+            session = SimpleNamespace(
+                session_id=runtime.session_id,
+                workspace_id=runtime.workspace_id,
+                runtime_root=runtime.runtime_root,
+                provider_thread_id=provider_thread_id,
+                system_prompt="",
+            )
+            launch_spec = RuntimeBackendLaunchSpec(
+                provider_id="codex",
+                command=["codex", "app-server"],
+                env_overrides={"CODEX_HOME": str(runtime_home)},
+                credential_binding_id=None,
+                resolved_secret_refs=[],
+                working_directory=temp_dir,
+                execution_mode="sandbox",
+                readable_roots=[],
+                writable_roots=[],
+            )
+
+            with patch.object(runtime_thread, "_send_request") as send_request:
+                with self.assertRaises(ProviderLaunchError) as caught:
+                    runtime_thread._ensure_provider_thread(
+                        runtime=runtime,
+                        session=session,
+                        launch_spec=launch_spec,
+                        on_provider_thread_id=None,
+                    )
+
+        self.assertEqual(caught.exception.reason_code, "provider_thread_missing")
+        send_request.assert_not_called()
 
     def test_turn_start_sends_text_and_structured_skill_input(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -77,6 +77,26 @@ def terminate_runtime_processes(session_id: str, *, timeout_seconds: float = 1.5
     return terminated
 
 
+def runtime_processes_alive_for_session(session_id: str) -> bool:
+    """Return whether any registered or marked provider process still owns a session."""
+    with _LOCK:
+        registered = list(_PROCESSES_BY_SESSION.get(session_id, set()))
+    if any(process.poll() is None for process in registered):
+        return True
+    proc_root = "/proc"
+    if not os.path.isdir(proc_root):
+        return False
+    for name in os.listdir(proc_root):
+        if not name.isdigit():
+            continue
+        try:
+            if _proc_matches_runtime_engine_session(int(name), session_id):
+                return True
+        except (OSError, ProcessLookupError):
+            continue
+    return False
+
+
 def terminate_runtime_process(process: subprocess.Popen, *, timeout_seconds: float = 1.5) -> bool:
     """Terminate one provider subprocess and its process group."""
     if process.poll() is not None:

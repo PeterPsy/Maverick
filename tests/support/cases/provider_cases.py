@@ -760,6 +760,7 @@ class ProvidersTestCase(unittest.TestCase):
                     sandbox_command = adapter._build_command(
                         workspace_root=home / "workspace",
                         runtime_root=home / "workspace" / "runtime",
+                        runtime_home=home / "workspace" / "runtime" / "codex-home",
                         execution_mode="sandbox",
                     )
 
@@ -802,6 +803,7 @@ class ProvidersTestCase(unittest.TestCase):
                 sandbox_command = adapter._build_command(
                     workspace_root=home / "workspace",
                     runtime_root=home / "workspace" / "runtime",
+                    runtime_home=home / "workspace" / "runtime" / "codex-home",
                     execution_mode="sandbox",
                 )
 

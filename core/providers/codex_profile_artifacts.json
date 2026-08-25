@@ -1,0 +1,10 @@
+{
+  "adapter_id": "codex-app-server",
+  "current_revision": "9",
+  "revisions": {
+    "7": "7015f0fd1232170c003b8a5397769cef4ce37d8dd035e697b85e739224bbd7fd",
+    "8": "3900af3183255444be1651da59c439914cc4dae6a187d3bfcffac06f87f54b0c",
+    "9": "837217e2b940b074f686e1217189e9fc39218a732a9871751fb5bb3879057f0e"
+  },
+  "schema_version": "1"
+}

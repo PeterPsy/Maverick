@@ -13,6 +13,7 @@ from core.runtime.errors import (
 )
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.lifecycle import create_runtime_session, transition_runtime_session
+from core.runtime.process_control import runtime_processes_alive_for_session
 from core.runtime.provider_state import RuntimeProviderState
 from core.runtime.runtime_session import RuntimeSessionGrantRecord, RuntimeSessionRecord
 from core.runtime.runtime_threads import create_runtime_thread
@@ -122,28 +123,79 @@ def transfer_provider_state(
     return state.runtime_store.update_provider_state(desired, expected_revision=0)
 
 
+def close_predecessor_runtime_process(
+    state,
+    handoff: RuntimeContinuationHandoff,
+) -> None:
+    """Close the idle physical runtime before continuation state changes owner."""
+    from core.recovery.continuation_admission import (
+        runtime_session_has_nonterminal_turns,
+    )
+    from core.runtime.runtime_process_lifecycle import release_idle_runtime_processes
+
+    predecessor = state.runtime_store.get_session(handoff.predecessor_session_id)
+    if runtime_session_has_nonterminal_turns(state.runtime_store, predecessor.session_id):
+        raise RuntimeProviderStateError("runtime_profile_upgrade_turn_busy")
+    binding = predecessor.execution_binding
+    release_idle_runtime_processes(
+        state,
+        session_id=predecessor.session_id,
+        provider_id="unconfigured" if binding is None else binding.runtime_engine_id,
+        reason="continuation_fork_predecessor_fenced",
+        idle_ttl_seconds=0,
+    )
+    if runtime_processes_alive_for_session(predecessor.session_id):
+        raise RuntimeProviderStateError(
+            "runtime_continuation_predecessor_process_still_running"
+        )
+
+
+def quarantine_continuation_successor(
+    state,
+    handoff: RuntimeContinuationHandoff,
+) -> None:
+    """Stop an untrusted successor after live handoff revalidation fails."""
+    from core.runtime.runtime_process_lifecycle import release_idle_runtime_processes
+    from core.runtime.session_termination import terminate_runtime_session
+
+    try:
+        successor = state.runtime_store.get_session(handoff.successor_session_id)
+    except RuntimeSessionNotFoundError:
+        return
+    terminate_runtime_session(
+        state.runtime_store,
+        session_id=successor.session_id,
+        reason="continuation target authority invalid",
+        event_bus=getattr(state, "runtime_event_bus", None),
+        observability_store=getattr(state, "observability_store", None),
+        start_path=getattr(state, "repository_root", None),
+    )
+    binding = successor.execution_binding
+    release_idle_runtime_processes(
+        state,
+        session_id=successor.session_id,
+        provider_id="unconfigured" if binding is None else binding.runtime_engine_id,
+        reason="continuation_target_authority_invalid",
+        idle_ttl_seconds=0,
+    )
+    if runtime_processes_alive_for_session(successor.session_id):
+        raise RuntimeProviderStateError(
+            "runtime_continuation_successor_process_still_running"
+        )
+
+
 def fence_predecessor_and_start_successor(
     state,
     handoff: RuntimeContinuationHandoff,
     *,
+    start_successor: bool = True,
     now: datetime,
 ) -> None:
-    """Make the predecessor permanently non-executable and start its child."""
+    """Make the closed predecessor non-executable and start its child."""
     predecessor = state.runtime_store.get_session(handoff.predecessor_session_id)
-    if predecessor.status in {"created", "running", "stopping"}:
-        from core.runtime.runtime_process_lifecycle import (
-            release_idle_runtime_processes,
-        )
-
-        binding = predecessor.execution_binding
-        release_idle_runtime_processes(
-            state,
-            session_id=predecessor.session_id,
-            provider_id=(
-                "unconfigured" if binding is None else binding.runtime_engine_id
-            ),
-            reason="continuation_fork_predecessor_fenced",
-            idle_ttl_seconds=0,
+    if runtime_processes_alive_for_session(predecessor.session_id):
+        raise RuntimeProviderStateError(
+            "runtime_continuation_predecessor_process_still_running"
         )
     if predecessor.status in {"created", "running", "stopping"}:
         transition_runtime_session(
@@ -156,11 +208,17 @@ def fence_predecessor_and_start_successor(
             now=now,
         )
     successor = state.runtime_store.get_session(handoff.successor_session_id)
-    if successor.status != "running":
+    target_status = "running" if start_successor else "stopped"
+    if successor.status != target_status:
         transition_runtime_session(
             state.runtime_store,
             session_id=successor.session_id,
-            target_status="running",
+            target_status=target_status,
+            forced_stop_reason=(
+                None
+                if start_successor
+                else "continuation target requires another compatible upgrade"
+            ),
             observability_store=getattr(state, "observability_store", None),
             start_path=getattr(state, "repository_root", None),
             now=now,

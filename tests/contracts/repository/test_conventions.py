@@ -169,6 +169,10 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         self.assertEqual(pyproject["project"]["license"], {"text": "MIT"})
         self.assertEqual(pyproject["tool"]["setuptools"]["packages"]["find"]["include"], ["core*"])
         self.assertTrue(pyproject["tool"]["setuptools"]["packages"]["find"]["namespaces"])
+        self.assertIn(
+            "codex_profile_artifacts.json",
+            pyproject["tool"]["setuptools"]["package-data"]["core.providers"],
+        )
 
     def test_root_tests_are_layered_not_flat(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root

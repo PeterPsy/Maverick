@@ -10,6 +10,10 @@ import threading
 from typing import Any, Callable
 
 from core.providers.codex_app_server_runtime_errors import CodexAppServerRequestError
+from core.providers.codex_app_server_runtime_resume import (
+    local_resume_archive_problem,
+    resume_error_is_missing_thread,
+)
 from core.providers.errors import ProviderLaunchError
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
@@ -98,6 +102,20 @@ def _ensure_provider_thread(
         existing_thread_id = str(session.provider_thread_id or "").strip()
         params = _thread_params(session=session, launch_spec=launch_spec)
         if existing_thread_id:
+            archive_problem = local_resume_archive_problem(
+                runtime,
+                existing_thread_id,
+            )
+            if archive_problem is not None:
+                reason_code = (
+                    "provider_thread_missing"
+                    if archive_problem == "missing"
+                    else "provider_request_rejected"
+                )
+                raise ProviderLaunchError(
+                    f"provider_conversation_archive_{archive_problem}",
+                    reason_code=reason_code,
+                )
             try:
                 result = _send_request(
                     runtime,
@@ -106,9 +124,14 @@ def _ensure_provider_thread(
                     timeout=20.0,
                 )
             except CodexAppServerRequestError as error:
+                reason_code = (
+                    "provider_thread_missing"
+                    if resume_error_is_missing_thread(error)
+                    else "provider_request_rejected"
+                )
                 raise ProviderLaunchError(
-                    "provider_thread_missing",
-                    reason_code="provider_thread_missing",
+                    reason_code,
+                    reason_code=reason_code,
                 ) from error
         else:
             result = _send_request(runtime, "thread/start", params, timeout=20.0)

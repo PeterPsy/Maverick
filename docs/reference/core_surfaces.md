@@ -169,6 +169,12 @@ Important current tools include:
 - `core.jobs.get`
 - `core.jobs.cancel`
 
+`core.runtime.status` and `core.recovery.health` are operator-only diagnostic
+surfaces. Recovery health requests must name `target_kind` (`runtime`,
+`provider`, or `app`) and the matching `session_id`, `provider_id`, or `app_id`;
+invalid or incomplete requests return a stable argument error instead of a raw
+mapping exception.
+
 The runtime transcript surfaces are owner/admin/grant-scoped and available to
 sandboxed agents; full-access mode does not expand their data authority.
 `threads.list` searches metadata only after unauthorized threads are removed.

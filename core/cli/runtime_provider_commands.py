@@ -125,7 +125,7 @@ def runtime_provider_command_specs(
                 path_segments=["core", "runtime", "status"],
                 description="Inspect runtime status for the active workspace.",
                 owner_id="runtime",
-                invocation_policy=WORKSPACE_SAFE,
+                invocation_policy=OPERATOR_ONLY,
             ),
             _runtime_status_handler,
         ),

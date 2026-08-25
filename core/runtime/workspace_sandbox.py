@@ -29,6 +29,7 @@ def build_bwrap_command(
     *,
     workspace_root: Path,
     runtime_root: Path,
+    home_root: Path | None = None,
     dependency_roots: list[Path] | None,
     dependency_files: list[tuple[Path, Path]] | None = None,
     command: list[str],
@@ -38,6 +39,11 @@ def build_bwrap_command(
         raise ValueError("workspace sandbox requires a command to execute")
     workspace = workspace_root.resolve(strict=False)
     runtime = runtime_root.resolve(strict=False)
+    home = (home_root or (runtime / "codex-home")).resolve(strict=False)
+    if home_root is not None and not (
+        home.is_relative_to(workspace) or home.is_relative_to(runtime)
+    ):
+        raise ValueError("workspace sandbox home must remain inside the workspace or runtime root")
     dependencies = _dedupe_paths([path for path in dependency_roots or [] if path.exists()])
     file_dependencies = [
         (source.resolve(strict=False), destination.resolve(strict=False))
@@ -64,7 +70,7 @@ def build_bwrap_command(
         str(runtime),
         "--setenv",
         "HOME",
-        str(runtime / "codex-home"),
+        str(home),
         "--unsetenv",
         "PYTHONPATH",
     ]
@@ -99,6 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace-root", required=True)
     parser.add_argument("--runtime-root", required=True)
+    parser.add_argument("--home")
     parser.add_argument("--dependency-root", action="append", default=[])
     parser.add_argument("--dependency-file", action="append", default=[])
     parser.add_argument("command", nargs=argparse.REMAINDER)
@@ -109,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     bwrap_command = build_bwrap_command(
         workspace_root=Path(args.workspace_root),
         runtime_root=Path(args.runtime_root),
+        home_root=None if args.home is None else Path(args.home),
         dependency_roots=[Path(root) for root in args.dependency_root],
         dependency_files=_parse_dependency_files(args.dependency_file),
         command=command,

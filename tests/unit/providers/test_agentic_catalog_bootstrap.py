@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
 from core.providers.certificate_projection import certificate_profile_status
+from core.providers.agentic_profiles import CODEX_PROFILE_REVISION
 from tests.support.repo import make_temp_repo_root
 
 
@@ -53,7 +54,8 @@ class AgenticCatalogBootstrapTest(unittest.TestCase):
         current_profiles = {
             profile.model_id: profile
             for profile in restarted.provider_store.list_agentic_profile_definitions()
-            if profile.runtime_engine_id == "codex" and profile.revision == "8"
+            if profile.runtime_engine_id == "codex"
+            and profile.revision == CODEX_PROFILE_REVISION
         }
         self.assertEqual(set(current_profiles), {model.model_id for model in persisted_models})
         for model_id, profile in current_profiles.items():

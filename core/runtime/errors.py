@@ -48,6 +48,10 @@ class RuntimeTransitionError(RuntimeDomainError):
     """Raised when one runtime lifecycle transition is invalid."""
 
 
+class RuntimeTurnQueueRejectedError(RuntimeTransitionError):
+    """Raised when authoritative session state rejects a new queued turn."""
+
+
 class RuntimeProviderStateError(RuntimeDomainError):
     """Raised when provider state is missing, stale, or invalid."""
 

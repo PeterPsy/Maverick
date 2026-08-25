@@ -2,23 +2,40 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from datetime import UTC, datetime
 import hashlib
 from types import SimpleNamespace
 from uuid import uuid4
 
-from core.recovery.continuation_admission import assess_runtime_session_admission
+from core.recovery.continuation_admission import (
+    RuntimeAdmissionAssessment,
+    assess_runtime_session_admission,
+    runtime_session_has_nonterminal_turns,
+)
 from core.recovery.continuation_handoff_service import (
     RuntimeContinuationResult,
     complete_compatible_continuation_fork,
     complete_existing_continuation_handoff,
 )
+from core.recovery.continuation_validation import revalidate_continuation_handoff
 from core.runtime.continuation_lineage import resolve_latest_runtime_session
 from core.runtime.errors import (
     RuntimeProfileUpgradeRequiredError,
     RuntimeProviderStateError,
+    RuntimeSessionNotFoundError,
 )
+from core.runtime.message_admission import runtime_message_admission_handoff
 from core.runtime.runtime_session import RuntimeSessionRecord
+
+
+MAX_CONTINUATION_ADMISSION_HOPS = 8
+
+
+class _ContinuationAdmissionRetry(RuntimeError):
+    def __init__(self, session: RuntimeSessionRecord) -> None:
+        super().__init__(session.session_id)
+        self.session = session
 
 
 def admit_runtime_session(
@@ -30,40 +47,97 @@ def admit_runtime_session(
 ) -> RuntimeContinuationResult:
     """Resolve current lineage, validate authority, and fork only with proof."""
     timestamp = now or datetime.now(tz=UTC)
-    pending = _continuation_handoff_for_session(state, session)
+    candidate = session
+    last_fork: RuntimeContinuationResult | None = None
+    for _hop in range(MAX_CONTINUATION_ADMISSION_HOPS):
+        try:
+            result = _admit_runtime_session_once(
+                state,
+                session=candidate,
+                allow_compatible_fork=allow_compatible_fork,
+                now=timestamp,
+            )
+        except _ContinuationAdmissionRetry as retry:
+            candidate = retry.session
+            continue
+        if result.status == "direct":
+            if last_fork is None:
+                return result
+            return RuntimeContinuationResult(
+                status="forked",
+                session=result.session,
+                assessment=last_fork.assessment,
+                handoff=last_fork.handoff,
+            )
+        last_fork = result
+        candidate = result.session
+    raise RuntimeProfileUpgradeRequiredError(
+        "runtime_profile_upgrade_required",
+        detail_code="runtime_continuation_hop_limit_exceeded",
+    )
+
+
+def _admit_runtime_session_once(
+    state,
+    *,
+    session: RuntimeSessionRecord,
+    allow_compatible_fork: bool,
+    now: datetime,
+) -> RuntimeContinuationResult:
+    handoff = _continuation_handoff_for_session(state, session)
+    pending = handoff if handoff is not None and handoff.phase != "completed" else None
     lock_session = (
         state.runtime_store.get_session(pending.predecessor_session_id)
         if pending is not None
         else resolve_latest_runtime_session(state.runtime_store, session)
     )
-    with state.runtime_store.session_lifecycle_handoff(
-        workspace_id=lock_session.workspace_id,
-        session_id=lock_session.session_id,
-    ):
+    successor_id = (
+        pending.successor_session_id if pending is not None else str(uuid4())
+    )
+    admission_session_ids = {lock_session.session_id, successor_id}
+    with ExitStack() as admission_stack:
+        for session_id in sorted(admission_session_ids):
+            admission_stack.enter_context(runtime_message_admission_handoff(session_id))
+        lifecycle_session_ids = {lock_session.session_id}
         if pending is not None:
-            pending = state.runtime_store.get_continuation_handoff(pending.handoff_id)
-            if pending.phase != "completed":
-                predecessor = state.runtime_store.get_session(
-                    pending.predecessor_session_id
+            lifecycle_session_ids.add(successor_id)
+        for session_id in sorted(lifecycle_session_ids):
+            admission_stack.enter_context(
+                state.runtime_store.session_lifecycle_handoff(
+                    workspace_id=lock_session.workspace_id,
+                    session_id=session_id,
                 )
-                return complete_existing_continuation_handoff(
-                    state,
-                    predecessor=predecessor,
-                    handoff=pending,
-                    now=timestamp,
-                )
+            )
+        live_handoff = _continuation_handoff_for_session(
+            state,
+            state.runtime_store.get_session(lock_session.session_id),
+        )
+        if live_handoff is not None and live_handoff.phase != "completed":
+            if live_handoff.successor_session_id not in admission_session_ids:
+                raise _ContinuationAdmissionRetry(lock_session)
+            predecessor = state.runtime_store.get_session(
+                live_handoff.predecessor_session_id
+            )
+            _require_handoff_turns_idle(state, live_handoff)
+            return complete_existing_continuation_handoff(
+                state,
+                predecessor=predecessor,
+                handoff=live_handoff,
+                now=now,
+            )
         current = resolve_latest_runtime_session(
             state.runtime_store,
             state.runtime_store.get_session(lock_session.session_id),
         )
-        successor_id = str(uuid4())
+        if current.session_id not in admission_session_ids:
+            raise _ContinuationAdmissionRetry(current)
         assessment = assess_runtime_session_admission(
             state.provider_store,
             state.runtime_store,
             state.provider_registry,
             session=current,
             target_session_id=successor_id,
-            now=timestamp,
+            now=now,
         )
         if assessment.status == "direct":
             return RuntimeContinuationResult(
@@ -76,12 +150,42 @@ def admit_runtime_session(
                 assessment.reason_code or "runtime_profile_upgrade_required",
                 detail_code=assessment.detail_code,
             )
+        admission_stack.enter_context(
+            state.runtime_store.session_lifecycle_handoff(
+                workspace_id=current.workspace_id,
+                session_id=successor_id,
+            )
+        )
         return complete_compatible_continuation_fork(
             state,
             predecessor=current,
             assessment=assessment,
-            now=timestamp,
+            now=now,
         )
+
+
+def _require_handoff_turns_idle(state, handoff) -> None:
+    session_ids = (
+        handoff.predecessor_session_id,
+        handoff.successor_session_id,
+    )
+    if any(
+        runtime_session_has_nonterminal_turns(state.runtime_store, session_id)
+        for session_id in session_ids
+        if _session_exists(state, session_id)
+    ):
+        raise RuntimeProfileUpgradeRequiredError(
+            "runtime_profile_upgrade_required",
+            detail_code="runtime_profile_upgrade_turn_busy",
+        )
+
+
+def _session_exists(state, session_id: str) -> bool:
+    try:
+        state.runtime_store.get_session(session_id)
+    except RuntimeSessionNotFoundError:
+        return False
+    return True
 
 
 def continuation_repair_inventory(
@@ -94,21 +198,15 @@ def continuation_repair_inventory(
     """Classify sessions without writing handoffs, turns, or runtime metadata."""
     timestamp = now or datetime.now(tz=UTC)
     inventory: list[dict[str, object]] = []
-    sessions = (
-        state.runtime_store.list_sessions(workspace_id)
-        if workspace_id is not None
-        else state.runtime_store.list_all_sessions()
+    sessions = _continuation_inventory_tips(
+        state,
+        workspace_id=workspace_id,
+        session_ids=session_ids,
     )
     for session in sessions:
-        if session_ids is not None and session.session_id not in session_ids:
-            continue
-        if session.predecessor_session_id or session.continuation_successor_session_id:
-            continue
         target_session_id = _dry_run_successor_id(session.session_id)
-        assessment = assess_runtime_session_admission(
-            state.provider_store,
-            state.runtime_store,
-            state.provider_registry,
+        assessment = _inventory_admission_assessment(
+            state,
             session=session,
             target_session_id=target_session_id,
             now=timestamp,
@@ -118,6 +216,9 @@ def continuation_repair_inventory(
         inventory.append(
             {
                 "session_id": session.session_id,
+                "lineage_root_session_id": (
+                    session.lineage_root_session_id or session.session_id
+                ),
                 "workspace_id": session.workspace_id,
                 "status": assessment.status,
                 "reason_code": assessment.reason_code,
@@ -135,6 +236,52 @@ def continuation_repair_inventory(
             }
         )
     return inventory
+
+
+def _inventory_admission_assessment(
+    state,
+    *,
+    session: RuntimeSessionRecord,
+    target_session_id: str,
+    now: datetime,
+) -> RuntimeAdmissionAssessment:
+    handoff = _continuation_handoff_for_session(state, session)
+    if handoff is None or handoff.phase == "completed":
+        return assess_runtime_session_admission(
+            state.provider_store,
+            state.runtime_store,
+            state.provider_registry,
+            session=session,
+            target_session_id=target_session_id,
+            now=now,
+        )
+    try:
+        predecessor = state.runtime_store.get_session(
+            handoff.predecessor_session_id
+        )
+        _require_handoff_turns_idle(state, handoff)
+        revalidate_continuation_handoff(
+            state,
+            predecessor=predecessor,
+            handoff=handoff,
+            now=now,
+        )
+    except RuntimeProfileUpgradeRequiredError as error:
+        return RuntimeAdmissionAssessment(
+            status="upgrade_required",
+            session_id=session.session_id,
+            reason_code=error.reason_code,
+            detail_code=error.detail_code,
+        )
+    return RuntimeAdmissionAssessment(
+        status="compatible_upgrade",
+        session_id=session.session_id,
+        reason_code="runtime_profile_upgrade_compatible",
+        detail_code="runtime_continuation_handoff_pending",
+        target_execution_binding=handoff.target_execution_binding,
+        compatible_capabilities=handoff.compatible_capabilities,
+        compatibility_digest=handoff.compatibility_digest,
+    )
 
 
 def repair_compatible_runtime_continuations(
@@ -157,12 +304,20 @@ def repair_compatible_runtime_continuations(
             now=now,
         )
     )
+    allowed_session_ids = _resolved_scope_session_ids(
+        state,
+        workspace_id=workspace_id,
+        session_ids=session_ids,
+    )
     for item in inventory:
         item_session_id = str(item.get("session_id") or "").strip()
         if (
             str(item.get("workspace_id") or "").strip() != workspace_id
             or not item_session_id
-            or (session_ids is not None and item_session_id not in session_ids)
+            or (
+                allowed_session_ids is not None
+                and item_session_id not in allowed_session_ids
+            )
         ):
             raise RuntimeProviderStateError(
                 "runtime_continuation_repair_scope_mismatch"
@@ -198,6 +353,50 @@ def repair_compatible_runtime_continuations(
         ),
         "inventory": inventory,
         "results": results,
+    }
+
+
+def _continuation_inventory_tips(
+    state,
+    *,
+    workspace_id: str | None,
+    session_ids: set[str] | None,
+) -> list[RuntimeSessionRecord]:
+    if session_ids is None:
+        candidates = (
+            state.runtime_store.list_sessions(workspace_id)
+            if workspace_id is not None
+            else state.runtime_store.list_all_sessions()
+        )
+    else:
+        candidates = [
+            state.runtime_store.get_session(session_id)
+            for session_id in sorted(session_ids)
+        ]
+    tips: dict[str, RuntimeSessionRecord] = {}
+    for candidate in candidates:
+        if workspace_id is not None and candidate.workspace_id != workspace_id:
+            raise RuntimeProviderStateError("runtime_continuation_repair_scope_mismatch")
+        tip = resolve_latest_runtime_session(state.runtime_store, candidate)
+        tips[tip.session_id] = tip
+    return [tips[session_id] for session_id in sorted(tips)]
+
+
+def _resolved_scope_session_ids(
+    state,
+    *,
+    workspace_id: str,
+    session_ids: set[str] | None,
+) -> set[str] | None:
+    if session_ids is None:
+        return None
+    return {
+        session.session_id
+        for session in _continuation_inventory_tips(
+            state,
+            workspace_id=workspace_id,
+            session_ids=session_ids,
+        )
     }
 
 

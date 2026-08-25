@@ -14,6 +14,11 @@ from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.recovery.backend_service import restart_backend_service
+from core.recovery.health_request import (
+    RECOVERY_HEALTH_INPUT_SCHEMA,
+    RecoveryHealthArgumentError,
+    parse_recovery_health_target,
+)
 from core.recovery.service import execute_session_restart, record_app_health, record_failed_start, record_provider_health, record_runtime_health, recovery_status
 from core.recovery.store import RecoveryStore
 from core.runtime.store import RuntimeStore
@@ -97,13 +102,16 @@ def recovery_tool_specs(
         return {"planned": True, "failure_id": failure.failure_id, "intent_id": intent.intent_id, "action": intent.action}
 
     def _recovery_health_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
+        try:
+            target_kind, target_id = parse_recovery_health_target(arguments)
+        except RecoveryHealthArgumentError as error:
+            return {"health": None, "error": error.code}
         if recovery_store is None:
             return {"health": None}
-        target_kind = str(arguments["target_kind"])
         if target_kind == "runtime":
             if runtime_store is None:
                 return {"health": None}
-            session = runtime_store.get_session(str(arguments["session_id"]))
+            session = runtime_store.get_session(target_id)
             result = record_runtime_health(
                 recovery_store,
                 session=session,
@@ -118,7 +126,7 @@ def recovery_tool_specs(
             result = record_provider_health(
                 recovery_store,
                 provider_registry=provider_registry,
-                provider_id=str(arguments["provider_id"]),
+                provider_id=target_id,
                 workspace_id=arguments.get("workspace_id") or context.workspace_id,
                 observability_store=observability_store,
             )
@@ -129,18 +137,18 @@ def recovery_tool_specs(
                 recovery_store,
                 app_store=app_store,
                 workspace_id=str(arguments.get("workspace_id") or context.workspace_id),
-                app_id=str(arguments["app_id"]),
+                app_id=target_id,
                 start_path=start_path,
                 observability_store=observability_store,
             )
         return {"health": {"target_kind": result.target_kind, "target_id": result.target_id, "status": result.status, "detail": result.detail}}
 
     tool_specs = [
-        ("core.recovery.status", "Inspect recovery status for one workspace or runtime session.", OPERATOR_ONLY, _recovery_status_handler),
-        ("core.recovery.restart", "Execute one runtime-session restart recovery action when allowed.", WORKSPACE_SAFE, _recovery_restart_handler),
-        ("core.recovery.restart_backend", "Restart the Maverick backend host service and verify its health.", FULL_ACCESS_WORKSPACE, _recovery_backend_restart_handler),
-        ("core.recovery.failed_start", "Record one failed-start diagnosis and plan recovery.", OPERATOR_ONLY, _recovery_failed_start_handler),
-        ("core.recovery.health", "Run one recovery health probe on demand.", OPERATOR_ONLY, _recovery_health_handler),
+        ("core.recovery.status", "Inspect recovery status for one workspace or runtime session.", OPERATOR_ONLY, None, _recovery_status_handler),
+        ("core.recovery.restart", "Execute one runtime-session restart recovery action when allowed.", WORKSPACE_SAFE, None, _recovery_restart_handler),
+        ("core.recovery.restart_backend", "Restart the Maverick backend host service and verify its health.", FULL_ACCESS_WORKSPACE, None, _recovery_backend_restart_handler),
+        ("core.recovery.failed_start", "Record one failed-start diagnosis and plan recovery.", OPERATOR_ONLY, None, _recovery_failed_start_handler),
+        ("core.recovery.health", "Run one recovery health probe on demand.", OPERATOR_ONLY, RECOVERY_HEALTH_INPUT_SCHEMA, _recovery_health_handler),
     ]
     return [
         (
@@ -149,8 +157,9 @@ def recovery_tool_specs(
                 description=description,
                 owner_id="recovery",
                 invocation_policy=invocation_policy,
+                input_schema=input_schema,
             ),
             handler,
         )
-        for tool_name, description, invocation_policy, handler in tool_specs
+        for tool_name, description, invocation_policy, input_schema, handler in tool_specs
     ]

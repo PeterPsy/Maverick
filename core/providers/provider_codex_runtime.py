@@ -182,19 +182,31 @@ class CodexProviderAdapter(
         return tuple(
             import_module(module_name)
             for module_name in (
+                "core.providers.codex_app_server",
                 "core.providers.codex_app_server_runtime",
                 "core.providers.codex_app_server_runtime_errors",
+                "core.providers.codex_app_server_runtime_lifecycle",
                 "core.providers.codex_app_server_runtime_notifications",
                 "core.providers.codex_app_server_runtime_process",
                 "core.providers.codex_app_server_runtime_protocol",
+                "core.providers.codex_app_server_runtime_resume",
                 "core.providers.codex_app_server_runtime_state",
                 "core.providers.codex_app_server_runtime_steering",
                 "core.providers.codex_app_server_runtime_thread",
                 "core.providers.codex_app_server_runtime_transport",
                 "core.providers.codex_app_server_skill_rehydration",
                 "core.providers.codex_skill_inputs",
+                "core.providers.provider_codex",
+                "core.providers.provider_codex_config_policy",
                 "core.providers.provider_codex_continuation_home",
+                "core.providers.provider_codex_hooks",
+                "core.providers.provider_codex_reasoning",
+                "core.providers.provider_codex_wrappers",
                 "core.providers.provider_legacy_agentic_bridge",
+                "core.runtime.process_control",
+                "core.runtime.provider_start_handoff",
+                "core.runtime.turn_queue_admission",
+                "core.runtime.workspace_sandbox",
             )
         )
 

@@ -7,6 +7,7 @@ import time
 from types import SimpleNamespace
 import unittest
 
+from core.runtime.process_control import runtime_processes_alive_for_session
 from core.runtime.service import create_runtime_session, queue_runtime_turn, transition_runtime_turn
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_submission import release_idle_runtime_processes
@@ -57,6 +58,9 @@ class RuntimeProcessControlTestCase(unittest.TestCase):
             start_new_session=True,
         )
         try:
+            self.assertTrue(
+                runtime_processes_alive_for_session("sess-lost-codex-process")
+            )
             terminated = release_idle_runtime_processes(
                 SimpleNamespace(
                     runtime_store=store,
@@ -74,6 +78,9 @@ class RuntimeProcessControlTestCase(unittest.TestCase):
             while process.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.05)
             self.assertIsNotNone(process.poll())
+            self.assertFalse(
+                runtime_processes_alive_for_session("sess-lost-codex-process")
+            )
             self.assertIn(
                 "runtime.process.idle_reaped",
                 [event.event_type for event in store.list_events("sess-lost-codex-process")],

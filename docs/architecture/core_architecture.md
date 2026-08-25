@@ -1651,10 +1651,15 @@ compatible continuation child reuses the lineage-root session's `CODEX_HOME`:
 Codex persists the provider thread in its local database together with an
 absolute rollout path, so transferring only the thread id or copying the
 database to a different root cannot resume the conversation safely. Core must
-fence provider-state updates and close the predecessor app-server before the
-child becomes executable. A missing, symlinked, or non-canonical lineage home
-fails as `provider_thread_missing`; the adapter must never replace it with a new
-provider thread.
+serialize continuation admission with ordinary message admission, reject a
+fork while either side owns a queued, active, or waiting turn, fence
+provider-state updates, and prove that the predecessor app-server process is
+closed before provider-state ownership moves or the child becomes executable.
+A missing, symlinked, or non-canonical lineage home fails as
+`provider_thread_missing`; the adapter must never replace it with a new provider
+thread. The operating-system sandbox receives that same canonical lineage home
+as `HOME` and `CODEX_HOME`, so Codex cannot resolve its database or rollout
+through a session-local home that differs from the ownership root.
 
 The home must live below the continuation lineage's session roots, not in the
 workspace data plane and not inside the source repository. The initial session
@@ -1692,7 +1697,7 @@ The sanitized runtime config must remove inherited MCP server and plugin section
 
 The Codex adapter owns Maverick's managed Codex model selection for runtime agents. It should discover the visible Codex model catalog through the configured Codex binary, expose the viable model and reasoning-effort options through generic provider settings, and write the workspace-selected `model` plus the session-selected `model_reasoning_effort` into each runtime-scoped Codex config instead of inheriting those values from the operator home. Reasoning is not workspace-default authority. The fallback model is `gpt-5.6-sol`. New sessions default to the deepest supported single-agent reasoning effort: `max` when the model exposes it, otherwise the next deepest advertised effort. Codex `ultra` is a multi-agent execution mode rather than a reasoning effort and must not appear in the reasoning selector. Persisted model catalogs are normalized to this contract without requiring code changes when Codex adds or removes visible models.
 
-Selectable agentic profiles bind their supported reasoning efforts and default into the immutable capability certificate and copy that exact contract into the session execution binding. `/api/providers` may use provider model metadata only for labels and descriptions; selectable values come from the active certificate. Chat renders a per-session reasoning selector only when that certified list is non-empty and does not recover missing choices from mutable model metadata. Before session creation and on every live certificate validation, Core rejects a requested effort outside the certified tuple or any mismatch between the certificate and binding. A behavior-changing built-in Codex adapter update publishes a new immutable profile revision and certificate, rebinds the workspace default to it, and suspends prior revisions whose adapter artifact digest is no longer current. The declared Codex artifact bundle includes every app-server transport, thread, protocol, notification, steering, state, skill-input, and legacy bridge module that can change provider behavior. Reusing a profile revision when that digest or its reasoning contract changes fails bootstrap and CI with `profile_revision_artifact_mismatch`. Codex profile revision 7 is the first revision certified against this complete bundle; revision 8 adds continuation-lineage ownership of the physical Codex conversation store and typed missing-thread failures. In Chat's model menu each row presents the model label as its title, the provider label as its only subtitle, and the reasoning control inline at the right; rollout, certificate, tool-count, and technical profile badges do not belong in this compact picker.
+Selectable agentic profiles bind their supported reasoning efforts and default into the immutable capability certificate and copy that exact contract into the session execution binding. `/api/providers` may use provider model metadata only for labels and descriptions; selectable values come from the active certificate. Chat renders a per-session reasoning selector only when that certified list is non-empty and does not recover missing choices from mutable model metadata. Before session creation and on every live certificate validation, Core rejects a requested effort outside the certified tuple or any mismatch between the certificate and binding. A behavior-changing built-in Codex adapter update publishes a new immutable profile revision and certificate, publishes a corresponding current binding for every enabled historical binding of the same model without rewriting the old binding, and suspends prior revisions whose adapter artifact digest is no longer current. A continuation selects the current enabled binding for the source profile/model; it must not silently move a historical non-default-model chat to the workspace default model. The declared Codex artifact bundle includes every app-server transport, thread, protocol, notification, steering, state, skill-input, configuration-policy, hook, reasoning, wrapper, sandbox, continuation-home, and legacy bridge module that can change provider behavior. Its revision-to-digest manifest is append-only: a historical digest may never be rewritten, and changing any declared artifact without adding a revision fails bootstrap and CI with `profile_revision_artifact_mismatch`. Codex profile revision 7 is the first revision certified against the expanded app-server bundle; revision 8 adds continuation-lineage ownership of the physical Codex conversation store and typed missing-thread failures; revision 9 adds admission/process fencing, live handoff revalidation, lineage snapshots, and sandbox-home identity. In Chat's model menu each row presents the model label as its title, the provider label as its only subtitle, and the reasoning control inline at the right; rollout, certificate, tool-count, and technical profile badges do not belong in this compact picker.
 
 The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
 
@@ -1866,7 +1871,17 @@ For example, a `skills changed` runtime update may be rendered as a synthetic `s
 
 Deleting a chat thread is also a runtime ownership operation when the thread references a runtime session.
 
-The chat product model is one logical runtime-thread invariant. Ordinarily one chat maps to one `session_kind=chat_root` runtime session, one selected-provider app-server context, and one canonical session root under `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/`. When immutable execution authority changes compatibly, the same thread may point to a child runtime session and render the frozen predecessor plus child as one audited lineage. Automatic forks are limited to `chat_root`; hidden inter-agent and system sessions fail closed because their scheduler ownership would require a separate audited handoff. The predecessor keeps its original binding and history, rejects new turns, and is not listed as a second chat. For Codex, the provider thread id and its physical database/rollout store move as one ownership unit: the executable child uses the lineage-root `CODEX_HOME`, while the predecessor app-server is closed before the child starts. A chat thread must not exist without a user-visible current runtime session, and every current `thread_visibility=user` runtime session in the active workspace must be represented by exactly one runtime thread before the chat list is returned. `thread_visibility=hidden` sessions are runtime-operational records for future inter-agent participants and must not appear as standalone chats. The initial runtime thread id should use the initial runtime session id; continuation rebinds only its `runtime_session_id` pointer so the user-facing thread identity remains stable. Runtime WebSocket snapshots carry the requested logical session id plus all physical lineage ids; Chat scopes events to that authenticated set and follows a live `runtime.continuation.forked` event onto its successor instead of discarding child events as foreign.
+The chat product model is one logical runtime-thread invariant. Ordinarily one chat maps to one `session_kind=chat_root` runtime session, one selected-provider app-server context, and one canonical session root under `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/`. When immutable execution authority changes compatibly, the same thread may point to a child runtime session and render the frozen predecessor plus child as one audited lineage. Automatic forks are limited to `chat_root`; hidden inter-agent and system sessions fail closed because their scheduler ownership would require a separate audited handoff. Continuation admission holds the same per-session message-admission and lifecycle fences used for ordinary turn creation. Any queued, active, or waiting turn on the predecessor or successor blocks ownership transfer. The predecessor keeps its original binding and history, rejects new turns, and is not listed as a second chat. For Codex, the provider thread id and its physical database/rollout store move as one ownership unit: the executable child uses the lineage-root `CODEX_HOME`, and Core must prove the predecessor app-server process is absent before transferring provider state or starting the child. A chat thread must not exist without a user-visible current runtime session, and every current `thread_visibility=user` runtime session in the active workspace must be represented by exactly one runtime thread before the chat list is returned. `thread_visibility=hidden` sessions are runtime-operational records for future inter-agent participants and must not appear as standalone chats. The initial runtime thread id should use the initial runtime session id; continuation rebinds only its `runtime_session_id` pointer so the user-facing thread identity remains stable. Runtime WebSocket snapshots carry the requested logical session id plus all physical lineage ids; Chat scopes events to that authenticated set and follows a live `runtime.continuation.forked` event onto its successor instead of discarding child events as foreign.
+
+Every resumed handoff revalidates the source and successor certificates,
+workspace bindings, credential availability, egress governance, adapter
+artifact digest, and persisted compatibility proof against current live
+authority before another phase advances. An expired or artifact-stale
+intermediate target may be completed only as a fenced link and immediately
+continued to the newest compatible revision; admission follows at most a
+bounded number of such links and succeeds only on a direct current target. A
+revoked or otherwise incompatible successor is quarantined as non-executable
+and the handoff fails closed without moving provider state.
 
 Session reads expose the redaction-safe admission states `direct`,
 `compatible_upgrade`, `upgrade_required`, and `provider_thread_missing`. Chat may
@@ -1875,10 +1890,15 @@ proven compatible fork; it blocks the latter two with actionable copy and must
 not imply that an unavailable provider conversation can be reconstructed.
 
 Bulk repair is an admin-only CLI operation and defaults to `dry_run=true`.
-Before a mutating run, Core writes a private, collision-safe snapshot under
-`data/recovery-snapshots/` containing provider control-plane JSON, workspace
-runtime indexes, and the selected sessions' JSON/event-history records. Large
-provider homes, logs, and unrelated runtime caches are deliberately excluded.
+Inventory resolves a requested predecessor or lineage root to its current tip
+and deduplicates multi-hop lineages. Before a mutating run, Core writes a
+private, collision-safe snapshot under `data/recovery-snapshots/` containing
+provider control-plane JSON, workspace runtime indexes, every selected lineage
+session's JSON/event-history records, and the Codex lineage-root conversation
+store required to resume it. SQLite databases are copied through SQLite's
+online backup API and pass `PRAGMA quick_check`; rollout JSONL files are copied
+with canonical-path and symlink checks, bounded size, and SHA-256 entries in the
+manifest. Logs, transient caches, and unrelated provider homes remain excluded.
 The mutation then uses the same preflight inventory and never broadens its
 session scope between snapshot and handoff.
 

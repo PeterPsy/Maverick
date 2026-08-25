@@ -123,7 +123,7 @@ def runtime_provider_tool_specs(
                 tool_name="core.runtime.status",
                 description="Inspect runtime session status for the active workspace.",
                 owner_id="runtime",
-                invocation_policy=WORKSPACE_SAFE,
+                invocation_policy=OPERATOR_ONLY,
             ),
             _runtime_status_handler,
         ),

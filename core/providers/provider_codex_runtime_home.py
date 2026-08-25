@@ -7,6 +7,7 @@ import shutil
 from typing import TYPE_CHECKING
 
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, ProviderModelOption, ProviderReasoningOption
+from core.providers.provider_codex_continuation_home import resolve_codex_runtime_home
 from core.providers.provider_codex_hooks import CODEX_POST_TOOL_USE_HOOK_NAME, write_codex_post_tool_use_hook
 from core.providers.provider_codex_reasoning import (
     CODEX_DEFAULT_REASONING_EFFORT,
@@ -134,7 +135,7 @@ def remove_codex_system_skills(runtime_home: Path) -> None:
 
 class CodexRuntimeHomeMixin:
     def _runtime_home(self, session: RuntimeSessionRecord) -> Path:
-        return Path(session.runtime_root) / "codex-home"
+        return resolve_codex_runtime_home(session)
 
 
 

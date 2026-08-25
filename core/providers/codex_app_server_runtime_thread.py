@@ -9,6 +9,8 @@ import subprocess
 import threading
 from typing import Any, Callable
 
+from core.providers.codex_app_server_runtime_errors import CodexAppServerRequestError
+from core.providers.errors import ProviderLaunchError
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.codex_app_server_runtime_transport import _send_request
@@ -56,6 +58,10 @@ def _ensure_runtime(
             workspace_id=session.workspace_id,
             runtime_root=session.runtime_root,
             process=process,
+            runtime_home=(
+                str(launch_spec.env_overrides.get("CODEX_HOME") or "").strip()
+                or f"{session.runtime_root}/codex-home"
+            ),
         )
         runtime.reader_thread = threading.Thread(target=_reader_loop, args=(runtime,), daemon=True, name=f"codex-app-server-{session.session_id}")
         _RUNTIMES[session.session_id] = runtime
@@ -92,12 +98,18 @@ def _ensure_provider_thread(
         existing_thread_id = str(session.provider_thread_id or "").strip()
         params = _thread_params(session=session, launch_spec=launch_spec)
         if existing_thread_id:
-            result = _send_request(
-                runtime,
-                "thread/resume",
-                {"threadId": existing_thread_id, **params},
-                timeout=20.0,
-            )
+            try:
+                result = _send_request(
+                    runtime,
+                    "thread/resume",
+                    {"threadId": existing_thread_id, **params},
+                    timeout=20.0,
+                )
+            except CodexAppServerRequestError as error:
+                raise ProviderLaunchError(
+                    "provider_thread_missing",
+                    reason_code="provider_thread_missing",
+                ) from error
         else:
             result = _send_request(runtime, "thread/start", params, timeout=20.0)
         thread = result.get("thread") if isinstance(result.get("thread"), dict) else {}

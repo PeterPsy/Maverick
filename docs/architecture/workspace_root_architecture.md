@@ -257,7 +257,7 @@ Workspace backup and export therefore treat these records differently:
 - moving or restoring a workspace cannot manufacture, widen, or reactivate a
   capability certificate.
 
-Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`, copied runtime skills, and transient provider binaries live under the session runtime root. The workspace may contain hundreds or thousands of runtime session roots over time, but active provider state must not be shared between concurrent agents unless a provider adapter documents an explicit immutable cache.
+Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`, copied runtime skills, and transient provider binaries live under the session runtime roots. The workspace may contain hundreds or thousands of runtime session roots over time, but active provider state must not be shared between independent concurrent agents unless a provider adapter documents an explicit immutable cache. A compatible Codex continuation lineage is one provider conversation rather than independent agents: its single executable child inherits the lineage-root `CODEX_HOME` because the thread database points to an absolute rollout file there. The predecessor provider state is fenced and its app-server is closed before ownership passes to the child; lineage-aware cleanup removes the root home with the complete lineage.
 Runtime session history and operational records that belong to one agent must live inside that same session root so cleanup can remove one agent's files without scanning or rewriting shared cross-agent history files. This includes persisted runtime events, turn records, process records, and the mutable runtime state snapshot.
 
 ```text
@@ -314,7 +314,7 @@ So the distinction is:
 
 - `workspace_root` = the writable sandbox boundary for the workspace
 - `runtime/` = runtime-local temporary and operational state, not the provider process cwd
-- `runtime/sessions/<runtime_session_id>/` = one agent session's mutable provider state
+- `runtime/sessions/<runtime_session_id>/` = one physical agent session's mutable runtime records; a compatible Codex continuation child explicitly inherits its fenced lineage root's provider home
 
 Provider processes that operate on workspace files should start in the workspace root.
 

@@ -19,6 +19,7 @@ class _CodexAppServerRuntime:
     workspace_id: str
     runtime_root: str
     process: subprocess.Popen
+    runtime_home: str | None = None
     request_lock: threading.Lock = field(default_factory=threading.Lock)
     write_lock: threading.Lock = field(default_factory=threading.Lock)
     steering_lock: threading.Lock = field(default_factory=threading.Lock)

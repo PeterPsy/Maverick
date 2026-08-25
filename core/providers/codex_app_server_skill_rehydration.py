@@ -86,7 +86,11 @@ def _rehydrate_codex_skills_after_compaction(
             invoked_skills = current_invoked_skills
         input_items = [
             {"type": "text", "text": SKILL_REHYDRATION_INPUT_TEXT},
-            *codex_skill_input_items(runtime.runtime_root, list(invoked_skills)),
+            *codex_skill_input_items(
+                runtime.runtime_root,
+                list(invoked_skills),
+                runtime_home=runtime.runtime_home,
+            ),
         ]
         for attempt in range(len(_REHYDRATION_RETRY_DELAYS) + 1):
             try:

@@ -93,6 +93,14 @@ continuation forks are limited to `chat_root` sessions; hidden inter-agent and
 system sessions require a separately designed ownership handoff rather than
 silently changing their scheduler references.
 
+Provider continuation state is transferred as an ownership unit, not merely as
+an identifier. For Codex, the thread database stores an absolute rollout path,
+so the executable child must use the lineage-root `CODEX_HOME`. Core closes the
+predecessor runtime before starting the child, and independent conversations
+never share that home. If the canonical lineage home is unavailable, resume
+fails explicitly as `provider_thread_missing` and never starts a replacement
+thread.
+
 The predecessor and child form one logical transcript lineage. REST,
 WebSocket, transcript, usage, and cleanup surfaces traverse that lineage while
 each event and turn remains owned by the immutable session under which it was

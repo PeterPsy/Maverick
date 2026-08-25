@@ -83,7 +83,7 @@ class RuntimeContinuationForkTest(unittest.TestCase):
         self.assertEqual(predecessor.status, "stopped")
         self.assertEqual(predecessor.continuation_successor_session_id, successor.session_id)
         self.assertEqual(successor.predecessor_session_id, predecessor.session_id)
-        self.assertEqual(successor.execution_binding.profile_definition_revision, "7")
+        self.assertEqual(successor.execution_binding.profile_definition_revision, "8")
         self.assertEqual(result.handoff.phase, "completed")
 
         source_state = self.state.runtime_store.get_provider_state(predecessor.session_id)

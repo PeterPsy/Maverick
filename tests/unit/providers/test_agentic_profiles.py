@@ -362,9 +362,9 @@ class AgenticProfilesTest(unittest.TestCase):
             selection=selection,
             now=NOW,
         )
-        self.assertEqual(profile.revision, "7")
+        self.assertEqual(profile.revision, "8")
 
-        for rev in ("1", "2", "3", "4", "5", "6"):
+        for rev in ("1", "2", "3", "4", "5", "6", "7"):
             self.provider_store.save_agentic_profile_definition_status(
                 AgenticProfileDefinitionStatus(
                     definition_id=profile.definition_id,
@@ -383,7 +383,7 @@ class AgenticProfilesTest(unittest.TestCase):
             now=replace_time(NOW),
         )
 
-        for rev in ("1", "2", "3", "4", "5", "6"):
+        for rev in ("1", "2", "3", "4", "5", "6", "7"):
             status = self.provider_store.get_agentic_profile_definition_status(
                 profile.definition_id,
                 rev,
@@ -416,9 +416,9 @@ class AgenticProfilesTest(unittest.TestCase):
                 profile = next(
                     item
                     for item in self.provider_store.list_agentic_profile_definitions()
-                    if item.model_id == model.model_id and item.revision == "7"
+                    if item.model_id == model.model_id and item.revision == "8"
                 )
-                self.assertEqual(profile.revision, "7")
+                self.assertEqual(profile.revision, "8")
                 status = self.provider_store.get_agentic_profile_definition_status(
                     profile.definition_id,
                     profile.revision,

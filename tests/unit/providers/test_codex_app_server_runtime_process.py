@@ -11,6 +11,8 @@ from unittest.mock import patch
 importlib.import_module("core.providers.codex_app_server_runtime")
 from core.providers import codex_app_server_runtime_process as runtime_process
 from core.providers import codex_app_server_runtime_thread as runtime_thread
+from core.providers.codex_app_server_runtime_errors import CodexAppServerRequestError
+from core.providers.errors import ProviderLaunchError
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime import process_control
 from core.skills.models import SkillDefinition
@@ -60,10 +62,55 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
         self.assertEqual(send_request.call_args.args[1], "thread/resume")
         self.assertIsNone(runtime.provider_thread_id)
 
+    def test_resume_provider_rejection_is_reported_as_missing_thread(self) -> None:
+        runtime = runtime_process._CodexAppServerRuntime(
+            session_id="session-resume-missing",
+            workspace_id="default",
+            runtime_root="/tmp/runtime-resume-missing",
+            process=SimpleNamespace(pid=123, poll=lambda: None),
+        )
+        session = SimpleNamespace(
+            session_id=runtime.session_id,
+            workspace_id=runtime.workspace_id,
+            runtime_root=runtime.runtime_root,
+            provider_thread_id="provider-thread-missing",
+            system_prompt="",
+        )
+        launch_spec = RuntimeBackendLaunchSpec(
+            provider_id="codex",
+            command=["codex", "app-server"],
+            env_overrides={},
+            credential_binding_id=None,
+            resolved_secret_refs=[],
+            working_directory="/tmp",
+            execution_mode="sandbox",
+            readable_roots=[],
+            writable_roots=[],
+        )
+
+        with patch.object(
+            runtime_thread,
+            "_send_request",
+            side_effect=CodexAppServerRequestError(
+                "thread/resume",
+                code=-32602,
+                message="thread not found",
+            ),
+        ):
+            with self.assertRaises(ProviderLaunchError) as caught:
+                runtime_thread._ensure_provider_thread(
+                    runtime=runtime,
+                    session=session,
+                    launch_spec=launch_spec,
+                    on_provider_thread_id=None,
+                )
+
+        self.assertEqual(caught.exception.reason_code, "provider_thread_missing")
+
     def test_turn_start_sends_text_and_structured_skill_input(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             runtime_root = Path(temp_dir) / "runtime"
-            runtime_home = runtime_root / "codex-home"
+            runtime_home = Path(temp_dir) / "lineage-root" / "codex-home"
             skill_file = runtime_home / "skills" / "storage-ops" / "SKILL.md"
             skill_file.parent.mkdir(parents=True)
             skill_file.write_text("# Storage Ops\n", encoding="utf-8")
@@ -89,6 +136,7 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
                 workspace_id=session.workspace_id,
                 runtime_root=session.runtime_root,
                 process=SimpleNamespace(pid=123, poll=lambda: None),
+                runtime_home=str(runtime_home),
             )
             invoked_skill = SkillDefinition(
                 skill_id="storage-ops",
@@ -262,6 +310,10 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
             runtime_thread.unregister_runtime_process(session.session_id, process)
 
         self.assertIs(runtime.process, process)
+        self.assertEqual(
+            runtime.runtime_home,
+            str(Path(session.runtime_root) / "codex-home"),
+        )
         configure_oom.assert_called_once_with(process)
 
     def test_warm_turn_skips_repeated_generated_skill_cleanup_and_reports_startup_spans(self) -> None:

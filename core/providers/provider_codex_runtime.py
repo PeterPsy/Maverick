@@ -193,6 +193,7 @@ class CodexProviderAdapter(
                 "core.providers.codex_app_server_runtime_transport",
                 "core.providers.codex_app_server_skill_rehydration",
                 "core.providers.codex_skill_inputs",
+                "core.providers.provider_codex_continuation_home",
                 "core.providers.provider_legacy_agentic_bridge",
             )
         )

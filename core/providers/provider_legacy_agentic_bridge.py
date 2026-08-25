@@ -126,7 +126,13 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
             except Exception as error:
                 publish(
                     "runtime.error",
-                    {"reason_code": "legacy_adapter_execution_failed", "error_type": type(error).__name__},
+                    {
+                        "reason_code": (
+                            str(getattr(error, "reason_code", None) or "").strip()
+                            or "legacy_adapter_execution_failed"
+                        ),
+                        "error_type": type(error).__name__,
+                    },
                 )
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, None)

@@ -53,7 +53,7 @@ class AgenticCatalogBootstrapTest(unittest.TestCase):
         current_profiles = {
             profile.model_id: profile
             for profile in restarted.provider_store.list_agentic_profile_definitions()
-            if profile.runtime_engine_id == "codex" and profile.revision == "7"
+            if profile.runtime_engine_id == "codex" and profile.revision == "8"
         }
         self.assertEqual(set(current_profiles), {model.model_id for model in persisted_models})
         for model_id, profile in current_profiles.items():

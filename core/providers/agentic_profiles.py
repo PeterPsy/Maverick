@@ -37,10 +37,10 @@ from core.runtime.agentic_feature_flags import (
 )
 
 
-CODEX_PROFILE_REVISION = "7"
-CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6")
+CODEX_PROFILE_REVISION = "8"
+CODEX_PREVIOUS_PROFILE_REVISIONS = ("1", "2", "3", "4", "5", "6", "7")
 CODEX_PROFILE_ARTIFACT_DIGEST = (
-    "7015f0fd1232170c003b8a5397769cef4ce37d8dd035e697b85e739224bbd7fd"
+    "3900af3183255444be1651da59c439914cc4dae6a187d3bfcffac06f87f54b0c"
 )
 CODEX_ADAPTER_ID = "codex-app-server"
 CODEX_ADAPTER_VERSION = "2"

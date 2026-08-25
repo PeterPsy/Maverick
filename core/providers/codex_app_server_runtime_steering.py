@@ -61,7 +61,11 @@ def steer_codex_app_server_turn(
                             skill_activation_mode=skill_activation_mode,
                         ),
                     },
-                    *codex_skill_input_items(runtime.runtime_root, invoked_skills),
+                    *codex_skill_input_items(
+                        runtime.runtime_root,
+                        invoked_skills,
+                        runtime_home=runtime.runtime_home,
+                    ),
                 ],
             }
             normalized_client_message_id = str(client_message_id or "").strip()

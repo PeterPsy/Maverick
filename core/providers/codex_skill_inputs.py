@@ -53,14 +53,20 @@ def codex_provider_input_text(input_text: str, *, skill_activation_mode: object)
 def codex_skill_input_items(
     runtime_root: str | Path,
     invoked_skills: list[SkillDefinition] | None,
+    *,
+    runtime_home: str | Path | None = None,
 ) -> list[dict[str, str]]:
     """Resolve invoked skills only from the materialized Codex runtime home."""
     if not invoked_skills:
         return []
-    runtime_home = Path(runtime_root) / "codex-home"
-    skills_root = runtime_home / "skills"
+    runtime_home_path = (
+        Path(runtime_home)
+        if runtime_home is not None
+        else Path(runtime_root) / "codex-home"
+    )
+    skills_root = runtime_home_path / "skills"
     try:
-        resolved_runtime_home = runtime_home.resolve(strict=True)
+        resolved_runtime_home = runtime_home_path.resolve(strict=True)
         resolved_skills_root = skills_root.resolve(strict=True)
     except OSError as error:
         raise ProviderLaunchError("invoked_skill_runtime_path_missing") from error

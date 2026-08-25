@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
+import tempfile
+import unittest
+
+from core.providers.errors import ProviderLaunchError
+from core.providers.provider_codex_runtime import CodexProviderAdapter
 from tests.support.cases import provider_cases as cases
 
 
@@ -26,3 +33,63 @@ class ProviderRuntimeHomeAndSecretsTest(cases.ProvidersTestCase):
 
 
 _mask_unselected(ProviderRuntimeHomeAndSecretsTest)
+
+
+class CodexContinuationRuntimeHomeTest(unittest.TestCase):
+    def test_continuation_successor_reuses_lineage_root_codex_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sessions_root = Path(temp_dir) / "runtime" / "sessions"
+            lineage_root = sessions_root / "session-origin"
+            predecessor_root = sessions_root / "session-predecessor"
+            successor_root = sessions_root / "session-successor"
+            lineage_home = lineage_root / "codex-home"
+            lineage_home.mkdir(parents=True)
+            (predecessor_root / "codex-home").mkdir(parents=True)
+            successor_root.mkdir(parents=True)
+            session = SimpleNamespace(
+                session_id="session-successor",
+                runtime_root=str(successor_root),
+                predecessor_session_id="session-predecessor",
+                lineage_root_session_id="session-origin",
+                continuation_handoff_id="handoff-1",
+            )
+
+            runtime_home = CodexProviderAdapter()._runtime_home(session)
+
+            self.assertEqual(runtime_home, lineage_home)
+
+    def test_continuation_runtime_home_fails_closed_when_lineage_root_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            successor_root = Path(temp_dir) / "runtime" / "sessions" / "session-successor"
+            successor_root.mkdir(parents=True)
+            session = SimpleNamespace(
+                session_id="session-successor",
+                runtime_root=str(successor_root),
+                predecessor_session_id="session-predecessor",
+                lineage_root_session_id="session-predecessor",
+                continuation_handoff_id="handoff-1",
+            )
+
+            with self.assertRaisesRegex(
+                ProviderLaunchError,
+                "codex_continuation_runtime_home_missing",
+            ):
+                CodexProviderAdapter()._runtime_home(session)
+
+    def test_partial_continuation_identity_never_falls_back_to_a_new_home(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            successor_root = Path(temp_dir) / "runtime" / "sessions" / "session-successor"
+            successor_root.mkdir(parents=True)
+            session = SimpleNamespace(
+                session_id="session-successor",
+                runtime_root=str(successor_root),
+                predecessor_session_id="session-predecessor",
+                lineage_root_session_id=None,
+                continuation_handoff_id="handoff-1",
+            )
+
+            with self.assertRaisesRegex(
+                ProviderLaunchError,
+                "codex_continuation_runtime_home_unsafe",
+            ):
+                CodexProviderAdapter()._runtime_home(session)

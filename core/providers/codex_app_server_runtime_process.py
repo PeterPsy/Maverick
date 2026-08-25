@@ -95,7 +95,7 @@ def execute_codex_app_server_turn(
                 skill_activation_mode=getattr(session, "skill_activation_mode", "implicit"),
             ),
         },
-        *codex_skill_input_items(runtime.runtime_root, invoked_skills),
+        *codex_skill_input_items(runtime.runtime_root, invoked_skills, runtime_home=runtime.runtime_home),
     ]
     if on_provider_startup_event is not None:
         on_provider_startup_event("event_sink_reset_started", {})

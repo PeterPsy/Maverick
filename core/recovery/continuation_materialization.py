@@ -131,6 +131,21 @@ def fence_predecessor_and_start_successor(
     """Make the predecessor permanently non-executable and start its child."""
     predecessor = state.runtime_store.get_session(handoff.predecessor_session_id)
     if predecessor.status in {"created", "running", "stopping"}:
+        from core.runtime.runtime_process_lifecycle import (
+            release_idle_runtime_processes,
+        )
+
+        binding = predecessor.execution_binding
+        release_idle_runtime_processes(
+            state,
+            session_id=predecessor.session_id,
+            provider_id=(
+                "unconfigured" if binding is None else binding.runtime_engine_id
+            ),
+            reason="continuation_fork_predecessor_fenced",
+            idle_ttl_seconds=0,
+        )
+    if predecessor.status in {"created", "running", "stopping"}:
         transition_runtime_session(
             state.runtime_store,
             session_id=predecessor.session_id,

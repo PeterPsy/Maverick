@@ -14,7 +14,7 @@ from core.providers.agentic_adapter import (
 )
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.certificate_service import runtime_adapter_artifact_digest
-from core.providers.errors import ProviderNotFoundError
+from core.providers.errors import ProviderLaunchError, ProviderNotFoundError
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.service import builtin_provider_registry
 from core.runtime.agentic_execution import _validate_event
@@ -241,6 +241,60 @@ class AgenticAdapterContractTest(unittest.TestCase):
         encoded_payload = json.dumps(tool_payload, separators=(",", ":")).encode("utf-8")
         self.assertLessEqual(len(encoded_payload), 1_048_576)
 
+    def test_legacy_bridge_preserves_structured_provider_failure_code(self) -> None:
+        legacy = _LegacyAdapter(
+            self.definition,
+            execution_error=ProviderLaunchError(
+                "provider_thread_missing",
+                reason_code="provider_thread_missing",
+            ),
+        )
+        self.registry.register_runtime_adapter(legacy)
+        bridge = self.registry.get_agentic_runtime_adapter(self.definition.provider_id)
+        legacy_evidence = fake_capability_evidence(bridge, now=NOW)
+        legacy_binding = replace(
+            self.binding,
+            adapter_id=bridge.adapter_id,
+            adapter_version=bridge.adapter_version,
+            adapter_artifact_digest=runtime_adapter_artifact_digest(bridge),
+            certificate_evidence_digest=legacy_evidence.evidence_digest,
+            binding_digest="",
+        )
+        from core.runtime.execution_binding import canonical_digest
+        legacy_binding = replace(
+            legacy_binding,
+            binding_digest=canonical_digest(legacy_binding),
+        )
+        legacy_session = replace(self.session, execution_binding=legacy_binding)
+        legacy_store = certified_test_provider_store(
+            legacy_binding,
+            bridge,
+            evidence=legacy_evidence,
+            now=NOW,
+        )
+
+        result = execute_runtime_turn(
+            session=legacy_session,
+            provider=self.definition,
+            input_text="continue",
+            runtime_adapter=legacy,
+            agentic_adapter=bridge,
+            provider_state=self.provider_state,
+            correlation_id="turn-missing-thread",
+            effective_authority=certified_test_authority(
+                legacy_store,
+                legacy_binding,
+                bridge,
+                turn_id="turn-missing-thread",
+                now=NOW,
+            ),
+            launch_spec=_launch_spec(self.session),
+        )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(result.failure_reason_code, "provider_thread_missing")
+        self.assertIn("provider conversation", result.public_error_message)
+
     async def _lifecycle(self, cancel, recovery, close):
         return (
             await self.adapter.cancel(cancel),
@@ -250,9 +304,16 @@ class AgenticAdapterContractTest(unittest.TestCase):
 
 
 class _LegacyAdapter:
-    def __init__(self, definition, *, tool_output: str | None = None) -> None:
+    def __init__(
+        self,
+        definition,
+        *,
+        tool_output: str | None = None,
+        execution_error: Exception | None = None,
+    ) -> None:
         self.definition = definition
         self.tool_output = tool_output
+        self.execution_error = execution_error
 
     def provider_definition(self):
         return self.definition
@@ -261,6 +322,8 @@ class _LegacyAdapter:
         return None
 
     def execute_turn(self, **kwargs):
+        if self.execution_error is not None:
+            raise self.execution_error
         if self.tool_output is not None:
             kwargs["event_sink"](
                 RuntimeExecutionEvent(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 from core.inter_agent.errors import InterAgentValidationError
@@ -18,7 +19,7 @@ class OrchestrationPlanTest(unittest.TestCase):
             {
               "summary": "Implement then review.",
               "tasks": [
-                {"id": "implement", "label": "Implementer", "role": "implementer", "objective": "Build it.", "depends_on": []},
+                {"id": "implement", "label": "Implementer", "role": "implementer", "objective": "Build it.", "depends_on": [], "invoked_skill_ids": ["storage-ops"]},
                 {"id": "review", "label": "Reviewer", "role": "reviewer", "objective": "Review it.", "depends_on": ["implement"], "review_of": "implement"}
               ]
             }
@@ -31,6 +32,7 @@ class OrchestrationPlanTest(unittest.TestCase):
         )
 
         self.assertEqual([task.task_id for task in plan.tasks], ["implement", "review"])
+        self.assertEqual(plan.tasks[0].invoked_skill_ids, ("storage-ops",))
         self.assertFalse(review.approved)
         self.assertTrue(completion.complete)
 
@@ -79,6 +81,25 @@ class OrchestrationPlanTest(unittest.TestCase):
                     require_review_gate=False,
                     reserved_task_ids={"custom-manager"},
                 )
+
+    def test_rejects_more_than_32_task_skill_invocations(self) -> None:
+        payload = json.dumps(
+            {
+                "tasks": [
+                    {
+                        "id": "implement",
+                        "label": "Implementer",
+                        "role": "implementer",
+                        "objective": "Build.",
+                        "depends_on": [],
+                        "invoked_skill_ids": [f"skill-{index}" for index in range(33)],
+                    }
+                ]
+            }
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "at most 32"):
+            parse_orchestration_plan(payload, max_tasks=1, require_review_gate=False)
 
     def test_rejects_reviewer_tasks_without_review_of_in_initial_plan(self) -> None:
         for role in ("reviewer", "security_reviewer"):

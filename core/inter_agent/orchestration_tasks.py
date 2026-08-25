@@ -206,6 +206,7 @@ def execute_task(
             started,
             task_prompt(task, input_text, dependency_outputs),
             f"{run.run_id}:task:{task.task_id}",
+            task.invoked_skill_ids,
         ).strip()
         if not output:
             raise InterAgentOperationError(f"Task `{task.task_id}` returned no output.")

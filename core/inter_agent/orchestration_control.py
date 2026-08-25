@@ -69,6 +69,7 @@ def create_initial_plan(
             list(available_agent_type_ids),
         ),
         f"{run.run_id}:orchestrator:plan",
+        (),
     )
     plan = parse_orchestration_plan(
         output,
@@ -124,6 +125,7 @@ def next_control_decision(
             available_agent_types=list(available_agent_type_ids),
         ),
         f"{run.run_id}:orchestrator:control:{step}",
+        (),
     )
     remaining_slots = max(0, max_participants - 1 - len(control.tasks))
     decision = parse_control_decision(

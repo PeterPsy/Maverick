@@ -131,7 +131,12 @@ class OrchestrationTaskRaceTest(unittest.TestCase):
         runtime_state = SimpleNamespace(runtime_store=runtime_store)
         calls: list[str] = []
 
-        def execute_turn(_participant, _prompt: str, client_message_id: str) -> str:
+        def execute_turn(
+            _participant,
+            _prompt: str,
+            client_message_id: str,
+            _invoked_skill_ids: tuple[str, ...],
+        ) -> str:
             calls.append(client_message_id)
             if client_message_id == f"{run.run_id}:orchestrator:plan":
                 return (

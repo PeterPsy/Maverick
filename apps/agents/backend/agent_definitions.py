@@ -247,6 +247,7 @@ def _compact_agent_type(agent_type: dict[str, Any]) -> dict[str, Any]:
         "name": agent_type["name"],
         "description": agent_type.get("description", ""),
         "role_id": agent_type["role_id"],
+        "skill_ids": agent_type.get("skill_ids", []),
         "skill_count": len(agent_type.get("skill_ids", [])),
         "skill_activation_mode": agent_type.get("skill_activation_mode", "implicit"),
         "trace_verbosity": agent_type.get("trace_verbosity", "compact"),

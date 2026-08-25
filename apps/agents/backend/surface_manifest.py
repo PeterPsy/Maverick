@@ -78,7 +78,7 @@ OPERATIONS_MANIFEST = {
     },
     "payload_profiles": {
         "default": "compact_manifest",
-        "catalog.compact": "ids_names_descriptions_only",
+        "catalog.compact": "compact_identity_and_runtime_selection_metadata",
         "catalog": "full_catalog_with_prompt_content",
         "get_agent_definition": "full_single_record_by_id",
         "upsert_agent_definition": "compact_write_result_by_default",

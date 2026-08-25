@@ -22,7 +22,8 @@ def planning_prompt(
     catalog = ", ".join(available_agent_types or []) or "default orchestrator capability"
     return (
         "You are the sole orchestrator of a Maverick Agent nodes run. Produce only one JSON object with "
-        'summary and tasks. Each task requires id, label, role, objective, depends_on and may select agent_type_id; '
+        'summary and tasks. Each task requires id, label, role, objective, depends_on and may select agent_type_id '
+        'and invoked_skill_ids; invoked_skill_ids must list only the task-required skills assigned to that agent; '
         "reviewer tasks also require review_of. Use safe lowercase ids. Plan only the work that is ready to start; "
         "you may add more tasks after every worker output. A reviewer must approve before completion. "
         "Never use orchestrator as a task id. "
@@ -68,7 +69,8 @@ def control_prompt(
         "You are the sole adaptive orchestrator at a persisted scheduling safe point. Respond with one JSON object: "
         '{"summary": string, "tasks": array, "cancel_task_ids": array, "complete": boolean, '
         '"quality_passed": boolean, "final_answer": string}. New tasks use id, label, role, objective, '
-        "depends_on and optional agent_type_id; reviewer and security_reviewer tasks must use review_of and depend "
+        "depends_on and optional agent_type_id and invoked_skill_ids; invoked_skill_ids must list only task-required "
+        "skills assigned to that agent; reviewer and security_reviewer tasks must use review_of and depend "
         "on that target. Add work when evidence is insufficient, "
         "cancel only unnecessary unstarted work, and complete only after a dependent reviewer explicitly approved. "
         "Never use orchestrator as a task id. A rejected or malformed review remains blocking until completed "

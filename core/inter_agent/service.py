@@ -55,10 +55,6 @@ from core.runtime.turn_submission import (
     submit_runtime_turn_async,
 )
 from core.runtime.turn_terminalization import terminalize_runtime_turn_cancellation
-from core.skills.catalog import DEFAULT_SKILL_CATALOG_APP_ID
-from core.skills.service import list_available_workspace_skills
-
-
 DEFAULT_SUMMARY_EVENT_LIMIT = 1000
 DEFAULT_DETAIL_EVENT_LIMIT = 500
 DEFAULT_DEBUG_EVENT_LIMIT = 100
@@ -1041,6 +1037,7 @@ class InterAgentService:
         participant_id: str,
         input_text: str,
         client_message_id: str | None = None,
+        invoked_skill_ids: list[str] | None = None,
         async_requested: bool = False,
         now: datetime | None = None,
         expected_recovery_generation: int | None = None,
@@ -1128,18 +1125,8 @@ class InterAgentService:
             "input_text": message,
             "client_message_id": _clean_optional(client_message_id),
         }
-        if session.skill_activation_mode == "explicit":
-            invoked_skill_ids = list(session.skill_ids)
-            if not invoked_skill_ids:
-                invoked_skill_ids = [
-                    skill.skill_id
-                    for skill in list_available_workspace_skills(
-                        workspace_id=session.workspace_id,
-                        start_path=getattr(state, "repository_root", None),
-                        app_id=session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID,
-                    )
-                ]
-            submit_kwargs["invoked_skill_ids"] = invoked_skill_ids
+        if session.skill_activation_mode == "explicit" or invoked_skill_ids is not None:
+            submit_kwargs["invoked_skill_ids"] = list(invoked_skill_ids or [])
         if queue_fence is not None:
             submit_kwargs["queue_fence"] = queue_fence
         try:
@@ -1162,7 +1149,7 @@ class InterAgentService:
                 "runtime_session_id": session.session_id,
                 "runtime_turn_id": turn.turn_id,
                 **(
-                    {"invoked_skill_ids": list(submit_kwargs["invoked_skill_ids"])}
+                    {"invoked_skill_ids": list(turn.invoked_skill_ids)}
                     if "invoked_skill_ids" in submit_kwargs
                     else {}
                 ),

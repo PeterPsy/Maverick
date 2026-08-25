@@ -172,6 +172,7 @@ class AgentsAppTestCase(unittest.TestCase):
             self.assertLess(len(json.dumps(compact)), len(json.dumps(full)))
             self.assertNotIn("common_prompt", compact)
             self.assertNotIn("instructions", compact["roles"][0])
+            self.assertIn("skill_ids", compact["agent_types"][0])
             self.assertEqual(full_status, 200)
 
     def test_upsert_agent_definition_is_idempotent_and_compact_by_default(self) -> None:

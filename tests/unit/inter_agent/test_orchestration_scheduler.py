@@ -215,7 +215,7 @@ class OrchestrationSchedulerTest(unittest.TestCase):
                 control,
                 input_text="Implement safely.",
                 trigger_task_id="security-review",
-                execute_turn=lambda _participant, _prompt, _client_message_id: (
+                execute_turn=lambda _participant, _prompt, _client_message_id, _invoked_skill_ids: (
                     '{"summary":"Use the earlier approval.","tasks":[],"cancel_task_ids":[],'
                     '"complete":true,"quality_passed":true,"final_answer":"Done."}'
                 ),
@@ -296,7 +296,9 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             participants["implement"],
             "Recover this orchestration.",
             {},
-            lambda _participant, _prompt, _client_message_id: "Persisted implementation output.",
+            lambda _participant, _prompt, _client_message_id, _invoked_skill_ids: (
+                "Persisted implementation output."
+            ),
         )
         store.save_run(replace(store.get_run(run.run_id, workspace_id="default"), status="recovering", recovery_generation=1))
         calls: list[str] = []
@@ -306,7 +308,12 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             catalog_resolution_calls.append(agent_type_id)
             raise AssertionError("persisted specialists must not be resolved from the catalog during recovery")
 
-        def resume_turn(_participant, _prompt: str, client_message_id: str) -> str:
+        def resume_turn(
+            _participant,
+            _prompt: str,
+            client_message_id: str,
+            _invoked_skill_ids: tuple[str, ...],
+        ) -> str:
             calls.append(client_message_id)
             return {
                 f"{run.run_id}:orchestrator:control:1": (
@@ -342,14 +349,22 @@ class OrchestrationSchedulerTest(unittest.TestCase):
         service = InterAgentService(store)
         run = service.create_run(orchestrated_spec())
         prompts: dict[str, str] = {}
+        skill_invocations: dict[str, tuple[str, ...]] = {}
 
-        def execute_turn(participant, prompt: str, client_message_id: str) -> str:
+        def execute_turn(
+            participant,
+            prompt: str,
+            client_message_id: str,
+            invoked_skill_ids: tuple[str, ...],
+        ) -> str:
             prompts[client_message_id] = prompt
+            skill_invocations[client_message_id] = invoked_skill_ids
             outputs = {
                 f"{run.run_id}:orchestrator:plan": (
                     '{"summary":"Start with implementation.","tasks":['
                     '{"id":"implement","label":"Implementer","role":"implementer",'
-                    '"objective":"Implement safely.","depends_on":[],"agent_type_id":"agent-type-coder"}]}'
+                    '"objective":"Implement safely.","depends_on":[],"agent_type_id":"agent-type-coder",'
+                    '"invoked_skill_ids":["storage"]}]}'
                 ),
                 f"{run.run_id}:task:implement": "First implementation.",
                 f"{run.run_id}:orchestrator:control:1": (
@@ -459,6 +474,8 @@ class OrchestrationSchedulerTest(unittest.TestCase):
         self.assertIn("Keep the revision small", prompts[f"{run.run_id}:orchestrator:control:1"])
         self.assertIn("Add the missing regression coverage", prompts[f"{run.run_id}:orchestrator:control:2"])
         self.assertIn("Dependency review", prompts[f"{run.run_id}:task:implement-r2"])
+        self.assertEqual(skill_invocations[f"{run.run_id}:orchestrator:plan"], ())
+        self.assertEqual(skill_invocations[f"{run.run_id}:task:implement"], ("storage",))
         self.assertIn("inter_agent.completion.decided", [event.event_type for event in events])
         self.assertIn("inter_agent.generalist.handoff_prepared", [event.event_type for event in events])
         self.assertEqual(

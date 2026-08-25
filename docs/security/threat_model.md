@@ -227,9 +227,12 @@ paths are not included in public API or transcript event payloads. In
 `explicit` mode Maverick also neutralizes Codex `$skill-id` mention syntax in
 the provider-only text copy, while retaining the user's original text in the
 turn and transcript. Structured, validated skill items are therefore the only
-activation authority. Automatic inter-agent turns derive their structured
-invocation set from the immutable participant skill snapshot rather than from
-model-authored task text.
+activation authority. An inter-agent participant snapshot is an allowlist, not
+an invocation request: each automatic task or direct participant message must
+carry its exact `invoked_skill_ids`, bounded to 32, and Core validates that set
+against the immutable participant session before dispatch. An empty request
+invokes no skill even when the participant allowlist or workspace catalog is
+non-empty.
 
 ### Participant output influencing the root generalist
 

@@ -249,7 +249,7 @@ class OrchestrationDecisionRecoveryTest(unittest.TestCase):
             participants["implement"],
             "Recover completion.",
             {},
-            lambda _participant, _prompt, _client_message_id: "Persisted implementation.",
+            lambda _participant, _prompt, _client_message_id, _invoked_skill_ids: "Persisted implementation.",
         )
         execute_task(
             service,
@@ -258,7 +258,7 @@ class OrchestrationDecisionRecoveryTest(unittest.TestCase):
             participants["review"],
             "Recover completion.",
             {"implement": implement_result.output_text},
-            lambda _participant, _prompt, _client_message_id: (
+            lambda _participant, _prompt, _client_message_id, _invoked_skill_ids: (
                 '{"approved":true,"feedback":"Persisted implementation is valid."}'
             ),
         )
@@ -319,7 +319,7 @@ class OrchestrationDecisionRecoveryTest(unittest.TestCase):
             participants["implement"],
             "Recover cancellation.",
             {},
-            lambda _participant, _prompt, _client_message_id: "Selected implementation.",
+            lambda _participant, _prompt, _client_message_id, _invoked_skill_ids: "Selected implementation.",
         )
         decision = parse_control_decision(
             '{"summary":"Cancel obsolete work and review.","tasks":['
@@ -333,7 +333,12 @@ class OrchestrationDecisionRecoveryTest(unittest.TestCase):
         recovery = service.recover_non_terminal_runs(runtime_state.runtime_store, workspace_id="default")
         calls: list[str] = []
 
-        def resume_turn(_participant, _prompt: str, client_message_id: str) -> str:
+        def resume_turn(
+            _participant,
+            _prompt: str,
+            client_message_id: str,
+            _invoked_skill_ids: tuple[str, ...],
+        ) -> str:
             calls.append(client_message_id)
             return {
                 f"{run.run_id}:task:review": '{"approved":true,"feedback":"Selected work is valid."}',

@@ -152,6 +152,7 @@ class InterAgentRuntimeServiceTest(unittest.TestCase):
             started_at=now,
             completed_at=now,
             failure_reason=None,
+            invoked_skill_ids=["storage-ops"],
         )
         event = RuntimeEventRecord(
             event_id="runtime-event-1",
@@ -172,6 +173,7 @@ class InterAgentRuntimeServiceTest(unittest.TestCase):
                 run_id=run.run_id,
                 participant_id=participant.participant_id,
                 input_text="hello child",
+                invoked_skill_ids=["storage-ops"],
                 now=now,
             )
 

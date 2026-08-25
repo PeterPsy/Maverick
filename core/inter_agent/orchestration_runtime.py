@@ -4,14 +4,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import time
-from typing import Any, Callable
+from typing import Any, Protocol
 
 from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.models import InterAgentParticipantRecord
 from core.inter_agent.service import InterAgentService
 
 
-ParticipantTurnExecutor = Callable[[InterAgentParticipantRecord, str, str], str]
+class ParticipantTurnExecutor(Protocol):
+    def __call__(
+        self,
+        participant: InterAgentParticipantRecord,
+        prompt: str,
+        client_message_id: str,
+        invoked_skill_ids: tuple[str, ...],
+    ) -> str:
+        ...
+
+
 TERMINAL_RUNTIME_TURN_STATUSES = {"completed", "failed", "cancelled", "timed-out"}
 GENERALIST_HANDOFF_WAIT_TIMEOUT_SECONDS = 6 * 60 * 60
 GENERALIST_HANDOFF_POLL_SECONDS = 0.1
@@ -37,7 +47,12 @@ def runtime_turn_executor(
         else expected_recovery_generation
     )
 
-    def execute(participant: InterAgentParticipantRecord, prompt: str, client_message_id: str) -> str:
+    def execute(
+        participant: InterAgentParticipantRecord,
+        prompt: str,
+        client_message_id: str,
+        invoked_skill_ids: tuple[str, ...],
+    ) -> str:
         current = service.store.get_participant(
             participant.participant_id,
             workspace_id=run.workspace_id,
@@ -60,6 +75,7 @@ def runtime_turn_executor(
             participant_id=current.participant_id,
             input_text=prompt,
             client_message_id=client_message_id,
+            invoked_skill_ids=list(invoked_skill_ids),
             async_requested=False,
             expected_recovery_generation=scheduler_generation,
         )

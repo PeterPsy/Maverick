@@ -149,6 +149,73 @@ class RuntimeMessageSteeringTestCase(unittest.TestCase):
         self.assertIsNotNone(claim)
         self.assertEqual(claim.status, "steered")
 
+    def test_successful_skill_steers_persist_the_union_on_the_active_turn(self) -> None:
+        adapter = _SteeringAdapter()
+        provider = SimpleNamespace(
+            provider_id="codex",
+            capabilities=SimpleNamespace(supports_same_turn_input=True),
+        )
+        first_skill = SimpleNamespace(skill_id="storage-ops")
+        second_skill = SimpleNamespace(skill_id="review-ops")
+
+        with patch(
+            "core.runtime.message_steering.resolve_runtime_backend_for_session",
+            return_value=(provider, None, adapter),
+        ), patch(
+            "core.runtime.message_steering.resolve_invoked_runtime_skills",
+            side_effect=([first_skill], [second_skill]),
+        ):
+            first = attempt_runtime_message_steer(
+                self.state,
+                session=self.session,
+                input_text="store the report",
+                client_message_id="client-skill-steer-1",
+                invoked_skill_ids=["storage-ops"],
+            )
+            second = attempt_runtime_message_steer(
+                self.state,
+                session=self.session,
+                input_text="review the report",
+                client_message_id="client-skill-steer-2",
+                invoked_skill_ids=["review-ops"],
+            )
+
+        persisted = self.store.get_turn(self.turn.turn_id)
+        self.assertEqual(first.status, "steered")
+        self.assertEqual(second.status, "steered")
+        self.assertEqual(persisted.invoked_skill_ids, ["storage-ops", "review-ops"])
+        self.assertEqual(second.events[0].payload["invoked_skill_ids"], ["review-ops"])
+
+    def test_skill_steer_falls_back_to_a_new_turn_when_the_active_turn_has_32_skills(self) -> None:
+        adapter = _SteeringAdapter()
+        provider = SimpleNamespace(
+            provider_id="codex",
+            capabilities=SimpleNamespace(supports_same_turn_input=True),
+        )
+        self.store.merge_turn_invoked_skill_ids(
+            turn_id=self.turn.turn_id,
+            invoked_skill_ids=[f"existing-skill-{index}" for index in range(32)],
+        )
+
+        with patch(
+            "core.runtime.message_steering.resolve_runtime_backend_for_session",
+            return_value=(provider, None, adapter),
+        ), patch(
+            "core.runtime.message_steering.resolve_invoked_runtime_skills",
+            return_value=[SimpleNamespace(skill_id="new-skill")],
+        ):
+            result = attempt_runtime_message_steer(
+                self.state,
+                session=self.session,
+                input_text="invoke one more skill",
+                client_message_id="client-skill-overflow",
+                invoked_skill_ids=["new-skill"],
+            )
+
+        self.assertEqual(result.status, "fallback")
+        self.assertEqual(result.reason, "too_many_invoked_skills")
+        self.assertEqual(adapter.calls, [])
+
     def test_uncertain_delivery_is_terminal_and_never_retried(self) -> None:
         adapter = _SteeringAdapter(
             RuntimeSteerResult(status="delivery_uncertain", provider_turn_id="provider-turn-1", reason="timeout")

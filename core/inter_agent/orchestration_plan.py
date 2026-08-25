@@ -9,6 +9,7 @@ from typing import Any
 
 from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.orchestration_topology import validate_task_ids_not_reserved
+from core.skills.service import SkillInvocationError, normalize_invoked_skill_ids
 
 
 _TASK_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
@@ -35,8 +36,17 @@ class OrchestrationTaskSpec:
     depends_on: tuple[str, ...] = ()
     review_of: str | None = None
     agent_type_id: str | None = None
+    invoked_skill_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        try:
+            normalized_skill_ids = tuple(
+                normalize_invoked_skill_ids(list(self.invoked_skill_ids))
+            )
+        except SkillInvocationError as error:
+            raise InterAgentValidationError(str(error)) from error
+        if normalized_skill_ids != self.invoked_skill_ids:
+            object.__setattr__(self, "invoked_skill_ids", normalized_skill_ids)
         if self.role in _REVIEWER_ROLES and not self.review_of:
             raise InterAgentValidationError("Reviewer tasks require review_of.")
         if self.review_of and self.role not in _REVIEWER_ROLES:
@@ -221,6 +231,7 @@ def task_payload(task: OrchestrationTaskSpec) -> dict[str, Any]:
         "depends_on": list(task.depends_on),
         "review_of": task.review_of,
         "agent_type_id": task.agent_type_id,
+        "invoked_skill_ids": list(task.invoked_skill_ids),
     }
 
 
@@ -255,6 +266,11 @@ def _task_spec(value: Any) -> OrchestrationTaskSpec:
     agent_type_id = str(value.get("agent_type_id") or "").strip() or None
     if agent_type_id and not _AGENT_TYPE_ID_RE.fullmatch(agent_type_id):
         raise InterAgentValidationError(f"Task `{task_id}` has an invalid agent_type_id.")
+    raw_invoked_skill_ids = value.get("invoked_skill_ids", [])
+    if not isinstance(raw_invoked_skill_ids, list) or any(
+        not isinstance(item, str) for item in raw_invoked_skill_ids
+    ):
+        raise InterAgentValidationError(f"Task `{task_id}` invoked_skill_ids must be an array of strings.")
     return OrchestrationTaskSpec(
         task_id=task_id,
         label=label,
@@ -263,6 +279,7 @@ def _task_spec(value: Any) -> OrchestrationTaskSpec:
         depends_on=dependencies,
         review_of=review_of,
         agent_type_id=agent_type_id,
+        invoked_skill_ids=tuple(raw_invoked_skill_ids),
     )
 
 

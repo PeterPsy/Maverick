@@ -17,7 +17,11 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import record_runtime_event
 from core.runtime.thread_catalog_events import mark_thread_user_message_queued
-from core.skills.service import resolve_invoked_runtime_skills
+from core.skills.service import (
+    SkillInvocationError,
+    normalize_invoked_skill_ids,
+    resolve_invoked_runtime_skills,
+)
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -120,6 +124,8 @@ def _attempt_runtime_message_steer_locked(
             invoked_skill_ids,
             start_path=getattr(state, "repository_root", None),
         )
+        resolved_invoked_skill_ids = [skill.skill_id for skill in invoked_skills]
+        normalize_invoked_skill_ids([*active_turn.invoked_skill_ids, *resolved_invoked_skill_ids])
         provider_input = runtime_provider_input_text(
             state,
             session=session,
@@ -127,6 +133,8 @@ def _attempt_runtime_message_steer_locked(
             app_references=materialized_app_references,
             attachments=attachments,
         )
+    except SkillInvocationError as error:
+        return RuntimeMessageSteerAttempt(status="fallback", reason=error.reason_code)
     except Exception:
         return RuntimeMessageSteerAttempt(status="fallback", reason="provider_input_build_failed")
 
@@ -188,6 +196,21 @@ def _attempt_runtime_message_steer_locked(
         _release_claim(state, claim)
         return RuntimeMessageSteerAttempt(status="fallback", reason=provider_result.reason or provider_result.status)
 
+    if resolved_invoked_skill_ids:
+        try:
+            active_turn = state.runtime_store.merge_turn_invoked_skill_ids(
+                turn_id=active_turn.turn_id,
+                invoked_skill_ids=resolved_invoked_skill_ids,
+            )
+        except Exception:
+            _mark_claim_status(state, claim, "delivery_uncertain")
+            return RuntimeMessageSteerAttempt(
+                status="delivery_uncertain",
+                turn=active_turn,
+                claim=claim,
+                reason="steered_skill_receipt_persistence_failed",
+            )
+
     payload: dict[str, object] = {
         "input_text": input_text,
         "client_message_id": normalized_client_message_id,
@@ -199,8 +222,8 @@ def _attempt_runtime_message_steer_locked(
         payload["attachments"] = attachments
     if app_references:
         payload["app_references"] = app_references
-    if invoked_skill_ids:
-        payload["invoked_skill_ids"] = list(invoked_skill_ids)
+    if resolved_invoked_skill_ids:
+        payload["invoked_skill_ids"] = resolved_invoked_skill_ids
     try:
         event = record_runtime_event(
             state.runtime_store,

@@ -157,6 +157,7 @@ class InterAgentApiTestCase(InterAgentApiSupport):
                 started_at=now,
                 completed_at=now,
                 failure_reason=None,
+                invoked_skill_ids=["storage"],
             )
             event = RuntimeEventRecord(
                 event_id="event-api-1",
@@ -169,14 +170,19 @@ class InterAgentApiTestCase(InterAgentApiSupport):
                 payload={},
                 created_at=now,
             )
-            with patch("core.inter_agent.service.submit_runtime_turn", return_value=(turn, [event])):
+            with patch("core.inter_agent.service.submit_runtime_turn", return_value=(turn, [event])) as submit:
                 send_status, send_payload, _headers = self._invoke(
                     app,
                     path="/api/inter-agent/runs/run-api-1/messages",
                     method="POST",
-                    body={"participant_id": "researcher", "input_text": "hello child"},
+                    body={
+                        "participant_id": "researcher",
+                        "input_text": "hello child",
+                        "invoked_skill_ids": ["storage"],
+                    },
                     cookie=cookie,
                 )
+            self.assertEqual(submit.call_args.kwargs["invoked_skill_ids"], ["storage"])
             wait_status, wait_payload, _headers = self._invoke(
                 app,
                 path="/api/inter-agent/runs/run-api-1/wait",

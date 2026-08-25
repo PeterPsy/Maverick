@@ -42,7 +42,7 @@ class GeneralistOrchestrationContextTest(unittest.TestCase):
             participants["implement"],
             "Implement it.",
             {},
-            lambda _participant, _prompt, _client_message_id: (
+            lambda _participant, _prompt, _client_message_id, _invoked_skill_ids: (
                 "Implementation completed with regression coverage. API_KEY=unsafe-runtime-secret"
             ),
         )

@@ -620,6 +620,12 @@ def _send_message(
     body: dict,
     start_response: StartResponse,
 ) -> list[bytes]:
+    raw_invoked_skill_ids = body.get("invoked_skill_ids")
+    if raw_invoked_skill_ids is not None and (
+        not isinstance(raw_invoked_skill_ids, list)
+        or any(not isinstance(item, str) for item in raw_invoked_skill_ids)
+    ):
+        raise InterAgentValidationError("Field `invoked_skill_ids` must be an array of strings.")
     participant, turn, events = service.send_runtime_message(
         state,
         workspace_id=context.workspace_id,
@@ -627,6 +633,7 @@ def _send_message(
         participant_id=_text(body.get("participant_id")),
         input_text=_text(body.get("input_text")) or _text(body.get("message")),
         client_message_id=_text(body.get("client_message_id")) or None,
+        invoked_skill_ids=raw_invoked_skill_ids,
         async_requested=bool(body.get("async")),
     )
     return json_response(

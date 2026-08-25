@@ -219,6 +219,14 @@ class RuntimeStore(Protocol):
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
         ...
 
+    def merge_turn_invoked_skill_ids(
+        self,
+        *,
+        turn_id: str,
+        invoked_skill_ids: list[str],
+    ) -> RuntimeTurnRecord:
+        ...
+
     def save_turn_if_cancellation_absent(
         self,
         record: RuntimeTurnRecord,
@@ -1097,6 +1105,55 @@ class RuntimeDocumentStore:
         persisted = RuntimeTurnRecord(**{**existing, **payload})
         self._remember_turn_partition(persisted)
         return persisted
+
+    def merge_turn_invoked_skill_ids(
+        self,
+        *,
+        turn_id: str,
+        invoked_skill_ids: list[str],
+    ) -> RuntimeTurnRecord:
+        """Atomically append validated same-turn skill receipts without losing peers."""
+        additions = list(
+            dict.fromkeys(str(item).strip() for item in invoked_skill_ids if str(item).strip())
+        )
+        if not additions:
+            return self.get_turn(turn_id)
+        while True:
+            current = self.get_turn(turn_id)
+            identity = {
+                "turn_id": current.turn_id,
+                "workspace_id": current.workspace_id,
+                "session_id": current.session_id,
+            }
+            document = self.collections.turns.find_one(identity)
+            if document is None:
+                return self.get_turn(turn_id)
+            expected_receipt = document.get("invoked_skill_ids")
+            current_skill_ids = (
+                [str(item) for item in expected_receipt]
+                if isinstance(expected_receipt, list)
+                else []
+            )
+            merged = [*current_skill_ids]
+            seen = set(merged)
+            for item in additions:
+                if item in seen:
+                    continue
+                merged.append(item)
+                seen.add(item)
+            if merged == current_skill_ids:
+                return self.get_turn(turn_id)
+            applied = self.collections.turns.compare_and_set(
+                {
+                    **identity,
+                    "invoked_skill_ids": expected_receipt,
+                },
+                {"$set": {"invoked_skill_ids": merged}},
+            )
+            if applied:
+                persisted = self.get_turn(turn_id)
+                self._remember_turn_partition(persisted)
+                return persisted
 
     def save_turn_if_cancellation_absent(
         self,

@@ -29,6 +29,7 @@ from opendesign_artifact_operations import (  # noqa: E402
     _clear_invalid_marker,
     _known_invalid_identity,
     _mark_invalid,
+    _required_artifacts,
 )
 
 
@@ -57,6 +58,38 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
         (self.namespace / ".maverick-artifact-namespace.json").chmod(0o640)
         self.store = OpenDesignArtifactStore(self.namespace)
         self.archive_path, self.archive_digest, self.source_manifest_digest = self._runtime_archive()
+
+    def test_release_retention_declares_a_runtime_overlay_rollback_pair(self) -> None:
+        manifest = json.loads((SERVICE_ROOT / "opendesign_bundle.json").read_text(encoding="utf-8"))
+        selection = json.loads(
+            (SERVICE_ROOT / "opendesign_release_selection.json").read_text(encoding="utf-8")
+        )
+
+        required = _required_artifacts(self.root / "fresh-data", manifest=manifest)
+
+        self.assertEqual(selection["schema_version"], "2")
+        self.assertEqual(
+            required.rollback_runtime,
+            selection["rollback_runtime_artifact_sha256"],
+        )
+        self.assertIn(selection["rollback_web_overlay_sha256"], required.web_overlays)
+        self.assertNotIn(required.rollback_runtime, required.optional_runtime)
+
+    def test_release_retention_rejects_current_runtime_as_rollback(self) -> None:
+        manifest = json.loads((SERVICE_ROOT / "opendesign_bundle.json").read_text(encoding="utf-8"))
+        current = manifest["artifact"]["assets"]["linux-x86_64"]["sha256"]
+        with patch(
+            "opendesign_artifact_operations._read_selection",
+            return_value={
+                "schema_version": "2",
+                "active_web_overlay_sha256": "a" * 64,
+                "rollback_runtime_artifact_sha256": current,
+                "rollback_web_overlay_sha256": "b" * 64,
+                "quarantine_retention_days": 14,
+            },
+        ):
+            with self.assertRaisesRegex(ArtifactStoreError, "rollback runtime"):
+                _required_artifacts(self.root / "fresh-data", manifest=manifest)
 
     def test_host_owner_is_translated_into_the_current_user_namespace(self) -> None:
         mapping = self.root / "uid_map"

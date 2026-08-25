@@ -54,6 +54,17 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertEqual(evidence["opendesign"]["oci_reference"], "ghcr.io/nexu-io/od:0.16.1")
         bundle = _read_json(SERVICE_ROOT / "opendesign_bundle.json")
         release = _read_json(SERVICE_ROOT / "opendesign_release_selection.json")
+        self.assertEqual(release["schema_version"], "2")
+        self.assertRegex(release["rollback_runtime_artifact_sha256"], r"^[a-f0-9]{64}$")
+        self.assertRegex(release["rollback_web_overlay_sha256"], r"^[a-f0-9]{64}$")
+        self.assertNotEqual(
+            release["rollback_runtime_artifact_sha256"],
+            bundle["artifact"]["assets"]["linux-x86_64"]["sha256"],
+        )
+        self.assertNotEqual(
+            release["rollback_web_overlay_sha256"],
+            release["active_web_overlay_sha256"],
+        )
         self.assertEqual(
             evidence["opendesign"]["runtime_artifact_sha256"],
             bundle["artifact"]["assets"]["linux-x86_64"]["sha256"],

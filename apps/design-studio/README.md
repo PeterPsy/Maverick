@@ -63,7 +63,10 @@ validates only the receipt, store generation, exact control binding,
 ownership/modes, and read-only mount; it does not hash the closure. Full audits
 run on publication, activation, repair, release certification, and background
 maintenance. Active and rollback generations are selected explicitly;
-unreferenced entries are never used as a fallback.
+`opendesign_release_selection.json` schema v2 binds the rollback web overlay
+to its retained runtime digest so a fresh install cannot advertise a partial
+or incompatible rollback pair. Unreferenced entries are never used as a
+fallback.
 
 Each immutable web overlay carries a file-level manifest, archive digest,
 runtime/upstream compatibility, lockfile and toolchain digests, CycloneDX SBOM,

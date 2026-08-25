@@ -16,7 +16,7 @@ from uuid import uuid4
 from core.apps.artifact_mounts import create_artifact_namespace, platform_artifact_store_root
 from core.api.sidecar_control import request_sidecar_control
 from core.shared.repository import discover_repository_root
-from opendesign_artifact import read_bundle_manifest, selected_asset, write_canonical_json
+from opendesign_artifact import is_sha256, read_bundle_manifest, selected_asset, write_canonical_json
 from opendesign_artifact_store import ArtifactStoreError, OpenDesignArtifactStore, StoredArtifact
 from opendesign_bootstrap import bootstrap_empty_generation
 from opendesign_generation_control import load_generation_control_metadata
@@ -35,6 +35,7 @@ ARTIFACT_ID = "opendesign"
 class RequiredArtifacts:
     current_runtime: str
     active_runtime: str
+    rollback_runtime: str
     active_web: str
     optional_runtime: tuple[str, ...]
     web_overlays: tuple[str, ...]
@@ -140,6 +141,27 @@ def _repair(
         runtime_repaired = True
     if runtime.artifact_sha256 != required.current_runtime:
         raise ArtifactStoreError("runtime_binding_invalid", "repair", "Published runtime differs from release selection")
+    retained_runtime: list[str] = [runtime.artifact_sha256]
+    required_runtime = {required.active_runtime, required.rollback_runtime}
+    for digest in _unique((required.active_runtime, required.rollback_runtime, *required.optional_runtime)):
+        if digest == required.current_runtime:
+            continue
+        try:
+            store.fast_runtime(
+                digest,
+                file_manifest_sha256=None,
+                opendesign_version="0.16.1",
+                upstream_commit=None,
+            )
+        except ArtifactStoreError as error:
+            if digest in required_runtime:
+                raise ArtifactStoreError(
+                    "artifact_missing",
+                    "repair",
+                    "A declared active or rollback OpenDesign runtime is not retained in the protected store",
+                ) from error
+            continue
+        retained_runtime.append(digest)
     repaired_web: list[str] = []
     retained_web: list[str] = []
     for digest in required.web_overlays:
@@ -162,26 +184,15 @@ def _repair(
             repair=True,
             invalid_package_identity=web_invalid_identity,
         )
+        if not _fast_web_for_any_runtime(store, digest=digest, required=required):
+            raise ArtifactStoreError(
+                "runtime_binding_invalid",
+                "repair",
+                "A declared OpenDesign web overlay is incompatible with every retained runtime",
+            )
         _clear_invalid_marker(store, kind="web", digest=digest)
         repaired_web.append(digest)
         retained_web.append(digest)
-    for digest in (required.active_runtime, *required.optional_runtime):
-        if digest == required.current_runtime:
-            continue
-        try:
-            store.fast_runtime(
-                digest,
-                file_manifest_sha256=None,
-                opendesign_version="0.16.1",
-                upstream_commit=None,
-            )
-        except ArtifactStoreError:
-            if digest == required.active_runtime:
-                raise ArtifactStoreError(
-                    "artifact_missing",
-                    "repair",
-                    "The active non-current runtime is not retained in the protected store",
-                )
     bootstrapped = _bootstrap_fresh_generation(
         data_root,
         runtime=runtime,
@@ -190,6 +201,7 @@ def _repair(
     return {
         "runtime_artifact_sha256": runtime.artifact_sha256,
         "runtime_repaired": runtime_repaired,
+        "retained_runtime_artifacts": retained_runtime,
         "web_overlay_sha256": required.fresh_web_overlay,
         "repaired_web_overlays": repaired_web,
         "retained_web_overlays": retained_web,
@@ -203,7 +215,14 @@ def _fast_web_for_any_runtime(
     digest: str,
     required: RequiredArtifacts,
 ) -> bool:
-    for runtime_digest in _unique((required.active_runtime, required.current_runtime, *required.optional_runtime)):
+    for runtime_digest in _unique(
+        (
+            required.active_runtime,
+            required.current_runtime,
+            required.rollback_runtime,
+            *required.optional_runtime,
+        )
+    ):
         try:
             store.fast_web_overlay(digest, runtime_artifact_sha256=runtime_digest)
             return True
@@ -214,7 +233,14 @@ def _fast_web_for_any_runtime(
 
 def _status(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> dict[str, Any]:
     runtime_states: dict[str, str] = {}
-    for digest in _unique((required.current_runtime, required.active_runtime, *required.optional_runtime)):
+    for digest in _unique(
+        (
+            required.current_runtime,
+            required.active_runtime,
+            required.rollback_runtime,
+            *required.optional_runtime,
+        )
+    ):
         try:
             store.fast_runtime(digest, file_manifest_sha256=None, opendesign_version="0.16.1", upstream_commit=None)
             runtime_states[digest] = "verified_fast"
@@ -223,7 +249,14 @@ def _status(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> d
     web_states: dict[str, str] = {}
     for digest in required.web_overlays:
         last_error: ArtifactStoreError | None = None
-        for runtime_digest in _unique((required.active_runtime, required.current_runtime, *required.optional_runtime)):
+        for runtime_digest in _unique(
+            (
+                required.active_runtime,
+                required.current_runtime,
+                required.rollback_runtime,
+                *required.optional_runtime,
+            )
+        ):
             try:
                 store.fast_web_overlay(digest, runtime_artifact_sha256=runtime_digest)
                 web_states[digest] = "verified_fast"
@@ -254,12 +287,19 @@ def _verify(
     max_workers: int | None = None,
 ) -> dict[str, Any]:
     audited_runtime: list[str] = []
-    for digest in _unique((required.current_runtime, required.active_runtime, *required.optional_runtime)):
+    for digest in _unique(
+        (
+            required.current_runtime,
+            required.active_runtime,
+            required.rollback_runtime,
+            *required.optional_runtime,
+        )
+    ):
         try:
             store.full_audit("runtime", digest, max_workers=max_workers)
         except ArtifactStoreError:
             _mark_invalid(store, kind="runtime", digest=digest)
-            if digest in {required.current_runtime, required.active_runtime}:
+            if digest in {required.current_runtime, required.active_runtime, required.rollback_runtime}:
                 raise
             continue
         _clear_invalid_marker(store, kind="runtime", digest=digest)
@@ -357,6 +397,13 @@ def _clear_invalid_marker(store: OpenDesignArtifactStore, *, kind: str, digest: 
 def _required_artifacts(data_root: Path, *, manifest: dict[str, Any]) -> RequiredArtifacts:
     current = str(selected_asset(manifest, require_artifact_digest=True)["sha256"])
     release = _read_selection()
+    rollback_runtime = str(release["rollback_runtime_artifact_sha256"])
+    if rollback_runtime == current:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "release_selection",
+            "The declared rollback runtime must differ from the current runtime",
+        )
     active_runtime = current
     active_web = str(release["active_web_overlay_sha256"])
     optional_runtime: list[str] = []
@@ -379,6 +426,7 @@ def _required_artifacts(data_root: Path, *, manifest: dict[str, Any]) -> Require
     return RequiredArtifacts(
         current_runtime=current,
         active_runtime=active_runtime,
+        rollback_runtime=rollback_runtime,
         active_web=active_web,
         optional_runtime=tuple(_unique(optional_runtime)),
         web_overlays=tuple(_unique(web)),
@@ -430,14 +478,41 @@ def _read_selection() -> dict[str, Any]:
         payload = json.loads(SELECTION_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise ArtifactStoreError("runtime_binding_invalid", "release_selection", "Release selection is invalid") from error
-    expected = {"schema_version", "active_web_overlay_sha256", "rollback_web_overlay_sha256", "quarantine_retention_days"}
-    if not isinstance(payload, dict) or set(payload) != expected or payload.get("schema_version") != "1":
+    expected = {
+        "schema_version",
+        "active_web_overlay_sha256",
+        "rollback_runtime_artifact_sha256",
+        "rollback_web_overlay_sha256",
+        "quarantine_retention_days",
+    }
+    if not isinstance(payload, dict) or set(payload) != expected or payload.get("schema_version") != "2":
         raise ArtifactStoreError("runtime_binding_invalid", "release_selection", "Release selection schema is invalid")
+    if any(
+        not is_sha256(payload.get(field))
+        for field in (
+            "active_web_overlay_sha256",
+            "rollback_runtime_artifact_sha256",
+            "rollback_web_overlay_sha256",
+        )
+    ):
+        raise ArtifactStoreError("runtime_binding_invalid", "release_selection", "Release selection digest is invalid")
+    if payload["active_web_overlay_sha256"] == payload["rollback_web_overlay_sha256"]:
+        raise ArtifactStoreError("runtime_binding_invalid", "release_selection", "Release overlays must be distinct")
+    retention = payload["quarantine_retention_days"]
+    if isinstance(retention, bool) or not isinstance(retention, int) or not 1 <= retention <= 365:
+        raise ArtifactStoreError("runtime_binding_invalid", "release_selection", "Release retention is invalid")
     return payload
 
 
 def _garbage_collect(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> dict[str, Any]:
-    keep_runtime = set((required.current_runtime, required.active_runtime, *required.optional_runtime))
+    keep_runtime = set(
+        (
+            required.current_runtime,
+            required.active_runtime,
+            required.rollback_runtime,
+            *required.optional_runtime,
+        )
+    )
     keep_web = set(required.web_overlays)
     marked: list[str] = []
     for kind, keep in (("runtime", keep_runtime), ("web", keep_web)):

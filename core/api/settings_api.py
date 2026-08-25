@@ -25,6 +25,7 @@ from core.authorization.service import (
 from core.recovery.service import execute_session_restart, record_provider_health, record_runtime_health, recovery_status
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.continuation_lineage import runtime_session_lineage
+from core.runtime.remote_agentic_admission import remote_agentic_containment_reason
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.workspaces.errors import WorkspaceMembershipError
 
@@ -104,6 +105,7 @@ def _runtime_session_settings_payload(state: PlatformState, session: RuntimeSess
         workspace_name = state.workspace_store.get_workspace(session.workspace_id).name
     except Exception:
         workspace_name = session.workspace_id
+    containment_reason = remote_agentic_containment_reason(session.execution_binding)
     return {
         "session_id": session.session_id,
         "workspace_id": session.workspace_id,
@@ -120,6 +122,11 @@ def _runtime_session_settings_payload(state: PlatformState, session: RuntimeSess
         "updated_at": session.updated_at,
         "ended_at": session.ended_at,
         "last_progress_at": session.last_progress_at,
+        "recovery_reason_code": session.recovery_reason_code,
+        "agentic_containment": {
+            "status": "NO-GO" if containment_reason else "GO",
+            "reason_code": containment_reason,
+        },
     }
 
 

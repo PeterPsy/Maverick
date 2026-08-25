@@ -49,7 +49,6 @@ export type ChatComposerProps = {
   onSelectAgent: (agentTypeId: string) => void;
   onSelectProvider: (providerId: string, reasoningEffort?: string) => void;
   onReasoningEffortChange?: (effort: string) => void;
-  onSyntheticDataConfirmedChange?: (confirmed: boolean) => void;
   providerSelectorLocked?: boolean;
   onRemoveAttachment: (attachmentId: string) => void;
   onStopTurn: () => void;
@@ -62,8 +61,6 @@ export type ChatComposerProps = {
   sourceAppChatMode?: SourceAppChatMode;
   sourceAppId?: string;
   sourceAppProjectId?: string;
-  syntheticDataConfirmationRequired?: boolean;
-  syntheticDataConfirmed?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
   transcriptionChunkedDictationSupported?: boolean;
@@ -101,7 +98,6 @@ export function ChatComposer({
   onSelectAgent,
   onSelectProvider,
   onReasoningEffortChange = () => undefined,
-  onSyntheticDataConfirmedChange,
   providerSelectorLocked = false,
   onRemoveAttachment,
   onStopTurn,
@@ -114,8 +110,6 @@ export function ChatComposer({
   sourceAppChatMode = "design",
   sourceAppId = "",
   sourceAppProjectId = "",
-  syntheticDataConfirmationRequired = false,
-  syntheticDataConfirmed = false,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
   transcriptionChunkedDictationSupported = false,
@@ -342,9 +336,6 @@ export function ChatComposer({
                     onReasoningEffortChange={onReasoningEffortChange}
                     providers={providers}
                     reasoningEffort={reasoningEffort}
-                    syntheticDataConfirmationRequired={syntheticDataConfirmationRequired}
-                    syntheticDataConfirmed={syntheticDataConfirmed}
-                    onSyntheticDataConfirmedChange={onSyntheticDataConfirmedChange}
                     usage={usage}
                   />
                 </ComposerUtilities>

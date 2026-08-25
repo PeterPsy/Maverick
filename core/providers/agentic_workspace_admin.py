@@ -15,7 +15,6 @@ from core.providers.agentic_models import (
 )
 from core.providers.agentic_profiles import publish_codex_agentic_profile
 from core.providers.agentic_workspace_policy import (
-    REMOTE_PREVIEW_EGRESS_POLICY_ID,
     egress_policy_for_definition,
     workspace_policy_from_patch,
 )
@@ -35,6 +34,7 @@ from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_PROFILES,
     feature_enabled,
 )
+from core.runtime.remote_agentic_admission import require_remote_agentic_session_admission
 
 
 def configure_workspace_agentic_default(
@@ -133,7 +133,6 @@ def configure_workspace_agentic_default(
             default_actor_selection_policy() if source is None else source.actor_policy
         ),
         policy_patch=policy_patch,
-        confirm_fake_data_only_workspace=False,
         observability_store=observability_store,
         now=timestamp,
     )
@@ -156,7 +155,6 @@ def save_workspace_agentic_binding(
     is_default: bool,
     actor_policy: ActorSelectionPolicy,
     policy_patch: dict[str, object],
-    confirm_fake_data_only_workspace: bool,
     binding_id: str | None = None,
     expected_revision: int | None = None,
     observability_store=None,
@@ -206,6 +204,8 @@ def save_workspace_agentic_binding(
         raise AgenticProfileError("workspace_default_profile_must_be_enabled")
     if enabled and not _actor_policy_has_principal(actor_policy):
         raise AgenticProfileError("workspace_profile_actor_policy_empty")
+    if enabled:
+        require_remote_agentic_session_admission(definition)
 
     model_provider = registry.get_provider_definition(definition.model_provider_id)
     normalized_credential_id = str(credential_binding_id or "").strip() or None
@@ -227,9 +227,6 @@ def save_workspace_agentic_binding(
         current_policy=None if existing is None else existing.workspace_policy_ceiling,
     )
     egress_policy_id, egress_policy_revision = egress_policy_for_definition(definition)
-    if egress_policy_id == REMOTE_PREVIEW_EGRESS_POLICY_ID and enabled:
-        if "workspace_internal_fake" not in workspace_policy.allowed_remote_data_classes:
-            raise AgenticProfileError("fake_data_egress_class_required")
     if enabled:
         _require_active_certificate(store, registry, definition)
 

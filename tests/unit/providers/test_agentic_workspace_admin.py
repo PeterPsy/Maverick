@@ -12,7 +12,7 @@ from core.providers.agentic_workspace_admin import (
     save_workspace_agentic_binding,
 )
 from core.providers.agentic_workspace_policy import actor_selection_allowed
-from core.providers.errors import AgenticProfileError, ProviderNotFoundError
+from core.providers.errors import AgenticProfileError
 from core.providers.google_agentic_profile import (
     GOOGLE_AGENTIC_PROFILE_ID,
     GOOGLE_AGENTIC_PROFILE_REVISION,
@@ -38,7 +38,7 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 install_builtin_apps=False,
             )
 
-    def test_remote_model_requires_credential_and_active_certificate_without_extra_consent(self) -> None:
+    def test_remote_model_cannot_be_enabled_by_workspace_input_during_containment(self) -> None:
         credential = bind_provider_credential(
             self.state.provider_store,
             provider_id="google-ai-studio",
@@ -59,7 +59,7 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             "max_estimated_cost_microusd": 100_000,
         }
 
-        with self.assertRaises(ProviderNotFoundError):
+        with self.assertRaisesRegex(AgenticProfileError, "hosted_agent_runtime_disabled"):
             save_workspace_agentic_binding(
                 self.state.provider_store,
                 self.state.provider_registry,
@@ -71,9 +71,17 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 is_default=False,
                 actor_policy=actor_policy,
                 policy_patch=policy_patch,
-                confirm_fake_data_only_workspace=False,
                 now=NOW,
             )
+        self.assertFalse(
+            any(
+                binding.enabled
+                for binding in self.state.provider_store.list_workspace_agentic_profile_bindings(
+                    "default"
+                )
+                if binding.definition_id == GOOGLE_AGENTIC_PROFILE_ID
+            )
+        )
 
     def test_legacy_selection_is_not_written_before_authoritative_publication(self) -> None:
         previous = self.state.provider_store.get_provider_selection("default")
@@ -118,7 +126,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 is_default=False,
                 actor_policy=ActorSelectionPolicy(True, (), ("member",), ()),
                 policy_patch={"max_output_tokens": profile.policy_ceiling.max_output_tokens + 1},
-                confirm_fake_data_only_workspace=False,
                 now=NOW,
             )
 
@@ -140,7 +147,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 "tool_access_enabled": False,
                 "allowed_remote_data_classes": [],
             },
-            confirm_fake_data_only_workspace=False,
             now=NOW,
         )
 
@@ -157,7 +163,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             is_default=False,
             actor_policy=actor_policy,
             policy_patch={"max_estimated_cost_microusd": 25_000},
-            confirm_fake_data_only_workspace=False,
             now=NOW,
         )
 
@@ -178,7 +183,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             is_default=False,
             actor_policy=ActorSelectionPolicy(False, (), ("member",), ("safe-agent",)),
             policy_patch={"tool_access_enabled": False},
-            confirm_fake_data_only_workspace=False,
             now=NOW,
         )
         self.assertFalse(
@@ -214,7 +218,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             is_default=False,
             actor_policy=actor_policy,
             policy_patch={"tool_access_enabled": False},
-            confirm_fake_data_only_workspace=False,
             now=NOW,
         )
         self.assertEqual(created.workspace_id, "workspace-a")
@@ -235,7 +238,6 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
                 is_default=False,
                 actor_policy=actor_policy,
                 policy_patch={"tool_access_enabled": False},
-                confirm_fake_data_only_workspace=False,
                 now=NOW,
             )
 

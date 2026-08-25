@@ -27,7 +27,22 @@ from tests.support.repo import make_temp_repo_root
 
 
 class AgenticTurnSubmissionTest(unittest.TestCase):
-    def test_common_lifecycle_executes_non_process_adapter_without_launch_spec(self) -> None:
+    @patch(
+        "core.runtime.provider_start_handoff.require_remote_agentic_dispatch",
+        return_value=None,
+    )
+    @patch(
+        "core.runtime.turn_queue_admission.remote_agentic_containment_reason",
+        return_value=None,
+    )
+    @patch(
+        "core.runtime.lifecycle_service_sessions.require_remote_agentic_session_admission",
+        return_value=None,
+    )
+    def test_common_lifecycle_executes_non_process_adapter_without_launch_spec(
+        self,
+        *_containment_guards,
+    ) -> None:
         repo_root = make_temp_repo_root(self)
         runtime_store = RuntimeDocumentStore(
             RuntimeCollections(

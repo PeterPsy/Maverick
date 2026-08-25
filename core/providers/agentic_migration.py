@@ -303,7 +303,6 @@ def _roll_forward_enabled_codex_bindings(
                     "require_confirmation_for_mutating": policy.require_confirmation_for_mutating,
                     "require_confirmation_for_destructive": policy.require_confirmation_for_destructive,
                 },
-                confirm_fake_data_only_workspace=False,
                 binding_id=binding_id,
                 expected_revision=(
                     None if existing is None else existing.revision

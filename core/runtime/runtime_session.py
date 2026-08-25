@@ -12,7 +12,14 @@ from core.providers.agentic_models import RuntimeDataClass
 from core.runtime.execution_binding import RuntimeExecutionBinding, execution_binding_from_document
 
 
-RuntimeSessionStatus = Literal["created", "running", "stopping", "stopped", "failed"]
+RuntimeSessionStatus = Literal[
+    "created",
+    "running",
+    "stopping",
+    "stopped",
+    "failed",
+    "recovery_required",
+]
 RuntimeSessionPreparationStatus = Literal["unprepared", "prepared"]
 RuntimeApiTokenStatus = Literal["active", "revoked"]
 RuntimeSessionGrantOperation = Literal[
@@ -94,6 +101,7 @@ class RuntimeSessionRecord:
     hosted_provider_id: str | None = None
     hosted_model_id: str | None = None
     declared_remote_data_class: RuntimeDataClass | None = None
+    recovery_reason_code: str | None = None
     prepared_session_fingerprint: str | None = None
 
 
@@ -186,6 +194,7 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     # Records written before the preparation barrier was introduced were only
     # returned after all initial state writes completed, so they are prepared.
     payload.setdefault("preparation_status", "prepared")
+    payload.setdefault("recovery_reason_code", None)
     payload.setdefault("prepared_session_fingerprint", None)
     session_kind, thread_visibility = normalize_runtime_session_visibility(
         payload.get("session_kind"),

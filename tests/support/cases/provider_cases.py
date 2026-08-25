@@ -1380,14 +1380,19 @@ class ProvidersTestCase(unittest.TestCase):
             egress_policy_revision="1",
             created_at=datetime.now(tz=UTC),
         )
-        session = create_runtime_session(
-            runtime_store,
-            session_id="sess-credentialed",
-            workspace_id="default",
-            agent_id="agent-1",
-            start_path=repo_root,
-            execution_binding=execution_binding,
-        )
+        # Isolate legacy local launch-spec secret delivery from the authoritative
+        # Phase-0 remote admission barrier exercised in dedicated tests.
+        with patch(
+            "core.runtime.lifecycle_service_sessions.require_remote_agentic_session_admission"
+        ):
+            session = create_runtime_session(
+                runtime_store,
+                session_id="sess-credentialed",
+                workspace_id="default",
+                agent_id="agent-1",
+                start_path=repo_root,
+                execution_binding=execution_binding,
+            )
 
         spec = build_runtime_backend_launch_spec(
             provider_store,

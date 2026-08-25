@@ -90,9 +90,6 @@ type UseChatControllerPresentationParams = {
   sourceAppChatMode: SourceAppChatMode;
   sourceAppId: string;
   sourceAppProjectId: string;
-  syntheticDataConfirmationRequired: boolean;
-  syntheticDataConfirmed: boolean;
-  setSyntheticDataConfirmed: (confirmed: boolean) => void;
   setSourceAppChatMode: (mode: SourceAppChatMode) => void;
   setMultiAgentMode: (mode: MultiAgentComposerMode) => void;
   setComposer: (value: string) => void;
@@ -171,9 +168,6 @@ export function useChatControllerPresentation({
   sourceAppChatMode,
   sourceAppId,
   sourceAppProjectId,
-  syntheticDataConfirmationRequired,
-  syntheticDataConfirmed,
-  setSyntheticDataConfirmed,
   setSourceAppChatMode,
   setMultiAgentMode,
   setComposer,
@@ -266,9 +260,6 @@ export function useChatControllerPresentation({
       providers,
       reasoningEffort,
       providerSelectorLocked,
-      syntheticDataConfirmationRequired,
-      syntheticDataConfirmed,
-      onSyntheticDataConfirmedChange: setSyntheticDataConfirmed,
       queuedCount: queuedMessages.length,
       queuedPreview: queuedMessages[0]?.content || null,
       selectedAgentTypeId: composerSelectedAgentTypeId,

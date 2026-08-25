@@ -51,6 +51,8 @@ function agenticProfile(
     rollout_status: rolloutStatus,
     enabled: true,
     is_default: false,
+    selectable: true,
+    containment_status: "GO",
     certified: true,
     certificate: { effective_status: "active" },
     default_reasoning_effort: "high",
@@ -59,7 +61,7 @@ function agenticProfile(
 }
 
 describe("remote agentic provider runtime options", () => {
-  it("makes certified previews selectable while excluding suspended profiles", () => {
+  it("uses the server selectable projection while excluding suspended profiles", () => {
     const modelId = "gemini-3.6-flash";
     const preview = agenticProfile("google-ai-studio", modelId, "preview");
     const suspended = agenticProfile("google-ai-studio", modelId, "suspended");
@@ -78,6 +80,22 @@ describe("remote agentic provider runtime options", () => {
 
     expect(providers.filter((provider) => provider.workspace_profile_binding_id)).toHaveLength(1);
     expect(providers[0]?.workspace_profile_binding_id).toBe(preview.workspace_profile_binding_id);
+  });
+
+  it("does not offer a contained remote profile even when legacy fields look active", () => {
+    const contained = agenticProfile("google-ai-studio", "gemini-3.6-flash", "preview");
+    contained.selectable = false;
+    contained.containment_status = "NO-GO";
+    contained.containment_reason = "hosted_agent_runtime_disabled";
+
+    const providers = providerItemsFromPayload({
+      workspace_id: "default",
+      active_provider: null,
+      available_providers: [],
+      agentic_profiles: { default_binding_id: null, items: [contained] },
+    });
+
+    expect(providers.some((provider) => provider.workspace_profile_binding_id === contained.workspace_profile_binding_id)).toBe(false);
   });
 
   it("fails closed for missing certification or a non-active certificate", () => {

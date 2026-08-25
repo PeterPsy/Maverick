@@ -18,19 +18,25 @@ MAVERICK_FEATURE_PARALLEL_TOOL_CALLS = "MAVERICK_FEATURE_PARALLEL_TOOL_CALLS"
 
 _DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
 _ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})
+_DEFAULTS = {
+    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: False,
+    MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: False,
+    MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW: False,
+    MAVERICK_FEATURE_PARALLEL_TOOL_CALLS: False,
+}
 
 
 def feature_enabled(
     name: str,
     *,
-    default: bool = True,
+    default: bool | None = None,
     environment: Mapping[str, str] | None = None,
 ) -> bool:
     """Resolve a strict boolean flag; any malformed configured value disables it."""
     source = os.environ if environment is None else environment
     raw = source.get(name)
     if raw is None or not str(raw).strip():
-        return default
+        return _DEFAULTS.get(name, True) if default is None else default
     normalized = str(raw).strip().lower()
     if normalized in _ENABLED_VALUES:
         return True

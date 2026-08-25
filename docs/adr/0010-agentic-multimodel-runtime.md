@@ -4,6 +4,11 @@
 
 Accepted on 2026-08-16 as the ADR-0 gate for the agentic multimodel runtime.
 
+Phase-0 containment amendment accepted on 2026-08-25: remote agentic execution
+is **NO-GO** until the revision-bound server attestation designed in Phase 1
+exists. This amendment supersedes earlier preview-enablement language below;
+Codex agentic and plain hosted text are not contained.
+
 This decision authorizes implementation in the order described below. It does
 not authorize production use or remote-provider processing of real workspace
 data.
@@ -30,6 +35,34 @@ artifact `storage/generated/specs/maverick-agentic-multimodel-development-spec-2
 `02bd09144de71d69d5888d5f68c57c285dbaf4848955e6f1ccbcdbab917597ce`).
 
 ## Decision
+
+### 0. Remote agentic execution is contained before further parity work
+
+Hosted agentic, Google agentic, and OpenRouter agentic switches default off.
+Only the exact local Codex app-server identity is treated as local; every other
+agentic provider identity, including an unknown future hosted provider, fails
+closed. Even when all process flags are explicitly enabled, the Phase-0
+attestation barrier rejects remote session creation and provider dispatch until
+Phase 1 replaces that hard barrier with a revision-bound server proof. Client
+data declarations, browser consent, and the legacy
+`workspace_internal_fake` value cannot authorize a session.
+
+Admission rejects a new remote execution binding before the session aggregate,
+provider state, turn, thread, or other runtime record is persisted. Existing
+pinned remote sessions are rejected again at queue admission and provider-start
+handoff. Ambiguous persisted sessions transition idempotently to
+`recovery_required`, expose only a redaction-safe reason, and cannot accept a
+new turn; this is quarantine support, not the Phase-2 recovery engine.
+
+The operator containment service inventories all stores through their JSON or
+Mongo abstraction, plans or applies revision-CAS transitions, disables remote
+workspace bindings, suspends remote profile revisions, revokes current remote
+suite-v8 certificates, and quarantines ambiguous sessions. Dry-run is
+non-mutating and emits identities, revisions, counts, per-target digests, and a
+whole-plan digest without credential or private provider data. Apply requires
+the reviewed plan digest and is idempotent. Phase 0 is implementation-ready and
+dry-run-verifiable, but the operational gate remains
+`live_apply_pending_review` until apply and post-apply verification occur.
 
 ### 1. Definitions and workspace bindings are separate
 
@@ -209,9 +242,10 @@ domain-separated HMAC digests; they do not include source or transformed
 content.
 
 Unknown classification, provenance, trust, destination, or policy fails closed.
-The initial preview permits only public or explicitly fake internal data.
-Secrets, bearer authority, host operational metadata, and unclassified content
-are never remotely exportable.
+The legacy preview policy described public and explicitly fake internal data,
+but Phase-0 containment authorizes neither class for remote agentic execution.
+Secrets, bearer authority, host operational metadata, unclassified content,
+and client-supplied classification are never remotely exportable.
 
 OpenRouter agentic routing pins certified upstreams, disables fallback, requires
 parameters, denies data collection, and enforces ZDR when the egress policy
@@ -343,8 +377,8 @@ credential, owner, grant, tool authority, private locator, or policy fields.
 Until the open runtime bearer authority, CSRF, app WebSocket, frontend/backend
 isolation, and recovery-policy blockers in `SECURITY.md` are closed:
 
-- real remote-provider data is disabled by default;
-- remote agentic profiles are preview-only and fake-data-only;
+- every remote agentic profile is contained and non-selectable (NO-GO);
+- no browser consent or fake-data declaration can activate remote agentic work;
 - certificate evidence proves adapter behavior, not platform production safety;
 - UI and API status must expose the preview limitation;
 - no certificate or feature flag may claim production readiness.
@@ -360,17 +394,18 @@ to provide live narrowing for already-pinned sessions.
 |---|---|---|
 | Profile definitions and workspace bindings | `MAVERICK_FEATURE_AGENTIC_PROFILES` | enabled |
 | Agentic adapter contract | `MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT` | enabled |
-| Hosted agent runtime | `MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME` | enabled |
+| Hosted agent runtime | `MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME` | **disabled** |
 | Tool confirmation and resume | `MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION` | enabled |
 | Provider-private state | `MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE` | enabled |
 | Egress enforcement | `MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT` | enabled |
-| Google agentic preview | `MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW` | enabled |
-| OpenRouter agentic preview | `MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW` | enabled |
+| Google agentic preview | `MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW` | **disabled** |
+| OpenRouter agentic preview | `MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW` | **disabled** |
 | Parallel tool calls | `MAVERICK_FEATURE_PARALLEL_TOOL_CALLS` | disabled |
 
-Values `0`, `false`, `no`, and `off` disable a released surface. Values `1`,
-`true`, `yes`, and `on` enable it. An absent or invalid value preserves the
-declared default. Disabling egress enforcement blocks hosted export rather than
+Values `0`, `false`, `no`, and `off` disable a surface. Values `1`, `true`,
+`yes`, and `on` enable its switch. An absent value uses the declared default;
+an invalid configured value fails closed. Remote flags do not bypass the
+independent Phase-0 attestation barrier. Disabling egress enforcement blocks hosted export rather than
 bypassing evaluation. Enabling the parallel-tool-call switch does not override
 the MVP's sequential policy ceilings or codec rejection; it only reserves an
 independent rollout control for a future implementation.
@@ -416,5 +451,6 @@ remote profile beyond fake-data preview.
   retries, and recovery.
 - Control-plane and runtime stores gain real CAS semantics shared by JSON,
   MongoDB, and tests.
-- Remote-provider preview remains intentionally narrower than local Codex until
-  platform security blockers close.
+- Remote agentic execution remains NO-GO while local Codex and plain hosted
+  text retain their existing behavior; reopening requires the later attestation
+  and recovery gates, not a browser declaration or a flag alone.

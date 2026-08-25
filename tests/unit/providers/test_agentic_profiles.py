@@ -258,6 +258,10 @@ class AgenticProfilesTest(unittest.TestCase):
                 "core.providers.agentic_profiles.build_runtime_execution_binding",
                 return_value=expected,
             ) as build_binding,
+            patch(
+                "core.providers.agentic_profiles.require_remote_agentic_session_admission",
+                return_value=None,
+            ),
             patch("core.providers.agentic_profiles.validate_certificate_for_binding"),
         ):
             resolved = build_pinned_execution_binding(

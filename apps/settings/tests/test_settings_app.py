@@ -244,6 +244,7 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         settings_source = (app_root / "frontend" / "src" / "settingsPanel.ts").read_text(encoding="utf-8")
         styles_source = (app_root / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
         api_source = (app_root / "frontend" / "src" / "adminApi.ts").read_text(encoding="utf-8")
+        agentic_binding_source = (app_root / "frontend" / "src" / "agenticBindingController.ts").read_text(encoding="utf-8")
 
         self.assertIn("settingsPanelHtml(platformSettings, settingsPanelState)", main_source)
         self.assertIn("Platform settings", settings_source)
@@ -281,6 +282,8 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("/api/settings/runtime-sessions", api_source)
         self.assertIn("/api/settings/runtime-sessions/clear", api_source)
         self.assertIn("/api/usage/timeseries", api_source)
+        self.assertNotIn("confirm_fake_data_only_workspace", agentic_binding_source)
+        self.assertNotIn("'workspace_internal_fake'", agentic_binding_source)
 
     def test_settings_panel_renders_openrouter_hosted_models_separately_from_codex(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -649,6 +652,98 @@ assert.ok(html.includes('Require zero data retention'));
 assert.ok(html.includes('data-hosted-model-id="nvidia/nemotron-3-ultra-550b-a55b:free"'));
 assert.ok(html.includes('Nvidia'));
 assert.ok(html.includes('runtime engine remains Codex'));
+
+settings.agentic_admin = {
+  workspace_id: 'default',
+  release_decision: 'NO-GO',
+  items: [{
+    definition_id: 'google-agentic-gemini-3-5-pro-preview',
+    definition_revision: '8',
+    display_name: 'Google agentic Gemini 3.5 Pro',
+    runtime_engine_id: 'maverick-tool-loop',
+    model_provider_id: 'google-ai-studio',
+    model_id: 'gemini-3.5-pro',
+    provider_protocol: 'google-interactions-sse',
+    provider_api_version: 'v1beta',
+    adapter_id: 'google-interactions-agentic',
+    adapter_version_constraint: '==8',
+    routing_constraint: {
+      endpoint_id: 'google-ai-studio',
+      allowed_upstream_ids: ['google-ai-studio'],
+      allow_fallbacks: false,
+      require_parameters: true,
+      data_collection_policy: 'deny',
+      require_zdr: true,
+      allowed_quantizations: []
+    },
+    upstream_provider_ids: ['google-ai-studio'],
+    profile_policy_ceiling: {
+      allowed_remote_data_classes: ['public', 'workspace_internal_fake'],
+      allowed_tool_handles: [],
+      tool_handle_mode: 'none',
+      max_estimated_cost_microusd: 100000,
+      require_confirmation_for_mutating: true,
+      require_confirmation_for_destructive: true
+    },
+    rollout_status: 'suspended',
+    profile_status: 'suspended',
+    certificate: { effective_status: 'revoked', expires_at: '2026-09-01T00:00:00Z' },
+    certificate_eligibility: 'ineligible',
+    credential_bindings: [],
+    binding: {
+      binding_id: 'binding-google-contained',
+      revision: 2,
+      credential_binding_id: null,
+      enabled: false,
+      is_default: false,
+      actor_policy: {
+        allow_workspace_admins: true,
+        allowed_user_ids: [],
+        allowed_workspace_role_ids: ['member'],
+        allowed_agent_type_ids: []
+      },
+      workspace_policy_ceiling: {
+        allowed_remote_data_classes: [],
+        allowed_tool_handles: [],
+        tool_handle_mode: 'none',
+        max_estimated_cost_microusd: 100000,
+        require_confirmation_for_mutating: true,
+        require_confirmation_for_destructive: true
+      },
+      egress_policy_id: 'fake-data-remote-preview',
+      egress_policy_revision: '1',
+      created_at: '2026-08-01T00:00:00Z',
+      updated_at: '2026-08-25T00:00:00Z'
+    },
+    binding_status: 'disabled',
+    health: 'blocked',
+    blocked_reason: 'hosted_agent_runtime_disabled',
+    containment_status: 'NO-GO',
+    containment_reason: 'hosted_agent_runtime_disabled'
+  }]
+};
+settings.runtime.all_sessions = [{
+  session_id: 'session-quarantined',
+  workspace_id: 'default',
+  workspace_name: 'Default',
+  agent_id: 'chat',
+  status: 'recovery_required',
+  effective_mode: 'sandbox',
+  last_progress_at: null,
+  recovery_reason_code: 'remote_agentic_state_ambiguous',
+  agentic_containment: { status: 'NO-GO', reason_code: 'hosted_agent_runtime_disabled' }
+}];
+const containmentHtml = settingsPanelHtml(settings, state);
+for (const expected of [
+  'Remote agentic release: NO-GO',
+  'Provider google-ai-studio · upstream google-ai-studio',
+  'Binding Disabled · Profile Suspended · Certificate Revoked / Ineligible',
+  'Google agentic Gemini 3.5 Pro',
+  'Quarantined: Remote Agentic State Ambiguous',
+  'Pinned remote profile contained (NO-GO): Hosted Agent Runtime Disabled'
+]) {
+  assert.ok(containmentHtml.includes(expected), `missing containment projection: ${expected}`);
+}
 
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'mode', 'only');
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'provider_id', 'open-inference');

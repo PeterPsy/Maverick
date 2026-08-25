@@ -41,8 +41,12 @@ def terminate_runtime_session(
             if terminalization.turn.status == "cancelled" and terminalization.claimed:
                 cancelled_turns += 1
 
-    if session.status in {"created", "running", "stopping"}:
-        target_status = "stopped" if session.status in {"created", "stopping"} else "stopping"
+    if session.status in {"created", "running", "stopping", "recovery_required"}:
+        target_status = (
+            "stopped"
+            if session.status in {"created", "stopping", "recovery_required"}
+            else "stopping"
+        )
         try:
             session = transition_runtime_session(
                 store,

@@ -59,9 +59,6 @@ export function genericAgenticRuntimeConfig(
     runtime_mode: "agentic",
     workspace_profile_binding_id: provider.workspace_profile_binding_id,
     reasoning_effort: reasoningEffort || undefined,
-    declared_remote_data_class: provider.requires_synthetic_data_declaration
-      ? "workspace_internal_fake"
-      : undefined,
   };
 }
 
@@ -129,7 +126,6 @@ export function useChatRuntimeControls({
   setSelectedAgentTypeId,
   setComposerError,
 }: UseChatRuntimeControlsParams) {
-  const [syntheticDataConfirmed, setSyntheticDataConfirmed] = useState(false);
   const activeProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
   const [reasoningEffort, setReasoningEffort] = useState("");
   const pendingReasoningEffortRef = useRef("");
@@ -139,14 +135,12 @@ export function useChatRuntimeControls({
   const pinnedReasoningEffort = activeThread
     ? activeSession?.execution_binding?.reasoning_effort || ""
     : "";
-  const syntheticDataConfirmationRequired = activeProvider?.requires_synthetic_data_declaration === true;
 
   useEffect(() => {
     preloadAgentRuntimeConfig(workspaceId, agentCatalogAppId, selectedAgentTypeId);
   }, [agentCatalogAppId, selectedAgentTypeId, workspaceId]);
 
   useEffect(() => {
-    setSyntheticDataConfirmed(false);
     if (activeThread) {
       if (pinnedReasoningEffort) setReasoningEffort(pinnedReasoningEffort);
       return;
@@ -163,7 +157,6 @@ export function useChatRuntimeControls({
     pendingReasoningEffortRef.current = selectedReasoningEffort;
     if (selectedReasoningEffort) setReasoningEffort(selectedReasoningEffort);
     setActiveProviderId(providerId);
-    setSyntheticDataConfirmed(false);
     const provider = providers.find((item) => item.provider_id === providerId) || null;
     if (providerUsesPlainHostedRuntime(provider) || provider?.provider_role === "runtime_engine") {
       setError(null);
@@ -193,9 +186,6 @@ export function useChatRuntimeControls({
     if (hostedConfig) {
       return hostedConfig;
     }
-    if (selectedProvider?.requires_synthetic_data_declaration && !syntheticDataConfirmed) {
-      throw new Error("Confirm that this new preview chat contains synthetic data only.");
-    }
     const genericConfig = genericAgenticRuntimeConfig(selectedProvider, reasoningEffort);
     if (!selectedAgentTypeId || !agentCatalogAppId || !workspaceId) {
       return genericConfig;
@@ -214,9 +204,6 @@ export function useChatRuntimeControls({
       runtime_mode: "agentic",
       workspace_profile_binding_id: selectedProvider?.workspace_profile_binding_id,
       reasoning_effort: reasoningEffort || undefined,
-      declared_remote_data_class: selectedProvider?.requires_synthetic_data_declaration
-        ? "workspace_internal_fake"
-        : undefined,
     };
   }
 
@@ -243,8 +230,5 @@ export function useChatRuntimeControls({
     selectedAgentRuntimeConfig,
     reasoningEffort,
     setReasoningEffort,
-    setSyntheticDataConfirmed,
-    syntheticDataConfirmationRequired,
-    syntheticDataConfirmed,
   };
 }

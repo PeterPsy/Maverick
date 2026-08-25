@@ -1,10 +1,10 @@
 # Agentic provider preview operations
 
-Status date: 2026-08-17
+Status date: 2026-08-25
 
 Scope: operator runbook
 
-Production status: **not approved; public and synthetic data only**
+Production status: **NO-GO; all remote agentic execution contained**
 
 This runbook governs the Google Gemini and fixed-upstream OpenRouter agentic
 profiles. A capability certificate proves one exact implementation and provider
@@ -15,10 +15,45 @@ Certificate evidence must be produced and published through
 `docs/runbooks/agentic_certification_evidence.md` before this activation
 runbook begins. This runbook never manufactures or repairs a certificate.
 
+## Phase-0 containment procedure
+
+Do not run a live Google/OpenRouter probe, certification live step, provider
+HTTP request, or containment apply while reviewing the implementation. Obtain a
+redaction-safe real-store plan through the operator-only Core CLI:
+
+```bash
+maverick core cli run core.providers.agentic.containment.dry-run --operator --json
+```
+
+The report must state `implementation_ready`, `dry_run_verified`, and
+`live_apply_pending_review`; review every binding/profile/certificate/session
+identity, current revision/status, target status, target digest, count, and the
+whole `plan_digest`. It must contain no credential binding id, secret, request
+body, tool arguments/results, private envelope locator, or provider payload.
+
+Only after independent review may the orchestrator apply that exact plan:
+
+```bash
+maverick core cli run core.providers.agentic.containment.apply \
+  --operator \
+  --confirmation phase-0-reviewed \
+  --plan-digest <REVIEWED_PLAN_DIGEST> \
+  --json
+```
+
+A changed plan digest or CAS conflict requires a fresh dry-run and review; never
+retry by dropping the digest. Re-run dry-run after apply and require zero
+remaining enabled/default remote bindings, selectable remote profiles, eligible
+current remote suite-v8 certificates, or ambiguous unquarantined sessions.
+Codex state and hosted text selection must be unchanged. Preserve the audit
+digest and counts. Until apply plus that verification completes, the Phase-0
+operational exit gate remains open.
+
 ## Invariants
 
-- Remote profiles remain `preview`, unbound by default, and restricted to
-  `public` and `workspace_internal_fake` data.
+- Remote profiles are non-selectable NO-GO records. Legacy `public` or
+  `workspace_internal_fake` policy values and browser consent grant no remote
+  agentic authority.
 - Every session pins definition revision, engine, adapter, model, protocol,
   endpoint/upstream, credential binding, certificate evidence, egress policy,
   and policy ceilings once. Existing bindings are never rewritten in place.
@@ -34,7 +69,10 @@ runbook begins. This runbook never manufactures or repairs a certificate.
 - Provider-private bytes and tool payloads remain encrypted Core state. Never
   copy them into tickets, logs, prompts, analytics, or ordinary exports.
 
-## Pre-activation gate
+## Future pre-activation gate (suspended until Phase 1+)
+
+This section is retained as future work and must not be executed during Phase
+0. Feature flags alone cannot reopen remote agentic admission.
 
 An operator must verify all of the following before enabling a workspace
 binding:
@@ -48,8 +86,8 @@ binding:
    deployed code and dated provider catalog.
 3. A provider credential is delivered by a Core credential binding. No raw key
    is present in a workspace record, environment file, request body, or log.
-4. The workspace contains only public or explicitly synthetic fixtures and the
-   administrator explicitly confirms the fake-data-only restriction.
+4. A revision-bound, server-verifiable attestation defined by the later phase
+   proves the allowed data classification; no client declaration is accepted.
 5. The workspace policy is at least as restrictive as the profile: read-only
    Core filesystem capability, bounded steps/tokens/cost, no shell or writes,
    and confirmation retained for mutating/destructive classes.
@@ -66,11 +104,10 @@ Use Settings as the normal control surface. Its agentic panel reads:
 - `GET /api/providers/agentic/certificates`
 - `GET /api/providers/agentic/workspace-bindings`
 
-Enabling or changing a binding goes through
-`POST /api/providers/agentic/workspace-bindings` with the current expected
-revision, restrictive policy patch, actor policy, credential binding id, and
-`confirm_fake_data_only_workspace: true`. A revision conflict requires a fresh
-read and operator review; never overwrite it blindly.
+During Phase 0, `POST /api/providers/agentic/workspace-bindings` may disable a
+remote binding but cannot enable one. No fake-data confirmation field exists.
+A revision conflict requires a fresh read and operator review; never overwrite
+it blindly.
 
 ## Canary and observation
 
@@ -121,22 +158,20 @@ secret again; cancel its transport and follow incident handling.
 Rollback is a control-plane narrowing operation first and a code deployment
 operation second:
 
-1. Disable the affected workspace binding with its current expected revision.
-   This stops new sessions and live-narrows existing ones.
-2. Revoke the exact capability certificate with status revision CAS when the
-   artifact, evidence, provider behavior, routing, or privacy claim is in doubt.
-3. Suspend the affected immutable profile revision. Do not mutate its model,
-   routing constraint, certificate id, or policy ceiling.
-4. Cancel active remote turns. Mark ambiguous tool executions for manual
-   reconciliation; do not replay them.
-5. Confirm Settings reports no enabled/default affected binding and that new
+1. Run and review the store-backed containment dry-run above.
+2. Apply its exact digest so binding disablement, profile suspension,
+   certificate revocation, and ambiguous-session quarantine use CAS and one
+   auditable plan.
+3. Cancel active remote transports. Preserve `execution_unknown` and
+   `recovery_required`; do not replay or manufacture a committed outcome.
+4. Confirm Settings reports no enabled/default affected binding and that new
    remote session creation fails closed.
-6. Preserve redaction-safe audit, usage, egress decisions, request ids, binding
+5. Preserve redaction-safe audit, usage, egress decisions, request ids, binding
    digests, and certificate status. Preserve encrypted private/tool state under
    the normal retention policy until ambiguity is resolved.
-7. Revert or redeploy code only after authority is narrowed. Startup may publish
+6. Revert or redeploy code only after authority is narrowed. Startup may publish
    a new immutable revision, but must not reactivate a suspended old revision.
-8. If local Codex is the approved fallback, select it only for newly created
+7. If local Codex is the approved fallback, select it only for newly created
    sessions. Never migrate a pinned remote session to another engine, model, or
    upstream.
 

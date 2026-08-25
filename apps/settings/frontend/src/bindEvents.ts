@@ -16,7 +16,7 @@ export function bindSettingsEvents(context: {
   saveAgenticBindingFromPanel: (
     definitionId: string,
     definitionRevision: string,
-    options?: { enabled?: boolean; confirmFakeDataOnlyWorkspace?: boolean }
+    options?: { enabled?: boolean }
   ) => Promise<void>;
   onProviderModelChanged: (modelId: string) => void;
   refreshProviderUsageFromPanel: () => Promise<void>;

@@ -146,6 +146,9 @@ class ProviderStore(Protocol):
     def list_workspace_agentic_profile_bindings(self, workspace_id: str) -> list[WorkspaceAgenticProfileBinding]:
         ...
 
+    def list_all_workspace_agentic_profile_bindings(self) -> list[WorkspaceAgenticProfileBinding]:
+        ...
+
     def save_agentic_migration(self, record: AgenticMigrationRecord) -> AgenticMigrationRecord:
         ...
 
@@ -421,6 +424,13 @@ class ProviderDocumentStore:
         return [
             _workspace_agentic_profile_binding(item)
             for item in self._workspace_agentic_profile_bindings.find({"workspace_id": workspace_id})
+        ]
+
+    def list_all_workspace_agentic_profile_bindings(self) -> list[WorkspaceAgenticProfileBinding]:
+        """List every workspace binding through the configured document adapter."""
+        return [
+            _workspace_agentic_profile_binding(item)
+            for item in self._workspace_agentic_profile_bindings.find({})
         ]
 
     def save_agentic_migration(self, record: AgenticMigrationRecord) -> AgenticMigrationRecord:

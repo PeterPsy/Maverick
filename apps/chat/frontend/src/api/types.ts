@@ -17,7 +17,8 @@ export type ProviderItem = {
   agentic_egress_policy_id?: string | null;
   agentic_allowed_tool_handles?: string[];
   agentic_max_estimated_cost_microusd?: number | null;
-  requires_synthetic_data_declaration?: boolean;
+  agentic_containment_status?: "GO" | "NO-GO";
+  agentic_containment_reason?: string | null;
   default_reasoning_effort?: string | null;
   supported_reasoning_efforts?: ProviderReasoningOption[];
   input_modalities?: string[];
@@ -100,6 +101,10 @@ export type AgenticProfileItem = {
   rollout_status: string | null;
   enabled: boolean;
   is_default: boolean;
+  selectable?: boolean;
+  containment_status?: "GO" | "NO-GO";
+  containment_reason?: string | null;
+  certificate_eligibility?: string;
   certified?: boolean;
   provider_protocol?: string;
   provider_api_version?: string | null;
@@ -108,7 +113,6 @@ export type AgenticProfileItem = {
   egress_policy_id?: string;
   allowed_tool_handles?: string[];
   max_estimated_cost_microusd?: number | null;
-  requires_synthetic_data_declaration?: boolean;
   certificate?: {
     effective_status?: string;
     expires_at?: string;
@@ -159,7 +163,7 @@ export type AgentTypeSummary = {
 
 export type AgentCatalogPayload = {
   workspace_id?: string;
-  agent_types?: AgentTypeSummary[];
+  agent_types: AgentTypeSummary[];
 };
 
 export type AgentDefinition = AgentTypeSummary & {
@@ -409,6 +413,11 @@ export type RuntimeSession = {
   runtime_ready?: boolean;
   prewarm_total_ms?: number;
   declared_remote_data_class?: string | null;
+  recovery_reason_code?: string | null;
+  agentic_containment?: {
+    status: "GO" | "NO-GO";
+    reason_code: string | null;
+  } | null;
   predecessor_session_id?: string | null;
   lineage_root_session_id?: string | null;
   continuation_successor_session_id?: string | null;
@@ -928,7 +937,6 @@ export type RuntimeSessionOptions = {
   hosted_model_id?: string;
   workspace_profile_binding_id?: string;
   reasoning_effort?: string;
-  declared_remote_data_class?: "workspace_internal_fake" | "public";
   prepare_only?: boolean;
   title?: string;
 };

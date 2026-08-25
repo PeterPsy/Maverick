@@ -1,8 +1,8 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-08-18
+Status date: 2026-08-25
 
-Target: internal preview with synthetic data; not production approval
+Target: Phase-0 remote containment; remote agentic release is NO-GO
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
 2.1 (2026-08-16), and ADR 0010.
@@ -10,7 +10,33 @@ Normative source: Maverick Agentic Multimodel Runtime specification, revision
 This tasklist records implementation state without treating code presence as
 certification evidence. A checked implementation item still requires its phase
 gate and relevant tests. Remote providers remain candidate preview profiles
-until an executed, signed suite and live synthetic probe produce a certificate.
+until the later attestation, recovery, certification, and operational gates are
+reviewed. A legacy certificate or client declaration is not authorization.
+
+## Phase 0 — containment status
+
+- [x] Hosted, Google, and OpenRouter agentic switches default off; unknown
+  hosted agentic identities fail closed while Codex and plain hosted text keep
+  their prior paths.
+- [x] New remote sessions fail before persistence, pinned remote sessions fail
+  again before dispatch, and client/browser fake-data declarations cannot
+  authorize either path.
+- [x] Store-backed dry-run/apply containment plans binding disablement, profile
+  suspension, suite-v8 certificate revocation/ineligibility, and ambiguous
+  session quarantine through revision CAS; reports are redaction-safe and
+  repeated apply is idempotent.
+- [x] Remote inventory detects terminal-turn/running-session mismatch,
+  request/acceptance without a ledger proposal, pending or uncommitted provider
+  state, `execution_unknown`, and staged/committed mismatch.
+- [x] `session_status=recovery_required` persists, projects safely through APIs
+  and Settings/Chat, and blocks further turn/queue admission without claiming a
+  complete recovery engine.
+- [x] Chat excludes contained profiles and synthesizes neither consent nor fake
+  classification; Settings keeps contained records visible as NO-GO with
+  provider/upstream, binding, profile, and certificate state.
+- [ ] Review the real-store dry-run plan, execute the digest-bound live apply,
+  verify post-apply state, and record the audit result. Until then the
+  operational status is `live_apply_pending_review`.
 
 ## Completed implementation boundaries
 
@@ -33,7 +59,7 @@ until an executed, signed suite and live synthetic probe produce a certificate.
 - [x] Canonical architecture, security, reference, app README, provider runbook,
   and certification-evidence documentation mapped.
 
-## Preview gates still open
+## Later parity and preview gates still open
 
 - [ ] Run the complete Google contract/E2E suite and operator-only live
   synthetic probe on the exact deployable commit and adapter bundle.
@@ -61,5 +87,7 @@ until an executed, signed suite and live synthetic probe produce a certificate.
 - Security posture: `docs/security/threat_model.md` and
   `docs/security/production_readiness.md`
 
-The epic is complete for internal preview only when every preview gate above is
-checked with immutable evidence. Production readiness remains a separate gate.
+Phase 0 is implementation-ready only when its focused and repository checks
+pass and its real dry-run is recorded. It is not operationally closed until the
+reviewed apply and post-apply verification occur. Internal preview and
+production readiness remain later, separate gates.

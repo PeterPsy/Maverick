@@ -9,6 +9,7 @@ from core.runtime.errors import RuntimeProviderStateError, RuntimeTransitionErro
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.store import RuntimeStore
 from core.runtime.turn_queue_admission import require_turn_queue_session_executable
+from core.runtime.remote_agentic_admission import require_remote_agentic_dispatch
 
 
 class RuntimeProviderStartHandoff:
@@ -39,6 +40,7 @@ class RuntimeProviderStartHandoff:
             if session.runtime_mode == "agentic":
                 binding = session.execution_binding
                 if binding is not None:
+                    require_remote_agentic_dispatch(binding)
                     provider_state = self.store.get_provider_state(session.session_id)
                     if (
                         provider_state.runtime_engine_id != binding.runtime_engine_id

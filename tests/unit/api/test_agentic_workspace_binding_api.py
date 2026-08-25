@@ -69,7 +69,6 @@ class AgenticWorkspaceBindingApiTest(unittest.TestCase):
                         "allowed_remote_data_classes": [],
                         "max_estimated_cost_microusd": None,
                     },
-                    "confirm_fake_data_only_workspace": False,
                 },
                 state=state,
             )

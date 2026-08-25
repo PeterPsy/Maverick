@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import os
+from unittest.mock import patch
 
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
@@ -16,6 +18,11 @@ from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.capability_models import RuntimeCapabilitySet
 from core.providers.service import builtin_provider_registry
 from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+    MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+)
 from core.runtime.execution_binding import build_runtime_execution_binding, canonical_digest
 from core.runtime.hosted_agentic_engine import (
     HostedAgenticEngineAdapter,
@@ -70,6 +77,23 @@ class HostedAgenticHarness:
         routing_constraint=None,
         filesystem_list: bool = False,
     ) -> None:
+        feature_flags = patch.dict(
+            os.environ,
+            {
+                MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+                MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
+                MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "1",
+            },
+            clear=False,
+        )
+        feature_flags.start()
+        test_case.addCleanup(feature_flags.stop)
+        dispatch_guard = patch(
+            "core.runtime.hosted_provider_runtime.require_remote_agentic_dispatch",
+            return_value=None,
+        )
+        dispatch_guard.start()
+        test_case.addCleanup(dispatch_guard.stop)
         self.root = make_temp_repo_root(test_case)
         self.filesystem_list = filesystem_list
         self.filesystem_marker = "hosted-loop-filesystem-marker.txt"

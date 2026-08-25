@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, replace
 from typing import Any
 
 from core.cli.core_command_helpers import OPERATOR_ONLY, WORKSPACE_SAFE, core_cli_command
@@ -12,6 +13,7 @@ from core.providers.payloads import (
     routing_decision_payload,
     sort_provider_definitions,
 )
+from core.providers.agentic_containment import run_remote_agentic_containment
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.service import activate_hosted_model_provider, effective_provider_registry, is_retired_provider_definition
@@ -118,6 +120,52 @@ def runtime_provider_command_specs(
             "preflight": routing_decision_payload(activation.routing_decision),
         }
 
+    def _remote_agentic_containment_dry_run_handler(
+        arguments: dict[str, Any],
+        context: CliInvocationContext,
+    ) -> dict[str, Any]:
+        if provider_store is None or runtime_store is None:
+            return {
+                "command_id": "core.providers.agentic.containment.dry-run",
+                "error": "containment_store_unavailable",
+            }
+        return {
+            "command_id": "core.providers.agentic.containment.dry-run",
+            "report": asdict(
+                run_remote_agentic_containment(
+                    provider_store,
+                    runtime_store,
+                    mode="dry_run",
+                )
+            ),
+        }
+
+    def _remote_agentic_containment_apply_handler(
+        arguments: dict[str, Any],
+        context: CliInvocationContext,
+    ) -> dict[str, Any]:
+        command_id = "core.providers.agentic.containment.apply"
+        if provider_store is None or runtime_store is None:
+            return {"command_id": command_id, "error": "containment_store_unavailable"}
+        if str(arguments.get("confirmation") or "") != "phase-0-reviewed":
+            return {
+                "command_id": command_id,
+                "error": "containment_apply_confirmation_required",
+                "required_confirmation": "phase-0-reviewed",
+            }
+        plan_digest = str(arguments.get("plan_digest") or "").strip()
+        try:
+            report = run_remote_agentic_containment(
+                provider_store,
+                runtime_store,
+                mode="apply",
+                expected_plan_digest=plan_digest,
+                observability_store=observability_store,
+            )
+        except ValueError as error:
+            return {"command_id": command_id, "error": str(error)}
+        return {"command_id": command_id, "report": asdict(report)}
+
     return [
         (
             core_cli_command(
@@ -181,6 +229,49 @@ def runtime_provider_command_specs(
                 },
             ),
             _providers_hosted_activate_handler,
+        ),
+        (
+            replace(
+                core_cli_command(
+                    command_id="core.providers.agentic.containment.dry-run",
+                    path_segments=["core", "providers", "agentic", "containment", "dry-run"],
+                    description="Inventory and plan Phase-0 remote agentic containment without mutation.",
+                    owner_id="providers",
+                    invocation_policy=OPERATOR_ONLY,
+                    argument_schema={"type": "object", "additionalProperties": False},
+                ),
+                effect_class="read",
+                safe_to_retry=True,
+            ),
+            _remote_agentic_containment_dry_run_handler,
+        ),
+        (
+            replace(
+                core_cli_command(
+                    command_id="core.providers.agentic.containment.apply",
+                    path_segments=["core", "providers", "agentic", "containment", "apply"],
+                    description="Apply a reviewed Phase-0 remote agentic containment plan through CAS stores.",
+                    owner_id="providers",
+                    invocation_policy=OPERATOR_ONLY,
+                    argument_schema={
+                        "type": "object",
+                        "properties": {
+                            "confirmation": {"type": "string", "enum": ["phase-0-reviewed"]},
+                            "plan_digest": {
+                                "type": "string",
+                                "minLength": 64,
+                                "maxLength": 64,
+                            },
+                        },
+                        "required": ["confirmation", "plan_digest"],
+                        "additionalProperties": False,
+                    },
+                ),
+                effect_class="mutating",
+                supports_idempotency=True,
+                safe_to_retry=True,
+            ),
+            _remote_agentic_containment_apply_handler,
         ),
     ]
 

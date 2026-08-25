@@ -11,10 +11,7 @@ export function ComposerRuntimeBadges({
   locked = false,
   onSelectProvider,
   onReasoningEffortChange,
-  onSyntheticDataConfirmedChange,
   providers,
-  syntheticDataConfirmationRequired = false,
-  syntheticDataConfirmed = false,
   reasoningEffort = "",
   usage = null,
 }: {
@@ -24,10 +21,7 @@ export function ComposerRuntimeBadges({
   locked?: boolean;
   onSelectProvider: (providerId: string, reasoningEffort?: string) => void;
   onReasoningEffortChange: (effort: string) => void;
-  onSyntheticDataConfirmedChange?: (confirmed: boolean) => void;
   providers: ProviderItem[];
-  syntheticDataConfirmationRequired?: boolean;
-  syntheticDataConfirmed?: boolean;
   reasoningEffort?: string;
   usage?: ChatUsageSummary | null;
 }) {
@@ -45,25 +39,6 @@ export function ComposerRuntimeBadges({
         reasoningEffort={reasoningEffort}
       />
       <ChatUsageBadge usage={usage} />
-      {syntheticDataConfirmationRequired ? (
-        locked ? (
-          <span className="chatapp-synthetic-data-chip is-pinned" title="This pinned preview session is restricted to synthetic data">
-            <span aria-hidden="true" className="material-symbols-rounded">science</span>
-            Synthetic preview
-          </span>
-        ) : (
-          <label className={`chatapp-synthetic-data-chip ${syntheticDataConfirmed ? "is-confirmed" : ""}`}>
-            <input
-              checked={syntheticDataConfirmed}
-              disabled={disabled}
-              onChange={(event) => onSyntheticDataConfirmedChange?.(event.currentTarget.checked)}
-              type="checkbox"
-            />
-            <span aria-hidden="true" className="material-symbols-rounded">science</span>
-            Synthetic data only
-          </label>
-        )
-      ) : null}
       {selectedProvider?.workspace_profile_binding_id && !locked ? (
         <span
           className={`chatapp-agentic-profile-chip ${certificateExpiring ? "is-warning" : ""}`}

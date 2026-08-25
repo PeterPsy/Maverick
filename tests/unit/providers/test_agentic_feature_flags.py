@@ -44,11 +44,24 @@ _NORMATIVE_FLAGS = (
 
 
 class AgenticFeatureFlagsTest(unittest.TestCase):
-    def test_released_surfaces_default_on_and_parallelism_defaults_off(self) -> None:
+    def test_local_surfaces_default_on_and_remote_agentic_defaults_off(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
-            for name in _NORMATIVE_FLAGS[:-1]:
+            for name in (
+                MAVERICK_FEATURE_AGENTIC_PROFILES,
+                MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+                MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+                MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+                MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+            ):
                 with self.subTest(name=name):
                     self.assertTrue(feature_enabled(name))
+            for name in (
+                MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+                MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
+                MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW,
+            ):
+                with self.subTest(name=name):
+                    self.assertFalse(feature_enabled(name))
             self.assertFalse(parallel_tool_calls_enabled())
 
     def test_every_flag_is_independently_disabled(self) -> None:
@@ -110,7 +123,10 @@ class AgenticFeatureFlagsTest(unittest.TestCase):
         )
         with patch.dict(
             os.environ,
-            {MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "0"},
+            {
+                MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+                MAVERICK_FEATURE_OPENROUTER_AGENTIC_PREVIEW: "0",
+            },
             clear=False,
         ):
             with self.assertRaises(HostedAgenticLoopError) as raised:

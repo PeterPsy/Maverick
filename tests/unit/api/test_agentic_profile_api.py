@@ -65,6 +65,8 @@ class AgenticProfileApiTest(unittest.TestCase):
         self.assertNotIn("credential_binding_id", encoded)
         self.assertNotIn("secret_ref", encoded)
         self.assertTrue(profile["certified"])
+        self.assertTrue(profile["selectable"])
+        self.assertEqual(profile["containment_status"], "GO")
         self.assertEqual(profile["certificate"]["effective_status"], "active")
 
         runtime_binding = build_pinned_execution_binding(
@@ -163,6 +165,13 @@ class AgenticProfileApiTest(unittest.TestCase):
                 [option["effort"] for option in profiles[provider_id]["supported_reasoning_efforts"]],
                 ["minimal", "low", "medium", "high"],
             )
+            self.assertFalse(profiles[provider_id]["selectable"])
+            self.assertEqual(profiles[provider_id]["containment_status"], "NO-GO")
+            self.assertEqual(
+                profiles[provider_id]["containment_reason"],
+                "hosted_agent_runtime_disabled",
+            )
+            self.assertEqual(profiles[provider_id]["certificate_eligibility"], "ineligible")
 
     def test_status_only_projects_profiles_selectable_by_the_human_actor(self) -> None:
         provider_store = ProviderDocumentStore(

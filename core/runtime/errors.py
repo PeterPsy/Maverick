@@ -51,6 +51,10 @@ class RuntimeTransitionError(RuntimeDomainError):
 class RuntimeTurnQueueRejectedError(RuntimeTransitionError):
     """Raised when authoritative session state rejects a new queued turn."""
 
+    def __init__(self, message: str, *, reason_code: str = "runtime_session_not_executable") -> None:
+        self.reason_code = reason_code
+        super().__init__(message)
+
 
 class RuntimeProviderStateError(RuntimeDomainError):
     """Raised when provider state is missing, stale, or invalid."""

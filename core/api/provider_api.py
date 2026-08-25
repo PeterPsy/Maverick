@@ -45,6 +45,7 @@ from core.providers.service import (
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.execution_binding import canonical_digest
+from core.runtime.remote_agentic_admission import remote_agentic_containment_reason
 from core.usage.quota import record_provider_quota_snapshots
 
 
@@ -343,6 +344,7 @@ def _speech_model_endpoint(options, model_id: str | None) -> str | None:
 
 def runtime_session_payload(session: RuntimeSessionRecord) -> dict[str, object]:
     """Return public runtime session metadata."""
+    containment_reason = remote_agentic_containment_reason(session.execution_binding)
     return {
         "session_id": session.session_id,
         "workspace_id": session.workspace_id,
@@ -355,6 +357,11 @@ def runtime_session_payload(session: RuntimeSessionRecord) -> dict[str, object]:
         "updated_at": session.updated_at,
         "ended_at": session.ended_at,
         "last_progress_at": session.last_progress_at,
+        "recovery_reason_code": session.recovery_reason_code,
+        "agentic_containment": {
+            "status": "NO-GO" if containment_reason else "GO",
+            "reason_code": containment_reason,
+        },
     }
 
 
@@ -451,6 +458,19 @@ def workspace_agentic_profile_status(
             definition,
             certificate=certificate if certificate_payload is not None else None,
         )
+        containment_reason = remote_agentic_containment_reason(definition)
+        certificate_active = bool(
+            certificate_payload and certificate_payload["effective_status"] == "active"
+        )
+        rollout_selectable = bool(
+            status and status.rollout_status in {"preview", "available"}
+        )
+        selectable = bool(
+            containment_reason is None
+            and binding.enabled
+            and certificate_active
+            and rollout_selectable
+        )
         items.append(
             {
                 "workspace_profile_binding_id": binding.binding_id,
@@ -473,19 +493,26 @@ def workspace_agentic_profile_status(
                 "credential_binding_configured": bool(binding.credential_binding_id),
                 "capability_certificate_id": definition.capability_certificate_id,
                 "certificate": certificate_payload,
-                "certified": bool(certificate_payload and certificate_payload["effective_status"] == "active"),
+                "certified": certificate_active,
+                "selectable": selectable,
+                "containment_status": "NO-GO" if containment_reason else "GO",
+                "containment_reason": containment_reason,
+                "certificate_eligibility": (
+                    "ineligible"
+                    if containment_reason is not None
+                    else (certificate_payload or {}).get("effective_status", "missing")
+                ),
                 "egress_policy_id": binding.egress_policy_id,
                 "egress_policy_revision": binding.egress_policy_revision,
                 "allowed_remote_data_classes": binding.workspace_policy_ceiling.allowed_remote_data_classes,
                 "tool_handle_mode": binding.workspace_policy_ceiling.tool_handle_mode,
                 "allowed_tool_handles": binding.workspace_policy_ceiling.allowed_tool_handles,
                 "max_estimated_cost_microusd": binding.workspace_policy_ceiling.max_estimated_cost_microusd,
-                "requires_synthetic_data_declaration": False,
                 "policy_ceiling_digest": canonical_digest(binding.workspace_policy_ceiling),
             }
         )
     items.sort(key=lambda item: (not bool(item["is_default"]), str(item["display_name"])))
-    default = next((item for item in items if item["enabled"] and item["is_default"]), None)
+    default = next((item for item in items if item["selectable"] and item["is_default"]), None)
     return {
         "default_binding_id": None if default is None else default["workspace_profile_binding_id"],
         "items": items,
@@ -595,6 +622,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             credential_bindings=credential_bindings,
             registry=registry,
         )
+        containment_reason = remote_agentic_containment_reason(definition)
         items.append(
             {
                 "definition_id": definition.definition_id,
@@ -608,6 +636,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 "adapter_id": definition.adapter_id,
                 "adapter_version_constraint": definition.adapter_version_constraint,
                 "routing_constraint": asdict(definition.routing_constraint),
+                "upstream_provider_ids": definition.routing_constraint.allowed_upstream_ids,
                 "profile_policy_ceiling": asdict(definition.policy_ceiling),
                 "rollout_status": None if status is None else status.rollout_status,
                 "certificate": certificate_payload,
@@ -627,6 +656,19 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 },
                 "health": "healthy" if blocked_reason is None else "blocked",
                 "blocked_reason": blocked_reason,
+                "containment_status": "NO-GO" if containment_reason else "GO",
+                "containment_reason": containment_reason,
+                "binding_status": (
+                    "missing"
+                    if binding is None
+                    else ("enabled" if binding.enabled else "disabled")
+                ),
+                "profile_status": "missing" if status is None else status.rollout_status,
+                "certificate_eligibility": (
+                    "ineligible"
+                    if containment_reason is not None
+                    else (certificate_payload or {}).get("effective_status", "missing")
+                ),
             }
         )
     items.sort(
@@ -635,12 +677,23 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             str(item["display_name"]),
         )
     )
-    return {"workspace_id": workspace_id, "items": items}
+    return {
+        "workspace_id": workspace_id,
+        "release_decision": (
+            "NO-GO"
+            if any(item["containment_status"] == "NO-GO" for item in items)
+            else "GO"
+        ),
+        "items": items,
+    }
 
 
 def _agentic_definition_blocked_reason(
     *, definition, rollout_status, binding, certificate, credential_bindings, registry
 ) -> str | None:
+    containment_reason = remote_agentic_containment_reason(definition)
+    if containment_reason is not None:
+        return containment_reason
     if rollout_status in {None, "disabled", "suspended"}:
         return "profile_definition_invalid"
     if certificate is None:
@@ -809,9 +862,6 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 is_default=body.get("is_default") is True,
                 actor_policy=actor_policy,
                 policy_patch=policy_patch,
-                confirm_fake_data_only_workspace=(
-                    body.get("confirm_fake_data_only_workspace") is True
-                ),
                 observability_store=state.observability_store,
             )
         except (ProviderError, ValueError) as error:

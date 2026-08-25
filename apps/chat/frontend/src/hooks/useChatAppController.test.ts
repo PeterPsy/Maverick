@@ -57,6 +57,19 @@ describe("chat runtime busy guard", () => {
 });
 
 describe("runtime admission status", () => {
+  it("shows explicit containment and quarantine causes", () => {
+    expect(runtimeAdmissionBlockMessage(session({
+      status: "recovery_required",
+      recovery_reason_code: "remote_agentic_state_ambiguous",
+    }))).toContain("quarantined");
+    expect(runtimeAdmissionBlockMessage(session({
+      agentic_containment: {
+        status: "NO-GO",
+        reason_code: "hosted_agent_runtime_disabled",
+      },
+    }))).toContain("contained (NO-GO)");
+  });
+
   it("blocks unsafe and missing-thread sessions with actionable copy", () => {
     expect(runtimeAdmissionBlockMessage(session({
       runtime_admission: {
@@ -187,6 +200,50 @@ describe("selectedProviderForSession", () => {
     });
 
     expect(selected?.provider_id).toBe("codex");
+  });
+
+  it("keeps a missing local pinned option on the Codex fallback", () => {
+    const selected = selectedProviderForSession({
+      activeProviderId: "codex",
+      activeSession: session({
+        runtime_mode: "agentic",
+        provider_id: "codex",
+        execution_binding: {
+          workspace_binding_id: "binding-codex",
+          model_id: "gpt-local",
+          runtime_engine_id: "codex",
+          binding_digest: "codex-digest",
+        },
+      }),
+      activeThread: thread("free"),
+      providers: [provider({ provider_id: "codex", label: "Codex", provider_role: "runtime_engine" })],
+    });
+
+    expect(selected?.provider_id).toBe("codex");
+    expect(selected?.agentic_containment_status).toBeUndefined();
+  });
+
+  it("renders a contained fallback for a pinned remote profile removed from selection", () => {
+    const selected = selectedProviderForSession({
+      activeProviderId: "codex",
+      activeSession: session({
+        runtime_mode: "agentic",
+        provider_id: "maverick-tool-loop",
+        execution_binding: {
+          workspace_binding_id: "binding-remote",
+          model_provider_id: "google-ai-studio",
+          model_id: "gemini-contained",
+          runtime_engine_id: "maverick-tool-loop",
+          binding_digest: "remote-digest",
+        },
+        agentic_containment: { status: "NO-GO", reason_code: "hosted_agent_runtime_disabled" },
+      }),
+      activeThread: thread("free"),
+      providers: [provider({ provider_id: "codex", label: "Codex", provider_role: "runtime_engine" })],
+    });
+
+    expect(selected?.provider_id).toBe("contained-session:binding-remote");
+    expect(selected?.agentic_containment_reason).toBe("hosted_agent_runtime_disabled");
   });
 
   it("does not show the global hosted model while an existing agentic thread session is loading", () => {

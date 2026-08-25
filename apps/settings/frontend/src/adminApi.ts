@@ -441,10 +441,17 @@ export type AgenticAdminItem = {
   } | null;
   health: 'healthy' | 'blocked';
   blocked_reason: string | null;
+  containment_status: 'GO' | 'NO-GO';
+  containment_reason: string | null;
+  binding_status: 'missing' | 'enabled' | 'disabled';
+  profile_status: string;
+  certificate_eligibility: string;
+  upstream_provider_ids: string[];
 };
 
 export type AgenticAdminPayload = {
   workspace_id: string;
+  release_decision: 'GO' | 'NO-GO';
   items: AgenticAdminItem[];
 };
 
@@ -464,6 +471,11 @@ export type RuntimeSessionItem = {
   updated_at?: string | null;
   ended_at?: string | null;
   last_progress_at: string | null;
+  recovery_reason_code?: string | null;
+  agentic_containment?: {
+    status: 'GO' | 'NO-GO';
+    reason_code: string | null;
+  } | null;
 };
 
 export type RuntimeStatus = ProviderStatus & {
@@ -659,7 +671,6 @@ export function configureAgenticWorkspaceBinding(payload: {
   is_default: boolean;
   actor_policy: AgenticActorPolicy;
   policy_patch: Record<string, unknown>;
-  confirm_fake_data_only_workspace: boolean;
 }): Promise<{ binding_id: string; binding_revision: number; agentic_admin: AgenticAdminPayload }> {
   return requestJson('/api/providers/agentic/workspace-bindings', {
     method: 'POST',

@@ -1,5 +1,6 @@
 import type {
   AgenticAdminItem,
+  AgenticAdminPayload,
   OpenRouterProviderRouting,
   PlatformSettings,
   ProviderModelOption,
@@ -19,7 +20,7 @@ import {
 import { bouncyToggleHtml } from './bouncyToggle';
 import { defaultUsageHistoryFilters, type UsageHistoryFilters } from './usageHistoryFilters';
 
-const ACTIVE_RUNTIME_STATUSES = new Set(['created', 'running', 'stopping']);
+const ACTIVE_RUNTIME_STATUSES = new Set(['created', 'running', 'stopping', 'recovery_required']);
 
 type HostedRoutingDraft = {
   allowFallbacks: boolean;
@@ -75,7 +76,7 @@ export type SettingsPanelActions = {
   onSaveAgenticBinding: (
     definitionId: string,
     definitionRevision: string,
-    options?: { enabled?: boolean; confirmFakeDataOnlyWorkspace?: boolean }
+    options?: { enabled?: boolean }
   ) => void;
   onSaveHostedProviderSettings: (modelId?: string) => void;
   onProviderModelChanged: (modelId: string) => void;
@@ -257,7 +258,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   );
 
   return `${userSettingsCardHtml(settings)}
-    ${agenticRuntimeSettingsCardHtml(settings.agentic_admin?.items || [], state)}
+    ${agenticRuntimeSettingsCardHtml(settings.agentic_admin || null, state)}
     ${usageHistoryCardHtml(state)}
     ${settings.agentic_admin ? '' : agenticModelSettingsCardHtml(
         provider,
@@ -499,11 +500,13 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   });
 }
 
-function agenticRuntimeSettingsCardHtml(items: AgenticAdminItem[], state: SettingsPanelState) {
-  const visibleItems = items.filter((item) => item.rollout_status !== 'suspended' || Boolean(item.binding?.enabled));
+function agenticRuntimeSettingsCardHtml(admin: AgenticAdminPayload | null, state: SettingsPanelState) {
+  const visibleItems = admin?.items || [];
+  const releaseDecision = admin?.release_decision || 'GO';
   return `<section class="settings-card settings-platform settings-agentic-runtimes-card">
     ${modelSettingsHeadingHtml('account_tree', 'Models')}
     <p class="settings-card-copy">Choose which models are available for new chats. Open a model only for optional workspace controls.</p>
+    ${releaseDecision === 'NO-GO' ? `<p class="settings-platform-error settings-agentic-no-go"><strong>Remote agentic release: NO-GO</strong><br>Remote profiles remain visible for containment review but cannot be enabled or selected.</p>` : ''}
     ${visibleItems.some((item) => item.runtime_engine_id === 'codex') ? `<div class="settings-models-toolbar">
       <button type="button" class="settings-secondary settings-provider-usage-refresh" id="settings-refresh-provider-usage" ${state.isLoadingProviderUsage ? 'disabled' : ''}>
         <span class="material-symbols-rounded ${state.isLoadingProviderUsage ? 'is-spinning' : ''}" aria-hidden="true">${state.isLoadingProviderUsage ? 'sync' : 'refresh'}</span>
@@ -531,6 +534,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
   };
   const certificate = item.certificate;
   const isRemote = item.runtime_engine_id !== 'codex';
+  const contained = item.containment_status === 'NO-GO';
   const isSaving = state.savingAgenticBindings.has(key);
   const error = state.agenticBindingErrors[key] || '';
   const toolEnabled = policy.tool_handle_mode !== 'none';
@@ -540,7 +544,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
   const credentials = item.credential_bindings;
   const selectedCredential = binding?.credential_binding_id || credentials[0]?.binding_id || '';
   const enabled = Boolean(binding?.enabled);
-  const available = certificate?.effective_status === 'active' && item.rollout_status !== 'disabled' && item.rollout_status !== 'suspended';
+  const available = !contained && certificate?.effective_status === 'active' && item.rollout_status !== 'disabled' && item.rollout_status !== 'suspended';
   const usageSummary = agenticModelUsageSummary(item, state);
   const displayName = item.display_name.replace(/\s*·\s*fake-data preview$/i, '');
   return `<details class="settings-model-accordion settings-agentic-runtime" data-settings-model-accordion="agentic-${escapeAttr(key)}">
@@ -551,6 +555,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
         <small>${escapeHtml(item.model_id)}${binding?.is_default ? ' · Default' : ''}${usageSummary ? ` · ${escapeHtml(usageSummary)}` : ''}</small>
       </span>
       <span class="settings-agentic-summary-badges">
+        ${contained ? '<span class="settings-pill is-warning">NO-GO</span>' : ''}
         ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(item.blocked_reason || certificate?.effective_status || 'Unavailable'))}</span>`}
         <label class="settings-model-toggle settings-toggle settings-bouncy-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
           <input type="checkbox" role="switch" data-agentic-model-toggle
@@ -566,34 +571,42 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       </span>
     </summary>
     <div class="settings-model-content settings-agentic-runtime-content" data-agentic-binding-form data-agentic-definition-id="${escapeAttr(item.definition_id)}" data-agentic-definition-revision="${escapeAttr(item.definition_revision)}">
+      ${contained ? `<div class="settings-provider-usage-unavailable settings-agentic-containment-state">
+        <span class="material-symbols-rounded" aria-hidden="true">block</span>
+        <span>
+          <strong>NO-GO · ${escapeHtml(humanizeAgenticCode(item.containment_reason || 'remote agentic contained'))}</strong>
+          <small>Provider ${escapeHtml(item.model_provider_id)} · upstream ${escapeHtml(item.upstream_provider_ids.join(', ') || 'none')}</small>
+          <small>Binding ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Profile ${escapeHtml(humanizeAgenticCode(item.profile_status))} · Certificate ${escapeHtml(humanizeAgenticCode(certificate?.effective_status || 'missing'))} / ${escapeHtml(humanizeAgenticCode(item.certificate_eligibility))}</small>
+        </span>
+      </div>` : ''}
       ${agenticModelUsageHtml(item, state)}
       <div class="settings-agentic-controls">
         ${isRemote ? `<label class="settings-platform-field">
           <span>Credential binding</span>
-          <select data-agentic-field="credential_binding_id" ${isSaving ? 'disabled' : ''}>
+          <select data-agentic-field="credential_binding_id" ${isSaving || contained ? 'disabled' : ''}>
             <option value="">${credentials.length ? 'No credential' : 'No active credential available'}</option>
             ${credentials.map((credential) => `<option value="${escapeAttr(credential.binding_id)}" ${credential.binding_id === selectedCredential ? 'selected' : ''}>${escapeHtml(credential.label || credential.binding_id)} · ${credential.workspace_id ? 'workspace' : 'platform'}</option>`).join('')}
           </select>
         </label>` : '<input data-agentic-field="credential_binding_id" type="hidden" value="">'}
         <label class="settings-platform-field">
           <span>Maximum cost per turn (USD)</span>
-          <input data-agentic-field="max_estimated_cost_usd" type="number" min="0" step="0.01" value="${escapeAttr(costDollars)}" placeholder="No explicit ceiling" ${isSaving ? 'disabled' : ''}>
+          <input data-agentic-field="max_estimated_cost_usd" type="number" min="0" step="0.01" value="${escapeAttr(costDollars)}" placeholder="No explicit ceiling" ${isSaving || contained ? 'disabled' : ''}>
         </label>
         <div class="settings-platform-checks settings-agentic-checks">
           <input data-agentic-field="enabled" type="checkbox" ${enabled ? 'checked' : ''} hidden>
-          ${agenticCheckbox('is_default', 'Use as workspace default', Boolean(binding?.is_default), isSaving)}
+          ${agenticCheckbox('is_default', 'Use as workspace default', Boolean(binding?.is_default), isSaving || contained)}
           <details class="settings-agentic-advanced">
             <summary>Advanced controls</summary>
-            ${agenticCheckbox('allow_workspace_admins', 'Workspace administrators', actor.allow_workspace_admins, isSaving)}
-            ${agenticCheckbox('allow_workspace_members', 'Workspace members', actor.allowed_workspace_role_ids.includes('member'), isSaving)}
-            ${agenticCheckbox('tool_access_enabled', `Allow tools (${policy.allowed_tool_handles.length || 0})`, toolEnabled, isSaving)}
-            ${agenticCheckbox('require_confirmation_for_mutating', 'Confirm mutating tools', policy.require_confirmation_for_mutating, isSaving, item.profile_policy_ceiling.require_confirmation_for_mutating)}
-            ${agenticCheckbox('require_confirmation_for_destructive', 'Confirm destructive tools', policy.require_confirmation_for_destructive, isSaving, item.profile_policy_ceiling.require_confirmation_for_destructive)}
-            ${item.profile_policy_ceiling.allowed_remote_data_classes.includes('public') ? agenticCheckbox('allow_public_data', 'Permit public data', policy.allowed_remote_data_classes.includes('public'), isSaving) : ''}
+            ${agenticCheckbox('allow_workspace_admins', 'Workspace administrators', actor.allow_workspace_admins, isSaving || contained)}
+            ${agenticCheckbox('allow_workspace_members', 'Workspace members', actor.allowed_workspace_role_ids.includes('member'), isSaving || contained)}
+            ${agenticCheckbox('tool_access_enabled', `Allow tools (${policy.allowed_tool_handles.length || 0})`, toolEnabled, isSaving || contained)}
+            ${agenticCheckbox('require_confirmation_for_mutating', 'Confirm mutating tools', policy.require_confirmation_for_mutating, isSaving || contained, item.profile_policy_ceiling.require_confirmation_for_mutating)}
+            ${agenticCheckbox('require_confirmation_for_destructive', 'Confirm destructive tools', policy.require_confirmation_for_destructive, isSaving || contained, item.profile_policy_ceiling.require_confirmation_for_destructive)}
+            ${item.profile_policy_ceiling.allowed_remote_data_classes.includes('public') ? agenticCheckbox('allow_public_data', 'Permit public data', policy.allowed_remote_data_classes.includes('public'), isSaving || contained) : ''}
           </details>
         </div>
       </div>
-      <button type="button" data-agentic-binding-save data-agentic-definition-id="${escapeAttr(item.definition_id)}" data-agentic-definition-revision="${escapeAttr(item.definition_revision)}" ${isSaving ? 'disabled' : ''}>
+      <button type="button" data-agentic-binding-save data-agentic-definition-id="${escapeAttr(item.definition_id)}" data-agentic-definition-revision="${escapeAttr(item.definition_revision)}" ${isSaving || contained ? 'disabled' : ''}>
         <span class="material-symbols-rounded" aria-hidden="true">${isSaving ? 'progress_activity' : 'verified_user'}</span>
         ${isSaving ? 'Saving binding' : binding ? 'Save binding' : 'Create binding'}
       </button>
@@ -1238,6 +1251,8 @@ function runtimeSessionRowHtml(session: RuntimeSessionItem, cleanupAllowed: bool
         </button>
       </span>
       <small>${escapeHtml(session.workspace_name || session.workspace_id)} · ${escapeHtml(session.effective_mode)} · ${escapeHtml(session.status)}</small>
+      ${session.status === 'recovery_required' ? `<small class="settings-platform-error">Quarantined: ${escapeHtml(humanizeAgenticCode(session.recovery_reason_code || 'runtime state ambiguous'))}</small>` : ''}
+      ${session.agentic_containment?.status === 'NO-GO' ? `<small class="settings-platform-error">Pinned remote profile contained (NO-GO): ${escapeHtml(humanizeAgenticCode(session.agentic_containment.reason_code || 'remote agentic contained'))}</small>` : ''}
       <code>${escapeHtml(session.session_id)}</code>
     </span>
   </div>`;

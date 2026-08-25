@@ -11,7 +11,6 @@ function agenticProvider(overrides: Partial<ProviderItem> = {}): ProviderItem {
     status: "active",
     default_model_family: "gemini-3.5-pro",
     workspace_profile_binding_id: "binding-google-gemini-35-pro",
-    requires_synthetic_data_declaration: true,
     ...overrides,
   };
 }
@@ -24,8 +23,10 @@ describe("genericAgenticRuntimeConfig", () => {
       title: "Gemini · 3.5 Pro",
       workspace_profile_binding_id: "binding-google-gemini-35-pro",
       reasoning_effort: "max",
-      declared_remote_data_class: "workspace_internal_fake",
     });
+    expect(genericAgenticRuntimeConfig(agenticProvider(), "max")).not.toHaveProperty(
+      "declared_remote_data_class",
+    );
   });
 
   it("preserves Codex reasoning without adding a remote-data declaration", () => {
@@ -33,11 +34,9 @@ describe("genericAgenticRuntimeConfig", () => {
       provider_id: "codex-agentic",
       label: "Codex · gpt-5.6-sol",
       workspace_profile_binding_id: "binding-codex-sol",
-      requires_synthetic_data_declaration: false,
     }), "xhigh")).toMatchObject({
       workspace_profile_binding_id: "binding-codex-sol",
       reasoning_effort: "xhigh",
-      declared_remote_data_class: undefined,
     });
   });
 

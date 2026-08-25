@@ -11,6 +11,8 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
   const options: ProviderItem[] = [];
   const agenticProfiles = (payload.agentic_profiles?.items || []).filter(
     (profile) =>
+      profile.selectable === true &&
+      profile.containment_status !== "NO-GO" &&
       profile.enabled &&
       profile.certified === true &&
       (profile.rollout_status === "preview" || profile.rollout_status === "available") &&
@@ -47,7 +49,8 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           agentic_egress_policy_id: profile.egress_policy_id || null,
           agentic_allowed_tool_handles: profile.allowed_tool_handles || [],
           agentic_max_estimated_cost_microusd: profile.max_estimated_cost_microusd ?? null,
-          requires_synthetic_data_declaration: false,
+          agentic_containment_status: profile.containment_status,
+          agentic_containment_reason: profile.containment_reason || null,
           default_reasoning_effort: reasoning.defaultEffort,
           supported_reasoning_efforts: reasoning.options,
         };

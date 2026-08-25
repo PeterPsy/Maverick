@@ -37,6 +37,7 @@ from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_PROFILES,
     feature_enabled,
 )
+from core.runtime.remote_agentic_admission import require_remote_agentic_session_admission
 
 
 CODEX_PROFILE_REVISION = "10"
@@ -205,8 +206,9 @@ def resolve_workspace_agentic_profile(
     *,
     workspace_id: str,
     binding_id: str | None = None,
+    enforce_remote_admission: bool = True,
 ) -> tuple[AgenticProfileDefinition, WorkspaceAgenticProfileBinding]:
-    """Resolve one enabled workspace binding and its exact immutable definition."""
+    """Resolve one enabled binding; only admission code may defer the remote guard."""
     if not feature_enabled(MAVERICK_FEATURE_AGENTIC_PROFILES):
         raise AgenticProfileError("agentic_profiles_disabled")
     bindings = store.list_workspace_agentic_profile_bindings(workspace_id)
@@ -226,6 +228,8 @@ def resolve_workspace_agentic_profile(
     status = store.get_agentic_profile_definition_status(definition.definition_id, definition.revision)
     if status is None or status.rollout_status in {"disabled", "suspended"}:
         raise AgenticProfileError("profile_definition_invalid")
+    if enforce_remote_admission:
+        require_remote_agentic_session_admission(definition)
     if binding.credential_binding_id:
         credential = resolve_provider_binding(
             store,

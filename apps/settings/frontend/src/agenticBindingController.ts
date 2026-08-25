@@ -17,7 +17,7 @@ export function createAgenticBindingController(context: AgenticBindingController
     save: async (
       definitionId: string,
       definitionRevision: string,
-      options: { enabled?: boolean; confirmFakeDataOnlyWorkspace?: boolean } = {}
+      options: { enabled?: boolean } = {}
     ) => {
       const key = `${definitionId}:${definitionRevision}`;
       const item = context.getSettings()?.agentic_admin?.items.find(
@@ -36,6 +36,12 @@ export function createAgenticBindingController(context: AgenticBindingController
       const field = <T extends HTMLInputElement | HTMLSelectElement>(name: string) =>
         form.querySelector<T>(`[data-agentic-field="${name}"]`);
       const checked = (name: string) => Boolean(field<HTMLInputElement>(name)?.checked);
+      const requestedEnabled = options.enabled ?? checked('enabled');
+      if (item.containment_status === 'NO-GO' && requestedEnabled) {
+        context.state.agenticBindingErrors[key] = `Remote agentic release is NO-GO: ${item.containment_reason || 'contained by operator policy'}.`;
+        context.render();
+        return;
+      }
       const costValue = field<HTMLInputElement>('max_estimated_cost_usd')?.value.trim() || '';
       const parsedCostMicrousd = Math.round(Number(costValue) * 1_000_000);
       if (costValue && (!Number.isFinite(parsedCostMicrousd) || parsedCostMicrousd < 0)) {
@@ -44,10 +50,7 @@ export function createAgenticBindingController(context: AgenticBindingController
         return;
       }
       const allowedRemoteDataClasses = [
-        ...(checked('allow_public_data') ? ['public'] : []),
-        ...(item.profile_policy_ceiling.allowed_remote_data_classes.includes('workspace_internal_fake')
-          ? ['workspace_internal_fake']
-          : [])
+        ...(checked('allow_public_data') ? ['public'] : [])
       ];
       context.state.savingAgenticBindings.add(key);
       context.state.agenticBindingErrors[key] = '';
@@ -59,7 +62,7 @@ export function createAgenticBindingController(context: AgenticBindingController
           binding_id: item.binding?.binding_id || null,
           expected_revision: item.binding?.revision ?? null,
           credential_binding_id: field<HTMLSelectElement>('credential_binding_id')?.value || null,
-          enabled: options.enabled ?? checked('enabled'),
+          enabled: requestedEnabled,
           is_default: options.enabled === false ? false : checked('is_default'),
           actor_policy: {
             allow_workspace_admins: checked('allow_workspace_admins'),
@@ -73,8 +76,7 @@ export function createAgenticBindingController(context: AgenticBindingController
             require_confirmation_for_mutating: checked('require_confirmation_for_mutating'),
             require_confirmation_for_destructive: checked('require_confirmation_for_destructive'),
             allowed_remote_data_classes: allowedRemoteDataClasses
-          },
-          confirm_fake_data_only_workspace: true
+          }
         });
         const settings = await getPlatformSettings();
         syncSettingsPanelDraft(context.state, settings);

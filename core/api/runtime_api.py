@@ -79,6 +79,11 @@ from core.runtime.service import (
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_session import coerce_declared_remote_data_class, coerce_runtime_mode
+from core.runtime.remote_agentic_admission import (
+    is_remote_agentic_identity,
+    remote_agentic_containment_reason,
+    require_remote_agentic_session_admission,
+)
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.routing import build_runtime_routing
 from core.runtime.plain_hosted_text import (
@@ -159,6 +164,11 @@ def _session_payload(
     payload["provider_id"] = provider_id
     if session.execution_binding is not None:
         binding = session.execution_binding
+        containment_reason = remote_agentic_containment_reason(binding)
+        payload["agentic_containment"] = {
+            "status": "NO-GO" if containment_reason else "GO",
+            "reason_code": containment_reason,
+        }
         payload["execution_binding"] = {
             "execution_binding_id": binding.execution_binding_id,
             "profile_definition_id": binding.profile_definition_id,
@@ -911,6 +921,7 @@ def _create_session(
             state.provider_store,
             workspace_id=context.workspace_id,
             binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
+            enforce_remote_admission=False,
         )
         platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
             state,
@@ -925,18 +936,12 @@ def _create_session(
             agent_type_id=str(body.get("agent_type_id") or "").strip(),
         ):
             raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
-        if workspace_binding.egress_policy_id == "fake-data-remote-preview":
-            # Legacy certified remote profiles use this internal classification.
-            # It is assigned by policy and no longer requires a per-chat user attestation.
-            declared_remote_data_class = "workspace_internal_fake"
-        elif declared_remote_data_class is not None:
-            raise ProviderError("remote_data_declaration_not_applicable")
-        if (
-            declared_remote_data_class is not None
-            and declared_remote_data_class
-            not in workspace_binding.workspace_policy_ceiling.allowed_remote_data_classes
-        ):
-            raise ProviderError("remote_data_class_not_allowed")
+        if declared_remote_data_class is not None:
+            raise ProviderError(
+                "remote_agentic_attestation_unavailable"
+                if is_remote_agentic_identity(definition)
+                else "remote_data_declaration_not_applicable"
+            )
         execution_binding = build_pinned_execution_binding(
             state.provider_store,
             registry,
@@ -1001,6 +1006,47 @@ def _create_session(
     return session
 
 
+def _require_remote_agentic_request_admission_before_claim(
+    state: PlatformState,
+    context: RequestSession,
+    body: dict,
+) -> None:
+    """Reject remote agentic requests before client-message claim persistence."""
+    if coerce_runtime_mode(body.get("runtime_mode")) != "agentic":
+        return
+    authorize_runtime_session_create(
+        workspace_store=state.workspace_store,
+        runtime_store=state.runtime_store,
+        user=context.user,
+        workspace_id=context.workspace_id,
+    )
+    definition, workspace_binding = resolve_workspace_agentic_profile(
+        state.provider_store,
+        workspace_id=context.workspace_id,
+        binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
+        enforce_remote_admission=False,
+    )
+    platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
+        state,
+        user_id=context.user.user_id,
+        workspace_id=context.workspace_id,
+    )
+    if not actor_selection_allowed(
+        workspace_binding,
+        user_id=user_id,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
+        agent_type_id=str(body.get("agent_type_id") or "").strip(),
+    ):
+        raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
+    require_remote_agentic_session_admission(
+        definition,
+        declared_remote_data_class=coerce_declared_remote_data_class(
+            body.get("declared_remote_data_class")
+        ),
+    )
+
+
 def _handle_session_collection(
     state: PlatformState,
     context: RequestSession,
@@ -1027,6 +1073,32 @@ def _handle_session_collection(
         prepare_only = bool(body.get("prepare_only"))
         if prepare_only and turn_requested:
             return json_response(start_response, {"error": "prepare_only_turn_not_allowed"}, status="400 Bad Request")
+        if turn_requested and client_message_id:
+            try:
+                _require_remote_agentic_request_admission_before_claim(
+                    state,
+                    context,
+                    body,
+                )
+            except AuthorizationError as error:
+                status = (
+                    "429 Too Many Requests"
+                    if error.reason == "max_agent_instances_reached"
+                    else "403 Forbidden"
+                )
+                return json_response(start_response, {"error": error.reason}, status=status)
+            except ProviderError as error:
+                return json_response(
+                    start_response,
+                    {"error": str(error)},
+                    status="409 Conflict",
+                )
+            except ValueError as error:
+                return json_response(
+                    start_response,
+                    {"error": str(error)},
+                    status="400 Bad Request",
+                )
         submission_timing = runtime_turn_submission_timing(received_perf_counter) if turn_requested else None
         if turn_requested:
             claim_started_at = time.perf_counter()
@@ -2108,12 +2180,26 @@ def _queue_runtime_turn_response(
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)
         return json_response(start_response, {"error": error.reason_code}, status="400 Bad Request")
-    except RuntimeTurnQueueRejectedError:
+    except RuntimeTurnQueueRejectedError as error:
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)
+        refreshed_session = state.runtime_store.get_session(session.session_id)
+        detail = {
+            "runtime_session_recovery_required": (
+                "This session is quarantined and requires operator recovery before another turn."
+            ),
+            "remote_agentic_session_contained": (
+                "This pinned remote agentic session is contained and cannot dispatch provider work."
+            ),
+        }.get(error.reason_code, "This runtime session cannot accept another turn.")
         return json_response(
             start_response,
-            {"error": "runtime_session_not_executable"},
+            {
+                "error": error.reason_code,
+                "detail": detail,
+                "session_status": refreshed_session.status,
+                "status_reason": refreshed_session.recovery_reason_code,
+            },
             status="409 Conflict",
         )
     except ProviderError as error:

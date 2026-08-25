@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.certificate_service import runtime_adapter_artifact_digest
@@ -138,15 +139,20 @@ class TestCoreFlowObservability(ObservabilityTestBase):
             created_at=datetime.now(tz=UTC),
         )
 
-        session = create_runtime_session(
-            runtime_store,
-            session_id="sess-observed",
-            workspace_id="default",
-            agent_id="agent-1",
-            start_path=repo_root,
-            observability_store=observability_store,
-            execution_binding=execution_binding,
-        )
+        # This test exercises the legacy local adapter audit path, not remote
+        # admission; Phase-0 containment is covered by its dedicated tests.
+        with patch(
+            "core.runtime.lifecycle_service_sessions.require_remote_agentic_session_admission"
+        ):
+            session = create_runtime_session(
+                runtime_store,
+                session_id="sess-observed",
+                workspace_id="default",
+                agent_id="agent-1",
+                start_path=repo_root,
+                observability_store=observability_store,
+                execution_binding=execution_binding,
+            )
         transition_runtime_session(
             runtime_store,
             session_id=session.session_id,

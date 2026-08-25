@@ -144,6 +144,8 @@ describe("provider runtime options", () => {
             rollout_status: "available",
             enabled: true,
             is_default: true,
+            selectable: true,
+            containment_status: "GO",
             certified: true,
             certificate: {
               effective_status: "active",
@@ -152,7 +154,6 @@ describe("provider runtime options", () => {
             egress_policy_id: "fake-data-remote-preview",
             allowed_tool_handles: ["mcp:storage_read"],
             max_estimated_cost_microusd: 250_000,
-            requires_synthetic_data_declaration: true,
           },
         ],
       },
@@ -168,7 +169,7 @@ describe("provider runtime options", () => {
       agentic_egress_policy_id: "fake-data-remote-preview",
       agentic_allowed_tool_handles: ["mcp:storage_read"],
       agentic_max_estimated_cost_microusd: 250_000,
-      requires_synthetic_data_declaration: false,
+      agentic_containment_status: "GO",
       agentic_rollout_status: "available",
       default_reasoning_effort: "xhigh",
       supported_reasoning_efforts: [

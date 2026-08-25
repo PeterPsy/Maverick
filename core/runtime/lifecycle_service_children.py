@@ -26,6 +26,7 @@ def transition_runtime_session(
     target_status: RuntimeSessionStatus,
     error_detail: str | None = None,
     forced_stop_reason: str | None = None,
+    recovery_reason_code: str | None = None,
     now: datetime | None = None,
     observability_store=None,
     start_path: Path | None = None,
@@ -39,11 +40,11 @@ def transition_runtime_session(
     ):
         session = store.get_session(session_id)
         allowed: dict[RuntimeSessionStatus, set[RuntimeSessionStatus]] = {
-            "created": {"running", "stopped", "failed"},
-            "running": {"stopping", "stopped", "failed"},
-            "stopping": {"stopped", "failed", "running"},
+            "created": {"running", "stopped", "failed", "recovery_required"},
+            "running": {"stopping", "stopped", "failed", "recovery_required"},
+            "stopping": {"stopped", "failed", "running", "recovery_required"},
             "stopped": {"running"},
-            "failed": {"running"},
+            "failed": {"running", "recovery_required"}, "recovery_required": {"stopped", "failed"},
         }
         _transition_allowed(session.status, target_status, allowed=allowed, kind="runtime session")
         if target_status == "running" and session.preparation_status != "prepared":
@@ -59,6 +60,7 @@ def transition_runtime_session(
             updated_at=timestamp,
             ended_at=ended_at,
             last_progress_at=timestamp if target_status == "running" else session.last_progress_at,
+            recovery_reason_code=(recovery_reason_code or "runtime_state_ambiguous") if target_status == "recovery_required" else session.recovery_reason_code,
         )
         state = store.get_state(session_id)
         store.save_state(
@@ -79,6 +81,7 @@ def transition_runtime_session(
             "to_status": target_status,
             "forced_stop_reason": forced_stop_reason,
             "error_detail": error_detail,
+            "recovery_reason_code": updated.recovery_reason_code,
         }
         audit_status = "failed" if target_status == "failed" else "succeeded"
         record_platform_event(
@@ -112,6 +115,8 @@ def transition_runtime_session(
             now=timestamp,
         )
     return saved
+
+
 def reconcile_runtime_session_policy(
     store: RuntimeStore,
     session: RuntimeSessionRecord,
@@ -150,6 +155,8 @@ def reconcile_runtime_session_policy(
         },
         now=timestamp,
     )
+
+
 def queue_runtime_turn(
     store: RuntimeStore,
     *,

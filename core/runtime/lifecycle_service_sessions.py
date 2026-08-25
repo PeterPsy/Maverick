@@ -25,6 +25,7 @@ from core.runtime.runtime_session import (
     coerce_skill_activation_mode,
     normalize_runtime_session_visibility,
 )
+from core.runtime.remote_agentic_admission import require_remote_agentic_session_admission
 from core.runtime.store import RuntimeStore
 from core.workspaces.models import WorkspaceGovernanceRecord
 
@@ -85,6 +86,10 @@ def create_runtime_session(
     routing: RuntimeRoutingDecision | None = None,
 ) -> RuntimeSessionRecord:
     """Create one runtime session and its initial runtime state."""
+    require_remote_agentic_session_admission(
+        execution_binding,
+        declared_remote_data_class=declared_remote_data_class,
+    )
     timestamp = now or utcnow()
     session_id = normalize_runtime_session_id(session_id)
     normalized_session_kind, normalized_thread_visibility = normalize_runtime_session_visibility(
@@ -232,6 +237,7 @@ def create_child_runtime_session(
 ) -> RuntimeSessionRecord:
     """Create one runtime child session using only explicit materialized authority."""
     parent = store.get_session(parent_session_id)
+    require_remote_agentic_session_admission(parent.execution_binding)
     timestamp = now or utcnow()
     child_session_id = normalize_runtime_session_id(child_session_id)
     runtime_root = Path(parent.runtime_root).parent / child_session_id

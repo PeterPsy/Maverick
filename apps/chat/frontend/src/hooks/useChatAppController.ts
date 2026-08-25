@@ -65,6 +65,12 @@ export function isActiveRuntimeTurnBusyForThread(activeTurn: RuntimeTurn | null,
 }
 
 export function runtimeAdmissionBlockMessage(session: RuntimeSession | null): string | null {
+  if (session?.status === "recovery_required") {
+    return "This chat is quarantined because its remote agentic state is ambiguous. Operator recovery or shutdown is required before another turn.";
+  }
+  if (session?.agentic_containment?.status === "NO-GO") {
+    return "This chat is pinned to a remote agentic profile that is contained (NO-GO). Start a new chat with an available model.";
+  }
   const status = session?.runtime_admission?.status;
   if (status === "provider_thread_missing") {
     return "This chat cannot continue because its provider conversation is no longer available. Start a new chat and hand off the prior transcript.";
@@ -113,6 +119,20 @@ export function selectedProviderForSession({
       const pinned = providers.find((provider) => provider.workspace_profile_binding_id === pinnedBindingId);
       if (pinned) {
         return pinned;
+      }
+      if (selectionSession.agentic_containment?.status === "NO-GO") {
+        const binding = selectionSession.execution_binding;
+        return {
+          provider_id: `contained-session:${encodeURIComponent(pinnedBindingId)}`,
+          label: binding?.model_id || "Contained remote model",
+          description: binding?.model_provider_id || "Pinned remote agentic profile",
+          provider_role: "runtime_engine",
+          status: "contained",
+          default_model_family: binding?.model_id || null,
+          workspace_profile_binding_id: pinnedBindingId,
+          agentic_containment_status: "NO-GO",
+          agentic_containment_reason: selectionSession.agentic_containment.reason_code || "remote_agentic_session_contained",
+        };
       }
     }
     return providerById(providers, selectionSession.provider_id) || existingThreadDefaultProvider(providers);
@@ -676,9 +696,6 @@ export function useChatAppController({
     sourceAppChatMode,
     sourceAppId,
     sourceAppProjectId,
-    syntheticDataConfirmationRequired: runtimeControls.syntheticDataConfirmationRequired,
-    syntheticDataConfirmed: runtimeControls.syntheticDataConfirmed,
-    setSyntheticDataConfirmed: runtimeControls.setSyntheticDataConfirmed,
     setSourceAppChatMode,
     setMultiAgentMode,
     setComposer,

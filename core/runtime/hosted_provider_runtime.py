@@ -10,7 +10,7 @@ from core.runtime.hosted_agentic_models import (
     HostedCostEstimator,
     HostedProviderPrivateCodec,
 )
-from core.runtime.agentic_feature_flags import feature_enabled, provider_preview_feature
+from core.runtime.remote_agentic_admission import require_remote_agentic_dispatch
 
 
 @dataclass(frozen=True)
@@ -39,9 +39,7 @@ class HostedProviderRuntimeRegistry:
         return runtime
 
     def resolve(self, binding) -> HostedProviderRuntime:
-        provider_feature = provider_preview_feature(binding.model_provider_id)
-        if provider_feature is not None and not feature_enabled(provider_feature[0]):
-            raise HostedAgenticLoopError(provider_feature[1])
+        require_remote_agentic_dispatch(binding)
         identity = (
             binding.model_provider_id,
             binding.provider_protocol,

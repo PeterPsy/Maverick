@@ -85,6 +85,22 @@ class OrchestrationControlDecision:
     final_answer: str
 
 
+def parse_catalog_lookup_cursor(value: str) -> str | None:
+    """Return a lookup-only cursor without treating it as a persisted decision."""
+    payload = _json_object(value, decision="catalog lookup or decision")
+    if "catalog_lookup" not in payload:
+        return None
+    if set(payload) != {"catalog_lookup"}:
+        raise InterAgentValidationError("Catalog lookup responses may only contain catalog_lookup.")
+    lookup = payload.get("catalog_lookup")
+    if not isinstance(lookup, dict) or set(lookup) != {"cursor"}:
+        raise InterAgentValidationError("Catalog lookup requires exactly one cursor field.")
+    cursor = str(lookup.get("cursor") or "").strip()
+    if not cursor or len(cursor) > 256:
+        raise InterAgentValidationError("Catalog lookup cursor is missing or too long.")
+    return cursor
+
+
 def parse_orchestration_plan(
     value: str,
     *,

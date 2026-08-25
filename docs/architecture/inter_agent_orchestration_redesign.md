@@ -154,6 +154,13 @@ transcript projection behavior.
   resulting immutable participant snapshot. Missing or invalid catalogs fall
   back to the root server snapshot rather than accepting model-authored prompt
   or skill data.
+- Explicit skill capabilities are the intersection of each assigned allowlist
+  and the selected provider's currently enabled workspace catalog. The planner
+  sees `none available` separately from `catalog unavailable`; enabled IDs are
+  deduplicated into shared scopes. Agent and skill catalog text is globally
+  bounded per planner turn, with validated lookup-only JSON cursors for every
+  omitted page. Lookup turns use deterministic message ids and do not become
+  durable plan or control decisions.
 - Hidden participant sessions remain inaccessible through raw runtime HTTP,
   WebSocket, CLI, and MCP paths.
 - Orchestrator-authored task ids cannot claim reserved participant identities,

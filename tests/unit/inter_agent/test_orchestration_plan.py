@@ -5,6 +5,7 @@ import unittest
 
 from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.orchestration_plan import (
+    parse_catalog_lookup_cursor,
     parse_control_decision,
     parse_completion_decision,
     parse_orchestration_plan,
@@ -13,6 +14,17 @@ from core.inter_agent.orchestration_plan import (
 
 
 class OrchestrationPlanTest(unittest.TestCase):
+    def test_parses_catalog_lookup_without_accepting_mixed_decisions(self) -> None:
+        self.assertEqual(
+            parse_catalog_lookup_cursor('{"catalog_lookup":{"cursor":"skills:s0:42"}}'),
+            "skills:s0:42",
+        )
+        self.assertIsNone(parse_catalog_lookup_cursor('{"summary":"Ready","tasks":[]}'))
+        with self.assertRaisesRegex(InterAgentValidationError, "only contain catalog_lookup"):
+            parse_catalog_lookup_cursor(
+                '{"catalog_lookup":{"cursor":"skills:s0:42"},"tasks":[]}'
+            )
+
     def test_parses_dependency_plan_and_quality_decisions(self) -> None:
         plan = parse_orchestration_plan(
             """```json

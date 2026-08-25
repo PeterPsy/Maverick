@@ -54,7 +54,7 @@ def start_orchestrated_execution_worker(
                 workspace_id=workspace_id,
                 run_id=run_id,
                 agent_snapshot_resolver=catalog.resolve,
-                available_agent_type_ids=catalog.prompt_entries,
+                planner_catalog=catalog.planner_catalog,
             )
         except Exception:
             logger.exception("Orchestrated inter-agent worker failed for %s/%s.", workspace_id, run_id)

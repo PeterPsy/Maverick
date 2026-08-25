@@ -14,8 +14,8 @@ class TaskResultLike(Protocol):
 
 
 SKILL_SELECTION_INSTRUCTION = (
-    "Catalog entries declare each agent's skill mode and allowed or assigned IDs. "
-    "For an explicit agent, set invoked_skill_ids to the exact task-required IDs from its allowed list; "
+    "Catalog entries declare each agent's skill mode and its server-owned capability scope. "
+    "For an explicit agent, set invoked_skill_ids to at most 32 exact task-required IDs shown by its scope pages; "
     "use an empty list when that task needs no skill. For an implicit agent, omit invoked_skill_ids unless "
     "the task explicitly requires a structured invocation. "
 )
@@ -27,11 +27,14 @@ def planning_prompt(
     policy: str | None,
     directives: list[Any],
     available_agent_types: list[str] | None = None,
+    *,
+    planner_catalog_page: str | None = None,
 ) -> str:
-    catalog = ", ".join(available_agent_types or []) or "default orchestrator capability"
+    catalog = _catalog_block(available_agent_types, planner_catalog_page)
     return (
-        "You are the sole orchestrator of a Maverick Agent nodes run. Produce only one JSON object with "
-        'summary and tasks. Each task requires id, label, role, objective, depends_on and may select agent_type_id '
+        "You are the sole orchestrator of a Maverick Agent nodes run. Produce only one JSON object: either a "
+        "lookup-only catalog_lookup request using an advertised cursor, or a plan with summary and tasks. "
+        'Each task requires id, label, role, objective, depends_on and may select agent_type_id '
         'and invoked_skill_ids; invoked_skill_ids must list only the task-required skills assigned to that agent; '
         f"{SKILL_SELECTION_INSTRUCTION}"
         "reviewer tasks also require review_of. Use safe lowercase ids. Plan only the work that is ready to start; "
@@ -39,7 +42,7 @@ def planning_prompt(
         "Never use orchestrator as a task id. "
         "Do not execute the work yourself.\n\n"
         f"Policy: {policy or 'auto'}\nUser request:\n{input_text}\n\n"
-        f"Generalist launch analysis:\n{generalist_analysis}\n\nAvailable agent types: {catalog}"
+        f"Generalist launch analysis:\n{generalist_analysis}\n\n{catalog}"
         f"\n{directive_block(directives)}"
     )
 
@@ -67,6 +70,7 @@ def control_prompt(
     trigger_task_id: str | None,
     directives: list[Any],
     available_agent_types: list[str] | None = None,
+    planner_catalog_page: str | None = None,
 ) -> str:
     ledger = "\n".join(
         _task_ledger_line(task, results.get(task.task_id))
@@ -77,9 +81,10 @@ def control_prompt(
         trigger_output = "No new worker output; inspect the ledger."
     else:
         trigger_output = trigger.output_text[:10000] or str(getattr(trigger, "error", "") or "")[:2000]
-    catalog = ", ".join(available_agent_types or []) or "default orchestrator capability"
+    catalog = _catalog_block(available_agent_types, planner_catalog_page)
     return (
         "You are the sole adaptive orchestrator at a persisted scheduling safe point. Respond with one JSON object: "
+        "either a lookup-only catalog_lookup request using an advertised cursor, or "
         '{"summary": string, "tasks": array, "cancel_task_ids": array, "complete": boolean, '
         '"quality_passed": boolean, "final_answer": string}. New tasks use id, label, role, objective, '
         "depends_on and optional agent_type_id and invoked_skill_ids; invoked_skill_ids must list only task-required "
@@ -91,9 +96,19 @@ def control_prompt(
         "material revision work and a later approved review both depend transitively on that rejection. A failed "
         "review remains blocking until an approved retry or replacement review depends on it. "
         "When continuing without new work, return empty tasks and cancel_task_ids.\n\n"
-        f"User request:\n{input_text}\n\nAvailable agent types: {catalog}\n\nTask ledger:\n{ledger}\n\n"
+        f"User request:\n{input_text}\n\n{catalog}\n\nTask ledger:\n{ledger}\n\n"
         f"Safe-point trigger: {trigger_task_id or 'scheduler'}\nLatest output:\n{trigger_output}"
         f"\n{directive_block(directives)}"
+    )
+
+
+def catalog_lookup_followup_prompt(*, decision_kind: str, catalog_page: str) -> str:
+    """Continue the same decision after a server-validated catalog lookup."""
+    return (
+        f"Requested server-authoritative planner catalog page:\n{catalog_page}\n\n"
+        f"Continue the pending {decision_kind} using the earlier request, evidence, and ledger. "
+        "Return either one lookup-only JSON object "
+        '{"catalog_lookup":{"cursor":"<advertised cursor>"}} or the complete decision JSON previously requested.'
     )
 
 
@@ -101,6 +116,13 @@ def directive_block(directives: list[Any]) -> str:
     texts = [str(item.payload.get("text") or "").strip() for item in directives]
     texts = [text for text in texts if text]
     return "\n\nLive generalist/user directives:\n" + "\n".join(f"- {text}" for text in texts) if texts else ""
+
+
+def _catalog_block(available_agent_types: list[str] | None, planner_catalog_page: str | None) -> str:
+    if planner_catalog_page:
+        return planner_catalog_page
+    catalog = ", ".join(available_agent_types or []) or "default orchestrator capability"
+    return f"Available agent types: {catalog}"
 
 
 def _task_ledger_line(task: OrchestrationTaskSpec, result: TaskResultLike | None) -> str:

@@ -12,11 +12,14 @@ from core.apps.runtime_requests import invoke_dependency_backend_request
 from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.models import AgentParticipantSnapshot, InterAgentParticipantRecord
 from core.inter_agent.orchestration_agent_capabilities import (
-    catalog_prompt_entry,
-    enabled_workspace_skill_ids,
-    requires_open_explicit_catalog,
-    root_prompt_entry,
+    CATALOG_AVAILABLE,
+    CATALOG_UNAVAILABLE,
+    EnabledWorkspaceSkillCatalog,
+    build_orchestration_planner_catalog,
+    enabled_workspace_skill_catalog,
+    requires_explicit_catalog,
 )
+from core.inter_agent.orchestration_planner_catalog import OrchestrationPlannerCatalog
 from core.skills.runtime_catalog import (
     selected_runtime_skill_catalog_app_id_for_source_app,
     validate_runtime_skill_catalog_provider_app_id,
@@ -31,7 +34,7 @@ ACTIVE_APP_CONTEXT_HEADER = "Current shell context:"
 @dataclass
 class OrchestrationAgentCatalog:
     root_snapshot: AgentParticipantSnapshot
-    prompt_entries: tuple[str, ...]
+    planner_catalog: OrchestrationPlannerCatalog
     provider_app_id: str | None
     agent_type_ids: frozenset[str]
     state: Any
@@ -112,7 +115,7 @@ def build_orchestration_agent_catalog(
             raise AppHostingError("No shared Chat agent provider is selected.")
         probe = OrchestrationAgentCatalog(
             root_snapshot=root_snapshot,
-            prompt_entries=(),
+            planner_catalog=OrchestrationPlannerCatalog.from_text_entries(()),
             provider_app_id=provider_app_id,
             agent_type_ids=frozenset(),
             state=state,
@@ -131,33 +134,43 @@ def build_orchestration_agent_catalog(
             for item in payload.get("agent_types", [])
             if isinstance(item, dict) and item.get("enabled") is not False and str(item.get("id") or "").strip()
         ]
-        default_skill_ids: list[str] = []
-        if requires_open_explicit_catalog(root_snapshot, items):
+        enabled_skills = EnabledWorkspaceSkillCatalog(
+            state=CATALOG_AVAILABLE,
+            skill_ids=(),
+        )
+        if requires_explicit_catalog(root_snapshot, items):
             try:
                 skill_catalog_app_id = _skill_catalog_app_id(probe, {}, {})
             except InterAgentValidationError:
-                pass
+                enabled_skills = EnabledWorkspaceSkillCatalog(
+                    state=CATALOG_UNAVAILABLE,
+                    skill_ids=(),
+                )
             else:
-                default_skill_ids = enabled_workspace_skill_ids(
+                enabled_skills = enabled_workspace_skill_catalog(
                     workspace_id=probe.workspace_id,
                     start_path=probe.start_path,
                     app_id=skill_catalog_app_id,
                 )
-        prompt_entries = (
-            root_prompt_entry(root_snapshot, default_skill_ids=default_skill_ids),
-            *(
-                catalog_prompt_entry(item, default_skill_ids=default_skill_ids)
-                for item in items
-                if str(item.get("id") or "").strip() != root_snapshot.agent_type_id
-            ),
+        probe.planner_catalog = build_orchestration_planner_catalog(
+            root_snapshot,
+            items,
+            enabled_skills=enabled_skills,
         )
-        probe.prompt_entries = prompt_entries
         probe.agent_type_ids = frozenset(str(item["id"]).strip() for item in items)
         return probe
     except Exception:
+        enabled_skills = EnabledWorkspaceSkillCatalog(
+            state=CATALOG_UNAVAILABLE if root_snapshot.skill_activation_mode == "explicit" else CATALOG_AVAILABLE,
+            skill_ids=(),
+        )
         return OrchestrationAgentCatalog(
             root_snapshot=root_snapshot,
-            prompt_entries=(root_prompt_entry(root_snapshot),),
+            planner_catalog=build_orchestration_planner_catalog(
+                root_snapshot,
+                [],
+                enabled_skills=enabled_skills,
+            ),
             provider_app_id=None,
             agent_type_ids=frozenset({root_snapshot.agent_type_id}),
             state=state,

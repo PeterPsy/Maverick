@@ -6,7 +6,11 @@ from unittest.mock import patch
 
 from core.api.orchestration_agent_catalog import build_orchestration_agent_catalog
 from core.inter_agent.models import AgentParticipantSnapshot
-from core.inter_agent.orchestration_agent_capabilities import root_prompt_entry
+from core.inter_agent.orchestration_agent_capabilities import (
+    CATALOG_AVAILABLE,
+    EnabledWorkspaceSkillCatalog,
+    build_orchestration_planner_catalog,
+)
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import build_inter_agent_document_store
 from tests.support.repo import make_temp_repo_root
@@ -14,8 +18,8 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class OrchestrationAgentCatalogTest(unittest.TestCase):
-    def test_explicit_default_agent_lists_enabled_catalog_ids_when_allowlist_is_open(self) -> None:
-        entry = root_prompt_entry(
+    def test_explicit_default_agent_references_shared_enabled_catalog_scope(self) -> None:
+        catalog = build_orchestration_planner_catalog(
             AgentParticipantSnapshot(
                 agent_type_id="generalist",
                 label="Generalist",
@@ -24,10 +28,17 @@ class OrchestrationAgentCatalogTest(unittest.TestCase):
                 skill_catalog_app_id="skills",
                 skill_activation_mode="explicit",
             ),
-            default_skill_ids=["storage-ops", "browser-ops"],
+            [],
+            enabled_skills=EnabledWorkspaceSkillCatalog(
+                state=CATALOG_AVAILABLE,
+                skill_ids=("storage-ops", "browser-ops"),
+            ),
         )
+        entry = catalog.agent_entries[0].text
 
-        self.assertIn("allowed skill ids=browser-ops,storage-ops", entry)
+        self.assertIn("invocable skill scope=s0", entry)
+        self.assertIn("enabled count=2", entry)
+        self.assertNotIn("browser-ops", entry)
 
     def test_lists_compact_candidates_and_materializes_selected_snapshot_server_side(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
@@ -92,6 +103,13 @@ class OrchestrationAgentCatalogTest(unittest.TestCase):
                 "core.api.orchestration_agent_catalog.validate_runtime_skill_catalog_provider_app_id",
                 return_value="skills",
             ),
+            patch(
+                "core.api.orchestration_agent_catalog.enabled_workspace_skill_catalog",
+                return_value=EnabledWorkspaceSkillCatalog(
+                    state=CATALOG_AVAILABLE,
+                    skill_ids=("storage-ops",),
+                ),
+            ),
         ):
             catalog = build_orchestration_agent_catalog(
                 state,
@@ -103,12 +121,13 @@ class OrchestrationAgentCatalogTest(unittest.TestCase):
             )
             selected = catalog.resolve("agent-type-coder")
 
-        self.assertEqual(catalog.prompt_entries, (
+        self.assertEqual(tuple(entry.text for entry in catalog.planner_catalog.agent_entries), (
             "default (omit agent_type_id): generalist: Generalist "
-            "[skill mode=implicit; assigned skill ids=storage]",
+            "[skill mode=implicit; skills are runtime-managed; omit invoked_skill_ids]",
             "agent-type-coder: Coder Specialist — Implements and tests code changes. "
-            "[skill mode=explicit; allowed skill ids=storage-ops]",
+            "[skill mode=explicit; invocable skill scope=s0; enabled count=1; catalog cursor=skills:s0:0]",
         ))
+        self.assertIn("storage-ops", catalog.planner_catalog.initial_page().text)
         self.assertEqual(selected.agent_type_id, "agent-type-coder")
         self.assertEqual(selected.system_prompt, "You are the server-owned coder specialist.")
         self.assertEqual(selected.skill_ids, ["storage"])

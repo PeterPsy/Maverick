@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.inter_agent.errors import InterAgentValidationError
+from core.inter_agent.orchestration_catalog_lookup import execute_catalog_aware_planner_turn
 from core.inter_agent.orchestration_decisions import record_control_decision, record_control_decision_applied
 from core.inter_agent.orchestration_plan import (
     OrchestrationControlDecision,
@@ -13,7 +14,11 @@ from core.inter_agent.orchestration_plan import (
     parse_control_decision,
     parse_orchestration_plan,
 )
-from core.inter_agent.orchestration_prompts import control_prompt, planning_prompt
+from core.inter_agent.orchestration_prompts import (
+    control_prompt,
+    planning_prompt,
+)
+from core.inter_agent.orchestration_planner_catalog import OrchestrationPlannerCatalog
 from core.inter_agent.orchestration_participants import AgentSnapshotResolver
 from core.inter_agent.orchestration_runtime import ParticipantTurnExecutor, sync_generalist_directives
 from core.inter_agent.orchestration_state import OrchestrationControlState, RecordedControlDecision
@@ -45,6 +50,7 @@ def create_initial_plan(
     *,
     max_initial_tasks: int,
     available_agent_type_ids: tuple[str, ...],
+    planner_catalog: OrchestrationPlannerCatalog | None = None,
     expected_recovery_generation: int | None = None,
 ) -> OrchestrationPlan:
     scheduler_generation = (
@@ -59,7 +65,10 @@ def create_initial_plan(
         expected_recovery_generation=scheduler_generation,
     )
     directives = service.pending_directives(run)
-    output = execute_turn(
+    catalog_page = planner_catalog.initial_page() if planner_catalog is not None else None
+    client_message_id = f"{run.run_id}:orchestrator:plan"
+    output = execute_catalog_aware_planner_turn(
+        execute_turn,
         orchestrator,
         planning_prompt(
             input_text,
@@ -67,9 +76,12 @@ def create_initial_plan(
             run.orchestration_policy,
             directives,
             list(available_agent_type_ids),
+            planner_catalog_page=catalog_page.text if catalog_page is not None else None,
         ),
-        f"{run.run_id}:orchestrator:plan",
-        (),
+        client_message_id,
+        decision_kind="orchestration plan",
+        planner_catalog=planner_catalog,
+        initial_catalog_page=catalog_page,
     )
     plan = parse_orchestration_plan(
         output,
@@ -98,6 +110,7 @@ def next_control_decision(
     runtime_state: Any,
     max_participants: int,
     available_agent_type_ids: tuple[str, ...],
+    planner_catalog: OrchestrationPlannerCatalog | None = None,
     non_cancellable_task_ids: set[str] | None = None,
     expected_recovery_generation: int | None = None,
 ) -> RecordedControlDecision:
@@ -114,7 +127,10 @@ def next_control_decision(
     )
     directives = service.pending_directives(run)
     step = control.control_step + 1
-    output = execute_turn(
+    catalog_page = planner_catalog.index_page() if planner_catalog is not None else None
+    client_message_id = f"{run.run_id}:orchestrator:control:{step}"
+    output = execute_catalog_aware_planner_turn(
+        execute_turn,
         orchestrator,
         control_prompt(
             input_text,
@@ -123,9 +139,12 @@ def next_control_decision(
             trigger_task_id=trigger_task_id,
             directives=directives,
             available_agent_types=list(available_agent_type_ids),
+            planner_catalog_page=catalog_page.text if catalog_page is not None else None,
         ),
-        f"{run.run_id}:orchestrator:control:{step}",
-        (),
+        client_message_id,
+        decision_kind="control decision",
+        planner_catalog=planner_catalog,
+        initial_catalog_page=catalog_page,
     )
     remaining_slots = max(0, max_participants - 1 - len(control.tasks))
     decision = parse_control_decision(

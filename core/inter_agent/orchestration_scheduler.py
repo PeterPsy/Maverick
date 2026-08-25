@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from core.inter_agent.errors import InterAgentOperationError, InterAgentValidationError
+from core.inter_agent.orchestration_planner_catalog import OrchestrationPlannerCatalog
 from core.inter_agent.orchestration_control import (
     ControlCompletion,
     apply_control_decision,
@@ -48,9 +49,12 @@ def execute_orchestrated_run(
     turn_executor: ParticipantTurnExecutor | None = None,
     agent_snapshot_resolver: AgentSnapshotResolver | None = None,
     available_agent_type_ids: tuple[str, ...] = (),
+    planner_catalog: OrchestrationPlannerCatalog | None = None,
     now: datetime | None = None,
 ) -> OrchestrationExecutionResult:
     """Resume or execute one adaptive orchestration from its persisted event state."""
+    if planner_catalog is None:
+        planner_catalog = OrchestrationPlannerCatalog.from_text_entries(available_agent_type_ids)
     run = service.store.get_run(run_id, workspace_id=workspace_id)
     if run.mode != "orchestrated":
         raise InterAgentOperationError("Dynamic scheduler requires an orchestrated run.")
@@ -111,6 +115,7 @@ def execute_orchestrated_run(
                 state,
                 max_initial_tasks=_initial_task_limit(budget.max_participants),
                 available_agent_type_ids=available_agent_type_ids,
+                planner_catalog=planner_catalog,
                 expected_recovery_generation=scheduler_generation,
             )
             record_plan(
@@ -168,6 +173,7 @@ def execute_orchestrated_run(
                     max_control_steps=max_control_steps,
                     agent_snapshot_resolver=agent_snapshot_resolver,
                     available_agent_type_ids=available_agent_type_ids,
+                    planner_catalog=planner_catalog,
                     expected_recovery_generation=scheduler_generation,
                 )
                 if completion is not None:
@@ -185,6 +191,7 @@ def execute_orchestrated_run(
                 runtime_state=state,
                 max_participants=budget.max_participants,
                 available_agent_type_ids=available_agent_type_ids,
+                planner_catalog=planner_catalog,
                 expected_recovery_generation=scheduler_generation,
             )
             completion = apply_control_decision(
@@ -241,6 +248,7 @@ def _execute_ready_wave(
     max_control_steps: int,
     agent_snapshot_resolver: AgentSnapshotResolver | None,
     available_agent_type_ids: tuple[str, ...],
+    planner_catalog: OrchestrationPlannerCatalog | None,
     expected_recovery_generation: int,
 ) -> ControlCompletion | None:
     running_ids = {task.task_id for task in ready}
@@ -282,6 +290,7 @@ def _execute_ready_wave(
                 runtime_state=runtime_state,
                 max_participants=max_participants,
                 available_agent_type_ids=available_agent_type_ids,
+                planner_catalog=planner_catalog,
                 non_cancellable_task_ids=running_ids,
                 expected_recovery_generation=expected_recovery_generation,
             )

@@ -61,6 +61,17 @@ CONSERVATIVE_ACTIONS = {
     "opendesign_e2e_affected",
 }
 WEB_PATCH_COMPONENTS = {"web-build", "web-react"}
+CORE_APP_HOSTING_SUPPORT_PATHS = {
+    "core/api/admin_api.py",
+    "core/api/admin_app_management.py",
+    "core/api/asgi_application.py",
+    "core/api/platform_host.py",
+    "core/api/server.py",
+    "core/cli/app_commands.py",
+    "core/shared/entrypoints.py",
+    "tests/unit/apps/test_surface_descriptors.py",
+    "tests/unit/shared/test_entrypoints.py",
+}
 
 
 @dataclass(frozen=True)
@@ -280,7 +291,14 @@ def _classify_path(path: str) -> tuple[str | None, set[str]]:
             "design_studio_frontend_build",
             "opendesign_e2e_quick",
         }
-    if path.startswith(("apps/design-studio/backend/", "apps/design-studio/mcp/", "apps/design-studio/cli/")):
+    if path.startswith(
+        (
+            "apps/design-studio/backend/",
+            "apps/design-studio/mcp/",
+            "apps/design-studio/cli/",
+            "apps/design-studio/hooks/",
+        )
+    ):
         return "design-studio-backend", {
             "design_studio_backend_tests",
             "opendesign_e2e_affected",
@@ -305,7 +323,15 @@ def _classify_path(path: str) -> tuple[str | None, set[str]]:
             "app_hosting_core_tests",
             "opendesign_e2e_affected",
         }
-    if path.startswith(("core/apps/", "core/api/sidecar", "tests/unit/app_hosting/", "tests/integration/app_hosting/")):
+    if path in CORE_APP_HOSTING_SUPPORT_PATHS or path.startswith(
+        (
+            "core/apps/",
+            "core/api/sidecar",
+            "tests/contracts/app_contract/",
+            "tests/unit/app_hosting/",
+            "tests/integration/app_hosting/",
+        )
+    ):
         return "core-app-hosting", {
             "app_hosting_core_tests",
             "opendesign_e2e_affected",

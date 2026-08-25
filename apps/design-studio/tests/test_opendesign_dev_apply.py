@@ -197,6 +197,37 @@ class DevApplyClassifierTests(unittest.TestCase):
         self.assertEqual(result.actions, ("changed_suite",))
         self.assertNotIn("app_hosting_core_tests", result.actions)
 
+    def test_design_studio_hooks_use_backend_gate_without_repository_suite(self) -> None:
+        result = classify_diff(["apps/design-studio/hooks/health_check.py"])
+
+        self.assertEqual(
+            result.actions,
+            ("design_studio_backend_tests", "opendesign_e2e_affected"),
+        )
+        self.assertNotIn("changed_suite", result.actions)
+
+    def test_hosting_support_paths_use_focused_hosting_gate(self) -> None:
+        result = classify_diff(
+            [
+                "core/api/admin_api.py",
+                "core/api/admin_app_management.py",
+                "core/api/asgi_application.py",
+                "core/api/platform_host.py",
+                "core/api/server.py",
+                "core/cli/app_commands.py",
+                "core/shared/entrypoints.py",
+                "tests/contracts/app_contract/test_services.py",
+                "tests/unit/apps/test_surface_descriptors.py",
+                "tests/unit/shared/test_entrypoints.py",
+            ]
+        )
+
+        self.assertEqual(
+            result.actions,
+            ("app_hosting_core_tests", "opendesign_e2e_affected"),
+        )
+        self.assertNotIn("changed_suite", result.actions)
+
     def test_release_profile_invokes_only_the_complete_e2e_profile(self) -> None:
         result = classify_diff(["apps/design-studio/frontend/src/App.tsx"], profile="release")
 

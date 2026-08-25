@@ -13,282 +13,282 @@
   "launch_performance": {
     "cold_maverick_ready": {
       "count": 10,
-      "max_ms": 2182.815,
-      "p50_ms": 2002.879,
-      "p95_ms": 2182.815,
-      "p99_ms": 2182.815
+      "max_ms": 2148.915,
+      "p50_ms": 1996.664,
+      "p95_ms": 2148.915,
+      "p99_ms": 2148.915
     },
     "core_boot": {
       "count": 10,
-      "max_ms": 1782.115,
-      "p50_ms": 1644.211,
-      "p95_ms": 1782.115,
-      "p99_ms": 1782.115
+      "max_ms": 1655.681,
+      "p50_ms": 1647.616,
+      "p95_ms": 1655.681,
+      "p99_ms": 1655.681
     },
     "core_restart_count": 10,
     "daemon_internal_ready": {
       "count": 10,
-      "max_ms": 3731.057,
-      "p50_ms": 2351.671,
-      "p95_ms": 3731.057,
-      "p99_ms": 3731.057
+      "max_ms": 4038.301,
+      "p50_ms": 2049.769,
+      "p95_ms": 4038.301,
+      "p99_ms": 4038.301
     },
     "full_core_restart": {
       "count": 10,
-      "max_ms": 7193.052,
-      "p50_ms": 5956.343,
-      "p95_ms": 7193.052,
-      "p99_ms": 7193.052
+      "max_ms": 6615.82,
+      "p50_ms": 5643.336,
+      "p95_ms": 6615.82,
+      "p99_ms": 6615.82
     },
     "interface_after_transactional_ready": {
       "count": 10,
-      "max_ms": 5007.207,
-      "p50_ms": 3718.225,
-      "p95_ms": 5007.207,
-      "p99_ms": 5007.207
+      "max_ms": 4327.075,
+      "p50_ms": 3471.042,
+      "p95_ms": 4327.075,
+      "p99_ms": 4327.075
     },
     "prewarm_after_core_health": {
       "count": 10,
-      "max_ms": 471.48,
-      "p50_ms": 367.867,
-      "p95_ms": 471.48,
-      "p99_ms": 471.48
+      "max_ms": 498.516,
+      "p50_ms": 356.97,
+      "p95_ms": 498.516,
+      "p99_ms": 498.516
     },
     "resources": {
-      "cpu_ticks_max": 368,
-      "disk_read_bytes_max": 4096,
+      "cpu_ticks_max": 306,
+      "disk_read_bytes_max": 1986560,
       "process_count_max": 1,
-      "rss_kib_max": 72788
+      "rss_kib_max": 72960
     },
     "samples": [
       {
-        "cold_maverick_ready_ms": 1999.805,
-        "core_boot_ms": 1644.211,
-        "daemon_ready_ms": 3731.057,
-        "full_restart_ms": 6294.776,
-        "interface_after_core_health_ms": 4476.458,
-        "interface_after_transactional_ready_ms": 4120.864,
+        "cold_maverick_ready_ms": 2002.156,
+        "core_boot_ms": 1649.185,
+        "daemon_ready_ms": 4038.301,
+        "full_restart_ms": 5635.957,
+        "interface_after_core_health_ms": 3805.559,
+        "interface_after_transactional_ready_ms": 3452.588,
         "iteration": 1,
-        "prewarm_after_core_health_ms": 355.594,
-        "resources": {
-          "cpu_ticks": 319,
-          "disk_read_bytes": 4096,
-          "process_count": 1,
-          "rss_kib": 72600
-        },
-        "stop_ms": 174.101
-      },
-      {
-        "cold_maverick_ready_ms": 2182.815,
-        "core_boot_ms": 1782.115,
-        "daemon_ready_ms": 2374.055,
-        "full_restart_ms": 6331.471,
-        "interface_after_core_health_ms": 4356.258,
-        "interface_after_transactional_ready_ms": 3955.557,
-        "iteration": 2,
-        "prewarm_after_core_health_ms": 400.7,
-        "resources": {
-          "cpu_ticks": 308,
-          "disk_read_bytes": 0,
-          "process_count": 1,
-          "rss_kib": 72584
-        },
-        "stop_ms": 193.094
-      },
-      {
-        "cold_maverick_ready_ms": 2002.453,
-        "core_boot_ms": 1649.041,
-        "daemon_ready_ms": 2369.475,
-        "full_restart_ms": 5956.343,
-        "interface_after_core_health_ms": 4071.637,
-        "interface_after_transactional_ready_ms": 3718.225,
-        "iteration": 3,
-        "prewarm_after_core_health_ms": 353.412,
-        "resources": {
-          "cpu_ticks": 304,
-          "disk_read_bytes": 0,
-          "process_count": 1,
-          "rss_kib": 72332
-        },
-        "stop_ms": 235.661
-      },
-      {
-        "cold_maverick_ready_ms": 2001.828,
-        "core_boot_ms": 1645.126,
-        "daemon_ready_ms": 2330.818,
-        "full_restart_ms": 5655.808,
-        "interface_after_core_health_ms": 3800.165,
-        "interface_after_transactional_ready_ms": 3443.463,
-        "iteration": 4,
-        "prewarm_after_core_health_ms": 356.701,
-        "resources": {
-          "cpu_ticks": 296,
-          "disk_read_bytes": 4096,
-          "process_count": 1,
-          "rss_kib": 72464
-        },
-        "stop_ms": 210.511
-      },
-      {
-        "cold_maverick_ready_ms": 2002.879,
-        "core_boot_ms": 1641.845,
-        "daemon_ready_ms": 2130.329,
-        "full_restart_ms": 5786.505,
-        "interface_after_core_health_ms": 3898.148,
-        "interface_after_transactional_ready_ms": 3537.114,
-        "iteration": 5,
-        "prewarm_after_core_health_ms": 361.034,
+        "prewarm_after_core_health_ms": 352.971,
         "resources": {
           "cpu_ticks": 306,
-          "disk_read_bytes": 0,
+          "disk_read_bytes": 1986560,
           "process_count": 1,
-          "rss_kib": 72548
+          "rss_kib": 72768
         },
-        "stop_ms": 246.506
+        "stop_ms": 181.207
       },
       {
-        "cold_maverick_ready_ms": 2094.589,
-        "core_boot_ms": 1646.666,
-        "daemon_ready_ms": 2051.097,
-        "full_restart_ms": 6173.617,
-        "interface_after_core_health_ms": 4370.681,
-        "interface_after_transactional_ready_ms": 3922.758,
-        "iteration": 6,
-        "prewarm_after_core_health_ms": 447.923,
+        "cold_maverick_ready_ms": 1904.114,
+        "core_boot_ms": 1545.161,
+        "daemon_ready_ms": 2023.992,
+        "full_restart_ms": 6029.478,
+        "interface_after_core_health_ms": 4301.309,
+        "interface_after_transactional_ready_ms": 3942.356,
+        "iteration": 2,
+        "prewarm_after_core_health_ms": 358.953,
         "resources": {
-          "cpu_ticks": 300,
+          "cpu_ticks": 295,
           "disk_read_bytes": 0,
           "process_count": 1,
-          "rss_kib": 72584
+          "rss_kib": 72960
         },
-        "stop_ms": 156.264
+        "stop_ms": 183.003
       },
       {
-        "cold_maverick_ready_ms": 2116.755,
-        "core_boot_ms": 1647.651,
-        "daemon_ready_ms": 2351.671,
-        "full_restart_ms": 6534.91,
-        "interface_after_core_health_ms": 4749.926,
-        "interface_after_transactional_ready_ms": 4280.822,
-        "iteration": 7,
-        "prewarm_after_core_health_ms": 469.104,
+        "cold_maverick_ready_ms": 2004.217,
+        "core_boot_ms": 1655.681,
+        "daemon_ready_ms": 2436.829,
+        "full_restart_ms": 5740.627,
+        "interface_after_core_health_ms": 3819.579,
+        "interface_after_transactional_ready_ms": 3471.042,
+        "iteration": 3,
+        "prewarm_after_core_health_ms": 348.536,
+        "resources": {
+          "cpu_ticks": 281,
+          "disk_read_bytes": 0,
+          "process_count": 1,
+          "rss_kib": 71884
+        },
+        "stop_ms": 265.362
+      },
+      {
+        "cold_maverick_ready_ms": 1895.068,
+        "core_boot_ms": 1542.125,
+        "daemon_ready_ms": 2037.547,
+        "full_restart_ms": 5478.134,
+        "interface_after_core_health_ms": 3811.414,
+        "interface_after_transactional_ready_ms": 3458.471,
+        "iteration": 4,
+        "prewarm_after_core_health_ms": 352.943,
+        "resources": {
+          "cpu_ticks": 276,
+          "disk_read_bytes": 0,
+          "process_count": 1,
+          "rss_kib": 71844
+        },
+        "stop_ms": 124.589
+      },
+      {
+        "cold_maverick_ready_ms": 1903.126,
+        "core_boot_ms": 1542.658,
+        "daemon_ready_ms": 2021.95,
+        "full_restart_ms": 5588.762,
+        "interface_after_core_health_ms": 3920.92,
+        "interface_after_transactional_ready_ms": 3560.452,
+        "iteration": 5,
+        "prewarm_after_core_health_ms": 360.467,
         "resources": {
           "cpu_ticks": 280,
           "disk_read_bytes": 0,
           "process_count": 1,
-          "rss_kib": 71448
+          "rss_kib": 72240
         },
-        "stop_ms": 137.328
+        "stop_ms": 125.178
       },
       {
-        "cold_maverick_ready_ms": 2015.289,
-        "core_boot_ms": 1642.511,
-        "daemon_ready_ms": 3088.143,
-        "full_restart_ms": 5707.647,
-        "interface_after_core_health_ms": 3949.873,
-        "interface_after_transactional_ready_ms": 3577.095,
-        "iteration": 8,
-        "prewarm_after_core_health_ms": 372.778,
-        "resources": {
-          "cpu_ticks": 290,
-          "disk_read_bytes": 0,
-          "process_count": 1,
-          "rss_kib": 72032
-        },
-        "stop_ms": 115.258
-      },
-      {
-        "cold_maverick_ready_ms": 2019.002,
-        "core_boot_ms": 1547.521,
-        "daemon_ready_ms": 2025.091,
-        "full_restart_ms": 7193.052,
-        "interface_after_core_health_ms": 5478.687,
-        "interface_after_transactional_ready_ms": 5007.207,
-        "iteration": 9,
-        "prewarm_after_core_health_ms": 471.48,
-        "resources": {
-          "cpu_ticks": 368,
-          "disk_read_bytes": 0,
-          "process_count": 1,
-          "rss_kib": 72788
-        },
-        "stop_ms": 166.83
-      },
-      {
-        "cold_maverick_ready_ms": 1907.998,
-        "core_boot_ms": 1540.13,
-        "daemon_ready_ms": 2875.145,
-        "full_restart_ms": 5500.935,
-        "interface_after_core_health_ms": 3772.782,
-        "interface_after_transactional_ready_ms": 3404.915,
-        "iteration": 10,
-        "prewarm_after_core_health_ms": 367.867,
+        "cold_maverick_ready_ms": 2053.714,
+        "core_boot_ms": 1649.984,
+        "daemon_ready_ms": 2049.769,
+        "full_restart_ms": 6011.686,
+        "interface_after_core_health_ms": 4079.27,
+        "interface_after_transactional_ready_ms": 3675.54,
+        "iteration": 6,
+        "prewarm_after_core_health_ms": 403.73,
         "resources": {
           "cpu_ticks": 301,
           "disk_read_bytes": 0,
           "process_count": 1,
-          "rss_kib": 72508
+          "rss_kib": 72752
         },
-        "stop_ms": 188.017
+        "stop_ms": 282.426
+      },
+      {
+        "cold_maverick_ready_ms": 1900.805,
+        "core_boot_ms": 1543.835,
+        "daemon_ready_ms": 2152.473,
+        "full_restart_ms": 5643.336,
+        "interface_after_core_health_ms": 3916.727,
+        "interface_after_transactional_ready_ms": 3559.756,
+        "iteration": 7,
+        "prewarm_after_core_health_ms": 356.97,
+        "resources": {
+          "cpu_ticks": 296,
+          "disk_read_bytes": 0,
+          "process_count": 1,
+          "rss_kib": 72716
+        },
+        "stop_ms": 182.77
+      },
+      {
+        "cold_maverick_ready_ms": 2011.996,
+        "core_boot_ms": 1654.916,
+        "daemon_ready_ms": 2127.925,
+        "full_restart_ms": 5714.415,
+        "interface_after_core_health_ms": 3759.423,
+        "interface_after_transactional_ready_ms": 3402.343,
+        "iteration": 8,
+        "prewarm_after_core_health_ms": 357.08,
+        "resources": {
+          "cpu_ticks": 287,
+          "disk_read_bytes": 0,
+          "process_count": 1,
+          "rss_kib": 72048
+        },
+        "stop_ms": 300.072
+      },
+      {
+        "cold_maverick_ready_ms": 2148.915,
+        "core_boot_ms": 1650.4,
+        "daemon_ready_ms": 2034.782,
+        "full_restart_ms": 6615.82,
+        "interface_after_core_health_ms": 4825.591,
+        "interface_after_transactional_ready_ms": 4327.075,
+        "iteration": 9,
+        "prewarm_after_core_health_ms": 498.516,
+        "resources": {
+          "cpu_ticks": 292,
+          "disk_read_bytes": 0,
+          "process_count": 1,
+          "rss_kib": 71852
+        },
+        "stop_ms": 139.824
+      },
+      {
+        "cold_maverick_ready_ms": 1996.664,
+        "core_boot_ms": 1647.616,
+        "daemon_ready_ms": 2671.499,
+        "full_restart_ms": 5502.93,
+        "interface_after_core_health_ms": 3704.86,
+        "interface_after_transactional_ready_ms": 3355.811,
+        "iteration": 10,
+        "prewarm_after_core_health_ms": 349.048,
+        "resources": {
+          "cpu_ticks": 290,
+          "disk_read_bytes": 0,
+          "process_count": 1,
+          "rss_kib": 72376
+        },
+        "stop_ms": 150.448
       }
     ],
     "schema_version": "1",
     "targets_met": true,
     "warm_browser_ticket": {
       "count": 30,
-      "max_ms": 39.726,
-      "p50_ms": 24.716,
-      "p95_ms": 25.803,
-      "p99_ms": 39.726,
+      "max_ms": 58.057,
+      "p50_ms": 27.175,
+      "p95_ms": 40.078,
+      "p99_ms": 58.057,
       "same_sidecar_instance": true
     },
     "warm_interface": {
       "count": 30,
       "full_wrapper_remount": {
         "count": 30,
-        "max_ms": 2057.964,
-        "p50_ms": 1142.289,
-        "p95_ms": 1758.486,
-        "p99_ms": 2057.964
+        "max_ms": 1822.019,
+        "p50_ms": 1090.118,
+        "p95_ms": 1533.21,
+        "p99_ms": 1822.019
       },
-      "max_ms": 1624.103,
-      "p50_ms": 794.54,
-      "p95_ms": 1225.859,
-      "p99_ms": 1624.103,
+      "max_ms": 1357.883,
+      "p50_ms": 693.126,
+      "p95_ms": 1207.934,
+      "p99_ms": 1357.883,
       "sidecar_frame_ready": {
         "count": 30,
-        "max_ms": 1624.103,
-        "p50_ms": 794.54,
-        "p95_ms": 1225.859,
-        "p99_ms": 1624.103
+        "max_ms": 1357.883,
+        "p50_ms": 693.126,
+        "p95_ms": 1207.934,
+        "p99_ms": 1357.883
       },
       "sidecar_navigation": {
         "count": 30,
-        "max_ms": 776.1,
-        "p50_ms": 310.7,
-        "p95_ms": 481.4,
-        "p99_ms": 776.1
+        "max_ms": 507.1,
+        "p50_ms": 255.5,
+        "p95_ms": 500,
+        "p99_ms": 507.1
       },
       "sidecar_resource_transfer_bytes": {
         "count": 30,
-        "max_ms": 3071,
+        "max_ms": 1758,
         "p50_ms": 324,
         "p95_ms": 1411,
-        "p99_ms": 3071
+        "p99_ms": 1758
       },
       "sidecar_response": {
         "count": 30,
-        "max_ms": 568.4,
-        "p50_ms": 172.5,
-        "p95_ms": 371.9,
-        "p99_ms": 568.4
+        "max_ms": 398,
+        "p50_ms": 154.8,
+        "p95_ms": 369.5,
+        "p99_ms": 398
       },
       "wrapper_dom_content_loaded": {
         "count": 30,
-        "max_ms": 671.687,
-        "p50_ms": 376.041,
-        "p95_ms": 605.003,
-        "p99_ms": 671.687
+        "max_ms": 769.647,
+        "p50_ms": 379.638,
+        "p95_ms": 557.298,
+        "p99_ms": 769.647
       }
     }
   },
@@ -313,14 +313,14 @@
   "scenarios": [
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "login_open",
@@ -333,14 +333,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "create_project_ui",
@@ -356,14 +356,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "storage_import",
@@ -375,14 +375,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "runtime_start",
@@ -394,14 +394,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "incremental_sse",
@@ -413,14 +413,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "generated_preview",
@@ -432,14 +432,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_32bf9259ac9f5177bcb0b765",
+        "correlation_id": "request_4d0db776ae0476ca4a58ce87",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_5071d19a06e54f22b965bb1510146da7",
-        "request_id": "request_32bf9259ac9f5177bcb0b765",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_7556f12c9ca941809b7474c57e4e7b66",
+        "request_id": "request_4d0db776ae0476ca4a58ce87",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "f3750293-8688-48bd-9bc7-9d001e30ae62",
+        "turn_id": "b5b74f5c-4b2b-4ec0-9897-6ad751423f62",
         "workspace_id": "default"
       },
       "id": "cancel_long_run",
@@ -452,14 +452,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "storage_export",
@@ -471,14 +471,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "restart_reload",
@@ -491,14 +491,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "deep_link",
@@ -511,14 +511,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_75277d4790922f425cde7f45",
+        "correlation_id": "request_e0817a3a8a8965b779e003f7",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_22e4e4e2a78c41688aa5433a",
-        "od_run_id": "od_run_cb2ca9949cd94e6abfccc1415be05fda",
-        "request_id": "request_75277d4790922f425cde7f45",
-        "runtime_session_id": "efe0b3ff-d02a-48be-aaed-653ff58fc0a3",
+        "od_project_id": "od_maverick_447c473082e9491db9aa8d9e",
+        "od_run_id": "od_run_1b7b8d0a632b4251bae6e1c4f27a3afe",
+        "request_id": "request_e0817a3a8a8965b779e003f7",
+        "runtime_session_id": "b976dc22-fe2e-453f-8053-5ef24ce85899",
         "sidecar_id": "opendesign",
-        "turn_id": "6765437f-b087-41ee-8a13-9b8089916b5f",
+        "turn_id": "119e3ceb-8f47-4d7f-b8f5-bba87bc1028a",
         "workspace_id": "workspace-b"
       },
       "id": "workspace_isolation",
@@ -530,14 +530,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "forbidden_routes",
@@ -549,14 +549,14 @@
     },
     {
       "correlation": {
-        "correlation_id": "request_ec276a5d2799a3311cb73594",
+        "correlation_id": "request_d956370b7d98ee56683dd01f",
         "local_app_id": "design-studio",
-        "od_project_id": "od_maverick_e382b93c11224c78ac7f83ab",
-        "od_run_id": "od_run_aaeac158b0f24aa788d84aab5538e12c",
-        "request_id": "request_ec276a5d2799a3311cb73594",
-        "runtime_session_id": "58d49a92-6024-4c53-bcb9-a4fcb90f90a4",
+        "od_project_id": "od_maverick_6a0cd48cb24548cb96d985a0",
+        "od_run_id": "od_run_73bc5c6718aa472d9e1880e80131a817",
+        "request_id": "request_d956370b7d98ee56683dd01f",
+        "runtime_session_id": "aea14703-bd52-4639-a4c5-eee5d13f7df5",
         "sidecar_id": "opendesign",
-        "turn_id": "da7be95f-3b64-4e0f-b2fd-3438d93ee20e",
+        "turn_id": "84262328-2f4d-4215-8ce3-da49eaa8f435",
         "workspace_id": "default"
       },
       "id": "secret_boundary",

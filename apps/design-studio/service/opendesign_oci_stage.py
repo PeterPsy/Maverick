@@ -129,6 +129,10 @@ def _safe_stage_path(root: Path, relative: str, *, directory: bool) -> Path:
 
 
 def _normalize_tree(root: Path) -> None:
+    # A staging root created below a collaborative/setgid work directory may
+    # inherit 02000.  Clear it before later metadata directories are created,
+    # otherwise identical inputs produce environment-dependent tar headers.
+    root.chmod(0o755)
     for path in artifact_paths(root):
         if path.is_symlink():
             try:
@@ -144,6 +148,7 @@ def _normalize_tree(root: Path) -> None:
         else:
             raise OciStageError("OpenDesign runtime closure contains an unsupported object")
         os.utime(path, (0, 0), follow_symlinks=False)
+    root.chmod(0o755)
     os.utime(root, (0, 0), follow_symlinks=False)
 
 

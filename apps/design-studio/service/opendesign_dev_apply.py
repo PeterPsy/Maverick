@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import pwd
+import re
 import subprocess
 import sys
 import tempfile
@@ -69,6 +70,17 @@ class DiffClassification:
     actions: tuple[str, ...]
     conservative_elevation: bool
     unknown_files: tuple[str, ...]
+
+
+class GateExecutionError(RuntimeError):
+    """Bounded, redaction-safe failure for one isolated dev-apply gate."""
+
+    def __init__(self, action: str, exit_code: int, *, stdout: str, stderr: str) -> None:
+        super().__init__(f"gate {action} exited with status {exit_code}")
+        self.code = f"{action}_failed"
+        self.phase = action
+        self.exit_code = exit_code
+        self.diagnostic = _redacted_gate_diagnostic(stderr or stdout)
 
 
 def classify_diff(
@@ -235,17 +247,21 @@ def apply_incremental(payload: dict[str, Any], arguments: dict[str, Any]) -> dic
                     "reason": "post_activation_gate_failed",
                     "error_code": type(rollback_error).__name__,
                 }
-        report["actions"].append(
-            {
-                "name": classification.actions[len(report["actions"])]
-                if len(report["actions"]) < len(classification.actions)
-                else "unknown",
-                "status": "failed",
-                "error_code": type(error).__name__,
-            }
-        )
+        failure = {
+            "name": classification.actions[len(report["actions"])]
+            if len(report["actions"]) < len(classification.actions)
+            else "unknown",
+            "status": "failed",
+            "error_code": getattr(error, "code", type(error).__name__),
+            "phase": getattr(error, "phase", "dev_apply"),
+        }
+        if isinstance(getattr(error, "exit_code", None), int):
+            failure["exit_code"] = error.exit_code
+        if isinstance(getattr(error, "diagnostic", None), str) and error.diagnostic:
+            failure["diagnostic"] = error.diagnostic
+        report["actions"].append(failure)
         raise DevApplyError(
-            f"Design Studio incremental apply failed: {type(error).__name__}",
+            f"Design Studio incremental apply failed: {failure['error_code']}",
             report=report,
         ) from error
     finally:
@@ -398,7 +414,12 @@ def _run_gate(
         **({"env": environment} if environment is not None else {}),
     )
     if completed.returncode != 0:
-        raise RuntimeError(f"gate {action} exited with status {completed.returncode}")
+        raise GateExecutionError(
+            action,
+            completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
     result: dict[str, Any] = {"status": "passed", "exit_code": completed.returncode}
     if completed.stdout.strip().startswith("{"):
         try:
@@ -406,6 +427,23 @@ def _run_gate(
         except json.JSONDecodeError:
             pass
     return result
+
+
+def _redacted_gate_diagnostic(value: str) -> str:
+    """Return one useful gate line without paths, credentials, or payloads."""
+    lines = [line.strip() for line in str(value or "").splitlines() if line.strip()]
+    if not lines:
+        return ""
+    candidates = [line for line in lines if "error" in line.lower() or "failed" in line.lower()]
+    diagnostic = (candidates[-1] if candidates else lines[-1])[:512]
+    lowered = diagnostic.lower()
+    if any(
+        marker in lowered
+        for marker in ("authorization", "bearer", "cookie", "password", "secret", "api_key", "api-key")
+    ):
+        return "[redacted gate diagnostic]"
+    diagnostic = re.sub(r"(?<![A-Za-z0-9_.-])/(?:[^\s:'\"`]+)", "<path>", diagnostic)
+    return diagnostic[:240]
 
 
 def _build_and_activate_overlay(

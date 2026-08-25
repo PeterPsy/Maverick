@@ -15,6 +15,7 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_dev_apply import (  # noqa: E402
     DevApplyError,
+    GateExecutionError,
     _changed_patch_series_components,
     _restart_sidecars,
     _run_gate,
@@ -53,6 +54,29 @@ class DevApplyClassifierTests(unittest.TestCase):
             },
         )
         self.assertFalse(result.conservative_elevation)
+
+    def test_failed_gate_exposes_typed_redacted_diagnostic(self) -> None:
+        completed = Mock(
+            returncode=7,
+            stdout="",
+            stderr="OpenDesign OCI import failed at /home/private/signing-key.pem\n",
+        )
+        with tempfile.TemporaryDirectory(prefix="od-gate-error-") as temporary:
+            root = Path(temporary)
+            with patch("opendesign_dev_apply.subprocess.run", return_value=completed):
+                with self.assertRaises(GateExecutionError) as raised:
+                    _run_gate(
+                        "design_studio_frontend_tests",
+                        {},
+                        repo_root=root,
+                        changed_files=("apps/design-studio/frontend/src/App.tsx",),
+                    )
+
+        self.assertEqual(raised.exception.code, "design_studio_frontend_tests_failed")
+        self.assertEqual(raised.exception.phase, "design_studio_frontend_tests")
+        self.assertEqual(raised.exception.exit_code, 7)
+        self.assertIn("<path>", raised.exception.diagnostic)
+        self.assertNotIn("/home/private", raised.exception.diagnostic)
 
     def test_web_build_and_react_patches_never_imply_runtime_pipeline(self) -> None:
         result = classify_diff(

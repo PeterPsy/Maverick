@@ -6,6 +6,7 @@ import importlib.util
 from io import BytesIO
 import json
 from pathlib import Path
+import stat
 import sys
 import tarfile
 import tempfile
@@ -278,6 +279,23 @@ class OpenDesignOciImportTests(unittest.TestCase):
                 [(root / "app/apps/daemon/dist/cli.js").as_uri(), "--no-open"],
             )
             self.assertNotEqual(command[3], "node")
+
+    def test_staging_normalization_clears_inherited_setgid_before_metadata(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-od-oci-setgid-") as temporary:
+            parent = Path(temporary) / "shared-work"
+            parent.mkdir()
+            parent.chmod(0o2775)
+            staging = parent / "staging"
+            staging.mkdir()
+            (staging / "runtime").mkdir()
+
+            self.stage._normalize_tree(staging)
+            metadata = staging / "maverick"
+            metadata.mkdir()
+
+            self.assertEqual(stat.S_IMODE(staging.stat().st_mode), 0o755)
+            self.assertEqual(stat.S_IMODE((staging / "runtime").stat().st_mode), 0o755)
+            self.assertEqual(stat.S_IMODE(metadata.stat().st_mode), 0o755)
 
     def test_primary_import_has_no_docker_socket_or_embedded_web_builder(self) -> None:
         sources = "\n".join(

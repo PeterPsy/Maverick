@@ -61,8 +61,9 @@ package manager and core therefore does not mount a host Node runtime.
 Publication performs the complete manifest-v2 audit, including contents,
 modes, directories, symlinks, and absence of extra files, then writes a
 protected receipt and atomically renames the generation into place. Normal
-launch checks that receipt, store identity, owner/modes, read-only mount, and
-exact runtime/overlay/data binding without scanning or hashing the closure.
+launch hashes only the manifest-v2 metadata file to bind it to that receipt,
+then checks store identity, owner/modes, read-only mount, and exact
+runtime/overlay/data binding without scanning or hashing the closure.
 Full verification remains mandatory for install, activation, repair, audit,
 and release certification. Core prewarms asynchronously with per-key
 singleflight; its browser gate is `/api/maverick-ready` with a 12-second budget.

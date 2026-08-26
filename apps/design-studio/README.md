@@ -59,8 +59,9 @@ SHA-256 digests are pinned in the committed canonical manifest.
 normalizes manifest-v2 modes, performs a complete content audit, writes a
 protected receipt, fsyncs, and atomically publishes the digest. An invalid
 generation is quarantined and replaced, never edited in place. Normal launch
-validates only the receipt, store generation, exact control binding,
-ownership/modes, and read-only mount; it does not hash the closure. Full audits
+binds the protected manifest v2 to its receipt, then validates store generation,
+exact control binding, ownership/modes, and read-only mount; it does not hash the
+closure. Full audits
 run on publication, activation, repair, release certification, and background
 maintenance. Active and rollback generations are selected explicitly;
 `opendesign_release_selection.json` schema v2 binds the rollback web overlay
@@ -285,9 +286,10 @@ cookies, Storage, operator paths, and other workspaces are absent. The generated
 technical token uses the generic `${service.token}` substitution and is not the
 relay capability.
 
-OpenDesign performs a receipt-only integrity check before every process start;
-full hashing is outside the launch critical path. Core prewarms the declared
-sidecar asynchronously after bootstrap, install, activation, and repair, with
+OpenDesign authenticates the small manifest-v2 file against its protected
+receipt before every process start; closure hashing remains outside the launch
+critical path. Core prewarms the declared sidecar asynchronously after
+bootstrap, install, activation, and repair, with
 per-key singleflight so one slow app cannot convoy unrelated sidecars. The
 sidecar health gate uses only `/api/maverick-ready` with a 12-second budget;
 failed readiness terminates the complete process group and returns a typed,

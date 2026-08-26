@@ -24,7 +24,12 @@ from opendesign_artifact_store import (  # noqa: E402
     OpenDesignArtifactStore,
     _mapped_namespace_id,
 )
-from opendesign_store_manifest import StoreManifestError, create_store_manifest, verify_store_manifest  # noqa: E402
+from opendesign_store_manifest import (  # noqa: E402
+    StoreManifestError,
+    create_store_manifest,
+    manifest_sha256,
+    verify_store_manifest,
+)
 from opendesign_artifact_operations import (  # noqa: E402
     _clear_invalid_marker,
     _known_invalid_identity,
@@ -141,6 +146,33 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
             self.store.full_audit("runtime", self.archive_digest)
         self.assertEqual(raised.exception.code, "artifact_integrity_mismatch")
         self.assertGreaterEqual(raised.exception.differences, 1)
+
+    def test_receipt_authenticates_manifest_v2_on_fast_and_full_paths(self) -> None:
+        published = self._publish_runtime()
+        receipt_digest = published.receipt["file_manifest_sha256"]
+        (published.content_path / "share/readme.txt").write_text("replacement\n", encoding="utf-8")
+        replacement_manifest = create_store_manifest(published.content_path)
+        self.assertNotEqual(manifest_sha256(replacement_manifest), receipt_digest)
+        write_canonical_json(published.package_path / "manifest-v2.json", replacement_manifest)
+
+        with self.assertRaises(ArtifactStoreError) as fast_failure:
+            self.store.fast_runtime(
+                self.archive_digest,
+                file_manifest_sha256=self.source_manifest_digest,
+                opendesign_version="0.16.1",
+                upstream_commit=UPSTREAM_COMMIT,
+            )
+        self.assertEqual(fast_failure.exception.phase, "artifact_fast_verify")
+
+        # Even if the file changes after the fast digest read, full audit binds
+        # the parsed manifest to the same receipt before trusting its inventory.
+        with (
+            patch("opendesign_artifact_store.sha256_file", return_value=receipt_digest),
+            self.assertRaises(ArtifactStoreError) as full_failure,
+        ):
+            self.store.full_audit("runtime", self.archive_digest)
+        self.assertEqual(full_failure.exception.phase, "artifact_full_verify")
+        self.assertGreaterEqual(full_failure.exception.differences, 1)
 
     def test_receipt_tampering_fails_fast_and_repair_quarantines_instead_of_editing_in_place(self) -> None:
         published = self._publish_runtime()

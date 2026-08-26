@@ -18,7 +18,12 @@ from typing import Any, Callable, Iterator
 from uuid import uuid4
 
 from opendesign_archive import FILE_MANIFEST_PATH, read_materialized_marker
-from opendesign_artifact import ArtifactError, is_sha256, write_canonical_json
+from opendesign_artifact import (
+    ArtifactError,
+    is_sha256,
+    sha256_file,
+    write_canonical_json,
+)
 from opendesign_attestation import verify_artifact_set
 from opendesign_materialization import materialize_archive
 from opendesign_store_manifest import (
@@ -225,6 +230,13 @@ class OpenDesignArtifactStore:
         result = self._fast(kind, digest, require_mount=False)
         manifest = _read_json(result.package_path / "manifest-v2.json", label="store manifest v2")
         try:
+            if manifest_sha256(manifest) != result.receipt["file_manifest_sha256"]:
+                raise ArtifactStoreError(
+                    "artifact_integrity_mismatch",
+                    "artifact_full_verify",
+                    "OpenDesign store manifest v2 differs from its protected receipt",
+                    differences=1,
+                )
             verify_store_manifest(result.content_path, manifest, max_workers=max_workers)
             if kind == "runtime":
                 marker = read_materialized_marker(result.content_path)
@@ -408,6 +420,21 @@ class OpenDesignArtifactStore:
             owner_uid=owner_uid,
             owner_gid=owner_gid,
         )
+        try:
+            observed_manifest_sha256 = sha256_file(manifest_path)
+        except (OSError, ArtifactError) as error:
+            raise ArtifactStoreError(
+                "artifact_integrity_mismatch",
+                "artifact_fast_verify",
+                "OpenDesign store manifest v2 cannot be authenticated",
+            ) from error
+        if observed_manifest_sha256 != receipt["file_manifest_sha256"]:
+            raise ArtifactStoreError(
+                "artifact_integrity_mismatch",
+                "artifact_fast_verify",
+                "OpenDesign store manifest v2 differs from its protected receipt",
+                differences=1,
+            )
         should_require_mount = self.require_read_only_mount if require_mount is None else require_mount
         if should_require_mount and not _path_is_read_only_mount(self.root):
             raise ArtifactStoreError(

@@ -29,6 +29,7 @@ def main() -> None:
         result["artifact_store"] = {
             "status": provisioned["status"],
             "store_generation": provisioned["store_generation"],
+            "staging_recovery": provisioned["staging_recovery"],
             "runtime_artifact_sha256": provisioned["runtime_artifact_sha256"],
             "retained_runtime_artifacts": provisioned["retained_runtime_artifacts"],
             "web_overlay_sha256": provisioned["web_overlay_sha256"],

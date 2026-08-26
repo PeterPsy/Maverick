@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import errno
 import json
 import os
 from pathlib import Path
+import select
 import shutil
+import signal
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -31,9 +35,12 @@ from opendesign_store_manifest import (  # noqa: E402
     verify_store_manifest,
 )
 from opendesign_artifact_operations import (  # noqa: E402
+    RequiredArtifacts,
     _clear_invalid_marker,
+    _garbage_collect,
     _known_invalid_identity,
     _mark_invalid,
+    _purge_expired_quarantine,
     _required_artifacts,
 )
 
@@ -273,6 +280,126 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
             )
         self.assertTrue(active.is_dir())
         rename_store.full_audit("runtime", self.archive_digest)
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires POSIX process semantics")
+    def test_sigkill_stage_is_not_reaped_live_then_is_quarantined_and_retained(self) -> None:
+        read_descriptor, write_descriptor = os.pipe()
+        child_pid = os.fork()
+        if child_pid == 0:  # pragma: no cover - assertions are made by the parent
+            os.close(read_descriptor)
+
+            def pause_after_fsync(phase: str) -> None:
+                if phase == "fsync":
+                    os.write(write_descriptor, b"1")
+                    while True:
+                        signal.pause()
+
+            try:
+                child_store = OpenDesignArtifactStore(self.namespace)
+                self._publish_to(child_store, injector=pause_after_fsync)
+            finally:
+                os._exit(70)
+
+        os.close(write_descriptor)
+        waited = False
+        try:
+            readable, _, _ = select.select([read_descriptor], [], [], 10)
+            self.assertTrue(readable, "child publisher did not reach the protected fsync phase")
+            self.assertEqual(os.read(read_descriptor, 1), b"1")
+
+            while_live = self.store.recover_orphaned_staging(legacy_grace_seconds=0)
+            self.assertEqual(while_live, {"recovered": 0, "active": 1, "deferred_legacy": 0})
+            self.assertEqual(len(list((self.namespace / ".staging").iterdir())), 1)
+
+            os.kill(child_pid, signal.SIGKILL)
+            _pid, status = os.waitpid(child_pid, 0)
+            waited = True
+            self.assertTrue(os.WIFSIGNALED(status))
+            self.assertEqual(os.WTERMSIG(status), signal.SIGKILL)
+
+            after_kill = self.store.recover_orphaned_staging(legacy_grace_seconds=0)
+            self.assertEqual(after_kill, {"recovered": 1, "active": 0, "deferred_legacy": 0})
+            self.assertEqual(list((self.namespace / ".staging").iterdir()), [])
+            self.assertEqual(list((self.namespace / ".staging-leases").iterdir()), [])
+            quarantined = list((self.namespace / "quarantine/staging").iterdir())
+            self.assertEqual(len(quarantined), 1)
+            self.assertFalse((self.namespace / "runtime" / self.archive_digest).exists())
+
+            resumed = self._publish_runtime()
+            self.assertEqual(resumed.artifact_sha256, self.archive_digest)
+            self.store.full_audit("runtime", self.archive_digest)
+
+            expired = time.time() - (2 * 24 * 60 * 60)
+            os.utime(quarantined[0], (expired, expired))
+            _purge_expired_quarantine(self.namespace, retention_days=1)
+            self.assertEqual(list((self.namespace / "quarantine/staging").iterdir()), [])
+        finally:
+            os.close(read_descriptor)
+            if not waited:
+                try:
+                    os.kill(child_pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                os.waitpid(child_pid, 0)
+
+    def test_enospc_fails_typed_cleans_stage_and_allows_a_fresh_publish(self) -> None:
+        with (
+            patch(
+                "opendesign_artifact_store._fsync_tree",
+                side_effect=OSError(errno.ENOSPC, "injected disk full"),
+            ),
+            self.assertRaises(ArtifactStoreError) as raised,
+        ):
+            self._publish_runtime()
+
+        self.assertEqual(raised.exception.code, "artifact_repair_failed")
+        self.assertEqual(raised.exception.phase, "artifact_staging")
+        self.assertEqual(list((self.namespace / ".staging").iterdir()), [])
+        self.assertEqual(list((self.namespace / ".staging-leases").iterdir()), [])
+        self.assertFalse((self.namespace / "runtime" / self.archive_digest).exists())
+        self.assertEqual(self._publish_runtime().artifact_sha256, self.archive_digest)
+
+    def test_unleased_legacy_stage_uses_a_grace_period_before_quarantine(self) -> None:
+        legacy = self.namespace / ".staging/.runtime-legacy-dead"
+        legacy.mkdir()
+        (legacy / "partial").write_bytes(b"partial")
+
+        recent = self.store.recover_orphaned_staging(legacy_grace_seconds=300)
+        self.assertEqual(recent, {"recovered": 0, "active": 0, "deferred_legacy": 1})
+        expired = time.time() - 301
+        os.utime(legacy, (expired, expired))
+        recovered = self.store.recover_orphaned_staging(legacy_grace_seconds=300)
+        self.assertEqual(recovered, {"recovered": 1, "active": 0, "deferred_legacy": 0})
+        self.assertFalse(legacy.exists())
+        self.assertEqual(len(list((self.namespace / "quarantine/staging").iterdir())), 1)
+
+    def test_garbage_collection_recovers_orphaned_staging(self) -> None:
+        orphan = self.namespace / ".staging/.runtime-legacy-gc"
+        orphan.mkdir()
+        expired = time.time() - 301
+        os.utime(orphan, (expired, expired))
+        required = RequiredArtifacts(
+            current_runtime=self.archive_digest,
+            active_runtime=self.archive_digest,
+            rollback_runtime="a" * 64,
+            active_web="b" * 64,
+            optional_runtime=(),
+            web_overlays=(),
+            fresh_web_overlay="b" * 64,
+        )
+
+        with patch(
+            "opendesign_artifact_operations._read_selection",
+            return_value={"quarantine_retention_days": 14},
+        ):
+            result = _garbage_collect(self.store, required=required)
+
+        self.assertEqual(
+            result["staging_recovery"],
+            {"recovered": 1, "active": 0, "deferred_legacy": 0},
+        )
+        self.assertFalse(orphan.exists())
+        self.assertEqual(len(list((self.namespace / "quarantine/staging").iterdir())), 1)
 
     def _publish_runtime(self, *, repair: bool = False, injector=None):
         return self._publish_to(self.store, repair=repair, injector=injector)

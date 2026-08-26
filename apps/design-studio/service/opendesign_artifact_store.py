@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import ctypes
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import errno
 import fcntl
 import json
 import os
@@ -40,6 +41,8 @@ from opendesign_web_overlay import VerifiedWebOverlay, verify_staged_web_overlay
 NAMESPACE_MARKER = ".maverick-artifact-namespace.json"
 RECEIPT_SCHEMA_VERSION = "1"
 VERIFIER_VERSION = "opendesign-store-v1"
+STAGING_LEASE_SCHEMA_VERSION = "1"
+LEGACY_STAGING_GRACE_SECONDS = 300
 FailureInjector = Callable[[str], None]
 ArtifactVerifier = Callable[[dict[str, Any], Path], dict[str, Any]]
 
@@ -63,6 +66,21 @@ class StoredArtifact:
     receipt: dict[str, Any]
 
 
+@dataclass
+class _StagingLease:
+    stage: Path
+    path: Path
+    descriptor: int
+    closed: bool = False
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        fcntl.flock(self.descriptor, fcntl.LOCK_UN)
+        os.close(self.descriptor)
+        self.closed = True
+
+
 class OpenDesignArtifactStore:
     """Own OpenDesign runtime and web generations outside the source tree."""
 
@@ -83,6 +101,62 @@ class OpenDesignArtifactStore:
         if not path.exists() and not path.is_symlink():
             return None
         return _directory_identity(path)
+
+    def recover_orphaned_staging(
+        self,
+        *,
+        legacy_grace_seconds: int = LEGACY_STAGING_GRACE_SECONDS,
+    ) -> dict[str, int]:
+        """Quarantine crash-orphaned stages without touching a live publisher."""
+        if self.require_read_only_mount:
+            raise ArtifactStoreError(
+                "artifact_permissions_invalid",
+                "staging_recovery",
+                "Read-only runtime mounts cannot recover artifact staging",
+            )
+        if (
+            isinstance(legacy_grace_seconds, bool)
+            or not isinstance(legacy_grace_seconds, int)
+            or legacy_grace_seconds < 0
+        ):
+            raise ArtifactStoreError(
+                "runtime_binding_invalid",
+                "staging_recovery",
+                "OpenDesign legacy staging grace is invalid",
+            )
+        recovered = 0
+        active = 0
+        deferred = 0
+        with self._staging_registry_lock():
+            staging_root = self.root / ".staging"
+            lease_root = self.root / ".staging-leases"
+            now = time.time()
+            for candidate in list(staging_root.iterdir()):
+                lease_path = lease_root / f"{candidate.name}.json"
+                try:
+                    lease_descriptor = _try_lock_staging_lease(lease_path)
+                except BlockingIOError:
+                    active += 1
+                    continue
+                if lease_descriptor is None and _legacy_stage_is_recent(
+                    candidate,
+                    now=now,
+                    grace_seconds=legacy_grace_seconds,
+                ):
+                    deferred += 1
+                    continue
+                try:
+                    _quarantine_orphaned_stage(self.root, candidate)
+                    recovered += 1
+                finally:
+                    if isinstance(lease_descriptor, int):
+                        fcntl.flock(lease_descriptor, fcntl.LOCK_UN)
+                        os.close(lease_descriptor)
+                    lease_path.unlink(missing_ok=True)
+            _remove_stale_staging_leases(staging_root, lease_root)
+            _fsync_directory(staging_root)
+            _fsync_directory(lease_root)
+        return {"recovered": recovered, "active": active, "deferred_legacy": deferred}
 
     def publish_runtime(
         self,
@@ -312,9 +386,11 @@ class OpenDesignArtifactStore:
                     except ArtifactStoreError:
                         if not repair:
                             raise
-            stage = Path(tempfile.mkdtemp(prefix=f".{kind}-{digest[:12]}-", dir=self.root / ".staging"))
+            lease: _StagingLease | None = None
             activated = False
             try:
+                lease = self._create_staging_lease(kind, digest)
+                stage = lease.stage
                 content = stage / "content"
                 extra = build(content)
                 manifest = create_store_manifest(
@@ -357,10 +433,17 @@ class OpenDesignArtifactStore:
                 activated = True
                 _fsync_directory(destination.parent)
                 _inject(failure_injector, "rename")
+            except OSError as error:
+                if error.errno == errno.ENOSPC:
+                    raise ArtifactStoreError(
+                        "artifact_repair_failed",
+                        "artifact_staging",
+                        "OpenDesign artifact staging ran out of storage",
+                    ) from error
+                raise
             finally:
-                if not activated and stage.exists() and not stage.is_symlink():
-                    _make_owner_writable(stage)
-                    shutil.rmtree(stage)
+                if lease is not None:
+                    self._finalize_staging_lease(lease, activated=activated)
             return self._fast(kind, digest, require_mount=False)
 
     def _fast(
@@ -504,13 +587,74 @@ class OpenDesignArtifactStore:
         return marker
 
     def _ensure_layout(self, *, create: bool) -> None:
-        for relative in ("runtime", "web", "quarantine/runtime", "quarantine/web", ".staging", ".locks"):
+        for relative in (
+            "runtime",
+            "web",
+            "quarantine/runtime",
+            "quarantine/web",
+            "quarantine/staging",
+            ".staging",
+            ".staging-leases",
+            ".locks",
+        ):
             path = self.root / relative
             if create:
                 path.mkdir(parents=True, exist_ok=True, mode=0o750)
                 path.chmod(0o750)
             elif not path.is_dir() or path.is_symlink():
                 raise ArtifactStoreError("artifact_missing", "store_open", "OpenDesign artifact store layout is incomplete")
+
+    def _create_staging_lease(self, kind: str, digest: str) -> _StagingLease:
+        with self._staging_registry_lock():
+            stage = Path(
+                tempfile.mkdtemp(
+                    prefix=f".{kind}-{digest[:12]}-",
+                    dir=self.root / ".staging",
+                )
+            )
+            lease_path = self.root / ".staging-leases" / f"{stage.name}.json"
+            descriptor = -1
+            try:
+                flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
+                if hasattr(os, "O_NOFOLLOW"):
+                    flags |= os.O_NOFOLLOW
+                descriptor = os.open(lease_path, flags, 0o640)
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                payload = {
+                    "schema_version": STAGING_LEASE_SCHEMA_VERSION,
+                    "kind": kind,
+                    "artifact_sha256": digest,
+                    "stage_name": stage.name,
+                    "store_generation": self.store_generation,
+                    "publisher_pid": os.getpid(),
+                    "created_at_epoch_ms": int(time.time() * 1000),
+                }
+                _write_descriptor(
+                    descriptor,
+                    (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8"),
+                )
+                os.fsync(descriptor)
+                _fsync_directory(stage)
+                _fsync_directory(stage.parent)
+                _fsync_directory(lease_path.parent)
+                return _StagingLease(stage=stage, path=lease_path, descriptor=descriptor)
+            except Exception:
+                if descriptor >= 0:
+                    os.close(descriptor)
+                lease_path.unlink(missing_ok=True)
+                if stage.exists() and not stage.is_symlink():
+                    shutil.rmtree(stage)
+                raise
+
+    def _finalize_staging_lease(self, lease: _StagingLease, *, activated: bool) -> None:
+        with self._staging_registry_lock():
+            lease.close()
+            lease.path.unlink(missing_ok=True)
+            if not activated and lease.stage.exists() and not lease.stage.is_symlink():
+                _make_owner_writable(lease.stage)
+                shutil.rmtree(lease.stage)
+            _fsync_directory(self.root / ".staging")
+            _fsync_directory(self.root / ".staging-leases")
 
     @contextmanager
     def _digest_lock(self, kind: str, digest: str) -> Iterator[None]:
@@ -525,6 +669,108 @@ class OpenDesignArtifactStore:
         finally:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
             os.close(descriptor)
+
+    @contextmanager
+    def _staging_registry_lock(self) -> Iterator[None]:
+        lock_path = self.root / ".locks/staging-registry.lock"
+        flags = os.O_RDWR | os.O_CREAT
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(lock_path, flags, 0o640)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+
+
+def _try_lock_staging_lease(path: Path) -> int | None:
+    """Return a locked fd, None for no safe lease, or raise while it is live."""
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return None
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        return None
+    flags = os.O_RDWR
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError:
+        return None
+    try:
+        opened = os.fstat(descriptor)
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (
+            metadata.st_dev,
+            metadata.st_ino,
+        ):
+            os.close(descriptor)
+            return None
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return descriptor
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def _legacy_stage_is_recent(candidate: Path, *, now: float, grace_seconds: int) -> bool:
+    try:
+        modified = candidate.lstat().st_mtime
+    except FileNotFoundError:
+        return False
+    return now - modified < grace_seconds
+
+
+def _quarantine_orphaned_stage(root: Path, candidate: Path) -> None:
+    try:
+        metadata = candidate.lstat()
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        candidate.unlink(missing_ok=True)
+        return
+    destination = root / "quarantine/staging" / (
+        f"orphan.{int(time.time())}.{uuid4().hex[:12]}"
+    )
+    os.rename(candidate, destination)
+    os.utime(destination, None, follow_symlinks=False)
+    _fsync_directory(destination.parent)
+
+
+def _remove_stale_staging_leases(staging_root: Path, lease_root: Path) -> None:
+    for lease_path in list(lease_root.iterdir()):
+        stage_name = lease_path.name.removesuffix(".json")
+        if lease_path.name.endswith(".json") and (staging_root / stage_name).exists():
+            continue
+        try:
+            descriptor = _try_lock_staging_lease(lease_path)
+        except BlockingIOError:
+            continue
+        if isinstance(descriptor, int):
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
+        try:
+            metadata = lease_path.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode):
+            raise ArtifactStoreError(
+                "artifact_permissions_invalid",
+                "staging_recovery",
+                "OpenDesign staging lease registry contains a directory",
+            )
+        lease_path.unlink(missing_ok=True)
+
+
+def _write_descriptor(descriptor: int, payload: bytes) -> None:
+    remaining = memoryview(payload)
+    while remaining:
+        written = os.write(descriptor, remaining)
+        if written <= 0:
+            raise OSError("short write to OpenDesign staging lease")
+        remaining = remaining[written:]
 
 
 def _validate_receipt(payload: object, *, kind: str, digest: str, store_generation: str) -> dict[str, Any]:

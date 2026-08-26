@@ -73,6 +73,14 @@ verification profiles. A fresh install therefore materializes and fully audits
 both exact runtime sources instead of assuming that the rollback is already in
 the store. Unreferenced entries are never used as a fallback.
 
+Every publication stage owns an external lease file locked for the lifetime of
+the publisher. A governed provision, repair, or garbage-collection pass skips a
+live lease, but atomically moves a lease whose process died (including
+`SIGKILL`) into `quarantine/staging/`. Pre-lease staging from an older release
+gets a five-minute compatibility grace. Staging quarantine follows the same
+configured retention as runtime and overlay quarantine; `ENOSPC` fails with a
+typed error, removes the incomplete stage, and never exposes a partial digest.
+
 Each immutable web overlay carries a file-level manifest, archive digest,
 runtime/upstream compatibility, lockfile and toolchain digests, CycloneDX SBOM,
 licenses, provenance, and signature. Verification uses the separately reviewed

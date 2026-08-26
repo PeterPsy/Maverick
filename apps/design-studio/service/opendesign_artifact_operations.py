@@ -80,6 +80,11 @@ def run_artifact_operation(
 
     namespace = _namespace(repository, create=operation in {"repair", "provision", "gc"})
     store = OpenDesignArtifactStore(namespace)
+    staging_recovery = (
+        store.recover_orphaned_staging()
+        if operation in {"repair", "provision"}
+        else None
+    )
     runtime_sources = load_runtime_source_catalog()
     manifest = runtime_sources.by_role["current"].manifest
     required = _required_artifacts(data_root, manifest=manifest)
@@ -125,6 +130,7 @@ def run_artifact_operation(
         "status": "ready",
         "duration_ms": _elapsed_ms(started),
         "store_generation": store.store_generation,
+        **({"staging_recovery": staging_recovery} if staging_recovery is not None else {}),
         **result,
     }
 
@@ -638,6 +644,7 @@ def _read_selection() -> dict[str, Any]:
 
 
 def _garbage_collect(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> dict[str, Any]:
+    staging_recovery = store.recover_orphaned_staging()
     keep_runtime = set(
         (
             required.current_runtime,
@@ -656,12 +663,15 @@ def _garbage_collect(store: OpenDesignArtifactStore, *, required: RequiredArtifa
             os.rename(candidate, marker)
             marked.append(f"{kind}:{candidate.name}")
     _purge_expired_quarantine(store.root, retention_days=int(_read_selection()["quarantine_retention_days"]))
-    return {"marked_for_gc": sorted(marked)}
+    return {
+        "marked_for_gc": sorted(marked),
+        "staging_recovery": staging_recovery,
+    }
 
 
 def _purge_expired_quarantine(root: Path, *, retention_days: int) -> None:
     cutoff = datetime.now(tz=UTC) - timedelta(days=max(1, retention_days))
-    for kind in ("runtime", "web"):
+    for kind in ("runtime", "web", "staging"):
         for candidate in (root / "quarantine" / kind).iterdir():
             if candidate.is_symlink() or not candidate.is_dir():
                 continue

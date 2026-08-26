@@ -118,6 +118,15 @@ and replaced from staging; it is never overwritten or repaired file-by-file.
 The launcher uses the receipt fast path for the exact active
 runtime/overlay/version/data selection.
 
+`.staging/` is governed by per-stage lease files in `.staging-leases/`, with an
+`flock` held until the atomic rename finishes. Recovery never reaps a live
+publisher. After process death it moves the orphan directory atomically to
+`quarantine/staging/`; legacy unleased stages receive a bounded five-minute
+grace. Provision and repair run this recovery before materialization, garbage
+collection runs it directly, and staging quarantine is purged only after the
+release retention interval. A real `SIGKILL` test proves lease handoff and
+resume, while an injected `ENOSPC` proves typed failure and immediate cleanup.
+
 Web overlays have their own archive and manifest-v2 file/mode inventory, compatible runtime
 digests, upstream/version pin, lockfile and toolchain digests, CycloneDX SBOM,
 license inventory, provenance, and signature. Publication and full audit verify them fail-closed against

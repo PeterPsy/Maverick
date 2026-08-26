@@ -20,7 +20,7 @@ Adapter: `maverick-hosted-tool-loop==5`
 | Continuation | stateful in production; stateless exact-history codec tested |
 | Tool calls | one sequential function call per model step; consumed call ids are retained in private codec state |
 | Reasoning levels | `high`; deployed default `high` |
-| Future standalone diagnostic output budget | 2,048 tokens per request, including thinking tokens |
+| Synthetic live probe output budget | 2,048 tokens per request, including thinking tokens |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
 | Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
@@ -63,16 +63,17 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Standalone live diagnostic | operator-only and outside the certification manifest/repository checks | future release gate; not certificate evidence |
+| Live capability probe | operator-only two sequential real-filesystem-list calls plus final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run at bootstrap |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
-certificate. The certification pipeline executes fixture-contract steps only,
-binds the result to the source commit, suite version, adapter artifact bundle
-and this matrix revision, and signs the completed run. A future operator live
-diagnostic is invoked separately and is not a manifest step or certificate
-claim. Only a verified fixture-contract artifact may be used to issue a
-candidate certificate, which still cannot bypass Phase-0 admission.
+certificate. Certification requires deterministic fixture conformance, the
+operator-only synthetic live probe, behavioral validation of the complete
+ordered manifest and canonical command digests, and only then signing and
+publication. Repository checks explicitly select `fixture_contract` and never
+start the retained `live_probe`; a fixture-only result is rejected by signing,
+verification, and publication. Even a valid candidate certificate cannot bypass
+Phase-0 admission.
 The executable signing and publication workflow is defined in
 `docs/runbooks/agentic_certification_evidence.md`.
 
@@ -103,6 +104,7 @@ NO-GO. It also carries the revision-12 corrections exposed by a real multi-tool 
 conservative per-request price reservations are reconciled with reported usage,
 and Google private continuation state tracks already-consumed call ids so a
 cumulative Core result ledger can send only the currently pending result. The
-r8 fixture contract covers sequential tool calls before the final response. The
+r8 fixture contract and retained live probe cover sequential tool calls before
+the final response. The probe has not been run for this candidate. The
 shared egress contract also redacts residual host paths found inside untrusted
 tool output while retaining fail-closed denial for every other provenance.

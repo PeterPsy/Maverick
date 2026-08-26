@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 import tempfile
 import unittest
@@ -15,10 +16,116 @@ from core.providers.google_agentic_profile import (
     GOOGLE_AGENTIC_PROFILE_ID,
     GOOGLE_AGENTIC_PROFILE_REVISION,
 )
+from core.providers.agentic_profiles import resolve_workspace_agentic_profile
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_authorized_codex_pin_matches_the_preflight_profile_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state, app, cookie = self._platform(temp_dir)
+            definition, binding = resolve_workspace_agentic_profile(
+                state.provider_store,
+                workspace_id="default",
+                enforce_remote_admission=False,
+            )
+
+            with patch(
+                "core.api.runtime_api._prewarm_new_runtime_session",
+                return_value=None,
+            ):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={
+                        "agent_id": "chat",
+                        "source_app_id": "chat",
+                        "runtime_mode": "agentic",
+                    },
+                    cookie=cookie,
+                )
+
+            self.assertEqual(status, 201)
+            pinned = payload["execution_binding"]
+            self.assertEqual(pinned["workspace_binding_id"], binding.binding_id)
+            self.assertEqual(pinned["workspace_binding_revision"], binding.revision)
+            self.assertEqual(pinned["profile_definition_id"], definition.definition_id)
+            self.assertEqual(
+                pinned["profile_definition_revision"],
+                definition.revision,
+            )
+
+    def test_profile_mutation_fails_before_claim_prepared_lock_or_runtime_records(self) -> None:
+        request_shapes = {
+            "claim": {
+                "input_text": "must not persist",
+                "client_message_id": "mutating-profile-message",
+            },
+            "prepared": {"prepare_only": True},
+        }
+        for mutation in ("revision", "default", "definition"):
+            for request_kind, request_fields in request_shapes.items():
+                with self.subTest(mutation=mutation, request_kind=request_kind), tempfile.TemporaryDirectory() as temp_dir:
+                    state, app, cookie = self._platform(temp_dir)
+                    resolver = self._mutating_profile_resolver(state, mutation=mutation)
+                    before_sessions = state.runtime_store.list_all_sessions()
+                    before_threads = state.runtime_store.list_threads("default")
+
+                    with patch(
+                        "core.api.runtime_api.resolve_workspace_agentic_profile",
+                        side_effect=resolver,
+                    ), patch.object(
+                        state.runtime_store,
+                        "claim_client_message_id",
+                        wraps=state.runtime_store.claim_client_message_id,
+                    ) as claim_client_message, patch(
+                        "core.api.runtime_api.acquire_prepared_session",
+                    ) as acquire_prepared, patch(
+                        "core.api.runtime_api.create_runtime_session",
+                    ) as create_session, patch(
+                        "core.api.runtime_api.create_runtime_thread",
+                    ) as create_thread, patch(
+                        "core.api.runtime_api.submit_runtime_turn",
+                    ) as submit_turn, patch(
+                        "core.api.runtime_api.submit_runtime_turn_async",
+                    ) as submit_turn_async:
+                        status, payload, _headers = self._invoke(
+                            app,
+                            path="/api/runtime/sessions",
+                            method="POST",
+                            body={
+                                "agent_id": "chat",
+                                "source_app_id": "chat",
+                                "runtime_mode": "agentic",
+                                **request_fields,
+                            },
+                            cookie=cookie,
+                        )
+
+                    self.assertEqual(status, 409)
+                    self.assertIn(
+                        payload["error"],
+                        {
+                            "workspace_profile_binding_changed",
+                            "profile_definition_invalid",
+                        },
+                    )
+                    claim_client_message.assert_not_called()
+                    acquire_prepared.assert_not_called()
+                    create_session.assert_not_called()
+                    create_thread.assert_not_called()
+                    submit_turn.assert_not_called()
+                    submit_turn_async.assert_not_called()
+                    self.assertEqual(
+                        state.runtime_store.list_all_sessions(),
+                        before_sessions,
+                    )
+                    self.assertEqual(
+                        state.runtime_store.list_threads("default"),
+                        before_threads,
+                    )
+
     def test_remote_agentic_session_is_rejected_before_persistence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             state, app, cookie = self._platform(temp_dir)
@@ -117,6 +224,60 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
             state = bootstrap_platform_state(start_path=repo_root)
         app = PlatformHost(state, start_path=repo_root)
         return state, app, self._login(app)
+
+    @staticmethod
+    def _mutating_profile_resolver(state, *, mutation: str):
+        def resolve_then_mutate(*args, **kwargs):
+            definition, binding = resolve_workspace_agentic_profile(*args, **kwargs)
+            now = datetime.now(UTC)
+            if mutation == "revision":
+                state.provider_store.save_workspace_agentic_profile_binding(
+                    replace(
+                        binding,
+                        revision=binding.revision + 1,
+                        updated_at=now,
+                    ),
+                    expected_revision=binding.revision,
+                )
+            elif mutation == "default":
+                state.provider_store.save_workspace_agentic_profile_binding(
+                    replace(
+                        binding,
+                        is_default=False,
+                        revision=binding.revision + 1,
+                        updated_at=now,
+                    ),
+                    expected_revision=binding.revision,
+                )
+                state.provider_store.save_workspace_agentic_profile_binding(
+                    replace(
+                        binding,
+                        binding_id="workspace-agentic-concurrent-default",
+                        revision=0,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    expected_revision=None,
+                )
+            elif mutation == "definition":
+                status = state.provider_store.get_agentic_profile_definition_status(
+                    definition.definition_id,
+                    definition.revision,
+                )
+                state.provider_store.save_agentic_profile_definition_status(
+                    replace(
+                        status,
+                        rollout_status="suspended",
+                        revision=status.revision + 1,
+                        updated_at=now,
+                    ),
+                    expected_revision=status.revision,
+                )
+            else:
+                raise AssertionError(f"Unknown mutation {mutation}")
+            return definition, binding
+
+        return resolve_then_mutate
 
     @staticmethod
     def _remote_binding(state):

@@ -11,10 +11,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from core.api.platform_state import bootstrap_platform_state
 from core.providers.certificate_service import runtime_adapter_artifact_digest
 from core.providers.certification_pipeline import (
+    SignedCertificationRun,
     execute_certification_suite,
     sign_certification_run,
 )
-from core.providers.errors import ProviderNotFoundError
+from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 from core.providers.openrouter_agentic_certification import (
     OPENROUTER_CERTIFICATION_MATRIX_REVISION,
     OPENROUTER_CERTIFICATION_SUITE_ID,
@@ -103,6 +104,15 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             "core.providers.certification_pipeline.subprocess.run",
             return_value=completed,
         ):
+            fixture_run = execute_certification_suite(
+                cwd=repository_root,
+                suite_id=OPENROUTER_CERTIFICATION_SUITE_ID,
+                suite_version=OPENROUTER_CERTIFICATION_SUITE_VERSION,
+                adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
+                evidence_refs=("platform-evidence:test-run:openrouter-fixture",),
+                started_at=NOW,
+                step_kinds=("fixture_contract",),
+            )
             run = execute_certification_suite(
                 cwd=repository_root,
                 suite_id=OPENROUTER_CERTIFICATION_SUITE_ID,
@@ -110,6 +120,25 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
                 adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
                 evidence_refs=("platform-evidence:test-run:openrouter",),
                 started_at=NOW,
+            )
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "certification_required_steps_missing",
+        ):
+            publish_openrouter_preview_certificate(
+                state.provider_store,
+                definition=profile,
+                adapter=adapter,
+                signed_run=SignedCertificationRun(
+                    run=fixture_run,
+                    signer_key_id="test-ci",
+                    signature="fixture-only-is-not-certificate-evidence",
+                ),
+                trusted_keys={"test-ci": private_key.public_key()},
+            )
+        with self.assertRaises(ProviderNotFoundError):
+            state.provider_store.get_capability_certificate(
+                profile.capability_certificate_id
             )
         signed = sign_certification_run(
             run,

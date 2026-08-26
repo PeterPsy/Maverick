@@ -450,6 +450,7 @@ export type AgenticAdminItem = {
     provider_id: string;
     endpoint_id: string;
     upstream_provider_ids: string[];
+    display_label: string;
   };
   egress_policy: {
     policy_id: string;

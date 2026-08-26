@@ -34,7 +34,7 @@ active for DeepSeek V4 Flash, with `tools`, `tool_choice`, `reasoning`,
 `max_tokens`, and `reasoning_effort` support. Neither catalog declared
 `parallel_tool_calls`. The endpoint exposed FP8 quantization; the recorded list
 price was $0.09 per million input tokens and $0.18 per million output tokens.
-The standalone operator diagnostic fetches both official catalogs immediately before any
+The certification probe fetches both official catalogs immediately before any
 completion request and fails unless this exact record is active, ZDR-listed,
 large enough for the requested completion budget, and supports every parameter
 the translated payload sends that participates in endpoint parameter routing.
@@ -98,14 +98,17 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
+| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus final response at every certificate-bound reasoning effort | manifest step available; not run for r8 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the candidate profile and never manufactures a
-certificate. Certification manifests execute fixture-contract steps only and
-produce an immutable result bound to source commit, suite version, adapter
-artifact bundle and this matrix revision, with an Ed25519 signature from a
-trusted CI key. Any future operator live diagnostic and catalog reconfirmation
-run separately and are not manifest steps or certificate claims.
+certificate. Certification requires deterministic fixture conformance, the
+operator-only synthetic live probe with fresh catalog/ZDR reconfirmation,
+behavioral validation of the complete ordered manifest and canonical command
+digests, and only then an immutable signed result and publication. Repository
+checks explicitly select `fixture_contract` and never start the retained
+`live_probe`; fixture-only output is rejected by signing, verification, and
+publication.
 The executable signing and publication workflow is defined in
 `docs/runbooks/agentic_certification_evidence.md`.
 
@@ -135,7 +138,8 @@ other provenance remain denied. Revision 11 is historical and suspended.
 Revision 12 retains the exact `fake-data preview` warning label but removes fake
 classification authority: its policy lists only Core-classified `public`, its
 egress id is `remote-agentic-contained@2`, and central admission remains
-NO-GO. The r8 certification manifest is fixture-contract-only.
+NO-GO. The r8 certification manifest retains both `fixture_contract` and
+`live_probe`; the live step has not been run for this candidate.
 
 ## Fail-closed conditions
 

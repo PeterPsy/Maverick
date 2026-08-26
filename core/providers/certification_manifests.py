@@ -124,6 +124,11 @@ GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
                 "tests.unit.runtime_tools.test_tool_orchestrator",
             ),
         ),
+        CertificationStepManifest(
+            step_id="live-synthetic-probe",
+            kind="live_probe",
+            command=("python3", "scripts/run_google_interactions_probe.py"),
+        ),
     ),
 )
 
@@ -225,6 +230,11 @@ OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
                 "tests.unit.runtime_tools.test_tool_orchestrator",
                 "tests.unit.scripts.test_openrouter_agentic_probe",
             ),
+        ),
+        CertificationStepManifest(
+            step_id="live-synthetic-probe",
+            kind="live_probe",
+            command=("python3", "scripts/run_openrouter_agentic_probe.py"),
         ),
     ),
 )

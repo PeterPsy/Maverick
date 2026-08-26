@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import UTC, datetime
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 import core.apps.runtime_requests as runtime_requests
+from core.api.platform_state import bootstrap_platform_state
+from core.providers.agentic_profiles import resolve_workspace_agentic_profile
 from core.providers.errors import ProviderError
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
 )
+from tests.support.repo import make_temp_repo_root
 
 
 class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
@@ -99,6 +105,99 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
         self.assertEqual(result["error"], "remote_agentic_attestation_unavailable")
         self.runtime_store.reserve_app_stream.assert_not_called()
 
+    def test_profile_mutation_fails_before_app_stream_or_runtime_records(self) -> None:
+        for mutation in ("revision", "default", "definition"):
+            with self.subTest(mutation=mutation):
+                root = make_temp_repo_root(self)
+                with patch.dict(
+                    os.environ,
+                    {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+                    clear=False,
+                ):
+                    state = bootstrap_platform_state(
+                        start_path=root,
+                        install_builtin_apps=False,
+                    )
+                resolver = self._mutating_profile_resolver(
+                    state,
+                    mutation=mutation,
+                )
+                before_sessions = state.runtime_store.list_all_sessions()
+                before_threads = state.runtime_store.list_threads("default")
+                with patch.object(
+                    runtime_requests,
+                    "resolve_workspace_agentic_profile",
+                    side_effect=resolver,
+                ), patch.object(
+                    runtime_requests,
+                    "resolve_runtime_actor_roles",
+                    return_value=("admin", "user:admin", "admin"),
+                ), patch.object(
+                    runtime_requests,
+                    "actor_selection_allowed",
+                    return_value=True,
+                ), patch.object(
+                    state.runtime_store,
+                    "reserve_app_stream",
+                    wraps=state.runtime_store.reserve_app_stream,
+                ) as reserve_app_stream, patch.object(
+                    runtime_requests,
+                    "create_runtime_session",
+                ) as create_session, patch.object(
+                    runtime_requests,
+                    "create_runtime_thread",
+                ) as create_thread, patch.object(
+                    runtime_requests,
+                    "submit_runtime_turn_async",
+                ) as submit_turn, patch.object(
+                    runtime_requests,
+                    "_record_runtime_request_failed",
+                ), patch.object(
+                    runtime_requests,
+                    "_invoke_runtime_request_callback",
+                    return_value={"status_code": 0},
+                ):
+                    result = runtime_requests._apply_one_runtime_request(
+                        state,
+                        request={
+                            "request_id": f"mutating-{mutation}",
+                            "idempotency_key": f"mutating-{mutation}",
+                            "create_stream": True,
+                            "agent_id": "chat",
+                            "runtime_mode": "agentic",
+                            "input_text": "must not persist",
+                        },
+                        workspace_id="default",
+                        app_id="sensor-hub",
+                        source_root=root / "apps" / "sensor-hub",
+                        backend_entrypoint=None,
+                        data_root="workspaces/default/data/sensor-hub",
+                        parsed=SimpleNamespace(),
+                        start_path=root,
+                        actor_user_id="user:admin",
+                    )
+
+                self.assertEqual(result["status"], "failed")
+                self.assertIn(
+                    result["error"],
+                    {
+                        "workspace_profile_binding_changed",
+                        "profile_definition_invalid",
+                    },
+                )
+                reserve_app_stream.assert_not_called()
+                create_session.assert_not_called()
+                create_thread.assert_not_called()
+                submit_turn.assert_not_called()
+                self.assertEqual(
+                    state.runtime_store.list_all_sessions(),
+                    before_sessions,
+                )
+                self.assertEqual(
+                    state.runtime_store.list_threads("default"),
+                    before_threads,
+                )
+
     def _authorized_remote_profile(self):
         return _PatchGroup(
             patch.object(
@@ -113,6 +212,60 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
             ),
             patch.object(runtime_requests, "actor_selection_allowed", return_value=True),
         )
+
+    @staticmethod
+    def _mutating_profile_resolver(state, *, mutation: str):
+        def resolve_then_mutate(*args, **kwargs):
+            definition, binding = resolve_workspace_agentic_profile(*args, **kwargs)
+            now = datetime.now(UTC)
+            if mutation == "revision":
+                state.provider_store.save_workspace_agentic_profile_binding(
+                    replace(
+                        binding,
+                        revision=binding.revision + 1,
+                        updated_at=now,
+                    ),
+                    expected_revision=binding.revision,
+                )
+            elif mutation == "default":
+                state.provider_store.save_workspace_agentic_profile_binding(
+                    replace(
+                        binding,
+                        is_default=False,
+                        revision=binding.revision + 1,
+                        updated_at=now,
+                    ),
+                    expected_revision=binding.revision,
+                )
+                state.provider_store.save_workspace_agentic_profile_binding(
+                    replace(
+                        binding,
+                        binding_id="workspace-agentic-concurrent-app-default",
+                        revision=0,
+                        created_at=now,
+                        updated_at=now,
+                    ),
+                    expected_revision=None,
+                )
+            elif mutation == "definition":
+                status = state.provider_store.get_agentic_profile_definition_status(
+                    definition.definition_id,
+                    definition.revision,
+                )
+                state.provider_store.save_agentic_profile_definition_status(
+                    replace(
+                        status,
+                        rollout_status="suspended",
+                        revision=status.revision + 1,
+                        updated_at=now,
+                    ),
+                    expected_revision=status.revision,
+                )
+            else:
+                raise AssertionError(f"Unknown mutation {mutation}")
+            return definition, binding
+
+        return resolve_then_mutate
 
 
 class _PatchGroup:

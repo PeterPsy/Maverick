@@ -27,6 +27,26 @@ export function ComposerRuntimeBadges({
 }) {
   const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
   const certificateExpiring = agenticCertificateExpiringSoon(selectedProvider?.agentic_certificate_expires_at);
+  const contained = selectedProvider?.agentic_containment_status === "NO-GO";
+  const destinationLabel = selectedProvider?.agentic_data_destination?.display_label || "destination unavailable";
+  const showAgenticProfile = Boolean(
+    selectedProvider?.workspace_profile_binding_id && (!locked || contained),
+  );
+  const governanceTitle = [
+    selectedProvider?.label,
+    contained ? "NO-GO" : selectedProvider?.agentic_rollout_status,
+    `destination ${destinationLabel}`,
+    selectedProvider?.agentic_egress_policy
+      ? `egress ${selectedProvider.agentic_egress_policy.policy_id}@${selectedProvider.agentic_egress_policy.revision} [${selectedProvider.agentic_egress_policy.allowed_remote_data_classes.join(", ") || "none"}]`
+      : null,
+    selectedProvider?.agentic_data_policy
+      ? `data collection ${selectedProvider.agentic_data_policy.collection} · ZDR ${selectedProvider.agentic_data_policy.require_zdr ? "required" : "not required"}`
+      : null,
+    `certificate ${selectedProvider?.agentic_certificate_posture?.effective_status || selectedProvider?.agentic_certificate_status || "unknown"}`,
+    selectedProvider?.agentic_certificate_posture?.eligibility
+      ? `certificate eligibility ${selectedProvider.agentic_certificate_posture.eligibility}`
+      : null,
+  ].filter(Boolean).join(" · ");
   return (
     <div className="chatapp-composer__runtime-badges">
       <ProviderSelector
@@ -39,18 +59,16 @@ export function ComposerRuntimeBadges({
         reasoningEffort={reasoningEffort}
       />
       <ChatUsageBadge usage={usage} />
-      {selectedProvider?.workspace_profile_binding_id && !locked ? (
+      {showAgenticProfile ? (
         <span
-          className={`chatapp-agentic-profile-chip ${certificateExpiring ? "is-warning" : ""}`}
-          title={[
-            "Workspace agentic profile",
-            selectedProvider.agentic_rollout_status,
-            `certificate ${selectedProvider.agentic_certificate_status || "unknown"}`,
-            `${selectedProvider.agentic_allowed_tool_handles?.length || 0} tools`,
-          ].filter(Boolean).join(" · ")}
+          aria-label={contained ? `NO-GO agentic profile; ${destinationLabel}` : undefined}
+          className={`chatapp-agentic-profile-chip ${certificateExpiring || contained ? "is-warning" : ""}`}
+          title={governanceTitle}
         >
           <span aria-hidden="true" className="material-symbols-rounded">verified_user</span>
-          {selectedProvider.agentic_rollout_status || "Agentic"}
+          {contained
+            ? `NO-GO · ${destinationLabel}`
+            : selectedProvider?.agentic_rollout_status || "Agentic"}
           {certificateExpiring ? " · certificate expiring" : ""}
         </span>
       ) : null}

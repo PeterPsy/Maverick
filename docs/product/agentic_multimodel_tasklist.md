@@ -21,6 +21,10 @@ reviewed. A legacy certificate or client declaration is not authorization.
 - [x] New remote sessions fail before persistence, pinned remote sessions fail
   again before dispatch, and client/browser fake-data declarations cannot
   authorize either path.
+- [x] API and app preflight carry the authorized binding/definition snapshot and
+  final pin into creation. Binding revision, default, or immutable-definition
+  drift fails before claims, prepared locks, app-stream reservations, sessions,
+  threads, turns, or provider work can be created.
 - [x] Store-backed dry-run/apply containment plans binding disablement, profile
   suspension, suite-v8 certificate revocation/ineligibility, and ambiguous
   session quarantine; provider records use revision CAS and session quarantine
@@ -35,11 +39,12 @@ reviewed. A legacy certificate or client declaration is not authorization.
   and Settings/Chat through an allowlisted public reason, removes operational
   authority from associated runtime tokens, and blocks further turn/queue
   admission without claiming a complete recovery engine.
-- [x] Chat excludes contained profiles and synthesizes neither consent nor fake
-  classification; Settings keeps contained records visible as NO-GO with
-  the exact preview label, provider/upstream/data destination, egress/data
-  policy, binding, profile, and certificate state. Neither browser sends a data
-  classification control.
+- [x] Chat excludes contained profiles from new-chat selection and synthesizes
+  neither consent nor fake classification. For a contained historical pin, the
+  server projects the exact display name, provider/upstream/data destination,
+  egress/data policy, certificate posture, and NO-GO state; Chat renders that
+  projection without browser classification. Settings keeps the same governance
+  facts visible. Neither browser sends a data-classification control.
 - [ ] Review the real-store dry-run plan, execute the digest-bound live apply,
   verify post-apply state, and record the audit result. Until then the
   operational status is `live_apply_pending_review`.
@@ -67,15 +72,18 @@ reviewed. A legacy certificate or client declaration is not authorization.
 
 ## Later parity and preview gates still open
 
-- [ ] Run the complete Google fixture contract/E2E suite on the exact
-  deployable commit and adapter bundle. Certification manifests remain
-  `fixture_contract`-only; any later operator live diagnostic is a separate
-  release gate and must never be started by repository checks.
+- [ ] Run the complete Google certification manifest on the exact deployable
+  commit and adapter bundle: deterministic conformance, operator-only synthetic
+  live probe, behavioral conformance validation, then certificate publication.
+  Ordinary repository checks explicitly select `fixture_contract` and never
+  start the retained `live_probe`; fixture-only output cannot be signed,
+  verified, published, or used as certificate evidence.
 - [ ] Persist its immutable evidence in the platform-owned store, sign the run
   with a trusted CI key, publish a Google preview certificate, and complete the
   one-workspace canary.
-- [ ] Repeat the full independent evidence, signing, publication, catalog/ZDR
-  reconfirmation, and canary flow before enabling OpenRouter.
+- [ ] Repeat the full independent two-step manifest, behavioral validation,
+  evidence signing/publication, catalog/ZDR reconfirmation, and canary flow
+  before enabling OpenRouter.
 - [ ] Record the focused agentic, fast, and applicable pre-merge suite results
   for the candidate commit; no certificate may substitute for these gates.
 - [ ] Rehearse certificate/binding/provider kill switches, cancellation,

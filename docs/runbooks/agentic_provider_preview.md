@@ -104,10 +104,11 @@ binding:
 5. The workspace policy is at least as restrictive as the profile: read-only
    Core filesystem capability, bounded steps/tokens/cost, no shell or writes,
    and confirmation retained for mutating/destructive classes.
-6. The fixture-only certification manifest passes on the deployed source. A
-   future operator-run live diagnostic, if required by the later release gate,
-   is invoked separately and never becomes a manifest step or a repository
-   check. Fixture evidence alone is insufficient for promotion.
+6. The complete certification manifest passes on the deployed source in the
+   trust order: deterministic conformance, operator-only synthetic live probe,
+   behavioral conformance validation, then certificate publication. Ordinary
+   repository checks explicitly select the fixture step and never run the live
+   step; fixture-only evidence is rejected for signing and promotion.
 7. Open platform security blockers in `SECURITY.md` remain acknowledged. Do not
    relabel the profile `available` or production-ready as part of preview
    activation.

@@ -680,7 +680,8 @@ settings.agentic_admin = {
     data_destination: {
       provider_id: 'google-ai-studio',
       endpoint_id: 'google-ai-studio',
-      upstream_provider_ids: ['google-ai-studio']
+      upstream_provider_ids: ['google-ai-studio'],
+      display_label: 'google-ai-studio → google-ai-studio · google-ai-studio'
     },
     egress_policy: {
       policy_id: 'remote-agentic-contained',
@@ -752,7 +753,7 @@ const containmentHtml = settingsPanelHtml(settings, state);
 for (const expected of [
   'Remote agentic release: NO-GO',
   'Provider google-ai-studio · upstream google-ai-studio',
-  'Data destination google-ai-studio / google-ai-studio · upstream google-ai-studio',
+  'Data destination google-ai-studio → google-ai-studio · google-ai-studio',
   'Egress policy remote-agentic-contained@2 · Core-classified data none',
   'Data policy collection=deny · ZDR required · attestation unavailable',
   'Binding Disabled · Profile Suspended · Certificate Revoked / Ineligible',

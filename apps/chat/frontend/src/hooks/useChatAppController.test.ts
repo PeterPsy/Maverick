@@ -234,19 +234,59 @@ describe("selectedProviderForSession", () => {
         provider_id: "maverick-tool-loop",
         execution_binding: {
           workspace_binding_id: "binding-remote",
-          model_provider_id: "google-ai-studio",
-          model_id: "gemini-contained",
+          model_provider_id: "openrouter",
+          model_id: "deepseek/deepseek-v4-flash",
           runtime_engine_id: "maverick-tool-loop",
           binding_digest: "remote-digest",
         },
         agentic_containment: { status: "NO-GO", reason_code: "hosted_agent_runtime_disabled" },
+        agentic_governance: {
+          display_name: "OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · fake-data preview",
+          profile_definition_id: "profile-openrouter",
+          profile_definition_revision: "12",
+          workspace_binding_id: "binding-remote",
+          workspace_binding_revision: 4,
+          runtime_engine_id: "maverick-tool-loop",
+          model_provider_id: "openrouter",
+          model_id: "deepseek/deepseek-v4-flash",
+          rollout_status: "suspended",
+          containment: { status: "NO-GO", reason_code: "hosted_agent_runtime_disabled" },
+          data_destination: {
+            provider_id: "openrouter",
+            endpoint_id: "openrouter-chat-completions-v1",
+            upstream_provider_ids: ["deepinfra/fp8"],
+            display_label: "openrouter → deepinfra/fp8 · openrouter-chat-completions-v1",
+          },
+          egress_policy: {
+            policy_id: "remote-agentic-contained",
+            revision: "2",
+            allowed_remote_data_classes: ["public"],
+          },
+          data_policy: {
+            collection: "deny",
+            require_zdr: true,
+            attestation_state: "unavailable",
+          },
+          certificate_posture: {
+            certificate_id: "certificate-openrouter-12",
+            effective_status: "revoked",
+            eligibility: "ineligible",
+            expires_at: "2026-09-30T00:00:00Z",
+            pinned_evidence_digest: "evidence-digest",
+          },
+        },
       }),
       activeThread: thread("free"),
       providers: [provider({ provider_id: "codex", label: "Codex", provider_role: "runtime_engine" })],
     });
 
     expect(selected?.provider_id).toBe("contained-session:binding-remote");
+    expect(selected?.label).toBe("OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · fake-data preview");
+    expect(selected?.description).toBe("openrouter → deepinfra/fp8 · openrouter-chat-completions-v1");
     expect(selected?.agentic_containment_reason).toBe("hosted_agent_runtime_disabled");
+    expect(selected?.agentic_certificate_status).toBe("revoked");
+    expect(selected?.agentic_certificate_posture?.eligibility).toBe("ineligible");
+    expect(selected?.agentic_egress_policy?.allowed_remote_data_classes).toEqual(["public"]);
   });
 
   it("does not show the global hosted model while an existing agentic thread session is loading", () => {

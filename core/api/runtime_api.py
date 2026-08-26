@@ -17,7 +17,10 @@ from core.api.app_reference_payloads import (
 )
 from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
-from core.api.provider_api import workspace_provider_status
+from core.api.provider_api import (
+    runtime_session_agentic_governance_payload,
+    workspace_provider_status,
+)
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.runtime_cleanup_batch import cleanup_runtime_sessions_batch
 from core.api.runtime_tool_confirmation_api import handle_runtime_tool_confirmation
@@ -77,6 +80,7 @@ from core.runtime.service import (
     transition_runtime_session,
 )
 from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.execution_binding import RuntimeExecutionBinding
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_session import coerce_runtime_mode
 from core.runtime.remote_agentic_admission import (
@@ -85,7 +89,7 @@ from core.runtime.remote_agentic_admission import (
 )
 from core.runtime.public_status import public_runtime_recovery_reason_code
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
-from core.runtime.routing import build_runtime_routing
+from core.runtime.routing import build_runtime_routing, resolve_runtime_execution_mode
 from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
     plain_hosted_chat_attachment_limit_error,
@@ -120,6 +124,7 @@ from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 from core.usage.payloads import chat_usage_summary_payload
 from core.usage.service import build_runtime_chat_usage_summary
 from core.skills.service import SkillInvocationError, resolve_invoked_runtime_skills
+from core.workspaces.models import WorkspaceGovernanceRecord
 
 
 IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
@@ -152,9 +157,19 @@ class RuntimeTurnSubmissionDraft:
     async_requested: bool
 
 
+@dataclass(frozen=True)
+class RuntimeSessionCreationPreflight:
+    """Persistence-free authorization snapshot for one new runtime session."""
+
+    session_id: str
+    governance: WorkspaceGovernanceRecord
+    execution_binding: RuntimeExecutionBinding | None
+
+
 def _session_payload(
     session: RuntimeSessionRecord,
     *,
+    state: PlatformState | None = None,
     provider_id: str | None = None,
     prewarm: RuntimeSessionPrewarmResult | None = None,
     admission: dict[str, object] | None = None,
@@ -196,6 +211,13 @@ def _session_payload(
             "binding_digest": binding.binding_digest,
             "created_at": binding.created_at,
         }
+        if state is not None:
+            payload["agentic_governance"] = (
+                runtime_session_agentic_governance_payload(
+                    state,
+                    session=session,
+                )
+            )
     if prewarm is not None:
         payload.update(
             {
@@ -392,7 +414,11 @@ def _list_session_payloads(state: PlatformState, *, workspace_id: str, start_pat
         for session in current_sessions.values()
     ]
     return [
-        _session_payload(session, provider_id=_resolved_provider_id(state, session))
+        _session_payload(
+            session,
+            state=state,
+            provider_id=_resolved_provider_id(state, session),
+        )
         for session in reconciled
         if runtime_session_allows_user_thread(session)
     ]
@@ -464,6 +490,7 @@ def _claim_client_message_for_new_session(
     *,
     workspace_id: str,
     client_message_id: str | None,
+    session_id: str,
 ) -> tuple[RuntimeClientMessageClaim | None, bool]:
     normalized_client_message_id = client_message_id.strip() if isinstance(client_message_id, str) else ""
     if not normalized_client_message_id:
@@ -474,7 +501,7 @@ def _claim_client_message_for_new_session(
     return claim_client_message_id(
         workspace_id=workspace_id,
         client_message_id=normalized_client_message_id,
-        session_id=str(uuid4()),
+        session_id=session_id,
         turn_id=str(uuid4()),
     )
 
@@ -647,7 +674,11 @@ def _pending_client_message_claim_response(
         session = state.runtime_store.get_session(claim.session_id)
         session = _visibility_reconciled_session(state, session)
         if session.workspace_id == context.workspace_id and runtime_session_allows_user_thread(session):
-            payload["session"] = _session_payload(session, provider_id=_response_provider_id(session))
+            payload["session"] = _session_payload(
+                session,
+                state=state,
+                provider_id=_response_provider_id(session),
+            )
     return json_response(start_response, payload, status="202 Accepted")
 
 
@@ -674,7 +705,11 @@ def _runtime_turn_response_payload(
         runtime_session_id=session.session_id,
     )
     payload = {
-        "session": _session_payload(session, provider_id=_response_provider_id(session, events)),
+        "session": _session_payload(
+            session,
+            state=state,
+            provider_id=_response_provider_id(session, events),
+        ),
         "turn": _turn_payload(turn),
         "events": [_event_payload(event) for event in events],
     }
@@ -891,7 +926,7 @@ def _create_session(
     *,
     agent_id: str,
     start_path,
-    session_id: str | None = None,
+    preflight: RuntimeSessionCreationPreflight,
     prepare_only: bool = False,
     prepared_fingerprint: str | None = None,
 ) -> RuntimeSessionRecord:
@@ -903,8 +938,8 @@ def _create_session(
         workspace_id=context.workspace_id,
     )
     source_app_id = str(body.get("source_app_id") or "").strip() or None
-    resolved_session_id = session_id or str(uuid4())
-    governance = state.workspace_store.get_governance(context.workspace_id)
+    resolved_session_id = preflight.session_id
+    governance = preflight.governance
     routing = build_runtime_routing(
         session_id=resolved_session_id,
         workspace_id=context.workspace_id,
@@ -914,40 +949,20 @@ def _create_session(
         platform_allows_full_access=context.workspace_id == "default",
         start_path=start_path,
     )
-    execution_binding = None
-    if coerce_runtime_mode(body.get("runtime_mode")) == "agentic":
-        registry = effective_provider_registry(
-            state.provider_store,
-            registry=getattr(state, "provider_registry", None),
+    execution_binding = preflight.execution_binding
+    if (
+        (coerce_runtime_mode(body.get("runtime_mode")) == "agentic")
+        != (execution_binding is not None)
+        or (
+            execution_binding is not None
+            and (
+                execution_binding.session_id != resolved_session_id
+                or execution_binding.workspace_id != context.workspace_id
+                or execution_binding.execution_mode != routing.effective_mode
+            )
         )
-        definition, workspace_binding = resolve_workspace_agentic_profile(
-            state.provider_store,
-            workspace_id=context.workspace_id,
-            binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
-            enforce_remote_admission=False,
-        )
-        platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
-            state,
-            user_id=context.user.user_id,
-            workspace_id=context.workspace_id,
-        )
-        if not actor_selection_allowed(
-            workspace_binding,
-            user_id=user_id,
-            platform_role=platform_role,
-            workspace_role=workspace_role,
-            agent_type_id=str(body.get("agent_type_id") or "").strip(),
-        ):
-            raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
-        execution_binding = build_pinned_execution_binding(
-            state.provider_store,
-            registry,
-            session_id=resolved_session_id,
-            workspace_id=context.workspace_id,
-            execution_mode=routing.effective_mode,
-            workspace_binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
-            reasoning_effort=str(body.get("reasoning_effort") or "").strip() or None,
-        )
+    ):
+        raise ProviderError("runtime_preflight_pin_mismatch")
     session = create_runtime_session(
         state.runtime_store,
         session_id=resolved_session_id,
@@ -1001,41 +1016,72 @@ def _create_session(
     return session
 
 
-def _require_remote_agentic_request_admission_before_persistence(
+def _preflight_runtime_session_creation_before_persistence(
     state: PlatformState,
     context: RequestSession,
     body: dict,
-) -> None:
-    """Reject remote agentic requests before claims, prepared locks, or records."""
+) -> RuntimeSessionCreationPreflight:
+    """Authorize and pin a new session before claims, prepared locks, or records."""
     _reject_client_remote_data_declaration(body)
-    if coerce_runtime_mode(body.get("runtime_mode")) != "agentic":
-        return
     authorize_runtime_session_create(
         workspace_store=state.workspace_store,
         runtime_store=state.runtime_store,
         user=context.user,
         workspace_id=context.workspace_id,
     )
-    definition, workspace_binding = resolve_workspace_agentic_profile(
-        state.provider_store,
-        workspace_id=context.workspace_id,
-        binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
-        enforce_remote_admission=False,
+    session_id = str(uuid4())
+    runtime_mode = coerce_runtime_mode(body.get("runtime_mode"))
+    authorized_profile = None
+    if runtime_mode == "agentic":
+        definition, workspace_binding = resolve_workspace_agentic_profile(
+            state.provider_store,
+            workspace_id=context.workspace_id,
+            binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
+            enforce_remote_admission=False,
+        )
+        platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
+            state,
+            user_id=context.user.user_id,
+            workspace_id=context.workspace_id,
+        )
+        if not actor_selection_allowed(
+            workspace_binding,
+            user_id=user_id,
+            platform_role=platform_role,
+            workspace_role=workspace_role,
+            agent_type_id=str(body.get("agent_type_id") or "").strip(),
+        ):
+            raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
+        require_remote_agentic_session_admission(definition)
+        authorized_profile = (definition, workspace_binding)
+    governance = state.workspace_store.get_governance(context.workspace_id)
+    execution_binding = None
+    if authorized_profile is not None:
+        registry = effective_provider_registry(
+            state.provider_store,
+            registry=getattr(state, "provider_registry", None),
+        )
+        execution_binding = build_pinned_execution_binding(
+            state.provider_store,
+            registry,
+            session_id=session_id,
+            workspace_id=context.workspace_id,
+            execution_mode=resolve_runtime_execution_mode(
+                workspace_id=context.workspace_id,
+                requested_mode=body.get("requested_mode"),
+                governance=governance,
+                platform_allows_full_access=context.workspace_id == "default",
+            ),
+            workspace_binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
+            reasoning_effort=str(body.get("reasoning_effort") or "").strip() or None,
+            authorized_definition_snapshot=authorized_profile[0],
+            authorized_workspace_binding_snapshot=authorized_profile[1],
+        )
+    return RuntimeSessionCreationPreflight(
+        session_id=session_id,
+        governance=governance,
+        execution_binding=execution_binding,
     )
-    platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
-        state,
-        user_id=context.user.user_id,
-        workspace_id=context.workspace_id,
-    )
-    if not actor_selection_allowed(
-        workspace_binding,
-        user_id=user_id,
-        platform_role=platform_role,
-        workspace_role=workspace_role,
-        agent_type_id=str(body.get("agent_type_id") or "").strip(),
-    ):
-        raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
-    require_remote_agentic_session_admission(definition)
 
 
 def _reject_client_remote_data_declaration(body: dict) -> None:
@@ -1071,7 +1117,7 @@ def _handle_session_collection(
         if prepare_only and turn_requested:
             return json_response(start_response, {"error": "prepare_only_turn_not_allowed"}, status="400 Bad Request")
         try:
-            _require_remote_agentic_request_admission_before_persistence(
+            preflight = _preflight_runtime_session_creation_before_persistence(
                 state,
                 context,
                 body,
@@ -1102,6 +1148,7 @@ def _handle_session_collection(
                 state,
                 workspace_id=context.workspace_id,
                 client_message_id=client_message_id,
+                session_id=preflight.session_id,
             )
             _record_timing_duration(submission_timing, "claim_ms", claim_started_at)
             if client_message_claim is not None and not client_message_claim_created:
@@ -1125,6 +1172,7 @@ def _handle_session_collection(
                         body,
                         agent_id=agent_id,
                         start_path=start_path,
+                        preflight=preflight,
                         prepare_only=True,
                         prepared_fingerprint=fingerprint,
                     ),
@@ -1137,7 +1185,7 @@ def _handle_session_collection(
                     body,
                     agent_id=agent_id,
                     start_path=start_path,
-                    session_id=client_message_claim.session_id if client_message_claim is not None else None,
+                    preflight=preflight,
                     prepare_only=False,
                 )
             _record_timing_duration(submission_timing, "session_create_ms", session_create_started_at)
@@ -1188,6 +1236,7 @@ def _handle_session_collection(
                 raise
         payload = _session_payload(
             session,
+            state=state,
             provider_id=_resolved_provider_id(state, session),
             prewarm=prewarm_result if prepare_only else None,
         )
@@ -1505,6 +1554,7 @@ def _handle_session_item(state: PlatformState, context: RequestSession, session_
         start_response,
         _session_payload(
             session,
+            state=state,
             provider_id=_resolved_provider_id(state, session),
             admission=runtime_session_admission_payload(
                 state.provider_store,
@@ -1823,7 +1873,12 @@ def _handle_session_prewarm(
     )
     return json_response(
         start_response,
-        _session_payload(session, provider_id=_resolved_provider_id(state, session), prewarm=prewarm_result),
+        _session_payload(
+            session,
+            state=state,
+            provider_id=_resolved_provider_id(state, session),
+            prewarm=prewarm_result,
+        ),
     )
 
 

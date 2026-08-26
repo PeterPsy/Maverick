@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
@@ -9,8 +10,10 @@ from unittest.mock import patch
 import core.apps.runtime_requests as runtime_requests
 import core.runtime.turn_submission_service_runtime as runtime_submission_runtime
 from core.runtime.execution import RuntimeExecutionResult
+from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_submission_service_queue import _queue_turn_with_event
+from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.workspaces.service import default_workspace_governance
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
@@ -51,6 +54,38 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
             workspace_store=SimpleNamespace(
                 get_governance=lambda workspace_id: default_workspace_governance(workspace_id)
             ),
+        )
+
+    def _codex_execution_binding(self, **kwargs):
+        policy = codex_runtime_policy()
+        return build_runtime_execution_binding(
+            session_id=kwargs["session_id"],
+            workspace_id=kwargs["workspace_id"],
+            profile_definition_id="profile-codex-test",
+            profile_definition_revision="1",
+            workspace_binding_id="binding-codex-test",
+            workspace_binding_revision=0,
+            capability_certificate_id="certificate-codex-test",
+            runtime_engine_id="codex",
+            adapter_id="codex-app-server",
+            adapter_version="test",
+            adapter_artifact_digest="a" * 64,
+            model_provider_id="codex",
+            model_id="codex",
+            provider_protocol="codex-app-server-stdio",
+            provider_api_version=None,
+            routing_constraint=codex_routing_constraint(),
+            credential_binding_id=None,
+            reasoning_effort=None,
+            certified_reasoning_efforts=(),
+            default_reasoning_effort=None,
+            execution_mode=kwargs["execution_mode"],
+            profile_policy_ceiling=policy,
+            workspace_policy_ceiling=policy,
+            egress_policy_id="local-runtime-no-remote-egress",
+            egress_policy_revision="1",
+            certificate_evidence_digest="b" * 64,
+            created_at=datetime(2026, 8, 26, tzinfo=UTC),
         )
 
     def _write_generated_storage_file(self, repo_root: Path) -> str:
@@ -152,8 +187,7 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
         with (
             patch.object(runtime_requests, "_authorize_new_agentic_app_session", return_value=(object(), object())),
             patch.object(runtime_requests, "effective_provider_registry", return_value=object()),
-            patch.object(runtime_requests, "build_pinned_execution_binding", return_value=None),
-            patch.object(runtime_requests, "_require_exact_authorized_binding_pin"),
+            patch.object(runtime_requests, "build_pinned_execution_binding", side_effect=lambda *_args, **kwargs: self._codex_execution_binding(**kwargs)),
             patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", lambda *_args, **_kwargs: None),
             patch.object(runtime_requests, "submit_runtime_turn_async", fake_submit_runtime_turn_async),
         ):
@@ -220,10 +254,10 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
         with (
             patch.object(runtime_requests, "_authorize_new_agentic_app_session", return_value=(object(), object())),
             patch.object(runtime_requests, "effective_provider_registry", return_value=object()),
-            patch.object(runtime_requests, "build_pinned_execution_binding", return_value=None),
-            patch.object(runtime_requests, "_require_exact_authorized_binding_pin"),
+            patch.object(runtime_requests, "build_pinned_execution_binding", side_effect=lambda *_args, **kwargs: self._codex_execution_binding(**kwargs)),
             patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", lambda *_args, **_kwargs: None),
             patch.object(runtime_submission_runtime, "resolve_runtime_engine_for_session", fake_resolve_runtime_engine_for_session),
+            patch.object(runtime_submission_runtime.ResolvedRuntimeEngine, "execution_kwargs", return_value={}),
             patch.object(runtime_submission_runtime, "_build_launch_spec_for_execution", lambda *_args, **_kwargs: None),
             patch.object(runtime_submission_runtime, "execute_runtime_turn", fake_execute_runtime_turn),
             patch.object(runtime_submission_runtime, "dispatch_source_app_runtime_event", fake_dispatch_source_app_runtime_event),

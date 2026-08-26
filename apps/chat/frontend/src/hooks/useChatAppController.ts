@@ -116,23 +116,34 @@ export function selectedProviderForSession({
   if (activeThread && selectionSession?.provider_id) {
     const pinnedBindingId = selectionSession.execution_binding?.workspace_binding_id || "";
     if (pinnedBindingId) {
+      if (selectionSession.agentic_containment?.status === "NO-GO") {
+        const binding = selectionSession.execution_binding;
+        const governance = selectionSession.agentic_governance;
+        return {
+          provider_id: `contained-session:${encodeURIComponent(pinnedBindingId)}`,
+          label: governance?.display_name || "Contained pinned agentic profile",
+          description: governance?.data_destination.display_label || "Pinned destination unavailable",
+          provider_role: "runtime_engine",
+          status: "contained",
+          default_model_family: governance?.model_id || binding?.model_id || null,
+          workspace_profile_binding_id: pinnedBindingId,
+          agentic_containment_status: "NO-GO",
+          agentic_containment_reason: governance?.containment.reason_code
+            || selectionSession.agentic_containment.reason_code
+            || "remote_agentic_session_contained",
+          agentic_rollout_status: governance?.rollout_status || null,
+          agentic_certificate_status: governance?.certificate_posture.effective_status || null,
+          agentic_certificate_expires_at: governance?.certificate_posture.expires_at || null,
+          agentic_egress_policy_id: governance?.egress_policy.policy_id || null,
+          agentic_data_destination: governance?.data_destination || null,
+          agentic_egress_policy: governance?.egress_policy || null,
+          agentic_data_policy: governance?.data_policy || null,
+          agentic_certificate_posture: governance?.certificate_posture || null,
+        };
+      }
       const pinned = providers.find((provider) => provider.workspace_profile_binding_id === pinnedBindingId);
       if (pinned) {
         return pinned;
-      }
-      if (selectionSession.agentic_containment?.status === "NO-GO") {
-        const binding = selectionSession.execution_binding;
-        return {
-          provider_id: `contained-session:${encodeURIComponent(pinnedBindingId)}`,
-          label: binding?.model_id || "Contained remote model",
-          description: binding?.model_provider_id || "Pinned remote agentic profile",
-          provider_role: "runtime_engine",
-          status: "contained",
-          default_model_family: binding?.model_id || null,
-          workspace_profile_binding_id: pinnedBindingId,
-          agentic_containment_status: "NO-GO",
-          agentic_containment_reason: selectionSession.agentic_containment.reason_code || "remote_agentic_session_contained",
-        };
       }
     }
     return providerById(providers, selectionSession.provider_id) || existingThreadDefaultProvider(providers);
@@ -222,15 +233,10 @@ export function useChatAppController({
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
   const [chatUsage, setChatUsage] = useState<ChatUsageSummary | null>(null);
   const [composer, setComposer] = useState("");
-  const selectedProvider = useMemo(() => selectedProviderForSession({ activeProviderId, activeSession, activeThread, providers }), [
-    activeProviderId,
-    activeSession?.hosted_model_id,
-    activeSession?.hosted_provider_id,
-    activeSession?.provider_id,
-    activeSession?.runtime_mode,
-    activeThread,
-    providers,
-  ]);
+  const selectedProvider = useMemo(
+    () => selectedProviderForSession({ activeProviderId, activeSession, activeThread, providers }),
+    [activeProviderId, activeSession, activeThread, providers],
+  );
   const composerActiveProviderId = selectedProvider?.provider_id || activeProviderId;
   const composerProviders = useMemo(() => providersForComposer(providers, selectedProvider), [providers, selectedProvider]);
   const allowedAttachmentInputModalities = useMemo(() => {

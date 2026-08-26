@@ -49,16 +49,18 @@ data declarations, browser consent, and the legacy
 `workspace_internal_fake` value cannot authorize a session.
 
 Admission rejects a new remote execution binding before the session aggregate,
-provider state, turn, thread, or other runtime record is persisted. Existing
-pinned remote sessions are rejected again at queue admission and provider-start
-handoff. Browser and app requests cannot classify session data; Core interprets
-neither an egress-policy id nor a persisted legacy declaration as attestation.
-App-created agentic sessions resolve the authenticated actor and exact live
-workspace binding before Core mints the immutable pin. Ambiguous persisted
-sessions transition to `recovery_required` through the serialized session
-lifecycle handoff, expose only an allowlisted public reason, lose runtime bearer
-authority, and cannot accept a new turn; this is quarantine support, not the
-Phase-2 recovery engine.
+provider state, turn, thread, claim, prepared-session lock, or app-stream
+reservation is persisted. API and app preflight carry one authorized governance
+snapshot and immutable pin into creation. If the binding id, binding revision,
+default selection, or complete immutable definition differs when the pin is
+materialized, admission fails rather than silently authorizing one binding and
+using another. Existing pinned remote sessions are rejected again at queue
+admission and provider-start handoff. Browser and app requests cannot classify
+session data; Core interprets neither an egress-policy id nor a persisted legacy
+declaration as attestation. Ambiguous persisted sessions transition to
+`recovery_required` through the serialized session lifecycle handoff, expose
+only an allowlisted public reason, lose runtime bearer authority, and cannot
+accept a new turn; this is quarantine support, not the Phase-2 recovery engine.
 
 The operator containment service inventories all stores through their JSON or
 Mongo abstraction. It correlates each ordered provider step with either a
@@ -191,6 +193,15 @@ store. A certificate stores only immutable digests and opaque evidence ids.
 Workspace Storage may receive an explicit redaction-safe export, but it is not
 authoritative evidence.
 
+Certification follows one trust sequence: deterministic conformance, an
+operator-only synthetic live probe, behavioral conformance validation of the
+complete ordered manifest and canonical command digests, then certificate
+publication. Google and OpenRouter suite-v8 manifests contain both
+`fixture_contract` and `live_probe`. Repository tests may explicitly select the
+fixture step so normal CI sends no provider traffic, but an incomplete run is
+rejected by signing, verification, and publication and can never become
+certificate evidence.
+
 ### 4. Runtime adapters are asynchronous and provider-agnostic
 
 `AgenticRuntimeEngineAdapter` owns async validate, prepare, execute, cancel,
@@ -281,9 +292,9 @@ provider identity and terminal router metadata before the continuation is
 accepted as complete. The current contained definitions are Google revision 13
 and OpenRouter revision 12, both bound to
 `maverick-hosted-tool-loop==5`; older revisions are suspended rather than
-overwritten. The fixture-only certification manifests do not execute a
-provider live probe. Any future operator diagnostic is a separate release gate
-and cannot be certificate evidence in Phase 0.
+overwritten. Their certification manifests retain the distinct deterministic
+fixture and synthetic live steps. No live probe is run by ordinary repository
+checks, and no fixture-only result is certificate evidence.
 
 ## Concrete persistence map
 
@@ -366,6 +377,14 @@ reconstruct the legacy default-based runtime path.
 binding when the pinning reader cutover occurs. Chat session selection never
 mutates that projection. All repository consumers are migrated in the same
 feature, and the legacy runtime reader is removed before Definition of Done.
+
+Runtime session projections carry the authoritative public governance snapshot
+needed to render historical pins: the exact immutable display name, provider,
+model, endpoint and upstream destination, effective egress/data policy, current
+certificate posture, and containment state. Chat renders those fields without
+reconstructing policy or classification in the browser. A contained historical
+pin remains visible as `fake-data preview` and NO-GO but never becomes a
+selectable new-chat option.
 
 ## Failure semantics
 

@@ -53,6 +53,9 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           agentic_max_estimated_cost_microusd: profile.max_estimated_cost_microusd ?? null,
           agentic_containment_status: profile.containment_status,
           agentic_containment_reason: profile.containment_reason || null,
+          agentic_data_destination: profile.data_destination || null,
+          agentic_egress_policy: profile.egress_policy || null,
+          agentic_data_policy: profile.data_policy || null,
           default_reasoning_effort: reasoning.defaultEffort,
           supported_reasoning_efforts: reasoning.options,
         };

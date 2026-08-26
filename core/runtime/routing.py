@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from core.execution_policy.models import ExecutionMode
+from core.execution_policy.service import resolve_workspace_execution_profile
 from core.execution_policy.service import resolve_workspace_runtime_boundary
 from core.runtime.models import RuntimeLocation, RuntimeRoutingDecision
 from core.runtime.paths import runtime_session_root
@@ -15,6 +17,22 @@ from core.workspaces.paths import workspace_root
 def resolve_runtime(workspace_id: str, start_path: Path | None = None) -> RuntimeLocation:
     """Resolve the runtime root for one workspace through the runtime service layer."""
     return runtime_location(workspace_id=workspace_id, start_path=start_path)
+
+
+def resolve_runtime_execution_mode(
+    *,
+    workspace_id: str,
+    requested_mode: str | None = None,
+    governance: WorkspaceGovernanceRecord | None = None,
+    platform_allows_full_access: bool = False,
+) -> ExecutionMode:
+    """Resolve the effective mode without materializing runtime filesystem paths."""
+    return resolve_workspace_execution_profile(
+        workspace_id=workspace_id,
+        requested_mode=requested_mode,
+        governance=governance,
+        platform_allows_full_access=platform_allows_full_access,
+    ).effective_mode
 
 
 def build_runtime_routing(

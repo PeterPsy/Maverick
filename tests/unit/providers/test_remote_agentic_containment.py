@@ -94,13 +94,63 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
         self.assertEqual(certificate_status.revocation_reason, "phase" + "0_remote_agentic_containment")
         self.assertEqual(session.status, "recovery_required")
         self.assertEqual(session.recovery_reason_code, "remote_agentic_state_ambiguous")
-        for public_session in (runtime_session_payload(session), _session_payload(session)):
+        projection_state = SimpleNamespace(
+            provider_store=self.provider_store,
+            provider_registry=self.registry,
+        )
+        for public_session in (
+            runtime_session_payload(session, state=projection_state),
+            _session_payload(session, state=projection_state),
+        ):
             self.assertEqual(public_session["status"], "recovery_required")
             self.assertEqual(
                 public_session["recovery_reason_code"],
                 "remote_agentic_state_ambiguous",
             )
             self.assertEqual(public_session["agentic_containment"]["status"], "NO-GO")
+            governance = public_session["agentic_governance"]
+            self.assertEqual(
+                governance["display_name"],
+                self.remote_definition.display_name,
+            )
+            self.assertIn("fake-data preview", governance["display_name"])
+            self.assertEqual(governance["containment"]["status"], "NO-GO")
+            self.assertEqual(
+                governance["data_destination"],
+                {
+                    "provider_id": "google-ai-studio",
+                    "endpoint_id": "google-generativelanguage-v1-interactions",
+                    "upstream_provider_ids": (),
+                    "display_label": (
+                        "google-ai-studio · "
+                        "google-generativelanguage-v1-interactions"
+                    ),
+                },
+            )
+            self.assertEqual(
+                governance["egress_policy"],
+                {
+                    "policy_id": "remote-agentic-contained",
+                    "revision": "2",
+                    "allowed_remote_data_classes": ("public",),
+                },
+            )
+            self.assertEqual(
+                governance["data_policy"],
+                {
+                    "collection": "provider_contract",
+                    "require_zdr": False,
+                    "attestation_state": "unavailable",
+                },
+            )
+            self.assertEqual(
+                governance["certificate_posture"]["effective_status"],
+                "revoked",
+            )
+            self.assertEqual(
+                governance["certificate_posture"]["eligibility"],
+                "ineligible",
+            )
             self.assertNotIn("credential_binding_id", str(public_session))
         settings = workspace_agentic_admin_status(
             SimpleNamespace(
@@ -133,6 +183,10 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                 "provider_id": "google-ai-studio",
                 "endpoint_id": "google-generativelanguage-v1-interactions",
                 "upstream_provider_ids": (),
+                "display_label": (
+                    "google-ai-studio · "
+                    "google-generativelanguage-v1-interactions"
+                ),
             },
         )
         self.assertEqual(

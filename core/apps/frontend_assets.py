@@ -8,12 +8,14 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Iterable
+from urllib.parse import unquote, urlsplit
 
 
 FRONTEND_ASSET_MANIFEST_NAME = "maverick-frontend-assets.json"
 FRONTEND_ASSET_MANIFEST_SCHEMA = "maverick.frontend-assets.v1"
 _HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _BUILD_ID = re.compile(r"^[0-9a-f]{12,64}$")
+_PRECACHE_URL = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$")
 
 
 class FrontendAssetManifestError(ValueError):
@@ -28,11 +30,20 @@ class FrontendAssetRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class FrontendPrecacheRecord:
+    url: str
+    path: str
+    sha256: str
+    size_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
 class FrontendAssetManifest:
     build_id: str
     entrypoints: tuple[str, ...]
     immutable: tuple[FrontendAssetRecord, ...]
     revalidated: tuple[FrontendAssetRecord, ...]
+    precache: tuple[FrontendPrecacheRecord, ...] = ()
     offline_path: str | None = None
 
     def immutable_record(self, path: str) -> FrontendAssetRecord | None:
@@ -146,11 +157,15 @@ def _parse_manifest(payload: Any) -> FrontendAssetManifest:
         offline_path = _safe_asset_path(offline.get("path"))
         if offline_path not in set(declared_paths):
             raise FrontendAssetManifestError("Offline shell must have a verified asset record.")
+    precache = _parse_precache(payload.get("precache", []), records=(*immutable, *revalidated))
+    if offline_path is not None and not any(record.path == offline_path for record in precache):
+        raise FrontendAssetManifestError("Offline shell must be selected for precache.")
     return FrontendAssetManifest(
         build_id=build_id,
         entrypoints=entrypoints,
         immutable=immutable,
         revalidated=revalidated,
+        precache=precache,
         offline_path=offline_path,
     )
 
@@ -171,6 +186,71 @@ def _parse_records(value: Any, *, field: str) -> tuple[FrontendAssetRecord, ...]
             raise FrontendAssetManifestError(f"Frontend asset `{path}` has an invalid size.")
         records.append(FrontendAssetRecord(path=path, sha256=digest, size_bytes=size_bytes))
     return tuple(records)
+
+
+def _parse_precache(
+    value: Any,
+    *,
+    records: tuple[FrontendAssetRecord, ...],
+) -> tuple[FrontendPrecacheRecord, ...]:
+    if not isinstance(value, list):
+        raise FrontendAssetManifestError("Frontend asset manifest `precache` must be an array.")
+    records_by_path = {record.path: record for record in records}
+    parsed: list[FrontendPrecacheRecord] = []
+    for raw_record in value:
+        if not isinstance(raw_record, dict):
+            raise FrontendAssetManifestError("Frontend precache records must be objects.")
+        url = str(raw_record.get("url") or "")
+        parsed_url = urlsplit(url)
+        decoded_path = unquote(parsed_url.path)
+        decoded_segments = decoded_path.split("/")
+        if (
+            not url.startswith("/")
+            or not _PRECACHE_URL.fullmatch(url)
+            or url.startswith("//")
+            or "//" in url
+            or parsed_url.scheme
+            or parsed_url.netloc
+            or parsed_url.query
+            or parsed_url.fragment
+            or parsed_url.path != url
+            or "%" in url
+            or "\\" in decoded_path
+            or "//" in decoded_path
+            or any(part in {".", ".."} for part in decoded_segments)
+            or decoded_path == "/sw.js"
+            or decoded_path == "/api"
+            or decoded_path.startswith("/api/")
+            or decoded_path == "/ws"
+            or decoded_path.startswith("/ws/")
+            or any(part in {"backend", "sidecar"} for part in decoded_segments)
+            or any(character in url for character in "\r\n\0")
+        ):
+            raise FrontendAssetManifestError(f"Unsafe frontend precache URL `{url}`.")
+        path = _safe_asset_path(raw_record.get("path"))
+        record = records_by_path.get(path)
+        if record is None:
+            raise FrontendAssetManifestError(f"Frontend precache path is not declared: `{path}`.")
+        raw_size = raw_record.get("size_bytes")
+        if (
+            raw_record.get("sha256") != record.sha256
+            or not isinstance(raw_size, int)
+            or isinstance(raw_size, bool)
+            or raw_size != record.size_bytes
+        ):
+            raise FrontendAssetManifestError(f"Frontend precache metadata does not match `{path}`.")
+        parsed.append(
+            FrontendPrecacheRecord(
+                url=url,
+                path=path,
+                sha256=record.sha256,
+                size_bytes=record.size_bytes,
+            )
+        )
+    urls = [record.url for record in parsed]
+    if len(urls) != len(set(urls)):
+        raise FrontendAssetManifestError("Frontend precache URLs must be unique.")
+    return tuple(parsed)
 
 
 def _safe_asset_path(value: Any) -> str:

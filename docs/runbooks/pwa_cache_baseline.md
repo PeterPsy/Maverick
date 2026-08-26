@@ -72,6 +72,16 @@ For each container run at least five samples of:
 Safari and an installed PWA are separate containers and must have separate
 rows. An iPhone and Mac are separate devices and do not share cache evidence.
 
+For the M2 lifecycle, integrity, update, recovery, and kill-switch drill, also
+follow `docs/runbooks/pwa_shell_v2.md`. The persistent-profile development
+smoke test can be run independently of the authenticated performance probe:
+
+```bash
+node scripts/pwa_shell_offline_smoke.mjs \
+  --base-url http://127.0.0.1:8014 \
+  --engine chromium
+```
+
 ## Gates
 
 - M0 establishes values; it does not invent absolute latency thresholds.

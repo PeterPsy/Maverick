@@ -1,3 +1,5 @@
+import { recordMaverickNetworkFailure, recordMaverickNetworkSuccess } from "./connectivity";
+
 export type AppLogo = {
   kind: "glyph" | "image";
   value: string;
@@ -268,6 +270,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     init.signal?.addEventListener("abort", relayAbort, { once: true });
   }
   let didTimeout = false;
+  let receivedResponse = false;
   const timeoutId = globalThis.setTimeout(() => {
     didTimeout = true;
     requestController.abort();
@@ -279,11 +282,16 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
       headers: { Accept: "application/json", ...(init.headers || {}) },
       signal: requestController.signal,
     });
+    receivedResponse = true;
     if (!response.ok) {
       throw new Error(`Request failed ${response.status}: ${path}`);
     }
+    recordMaverickNetworkSuccess();
     return (await response.json()) as T;
   } catch (requestError) {
+    if (!receivedResponse && !init.signal?.aborted) {
+      recordMaverickNetworkFailure();
+    }
     if (didTimeout) {
       throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS} ms: ${path}`, { cause: requestError });
     }

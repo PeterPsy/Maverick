@@ -57,6 +57,60 @@ class FrontendAssetsTestCase(unittest.TestCase):
             with self.assertRaisesRegex(FrontendAssetManifestError, "Missing declared frontend asset"):
                 load_frontend_asset_manifest(root, required=True, verify_files=True)
 
+    def test_manifest_rejects_precache_metadata_that_does_not_match_declared_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.html").write_bytes(b"ok")
+            record = _record("index.html", b"ok")
+            payload = {
+                "schema": "maverick.frontend-assets.v1",
+                "build_id": "a" * 64,
+                "entrypoints": ["index.html"],
+                "immutable": [],
+                "revalidated": [record],
+                "precache": [{**record, "url": "/", "sha256": "b" * 64}],
+            }
+            (root / FRONTEND_ASSET_MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(FrontendAssetManifestError, "precache metadata"):
+                load_frontend_asset_manifest(root, required=True, verify_files=True)
+
+    def test_manifest_rejects_ambiguous_precache_urls(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.html").write_bytes(b"ok")
+            record = _record("index.html", b"ok")
+            payload = {
+                "schema": "maverick.frontend-assets.v1",
+                "build_id": "a" * 64,
+                "entrypoints": ["index.html"],
+                "immutable": [],
+                "revalidated": [record],
+                "precache": [{**record, "url": "/shell/../api/session"}],
+            }
+            (root / FRONTEND_ASSET_MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(FrontendAssetManifestError, "Unsafe frontend precache URL"):
+                load_frontend_asset_manifest(root, required=True, verify_files=True)
+
+    def test_manifest_rejects_dynamic_precache_urls(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.html").write_bytes(b"private")
+            record = _record("index.html", b"private")
+            payload = {
+                "schema": "maverick.frontend-assets.v1",
+                "build_id": "a" * 64,
+                "entrypoints": ["index.html"],
+                "immutable": [],
+                "revalidated": [record],
+                "precache": [{**record, "url": "/api/session"}],
+            }
+            (root / FRONTEND_ASSET_MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(FrontendAssetManifestError, "Unsafe frontend precache URL"):
+                load_frontend_asset_manifest(root, required=True, verify_files=True)
+
 
 def _record(path: str, body: bytes) -> dict[str, object]:
     return {"path": path, "sha256": hashlib.sha256(body).hexdigest(), "size_bytes": len(body)}

@@ -934,6 +934,48 @@ to `If-None-Match`, and accepts `If-Range` only when its strong ETag matches the
 current representation. JSON responses default to `private, no-store` unless
 their owner opts into a narrower explicit revalidation contract.
 
+Base Shell's M2 production build extends the verified frontend manifest with
+an `offline` entry and `precache` records containing the public URL, artifact
+path, SHA-256 digest, and exact decoded byte length. Its build identity covers
+the Rollup graph, the service-worker template, and the selected precache map;
+the worker is then generated from that identity. Core refuses undeclared,
+mismatched, ambiguous, traversal, API, WebSocket, backend, sidecar, and worker
+precache URLs before hosting the app.
+
+The root worker owns only these Cache API namespaces:
+
+- `maverick-static-v2:<build_id>` for an atomically installed, verified shell;
+- `maverick-app-static-v2` for static assets of visited apps that Core served
+  with the verified `public, max-age=31536000, immutable` contract;
+- the exact legacy `maverick-base-shell-v3` name for bounded migration cleanup.
+
+Navigation is network-first with a bounded timeout. `/` and `/app/...` fall
+back to the verified Base Shell document; other uncached navigations fall back
+to the localized public offline document. Generated immutable shell assets are
+cache-first only after digest and size verification. Other precached public
+assets are revalidated and fall back only to matching verified bytes. API,
+SSE, WebSocket, backend, sidecar, service-worker, non-GET, cross-origin, and
+range requests are never answered by the worker.
+
+Install failure deletes only the incomplete cache for the candidate build and
+leaves the active build untouched. Updates wait for explicit acceptance;
+controller change reloads every tab already controlled by the M2 client so an
+old shell does not continue under an incompatible worker. Activation removes
+only obsolete known shell-cache names, never the app static runtime cache,
+IndexedDB, OPFS, or unrelated Cache API entries. Kill-switch cleanup adds the
+known app static cache and unregisters the root worker, while recovery repairs
+missing or corrupt entries in place without discarding entries that still
+verify.
+
+Connectivity is a Base Shell external store. Browser `offline` or a bounded
+Maverick transport failure blocks remote UI immediately. A browser `online`
+event enters a still-blocked checking state; only a fresh successful Maverick
+response restores the current app icon and online actions. M2 persists only a
+non-sensitive last-success timestamp. Its offline render unmounts app frames
+and exposes exactly one accessible indicator in the current-app sidebar slot,
+plus the local-content management dialog; it persists no private app read
+model.
+
 ## Everything Above The Core Is An App
 
 The Maverick product shell should also be modeled as an app.

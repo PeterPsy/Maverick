@@ -10,7 +10,8 @@
     "predev": "node ../../scripts/check-node-runtime.mjs",
     "dev": "vite --host 0.0.0.0",
     "pretest": "node ../../scripts/check-node-runtime.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:service-worker": "node --test tests/service-worker-v2.test.mjs tests/frontend-precache-build.test.mjs"
   },
   "dependencies": {
     "@paper-design/shaders-react": "^0.0.76",

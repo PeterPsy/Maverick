@@ -1,7 +1,9 @@
 # Maverick PWA Offline-Aware Product Contract
 
-Status: approved for M0 on 2026-08-26. This document controls product copy and
-the global connection-state UI used by Base Shell.
+Status: approved for M0 and implemented for the M2 shell checkpoint on
+2026-08-26. Physical Safari and Home Screen evidence remains a release gate as
+defined in `docs/runbooks/pwa_shell_v2.md`. This document controls product copy
+and the global connection-state UI used by Base Shell.
 
 ## Approved positioning
 

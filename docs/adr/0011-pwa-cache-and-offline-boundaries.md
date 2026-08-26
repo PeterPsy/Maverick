@@ -192,4 +192,5 @@ admission/authorization/confirmation after reconnect.
 - `docs/product/pwa_offline_capabilities.md`
 - `docs/product/pwa_cache_resource_inventory.v1.json`
 - `docs/runbooks/pwa_cache_baseline.md`
+- `docs/runbooks/pwa_shell_v2.md`
 - `SECURITY.md`

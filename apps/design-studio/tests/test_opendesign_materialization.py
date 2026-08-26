@@ -126,6 +126,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
                 return_value=readiness,
             ) as wait_for_readiness,
             patch.object(self.launcher, "_finalize_pending_activations") as finalize,
+            patch.object(self.launcher, "_prewarm_browser_surface") as prewarm_browser,
             patch.object(self.launcher, "_write_readiness_marker") as write_marker,
             patch.object(self.launcher, "_wait_for_maverick_readiness") as wait_for_maverick,
             self.assertRaises(self.launcher.LauncherError) as exited,
@@ -152,6 +153,10 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             web_registry_root=self.root / "web-registry",
             readiness=readiness,
         )
+        prewarm_browser.assert_called_once_with(
+            daemon,
+            env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
+        )
         write_marker.assert_called_once_with(
             self.root / "generation",
             binding=binding,
@@ -161,6 +166,46 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             daemon,
             env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
         )
+
+    def test_browser_prewarm_requires_one_bounded_verified_html_response(self) -> None:
+        daemon = Mock()
+        daemon.poll.return_value = None
+        response = Mock()
+        response.status = 200
+        response.read.return_value = b"<!doctype html><html><body>OpenDesign</body></html>"
+        response.getheader.return_value = "text/html; charset=utf-8"
+        connection = Mock()
+        connection.getresponse.return_value = response
+
+        with patch.object(self.launcher.http.client, "HTTPConnection", return_value=connection):
+            self.launcher._prewarm_browser_surface(
+                daemon,
+                env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
+            )
+
+        connection.request.assert_called_once_with(
+            "GET",
+            "/index.html",
+            headers={
+                "Authorization": "Bearer token",
+                "Accept": "text/html",
+                "Connection": "close",
+            },
+        )
+        response.read.assert_called_once_with(2_097_153)
+        connection.close.assert_called_once()
+
+        response.status = 503
+        with (
+            patch.object(self.launcher.http.client, "HTTPConnection", return_value=connection),
+            self.assertRaises(self.launcher.LauncherError) as raised,
+        ):
+            self.launcher._prewarm_browser_surface(
+                daemon,
+                env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
+            )
+        self.assertEqual(raised.exception.code, "activation_incomplete")
+        self.assertEqual(raised.exception.phase, "browser_prewarm")
 
     def test_launcher_heartbeat_fails_closed_when_transactional_readiness_is_lost(self) -> None:
         daemon = Mock()

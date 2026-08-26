@@ -431,6 +431,10 @@ def _run_daemon(
         )
         timings["activation_commit_ms"] = _elapsed_ms(phase_started)
         _emit_timing("activation_commit_ms", timings["activation_commit_ms"], startup_id)
+        phase_started = time.monotonic()
+        _prewarm_browser_surface(daemon, env=env)
+        timings["browser_prewarm_ms"] = _elapsed_ms(phase_started)
+        _emit_timing("browser_prewarm_ms", timings["browser_prewarm_ms"], startup_id)
         _write_readiness_marker(generation_root, binding=binding, startup_nonce=startup_id)
         _wait_for_maverick_readiness(daemon, env=env)
         _update_health_status(
@@ -566,6 +570,55 @@ def _wait_for_maverick_readiness(
     )
     if payload.get("ready") is not True:
         raise LauncherError("activation_incomplete", "activation_commit", "Transactional readiness was not committed")
+
+
+def _prewarm_browser_surface(
+    daemon: subprocess.Popen[bytes],
+    *,
+    env: dict[str, str],
+) -> None:
+    """Prime the verified web entrypoint before transactional browser readiness."""
+    if daemon.poll() is not None:
+        raise LauncherError("daemon_spawn_failed", "browser_prewarm", "OpenDesign daemon exited before web prewarm")
+    host = str(env.get("OD_BIND_HOST") or "127.0.0.1")
+    try:
+        port = int(str(env.get("OD_PORT") or ""))
+    except ValueError as error:
+        raise LauncherError("runtime_binding_invalid", "browser_prewarm", "OpenDesign sidecar port is invalid") from error
+    token = str(env.get("OD_API_TOKEN") or "")
+    connection = http.client.HTTPConnection(host, port, timeout=4.0)
+    try:
+        connection.request(
+            "GET",
+            "/index.html",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "text/html",
+                "Connection": "close",
+            },
+        )
+        response = connection.getresponse()
+        body = response.read(2_097_153)
+    except (OSError, http.client.HTTPException) as error:
+        raise LauncherError(
+            "activation_incomplete",
+            "browser_prewarm",
+            "OpenDesign web entrypoint prewarm failed",
+        ) from error
+    finally:
+        connection.close()
+    content_type = str(response.getheader("Content-Type") or "").lower()
+    if (
+        response.status != 200
+        or len(body) > 2_097_152
+        or "text/html" not in content_type
+        or b"<html" not in body[:4096].lower()
+    ):
+        raise LauncherError(
+            "activation_incomplete",
+            "browser_prewarm",
+            "OpenDesign web entrypoint prewarm returned an invalid response",
+        )
 
 
 def _wait_for_json_readiness(

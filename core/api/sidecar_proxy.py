@@ -11,12 +11,13 @@ import http.client
 import logging
 import os
 from pathlib import Path
+from queue import Queue
 import re
 import secrets
 import signal
 import socket
 import subprocess
-from threading import BoundedSemaphore, Event, Lock
+from threading import BoundedSemaphore, Event, Lock, Thread
 import time
 from typing import Any, AsyncIterator, Callable, Iterable, Iterator
 from urllib.parse import quote
@@ -70,6 +71,10 @@ _DEFAULT_PROXY_TIMEOUT_SECONDS = 60
 _PROXY_CHUNK_SIZE = 64 * 1024
 _REQUEST_BODY_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _SIDECAR_MANAGER = None
+_SIDECAR_SPAWN_LOCK = Lock()
+_SIDECAR_SPAWN_QUEUE: Queue["_SidecarSpawnRequest"] = Queue()
+_SIDECAR_SPAWN_THREADS: list[Thread] = []
+_SIDECAR_SPAWN_WORKER_COUNT = 4
 _AUTO_REPAIR_LOCK = Lock()
 AutoRepairKey = tuple[str, str, str, str]
 _AUTO_REPAIRS: dict[AutoRepairKey, Future[None]] = {}
@@ -77,6 +82,69 @@ _AUTO_REPAIR_BACKOFFS: dict[AutoRepairKey, float] = {}
 _AUTO_REPAIR_BACKOFF_SECONDS = 60.0
 AsgiReceive = Any
 AsgiSend = Any
+
+
+@dataclass(frozen=True)
+class _SidecarSpawnRequest:
+    """One subprocess creation delegated to the process-lifetime owner thread."""
+
+    command: tuple[str, ...]
+    options: dict[str, Any]
+    future: Future[subprocess.Popen[bytes]]
+
+
+def _spawn_sidecar_process(
+    command: Iterable[str],
+    **options: Any,
+) -> subprocess.Popen[bytes]:
+    """Spawn from a stable thread so bubblewrap parent-death remains process-scoped.
+
+    Linux parent-death signals follow the thread that called ``fork``.  A
+    declarative prewarm runs on a short-lived worker, so invoking ``Popen``
+    there would make ``bwrap --die-with-parent`` kill an otherwise healthy
+    sidecar as soon as prewarm returned.  A bounded pool of owner threads lives
+    for the Core process lifetime, preserving parallel sidecar startups while
+    startup and health waits remain outside the global manager lock.
+    """
+    future: Future[subprocess.Popen[bytes]] = Future()
+    _ensure_sidecar_spawn_threads()
+    _SIDECAR_SPAWN_QUEUE.put(
+        _SidecarSpawnRequest(
+            command=tuple(command),
+            options=options,
+            future=future,
+        )
+    )
+    return future.result()
+
+
+def _ensure_sidecar_spawn_threads() -> tuple[Thread, ...]:
+    with _SIDECAR_SPAWN_LOCK:
+        _SIDECAR_SPAWN_THREADS[:] = [
+            thread for thread in _SIDECAR_SPAWN_THREADS if thread.is_alive()
+        ]
+        while len(_SIDECAR_SPAWN_THREADS) < _SIDECAR_SPAWN_WORKER_COUNT:
+            thread = Thread(
+                target=_sidecar_spawn_worker,
+                name=f"maverick-sidecar-process-owner-{len(_SIDECAR_SPAWN_THREADS) + 1}",
+                daemon=True,
+            )
+            _SIDECAR_SPAWN_THREADS.append(thread)
+            thread.start()
+        return tuple(_SIDECAR_SPAWN_THREADS)
+
+
+def _sidecar_spawn_worker() -> None:
+    while True:
+        request = _SIDECAR_SPAWN_QUEUE.get()
+        try:
+            process = subprocess.Popen(request.command, **request.options)
+        except BaseException as error:
+            request.future.set_exception(error)
+        else:
+            request.future.set_result(process)
+        finally:
+            _SIDECAR_SPAWN_QUEUE.task_done()
 
 
 @dataclass
@@ -365,12 +433,14 @@ class HttpSidecarManager:
             _probe_sidecar_health(running, sidecar=sidecar)
         except SidecarStartupError as failure:
             removed = False
+            process_exited = running.process.poll() is not None
             with self._lock:
                 if self._running.get(key) is running:
-                    self._running.pop(key, None)
-                    removed = True
+                    if process_exited:
+                        self._running.pop(key, None)
+                        removed = True
                     self._status[key] = {
-                        "state": "failed",
+                        "state": "failed" if process_exited else "degraded",
                         "phase": failure.phase,
                         "duration_ms": failure.duration_ms,
                         "updated_at": _utc_timestamp(),
@@ -461,7 +531,7 @@ class HttpSidecarManager:
             raise
         record_phase("process_spawn")
         try:
-            process = subprocess.Popen(
+            process = _spawn_sidecar_process(
                 confined_launch.command,
                 cwd="/",
                 env=confined_launch.env,

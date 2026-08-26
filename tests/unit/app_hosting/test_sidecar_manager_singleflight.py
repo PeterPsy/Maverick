@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Barrier, Event, Lock
+from threading import Barrier, Event, Lock, Thread, current_thread
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -80,6 +80,32 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
             self.assertEqual(two.result(timeout=3).instance_id, "two")
         self.assertEqual(peak, 2)
 
+    def test_process_spawn_is_owned_by_a_stable_process_lifetime_thread(self) -> None:
+        caller: list[Thread] = []
+        spawned_by: list[Thread] = []
+        result: list[object] = []
+        process = object()
+
+        def invoke() -> None:
+            caller.append(current_thread())
+            result.append(sidecar_proxy._spawn_sidecar_process(["sidecar-fixture"], cwd="/"))
+
+        def spawn(*_args, **_kwargs):
+            spawned_by.append(current_thread())
+            return process
+
+        with patch.object(sidecar_proxy.subprocess, "Popen", side_effect=spawn):
+            transient = Thread(target=invoke, name="transient-prewarm")
+            transient.start()
+            transient.join(timeout=2)
+
+        self.assertFalse(transient.is_alive())
+        self.assertEqual(result, [process])
+        self.assertEqual(len(spawned_by), 1)
+        self.assertIsNot(spawned_by[0], caller[0])
+        self.assertTrue(spawned_by[0].name.startswith("maverick-sidecar-process-owner-"))
+        self.assertTrue(spawned_by[0].is_alive())
+
     def test_slow_startup_does_not_convoy_another_sidecar(self) -> None:
         slow_entered = Event()
         slow_release = Event()
@@ -134,7 +160,7 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
         self.assertEqual(self._ensure(app_id="one", data_root="/data/one").instance_id, "retry")
         self.assertEqual(attempts, 2)
 
-    def test_existing_process_is_rechecked_and_evicted_when_transactional_health_is_lost(self) -> None:
+    def test_existing_process_is_rechecked_and_degraded_without_destructive_transient_eviction(self) -> None:
         running = _Running("stale-ready")
         self.manager._start_sidecar = Mock(return_value=running)  # type: ignore[method-assign]
         self.assertIs(self._ensure(app_id="one", data_root="/data/one"), running)
@@ -162,16 +188,39 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, "activation_incomplete")
         probe.assert_called_once_with(running, sidecar=self.sidecar)
-        cleanup.assert_called_once_with(running)
-        self.assertFalse(self.manager._running)
+        cleanup.assert_not_called()
+        self.assertTrue(self.manager._running)
         status = self.manager.startup_status(
             workspace_id="default",
             app_id="one",
             sidecar_id="daemon",
             data_root="/data/one",
         )
-        self.assertEqual(status["state"], "failed")
+        self.assertEqual(status["state"], "degraded")
         self.assertEqual(status["last_failure"]["code"], "activation_incomplete")
+
+        with patch.object(sidecar_proxy, "_probe_sidecar_health") as recovered_probe:
+            recovered = self.manager.ensure_running(
+                workspace_id="default",
+                app_id="one",
+                source_root=Path("/apps/one"),
+                data_root="/data/one",
+                sidecar=self.sidecar,
+                start_path=Path("/repo"),
+                shutdown_controller=None,
+                verify_existing_health=True,
+            )
+        self.assertIs(recovered, running)
+        recovered_probe.assert_called_once_with(running, sidecar=self.sidecar)
+        self.assertEqual(
+            self.manager.startup_status(
+                workspace_id="default",
+                app_id="one",
+                sidecar_id="daemon",
+                data_root="/data/one",
+            )["state"],
+            "ready",
+        )
 
     def test_failed_auto_repair_enters_backoff_without_a_spawn_hash_retry_loop(self) -> None:
         binding = SimpleNamespace(

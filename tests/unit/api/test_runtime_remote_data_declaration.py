@@ -70,7 +70,7 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
             )
 
             self.assertEqual(status, 409)
-            self.assertEqual(payload["error"], "remote_agentic_attestation_unavailable")
+            self.assertEqual(payload["error"], "remote_data_declaration_not_accepted")
             self.assertEqual(state.runtime_store.list_all_sessions(), [])
 
     def test_plain_hosted_session_rejects_agentic_remote_data_declaration(self) -> None:
@@ -102,7 +102,7 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
             )
 
             self.assertEqual(status, 409)
-            self.assertEqual(payload["error"], "remote_data_declaration_not_applicable")
+            self.assertEqual(payload["error"], "remote_data_declaration_not_accepted")
 
     def _platform(self, temp_dir: str):
         repo_root = self._repo_root(temp_dir)

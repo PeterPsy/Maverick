@@ -78,12 +78,12 @@ from core.runtime.service import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
-from core.runtime.runtime_session import coerce_declared_remote_data_class, coerce_runtime_mode
+from core.runtime.runtime_session import coerce_runtime_mode
 from core.runtime.remote_agentic_admission import (
-    is_remote_agentic_identity,
     remote_agentic_containment_reason,
     require_remote_agentic_session_admission,
 )
+from core.runtime.public_status import public_runtime_recovery_reason_code
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.routing import build_runtime_routing
 from core.runtime.plain_hosted_text import (
@@ -161,6 +161,11 @@ def _session_payload(
 ) -> dict[str, object]:
     payload = asdict(session)
     payload.pop("prepared_session_fingerprint", None)
+    payload.pop("declared_remote_data_class", None)
+    payload["recovery_reason_code"] = public_runtime_recovery_reason_code(
+        status=session.status,
+        reason_code=session.recovery_reason_code,
+    )
     payload["provider_id"] = provider_id
     if session.execution_binding is not None:
         binding = session.execution_binding
@@ -890,6 +895,7 @@ def _create_session(
     prepare_only: bool = False,
     prepared_fingerprint: str | None = None,
 ) -> RuntimeSessionRecord:
+    _reject_client_remote_data_declaration(body)
     authorize_runtime_session_create(
         workspace_store=state.workspace_store,
         runtime_store=state.runtime_store,
@@ -909,9 +915,6 @@ def _create_session(
         start_path=start_path,
     )
     execution_binding = None
-    declared_remote_data_class = coerce_declared_remote_data_class(
-        body.get("declared_remote_data_class")
-    )
     if coerce_runtime_mode(body.get("runtime_mode")) == "agentic":
         registry = effective_provider_registry(
             state.provider_store,
@@ -936,12 +939,6 @@ def _create_session(
             agent_type_id=str(body.get("agent_type_id") or "").strip(),
         ):
             raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
-        if declared_remote_data_class is not None:
-            raise ProviderError(
-                "remote_agentic_attestation_unavailable"
-                if is_remote_agentic_identity(definition)
-                else "remote_data_declaration_not_applicable"
-            )
         execution_binding = build_pinned_execution_binding(
             state.provider_store,
             registry,
@@ -951,8 +948,6 @@ def _create_session(
             workspace_binding_id=str(body.get("workspace_profile_binding_id") or "").strip() or None,
             reasoning_effort=str(body.get("reasoning_effort") or "").strip() or None,
         )
-    elif declared_remote_data_class is not None:
-        raise ProviderError("remote_data_declaration_not_applicable")
     session = create_runtime_session(
         state.runtime_store,
         session_id=resolved_session_id,
@@ -962,7 +957,7 @@ def _create_session(
         runtime_mode=body.get("runtime_mode"),
         hosted_provider_id=body.get("hosted_provider_id"),
         hosted_model_id=body.get("hosted_model_id"),
-        declared_remote_data_class=declared_remote_data_class,
+        declared_remote_data_class=None,
         prepared_session_fingerprint=prepared_fingerprint,
         system_prompt=str(body.get("system_prompt") or "").strip() or None,
         skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
@@ -1006,12 +1001,13 @@ def _create_session(
     return session
 
 
-def _require_remote_agentic_request_admission_before_claim(
+def _require_remote_agentic_request_admission_before_persistence(
     state: PlatformState,
     context: RequestSession,
     body: dict,
 ) -> None:
-    """Reject remote agentic requests before client-message claim persistence."""
+    """Reject remote agentic requests before claims, prepared locks, or records."""
+    _reject_client_remote_data_declaration(body)
     if coerce_runtime_mode(body.get("runtime_mode")) != "agentic":
         return
     authorize_runtime_session_create(
@@ -1039,12 +1035,13 @@ def _require_remote_agentic_request_admission_before_claim(
         agent_type_id=str(body.get("agent_type_id") or "").strip(),
     ):
         raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
-    require_remote_agentic_session_admission(
-        definition,
-        declared_remote_data_class=coerce_declared_remote_data_class(
-            body.get("declared_remote_data_class")
-        ),
-    )
+    require_remote_agentic_session_admission(definition)
+
+
+def _reject_client_remote_data_declaration(body: dict) -> None:
+    """Keep data classification Core-owned on every browser/API launch path."""
+    if body.get("declared_remote_data_class") not in {None, ""}:
+        raise ProviderError("remote_data_declaration_not_accepted")
 
 
 def _handle_session_collection(
@@ -1073,32 +1070,31 @@ def _handle_session_collection(
         prepare_only = bool(body.get("prepare_only"))
         if prepare_only and turn_requested:
             return json_response(start_response, {"error": "prepare_only_turn_not_allowed"}, status="400 Bad Request")
-        if turn_requested and client_message_id:
-            try:
-                _require_remote_agentic_request_admission_before_claim(
-                    state,
-                    context,
-                    body,
-                )
-            except AuthorizationError as error:
-                status = (
-                    "429 Too Many Requests"
-                    if error.reason == "max_agent_instances_reached"
-                    else "403 Forbidden"
-                )
-                return json_response(start_response, {"error": error.reason}, status=status)
-            except ProviderError as error:
-                return json_response(
-                    start_response,
-                    {"error": str(error)},
-                    status="409 Conflict",
-                )
-            except ValueError as error:
-                return json_response(
-                    start_response,
-                    {"error": str(error)},
-                    status="400 Bad Request",
-                )
+        try:
+            _require_remote_agentic_request_admission_before_persistence(
+                state,
+                context,
+                body,
+            )
+        except AuthorizationError as error:
+            status = (
+                "429 Too Many Requests"
+                if error.reason == "max_agent_instances_reached"
+                else "403 Forbidden"
+            )
+            return json_response(start_response, {"error": error.reason}, status=status)
+        except ProviderError as error:
+            return json_response(
+                start_response,
+                {"error": str(error)},
+                status="409 Conflict",
+            )
+        except ValueError as error:
+            return json_response(
+                start_response,
+                {"error": str(error)},
+                status="400 Bad Request",
+            )
         submission_timing = runtime_turn_submission_timing(received_perf_counter) if turn_requested else None
         if turn_requested:
             claim_started_at = time.perf_counter()
@@ -2198,7 +2194,10 @@ def _queue_runtime_turn_response(
                 "error": error.reason_code,
                 "detail": detail,
                 "session_status": refreshed_session.status,
-                "status_reason": refreshed_session.recovery_reason_code,
+                "status_reason": public_runtime_recovery_reason_code(
+                    status=refreshed_session.status,
+                    reason_code=refreshed_session.recovery_reason_code,
+                ),
             },
             status="409 Conflict",
         )

@@ -40,7 +40,9 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           provider_role: "runtime_engine",
           workspace_profile_binding_id: profile.workspace_profile_binding_id,
           default_model_family: profile.model_id,
-          label: model?.label || profile.model_id,
+          label: profile.runtime_engine_id === "codex"
+            ? model?.label || profile.model_id
+            : profile.display_name,
           description: modelProvider?.label || profile.model_provider_id,
           status: "active",
           agentic_rollout_status: profile.rollout_status,

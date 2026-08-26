@@ -223,7 +223,7 @@ class AgenticProfilesTest(unittest.TestCase):
             workspace_id="default",
             credential_binding_id="credential-google",
             workspace_policy_ceiling=SimpleNamespace(),
-            egress_policy_id="fake-data-remote-preview",
+            egress_policy_id="remote-agentic-contained",
             egress_policy_revision="1",
             revision=0,
             created_at=NOW,

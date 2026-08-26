@@ -72,10 +72,10 @@ def require_remote_agentic_session_admission(
     declared_remote_data_class: object | None = None,
 ) -> None:
     """Reject remote sessions before persistence; client declarations never authorize them."""
+    if declared_remote_data_class is not None:
+        raise AgenticProfileError("remote_data_declaration_not_accepted")
     if not is_remote_agentic_identity(binding_or_definition):
         return
-    if declared_remote_data_class is not None:
-        raise AgenticProfileError("remote_agentic_attestation_unavailable")
     reason = remote_agentic_containment_reason(binding_or_definition)
     if reason is not None:
         raise AgenticProfileError(reason)

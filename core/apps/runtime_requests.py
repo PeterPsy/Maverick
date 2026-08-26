@@ -25,11 +25,14 @@ from core.providers.agentic_workspace_policy import actor_selection_allowed
 from core.providers.service import effective_provider_registry, resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.app_streams import RuntimeAppStreamError, RuntimeAppStreamRecord
-from core.runtime.runtime_session import runtime_session_allows_user_thread
-from core.runtime.runtime_session import coerce_declared_remote_data_class, coerce_runtime_mode
+from core.runtime.remote_agentic_admission import (
+    require_remote_agentic_session_admission,
+)
+from core.runtime.runtime_session import coerce_runtime_mode, runtime_session_allows_user_thread
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_threads import create_runtime_thread
+from core.runtime.turn_queue_admission import require_turn_queue_session_executable
 from core.runtime.service import (
     claim_runtime_turn_cancellation,
     create_runtime_session,
@@ -311,6 +314,13 @@ def _apply_one_runtime_request(
     stream_requested = bool(request.get("create_stream"))
     actor_id = _text(actor_user_id) or "system"
     try:
+        _preflight_runtime_request_before_persistence(
+            state,
+            request=request,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            actor_user_id=actor_user_id,
+        )
         if stream_requested:
             idempotency_key = _text(request.get("idempotency_key"))
             if not idempotency_key:
@@ -477,6 +487,7 @@ def _runtime_session_for_request(
     start_path: Path,
     actor_user_id: str | None = None,
 ):
+    _reject_app_remote_data_declaration(request)
     existing_session_id = _text(request.get("runtime_session_id"))
     if existing_session_id:
         try:
@@ -512,43 +523,19 @@ def _runtime_session_for_request(
         start_path=start_path,
     )
     runtime_mode = coerce_runtime_mode(request.get("runtime_mode"))
-    declared_remote_data_class = coerce_declared_remote_data_class(
-        request.get("declared_remote_data_class")
-    )
     execution_binding = None
     if runtime_mode == "agentic":
+        _definition, authorized_workspace_binding = _authorize_new_agentic_app_session(
+            state,
+            request=request,
+            workspace_id=workspace_id,
+            agent_id=agent_id,
+            actor_user_id=actor_user_id,
+        )
         registry = effective_provider_registry(
             state.provider_store,
             registry=getattr(state, "provider_registry", None),
         )
-        _definition, workspace_binding = resolve_workspace_agentic_profile(
-            state.provider_store,
-            workspace_id=workspace_id,
-            binding_id=_text(request.get("workspace_profile_binding_id")) or None,
-        )
-        platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
-            state,
-            user_id=_text(actor_user_id) or None,
-            workspace_id=workspace_id,
-        )
-        if not actor_selection_allowed(
-            workspace_binding,
-            user_id=user_id,
-            platform_role=platform_role,
-            workspace_role=workspace_role,
-            agent_type_id=_text(request.get("agent_type_id")) or agent_id,
-        ):
-            raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
-        if workspace_binding.egress_policy_id == "fake-data-remote-preview":
-            declared_remote_data_class = "workspace_internal_fake"
-        elif declared_remote_data_class is not None:
-            raise ProviderError("remote_data_declaration_not_applicable")
-        if (
-            declared_remote_data_class is not None
-            and declared_remote_data_class
-            not in workspace_binding.workspace_policy_ceiling.allowed_remote_data_classes
-        ):
-            raise ProviderError("remote_data_class_not_allowed")
         execution_binding = build_pinned_execution_binding(
             state.provider_store,
             registry,
@@ -558,8 +545,10 @@ def _runtime_session_for_request(
             workspace_binding_id=_text(request.get("workspace_profile_binding_id")) or None,
             reasoning_effort=_text(request.get("reasoning_effort")) or None,
         )
-    elif declared_remote_data_class is not None:
-        raise ProviderError("remote_data_declaration_not_applicable")
+        _require_exact_authorized_binding_pin(
+            execution_binding,
+            authorized_workspace_binding,
+        )
     session = create_runtime_session(
         state.runtime_store,
         session_id=session_id,
@@ -569,7 +558,7 @@ def _runtime_session_for_request(
         runtime_mode=runtime_mode,
         hosted_provider_id=request.get("hosted_provider_id"),
         hosted_model_id=request.get("hosted_model_id"),
-        declared_remote_data_class=declared_remote_data_class,
+        declared_remote_data_class=None,
         system_prompt=system_prompt,
         skill_ids=_list_of_text(request.get("skill_ids")),
         skill_activation_mode=request.get("skill_activation_mode"),
@@ -613,6 +602,89 @@ def _runtime_session_for_request(
         now=session.started_at or session.updated_at,
     )
     return session
+
+
+def _preflight_runtime_request_before_persistence(
+    state,
+    *,
+    request: dict[str, Any],
+    workspace_id: str,
+    app_id: str,
+    actor_user_id: str | None,
+) -> None:
+    """Reject non-executable app requests before an app-stream reservation."""
+    _reject_app_remote_data_declaration(request)
+    existing_session_id = _text(request.get("runtime_session_id"))
+    if existing_session_id:
+        session = _runtime_session_for_request(
+            state,
+            request=request,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            parsed=None,  # Existing-session validation does not inspect the contract.
+            start_path=Path(getattr(state, "repository_root", Path.cwd())),
+            actor_user_id=actor_user_id,
+        )
+        require_turn_queue_session_executable(state.runtime_store, session)
+        return
+    agent_id = _text(request.get("agent_id") or request.get("agent_type_id"))
+    if not agent_id:
+        raise AppHostingError("Runtime launch request requires agent_id.")
+    if coerce_runtime_mode(request.get("runtime_mode")) == "agentic":
+        _authorize_new_agentic_app_session(
+            state,
+            request=request,
+            workspace_id=workspace_id,
+            agent_id=agent_id,
+            actor_user_id=actor_user_id,
+        )
+
+
+def _authorize_new_agentic_app_session(
+    state,
+    *,
+    request: dict[str, Any],
+    workspace_id: str,
+    agent_id: str,
+    actor_user_id: str | None,
+):
+    """Resolve actor/profile policy and run the central remote admission gate."""
+    definition, workspace_binding = resolve_workspace_agentic_profile(
+        state.provider_store,
+        workspace_id=workspace_id,
+        binding_id=_text(request.get("workspace_profile_binding_id")) or None,
+        enforce_remote_admission=False,
+    )
+    platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
+        state,
+        user_id=_text(actor_user_id) or None,
+        workspace_id=workspace_id,
+    )
+    if not actor_selection_allowed(
+        workspace_binding,
+        user_id=user_id,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
+        agent_type_id=_text(request.get("agent_type_id")) or agent_id,
+    ):
+        raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
+    require_remote_agentic_session_admission(definition)
+    return definition, workspace_binding
+
+
+def _reject_app_remote_data_declaration(request: dict[str, Any]) -> None:
+    """Reject app-authored session classification rather than interpreting it."""
+    if request.get("declared_remote_data_class") not in {None, ""}:
+        raise ProviderError("remote_data_declaration_not_accepted")
+
+
+def _require_exact_authorized_binding_pin(execution_binding, workspace_binding) -> None:
+    """Fail if governance changed between actor authorization and pin minting."""
+    if (
+        execution_binding.workspace_binding_id != workspace_binding.binding_id
+        or execution_binding.workspace_binding_revision != workspace_binding.revision
+    ):
+        raise ProviderError("workspace_profile_binding_changed")
 
 
 def _validated_runtime_request_attachments(

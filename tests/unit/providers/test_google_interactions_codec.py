@@ -320,7 +320,7 @@ def _request(
             AgenticRequestContentBlock(
                 f"{request_id}:system",
                 "system",
-                "workspace_internal_fake",
+                "public",
                 "platform_instruction",
                 "trusted_platform",
                 "text/plain",
@@ -329,7 +329,7 @@ def _request(
             AgenticRequestContentBlock(
                 f"{request_id}:user",
                 "user",
-                "workspace_internal_fake",
+                "public",
                 "user_input",
                 "trusted_actor",
                 "text/plain",

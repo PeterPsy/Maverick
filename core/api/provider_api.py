@@ -46,6 +46,7 @@ from core.providers.service import (
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.remote_agentic_admission import remote_agentic_containment_reason
+from core.runtime.public_status import public_runtime_recovery_reason_code
 from core.usage.quota import record_provider_quota_snapshots
 
 
@@ -357,7 +358,10 @@ def runtime_session_payload(session: RuntimeSessionRecord) -> dict[str, object]:
         "updated_at": session.updated_at,
         "ended_at": session.ended_at,
         "last_progress_at": session.last_progress_at,
-        "recovery_reason_code": session.recovery_reason_code,
+        "recovery_reason_code": public_runtime_recovery_reason_code(
+            status=session.status,
+            reason_code=session.recovery_reason_code,
+        ),
         "agentic_containment": {
             "status": "NO-GO" if containment_reason else "GO",
             "reason_code": containment_reason,
@@ -623,6 +627,19 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             registry=registry,
         )
         containment_reason = remote_agentic_containment_reason(definition)
+        effective_policy = (
+            definition.policy_ceiling
+            if binding is None
+            else binding.workspace_policy_ceiling
+        )
+        effective_egress_policy_id = (
+            definition.egress_policy_id if binding is None else binding.egress_policy_id
+        )
+        effective_egress_policy_revision = (
+            definition.egress_policy_revision
+            if binding is None
+            else binding.egress_policy_revision
+        )
         items.append(
             {
                 "definition_id": definition.definition_id,
@@ -637,6 +654,21 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 "adapter_version_constraint": definition.adapter_version_constraint,
                 "routing_constraint": asdict(definition.routing_constraint),
                 "upstream_provider_ids": definition.routing_constraint.allowed_upstream_ids,
+                "data_destination": {
+                    "provider_id": definition.model_provider_id,
+                    "endpoint_id": definition.routing_constraint.endpoint_id,
+                    "upstream_provider_ids": definition.routing_constraint.allowed_upstream_ids,
+                },
+                "egress_policy": {
+                    "policy_id": effective_egress_policy_id,
+                    "revision": effective_egress_policy_revision,
+                    "allowed_remote_data_classes": effective_policy.allowed_remote_data_classes,
+                },
+                "data_policy": {
+                    "collection": definition.routing_constraint.data_collection_policy,
+                    "require_zdr": definition.routing_constraint.require_zdr,
+                    "attestation_state": "unavailable",
+                },
                 "profile_policy_ceiling": asdict(definition.policy_ceiling),
                 "rollout_status": None if status is None else status.rollout_status,
                 "certificate": certificate_payload,
@@ -747,7 +779,6 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
         "effective_status": effective_status,
         "status_revision": None if status is None else status.revision,
         "revoked_at": None if status is None else status.revoked_at,
-        "revocation_reason": None if status is None else status.revocation_reason,
     }
 
 

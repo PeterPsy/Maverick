@@ -80,6 +80,7 @@ describe("remote agentic provider runtime options", () => {
 
     expect(providers.filter((provider) => provider.workspace_profile_binding_id)).toHaveLength(1);
     expect(providers[0]?.workspace_profile_binding_id).toBe(preview.workspace_profile_binding_id);
+    expect(providers[0]?.label).toBe(preview.display_name);
   });
 
   it("does not offer a contained remote profile even when legacy fields look active", () => {
@@ -175,14 +176,14 @@ describe("remote agentic provider runtime options", () => {
     }))).toEqual([
       {
         model: googleModelId,
-        title: "Gemini 3.6 Flash",
+        title: "google-ai-studio · gemini-3.6-flash · fake-data preview",
         subtitle: "Google AI Studio",
         defaultReasoning: "high",
         reasoning: ["minimal", "low", "medium", "high"],
       },
       {
         model: openRouterModelId,
-        title: "DeepSeek V4 Flash",
+        title: "openrouter · deepseek/deepseek-v4-flash · fake-data preview",
         subtitle: "OpenRouter",
         defaultReasoning: "high",
         reasoning: ["minimal", "low", "medium", "high"],

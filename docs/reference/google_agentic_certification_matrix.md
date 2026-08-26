@@ -1,7 +1,7 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-08-21
-Matrix revision: `2026-08-21-r7`
+Status date: 2026-08-26
+Matrix revision: `2026-08-26-r8`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==5`
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==5`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `12` (revision `11` suspended) |
+| Immutable profile revision | `13` (revision `12` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -20,9 +20,9 @@ Adapter: `maverick-hosted-tool-loop==5`
 | Continuation | stateful in production; stateless exact-history codec tested |
 | Tool calls | one sequential function call per model step; consumed call ids are retained in private codec state |
 | Reasoning levels | `high`; deployed default `high` |
-| Live probe output budget | 2,048 tokens per request, including thinking tokens |
+| Future standalone diagnostic output budget | 2,048 tokens per request, including thinking tokens |
 | Thought handling | summaries disabled; signatures kept provider-private |
-| Remote data classes | `public`, `workspace_internal_fake` |
+| Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
 | Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
 | Certificate lifetime after a successful signed run | 45 days |
 
@@ -63,14 +63,16 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | paced operator-only two sequential real-filesystem-list calls plus final response at the certificate-bound `high` effort (three requests total) | available, not run at bootstrap |
+| Standalone live diagnostic | operator-only and outside the certification manifest/repository checks | future release gate; not certificate evidence |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
-certificate. A certification pipeline must execute the complete suite and the
-operator-only synthetic live probe, bind the result to the source commit,
-suite version, adapter artifact bundle and this matrix revision, and sign the
-completed run. Only that verified artifact may be used to issue a certificate.
+certificate. The certification pipeline executes fixture-contract steps only,
+binds the result to the source commit, suite version, adapter artifact bundle
+and this matrix revision, and signs the completed run. A future operator live
+diagnostic is invoked separately and is not a manifest step or certificate
+claim. Only a verified fixture-contract artifact may be used to issue a
+candidate certificate, which still cannot bypass Phase-0 admission.
 The executable signing and publication workflow is defined in
 `docs/runbooks/agentic_certification_evidence.md`.
 
@@ -94,10 +96,13 @@ The executable signing and publication workflow is defined in
 - Raw provider errors, thought signatures and credentials never enter public
   runtime events.
 
-Revision 12 corrects the failures exposed by a real multi-tool turn:
+Revision 13 retains the exact `fake-data preview` warning label but removes fake
+classification authority: its policy lists only Core-classified `public`, its
+egress id is `remote-agentic-contained@2`, and central admission remains
+NO-GO. It also carries the revision-12 corrections exposed by a real multi-tool turn:
 conservative per-request price reservations are reconciled with reported usage,
 and Google private continuation state tracks already-consumed call ids so a
 cumulative Core result ledger can send only the currently pending result. The
-r7 probe now requires two sequential tool calls before the final response. The
+r8 fixture contract covers sequential tool calls before the final response. The
 shared egress contract also redacts residual host paths found inside untrusted
 tool output while retaining fail-closed denial for every other provenance.

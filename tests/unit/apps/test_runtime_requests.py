@@ -371,8 +371,13 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         provider_store = object()
         registry = object()
         routing = SimpleNamespace(effective_mode="sandbox")
-        binding = object()
+        binding = SimpleNamespace(
+            workspace_binding_id="binding-codex",
+            workspace_binding_revision=3,
+        )
         workspace_binding = SimpleNamespace(
+            binding_id="binding-codex",
+            revision=3,
             egress_policy_id="local-runtime-no-remote-egress",
             workspace_policy_ceiling=SimpleNamespace(allowed_remote_data_classes=()),
         )
@@ -397,15 +402,9 @@ class RuntimeRequestsTestCase(unittest.TestCase):
             patch.object(runtime_requests, "effective_provider_registry", return_value=registry),
             patch.object(
                 runtime_requests,
-                "resolve_workspace_agentic_profile",
+                "_authorize_new_agentic_app_session",
                 return_value=(object(), workspace_binding),
             ),
-            patch.object(
-                runtime_requests,
-                "resolve_runtime_actor_roles",
-                return_value=("admin", "user:admin", "admin"),
-            ),
-            patch.object(runtime_requests, "actor_selection_allowed", return_value=True),
             patch.object(runtime_requests, "build_pinned_execution_binding", return_value=binding) as pin,
             patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", return_value=None),
             patch.object(runtime_requests, "create_runtime_session", return_value=created) as create_session,
@@ -433,6 +432,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         self.assertIs(create_session.call_args.kwargs["execution_binding"], binding)
         self.assertIs(create_session.call_args.kwargs["routing"], routing)
         self.assertEqual(create_session.call_args.kwargs["runtime_mode"], "agentic")
+        self.assertIsNone(create_session.call_args.kwargs["declared_remote_data_class"])
 
     def test_dependency_backend_request_result_is_only_exposed_to_callback(self) -> None:
         callback_payloads: list[dict[str, object]] = []

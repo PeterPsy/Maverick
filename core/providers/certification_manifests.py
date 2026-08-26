@@ -36,7 +36,7 @@ GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
     suite_version="8",
     provider_id="google-ai-studio",
     matrix_path="docs/reference/google_agentic_certification_matrix.md",
-    matrix_revision="2026-08-21-r7",
+    matrix_revision="2026-08-26-r8",
     artifact_paths=(
         "core/egress/agentic_models.py",
         "core/egress/agentic_policy.py",
@@ -124,11 +124,6 @@ GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
                 "tests.unit.runtime_tools.test_tool_orchestrator",
             ),
         ),
-        CertificationStepManifest(
-            step_id="live-synthetic-probe",
-            kind="live_probe",
-            command=("python3", "scripts/run_google_interactions_probe.py"),
-        ),
     ),
 )
 
@@ -138,7 +133,7 @@ OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
     suite_version="8",
     provider_id="openrouter",
     matrix_path="docs/reference/openrouter_agentic_certification_matrix.md",
-    matrix_revision="2026-08-21-r7",
+    matrix_revision="2026-08-26-r8",
     artifact_paths=(
         "core/egress/agentic_models.py",
         "core/egress/agentic_policy.py",
@@ -230,11 +225,6 @@ OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = CertificationSuiteManifest(
                 "tests.unit.runtime_tools.test_tool_orchestrator",
                 "tests.unit.scripts.test_openrouter_agentic_probe",
             ),
-        ),
-        CertificationStepManifest(
-            step_id="live-synthetic-probe",
-            kind="live_probe",
-            command=("python3", "scripts/run_openrouter_agentic_probe.py"),
         ),
     ),
 )

@@ -529,9 +529,10 @@ def _migrate_legacy_agentic_profile_egress(payload: dict[str, Any]) -> None:
         return
     if payload.get("provider_protocol") == "codex-app-server-stdio":
         payload["egress_policy_id"] = "local-runtime-no-remote-egress"
+        payload["egress_policy_revision"] = "1"
     else:
-        payload["egress_policy_id"] = "fake-data-remote-preview"
-    payload["egress_policy_revision"] = "1"
+        payload["egress_policy_id"] = "remote-agentic-contained"
+        payload["egress_policy_revision"] = "2"
 
 
 def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:

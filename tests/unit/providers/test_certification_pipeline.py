@@ -16,6 +16,10 @@ from core.providers.certification_pipeline import (
 )
 from core.providers.errors import CapabilityCertificateError
 from core.providers.google_agentic_certification import GOOGLE_CERTIFICATION_SUITE_VERSION
+from core.providers.certification_manifests import (
+    GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
+    OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
+)
 
 
 class CertificationPipelineTest(unittest.TestCase):
@@ -74,6 +78,18 @@ class CertificationPipelineTest(unittest.TestCase):
                 adapter_artifact_digest=self.digest,
                 evidence_refs=("platform-evidence:test",), started_at=self.started_at,
             )
+
+    def test_remote_manifests_execute_fixture_contract_steps_only(self) -> None:
+        for manifest in (
+            GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
+            OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
+        ):
+            with self.subTest(provider_id=manifest.provider_id):
+                self.assertTrue(manifest.steps)
+                self.assertEqual(
+                    {step.kind for step in manifest.steps},
+                    {"fixture_contract"},
+                )
 
     def _execute(self):
         passed = mock.Mock(returncode=0, stdout=b"passed", stderr=b"")

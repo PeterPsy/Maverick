@@ -56,6 +56,7 @@ _ALWAYS_DENIED_DATA_CLASSES = {
     "credential_or_secret",
     "host_operational_metadata",
     "unclassified",
+    "workspace_internal_fake",
 }
 
 
@@ -212,18 +213,18 @@ class AgenticEgressEvaluator:
         )
 
 
-def fake_data_preview_egress_policy(
+def public_remote_egress_policy(
     *,
     provider_id: str,
     upstream_ids: tuple[str, ...] = (),
-    policy_id: str = "fake-data-remote-preview",
+    policy_id: str = "public-remote-egress",
     revision: str = "1",
 ) -> AgenticEgressPolicy:
-    """Return the initial remote preview posture: public or explicitly fake only."""
+    """Return a fixture-safe policy that can export only Core-classified public data."""
     return AgenticEgressPolicy(
         policy_id=policy_id,
         revision=revision,
-        allowed_data_classes=("public", "workspace_internal_fake"),
+        allowed_data_classes=("public",),
         allowed_provider_ids=(provider_id,),
         allowed_upstream_ids=upstream_ids,
     )

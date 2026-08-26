@@ -412,7 +412,6 @@ export type RuntimeSession = {
   provider_thread_ready?: boolean;
   runtime_ready?: boolean;
   prewarm_total_ms?: number;
-  declared_remote_data_class?: string | null;
   recovery_reason_code?: string | null;
   agentic_containment?: {
     status: "GO" | "NO-GO";

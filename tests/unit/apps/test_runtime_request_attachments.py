@@ -150,6 +150,10 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
             return turn, events
 
         with (
+            patch.object(runtime_requests, "_authorize_new_agentic_app_session", return_value=(object(), object())),
+            patch.object(runtime_requests, "effective_provider_registry", return_value=object()),
+            patch.object(runtime_requests, "build_pinned_execution_binding", return_value=None),
+            patch.object(runtime_requests, "_require_exact_authorized_binding_pin"),
             patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", lambda *_args, **_kwargs: None),
             patch.object(runtime_requests, "submit_runtime_turn_async", fake_submit_runtime_turn_async),
         ):
@@ -214,6 +218,10 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
             completed.set()
 
         with (
+            patch.object(runtime_requests, "_authorize_new_agentic_app_session", return_value=(object(), object())),
+            patch.object(runtime_requests, "effective_provider_registry", return_value=object()),
+            patch.object(runtime_requests, "build_pinned_execution_binding", return_value=None),
+            patch.object(runtime_requests, "_require_exact_authorized_binding_pin"),
             patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", lambda *_args, **_kwargs: None),
             patch.object(runtime_submission_runtime, "resolve_runtime_engine_for_session", fake_resolve_runtime_engine_for_session),
             patch.object(runtime_submission_runtime, "_build_launch_spec_for_execution", lambda *_args, **_kwargs: None),

@@ -1,4 +1,4 @@
-"""Immutable fake-data preview for certified OpenRouter agentic execution."""
+"""Immutable contained preview for certified OpenRouter agentic execution."""
 
 from __future__ import annotations
 
@@ -12,6 +12,10 @@ from core.providers.agentic_models import (
     RoutingConstraint,
 )
 from core.providers.errors import ProviderNotFoundError
+from core.providers.agentic_workspace_policy import (
+    REMOTE_PREVIEW_EGRESS_POLICY_ID,
+    REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
+)
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_ENDPOINT_ID,
     OPENROUTER_AGENTIC_MODEL_ID,
@@ -21,9 +25,9 @@ from core.providers.store import ProviderStore
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "11"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "12"
 OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
 )
 OPENROUTER_CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
 OPENROUTER_DEFAULT_REASONING_EFFORT = "high"
@@ -33,7 +37,7 @@ OPENROUTER_AGENTIC_CERTIFICATE_ID = (
 
 
 def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
-    """Allow bounded reads over public or explicitly synthetic data only."""
+    """Allow bounded reads only over content classified public by Core."""
     return AgenticRuntimePolicy(
         max_steps_per_turn=8,
         max_tool_calls_per_turn=4,
@@ -56,7 +60,7 @@ def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
         allow_shell=False,
         require_confirmation_for_mutating=True,
         require_confirmation_for_destructive=True,
-        allowed_remote_data_classes=("public", "workspace_internal_fake"),
+        allowed_remote_data_classes=("public",),
     )
 
 
@@ -96,8 +100,8 @@ def ensure_openrouter_agentic_preview_profile(
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,
         created_at=timestamp,
-        egress_policy_id="fake-data-remote-preview",
-        egress_policy_revision="1",
+        egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
+        egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
     )
     try:
         stored = store.get_agentic_profile_definition(

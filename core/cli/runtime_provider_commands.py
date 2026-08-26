@@ -13,7 +13,10 @@ from core.providers.payloads import (
     routing_decision_payload,
     sort_provider_definitions,
 )
-from core.providers.agentic_containment import run_remote_agentic_containment
+from core.providers.agentic_containment import (
+    RemoteAgenticContainmentApplyError,
+    run_remote_agentic_containment,
+)
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.service import activate_hosted_model_provider, effective_provider_registry, is_retired_provider_definition
@@ -146,12 +149,19 @@ def runtime_provider_command_specs(
     ) -> dict[str, Any]:
         command_id = "core.providers.agentic.containment.apply"
         if provider_store is None or runtime_store is None:
-            return {"command_id": command_id, "error": "containment_store_unavailable"}
+            return {
+                "command_id": command_id,
+                "error": "containment_store_unavailable",
+                "safe_to_retry": False,
+                "requires_new_dry_run": True,
+            }
         if str(arguments.get("confirmation") or "") != "phase-0-reviewed":
             return {
                 "command_id": command_id,
                 "error": "containment_apply_confirmation_required",
                 "required_confirmation": "phase-0-reviewed",
+                "safe_to_retry": False,
+                "requires_new_dry_run": True,
             }
         plan_digest = str(arguments.get("plan_digest") or "").strip()
         try:
@@ -162,9 +172,26 @@ def runtime_provider_command_specs(
                 expected_plan_digest=plan_digest,
                 observability_store=observability_store,
             )
+        except RemoteAgenticContainmentApplyError as error:
+            return {
+                "command_id": command_id,
+                "error": error.reason_code,
+                "safe_to_retry": False,
+                "requires_new_dry_run": True,
+            }
         except ValueError as error:
-            return {"command_id": command_id, "error": str(error)}
-        return {"command_id": command_id, "report": asdict(report)}
+            return {
+                "command_id": command_id,
+                "error": str(error),
+                "safe_to_retry": False,
+                "requires_new_dry_run": True,
+            }
+        return {
+            "command_id": command_id,
+            "report": asdict(report),
+            "safe_to_retry": False,
+            "requires_new_dry_run": True,
+        }
 
     return [
         (
@@ -250,7 +277,7 @@ def runtime_provider_command_specs(
                 core_cli_command(
                     command_id="core.providers.agentic.containment.apply",
                     path_segments=["core", "providers", "agentic", "containment", "apply"],
-                    description="Apply a reviewed Phase-0 remote agentic containment plan through CAS stores.",
+                    description="Apply one reviewed Phase-0 containment plan; any repeat requires a new dry-run.",
                     owner_id="providers",
                     invocation_policy=OPERATOR_ONLY,
                     argument_schema={
@@ -268,8 +295,8 @@ def runtime_provider_command_specs(
                     },
                 ),
                 effect_class="mutating",
-                supports_idempotency=True,
-                safe_to_retry=True,
+                supports_idempotency=False,
+                safe_to_retry=False,
             ),
             _remote_agentic_containment_apply_handler,
         ),

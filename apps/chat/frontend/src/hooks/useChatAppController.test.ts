@@ -58,10 +58,13 @@ describe("chat runtime busy guard", () => {
 
 describe("runtime admission status", () => {
   it("shows explicit containment and quarantine causes", () => {
-    expect(runtimeAdmissionBlockMessage(session({
+    const quarantineMessage = runtimeAdmissionBlockMessage(session({
       status: "recovery_required",
-      recovery_reason_code: "remote_agentic_state_ambiguous",
-    }))).toContain("quarantined");
+      recovery_reason_code: "private:/srv/runtime/token=do-not-render",
+    }));
+    expect(quarantineMessage).toContain("quarantined");
+    expect(quarantineMessage).toContain("state is ambiguous");
+    expect(quarantineMessage).not.toContain("do-not-render");
     expect(runtimeAdmissionBlockMessage(session({
       agentic_containment: {
         status: "NO-GO",

@@ -173,7 +173,6 @@ def create_runtime_session(
             "runtime_mode": session.runtime_mode,
             "hosted_provider_id": session.hosted_provider_id,
             "hosted_model_id": session.hosted_model_id,
-            "declared_remote_data_class": session.declared_remote_data_class,
         }
         record_platform_event(
             observability_store,

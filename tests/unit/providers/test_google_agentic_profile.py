@@ -63,7 +63,9 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         self.assertEqual(profile.adapter_version_constraint, "==5")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.provider_api_version, "v1")
-        self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public", "workspace_internal_fake"))
+        self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
+        self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
+        self.assertEqual(profile.egress_policy_revision, "2")
         self.assertEqual(
             profile.policy_ceiling.allowed_tool_handles,
             (
@@ -161,17 +163,17 @@ class GoogleAgenticProfileTest(unittest.TestCase):
             "public",
         )
 
-    def test_classifier_honors_only_persisted_session_fake_data_declaration(self) -> None:
+    def test_classifier_ignores_persisted_legacy_declaration(self) -> None:
         context = SimpleNamespace(
-            session=SimpleNamespace(declared_remote_data_class="workspace_internal_fake")
+            session=SimpleNamespace(declared_remote_data_class="legacy-non-authoritative")
         )
         self.assertEqual(
             classify_hosted_content_fail_closed(context, "user_input", "fixture").data_class,
-            "workspace_internal_fake",
+            "unclassified",
         )
         self.assertEqual(
             classify_hosted_content_fail_closed(context, "tool_result", {"fixture": True}).data_class,
-            "workspace_internal_fake",
+            "unclassified",
         )
 
 

@@ -58,7 +58,7 @@ def ensure_successor_session(
             runtime_mode=predecessor.runtime_mode,
             hosted_provider_id=predecessor.hosted_provider_id,
             hosted_model_id=predecessor.hosted_model_id,
-            declared_remote_data_class=predecessor.declared_remote_data_class,
+            declared_remote_data_class=None,
             grants=_session_grants(predecessor),
             governance=(
                 None

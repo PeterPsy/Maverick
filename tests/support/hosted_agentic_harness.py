@@ -144,7 +144,7 @@ class HostedAgenticHarness:
             allow_filesystem_list=filesystem_list,
             require_confirmation_for_mutating=True,
             require_confirmation_for_destructive=True,
-            allowed_remote_data_classes=("workspace_internal_fake",),
+            allowed_remote_data_classes=("public",),
         )
         self.binding = build_runtime_execution_binding(
             session_id="session-hosted",
@@ -171,7 +171,7 @@ class HostedAgenticHarness:
             execution_mode="full-access",
             profile_policy_ceiling=self.policy,
             workspace_policy_ceiling=self.policy,
-            egress_policy_id="fake-data-remote-preview",
+            egress_policy_id="fixture-public-remote",
             egress_policy_revision="1",
             created_at=NOW,
         )
@@ -326,7 +326,7 @@ class HostedAgenticHarness:
             "provider_state": "trusted_platform",
             "tool_result": "untrusted_tool_output",
         }.get(provenance, "trusted_actor")
-        return HostedContentClassification("workspace_internal_fake", trust)
+        return HostedContentClassification("public", trust)
 
     def _authority(self) -> EffectiveRuntimeAuthority:
         authority = EffectiveRuntimeAuthority(

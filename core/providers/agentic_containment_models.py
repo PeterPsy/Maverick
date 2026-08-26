@@ -14,7 +14,7 @@ ContainmentMode = Literal["dry_run", "apply"]
 
 @dataclass(frozen=True)
 class RemoteContainmentTarget:
-    """One redaction-safe planned CAS transition."""
+    """One redaction-safe planned provider-CAS or session-lifecycle transition."""
 
     target_kind: Literal["binding", "profile", "certificate", "session"]
     identity: str

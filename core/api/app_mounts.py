@@ -766,6 +766,7 @@ def handle_app_backend(
             data_root=binding.data_root,
             parsed=parsed,
             start_path=start_path,
+            actor_user_id=None if user is None else user.user_id,
         )
     except AppHostingError as error:
         return json_response(start_response, {"error": "runtime_request_failed", "detail": str(error)}, status=status_line(500))

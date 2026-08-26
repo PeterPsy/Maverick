@@ -61,7 +61,7 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
                     _identity("google-ai-studio"),
                     declared_remote_data_class="workspace_internal_fake",
                 )
-        self.assertEqual(str(raised.exception), "remote_agentic_attestation_unavailable")
+        self.assertEqual(str(raised.exception), "remote_data_declaration_not_accepted")
 
         with patch.dict("os.environ", environment, clear=True):
             with self.assertRaises(AgenticProfileError) as raised:
@@ -90,6 +90,14 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
             require_remote_agentic_dispatch(codex)
             require_remote_agentic_session_admission(None)
             require_remote_agentic_dispatch(None)
+        with self.assertRaisesRegex(
+            AgenticProfileError,
+            "remote_data_declaration_not_accepted",
+        ):
+            require_remote_agentic_session_admission(
+                codex,
+                declared_remote_data_class="public",
+            )
 
     def test_recovery_required_and_contained_pins_have_explicit_queue_reasons(self) -> None:
         base = dict(

@@ -221,7 +221,7 @@ def validate_completed_run(run: CertificationRunResult) -> None:
         _sha256(value)
     if not run.evidence_refs:
         raise CapabilityCertificateError("certificate_evidence_ref_invalid")
-    if {str(item.get("kind")) for item in run.step_results} != {"fixture_contract", "live_probe"}:
+    if {str(item.get("kind")) for item in run.step_results} != {"fixture_contract"}:
         raise CapabilityCertificateError("certification_required_steps_missing")
     if any(item.get("outcome") != "passed" or item.get("exit_code") != 0 for item in run.step_results):
         raise CapabilityCertificateError("certification_run_not_passed")

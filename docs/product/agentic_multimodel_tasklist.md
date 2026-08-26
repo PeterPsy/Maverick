@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-08-25
+Status date: 2026-08-26
 
 Target: Phase-0 remote containment; remote agentic release is NO-GO
 
@@ -23,17 +23,23 @@ reviewed. A legacy certificate or client declaration is not authorization.
   authorize either path.
 - [x] Store-backed dry-run/apply containment plans binding disablement, profile
   suspension, suite-v8 certificate revocation/ineligibility, and ambiguous
-  session quarantine through revision CAS; reports are redaction-safe and
-  repeated apply is idempotent.
-- [x] Remote inventory detects terminal-turn/running-session mismatch,
-  request/acceptance without a ledger proposal, pending or uncommitted provider
-  state, `execution_unknown`, and staged/committed mismatch.
+  session quarantine; provider records use revision CAS and session quarantine
+  uses the serialized lifecycle handoff. Apply is partial, non-idempotent, and
+  not safe to retry: every error or conflict requires a new dry-run/review and
+  emits structured partial-count audit rather than a success claim.
+- [x] Remote inventory reads every archive page and correlates each ordered
+  provider step with a persisted final output or one or more ledger-backed
+  proposals. A step with neither outcome is ambiguous; four tool steps plus a
+  final response are not treated as a proposal gap.
 - [x] `session_status=recovery_required` persists, projects safely through APIs
-  and Settings/Chat, and blocks further turn/queue admission without claiming a
-  complete recovery engine.
+  and Settings/Chat through an allowlisted public reason, removes operational
+  authority from associated runtime tokens, and blocks further turn/queue
+  admission without claiming a complete recovery engine.
 - [x] Chat excludes contained profiles and synthesizes neither consent nor fake
   classification; Settings keeps contained records visible as NO-GO with
-  provider/upstream, binding, profile, and certificate state.
+  the exact preview label, provider/upstream/data destination, egress/data
+  policy, binding, profile, and certificate state. Neither browser sends a data
+  classification control.
 - [ ] Review the real-store dry-run plan, execute the digest-bound live apply,
   verify post-apply state, and record the audit result. Until then the
   operational status is `live_apply_pending_review`.
@@ -61,8 +67,10 @@ reviewed. A legacy certificate or client declaration is not authorization.
 
 ## Later parity and preview gates still open
 
-- [ ] Run the complete Google contract/E2E suite and operator-only live
-  synthetic probe on the exact deployable commit and adapter bundle.
+- [ ] Run the complete Google fixture contract/E2E suite on the exact
+  deployable commit and adapter bundle. Certification manifests remain
+  `fixture_contract`-only; any later operator live diagnostic is a separate
+  release gate and must never be started by repository checks.
 - [ ] Persist its immutable evidence in the platform-owned store, sign the run
   with a trusted CI key, publish a Google preview certificate, and complete the
   one-workspace canary.
@@ -87,7 +95,7 @@ reviewed. A legacy certificate or client declaration is not authorization.
 - Security posture: `docs/security/threat_model.md` and
   `docs/security/production_readiness.md`
 
-Phase 0 is implementation-ready only when its focused and repository checks
-pass and its real dry-run is recorded. It is not operationally closed until the
-reviewed apply and post-apply verification occur. Internal preview and
-production readiness remain later, separate gates.
+This tasklist does not claim that current repository checks are green. Phase 0
+is not operationally complete: the real-store dry-run, separately approved
+apply, and post-apply verification remain open. Internal preview and production
+readiness remain later, separate gates.

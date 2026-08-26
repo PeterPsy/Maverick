@@ -1,6 +1,6 @@
 # Agentic provider preview operations
 
-Status date: 2026-08-25
+Status date: 2026-08-26
 
 Scope: operator runbook
 
@@ -30,6 +30,10 @@ The report must state `implementation_ready`, `dry_run_verified`, and
 identity, current revision/status, target status, target digest, count, and the
 whole `plan_digest`. It must contain no credential binding id, secret, request
 body, tool arguments/results, private envelope locator, or provider payload.
+Review inventory ambiguity per ordered provider step across the complete event
+archive: a durable final output or a ledger-backed proposal closes that step;
+request-count-minus-invocation-count is not evidence, and a step with neither
+persisted outcome remains ambiguous.
 
 Only after independent review may the orchestrator apply that exact plan:
 
@@ -41,8 +45,15 @@ maverick core cli run core.providers.agentic.containment.apply \
   --json
 ```
 
-A changed plan digest or CAS conflict requires a fresh dry-run and review; never
-retry by dropping the digest. Re-run dry-run after apply and require zero
+A containment apply is a partial saga, not a transaction, and the command is
+neither idempotent nor safe to retry. A changed plan digest, provider-record CAS
+conflict, session-lifecycle conflict, audit failure, or any other apply error
+may leave earlier targets narrowed. Stop, inspect the structured failed audit
+(`partial_apply`, per-kind applied counts, safe failure code and target digest),
+then obtain a fresh dry-run and review before issuing any later apply. Never
+reuse the reviewed digest or retry by dropping it. After a reported success,
+the reviewed operation is still consumed: run a fresh dry-run for verification
+and require zero
 remaining enabled/default remote bindings, selectable remote profiles, eligible
 current remote suite-v8 certificates, or ambiguous unquarantined sessions.
 Codex state and hosted text selection must be unchanged. Preserve the audit
@@ -51,9 +62,11 @@ operational exit gate remains open.
 
 ## Invariants
 
-- Remote profiles are non-selectable NO-GO records. Legacy `public` or
-  `workspace_internal_fake` policy values and browser consent grant no remote
-  agentic authority.
+- Remote profiles are non-selectable NO-GO records. Current profile policy
+  lists only Core-classified `public`; the egress evaluator always rejects the
+  legacy `workspace_internal_fake` value, and browser/app declarations grant no
+  remote agentic authority. The exact `fake-data preview` label remains visible
+  as a warning and is not rewritten into a release claim.
 - Every session pins definition revision, engine, adapter, model, protocol,
   endpoint/upstream, credential binding, certificate evidence, egress policy,
   and policy ceilings once. Existing bindings are never rewritten in place.
@@ -91,9 +104,10 @@ binding:
 5. The workspace policy is at least as restrictive as the profile: read-only
    Core filesystem capability, bounded steps/tokens/cost, no shell or writes,
    and confirmation retained for mutating/destructive classes.
-6. The operator-run live synthetic probe passes with the deployed credential.
-   Store only its redaction-safe evidence digest. A packaged fixture certificate
-   alone is insufficient for promotion.
+6. The fixture-only certification manifest passes on the deployed source. A
+   future operator-run live diagnostic, if required by the later release gate,
+   is invoked separately and never becomes a manifest step or a repository
+   check. Fixture evidence alone is insufficient for promotion.
 7. Open platform security blockers in `SECURITY.md` remain acknowledged. Do not
    relabel the profile `available` or production-ready as part of preview
    activation.
@@ -106,8 +120,10 @@ Use Settings as the normal control surface. Its agentic panel reads:
 
 During Phase 0, `POST /api/providers/agentic/workspace-bindings` may disable a
 remote binding but cannot enable one. No fake-data confirmation field exists.
-A revision conflict requires a fresh read and operator review; never overwrite
-it blindly.
+Settings preserves the full preview label and shows provider, upstream, data
+destination, effective egress/data policy, attestation unavailable, and
+certificate state; it has no browser data-class checkbox. A revision conflict
+requires a fresh read and operator review; never overwrite it blindly.
 
 ## Canary and observation
 
@@ -134,6 +150,14 @@ increase, missing audit record, or leakage signal.
 
 ## Failure and recovery
 
+Provider definition-status, binding, certificate-status, and provider-state
+conflicts are record revision CAS failures. Moving a runtime session to
+`recovery_required` is instead a legal transition serialized through the
+session lifecycle handoff; do not describe it as provider-record CAS. Public
+APIs expose only allowlisted quarantine reasons, while arbitrary diagnostic
+detail remains Core-owned. Runtime tokens belonging to a quarantined session
+have no operational authority even if their token record has not yet expired.
+
 Before provider acceptance, a new operator-initiated turn may be attempted only
 after the outage or policy issue is understood. After acceptance, do not retry a
 request automatically. Preserve the journaled request id and continuation state
@@ -159,9 +183,9 @@ Rollback is a control-plane narrowing operation first and a code deployment
 operation second:
 
 1. Run and review the store-backed containment dry-run above.
-2. Apply its exact digest so binding disablement, profile suspension,
-   certificate revocation, and ambiguous-session quarantine use CAS and one
-   auditable plan.
+2. Apply its exact digest once. Binding/profile/certificate status writes use
+   record CAS; ambiguous-session quarantine uses the serialized lifecycle
+   handoff. The plan is auditable but not atomic or safe to retry.
 3. Cancel active remote transports. Preserve `execution_unknown` and
    `recovery_required`; do not replay or manufacture a committed outcome.
 4. Confirm Settings reports no enabled/default affected binding and that new

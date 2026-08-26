@@ -72,6 +72,9 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(routing.data_collection_policy, "deny")
         self.assertTrue(routing.require_zdr)
         self.assertEqual(routing.allowed_quantizations, ("fp8",))
+        self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
+        self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
+        self.assertEqual(profile.egress_policy_revision, "2")
         with self.assertRaises(ProviderNotFoundError):
             state.provider_store.get_capability_certificate(profile.capability_certificate_id)
         self.assertEqual(

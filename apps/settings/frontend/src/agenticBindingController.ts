@@ -49,9 +49,6 @@ export function createAgenticBindingController(context: AgenticBindingController
         context.render();
         return;
       }
-      const allowedRemoteDataClasses = [
-        ...(checked('allow_public_data') ? ['public'] : [])
-      ];
       context.state.savingAgenticBindings.add(key);
       context.state.agenticBindingErrors[key] = '';
       context.render();
@@ -74,8 +71,7 @@ export function createAgenticBindingController(context: AgenticBindingController
             max_estimated_cost_microusd: costValue ? parsedCostMicrousd : null,
             tool_access_enabled: checked('tool_access_enabled'),
             require_confirmation_for_mutating: checked('require_confirmation_for_mutating'),
-            require_confirmation_for_destructive: checked('require_confirmation_for_destructive'),
-            allowed_remote_data_classes: allowedRemoteDataClasses
+            require_confirmation_for_destructive: checked('require_confirmation_for_destructive')
           }
         });
         const settings = await getPlatformSettings();

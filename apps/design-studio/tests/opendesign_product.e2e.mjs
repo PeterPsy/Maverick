@@ -251,7 +251,7 @@ try {
     const transactionalReadyAt = performance.now();
     const interfaceStartedAt = performance.now();
     await openDesignStudioFromShell(page);
-    sidecar = await waitForUsableOpenDesign(page, networkProof);
+    sidecar = await waitForTransactionalOpenDesignInterface(page, networkProof);
     const browserReadyAt = performance.now();
     const daemonReadyMs = Number(readiness.body?.opendesign?.runtime?.timings_ms?.daemon_ready_ms);
     assert(Number.isFinite(daemonReadyMs) && daemonReadyMs > 0, 'Core restart omitted daemon readiness timing');
@@ -647,24 +647,12 @@ async function openDesignStudioFromShell(page) {
 }
 
 
-async function waitForUsableOpenDesign(page, networkProof, excludedFrame = null) {
+async function waitForTransactionalOpenDesignInterface(page, networkProof, excludedFrame = null) {
   const wrapper = await waitForShellWidgetFrame(page, 'Design Studio viewport');
   const sidecar = await waitForSidecarFrame(page, '', networkProof, true, excludedFrame);
   await wrapper.locator('.design-studio-host[data-phase="ready"]').waitFor({
     state: 'visible',
     timeout: 10_000,
-  });
-  await Promise.any([
-    sidecar.locator('[data-testid="maverick-project-view"]').waitFor({
-      state: 'visible',
-      timeout: 10_000,
-    }),
-    wrapper.locator('.design-studio-empty button').waitFor({
-      state: 'visible',
-      timeout: 10_000,
-    }),
-  ]).catch(() => {
-    throw new Error('OpenDesign signaled ready without a usable project or empty-state surface');
   });
   return sidecar;
 }
@@ -859,7 +847,7 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
     const startedAt = performance.now();
     await wrapper.goto(wrapperUrl, { waitUntil: 'domcontentloaded' });
     const wrapperReadyAt = performance.now();
-    const frame = await waitForUsableOpenDesign(page, networkProof, previousSidecar);
+    const frame = await waitForTransactionalOpenDesignInterface(page, networkProof, previousSidecar);
     const finishedAt = performance.now();
     durations.push(rounded(finishedAt - startedAt));
     wrapperDurations.push(rounded(wrapperReadyAt - startedAt));

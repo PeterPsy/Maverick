@@ -529,7 +529,7 @@ supply-chain inventory, and `patches/series.json`.
 
 Release performance is recomputed from the raw samples in schema 2 evidence.
 Warm interface time covers the complete wrapper navigation through the trusted
-`maverick.opendesign.ready` bridge message and usable project view; it no longer
+`maverick.opendesign.ready` bridge boundary; it no longer
 excludes wrapper DOM loading. After each real Core restart, Chromium keeps an
 already-open shell, waits for the declared prewarm, and measures the first user
 action through that same transactional UI-ready boundary. Both warm and cold

@@ -1,0 +1,46 @@
+{
+  "build_id": "d8f03b7b427b973a13a4de6435b2002113c5d5ded4811a2c8a51fdc7abca5fe5",
+  "entrypoints": [
+    "index.html",
+    "widgets/settings-sidebar/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/app-BCc4hi-8.css",
+      "sha256": "3a9269eddfd599af2e775fde586a8db2beb269445f4a6759f3677a2edad5bc04",
+      "size_bytes": 55768
+    },
+    {
+      "path": "assets/app-BeVOYTUZ.js",
+      "sha256": "b0f92ceb3bef29f47004e3795cd818951a807774355634736d0bae4507652f0c",
+      "size_bytes": 309141
+    },
+    {
+      "path": "assets/index-ZDYKsvKC.css",
+      "sha256": "20c89fbc67dadfd335fd4dccd28b472bed6ad5b043501ac96022f1610837bfc9",
+      "size_bytes": 6196
+    },
+    {
+      "path": "assets/pages-BZUBskpf.js",
+      "sha256": "1462473a4bc5a3376149fcce48212c24970f96e860a61a88915786701f10b2fe",
+      "size_bytes": 2206
+    },
+    {
+      "path": "assets/widgets/settings-sidebar/index-CzjN5Gbj.js",
+      "sha256": "5539f8fb59b61e586ebc4122958eac8fae1a834ed2ddc46f8ddfbf7b14fd0a85",
+      "size_bytes": 3729
+    },
+    {
+      "path": "index.html",
+      "sha256": "d2e2bfbe0617fc49bfae01dbba1d4d87a1d0094421b3d0da04e0b421052f425c",
+      "size_bytes": 691
+    },
+    {
+      "path": "widgets/settings-sidebar/index.html",
+      "sha256": "35b35d3035a81225738b8071166e7f8da408f0d417aae2b084606c4e7e89e339",
+      "size_bytes": 751
+    }
+  ],
+  "schema": "maverick.frontend-assets.v1"
+}

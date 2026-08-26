@@ -482,7 +482,7 @@ export type AgenticAdminItem = {
   binding_status: 'missing' | 'enabled' | 'disabled';
   profile_status: string;
   certificate_eligibility: string;
-  effective_capabilities: AgenticEffectiveCapabilities;
+  effective_capabilities?: AgenticEffectiveCapabilities | null;
   upstream_provider_ids: string[];
   data_destination: {
     provider_id: string;
@@ -498,8 +498,8 @@ export type AgenticAdminItem = {
   data_policy: {
     collection: string;
     require_zdr: boolean;
-    attestation_state: 'not_attested' | 'active' | 'revoked' | 'invalid';
-    attestation: {
+    attestation_state: 'unavailable' | 'not_attested' | 'active' | 'revoked' | 'invalid';
+    attestation?: {
       state: 'not_attested' | 'active' | 'revoked' | 'invalid';
       authoritative: boolean;
       declaration: string | null;
@@ -511,7 +511,7 @@ export type AgenticAdminItem = {
       updated_at: string | null;
       attested_at?: string;
       revoked_at?: string | null;
-    };
+    } | null;
   };
 };
 

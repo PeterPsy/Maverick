@@ -44,10 +44,10 @@ export function createAgenticBindingController(context: AgenticBindingController
       }
       if (
         item.runtime_engine_id !== 'codex'
-        && item.effective_capabilities.status !== 'active'
+        && item.effective_capabilities?.status !== 'active'
         && requestedEnabled
       ) {
-        context.state.agenticBindingErrors[key] = `Effective capability snapshot blocks this control: ${item.effective_capabilities.reason_code || 'runtime authority unavailable'}.`;
+        context.state.agenticBindingErrors[key] = `Effective capability snapshot blocks this control: ${item.effective_capabilities?.reason_code || 'runtime authority unavailable'}.`;
         context.render();
         return;
       }

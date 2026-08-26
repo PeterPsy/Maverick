@@ -800,6 +800,14 @@ for (const expected of [
 }
 assert.ok(!containmentHtml.includes('data-agentic-field="allow_public_data"'));
 
+const rollingUpgradeSettings = JSON.parse(JSON.stringify(settings));
+delete rollingUpgradeSettings.agentic_admin.items[0].effective_capabilities;
+delete rollingUpgradeSettings.agentic_admin.items[0].data_policy.attestation;
+rollingUpgradeSettings.agentic_admin.items[0].data_policy.attestation_state = 'unavailable';
+const rollingUpgradeHtml = settingsPanelHtml(rollingUpgradeSettings, state);
+assert.ok(rollingUpgradeHtml.includes('Effective capabilities · unavailable'));
+assert.ok(rollingUpgradeHtml.includes('Workspace declaration (read-only): unavailable'));
+
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'mode', 'only');
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'provider_id', 'open-inference');
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'zdr', true);
@@ -834,7 +842,7 @@ assert.equal(hostedProviderRoutingDraft(state, 'nvidia/nemotron-3-ultra-550b-a55
         ).read_text(encoding="utf-8")
 
         self.assertIn("item.runtime_engine_id !== 'codex'", controller_source)
-        self.assertIn("item.effective_capabilities.status !== 'active'", controller_source)
+        self.assertIn("item.effective_capabilities?.status !== 'active'", controller_source)
         self.assertIn("item.containment_status === 'NO-GO'", controller_source)
 
     def test_persistence_migration_requires_dry_run_and_explicit_cleanup(self) -> None:

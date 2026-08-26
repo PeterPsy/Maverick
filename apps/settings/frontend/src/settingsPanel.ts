@@ -534,6 +534,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
   };
   const certificate = item.certificate;
   const isRemote = item.runtime_engine_id !== 'codex';
+  const effectiveCapabilities = item.effective_capabilities;
   const contained = item.containment_status === 'NO-GO';
   const isSaving = state.savingAgenticBindings.has(key);
   const error = state.agenticBindingErrors[key] || '';
@@ -544,7 +545,17 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
   const credentials = item.credential_bindings;
   const selectedCredential = binding?.credential_binding_id || credentials[0]?.binding_id || '';
   const enabled = Boolean(binding?.enabled);
-  const available = !contained && certificate?.effective_status === 'active' && item.rollout_status !== 'disabled' && item.rollout_status !== 'suspended';
+  const available = !contained
+    && certificate?.effective_status === 'active'
+    && item.rollout_status !== 'disabled'
+    && item.rollout_status !== 'suspended'
+    && (!isRemote || effectiveCapabilities?.status === 'active');
+  const unavailableReason = item.blocked_reason
+    || (isRemote && effectiveCapabilities?.status !== 'active'
+      ? effectiveCapabilities?.reason_code || 'effective capabilities unavailable'
+      : '')
+    || certificate?.effective_status
+    || 'Unavailable';
   const usageSummary = agenticModelUsageSummary(item, state);
   return `<details class="settings-model-accordion settings-agentic-runtime" data-settings-model-accordion="agentic-${escapeAttr(key)}">
     <summary>
@@ -555,7 +566,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       </span>
       <span class="settings-agentic-summary-badges">
         ${contained ? '<span class="settings-pill is-warning">NO-GO</span>' : ''}
-        ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(item.blocked_reason || certificate?.effective_status || 'Unavailable'))}</span>`}
+        ${available ? '' : `<span class="settings-pill is-warning">${escapeHtml(humanizeAgenticCode(unavailableReason))}</span>`}
         <label class="settings-model-toggle settings-toggle settings-bouncy-toggle" title="${enabled ? 'Disable model' : 'Enable model'}">
           <input type="checkbox" role="switch" data-agentic-model-toggle
             data-agentic-definition-id="${escapeAttr(item.definition_id)}"
@@ -581,20 +592,7 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
           <small>Binding ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Profile ${escapeHtml(humanizeAgenticCode(item.profile_status))} · Certificate ${escapeHtml(humanizeAgenticCode(certificate?.effective_status || 'missing'))} / ${escapeHtml(humanizeAgenticCode(item.certificate_eligibility))}</small>
         </span>
       </div>` : ''}
-      <div class="settings-provider-usage-unavailable settings-agentic-capability-state">
-        <span class="material-symbols-rounded" aria-hidden="true">verified_user</span>
-        <span>
-          <strong>Effective capabilities · ${escapeHtml(item.effective_capabilities.status)}</strong>
-          <small>Snapshot ${escapeHtml(item.effective_capabilities.snapshot_digest)} · execution ${escapeHtml(item.effective_capabilities.execution_mode || 'unavailable')} · TCB ${escapeHtml(String(item.effective_capabilities.tcb?.posture || 'unavailable'))}</small>
-          ${item.effective_capabilities.reason_code ? `<small>Reason ${escapeHtml(humanizeAgenticCode(item.effective_capabilities.reason_code))}</small>` : ''}
-          <small>Filesystem read ${item.effective_capabilities.capabilities.filesystem_read === true ? 'yes' : 'no'} · write ${item.effective_capabilities.capabilities.filesystem_write === true ? 'yes' : 'no'} · shell ${item.effective_capabilities.capabilities.shell === true ? 'yes' : 'no'} · CLI ${item.effective_capabilities.capabilities.cli === true ? 'yes' : 'no'} · MCP ${item.effective_capabilities.capabilities.mcp === true ? 'yes' : 'no'}</small>
-          <small>Skills ${item.effective_capabilities.capabilities.skill_catalog === true ? 'yes' : 'no'} · app references ${item.effective_capabilities.capabilities.app_references === true ? 'yes' : 'no'} · attachment modes ${escapeHtml(Array.isArray(item.effective_capabilities.capabilities.attachment_modalities) ? item.effective_capabilities.capabilities.attachment_modalities.join(', ') || 'none' : 'none')} · confirmations ${item.effective_capabilities.capabilities.confirmations === true ? 'yes' : 'no'} · recovery ${item.effective_capabilities.capabilities.recovery === true ? 'yes' : 'no'}</small>
-          <small>Provider ${escapeHtml(item.effective_capabilities.provider?.provider_id || 'unavailable')} · upstream ${escapeHtml(item.effective_capabilities.provider?.effective_upstream_ids?.join(', ') || 'none')} · health ${escapeHtml(item.effective_capabilities.provider?.health_status || 'unavailable')}</small>
-          <small>Data classes ${escapeHtml(item.effective_capabilities.data_policy?.allowed_remote_data_classes?.join(', ') || 'none')} · collection ${escapeHtml(item.effective_capabilities.data_policy?.collection || 'deny')} · ZDR ${item.effective_capabilities.data_policy?.require_zdr ? 'required' : 'not required'}</small>
-          <small>Certificate ${escapeHtml(item.effective_capabilities.certificate?.certificate_id || 'unavailable')} · suite ${escapeHtml(item.effective_capabilities.certificate?.suite_id || 'unavailable')}@${escapeHtml(item.effective_capabilities.certificate?.suite_version || 'unavailable')} · expires ${escapeHtml(item.effective_capabilities.certificate?.expires_at || 'unavailable')}</small>
-          <small>Workspace declaration (read-only): ${escapeHtml(item.data_policy.attestation_state)}${item.data_policy.attestation.revision === null ? '' : ` · revision ${item.data_policy.attestation.revision}`}${item.data_policy.attestation.scope ? ` · scope ${escapeHtml(item.data_policy.attestation.scope.resource_prefixes.join(', ') || 'workspace')}` : ''}</small>
-        </span>
-      </div>
+      ${agenticCapabilityStateHtml(item)}
       ${agenticModelUsageHtml(item, state)}
       <div class="settings-agentic-controls">
         ${isRemote ? `<label class="settings-platform-field">
@@ -628,6 +626,42 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
       ${error ? `<p class="settings-platform-error" role="alert">${escapeHtml(error)}</p>` : ''}
     </div>
   </details>`;
+}
+
+function agenticCapabilityStateHtml(item: AgenticAdminItem): string {
+  const snapshot = item.effective_capabilities;
+  const capabilities = snapshot?.capabilities || {};
+  const unavailableCopy = item.runtime_engine_id === 'codex'
+    ? 'The active backend has not published this snapshot yet.'
+    : 'The active backend has not published this snapshot yet. Remote controls remain disabled.';
+  const snapshotHtml = snapshot
+    ? `<strong>Effective capabilities · ${escapeHtml(snapshot.status)}</strong>
+      <small>Snapshot ${escapeHtml(snapshot.snapshot_digest || 'unavailable')} · execution ${escapeHtml(snapshot.execution_mode || 'unavailable')} · TCB ${escapeHtml(String(snapshot.tcb?.posture || 'unavailable'))}</small>
+      ${snapshot.reason_code ? `<small>Reason ${escapeHtml(humanizeAgenticCode(snapshot.reason_code))}</small>` : ''}
+      <small>Filesystem read ${capabilities.filesystem_read === true ? 'yes' : 'no'} · write ${capabilities.filesystem_write === true ? 'yes' : 'no'} · shell ${capabilities.shell === true ? 'yes' : 'no'} · CLI ${capabilities.cli === true ? 'yes' : 'no'} · MCP ${capabilities.mcp === true ? 'yes' : 'no'}</small>
+      <small>Skills ${capabilities.skill_catalog === true ? 'yes' : 'no'} · app references ${capabilities.app_references === true ? 'yes' : 'no'} · attachment modes ${escapeHtml(Array.isArray(capabilities.attachment_modalities) ? capabilities.attachment_modalities.join(', ') || 'none' : 'none')} · confirmations ${capabilities.confirmations === true ? 'yes' : 'no'} · recovery ${capabilities.recovery === true ? 'yes' : 'no'}</small>
+      <small>Provider ${escapeHtml(snapshot.provider?.provider_id || 'unavailable')} · upstream ${escapeHtml(snapshot.provider?.effective_upstream_ids?.join(', ') || 'none')} · health ${escapeHtml(snapshot.provider?.health_status || 'unavailable')}</small>
+      <small>Data classes ${escapeHtml(snapshot.data_policy?.allowed_remote_data_classes?.join(', ') || 'none')} · collection ${escapeHtml(snapshot.data_policy?.collection || 'deny')} · ZDR ${snapshot.data_policy?.require_zdr ? 'required' : 'not required'}</small>
+      <small>Certificate ${escapeHtml(snapshot.certificate?.certificate_id || 'unavailable')} · suite ${escapeHtml(snapshot.certificate?.suite_id || 'unavailable')}@${escapeHtml(snapshot.certificate?.suite_version || 'unavailable')} · expires ${escapeHtml(snapshot.certificate?.expires_at || 'unavailable')}</small>`
+    : `<strong>Effective capabilities · unavailable</strong>
+      <small>${escapeHtml(unavailableCopy)}</small>`;
+  return `<div class="settings-provider-usage-unavailable settings-agentic-capability-state">
+    <span class="material-symbols-rounded" aria-hidden="true">verified_user</span>
+    <span>
+      ${snapshotHtml}
+      ${agenticWorkspaceDeclarationHtml(item)}
+    </span>
+  </div>`;
+}
+
+function agenticWorkspaceDeclarationHtml(item: AgenticAdminItem): string {
+  const attestation = item.data_policy.attestation;
+  const state = item.data_policy.attestation_state || attestation?.state || 'unavailable';
+  const revision = attestation?.revision == null ? '' : ` · revision ${attestation.revision}`;
+  const scope = attestation?.scope
+    ? ` · scope ${escapeHtml(attestation.scope.resource_prefixes.join(', ') || 'workspace')}`
+    : '';
+  return `<small>Workspace declaration (read-only): ${escapeHtml(state)}${revision}${scope}</small>`;
 }
 
 function agenticCheckbox(field: string, label: string, checked: boolean, disabled: boolean, forced = false) {

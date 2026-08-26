@@ -26,6 +26,7 @@ from core.api.inter_agent_api import handle_inter_agent_api
 from core.api.job_api import handle_job_api
 from core.api.platform_state import PlatformState
 from core.api.provider_api import handle_provider_api
+from core.api.pwa_api import handle_pwa_api
 from core.api.runtime_api import handle_runtime_api
 from core.api.runtime_cli_api import handle_runtime_cli_api
 from core.api.runtime_provider_hooks_api import handle_runtime_provider_hooks_api
@@ -92,6 +93,9 @@ class PlatformHost:
                 return routed
 
             routed = handle_session_api(self.state, environ, start_response)
+            if routed is not None:
+                return routed
+            routed = handle_pwa_api(environ, start_response)
             if routed is not None:
                 return routed
             routed = handle_workspace_api(self.state, environ, start_response, start_path=self.start_path)

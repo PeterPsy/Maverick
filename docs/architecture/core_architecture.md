@@ -902,6 +902,28 @@ For example, if chat embeds a checklist widget:
 - checklists owns the widget renderer and checklist data
 - core owns registry, routing, auth, and workspace enablement
 
+### PWA and browser-cache boundary
+
+The platform host owns generic HTTP correctness, verified frontend-artifact
+metadata, and a public fail-closed PWA rollout projection. It does not own app
+read-model schemas or place app business payloads in browser storage.
+
+The Base Shell owns the root service worker, offline shell, update lifecycle,
+single global connectivity indicator, and coordinated cleanup protocol. Each
+app remains responsible for the classification, sanitization, revision, TTL,
+size budget, and invalidation of its own read models. Storage separately owns
+the opt-in file-availability experience. Shared browser mechanics may live in a
+platform package, but that package must not import app models or permit one app
+to address another app's scope.
+
+Cache API, IndexedDB, and OPFS hold derived copies only. They cannot become a
+source of platform authority or satisfy capability, certificate, provider
+binding, admission, egress, recovery, confirmation, or revocation decisions.
+Unknown classification and unavailable policy fail closed to network-only. The
+normative mapping, rollout switches, private cold-offline rule, and product
+contract are recorded in
+`docs/adr/0011-pwa-cache-and-offline-boundaries.md`.
+
 ## Everything Above The Core Is An App
 
 The Maverick product shell should also be modeled as an app.

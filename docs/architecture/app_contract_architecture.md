@@ -1369,6 +1369,15 @@ For the first frontend build operation, the core supports app sources that decla
 
 Mounted app registry, frontend documents, and backend routes are authenticated workspace surfaces. Anonymous requests may load the root shell, the configured root-shell app document, and session endpoints, but `/api/status`, `/api/apps`, direct non-shell app document mounts such as `/apps/<app_id>/`, and `/api/apps/<app_id>/backend` require a valid user session. App and widget frontend HTML documents must be served with `Cache-Control: no-store` because they point at the current built asset hashes and must not pin clients to obsolete bundles after an official frontend rebuild. Static built frontend assets under `/apps/<app_id>/assets/...` and non-HTML static files emitted into the frontend artifact root are public cacheable artifacts and must not contain user, workspace, secret, or app-data payloads. They may be served with immutable cache headers, gzip or Brotli content encoding when the host supports the requested encoding, and cross-origin headers so sandboxed iframes, widget iframes, and Vite-generated `crossorigin` module/style tags can load the app bundle without needing session cookies on every asset request. Source maps and source-like extensions such as `.ts`, `.tsx`, `.jsx`, `.vue`, `.svelte`, `.py`, and `.env` must not be treated as public static assets or SPA fallback routes. Workspace-local editable backend entrypoints are additionally workspace-admin gated until a dedicated app backend sandbox/governance model is available.
 
+Browser persistence does not change app ownership. An app that later opts a
+read model into the shared PWA SDK must declare a canonical Maverick
+`data_class` source, resource provenance, stable revision, bounded TTL and byte
+budget, invalidation event, and sanitization rule. The local persistence policy
+is derived from that canonical classification under ADR-0011; it is not an
+app-defined sensitivity taxonomy. Missing classification or revision remains
+network-only. App frontends cannot inspect another app's IndexedDB or OPFS
+scope, and cached platform control-plane state never authorizes an app action.
+
 The `base-shell` UI/UX is the visual and interaction reference for the mounted shell.
 
 The shell should preserve the intended shell experience, layout behavior, sidebar composition, workspace/app panels, and responsive behavior where those concepts are still valid.

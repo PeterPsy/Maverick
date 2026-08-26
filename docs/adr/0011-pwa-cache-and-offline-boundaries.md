@@ -76,6 +76,13 @@ flag, and user choice. A resource rule may narrow the result. It cannot exceed
 the table's maximum. `deny` always wins, and a missing or stale classification
 fails closed.
 
+The normative resource inventory stores `local_persistence_policy` only as one
+of `deny`, `session`, `cache`, or `offline_opt_in`. Unmet approval, revision,
+classification, allowlist, or opt-in conditions belong in the optional
+`policy_prerequisites` list instead of being embedded in that enum value. A
+missing canonical class is recorded as `unclassified`, and an effective `deny`
+row has zero local TTL and byte budget until its policy is explicitly revised.
+
 The agentic control plane has an invariant resource override of `deny`,
 including effective capabilities, certificates, provider profiles/bindings,
 provider state, admission/preflight, recovery state, revocations, egress

@@ -27,9 +27,36 @@ def _load_hook():
 
 
 background = _load_hook()
+import opendesign_artifact_operations as operations  # noqa: E402
 
 
 class OpenDesignBackgroundAuditTests(unittest.TestCase):
+    def test_lifecycle_full_audit_suppresses_immediate_background_rehash(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="od-audit-handoff-") as temporary:
+            root = Path(temporary)
+            operations._record_full_audit_success(
+                root,
+                operation="provision",
+                result={
+                    "retained_runtime_artifacts": ["a" * 64, "b" * 64],
+                    "retained_web_overlays": ["c" * 64],
+                },
+                store_generation="store-generation-test",
+                observed_at_epoch_ms=1_000_000,
+            )
+            marker = root / "audit/background-full-audit.json"
+            payload = json.loads(marker.read_text(encoding="utf-8"))
+            mode = marker.stat().st_mode & 0o777
+            with patch.object(background.time, "time", return_value=1_001):
+                due = background._audit_due(marker)
+
+        self.assertFalse(due)
+        self.assertEqual(payload["status"], "passed")
+        self.assertEqual(payload["runtime_count"], 2)
+        self.assertEqual(payload["web_count"], 1)
+        self.assertEqual(payload["store_generation"], "store-generation-test")
+        self.assertEqual(mode, 0o640)
+
     def test_repair_state_redacts_untyped_exception_values(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-repair-state-") as temporary:
             root = Path(temporary)

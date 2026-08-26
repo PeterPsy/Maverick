@@ -46,6 +46,7 @@ SELECTION_PATH = SERVICE_ROOT / "opendesign_release_selection.json"
 TRUST_CONTRACT_PATH = SERVICE_ROOT / "opendesign_web_trust.json"
 APP_ID = "design-studio"
 ARTIFACT_ID = "opendesign"
+FULL_AUDIT_INTERVAL_SECONDS = 6 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,13 @@ def run_artifact_operation(
                 auto=auto,
             )
         raise
+    if operation in {"provision", "repair", "verify"}:
+        _record_full_audit_success(
+            store.root,
+            operation=operation,
+            result=result,
+            store_generation=store.store_generation,
+        )
     if operation != "status":
         _append_audit(
             store.root,
@@ -133,6 +141,49 @@ def run_artifact_operation(
         **({"staging_recovery": staging_recovery} if staging_recovery is not None else {}),
         **result,
     }
+
+
+def _record_full_audit_success(
+    store_root: Path,
+    *,
+    operation: str,
+    result: dict[str, Any],
+    store_generation: str,
+    observed_at_epoch_ms: int | None = None,
+) -> None:
+    """Let the background scheduler reuse the mandatory lifecycle full audit."""
+    observed = (
+        int(time.time() * 1000)
+        if observed_at_epoch_ms is None
+        else observed_at_epoch_ms
+    )
+    if operation == "verify":
+        runtime_count = len(result.get("audited_runtime", []))
+        web_count = len(result.get("audited_web", []))
+    else:
+        runtime_count = len(result.get("retained_runtime_artifacts", []))
+        web_count = len(result.get("retained_web_overlays", []))
+    path = store_root / "audit/background-full-audit.json"
+    path.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
+    write_canonical_json(
+        path,
+        {
+            "schema_version": "2",
+            "status": "passed",
+            "attempted_at_epoch_ms": observed,
+            "verified_at_epoch_ms": observed,
+            "next_attempt_at_epoch_ms": observed + FULL_AUDIT_INTERVAL_SECONDS * 1000,
+            "store_generation": store_generation,
+            "runtime_count": runtime_count,
+            "web_count": web_count,
+            "auto_repair_requested": False,
+            "audit_error_code": None,
+            "audit_phase": None,
+            "recovery_error_code": None,
+            "recovery_phase": None,
+        },
+    )
+    path.chmod(0o640)
 
 
 @contextmanager

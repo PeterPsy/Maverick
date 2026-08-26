@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem, PlatformSettings, SessionPayload, WorkspaceItem } from "../src/api";
 import { AppShell } from "../src/AppShell";
+import { recordMaverickNetworkFailure, recordMaverickNetworkSuccess } from "../src/connectivity";
 
 const api = vi.hoisted(() => ({
   configureActiveProvider: vi.fn(),
@@ -64,6 +65,9 @@ vi.mock("../src/components/Sidebar", () => ({
 vi.mock("../src/components/FloatingChatHost", () => ({
   FloatingChatHost: () => <div data-testid="floating-chat-host" />,
 }));
+vi.mock("../src/components/LoginScreen", () => ({
+  LoginScreen: () => <div data-testid="login-screen" />,
+}));
 vi.mock("../src/components/ProviderSetupDialog", () => ({
   ProviderSetupDialog: () => <div data-testid="provider-setup" />,
 }));
@@ -78,6 +82,7 @@ describe("AppShell bootstrap", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
+    recordMaverickNetworkSuccess(new Date("2026-08-26T12:00:00Z"));
     api.getSession.mockResolvedValue(sessionPayload());
     api.listApps.mockResolvedValue({ items: [app("chat")] });
     api.listPinnedApps.mockResolvedValue({ pinned_apps: ["chat"] });
@@ -126,6 +131,65 @@ describe("AppShell bootstrap", () => {
     expect(sidebar?.getAttribute("data-workspace-count")).toBe("1");
     expect(api.listPinnedApps).toHaveBeenCalledOnce();
     expect(api.listWorkspaces).toHaveBeenCalledOnce();
+  });
+
+  it("bootstraps authenticated shell state after a confirmed cold-offline reconnection", async () => {
+    recordMaverickNetworkFailure();
+    api.getSession.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.getSession).toHaveBeenCalledOnce();
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+
+    await act(async () => {
+      recordMaverickNetworkSuccess(new Date("2026-08-26T12:01:00Z"));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.getSession).toHaveBeenCalledTimes(2);
+    expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("default");
+    expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
+  });
+
+  it("hides stale authenticated state until reconnect session revalidation completes", async () => {
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
+
+    await act(async () => {
+      recordMaverickNetworkFailure();
+      await Promise.resolve();
+    });
+    let resolveSession: ((value: SessionPayload) => void) | undefined;
+    api.getSession.mockReturnValueOnce(new Promise((resolve) => { resolveSession = resolve; }));
+
+    await act(async () => {
+      recordMaverickNetworkSuccess(new Date("2026-08-26T12:02:00Z"));
+      await Promise.resolve();
+    });
+
+    expect(api.getSession).toHaveBeenCalledTimes(2);
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+    expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
+
+    await act(async () => {
+      resolveSession?.({ authenticated: false });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
   });
 });
 

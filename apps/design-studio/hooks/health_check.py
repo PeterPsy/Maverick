@@ -37,6 +37,17 @@ def main() -> None:
             }
         )
         return
+    if payload.raw.get("hook_name") == "install":
+        artifact_ready = artifact.get("operational") is True
+        _emit_health(
+            {
+                "ok": artifact_ready,
+                "schema_version": state.get("schema_version"),
+                "activation_gate": "artifact_ready",
+                "health": _health_layers(artifact_ready=artifact_ready),
+            }
+        )
+        return
     launcher = _launcher_status(Path(payload.data_root) / "opendesign" / "launcher-status.json")
     launcher_health = launcher.get("health") if isinstance(launcher.get("health"), dict) else {}
     last_failure = launcher.get("last_failure") if isinstance(launcher.get("last_failure"), dict) else None
@@ -202,7 +213,8 @@ def _live_sidecar_status(*, workspace_id: str, app_id: str) -> dict:
 
 def _emit_health(payload: dict) -> None:
     emit_json(payload)
-    if payload.get("ok") is not True or payload.get("operational") is not True:
+    operational = payload.get("operational", True)
+    if payload.get("ok") is not True or operational is not True:
         raise SystemExit(1)
 
 

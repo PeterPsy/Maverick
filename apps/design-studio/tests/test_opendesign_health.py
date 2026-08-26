@@ -62,6 +62,18 @@ class OpenDesignTruthfulHealthTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, 1)
 
+    def test_install_artifact_gate_does_not_claim_browser_operational(self) -> None:
+        payload = {
+            "ok": True,
+            "activation_gate": "artifact_ready",
+            "health": health_hook._health_layers(artifact_ready=True),
+        }
+
+        health_hook._emit_health(payload)
+
+        self.assertNotIn("operational", payload)
+        self.assertFalse(payload["health"]["browser_ready"])
+
     def test_stale_launcher_heartbeat_cannot_report_browser_ready(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-health-") as temporary:
             status = Path(temporary) / "launcher-status.json"

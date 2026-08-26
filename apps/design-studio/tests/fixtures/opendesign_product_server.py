@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -22,11 +23,15 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from core.api.asgi_application import PlatformAsgiHost  # noqa: E402
 from core.api.backend_recovery import start_backend_restart_recovery  # noqa: E402
+from core.api.background_hooks import start_background_hook_scheduler  # noqa: E402
 from core.api.platform_state import bootstrap_platform_state  # noqa: E402
+from core.api.sidecar_control import start_sidecar_control_server  # noqa: E402
+from core.api.sidecar_prewarm import start_declared_sidecar_prewarms  # noqa: E402
 from core.apps.artifact_mounts import platform_artifact_store_root  # noqa: E402
 from core.apps.dependencies import save_app_dependency_selection  # noqa: E402
 from core.apps.service import install_store_app, register_app_source_from_contract  # noqa: E402
 from core.providers.service import configure_workspace_provider  # noqa: E402
+from core.shared.entrypoints import EntrypointShutdownController  # noqa: E402
 from core.workspaces.service import create_workspace, set_active_workspace_for_user  # noqa: E402
 from opendesign_artifact import read_bundle_manifest, selected_asset, validate_bundle_manifest  # noqa: E402
 from opendesign_artifact_store import OpenDesignArtifactStore  # noqa: E402
@@ -65,6 +70,20 @@ def _build_runtime_fixture(root: Path) -> Path:
     output = root / "fixture-bin" / "vendor" / "maverick-wp10" / "codex" / "codex"
     output.parent.mkdir(parents=True, exist_ok=True)
     source = APP_ROOT / "tests" / "fixtures" / "codex_app_server_fixture.c"
+    build_receipt = output.with_name("build-receipt.json")
+    source_sha256 = sha256(source.read_bytes()).hexdigest()
+    try:
+        receipt = json.loads(build_receipt.read_text(encoding="utf-8"))
+        reusable = (
+            receipt == {"schema_version": 1, "source_sha256": source_sha256}
+            and output.is_file()
+            and not output.is_symlink()
+            and os.access(output, os.X_OK)
+        )
+    except (OSError, json.JSONDecodeError):
+        reusable = False
+    if reusable:
+        return output
     generated_include = root / "fixture-bin" / "build" / "codex_resume_archive_fixture.h"
     _write_resume_archive_fixture_header(generated_include)
     subprocess.run(
@@ -88,6 +107,15 @@ def _build_runtime_fixture(root: Path) -> Path:
         stderr=subprocess.DEVNULL,
     )
     output.chmod(0o755)
+    build_receipt.write_text(
+        json.dumps(
+            {"schema_version": 1, "source_sha256": source_sha256},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return output
 
 
@@ -220,6 +248,9 @@ def main() -> None:
     os.environ["MAVERICK_ADMIN_PASSWORD"] = "maverick"
     os.environ["MAVERICK_CODEX_COMMAND"] = str(_build_runtime_fixture(root))
     os.environ["MAVERICK_SIDECAR_ORIGIN_MODE"] = "local"
+    os.environ["MAVERICK_SIDECAR_CONTROL_SOCKET"] = str(
+        root / "tmp/maverick-sidecar-control.sock"
+    )
     state = bootstrap_platform_state(
         start_path=root,
         install_builtin_apps=False,
@@ -227,12 +258,23 @@ def main() -> None:
     )
     if not (root / SETUP_MARKER).is_file():
         _initial_setup(state, root, arguments.web_overlay_sha256)
+    shutdown_controller = EntrypointShutdownController()
     start_backend_restart_recovery(state)
-    app = PlatformAsgiHost(state)
+    start_background_hook_scheduler(state, shutdown_controller=shutdown_controller)
+    start_declared_sidecar_prewarms(
+        state,
+        trigger="core_start",
+        shutdown_controller=shutdown_controller,
+    )
+    start_sidecar_control_server(state, shutdown_controller=shutdown_controller)
+    app = PlatformAsgiHost(state, shutdown_controller=shutdown_controller)
     import uvicorn
 
     print(json.dumps({"ready": True, "port": arguments.port, "workspaces": list(WORKSPACES)}), flush=True)
-    uvicorn.run(app, host="127.0.0.1", port=arguments.port, log_level="warning", access_log=False)
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=arguments.port, log_level="warning", access_log=False)
+    finally:
+        shutdown_controller.begin_shutdown()
 
 
 if __name__ == "__main__":

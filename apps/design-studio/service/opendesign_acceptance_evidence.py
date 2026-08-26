@@ -184,17 +184,37 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
     if [sample.get("iteration") for sample in samples if isinstance(sample, dict)] != list(range(1, 11)):
         raise ValueError("Core restart sample inventory is invalid")
     cold_values = [_sample_number(sample, "cold_maverick_ready_ms") for sample in samples]
+    core_ready_values = [
+        _sample_number(sample, "transactional_ready_after_core_start_ms") for sample in samples
+    ]
+    prewarm_values = [_sample_number(sample, "prewarm_after_core_health_ms") for sample in samples]
     cold_interface_values = [
         _sample_number(sample, "interface_after_transactional_ready_ms") for sample in samples
     ]
     cold = _validated_derived_summary(
         value.get("cold_maverick_ready"), cold_values, label="cold transactional readiness"
     )
+    core_ready = _validated_derived_summary(
+        value.get("transactional_ready_after_core_start"),
+        core_ready_values,
+        label="Core restart transactional readiness",
+    )
+    prewarm = _validated_derived_summary(
+        value.get("prewarm_after_core_health"),
+        prewarm_values,
+        label="post-Core-health prewarm",
+    )
     cold_interface = _validated_derived_summary(
         value.get("cold_interface"), cold_interface_values, label="cold interface"
     )
     if cold_interface.get("measurement_scope") != "prewarmed_shell_action_to_transactional_ui_ready":
         raise ValueError("Cold interface measurement scope is invalid")
+    if cold.get("measurement_scope") != "sidecar_start_request_to_transactional_endpoint_ready":
+        raise ValueError("Cold transactional readiness measurement scope is invalid")
+    if core_ready.get("measurement_scope") != "core_process_start_to_transactional_endpoint_ready":
+        raise ValueError("Core restart readiness measurement scope is invalid")
+    if prewarm.get("measurement_scope") != "core_health_to_transactional_endpoint_ready":
+        raise ValueError("Post-Core-health prewarm measurement scope is invalid")
     resources = value.get("resources")
     if not isinstance(resources, dict):
         raise ValueError("Release resource evidence is missing")
@@ -213,6 +233,8 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
         or _number(warm_interface.get("p99_ms"), "warm interface p99") > 2_500
         or _number(cold.get("p95_ms"), "cold readiness p95") > 4_000
         or _number(cold.get("max_ms"), "cold readiness max") > 8_000
+        or _number(core_ready.get("max_ms"), "Core restart readiness max") > 8_000
+        or _number(prewarm.get("max_ms"), "post-Core-health prewarm max") > 8_000
         or _number(cold_interface.get("p95_ms"), "cold interface p95") > 1_500
         or _number(cold_interface.get("p99_ms"), "cold interface p99") > 2_500
         or not 0 < _number(resources.get("rss_kib_max"), "rss_kib_max") < math.inf

@@ -132,6 +132,20 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertEqual(performance["cold_maverick_ready"]["count"], 10)
         self.assertLessEqual(performance["cold_maverick_ready"]["p95_ms"], 4000)
         self.assertLessEqual(performance["cold_maverick_ready"]["max_ms"], 8000)
+        self.assertEqual(
+            performance["cold_maverick_ready"]["measurement_scope"],
+            "sidecar_start_request_to_transactional_endpoint_ready",
+        )
+        self.assertLessEqual(performance["transactional_ready_after_core_start"]["max_ms"], 8000)
+        self.assertEqual(
+            performance["transactional_ready_after_core_start"]["measurement_scope"],
+            "core_process_start_to_transactional_endpoint_ready",
+        )
+        self.assertLessEqual(performance["prewarm_after_core_health"]["max_ms"], 8000)
+        self.assertEqual(
+            performance["prewarm_after_core_health"]["measurement_scope"],
+            "core_health_to_transactional_endpoint_ready",
+        )
         self.assertEqual(performance["cold_interface"]["count"], 10)
         self.assertLessEqual(performance["cold_interface"]["p95_ms"], 1500)
         self.assertLessEqual(performance["cold_interface"]["p99_ms"], 2500)

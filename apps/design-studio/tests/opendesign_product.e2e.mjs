@@ -240,6 +240,7 @@ try {
   const coreRestarts = [];
   let bootstrapCountBeforeRestart = networkProof.bootstrapPosts;
   for (let iteration = 0; iteration < 10; iteration += 1) {
+    const previousSidecar = sidecar;
     await page.goto(`${platformOrigin}/app/storage`, { waitUntil: 'domcontentloaded' });
     await waitForShellWidgetFrame(page, 'Storage viewport');
     await delay(100);
@@ -252,18 +253,60 @@ try {
     const transactionalReadyAt = performance.now();
     const interfaceStartedAt = performance.now();
     const interfacePhases = { started_at: interfaceStartedAt };
+    const observeRequest = (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (pathname === '/api/app-sidecars/browser-launch' && interfacePhases.launch_request_ms === undefined) {
+        interfacePhases.launch_request_ms = rounded(performance.now() - interfaceStartedAt);
+      }
+      if (pathname === '/.well-known/maverick-sidecar-bootstrap' && interfacePhases.bootstrap_request_ms === undefined) {
+        interfacePhases.bootstrap_request_ms = rounded(performance.now() - interfaceStartedAt);
+      }
+    };
+    const observeResponse = (response) => {
+      const pathname = new URL(response.url()).pathname;
+      if (pathname === '/api/app-sidecars/browser-launch' && interfacePhases.launch_response_ms === undefined) {
+        interfacePhases.launch_response_ms = rounded(performance.now() - interfaceStartedAt);
+      }
+      if (pathname === '/.well-known/maverick-sidecar-bootstrap' && interfacePhases.bootstrap_response_ms === undefined) {
+        interfacePhases.bootstrap_response_ms = rounded(performance.now() - interfaceStartedAt);
+      }
+    };
+    page.on('request', observeRequest);
+    page.on('response', observeResponse);
     await openDesignStudioFromShell(page);
     interfacePhases.shell_route_ms = rounded(performance.now() - interfaceStartedAt);
-    sidecar = await waitForTransactionalOpenDesignInterface(page, networkProof, null, interfacePhases);
-    const browserReadyAt = performance.now();
+    sidecar = await waitForTransactionalOpenDesignInterface(
+      page,
+      networkProof,
+      previousSidecar,
+      interfacePhases,
+    );
+    const browserNavigation = await readSidecarNavigationDiagnostic(page, sidecar, networkProof);
+    sidecar = browserNavigation.frame;
+    interfacePhases.same_origin_as_initial = new URL(sidecar.url()).origin === originA;
+    interfacePhases.browser_navigation = browserNavigation.metrics;
+    await settleOpenDesignInterface(page, sidecar);
+    const browserReadyAt = interfaceStartedAt + interfacePhases.transactional_bridge_ready_ms;
+    page.off('request', observeRequest);
+    page.off('response', observeResponse);
     delete interfacePhases.started_at;
     const daemonReadyMs = Number(readiness.body?.opendesign?.runtime?.timings_ms?.daemon_ready_ms);
     assert(Number.isFinite(daemonReadyMs) && daemonReadyMs > 0, 'Core restart omitted daemon readiness timing');
+    const coldMaverickReadyMs = Number(
+      readiness.body?.opendesign?.runtime?.sidecar_manager?.duration_ms,
+    );
+    assert(
+      Number.isFinite(coldMaverickReadyMs) && coldMaverickReadyMs > 0,
+      'Core restart omitted governed sidecar startup timing',
+    );
     const resources = await processResourceSnapshot(server.pid);
     coreRestarts.push({
       iteration: iteration + 1,
       daemon_ready_ms: daemonReadyMs,
-      cold_maverick_ready_ms: rounded(transactionalReadyAt - server.wp10StartedAt),
+      cold_maverick_ready_ms: rounded(coldMaverickReadyMs),
+      transactional_ready_after_core_start_ms: rounded(
+        transactionalReadyAt - server.wp10StartedAt,
+      ),
       full_restart_ms: rounded(browserReadyAt - startedAt),
       stop_ms: rounded(stoppedAt - startedAt),
       core_boot_ms: rounded(coreReadyAt - server.wp10StartedAt),
@@ -666,14 +709,63 @@ async function waitForTransactionalOpenDesignInterface(
   };
   const wrapper = await waitForShellWidgetFrame(page, 'Design Studio viewport');
   mark('wrapper_dom_ready_ms');
-  const sidecar = await waitForSidecarFrame(page, '', networkProof, true, excludedFrame);
-  mark('sidecar_endpoint_ready_ms');
+  const sidecar = await waitForSidecarFrame(page, '', networkProof, false, excludedFrame);
+  mark('sidecar_dom_ready_ms');
   await wrapper.locator('.design-studio-host[data-phase="ready"]').waitFor({
     state: 'visible',
     timeout: 10_000,
   });
   mark('transactional_bridge_ready_ms');
+  const ready = await waitForFrameTransactionalEndpoint(sidecar);
+  assert(
+    ready.status === 200 && ready.body?.ok === true && ready.body?.ready === true,
+    `Transactional bridge became ready without the certified sidecar endpoint: HTTP ${ready.status}`,
+  );
+  mark('sidecar_endpoint_proof_ms');
   return sidecar;
+}
+
+
+async function waitForFrameTransactionalEndpoint(frame) {
+  let ready = { status: 0, body: null };
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    ready = await frameRequest(frame, '/api/maverick-ready').catch(() => ({ status: 0, body: null }));
+    if (ready.status === 200 && ready.body?.ok === true && ready.body?.ready === true) return ready;
+    await delay(25);
+  }
+  return ready;
+}
+
+
+async function readSidecarNavigationDiagnostic(page, initialFrame, networkProof) {
+  let frame = initialFrame;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      await frame.waitForLoadState('domcontentloaded');
+      const metrics = await frame.evaluate(() => {
+        const navigation = performance.getEntriesByType('navigation')[0];
+        const resources = performance.getEntriesByType('resource');
+        const stylesheets = resources.filter((entry) => entry.initiatorType === 'link');
+        return {
+          response_end_ms: Number(navigation?.responseEnd || 0),
+          dom_content_loaded_ms: Number(navigation?.domContentLoadedEventEnd || 0),
+          resource_count: resources.length,
+          transfer_bytes: resources.reduce((total, entry) => total + Number(entry.transferSize || 0), 0),
+          stylesheet_count: stylesheets.length,
+          stylesheet_transfer_bytes: stylesheets.reduce(
+            (total, entry) => total + Number(entry.transferSize || 0),
+            0,
+          ),
+          stylesheet_duration_ms_max: Math.max(0, ...stylesheets.map((entry) => entry.duration)),
+        };
+      });
+      return { frame, metrics };
+    } catch {
+      await delay(50);
+      frame = await waitForSidecarFrame(page, '', networkProof, true);
+    }
+  }
+  throw new Error('OpenDesign browser navigation diagnostic did not stabilize');
 }
 
 
@@ -866,8 +958,14 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
     const startedAt = performance.now();
     await wrapper.goto(wrapperUrl, { waitUntil: 'domcontentloaded' });
     const wrapperReadyAt = performance.now();
-    const frame = await waitForTransactionalOpenDesignInterface(page, networkProof, previousSidecar);
-    const finishedAt = performance.now();
+    const milestones = { started_at: startedAt };
+    const frame = await waitForTransactionalOpenDesignInterface(
+      page,
+      networkProof,
+      previousSidecar,
+      milestones,
+    );
+    const finishedAt = startedAt + milestones.transactional_bridge_ready_ms;
     durations.push(rounded(finishedAt - startedAt));
     wrapperDurations.push(rounded(wrapperReadyAt - startedAt));
     frameDurations.push(rounded(finishedAt - wrapperReadyAt));
@@ -876,7 +974,7 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
     frameResponseDurations.push(rounded(framePerformance.response_end));
     frameTransferBytes.push(framePerformance.transfer_bytes);
     await settleOpenDesignInterface(page, frame);
-    await delay(300);
+    await delay(750);
   }
   const interfaceDistribution = measuredDistribution(durations);
   return {
@@ -954,6 +1052,9 @@ async function waitForTransactionalReadiness(page) {
 function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }) {
   const daemon = distribution(coreRestarts.map((sample) => sample.daemon_ready_ms));
   const cold = distribution(coreRestarts.map((sample) => sample.cold_maverick_ready_ms));
+  const transactionalReadyAfterCoreStart = distribution(
+    coreRestarts.map((sample) => sample.transactional_ready_after_core_start_ms),
+  );
   const fullRestart = distribution(coreRestarts.map((sample) => sample.full_restart_ms));
   const restartStop = distribution(coreRestarts.map((sample) => sample.stop_ms));
   const coreBoot = distribution(coreRestarts.map((sample) => sample.core_boot_ms));
@@ -970,6 +1071,7 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     warmTickets,
     warmOpenings,
     cold,
+    transactionalReadyAfterCoreStart,
     fullRestart,
     daemon,
     restartStop,
@@ -993,6 +1095,12 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     `Cold transactional readiness SLO failed: ${diagnostic}`,
   );
   assert(
+    transactionalReadyAfterCoreStart.count === 10
+      && transactionalReadyAfterCoreStart.max_ms <= 8_000
+      && prewarmAfterCoreHealth.max_ms <= 8_000,
+    `Core restart prewarm SLO failed: ${diagnostic}`,
+  );
+  assert(
     interfaceAfterTransactionalReady.count === 10
       && interfaceAfterTransactionalReady.p95_ms <= 1_500
       && interfaceAfterTransactionalReady.p99_ms <= 2_500,
@@ -1003,11 +1111,21 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     schema_version: '2',
     warm_browser_ticket: warmTickets,
     warm_interface: warmOpenings,
-    cold_maverick_ready: cold,
+    cold_maverick_ready: {
+      ...cold,
+      measurement_scope: 'sidecar_start_request_to_transactional_endpoint_ready',
+    },
+    transactional_ready_after_core_start: {
+      ...transactionalReadyAfterCoreStart,
+      measurement_scope: 'core_process_start_to_transactional_endpoint_ready',
+    },
     daemon_internal_ready: daemon,
     full_core_restart: fullRestart,
     core_boot: coreBoot,
-    prewarm_after_core_health: prewarmAfterCoreHealth,
+    prewarm_after_core_health: {
+      ...prewarmAfterCoreHealth,
+      measurement_scope: 'core_health_to_transactional_endpoint_ready',
+    },
     cold_interface: {
       ...interfaceAfterTransactionalReady,
       measurement_scope: 'prewarmed_shell_action_to_transactional_ui_ready',

@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from opendesign_artifact import ArtifactError, selected_asset, validate_bundle_manifest
+from opendesign_artifact_audit import (
+    fully_audited_runtime,
+    fully_audited_web_overlay,
+)
 from opendesign_generation_control import (
     load_generation_control,
     load_generation_control_metadata,
@@ -65,7 +69,7 @@ def protected_activation_inventory(
     store: OpenDesignArtifactStore,
     generation_root: Path,
 ) -> tuple[GenerationControl, dict[str, str], dict[str, VerifiedWebOverlay]]:
-    """Resolve every exact control-referenced receipt needed by activation/recovery."""
+    """Full-audit every exact store generation needed by activation/recovery."""
     preliminary = load_generation_control_metadata(generation_root)
     selections = [preliminary.active]
     for selection in (
@@ -79,7 +83,8 @@ def protected_activation_inventory(
     overlays: dict[str, VerifiedWebOverlay] = {}
     for selection in selections:
         if selection.runtime_artifact_sha256 not in artifacts:
-            runtime = store.fast_runtime(
+            runtime = fully_audited_runtime(
+                store,
                 selection.runtime_artifact_sha256,
                 file_manifest_sha256=None,
                 opendesign_version=selection.od_version,
@@ -89,7 +94,8 @@ def protected_activation_inventory(
                 runtime.receipt["opendesign_version"]
             )
         if selection.web_overlay_sha256 not in overlays:
-            web = store.fast_web_overlay(
+            web = fully_audited_web_overlay(
+                store,
                 selection.web_overlay_sha256,
                 runtime_artifact_sha256=selection.runtime_artifact_sha256,
             )

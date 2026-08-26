@@ -20,6 +20,10 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from opendesign_artifact import is_sha256, selected_asset, validate_bundle_manifest
+from opendesign_artifact_audit import (
+    fully_audited_runtime,
+    fully_audited_web_overlay,
+)
 from opendesign_artifact_store import ArtifactStoreError, OpenDesignArtifactStore
 from opendesign_generation_control import load_generation_control
 from opendesign_generation_model import LaunchSelection
@@ -57,7 +61,11 @@ class OciMigrationRuntime:
         selected = selected_asset(self.manifest, require_artifact_digest=True)
         if (supplied_registry / ".maverick-artifact-namespace.json").is_file():
             self.registry_root, self.web_registry_root, self.bundles, self.overlays = (
-                self._protected_store_inventory(supplied_registry, selected=selected)
+                self._protected_store_inventory(
+                    supplied_registry,
+                    selected=selected,
+                    web_trust_contract=web_trust_contract,
+                )
             )
         else:
             self.registry_root = supplied_registry
@@ -92,10 +100,12 @@ class OciMigrationRuntime:
         root: Path,
         *,
         selected: Mapping[str, Any],
+        web_trust_contract: Path,
     ) -> tuple[Path, Path, dict[str, MaterializedBundle], dict[str, VerifiedWebOverlay]]:
         try:
             store = OpenDesignArtifactStore(root)
-            stored_runtime = store.fast_runtime(
+            stored_runtime = fully_audited_runtime(
+                store,
                 str(selected["sha256"]),
                 file_manifest_sha256=str(selected["file_manifest_sha256"]),
                 opendesign_version=str(self.manifest["upstream"]["release_version"]),
@@ -107,9 +117,11 @@ class OciMigrationRuntime:
                 if candidate.is_symlink() or not candidate.is_dir() or not is_sha256(candidate.name):
                     continue
                 try:
-                    stored = store.fast_web_overlay(
+                    stored = fully_audited_web_overlay(
+                        store,
                         candidate.name,
                         runtime_artifact_sha256=stored_runtime.artifact_sha256,
+                        trust_contract=web_trust_contract,
                     )
                 except ArtifactStoreError:
                     continue

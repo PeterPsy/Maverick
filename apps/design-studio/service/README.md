@@ -65,7 +65,8 @@ launch hashes only the manifest-v2 metadata file to bind it to that receipt,
 then checks store identity, owner/modes, read-only mount, and exact
 runtime/overlay/data binding without scanning or hashing the closure.
 Full verification remains mandatory for install, activation, repair, audit,
-and release certification. Core prewarms asynchronously with per-key
+and release certification, including packages already present in the store.
+Core prewarms asynchronously with per-key
 singleflight; its browser gate is `/api/maverick-ready` with a 12-second budget.
 A failed start tears down the complete confined process group and cannot reuse a
 relay, Future, ticket, or browser session.

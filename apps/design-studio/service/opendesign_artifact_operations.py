@@ -17,6 +17,10 @@ from core.apps.artifact_mounts import create_artifact_namespace, platform_artifa
 from core.api.sidecar_control import request_sidecar_control
 from core.shared.repository import discover_repository_root
 from opendesign_artifact import is_sha256, read_bundle_manifest, selected_asset, write_canonical_json
+from opendesign_artifact_audit import (
+    fully_audited_runtime,
+    fully_audited_web_overlay_for_any_runtime,
+)
 from opendesign_artifact_store import ArtifactStoreError, OpenDesignArtifactStore, StoredArtifact
 from opendesign_bootstrap import bootstrap_empty_generation
 from opendesign_generation_control import load_generation_control_metadata
@@ -120,7 +124,8 @@ def _repair(
                 "audited_repair_handoff",
                 "OpenDesign runtime was rejected by a prior full audit",
             )
-        runtime = store.fast_runtime(
+        runtime = fully_audited_runtime(
+            store,
             required.current_runtime,
             file_manifest_sha256=str(asset["file_manifest_sha256"]),
             opendesign_version=str(manifest["upstream"]["release_version"]),
@@ -137,6 +142,13 @@ def _repair(
             repair=True,
             invalid_package_identity=runtime_invalid_identity,
         )
+        runtime = fully_audited_runtime(
+            store,
+            required.current_runtime,
+            file_manifest_sha256=str(asset["file_manifest_sha256"]),
+            opendesign_version=str(manifest["upstream"]["release_version"]),
+            upstream_commit=str(manifest["upstream"]["commit"]),
+        )
         _clear_invalid_marker(store, kind="runtime", digest=required.current_runtime)
         runtime_repaired = True
     if runtime.artifact_sha256 != required.current_runtime:
@@ -147,7 +159,8 @@ def _repair(
         if digest == required.current_runtime:
             continue
         try:
-            store.fast_runtime(
+            fully_audited_runtime(
+                store,
                 digest,
                 file_manifest_sha256=None,
                 opendesign_version="0.16.1",
@@ -164,11 +177,29 @@ def _repair(
         retained_runtime.append(digest)
     repaired_web: list[str] = []
     retained_web: list[str] = []
+    runtime_candidates = _unique(
+        (
+            required.active_runtime,
+            required.current_runtime,
+            required.rollback_runtime,
+            *required.optional_runtime,
+        )
+    )
     for digest in required.web_overlays:
         web_invalid_identity = _known_invalid_identity(store, kind="web", digest=digest)
-        if web_invalid_identity is None and _fast_web_for_any_runtime(store, digest=digest, required=required):
-            retained_web.append(digest)
-            continue
+        if web_invalid_identity is None:
+            try:
+                fully_audited_web_overlay_for_any_runtime(
+                    store,
+                    digest,
+                    runtime_artifact_sha256=runtime_candidates,
+                    trust_contract=TRUST_CONTRACT_PATH,
+                )
+            except ArtifactStoreError:
+                web_invalid_identity = store.package_identity("web", digest)
+            else:
+                retained_web.append(digest)
+                continue
         source = SERVICE_ROOT / "artifacts/open-design-web" / digest
         if not source.is_dir() or source.is_symlink():
             raise ArtifactStoreError(
@@ -184,12 +215,12 @@ def _repair(
             repair=True,
             invalid_package_identity=web_invalid_identity,
         )
-        if not _fast_web_for_any_runtime(store, digest=digest, required=required):
-            raise ArtifactStoreError(
-                "runtime_binding_invalid",
-                "repair",
-                "A declared OpenDesign web overlay is incompatible with every retained runtime",
-            )
+        fully_audited_web_overlay_for_any_runtime(
+            store,
+            digest,
+            runtime_artifact_sha256=runtime_candidates,
+            trust_contract=TRUST_CONTRACT_PATH,
+        )
         _clear_invalid_marker(store, kind="web", digest=digest)
         repaired_web.append(digest)
         retained_web.append(digest)
@@ -207,29 +238,6 @@ def _repair(
         "retained_web_overlays": retained_web,
         "data_generation_bootstrapped": bootstrapped,
     }
-
-
-def _fast_web_for_any_runtime(
-    store: OpenDesignArtifactStore,
-    *,
-    digest: str,
-    required: RequiredArtifacts,
-) -> bool:
-    for runtime_digest in _unique(
-        (
-            required.active_runtime,
-            required.current_runtime,
-            required.rollback_runtime,
-            *required.optional_runtime,
-        )
-    ):
-        try:
-            store.fast_web_overlay(digest, runtime_artifact_sha256=runtime_digest)
-            return True
-        except ArtifactStoreError:
-            continue
-    return False
-
 
 def _status(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> dict[str, Any]:
     runtime_states: dict[str, str] = {}

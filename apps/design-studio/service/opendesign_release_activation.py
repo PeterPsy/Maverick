@@ -8,6 +8,10 @@ from typing import Any, Callable, Mapping
 from uuid import uuid4
 
 from opendesign_artifact import selected_asset
+from opendesign_artifact_audit import (
+    fully_audited_runtime,
+    fully_audited_web_overlay,
+)
 from opendesign_artifact_store import ArtifactStoreError, OpenDesignArtifactStore, StoredArtifact
 from opendesign_generation_control import load_generation_control_metadata
 from opendesign_generation_model import GenerationControl, LaunchSelection
@@ -40,7 +44,8 @@ def activate_protected_release(
     """Atomically cut over without migrating data and keep the prior active pair as rollback."""
     control = load_generation_control_metadata(generation_root)
     target_runtime_sha256 = str(selected_asset(manifest, require_artifact_digest=True)["sha256"])
-    target_runtime = store.fast_runtime(
+    target_runtime = fully_audited_runtime(
+        store,
         target_runtime_sha256,
         file_manifest_sha256=str(
             selected_asset(manifest, require_artifact_digest=True)["file_manifest_sha256"]
@@ -48,7 +53,8 @@ def activate_protected_release(
         opendesign_version=str(manifest["upstream"]["release_version"]),
         upstream_commit=str(manifest["upstream"]["commit"]),
     )
-    target_web = store.fast_web_overlay(
+    target_web = fully_audited_web_overlay(
+        store,
         target_web_overlay_sha256,
         runtime_artifact_sha256=target_runtime_sha256,
     )
@@ -60,7 +66,8 @@ def activate_protected_release(
     retired: list[str] = []
     for selection in _control_selections(control):
         try:
-            runtime = store.fast_runtime(
+            runtime = fully_audited_runtime(
+                store,
                 selection.runtime_artifact_sha256,
                 file_manifest_sha256=None,
                 opendesign_version=selection.od_version,
@@ -80,7 +87,8 @@ def activate_protected_release(
         else:
             artifacts[selection.runtime_artifact_sha256] = str(runtime.receipt["opendesign_version"])
         if selection.web_overlay_sha256 not in overlays:
-            web = store.fast_web_overlay(
+            web = fully_audited_web_overlay(
+                store,
                 selection.web_overlay_sha256,
                 runtime_artifact_sha256=selection.runtime_artifact_sha256,
             )

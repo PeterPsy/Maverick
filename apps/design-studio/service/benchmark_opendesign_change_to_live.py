@@ -18,6 +18,7 @@ import uuid
 
 from core.apps.artifact_mounts import create_artifact_namespace
 from opendesign_artifact import read_bundle_manifest, sha256_file, write_canonical_json
+from opendesign_artifact_audit import fully_audited_web_overlay
 from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_dev_apply import _cache_root, _repo_root, _required_path, _restart_sidecars, _work_parent
 from opendesign_runtime import protected_activation_inventory, verified_overlay_from_store
@@ -140,9 +141,15 @@ def run_change_to_live_benchmark(payload: dict[str, Any], arguments: dict[str, A
             trust_contract=benchmark_service / "opendesign_web_trust.json",
         )
         store_publish_duration = round(time.monotonic() - store_publish_started, 6)
-        _current, verified_artifacts, overlays = protected_activation_inventory(
+        current, verified_artifacts, overlays = protected_activation_inventory(
             store=store,
             generation_root=generation_root,
+        )
+        stored_candidate = fully_audited_web_overlay(
+            store,
+            stored_candidate.artifact_sha256,
+            runtime_artifact_sha256=current.active.runtime_artifact_sha256,
+            trust_contract=benchmark_service / "opendesign_web_trust.json",
         )
         overlays[stored_candidate.artifact_sha256] = verified_overlay_from_store(stored_candidate)
         outcome = None

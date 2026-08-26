@@ -21,6 +21,7 @@ from core.apps.artifact_mounts import (
 )
 from core.api.sidecar_control import request_sidecar_control
 from opendesign_artifact import read_bundle_manifest
+from opendesign_artifact_audit import fully_audited_web_overlay
 from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_dev_changeset import (
     DevApplyError,
@@ -520,6 +521,12 @@ def _build_and_activate_overlay(
     control, verified_artifacts, overlays = protected_activation_inventory(
         store=store,
         generation_root=generation_root,
+    )
+    stored_candidate = fully_audited_web_overlay(
+        store,
+        stored_candidate.artifact_sha256,
+        runtime_artifact_sha256=control.active.runtime_artifact_sha256,
+        trust_contract=service_root / "opendesign_web_trust.json",
     )
     overlays[stored_candidate.artifact_sha256] = verified_overlay_from_store(stored_candidate)
     recover_web_activation(

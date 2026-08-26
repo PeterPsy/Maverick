@@ -63,7 +63,9 @@ binds the protected manifest v2 to its receipt, then validates store generation,
 exact control binding, ownership/modes, and read-only mount; it does not hash the
 closure. Full audits
 run on publication, activation, repair, release certification, and background
-maintenance. Active and rollback generations are selected explicitly;
+maintenance. Provision, repair, and activation audit already-present packages
+too; a valid fast receipt never waives those lifecycle gates. Active and
+rollback generations are selected explicitly;
 `opendesign_release_selection.json` schema v2 binds the rollback web overlay
 to its retained runtime digest so a fresh install cannot advertise a partial
 or incompatible rollback pair. Unreferenced entries are never used as a

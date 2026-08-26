@@ -209,17 +209,21 @@ class OpenDesignMaterializationTests(unittest.TestCase):
 
     def test_launcher_heartbeat_fails_closed_when_transactional_readiness_is_lost(self) -> None:
         daemon = Mock()
-        daemon.wait.side_effect = subprocess.TimeoutExpired(cmd="daemon", timeout=1)
+        daemon.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd="daemon", timeout=1),
+            subprocess.TimeoutExpired(cmd="daemon", timeout=2),
+            subprocess.TimeoutExpired(cmd="daemon", timeout=4),
+            0,
+        ]
         with (
             patch.object(
                 self.launcher,
                 "_wait_for_json_readiness",
                 return_value={"ready": False},
             ) as readiness,
-            patch.object(self.launcher, "_update_health_status"),
-            self.assertRaises(self.launcher.LauncherError) as raised,
+            patch.object(self.launcher, "_update_health_status") as update_health,
         ):
-            self.launcher._wait_for_daemon_exit(
+            result = self.launcher._wait_for_daemon_exit(
                 daemon,
                 env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
                 generation_root=self.root / "generation",
@@ -227,14 +231,39 @@ class OpenDesignMaterializationTests(unittest.TestCase):
                 timings={},
             )
 
-        self.assertEqual(raised.exception.code, "activation_incomplete")
-        self.assertEqual(raised.exception.phase, "readiness_monitor")
-        readiness.assert_called_once_with(
-            daemon,
-            env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
-            path="/api/maverick-ready",
-            timeout_seconds=0.75,
-        )
+        self.assertEqual(result, 0)
+        self.assertEqual(readiness.call_count, 3)
+        self.assertEqual(update_health.call_count, 3)
+        self.assertTrue(all(call.kwargs["browser_ready"] is False for call in update_health.call_args_list))
+        self.assertEqual([call.kwargs["timeout"] for call in daemon.wait.call_args_list], [1, 2, 4, 8])
+
+    def test_launcher_heartbeat_recovers_after_one_fail_closed_sample(self) -> None:
+        daemon = Mock()
+        daemon.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd="daemon", timeout=1),
+            subprocess.TimeoutExpired(cmd="daemon", timeout=1),
+            0,
+        ]
+        with (
+            patch.object(
+                self.launcher,
+                "_wait_for_json_readiness",
+                side_effect=[{"ready": False}, {"ready": True}],
+            ),
+            patch.object(self.launcher, "_update_health_status") as update_health,
+        ):
+            result = self.launcher._wait_for_daemon_exit(
+                daemon,
+                env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
+                generation_root=self.root / "generation",
+                startup_id="startup-test",
+                timings={},
+            )
+
+        self.assertEqual(result, 0)
+        self.assertFalse(update_health.call_args_list[0].kwargs["browser_ready"])
+        self.assertTrue(update_health.call_args_list[1].kwargs["browser_ready"])
+        self.assertTrue(update_health.call_args_list[1].kwargs["clear_failure"])
 
     def test_existing_digest_directory_is_never_replaced_after_tampering(self) -> None:
         registry = self.root / "registry"

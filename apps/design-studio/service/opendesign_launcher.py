@@ -33,6 +33,7 @@ MANIFEST_PATH = SERVICE_ROOT / "opendesign_bundle.json"
 READY_MARKER_NAME = "maverick-ready.json"
 DAEMON_READY_TIMEOUT_SECONDS = 8.0
 STATUS_HEARTBEAT_SECONDS = 1.0
+STATUS_HEARTBEAT_BACKOFF_MAX_SECONDS = 8.0
 
 
 @dataclass(frozen=True)
@@ -484,9 +485,14 @@ def _wait_for_daemon_exit(
     startup_id: str,
     timings: dict[str, float],
 ) -> int:
+    consecutive_failures = 0
     while True:
         try:
-            return daemon.wait(timeout=STATUS_HEARTBEAT_SECONDS)
+            heartbeat_delay = min(
+                STATUS_HEARTBEAT_SECONDS * (2 ** min(consecutive_failures, 3)),
+                STATUS_HEARTBEAT_BACKOFF_MAX_SECONDS,
+            )
+            return daemon.wait(timeout=heartbeat_delay)
         except subprocess.TimeoutExpired:
             try:
                 readiness = _wait_for_json_readiness(
@@ -496,22 +502,42 @@ def _wait_for_daemon_exit(
                     timeout_seconds=0.75,
                 )
             except LauncherError as error:
-                raise LauncherError(
+                readiness_error = LauncherError(
                     error.code,
                     "readiness_monitor",
                     "OpenDesign transactional readiness recheck failed",
-                ) from error
-            if readiness.get("ready") is not True:
-                raise LauncherError(
-                    "activation_incomplete",
-                    "readiness_monitor",
-                    "OpenDesign transactional readiness was lost",
                 )
+            else:
+                readiness_error = (
+                    None
+                    if readiness.get("ready") is True
+                    else LauncherError(
+                        "activation_incomplete",
+                        "readiness_monitor",
+                        "OpenDesign transactional readiness was lost",
+                    )
+                )
+            if readiness_error is not None:
+                consecutive_failures += 1
+                _update_health_status(
+                    generation_root,
+                    startup_id=startup_id,
+                    phase="readiness_monitor_degraded",
+                    timings=timings,
+                    failure=readiness_error,
+                    sidecar_process_running=daemon.poll() is None,
+                    daemon_ready=False,
+                    activation_committed=True,
+                    browser_ready=False,
+                )
+                continue
+            consecutive_failures = 0
             _update_health_status(
                 generation_root,
                 startup_id=startup_id,
                 phase="browser_ready",
                 timings=timings,
+                clear_failure=True,
                 sidecar_process_running=True,
                 daemon_ready=True,
                 activation_committed=True,
@@ -767,6 +793,8 @@ def _update_health_status(
     startup_id: str,
     phase: str,
     timings: dict[str, float],
+    failure: LauncherError | None = None,
+    clear_failure: bool = False,
     **health_updates: object,
 ) -> None:
     path = generation_root / "launcher-status.json"
@@ -781,6 +809,18 @@ def _update_health_status(
     payload["health"] = health
     payload["phase"] = phase
     payload["timings_ms"] = dict(timings)
+    if failure is not None:
+        payload["last_failure"] = {
+            "code": failure.code,
+            "phase": failure.phase,
+            "startup_id": startup_id,
+            "duration_ms": 0,
+            "difference_count": 0,
+            "auto_repairable": False,
+            "observed_at_epoch_ms": int(time.time() * 1000),
+        }
+    elif clear_failure:
+        payload["last_failure"] = None
     payload["updated_at_epoch_ms"] = int(time.time() * 1000)
     write_canonical_json(path, payload)
 

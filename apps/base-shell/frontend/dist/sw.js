@@ -1,6 +1,6 @@
 "use strict";
 
-const BUILD_ID = "f573db88cdce6c3f13fcfb39d9a95d189f6c92037534bf5ec0bdd5bec833f95b";
+const BUILD_ID = "d3736fb4de2de97c0064e7c2b769adffe4a3be3763cd3a84bbfc1bae6c735aee";
 const PRECACHE = [{"url":"/","path":"index.html","sha256":"f1c5c7ee95cf15ee6b5db87097f3e5b1504c5c7d02cafc094bb1e6d06ef1f5f5","size_bytes":1977},{"url":"/apps/base-shell/app-icon-lightcolor.png","path":"app-icon-lightcolor.png","sha256":"5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0","size_bytes":95846},{"url":"/apps/base-shell/assets/index-B3FYq0tq.css","path":"assets/index-B3FYq0tq.css","sha256":"45ad73f1e01819599cb5491e859652f4d15dfcd3cd575a6445986261447cd91f","size_bytes":76237},{"url":"/apps/base-shell/assets/index-H9DRfmLT.js","path":"assets/index-H9DRfmLT.js","sha256":"acbd0c19c8bdb3321d55801f5c09b704b6bd9c6b11f6c74a8c9a9abf3f898b90","size_bytes":290503},{"url":"/apps/base-shell/assets/LoginPaperBackground-DpecP-iO.js","path":"assets/LoginPaperBackground-DpecP-iO.js","sha256":"c16ab6e828112c46a7c458dbca55015587d8c16b73fd5dd39683008a03fbb262","size_bytes":25087},{"url":"/apps/base-shell/maverick-logotype.svg","path":"maverick-logotype.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/apps/base-shell/maverick-mark.svg","path":"maverick-mark.svg","sha256":"443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983","size_bytes":17902},{"url":"/apps/base-shell/pwa-apple-touch-icon.png","path":"pwa-apple-touch-icon.png","sha256":"13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb","size_bytes":4075},{"url":"/apps/base-shell/pwa-logo-192.png","path":"pwa-logo-192.png","sha256":"d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24","size_bytes":4429},{"url":"/apps/base-shell/pwa-logo.png","path":"pwa-logo.png","sha256":"1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10","size_bytes":16936},{"url":"/apps/base-shell/pwa-maskable-logo.png","path":"pwa-maskable-logo.png","sha256":"5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031","size_bytes":17394},{"url":"/apps/base-shell/sidebar-logo-black.svg","path":"sidebar-logo-black.svg","sha256":"e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f","size_bytes":6750},{"url":"/apps/base-shell/sidebar-logo.svg","path":"sidebar-logo.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/favicon.ico","path":"favicon.ico","sha256":"fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912","size_bytes":270622},{"url":"/manifest.webmanifest","path":"manifest.webmanifest","sha256":"68094b835f2838d27849bd900f816e09370984de8c3646619c0b10ee3d5f5695","size_bytes":627},{"url":"/material-symbols-rounded.woff2","path":"material-symbols-rounded.woff2","sha256":"aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97","size_bytes":414656},{"url":"/offline.html","path":"offline.html","sha256":"0b360ff456adb1814162c549b07344f7ab813149bb4f4aaf5cbcc8b818552cad","size_bytes":1961}];
 const IMMUTABLE_SHELL_ASSETS = [{"url":"/apps/base-shell/assets/LoginPaperBackground-DpecP-iO.js","sha256":"c16ab6e828112c46a7c458dbca55015587d8c16b73fd5dd39683008a03fbb262","size_bytes":25087},{"url":"/apps/base-shell/assets/index-B3FYq0tq.css","sha256":"45ad73f1e01819599cb5491e859652f4d15dfcd3cd575a6445986261447cd91f","size_bytes":76237},{"url":"/apps/base-shell/assets/index-H9DRfmLT.js","sha256":"acbd0c19c8bdb3321d55801f5c09b704b6bd9c6b11f6c74a8c9a9abf3f898b90","size_bytes":290503}];
 const STATIC_CACHE_PREFIX = "maverick-static-v2:";
@@ -72,6 +72,39 @@ async function fetchVerifiedRecord(record, request = record.url) {
   return response;
 }
 
+async function openCacheBestEffort(cacheName) {
+  try {
+    return await caches.open(cacheName);
+  } catch {
+    return null;
+  }
+}
+
+async function matchCacheBestEffort(cache, request) {
+  try {
+    return await cache.match(request);
+  } catch {
+    return null;
+  }
+}
+
+async function putCacheBestEffort(cache, request, response) {
+  if (!cache) return;
+  try {
+    await cache.put(request, response.clone());
+  } catch {
+    // A valid network response must survive quota and Cache API failures.
+  }
+}
+
+async function deleteCacheEntryBestEffort(cache, request) {
+  try {
+    await cache.delete(request);
+  } catch {
+    // A failed cleanup must not block the network path.
+  }
+}
+
 async function installPrecache() {
   await caches.delete(STATIC_CACHE_NAME);
   const cache = await caches.open(STATIC_CACHE_NAME);
@@ -98,38 +131,46 @@ async function recoverPrecache() {
 }
 
 async function verifiedCachedRecord(cache, record) {
-  const cached = await cache.match(record.url);
+  const cached = await matchCacheBestEffort(cache, record.url);
   if (!cached) {
     return null;
   }
-  if (await responseMatchesRecord(cached, record)) {
-    return cached;
+  try {
+    if (await responseMatchesRecord(cached, record)) {
+      return cached;
+    }
+  } catch {
+    // Treat unreadable cache entries as misses and keep the network path alive.
   }
-  await cache.delete(record.url);
+  await deleteCacheEntryBestEffort(cache, record.url);
   return null;
 }
 
 async function cacheFirstVerifiedShellAsset(request, record) {
-  const cache = await caches.open(STATIC_CACHE_NAME);
-  const cached = await verifiedCachedRecord(cache, record);
-  if (cached) {
-    return cached;
+  const cache = await openCacheBestEffort(STATIC_CACHE_NAME);
+  if (cache) {
+    const cached = await verifiedCachedRecord(cache, record);
+    if (cached) {
+      return cached;
+    }
   }
   const response = await fetchVerifiedRecord(record, request);
-  await cache.put(record.url, response.clone());
+  await putCacheBestEffort(cache, record.url, response);
   return response;
 }
 
 async function networkFirstPrecachedAsset(request, record) {
-  const cache = await caches.open(STATIC_CACHE_NAME);
+  const cache = await openCacheBestEffort(STATIC_CACHE_NAME);
   try {
     const response = await fetchVerifiedRecord(record, request);
-    await cache.put(record.url, response.clone());
+    await putCacheBestEffort(cache, record.url, response);
     return response;
   } catch (error) {
-    const cached = await verifiedCachedRecord(cache, record);
-    if (cached) {
-      return cached;
+    if (cache) {
+      const cached = await verifiedCachedRecord(cache, record);
+      if (cached) {
+        return cached;
+      }
     }
     throw error;
   }
@@ -167,15 +208,15 @@ async function fetchNavigationWithTimeout(request) {
 }
 
 async function visitedAppStaticAsset(request) {
-  const cache = await caches.open(APP_STATIC_CACHE_NAME);
-  const cached = await cache.match(request);
+  const cache = await openCacheBestEffort(APP_STATIC_CACHE_NAME);
+  const cached = cache ? await matchCacheBestEffort(cache, request) : null;
   if (cached && responseCanEnterAppStaticCache(cached)) {
     return cached;
   }
-  if (cached) await cache.delete(request);
+  if (cached && cache) await deleteCacheEntryBestEffort(cache, request);
   const response = await fetch(request);
   if (responseCanEnterAppStaticCache(response)) {
-    await cache.put(request, response.clone());
+    await putCacheBestEffort(cache, request, response);
   }
   return response;
 }

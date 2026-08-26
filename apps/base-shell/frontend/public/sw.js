@@ -72,6 +72,39 @@ async function fetchVerifiedRecord(record, request = record.url) {
   return response;
 }
 
+async function openCacheBestEffort(cacheName) {
+  try {
+    return await caches.open(cacheName);
+  } catch {
+    return null;
+  }
+}
+
+async function matchCacheBestEffort(cache, request) {
+  try {
+    return await cache.match(request);
+  } catch {
+    return null;
+  }
+}
+
+async function putCacheBestEffort(cache, request, response) {
+  if (!cache) return;
+  try {
+    await cache.put(request, response.clone());
+  } catch {
+    // A valid network response must survive quota and Cache API failures.
+  }
+}
+
+async function deleteCacheEntryBestEffort(cache, request) {
+  try {
+    await cache.delete(request);
+  } catch {
+    // A failed cleanup must not block the network path.
+  }
+}
+
 async function installPrecache() {
   await caches.delete(STATIC_CACHE_NAME);
   const cache = await caches.open(STATIC_CACHE_NAME);
@@ -98,38 +131,46 @@ async function recoverPrecache() {
 }
 
 async function verifiedCachedRecord(cache, record) {
-  const cached = await cache.match(record.url);
+  const cached = await matchCacheBestEffort(cache, record.url);
   if (!cached) {
     return null;
   }
-  if (await responseMatchesRecord(cached, record)) {
-    return cached;
+  try {
+    if (await responseMatchesRecord(cached, record)) {
+      return cached;
+    }
+  } catch {
+    // Treat unreadable cache entries as misses and keep the network path alive.
   }
-  await cache.delete(record.url);
+  await deleteCacheEntryBestEffort(cache, record.url);
   return null;
 }
 
 async function cacheFirstVerifiedShellAsset(request, record) {
-  const cache = await caches.open(STATIC_CACHE_NAME);
-  const cached = await verifiedCachedRecord(cache, record);
-  if (cached) {
-    return cached;
+  const cache = await openCacheBestEffort(STATIC_CACHE_NAME);
+  if (cache) {
+    const cached = await verifiedCachedRecord(cache, record);
+    if (cached) {
+      return cached;
+    }
   }
   const response = await fetchVerifiedRecord(record, request);
-  await cache.put(record.url, response.clone());
+  await putCacheBestEffort(cache, record.url, response);
   return response;
 }
 
 async function networkFirstPrecachedAsset(request, record) {
-  const cache = await caches.open(STATIC_CACHE_NAME);
+  const cache = await openCacheBestEffort(STATIC_CACHE_NAME);
   try {
     const response = await fetchVerifiedRecord(record, request);
-    await cache.put(record.url, response.clone());
+    await putCacheBestEffort(cache, record.url, response);
     return response;
   } catch (error) {
-    const cached = await verifiedCachedRecord(cache, record);
-    if (cached) {
-      return cached;
+    if (cache) {
+      const cached = await verifiedCachedRecord(cache, record);
+      if (cached) {
+        return cached;
+      }
     }
     throw error;
   }
@@ -167,15 +208,15 @@ async function fetchNavigationWithTimeout(request) {
 }
 
 async function visitedAppStaticAsset(request) {
-  const cache = await caches.open(APP_STATIC_CACHE_NAME);
-  const cached = await cache.match(request);
+  const cache = await openCacheBestEffort(APP_STATIC_CACHE_NAME);
+  const cached = cache ? await matchCacheBestEffort(cache, request) : null;
   if (cached && responseCanEnterAppStaticCache(cached)) {
     return cached;
   }
-  if (cached) await cache.delete(request);
+  if (cached && cache) await deleteCacheEntryBestEffort(cache, request);
   const response = await fetch(request);
   if (responseCanEnterAppStaticCache(response)) {
-    await cache.put(request, response.clone());
+    await putCacheBestEffort(cache, request, response);
   }
   return response;
 }

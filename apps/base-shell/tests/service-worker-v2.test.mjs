@@ -84,6 +84,36 @@ test("a corrupted verified shell entry is deleted and repaired from the network"
   assert.equal(await (await cache.match(record.url)).text(), bodies.get(record.url));
 });
 
+test("runtime Cache API write failures never replace valid network responses", async () => {
+  const harness = workerHarness();
+  harness.fetchImpl = async (input) => responseFor(requestPath(input));
+  const shellCache = await harness.caches.open(harness.internals.STATIC_CACHE_NAME);
+  shellCache.writeError = quotaError();
+
+  const immutableRecord = records.find(({ url }) => url.includes("index-testhash.js"));
+  const immutable = await harness.internals.cacheFirstVerifiedShellAsset(fakeRequest(immutableRecord.url), immutableRecord);
+  const revalidatedRecord = records.find(({ url }) => url === "/offline.html");
+  const revalidated = await harness.internals.networkFirstPrecachedAsset(fakeRequest(revalidatedRecord.url), revalidatedRecord);
+
+  assert.equal(await immutable.text(), bodies.get(immutableRecord.url));
+  assert.equal(await revalidated.text(), bodies.get(revalidatedRecord.url));
+
+  const appRequest = fakeRequest("/apps/chat/assets/app-contenthash.js");
+  const appCache = await harness.caches.open(harness.internals.APP_STATIC_CACHE_NAME);
+  await appCache.put(appRequest, new Response("poisoned-html", { status: 200, headers: { "Content-Type": "text/html" } }));
+  appCache.writeError = quotaError();
+  harness.fetchImpl = async () => new Response("app-bundle", {
+    status: 200,
+    headers: {
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "Content-Type": "application/javascript",
+    },
+  });
+
+  const appResponse = await harness.internals.visitedAppStaticAsset(appRequest);
+  assert.equal(await appResponse.text(), "app-bundle");
+});
+
 test("recovery preserves verified entries when a missing entry cannot be fetched", async () => {
   const harness = workerHarness();
   harness.fetchImpl = async (input) => responseFor(requestPath(input));
@@ -216,6 +246,7 @@ function workerHarness({ activeWorker = null } = {}) {
     installPrecache,
     isExcludedRequest,
     navigationFallback,
+    networkFirstPrecachedAsset,
     recoverPrecache,
     responseCanEnterAppStaticCache,
     responseMatchesRecord,
@@ -266,10 +297,16 @@ class MemoryCacheStorage {
 }
 
 class MemoryCache {
-  constructor() { this.responses = new Map(); }
-  async delete(request) { return this.responses.delete(requestPath(request)); }
+  constructor() { this.responses = new Map(); this.writeError = null; }
+  async delete(request) {
+    if (this.writeError) throw this.writeError;
+    return this.responses.delete(requestPath(request));
+  }
   async match(request) { return this.responses.get(requestPath(request))?.clone() || undefined; }
-  async put(request, response) { this.responses.set(requestPath(request), response.clone()); }
+  async put(request, response) {
+    if (this.writeError) throw this.writeError;
+    this.responses.set(requestPath(request), response.clone());
+  }
 }
 
 function fakeRequest(path, mode = "cors", accept = "", headers = {}) {
@@ -290,4 +327,8 @@ function responseFor(path) {
   const body = bodies.get(path);
   if (body === undefined) return new Response("not found", { status: 404 });
   return new Response(body, { status: 200, headers: { "Content-Type": path.endsWith(".js") ? "application/javascript" : "text/html" } });
+}
+
+function quotaError() {
+  return Object.assign(new Error("Cache quota exceeded"), { name: "QuotaExceededError" });
 }

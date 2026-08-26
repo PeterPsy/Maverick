@@ -45,10 +45,10 @@ artifact `storage/generated/specs/maverick-agentic-multimodel-development-spec-2
 Hosted agentic, Google agentic, and OpenRouter agentic switches default off.
 Only the exact local Codex app-server identity is treated as local; every other
 agentic provider identity, including an unknown future hosted provider, fails
-closed. Even when all process flags are explicitly enabled, the Phase-0
-attestation barrier rejects remote session creation and provider dispatch until
-Phase 1 replaces that hard barrier with a revision-bound server proof. Client
-data declarations, browser consent, and the legacy
+closed. Even when all process flags are explicitly enabled, the independent
+availability barrier rejects remote session creation and provider dispatch
+until a later release explicitly admits the Phase-1 revision-bound server
+proof. Client data declarations, browser consent, and the legacy
 `workspace_internal_fake` value cannot authorize a session.
 
 Admission rejects a new remote execution binding before the session aggregate,
@@ -122,8 +122,16 @@ all authority-changing Core and UI surfaces and is the sole source for suite,
 artifact, signing/publication, execution-binding, and live-status digests. The
 publisher recomputes the digest; drift or missing legacy identity makes a
 remote certificate ineligible before create, continuation, refresh, or
-dispatch. This implementation boundary does not itself make remote execution
-available.
+dispatch. Manifest version 2 also declares six maintained dependency contracts
+for runtime admission, provider-input composition, classification/egress, tool
+execution, provider-state/lifecycle, and served governance. Core statically
+walks each declared local import closure, including package initializers, the
+exact `core/inter_agent/generalist_context.py` projection closure,
+continuation/recovery, app-entrypoint, observability, and usage dependencies.
+Every reached dependency must already be in the canonical artifact set; a new
+uncovered callout makes TCB identity calculation fail closed rather than
+silently producing a certifiable digest. This implementation boundary does not
+itself make remote execution available.
 
 ### 1. Definitions and workspace bindings are separate
 
@@ -343,13 +351,17 @@ restrictive join prevents an attestation or less-sensitive sibling block from
 promoting it.
 
 Unknown classification, provenance, trust, destination, or policy fails closed.
-Current contained profile revisions list only Core-classified `public` content;
-`workspace_internal_fake` is always denied by the egress evaluator even if a
-malformed policy lists it. The historical `fake-data preview` display label is
-retained verbatim as a warning, not an attestation or authority grant. In Phase
-0 the independent central admission barrier authorizes no remote agentic
-execution. Secrets, bearer authority, host operational metadata, unclassified
-content, and client-supplied classification are never remotely exportable.
+`workspace_internal_fake` is eligible for evaluation only when the exact
+resource/version was independently classified as such by Core, an active
+workspace-matching attestation covers that resource, and the selected policy
+explicitly allows the class and destination. The attestation cannot create or
+promote the resource classification. Current contained profile revisions list
+only Core-classified `public` content, remain disabled and non-selectable, and
+the independent central availability barrier still makes remote agentic
+execution NO-GO. The historical `fake-data preview` display label is retained
+verbatim as a warning, not an attestation or authority grant. Secrets, bearer
+authority, host operational metadata, unclassified content, and client-supplied
+classification are never remotely exportable.
 
 OpenRouter agentic routing pins certified upstreams, disables fallback, requires
 parameters, denies data collection, and enforces ZDR when the egress policy

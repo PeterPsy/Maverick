@@ -111,10 +111,7 @@ class CertificationPipelineTest(unittest.TestCase):
             cwd=self.root,
         )
 
-        with mock.patch(
-            "core.providers.certified_execution_tcb.compute_certified_tcb_digest",
-            return_value="f" * 64,
-        ):
+        with self._simulated_generalist_context_drift():
             with self.assertRaisesRegex(CapabilityCertificateError, "certificate_tcb_drift"):
                 sign_certification_run(
                     run,
@@ -134,6 +131,18 @@ class CertificationPipelineTest(unittest.TestCase):
                     cwd=self.root,
                     deployed_source_commit=run.source_commit,
                 )
+
+    def _simulated_generalist_context_drift(self):
+        target = (self.root / "core/inter_agent/generalist_context.py").resolve()
+        original_read_bytes = Path.read_bytes
+
+        def drifted_read_bytes(path: Path) -> bytes:
+            content = original_read_bytes(path)
+            if path.resolve() == target:
+                return content + b"\n# stale-certified-generalist-context\n"
+            return content
+
+        return mock.patch.object(Path, "read_bytes", drifted_read_bytes)
 
     def test_unknown_suite_cannot_supply_an_arbitrary_command(self) -> None:
         with self.assertRaisesRegex(CapabilityCertificateError, "manifest_unknown"):
@@ -168,11 +177,24 @@ class CertificationPipelineTest(unittest.TestCase):
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
             ),
         }
+        expected_manifest_digests = {
+            "google-ai-studio": (
+                "6b4c84b4321f2e6d45acc4409d0b821dd9e79333ef78781da1b2f27d1617bf03"
+            ),
+            "openrouter": (
+                "8a765963e95ce0575ea5981531ab9478a7cc1059f48bab657360faa2e8fac78d"
+            ),
+        }
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
+                self.assertEqual(manifest.matrix_revision, "2026-08-26-r9-tcb2")
+                self.assertEqual(
+                    manifest.digest,
+                    expected_manifest_digests[manifest.provider_id],
+                )
                 self.assertEqual(
                     tuple(step.kind for step in manifest.steps),
                     ("fixture_contract", "live_probe"),

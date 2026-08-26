@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -20,6 +21,7 @@ NOW = datetime(2026, 8, 16, tzinfo=UTC)
 
 class CertificateTcbEnforcementTest(unittest.TestCase):
     def setUp(self) -> None:
+        self.root = Path(__file__).resolve().parents[3]
         self.adapter = FakeHostedAgenticAdapter()
         self.evidence = fake_capability_evidence(self.adapter, now=NOW)
         self.binding = build_runtime_execution_binding(
@@ -91,10 +93,14 @@ class CertificateTcbEnforcementTest(unittest.TestCase):
                 now=NOW,
             )
 
-        with patch(
-            "core.providers.certified_execution_tcb.compute_certified_tcb_digest",
-            return_value="f" * 64,
-        ):
+        with self._simulated_generalist_context_drift():
+            with self.assertRaisesRegex(CapabilityCertificateError, "certificate_tcb_drift"):
+                validate_certificate_for_binding(
+                    self.store,
+                    binding=self.binding,
+                    adapter=self.adapter,
+                    now=NOW,
+                )
             with self.assertRaisesRegex(CapabilityCertificateError, "certificate_tcb_drift"):
                 certified_test_provider_store(
                     self.binding,
@@ -112,6 +118,18 @@ class CertificateTcbEnforcementTest(unittest.TestCase):
                 ),
                 "tcb_drift",
             )
+
+    def _simulated_generalist_context_drift(self):
+        target = (self.root / "core/inter_agent/generalist_context.py").resolve()
+        original_read_bytes = Path.read_bytes
+
+        def drifted_read_bytes(path: Path) -> bytes:
+            content = original_read_bytes(path)
+            if path.resolve() == target:
+                return content + b"\n# stale-certified-generalist-context\n"
+            return content
+
+        return patch.object(Path, "read_bytes", drifted_read_bytes)
 
 
 if __name__ == "__main__":

@@ -24,7 +24,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated matrix revision declared by the provider certificate module;
+- the dated suite-v9 matrix revision `2026-08-26-r9-tcb2` declared by the
+  provider certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
   provide or narrow its component list or digest;
@@ -67,8 +68,9 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `9`, matrix revision `2026-08-26-r9`, and the OpenRouter manifest. The
-Google suite uses version `9` and matrix revision `2026-08-26-r9`. The
+version `9`, matrix revision `2026-08-26-r9-tcb2`, and the OpenRouter manifest.
+The Google suite uses version `9` and matrix revision
+`2026-08-26-r9-tcb2`. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.
@@ -148,7 +150,13 @@ capability projection, Chat/Settings governance, and provider codec/transport/
 live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
-separate local identity.
+separate local identity. Manifest v2 makes the transitive inventory executable:
+six code-owned contracts statically walk local imports for admission, input,
+egress, tools, state/lifecycle, and served governance, including package
+initializers and the exact `core/inter_agent/generalist_context.py` closure.
+Every reached path must already be in the canonical artifact set. Signing,
+verification, publication validation, binding, and live status all reject an
+older digest when any such path drifts.
 
 After publication, read the certificate and evidence back through the
 platform-authority provider surface and verify that all signed identities match

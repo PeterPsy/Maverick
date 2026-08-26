@@ -1,7 +1,7 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-26
-Matrix revision: `2026-08-26-r9`
+Matrix revision: `2026-08-26-r9-tcb2`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==5`
@@ -48,7 +48,7 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
-| Certified execution TCB | canonical manifest/digest covers every authority-changing Core, Chat, Settings, codec, transport, store, and policy component; drift rejects signing/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v2 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | exact catalog reconciliation, pairing, and parallel-call rejection tests | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -101,13 +101,18 @@ The executable signing and publication workflow is defined in
 Revision 13 retains the exact `fake-data preview` warning label but removes fake
 classification authority: its policy lists only Core-classified `public`, its
 egress id is `remote-agentic-contained@2`, and central admission remains
-NO-GO. It also carries the revision-12 corrections exposed by a real multi-tool turn:
+NO-GO. A future policy could consider `workspace_internal_fake` only with the
+exact resource-derived classification and an active scoped workspace
+attestation; neither declaration alone can create that class. It also carries
+the revision-12 corrections exposed by a real multi-tool turn:
 conservative per-request price reservations are reconciled with reported usage,
 and Google private continuation state tracks already-consumed call ids so a
 cumulative Core result ledger can send only the currently pending result. The
 r9 fixture contract and retained live probe cover the Phase-1 TCB,
 resource-derived classification, certified schema, effective capability, and
 descriptor-relative filesystem gates in addition to sequential tool calls
-before the final response. The probe has not been run for this candidate. The
+before the final response. Matrix amendment `2026-08-26-r9-tcb2` pins the TCB
+v2 transitive-coverage evidence without changing suite version 9 or selecting
+the retained `live_probe`; the probe has not been run for this candidate. The
 shared egress contract also redacts residual host paths found inside untrusted
 tool output while retaining fail-closed denial for every other provenance.

@@ -77,11 +77,14 @@ operation.
 
 ## Invariants
 
-- Remote profiles are non-selectable NO-GO records. Current profile policy
-  lists only Core-classified `public`; the egress evaluator always rejects the
-  legacy `workspace_internal_fake` value, and browser/app declarations grant no
-  remote agentic authority. The exact `fake-data preview` label remains visible
-  as a warning and is not rewritten into a release claim.
+- Remote profiles are disabled, non-selectable NO-GO records. Current profile
+  policy lists only Core-classified `public`. The evaluator can consider
+  `workspace_internal_fake` only when the exact resource/version has that
+  Core-owned classification, an active workspace-matching attestation covers
+  its scope, and the selected policy allows that class and destination; none of
+  those conditions can be synthesized by a browser/app declaration. The exact
+  `fake-data preview` label remains visible as a warning and is not rewritten
+  into a release claim.
 - Every session pins definition revision, engine, adapter, model, protocol,
   endpoint/upstream, credential binding, certificate evidence, egress policy,
   and policy ceilings once. Existing bindings are never rewritten in place.
@@ -105,7 +108,10 @@ operation.
   shared by admission, request/catalog construction, API, Chat, and Settings.
 - Remote certificates bind the canonical code-owned execution TCB. Any drift or
   missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch.
+  authority refresh, or dispatch. Manifest v2 statically audits six maintained
+  import closures, including package initializers and the
+  `core/inter_agent/generalist_context.py` content-composition path; a reached
+  local dependency outside the artifact set makes identity calculation fail.
 
 ## Future pre-activation gate (suspended until Phase 2+ and release review)
 
@@ -126,8 +132,10 @@ binding:
 3. A provider credential is delivered by a Core credential binding. No raw key
    is present in a workspace record, environment file, request body, or log.
 4. The active revision-bound server attestation is actor-attributed, scoped,
-   unrevoked, and matched to exact Core resource classifications. It may only
-   narrow policy; no client declaration or policy id is accepted.
+   unrevoked, workspace-matching, and matched to exact Core resource
+   classifications. `workspace_internal_fake` additionally requires that the
+   selected policy allow that class and destination. Attestation may only narrow
+   policy; no client declaration or policy id is accepted.
 5. The workspace policy is at least as restrictive as the profile: read-only
    Core filesystem capability, bounded steps/tokens/cost, no shell or writes,
    and confirmation retained for mutating/destructive classes.

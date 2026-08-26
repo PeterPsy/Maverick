@@ -58,6 +58,10 @@ completion claim.
 - [x] A fake-data declaration can only narrow policy. It never promotes real,
   secret, workspace-internal, or unclassified content to public/fake, and the
   legacy declaration is non-authoritative and absent from continuations.
+- [x] `workspace_internal_fake` requires the exact resource-derived
+  classification, an active workspace-matching attestation whose scope covers
+  the resource, and an egress policy that allows the class/destination. Current
+  contained profiles remain public-only, disabled, non-selectable, and NO-GO.
 
 ### Resource-derived provenance and private state
 
@@ -81,14 +85,19 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
+- [x] Manifest v2 records six maintained transitive dependency contracts. The
+  audit walks package initializers and the admission, input, egress, tool,
+  state/lifecycle, and served-governance closures; it includes the exact
+  `core/inter_agent/generalist_context.py` closure and rejects any newly reached
+  local dependency that is not already hashed by the TCB.
 - [x] Suite, bundle, signing, verification, issuance/publication, execution
   binding, and live status derive from that manifest and digest. The publisher
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v9 manifests retain ordered
-  `fixture_contract` then operator-only `live_probe`; ordinary checks explicitly
-  select only the fixture step.
+- [x] Google and OpenRouter suite v9 / matrix `2026-08-26-r9-tcb2`
+  manifests retain ordered `fixture_contract` then operator-only `live_probe`;
+  ordinary checks explicitly select only the fixture step.
 
 ### Filesystem confinement
 
@@ -119,7 +128,8 @@ completion claim.
 ### P1 exit gate
 
 - [x] False data classification: `0`.
-- [x] Undetected TCB drift: `0`.
+- [x] Undetected TCB drift: `0` (including transitive generalist-context drift
+  across signing, verification/publication, binding, and live status).
 - [x] Filesystem escape in repeated Linux race tests: `0`.
 - [x] Capability overstatement: `0`.
 - [x] Unsupported context silently ignored: `0`.

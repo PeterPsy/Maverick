@@ -1,7 +1,7 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-26
-Matrix revision: `2026-08-26-r9`
+Matrix revision: `2026-08-26-r9-tcb2`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==5`
@@ -79,7 +79,7 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
-| Certified execution TCB | canonical manifest/digest covers every authority-changing Core, Chat, Settings, codec, transport, store, and policy component; drift rejects signing/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v2 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -139,8 +139,12 @@ other provenance remain denied. Revision 11 is historical and suspended.
 Revision 12 retains the exact `fake-data preview` warning label but removes fake
 classification authority: its policy lists only Core-classified `public`, its
 egress id is `remote-agentic-contained@2`, and central admission remains
-NO-GO. The r9 certification manifest retains both `fixture_contract` and
-`live_probe`; the live step has not been run for this candidate.
+NO-GO. A future policy could consider `workspace_internal_fake` only with the
+exact resource-derived classification and an active scoped workspace
+attestation; neither declaration alone can create that class. The suite-v9
+manifest retains both `fixture_contract` and `live_probe`; matrix amendment
+`2026-08-26-r9-tcb2` pins the TCB v2 transitive-coverage evidence without
+selecting the live step. The live step has not been run for this candidate.
 
 ## Fail-closed conditions
 

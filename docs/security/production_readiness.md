@@ -46,7 +46,10 @@ server-owned availability/admission boundary. P0 material containment is
 recorded in the agentic tasklist, and P1 implements the security boundary, but
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false and no remote binding,
 profile, or certificate is enabled. Current profile policy lists only
-Core-classified public content, while the legacy fake class is always denied.
+Core-classified public content. The fake class is not a declaration shortcut:
+it requires exact resource-derived classification, an active scoped
+workspace-matching attestation, and an allowing policy. No current contained
+profile permits it.
 Capability certificates attest only to one exact
 engine/adapter/provider/model/protocol/upstream/TCB combination and evidence
 suite; they are not a platform production-safety certificate.
@@ -60,6 +63,12 @@ one intersection of certificate, profile, workspace, actor, live catalog,
 feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1 repository implementation slice; it does
 not relax containment or any platform launch blocker.
+
+Manifest v2 additionally makes the known transitive boundary executable through
+six static import contracts. Package initializers, the generalist input-context
+projection closure, continuation/recovery, app-entrypoint, audit, and usage
+dependencies must all resolve to hashed artifacts; a newly reached local module
+outside the manifest prevents TCB identity calculation.
 
 The runtime now also separates actor-attributed CAS workspace attestation,
 exact resource classification, and per-block fail-closed egress decisions.

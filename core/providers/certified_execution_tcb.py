@@ -7,14 +7,25 @@ or governance participates in one deterministic live digest.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 import hashlib
-import os
 from pathlib import Path
-import stat
+from threading import RLock
 
+from core.providers.certified_tcb_dependencies import (
+    CertifiedTcbDependencyContract,
+    CertifiedTcbDependencyReport,
+    audit_certified_tcb_dependencies as _audit_certified_tcb_dependencies,
+    collect_certified_tcb_manifest_files,
+)
 from core.providers.errors import CapabilityCertificateError
 from core.runtime.execution_binding import canonical_digest
+
+
+_DEPENDENCY_AUDIT_CACHE_LIMIT = 16
+_DEPENDENCY_AUDIT_CACHE: OrderedDict[tuple[str, str, str], None] = OrderedDict()
+_DEPENDENCY_AUDIT_CACHE_LOCK = RLock()
 
 
 @dataclass(frozen=True)
@@ -29,6 +40,7 @@ class CertifiedExecutionTcbManifest:
     manifest_id: str
     manifest_version: str
     components: tuple[CertifiedTcbComponent, ...]
+    dependency_contracts: tuple[CertifiedTcbDependencyContract, ...]
 
     @property
     def structure_digest(self) -> str:
@@ -48,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="1",
+    manifest_version="2",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -78,6 +90,38 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             "input-request-runtime",
             "Input composition, provider request building, ledger/store, lifecycle, and recovery.",
             ("core/runtime",),
+        ),
+        CertifiedTcbComponent(
+            "transitive-execution-dependencies",
+            "Audited package, orchestration, recovery, audit, usage, and app-entrypoint callouts.",
+            (
+                "core/__init__.py",
+                "core/app_sdk/__init__.py",
+                "core/app_sdk/errors.py",
+                "core/app_sdk/storage.py",
+                "core/inter_agent/__init__.py",
+                "core/inter_agent/errors.py",
+                "core/inter_agent/events.py",
+                "core/inter_agent/generalist_context.py",
+                "core/inter_agent/models.py",
+                "core/inter_agent/orchestration_participants.py",
+                "core/inter_agent/orchestration_plan.py",
+                "core/inter_agent/orchestration_planner_catalog.py",
+                "core/inter_agent/orchestration_planner_catalog_search.py",
+                "core/inter_agent/orchestration_prompts.py",
+                "core/inter_agent/orchestration_runtime.py",
+                "core/inter_agent/orchestration_state.py",
+                "core/inter_agent/orchestration_tasks.py",
+                "core/inter_agent/orchestration_topology.py",
+                "core/inter_agent/service.py",
+                "core/inter_agent/store.py",
+                "core/observability",
+                "core/recovery",
+                "core/shared/__init__.py",
+                "core/shared/entrypoints.py",
+                "core/shared/repository.py",
+                "core/usage",
+            ),
         ),
         CertifiedTcbComponent(
             "tool-schema-catalog",
@@ -127,6 +171,90 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             ),
         ),
     ),
+    dependency_contracts=(
+        CertifiedTcbDependencyContract(
+            "runtime-admission",
+            "Session/turn admission, app-runtime admission, continuation, and live authority.",
+            (
+                "core/api/runtime_api.py",
+                "core/apps/runtime_requests.py",
+                "core/runtime/authority_service.py",
+                "core/runtime/provider_start_handoff.py",
+                "core/runtime/remote_agentic_admission.py",
+                "core/runtime/turn_queue_admission.py",
+            ),
+            (
+                "core.observability",
+                "core.recovery",
+                "core.shared",
+                "core.usage",
+            ),
+        ),
+        CertifiedTcbDependencyContract(
+            "provider-input-composition",
+            "Canonical source composition and provider request projection.",
+            (
+                "core/runtime/provider_input_context.py",
+                "core/runtime/hosted_agentic_request.py",
+                "core/providers/google_interactions_request.py",
+                "core/providers/openrouter_agentic_request.py",
+            ),
+            ("core.inter_agent",),
+        ),
+        CertifiedTcbDependencyContract(
+            "classification-egress",
+            "Resource classification, restrictive joins, transforms, decisions, and audit.",
+            (
+                "core/egress/agentic_policy.py",
+                "core/egress/classification.py",
+                "core/runtime/hosted_agentic_request.py",
+                "core/workspaces/data_governance.py",
+            ),
+            ("core.egress", "core.observability", "core.workspaces"),
+        ),
+        CertifiedTcbDependencyContract(
+            "tool-execution",
+            "Certified catalog/schema, confinement, invocation, ledger, and classified results.",
+            (
+                "core/runtime/confined_filesystem.py",
+                "core/runtime/hosted_agentic_loop.py",
+                "core/runtime/tool_catalog.py",
+                "core/runtime/tool_core_capabilities.py",
+                "core/runtime/tool_orchestrator.py",
+            ),
+            ("core.runtime",),
+        ),
+        CertifiedTcbDependencyContract(
+            "provider-state-lifecycle",
+            "Private/provider state, continuation lifecycle, certificate authority, and dispatch.",
+            (
+                "core/providers/certificate_projection.py",
+                "core/providers/certificate_service.py",
+                "core/runtime/lifecycle_service.py",
+                "core/runtime/provider_private_state.py",
+                "core/runtime/provider_state_service.py",
+                "core/runtime/turn_submission.py",
+            ),
+            ("core.providers", "core.recovery", "core.runtime"),
+        ),
+        CertifiedTcbDependencyContract(
+            "served-governance",
+            "Server projection and the exact Chat/Settings source and built assets served to users.",
+            (
+                "apps/chat/backend/chat_state.py",
+                "core/api/provider_api.py",
+                "core/api/settings_api.py",
+            ),
+            ("core.app_sdk",),
+            (
+                "apps/chat/backend/app_backend.py",
+                "apps/chat/frontend/src/App.tsx",
+                "apps/chat/frontend/dist/index.html",
+                "apps/settings/frontend/src/settingsPanel.ts",
+                "apps/settings/frontend/dist/index.html",
+            ),
+        ),
+    ),
 )
 
 
@@ -149,16 +277,25 @@ def certified_tcb_identity(root: Path | None = None) -> CertifiedTcbIdentity:
     )
 
 
+def audit_certified_tcb_dependencies(
+    root: Path,
+    *,
+    manifest: CertifiedExecutionTcbManifest = CERTIFIED_EXECUTION_TCB,
+) -> CertifiedTcbDependencyReport:
+    """Audit the canonical manifest without exposing dependency paths publicly."""
+    return _audit_certified_tcb_dependencies(root, manifest=manifest)
+
+
 def compute_certified_tcb_digest(root: Path) -> str:
     """Hash the manifest structure and every regular file under its path roots."""
     repository_root = root.resolve(strict=True)
     files: dict[str, Path] = {}
     for relative_root in CERTIFIED_EXECUTION_TCB.artifact_paths:
-        _collect_manifest_files(repository_root, relative_root, files)
+        collect_certified_tcb_manifest_files(repository_root, relative_root, files)
     if not files:
         raise CapabilityCertificateError("certificate_tcb_artifact_empty")
     digest = hashlib.sha256()
-    digest.update(b"maverick.certified-execution-tcb.v1\x00")
+    digest.update(b"maverick.certified-execution-tcb.v2\x00")
     digest.update(CERTIFIED_EXECUTION_TCB.structure_digest.encode("ascii"))
     digest.update(b"\x00")
     for relative_path in sorted(files):
@@ -169,7 +306,28 @@ def compute_certified_tcb_digest(root: Path) -> str:
         except OSError as error:
             raise CapabilityCertificateError("certificate_tcb_artifact_unavailable") from error
         digest.update(b"\x00")
-    return digest.hexdigest()
+    live_digest = digest.hexdigest()
+    _require_dependency_audit(repository_root, live_digest=live_digest)
+    return live_digest
+
+
+def _require_dependency_audit(repository_root: Path, *, live_digest: str) -> None:
+    """Audit once per exact content identity while still rehashing every authority check."""
+    key = (
+        str(repository_root),
+        CERTIFIED_EXECUTION_TCB.structure_digest,
+        live_digest,
+    )
+    with _DEPENDENCY_AUDIT_CACHE_LOCK:
+        if key in _DEPENDENCY_AUDIT_CACHE:
+            _DEPENDENCY_AUDIT_CACHE.move_to_end(key)
+            return
+    audit_certified_tcb_dependencies(repository_root)
+    with _DEPENDENCY_AUDIT_CACHE_LOCK:
+        _DEPENDENCY_AUDIT_CACHE[key] = None
+        _DEPENDENCY_AUDIT_CACHE.move_to_end(key)
+        while len(_DEPENDENCY_AUDIT_CACHE) > _DEPENDENCY_AUDIT_CACHE_LIMIT:
+            _DEPENDENCY_AUDIT_CACHE.popitem(last=False)
 
 
 def validate_remote_tcb_identity(
@@ -235,49 +393,3 @@ def tcb_public_projection(
             "active" if expected_live_digest == current.live_digest else "drifted"
         ),
     }
-
-
-def _collect_manifest_files(
-    repository_root: Path,
-    relative_root: str,
-    files: dict[str, Path],
-) -> None:
-    if (
-        not relative_root
-        or relative_root.startswith("/")
-        or ".." in Path(relative_root).parts
-        or "\x00" in relative_root
-    ):
-        raise CapabilityCertificateError("certificate_tcb_manifest_path_invalid")
-    candidate = repository_root / relative_root
-    try:
-        candidate.relative_to(repository_root)
-        metadata = candidate.lstat()
-    except (OSError, ValueError) as error:
-        raise CapabilityCertificateError("certificate_tcb_artifact_missing") from error
-    if stat.S_ISLNK(metadata.st_mode):
-        raise CapabilityCertificateError("certificate_tcb_artifact_symlink")
-    if stat.S_ISREG(metadata.st_mode):
-        files[candidate.relative_to(repository_root).as_posix()] = candidate
-        return
-    if not stat.S_ISDIR(metadata.st_mode):
-        raise CapabilityCertificateError("certificate_tcb_artifact_invalid")
-    for directory, directory_names, file_names in os.walk(candidate, followlinks=False):
-        directory_path = Path(directory)
-        directory_names[:] = sorted(
-            name
-            for name in directory_names
-            if name not in {"__pycache__", "node_modules", ".git"}
-        )
-        for name in directory_names:
-            if (directory_path / name).is_symlink():
-                raise CapabilityCertificateError("certificate_tcb_artifact_symlink")
-        for name in sorted(file_names):
-            path = directory_path / name
-            metadata = path.lstat()
-            if stat.S_ISLNK(metadata.st_mode):
-                raise CapabilityCertificateError("certificate_tcb_artifact_symlink")
-            if not stat.S_ISREG(metadata.st_mode) or name.endswith((".pyc", ".pyo")):
-                continue
-            relative = path.relative_to(repository_root).as_posix()
-            files[relative] = path

@@ -97,7 +97,12 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. It then computes one
+status, workspace binding, and upstream constraint. TCB manifest v2 also
+executes six static local-import audits across admission, input composition,
+classification/egress, tool execution, provider state/lifecycle, and served
+governance. Package initializers and the exact generalist orchestration-context
+closure are artifacts; any newly reached, uncovered dependency fails identity
+calculation. Core then computes one
 `EffectiveRuntimeAuthority` by intersecting certificate capability, profile
 policy ceiling, workspace binding, actor policy, live authority/catalog,
 feature flags, and provider health. The snapshot distinguishes filesystem
@@ -486,11 +491,15 @@ resource identity, revision, digest, and matching classification record. A
 missing/incoherent match becomes `unclassified`, and the restrictive source
 join cannot be weakened by an attestation or a less-sensitive sibling.
 Unknown data class, provenance, trust, provider, or upstream fails closed.
-Current contained revisions list only `public`, and
-`workspace_internal_fake` is always denied even when a malformed policy lists
-it; no client or egress-policy id is attestation. Secret, host-operational, and
-unclassified content is always denied. Workspace paths are rewritten to `workspace://` references,
-other host paths are denied, and recognizable sensitive text must be redacted.
+`workspace_internal_fake` can pass this stage only when the exact observed
+resource/version carries that Core-owned classification, an active scoped
+attestation matches the workspace and covers the resource, and the policy
+allows the class and destination. Attestation does not supply classification.
+Current contained revisions list only `public`, remain disabled and NO-GO, and
+no client or egress-policy id is attestation. Secret, host-operational, and
+unclassified content is always denied. Workspace paths are rewritten to
+`workspace://` references, other host paths are denied, and recognizable
+sensitive text must be redacted.
 
 The complete decision metadata is inserted first into the session-owned
 `egress_decisions.json`; only then may transformed bytes be used. Its audit

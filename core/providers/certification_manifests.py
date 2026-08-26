@@ -74,7 +74,7 @@ def _suite(
         suite_version="9",
         provider_id=provider_id,
         matrix_path=matrix_path,
-        matrix_revision="2026-08-26-r9",
+        matrix_revision="2026-08-26-r9-tcb2",
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

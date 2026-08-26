@@ -1015,17 +1015,14 @@ def _serve_app_file_response(
     try:
         served_range = _served_file_response_range(file_response, path_size=size)
     except ValueError:
-        _delete_file_response_after_send(path=path, enabled=delete_after_send)
         return json_response(start_response, {"error": "file_response_range_invalid"}, status=status_line(500))
     if served_range is not None:
         if not range_header:
-            _delete_file_response_after_send(path=path, enabled=delete_after_send)
             return json_response(start_response, {"error": "file_response_range_version_mismatch"}, status=status_line(502))
         start, end, total_size = served_range
         headers = [*base_headers, ("Content-Range", f"bytes {start}-{end}/{total_size}"), ("Content-Length", str(size))]
         start_response(status_line(206), headers)
         if method == "HEAD":
-            _delete_file_response_after_send(path=path, enabled=delete_after_send)
             return [b""]
         return _file_range_chunks(path, start=0, length=size, delete_after=delete_after_send)
 
@@ -1034,21 +1031,18 @@ def _serve_app_file_response(
         if selected is None:
             headers = [*base_headers, ("Content-Range", f"bytes */{size}"), ("Content-Length", "0")]
             start_response(status_line(416), headers)
-            _delete_file_response_after_send(path=path, enabled=delete_after_send)
             return [b""]
         start, end = selected
         length = end - start + 1
         headers = [*base_headers, ("Content-Range", f"bytes {start}-{end}/{size}"), ("Content-Length", str(length))]
         start_response(status_line(206), headers)
         if method == "HEAD":
-            _delete_file_response_after_send(path=path, enabled=delete_after_send)
             return [b""]
         return _file_range_chunks(path, start=start, length=length, delete_after=delete_after_send)
 
     headers = [*base_headers, ("Content-Length", str(size))]
     start_response(status_line(200), headers)
     if method == "HEAD":
-        _delete_file_response_after_send(path=path, enabled=delete_after_send)
         return [b""]
     return _file_range_chunks(path, start=0, length=size, delete_after=delete_after_send)
 
@@ -1245,8 +1239,8 @@ def _parse_single_byte_range(value: str, size: int) -> tuple[int, int] | None:
 
 
 def _file_range_chunks(path: Path, *, start: int, length: int, delete_after: bool = False):
+    remaining = length
     try:
-        remaining = length
         with path.open("rb") as handle:
             handle.seek(start)
             while remaining > 0:
@@ -1256,7 +1250,7 @@ def _file_range_chunks(path: Path, *, start: int, length: int, delete_after: boo
                 remaining -= len(chunk)
                 yield chunk
     finally:
-        _delete_file_response_after_send(path=path, enabled=delete_after)
+        _delete_file_response_after_send(path=path, enabled=delete_after and remaining == 0)
 
 
 def _safe_header_filename(value: str) -> str:

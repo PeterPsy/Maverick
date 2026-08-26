@@ -459,7 +459,7 @@ class AppMountsTestCase(unittest.TestCase):
             self.assertEqual(body, b"zip")
             self.assertFalse(media_path.exists())
 
-    def test_app_file_response_deletes_ephemeral_run_file_after_invalid_range(self) -> None:
+    def test_app_file_response_preserves_ephemeral_run_file_when_no_body_is_sent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             media_path = root / "run" / "folder_downloads" / "folder.zip"
@@ -481,6 +481,51 @@ class AppMountsTestCase(unittest.TestCase):
             self.assertEqual(status, "416 Range Not Satisfiable")
             self.assertEqual(headers["Content-Range"], "bytes */3")
             self.assertEqual(body, b"")
+            self.assertTrue(media_path.exists())
+
+    def test_app_file_response_head_preserves_ephemeral_run_file_for_a_later_get(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "run" / "folder_downloads" / "folder.zip"
+            media_path.parent.mkdir(parents=True)
+            media_path.write_bytes(b"zip")
+            response = {
+                "path": str(media_path),
+                "content_type": "application/zip",
+                "download": True,
+                "delete_after_send": True,
+            }
+
+            head_status, head_headers, head_body = _serve_file_response(
+                root=root,
+                file_response=response,
+                environ={"REQUEST_METHOD": "HEAD"},
+            )
+
+            self.assertEqual(head_status, "200 OK")
+            self.assertEqual(head_headers["Content-Length"], "3")
+            self.assertEqual(head_body, b"")
+            self.assertTrue(media_path.exists())
+
+            range_head_status, range_head_headers, range_head_body = _serve_file_response(
+                root=root,
+                file_response=response,
+                environ={"REQUEST_METHOD": "HEAD", "HTTP_RANGE": "bytes=0-1"},
+            )
+
+            self.assertEqual(range_head_status, "206 Partial Content")
+            self.assertEqual(range_head_headers["Content-Length"], "2")
+            self.assertEqual(range_head_body, b"")
+            self.assertTrue(media_path.exists())
+
+            get_status, _get_headers, get_body = _serve_file_response(
+                root=root,
+                file_response=response,
+                environ={"REQUEST_METHOD": "GET"},
+            )
+
+            self.assertEqual(get_status, "200 OK")
+            self.assertEqual(get_body, b"zip")
             self.assertFalse(media_path.exists())
 
     def test_app_file_response_ignores_delete_after_send_outside_run(self) -> None:

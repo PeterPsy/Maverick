@@ -250,9 +250,12 @@ try {
     const readiness = await waitForTransactionalReadiness(page);
     const transactionalReadyAt = performance.now();
     const interfaceStartedAt = performance.now();
+    const interfacePhases = { started_at: interfaceStartedAt };
     await openDesignStudioFromShell(page);
-    sidecar = await waitForTransactionalOpenDesignInterface(page, networkProof);
+    interfacePhases.shell_route_ms = rounded(performance.now() - interfaceStartedAt);
+    sidecar = await waitForTransactionalOpenDesignInterface(page, networkProof, null, interfacePhases);
     const browserReadyAt = performance.now();
+    delete interfacePhases.started_at;
     const daemonReadyMs = Number(readiness.body?.opendesign?.runtime?.timings_ms?.daemon_ready_ms);
     assert(Number.isFinite(daemonReadyMs) && daemonReadyMs > 0, 'Core restart omitted daemon readiness timing');
     const resources = await processResourceSnapshot(server.pid);
@@ -266,6 +269,7 @@ try {
       prewarm_after_core_health_ms: rounded(transactionalReadyAt - coreReadyAt),
       interface_after_core_health_ms: rounded(browserReadyAt - coreReadyAt),
       interface_after_transactional_ready_ms: rounded(browserReadyAt - interfaceStartedAt),
+      interface_phases_ms: interfacePhases,
       resources,
     });
     assert(networkProof.bootstrapPosts > bootstrapCountBeforeRestart, 'Restart did not mint a fresh one-shot browser session');
@@ -647,13 +651,24 @@ async function openDesignStudioFromShell(page) {
 }
 
 
-async function waitForTransactionalOpenDesignInterface(page, networkProof, excludedFrame = null) {
+async function waitForTransactionalOpenDesignInterface(
+  page,
+  networkProof,
+  excludedFrame = null,
+  milestones = null,
+) {
+  const mark = (name) => {
+    if (milestones?.started_at) milestones[name] = rounded(performance.now() - milestones.started_at);
+  };
   const wrapper = await waitForShellWidgetFrame(page, 'Design Studio viewport');
+  mark('wrapper_dom_ready_ms');
   const sidecar = await waitForSidecarFrame(page, '', networkProof, true, excludedFrame);
+  mark('sidecar_endpoint_ready_ms');
   await wrapper.locator('.design-studio-host[data-phase="ready"]').waitFor({
     state: 'visible',
     timeout: 10_000,
   });
+  mark('transactional_bridge_ready_ms');
   return sidecar;
 }
 
@@ -856,6 +871,7 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
     frameNavigationDurations.push(rounded(framePerformance.duration));
     frameResponseDurations.push(rounded(framePerformance.response_end));
     frameTransferBytes.push(framePerformance.transfer_bytes);
+    await settleOpenDesignInterface(page, frame);
     await delay(300);
   }
   const interfaceDistribution = measuredDistribution(durations);
@@ -869,6 +885,23 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
     sidecar_response: measuredDistribution(frameResponseDurations),
     sidecar_resource_transfer_bytes: measuredDistribution(frameTransferBytes),
   };
+}
+
+
+async function settleOpenDesignInterface(page, sidecar) {
+  const wrapper = await waitForShellWidgetFrame(page, 'Design Studio viewport');
+  await Promise.any([
+    sidecar.locator('[data-testid="maverick-project-view"]').waitFor({
+      state: 'visible',
+      timeout: 10_000,
+    }),
+    wrapper.locator('.design-studio-empty button').waitFor({
+      state: 'visible',
+      timeout: 10_000,
+    }),
+  ]).catch(() => {
+    throw new Error('OpenDesign did not settle after transactional interface readiness');
+  });
 }
 
 
@@ -940,6 +973,7 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     prewarmAfterCoreHealth,
     interfaceAfterCoreHealth,
     interfaceAfterTransactionalReady,
+    coldInterfacePhases: coreRestarts.map((sample) => sample.interface_phases_ms),
   });
   process.stderr.write(`OpenDesign performance diagnostic: ${diagnostic}\n`);
   assert(

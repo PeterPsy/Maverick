@@ -67,6 +67,49 @@ class SidecarPrewarmTests(unittest.TestCase):
 
         self.assertEqual(peak, 1)
 
+    def test_core_start_prewarms_only_active_user_workspace_selections(self) -> None:
+        workspaces = [
+            SimpleNamespace(workspace_id="default", status="active"),
+            SimpleNamespace(workspace_id="workspace-b", status="active"),
+            SimpleNamespace(workspace_id="retired", status="disabled"),
+        ]
+        selections = {
+            "user-active": SimpleNamespace(workspace_id="default"),
+            "user-disabled": SimpleNamespace(workspace_id="workspace-b"),
+        }
+        state = SimpleNamespace(
+            workspace_store=SimpleNamespace(
+                list_workspaces=lambda: workspaces,
+                get_active_workspace=lambda user_id: selections.get(user_id),
+            ),
+            identity_store=SimpleNamespace(
+                list_users=lambda: [
+                    SimpleNamespace(user_id="user-active", is_active=True),
+                    SimpleNamespace(user_id="user-disabled", is_active=False),
+                ]
+            ),
+        )
+
+        selected = sidecar_prewarm._selected_core_start_workspaces(state)
+
+        self.assertEqual([workspace.workspace_id for workspace in selected], ["default"])
+
+    def test_core_start_uses_one_deterministic_fallback_without_user_selection(self) -> None:
+        state = SimpleNamespace(
+            workspace_store=SimpleNamespace(
+                list_workspaces=lambda: [
+                    SimpleNamespace(workspace_id="workspace-b", status="active"),
+                    SimpleNamespace(workspace_id="default", status="active"),
+                ],
+                get_active_workspace=lambda _user_id: None,
+            ),
+            identity_store=SimpleNamespace(list_users=lambda: []),
+        )
+
+        selected = sidecar_prewarm._selected_core_start_workspaces(state)
+
+        self.assertEqual([workspace.workspace_id for workspace in selected], ["default"])
+
     def test_different_sidecar_families_prewarm_in_parallel(self) -> None:
         rendezvous = Barrier(2, timeout=2)
 

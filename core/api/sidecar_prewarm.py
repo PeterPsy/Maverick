@@ -27,10 +27,7 @@ def start_declared_sidecar_prewarms(
 ) -> tuple[Thread, ...]:
     """Schedule matching sidecars in deterministic per-family queues."""
     queues: dict[tuple[str, str], list[dict[str, object]]] = {}
-    workspaces = sorted(
-        state.workspace_store.list_workspaces(),
-        key=lambda item: (item.workspace_id != "default", item.workspace_id),
-    )
+    workspaces = _selected_core_start_workspaces(state)
     for workspace in workspaces:
         if getattr(workspace, "status", "") != "active":
             continue
@@ -55,6 +52,32 @@ def start_declared_sidecar_prewarms(
         thread.start()
         threads.append(thread)
     return tuple(threads)
+
+
+def _selected_core_start_workspaces(state) -> list[object]:
+    """Prewarm only workspaces selected by an active user, with one safe fallback."""
+    workspaces = sorted(
+        (
+            workspace
+            for workspace in state.workspace_store.list_workspaces()
+            if getattr(workspace, "status", "") == "active"
+        ),
+        key=lambda item: (item.workspace_id != "default", item.workspace_id),
+    )
+    active_ids = {workspace.workspace_id for workspace in workspaces}
+    selected_ids: set[str] = set()
+    try:
+        for user in state.identity_store.list_users():
+            if not getattr(user, "is_active", False):
+                continue
+            selection = state.workspace_store.get_active_workspace(user.user_id)
+            if selection is not None and selection.workspace_id in active_ids:
+                selected_ids.add(selection.workspace_id)
+    except Exception:
+        logger.exception("Unable to resolve active workspaces for declarative prewarm.")
+    if not selected_ids and workspaces:
+        selected_ids.add(workspaces[0].workspace_id)
+    return [workspace for workspace in workspaces if workspace.workspace_id in selected_ids]
 
 
 def start_workspace_app_sidecar_prewarms(

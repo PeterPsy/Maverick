@@ -1,0 +1,47 @@
+{
+  "schema": "maverick.frontend-assets.v1",
+  "build_id": "15f6769b735e633f2570126d2ea8dd289ad61797ce8b710e15792452c35f1485",
+  "entrypoints": [
+    "index.html",
+    "widgets/app-shortcuts/index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/app-77D--Jck.js",
+      "sha256": "669ca584a5f07d83e246b7069c8255bae941f0abad2ddbc99653d0f0158530bd",
+      "size_bytes": 45728
+    },
+    {
+      "path": "assets/app-DGXlyoJH.css",
+      "sha256": "920e12adb5ed482345aac4bc9259951b764a7db7bb54952d686d509efcad5b6f",
+      "size_bytes": 33135
+    },
+    {
+      "path": "assets/app-icons-BA-XArPW.js",
+      "sha256": "9ba3bee82cb8a77f0431739c5db9ec34eea76515e122cc0d45b00067495354a8",
+      "size_bytes": 4522
+    },
+    {
+      "path": "assets/index-bYI1O_RF.css",
+      "sha256": "43fa99cbb11c29341d4ce080efbc1a8c1459e0f387cfc1f4cfa71e2a81246314",
+      "size_bytes": 8121
+    },
+    {
+      "path": "assets/widgets/app-shortcuts/index-WQ86vh_L.js",
+      "sha256": "c8610afd610f15052aa7c5d603821de7067e09181d838aa6743d94b154008f20",
+      "size_bytes": 6532
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "index.html",
+      "sha256": "dddccdc76bb185d50340ea510ebb0e893af4de34887f12d83f9c60992467a37d",
+      "size_bytes": 2515
+    },
+    {
+      "path": "widgets/app-shortcuts/index.html",
+      "sha256": "0f602a997c31ac5b9f32bbd89cf90fae810e751a066d22c0f44cb0c0f086d583",
+      "size_bytes": 1724
+    }
+  ]
+}

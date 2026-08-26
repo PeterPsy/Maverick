@@ -43,6 +43,34 @@ class HttpRequestBodyTestCase(unittest.TestCase):
     def test_status_line_names_payload_too_large(self) -> None:
         self.assertEqual(status_line(413), "413 Payload Too Large")
 
+    def test_status_line_names_not_modified(self) -> None:
+        self.assertEqual(status_line(304), "304 Not Modified")
+
+    def test_json_responses_default_to_private_no_store(self) -> None:
+        from core.api.http import json_response
+
+        captured: dict[str, object] = {}
+
+        def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+            captured.update(status=status, headers=dict(headers))
+
+        json_response(start_response, {"authenticated": True})
+
+        self.assertEqual(captured["status"], "200 OK")
+        self.assertEqual(captured["headers"]["Cache-Control"], "private, no-store")
+
+    def test_json_response_preserves_explicit_cache_policy(self) -> None:
+        from core.api.http import json_response
+
+        captured: dict[str, object] = {}
+        json_response(
+            lambda status, headers: captured.update(status=status, headers=dict(headers)),
+            {"revision": "one"},
+            headers=[("Cache-Control", "private, no-cache")],
+        )
+
+        self.assertEqual(captured["headers"]["Cache-Control"], "private, no-cache")
+
     def test_cross_origin_unsafe_request_is_forbidden(self) -> None:
         environ = {
             "REQUEST_METHOD": "POST",

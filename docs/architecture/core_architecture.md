@@ -924,6 +924,16 @@ normative mapping, rollout switches, private cold-offline rule, and product
 contract are recorded in
 `docs/adr/0011-pwa-cache-and-offline-boundaries.md`.
 
+The hosted binary-response contract has three private policies. Mutable files
+use `private, no-cache` with a strong ETag and byte ranges. Explicit immutable
+revisions use `private, max-age=31536000, immutable`; the app must provide the
+stable ETag. Ephemeral responses, live generated audio, and temporary ZIPs use
+`no-store`, and a `delete_after_send` response can never return `304`. Core
+evaluates authorization before conditional validators, applies weak matching
+to `If-None-Match`, and accepts `If-Range` only when its strong ETag matches the
+current representation. JSON responses default to `private, no-store` unless
+their owner opts into a narrower explicit revalidation contract.
+
 ## Everything Above The Core Is An App
 
 The Maverick product shell should also be modeled as an app.

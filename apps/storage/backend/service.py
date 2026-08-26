@@ -1350,6 +1350,7 @@ def _media_stream_payload(
             localization_id=str(body.get("localization_id") or ""),
             source_version=str(body.get("source_version") or ""),
             range_header=str(request_headers.get("range") or body.get("range") or ""),
+            if_range_header=str(request_headers.get("if-range") or ""),
             request_method=request_method,
             streaming_response_supported=streaming_response_supported,
         )

@@ -23,9 +23,11 @@ from core.api.secret_grant_targets import (
     assert_consumer_resource_scope_allowed,
 )
 from core.api.http import StartResponse, json_response, max_json_body_bytes, query_params, read_json_body, read_request_body_bytes, status_line, text_response
+from core.api.http_validators import if_none_match_matches, if_range_matches, strong_etag
 from core.api.platform_state import PlatformState
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
+from core.apps.frontend_assets import FrontendAssetManifestError, load_frontend_asset_manifest, verify_frontend_asset_bytes
 from core.apps.models import ParsedAppContract
 from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.service import build_workspace_app_frontend
@@ -111,6 +113,7 @@ _PUBLIC_APP_STATIC_MANIFEST = {
     "favicon.ico",
     "manifest.webmanifest",
     "material-symbols-rounded.woff2",
+    "maverick-frontend-assets.json",
     "pwa-apple-touch-icon.png",
     "pwa-logo-192.png",
     "pwa-logo.png",
@@ -119,6 +122,7 @@ _PUBLIC_APP_STATIC_MANIFEST = {
 _ROOT_REVALIDATED_CACHE_CONTROL = {
     "manifest.webmanifest": "public, max-age=300, must-revalidate",
     "sw.js": "no-cache",
+    "maverick-frontend-assets.json": "no-cache",
 }
 _PUBLIC_UNHASHED_CACHE_CONTROL = "public, max-age=86400, must-revalidate"
 _PUBLIC_IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
@@ -140,9 +144,6 @@ _COMPRESSIBLE_CONTENT_TYPE_PREFIXES = (
     "text/",
 )
 _MIN_COMPRESSIBLE_BYTES = 1024
-_HASHED_PUBLIC_ASSET_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$")
-
-
 def _accepted_content_encodings(environ: Mapping[str, str] | None) -> set[str]:
     header = (environ or {}).get("HTTP_ACCEPT_ENCODING", "")
     encodings: set[str] = set()
@@ -175,21 +176,13 @@ def _encoded_frontend_body(body: bytes, *, content_type: str, environ: Mapping[s
     return body, ""
 
 
-def _is_hashed_public_frontend_asset(subpath: str) -> bool:
-    normalized = subpath.lstrip("/")
-    suffix = Path(normalized).suffix.lower()
-    if suffix not in _PUBLIC_STATIC_EXTENSIONS:
-        return False
-    return normalized.startswith("assets/") and bool(_HASHED_PUBLIC_ASSET_PATTERN.match(Path(normalized).name))
-
-
-def _frontend_cache_control(*, content_type: str, served_subpath: str, cross_origin: bool) -> str:
+def _frontend_cache_control(*, content_type: str, served_subpath: str, cross_origin: bool, verified_immutable: bool) -> str:
     if content_type.startswith("text/html"):
         return "no-store"
     asset_name = Path(served_subpath).name
     if asset_name in _ROOT_REVALIDATED_CACHE_CONTROL:
         return _ROOT_REVALIDATED_CACHE_CONTROL[asset_name]
-    if _is_hashed_public_frontend_asset(served_subpath):
+    if verified_immutable:
         return _PUBLIC_IMMUTABLE_CACHE_CONTROL
     if cross_origin:
         return _PUBLIC_UNHASHED_CACHE_CONTROL
@@ -234,10 +227,20 @@ def serve_frontend(
             served_subpath = candidate.relative_to(root).as_posix()
         except ValueError:
             served_subpath = candidate.name
+        verified_immutable = False
+        try:
+            asset_manifest = load_frontend_asset_manifest(root)
+            immutable_record = asset_manifest.immutable_record(served_subpath) if asset_manifest is not None else None
+            if immutable_record is not None:
+                verify_frontend_asset_bytes(immutable_record, body)
+                verified_immutable = True
+        except FrontendAssetManifestError as error:
+            logger.warning("Ignoring invalid frontend asset manifest in `%s`: %s", root, error)
         cache_control = _frontend_cache_control(
             content_type=content_type,
             served_subpath=served_subpath,
             cross_origin=cross_origin,
+            verified_immutable=verified_immutable,
         )
         if cache_control:
             headers.append(("Cache-Control", cache_control))
@@ -256,6 +259,7 @@ def serve_frontend(
                 "content_type": content_type,
                 "extension": candidate.suffix.lower(),
                 "transfer_bytes": len(encoded_body),
+                "verified_immutable": verified_immutable,
                 "served_fallback_html": candidate.name == "index.html" and bool(subpath.strip("/")),
             }
         )
@@ -269,7 +273,8 @@ def is_public_app_static_asset(subpath: str) -> bool:
     suffix = Path(normalized).suffix.lower()
     if suffix in _PRIVATE_SOURCE_EXTENSIONS:
         return False
-    if _is_hashed_public_frontend_asset(normalized):
+    pure = Path(normalized)
+    if normalized.startswith("assets/") and suffix in _PUBLIC_STATIC_EXTENSIONS and ".." not in pure.parts:
         return True
     return "/" not in normalized and normalized in _PUBLIC_APP_STATIC_MANIFEST
 
@@ -976,16 +981,36 @@ def _serve_app_file_response(
     content_type = str(file_response.get("content_type") or mimetypes.guess_type(path.name)[0] or "application/octet-stream")
     file_name = _safe_header_filename(str(file_response.get("file_name") or path.name))
     disposition = "attachment" if _truthy(file_response.get("download")) or not _safe_inline_file_response_type(content_type) else "inline"
-    etag = _quoted_etag(str(file_response.get("etag") or f"{path.stat().st_mtime_ns:x}-{size:x}"))
+    explicit_etag = bool(str(file_response.get("etag") or "").strip())
+    etag = strong_etag(str(file_response.get("etag") or f"{path.stat().st_mtime_ns:x}-{size:x}"), fallback="file")
+    cache_control = _app_binary_cache_control(
+        file_response,
+        delete_after_send=delete_after_send,
+        explicit_etag=explicit_etag,
+    )
     base_headers = [
         ("Content-Type", content_type),
         ("Accept-Ranges", "bytes"),
         ("ETag", etag),
-        ("Cache-Control", str(file_response.get("cache_control") or "private, max-age=60")),
+        ("Cache-Control", cache_control),
+        ("Vary", "Cookie"),
         ("X-Content-Type-Options", "nosniff"),
         ("Content-Disposition", f'{disposition}; filename="{file_name}"'),
         *_file_response_extra_headers(file_response),
     ]
+
+    if (
+        not delete_after_send
+        and "no-store" not in cache_control.lower()
+        and if_none_match_matches(str(environ.get("HTTP_IF_NONE_MATCH") or ""), etag)
+    ):
+        start_response(status_line(304), base_headers)
+        return [b""]
+
+    range_header = str(environ.get("HTTP_RANGE") or "").strip()
+    if_range_header = str(environ.get("HTTP_IF_RANGE") or "").strip()
+    if range_header and if_range_header and not if_range_matches(if_range_header, etag):
+        range_header = ""
 
     try:
         served_range = _served_file_response_range(file_response, path_size=size)
@@ -993,6 +1018,9 @@ def _serve_app_file_response(
         _delete_file_response_after_send(path=path, enabled=delete_after_send)
         return json_response(start_response, {"error": "file_response_range_invalid"}, status=status_line(500))
     if served_range is not None:
+        if not range_header:
+            _delete_file_response_after_send(path=path, enabled=delete_after_send)
+            return json_response(start_response, {"error": "file_response_range_version_mismatch"}, status=status_line(502))
         start, end, total_size = served_range
         headers = [*base_headers, ("Content-Range", f"bytes {start}-{end}/{total_size}"), ("Content-Length", str(size))]
         start_response(status_line(206), headers)
@@ -1001,7 +1029,6 @@ def _serve_app_file_response(
             return [b""]
         return _file_range_chunks(path, start=0, length=size, delete_after=delete_after_send)
 
-    range_header = str(environ.get("HTTP_RANGE") or "").strip()
     if range_header:
         selected = _parse_single_byte_range(range_header, size)
         if selected is None:
@@ -1040,6 +1067,24 @@ def _file_response_extra_headers(file_response: dict[str, Any]) -> list[tuple[st
             continue
         headers.append((header_name, header_value))
     return headers
+
+
+def _app_binary_cache_control(
+    response: Mapping[str, Any],
+    *,
+    delete_after_send: bool = False,
+    explicit_etag: bool = False,
+) -> str:
+    """Return the canonical private cache policy for an app-owned binary."""
+
+    requested_policy = str(response.get("cache_policy") or "").strip().lower()
+    requested_control = str(response.get("cache_control") or "").strip().lower()
+    if delete_after_send or requested_policy == "ephemeral" or "no-store" in requested_control:
+        return "no-store"
+    wants_immutable = requested_policy == "immutable" or "immutable" in requested_control
+    if wants_immutable and explicit_etag:
+        return "private, max-age=31536000, immutable"
+    return "private, no-cache"
 
 
 def _file_response_delete_after_send(*, file_response: dict[str, Any], path: Path, roots: list[Path]) -> bool:
@@ -1087,20 +1132,35 @@ def _serve_app_stream_response(
     content_type = str(stream_response.get("content_type") or "application/octet-stream")
     file_name = _safe_header_filename(str(stream_response.get("file_name") or "download"))
     disposition = "attachment" if _truthy(stream_response.get("download")) or not _safe_inline_file_response_type(content_type) else "inline"
+    explicit_etag = method in {"GET", "HEAD"} and bool(str(stream_response.get("etag") or "").strip())
+    cache_control = _app_binary_cache_control(stream_response, explicit_etag=explicit_etag)
     headers = [
         ("Content-Type", content_type),
-        ("Cache-Control", str(stream_response.get("cache_control") or "private, max-age=60")),
+        ("Cache-Control", cache_control),
+        ("Vary", "Cookie"),
         ("X-Accel-Buffering", "no"),
         ("X-Content-Type-Options", "nosniff"),
         ("Content-Disposition", f'{disposition}; filename="{file_name}"'),
         *_stream_response_observability_headers(stream_response),
     ]
+    etag = strong_etag(str(stream_response.get("etag") or "stream"), fallback="stream")
     if method in {"GET", "HEAD"}:
-        headers.append(("ETag", _quoted_etag(str(stream_response.get("etag") or "stream"))))
+        headers.append(("ETag", etag))
         headers.append(("Accept-Ranges", "bytes"))
     content_length = _optional_non_negative_int(stream_response.get("content_length"))
     if content_length is not None:
         headers.append(("Content-Length", str(content_length)))
+    if (
+        method in {"GET", "HEAD"}
+        and explicit_etag
+        and "no-store" not in cache_control
+        and if_none_match_matches(str(environ.get("HTTP_IF_NONE_MATCH") or ""), etag)
+    ):
+        if stream is not None:
+            stream.close()
+        headers = [(name, value) for name, value in headers if name.lower() != "content-length"]
+        start_response(status_line(304), headers)
+        return [b""]
     start_response(status_line(status_code), headers)
     if method == "HEAD" or stream is None:
         if stream is not None:
@@ -1201,11 +1261,6 @@ def _safe_header_filename(value: str) -> str:
     return name.replace("\\", "_").replace('"', "'").replace("\r", "_").replace("\n", "_")
 
 
-def _quoted_etag(value: str) -> str:
-    clean = value.strip().strip('"') or "file"
-    return f'"{clean.replace(chr(34), "")}"'
-
-
 def _parse_file_gateway_timestamp(value: object) -> datetime | None:
     text = str(value or "").strip()
     if not text:
@@ -1295,6 +1350,8 @@ def _backend_request_headers(environ: Mapping[str, Any]) -> dict[str, str]:
     add("content_type", environ.get("CONTENT_TYPE", ""))
     add("content-type", environ.get("CONTENT_TYPE", ""))
     add("range", environ.get("HTTP_RANGE", ""))
+    add("if-none-match", environ.get("HTTP_IF_NONE_MATCH", ""))
+    add("if-range", environ.get("HTTP_IF_RANGE", ""))
     add("origin", environ.get("HTTP_ORIGIN", ""))
     add("host", environ.get("HTTP_HOST", ""))
     add("x-forwarded-host", environ.get("HTTP_X_FORWARDED_HOST", ""))

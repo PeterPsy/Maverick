@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "license": "MIT",
   "private": true,
+  "type": "module",
   "scripts": {
     "prebuild": "node ../../scripts/check-node-runtime.mjs",
-    "build": "node scripts/build-frontend.mjs"
+    "build": "vite build",
+    "test:content-hash": "node --test tests/frontend-content-hash.test.mjs"
+  },
+  "devDependencies": {
+    "vite": "^7.3.0"
   },
   "engines": {
     "node": ">=24.11.0 <25"

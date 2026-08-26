@@ -796,7 +796,21 @@ class GoogleDriveProviderTest(unittest.TestCase):
                     "stable_storage_file_id": file_id,
                     "source_version": "8",
                     "_app_secrets": SECRETS,
-                    "_request_headers": {"range": "bytes=6-9"},
+                    "_request_headers": {"range": "bytes=6-9", "if-range": f'"{media["file_response"]["etag"]}"'},
+                },
+                drive_transport=transport,
+                media_route=True,
+            )
+            mismatch_status, mismatch_media = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.media_stream",
+                    "stable_storage_file_id": file_id,
+                    "source_version": "8",
+                    "_app_secrets": SECRETS,
+                    "_request_headers": {"range": "bytes=0-1", "if-range": '"stale-revision"'},
                 },
                 drive_transport=transport,
                 media_route=True,
@@ -804,18 +818,22 @@ class GoogleDriveProviderTest(unittest.TestCase):
             range_path = Path(media["file_response"]["path"])
             full_cache_path = data_root / "drive_local_cache" / media["localization"]["id"][:2] / media["localization"]["id"] / "content.bin"
             range_bytes = range_path.read_bytes()
+            mismatch_bytes = Path(mismatch_media["file_response"]["path"]).read_bytes()
             full_cache_exists = full_cache_path.exists()
             media_calls = [call for call in transport.calls if parse_qs(urlparse(call[1]).query).get("alt") == ["media"]]
 
         self.assertEqual(status, 200)
         self.assertEqual(second_status, 200)
+        self.assertEqual(mismatch_status, 200)
         self.assertEqual(range_bytes, b"2345")
         self.assertEqual(media["file_response"]["served_range"], {"start": 2, "end": 5, "size": len(content)})
         self.assertEqual(second_media["file_response"]["served_range"], {"start": 6, "end": 9, "size": len(content)})
+        self.assertNotIn("served_range", mismatch_media["file_response"])
+        self.assertEqual(mismatch_bytes, content)
         self.assertEqual(media["file_response"]["etag"], second_media["file_response"]["etag"])
         self.assertEqual(media["file_response"]["content_type"], "video/mp4")
-        self.assertFalse(full_cache_exists)
-        self.assertEqual(len(media_calls), 2)
+        self.assertTrue(full_cache_exists)
+        self.assertEqual(len(media_calls), 3)
 
     def test_drive_media_stream_promotes_complete_range_to_ready_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

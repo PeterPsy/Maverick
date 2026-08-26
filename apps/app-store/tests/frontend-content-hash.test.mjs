@@ -85,3 +85,26 @@ test("static Rollup output names that resemble hashes remain revalidated", async
   assert.ok(!manifest.immutable.some(({ path }) => path === "assets/app-deadbeef.js"));
   assert.ok(!manifest.immutable.some(({ path }) => path === "assets/copied-cafebabe.svg"));
 });
+
+test("frontend build rejects a missing local asset referenced by HTML", async (context) => {
+  const temporaryRoot = mkdtempSync(resolve(tmpdir(), "maverick-missing-html-asset-"));
+  context.after(() => rmSync(temporaryRoot, { force: true, recursive: true }));
+  const sourceRoot = resolve(temporaryRoot, "src");
+  const outDir = resolve(temporaryRoot, "dist");
+  mkdirSync(sourceRoot);
+  writeFileSync(
+    resolve(sourceRoot, "index.html"),
+    '<img src="/missing.png"><a href="/workspace-route">Workspace</a><img src="data:image/png;base64,AA==">',
+  );
+
+  await assert.rejects(
+    build({
+      configFile: false,
+      logLevel: "silent",
+      root: sourceRoot,
+      plugins: [maverickFrontendAssets()],
+      build: { outDir, emptyOutDir: true },
+    }),
+    /Maverick HTML asset reference is missing from build output: index\.html -> \/missing\.png \(missing\.png\)/,
+  );
+});

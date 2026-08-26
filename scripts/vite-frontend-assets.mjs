@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { posix, relative, resolve, sep } from "node:path";
 
+import { validateHtmlAssetReferences } from "./frontend-html-asset-references.mjs";
+
 export const MAVERICK_FRONTEND_ASSET_MANIFEST = "maverick-frontend-assets.json";
 export const MAVERICK_FRONTEND_ASSET_SCHEMA = "maverick.frontend-assets.v1";
 
@@ -182,6 +184,12 @@ export function maverickFrontendAssets(options = {}) {
       if (entrypoints.length === 0) {
         throw new Error("Maverick frontend builds require at least one HTML entrypoint.");
       }
+      validateHtmlAssetReferences({
+        base: resolvedConfig.base,
+        entrypoints,
+        outDir,
+        paths,
+      });
       let { immutable, revalidated } = recordsForPaths(outDir, paths, immutableRollupOutputs);
       const recordsByPath = new Map([...immutable, ...revalidated].map((record) => [record.path, record]));
       const precache = precacheRecords({

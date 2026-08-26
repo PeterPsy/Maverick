@@ -11,7 +11,6 @@ import sys
 import time
 
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
-from core.api.sidecar_control import request_sidecar_control
 from core.apps.artifact_mounts import platform_artifact_store_root
 
 
@@ -20,12 +19,25 @@ REPOSITORY_ROOT = SERVICE_ROOT.parents[2]
 sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_artifact import write_canonical_json  # noqa: E402
-from opendesign_artifact_operations import run_artifact_operation  # noqa: E402
 from opendesign_repair_state import failure_identity, write_repair_state  # noqa: E402
 
 
 AUDIT_INTERVAL_SECONDS = 6 * 60 * 60
 AUDIT_FAILURE_BACKOFF_SECONDS = 60 * 60
+
+
+def run_artifact_operation(*args, **kwargs):
+    """Import the full verifier only after the protected marker says audit is due."""
+    from opendesign_artifact_operations import run_artifact_operation as operation
+
+    return operation(*args, **kwargs)
+
+
+def request_sidecar_control(*args, **kwargs):
+    """Load live-manager control only on the failed-audit recovery path."""
+    from core.api.sidecar_control import request_sidecar_control as request
+
+    return request(*args, **kwargs)
 
 
 def main() -> None:

@@ -50,7 +50,7 @@ test("App Store changes asset filename and digest when one source byte changes",
   assert.ok([...beforeJavaScript].some(([path, digest]) => !afterJavaScript.has(path) && ![...afterJavaScript.values()].includes(digest)));
 });
 
-test("semantic Rollup output names are revalidated rather than immutable", async (context) => {
+test("static Rollup output names that resemble hashes remain revalidated", async (context) => {
   const temporaryRoot = mkdtempSync(resolve(tmpdir(), "maverick-semantic-asset-"));
   context.after(() => rmSync(temporaryRoot, { force: true, recursive: true }));
   const sourceRoot = resolve(temporaryRoot, "src");
@@ -63,15 +63,25 @@ test("semantic Rollup output names are revalidated rather than immutable", async
     configFile: false,
     logLevel: "silent",
     root: sourceRoot,
-    plugins: [maverickFrontendAssets()],
+    plugins: [
+      {
+        name: "static-lookalike-asset",
+        buildStart() {
+          this.emitFile({ type: "asset", fileName: "assets/copied-cafebabe.svg", source: "<svg/>" });
+        },
+      },
+      maverickFrontendAssets(),
+    ],
     build: {
       outDir,
       emptyOutDir: true,
-      rollupOptions: { output: { entryFileNames: "assets/main.js" } },
+      rollupOptions: { output: { entryFileNames: "assets/app-deadbeef.js" } },
     },
   });
 
   const manifest = JSON.parse(readFileSync(resolve(outDir, "maverick-frontend-assets.json"), "utf8"));
-  assert.ok(manifest.revalidated.some(({ path }) => path === "assets/main.js"));
-  assert.ok(!manifest.immutable.some(({ path }) => path === "assets/main.js"));
+  assert.ok(manifest.revalidated.some(({ path }) => path === "assets/app-deadbeef.js"));
+  assert.ok(manifest.revalidated.some(({ path }) => path === "assets/copied-cafebabe.svg"));
+  assert.ok(!manifest.immutable.some(({ path }) => path === "assets/app-deadbeef.js"));
+  assert.ok(!manifest.immutable.some(({ path }) => path === "assets/copied-cafebabe.svg"));
 });

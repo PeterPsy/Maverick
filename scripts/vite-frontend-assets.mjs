@@ -48,13 +48,24 @@ function canonicalBuildPayload({ entrypoints, immutable, precache = null, revali
   return JSON.stringify(payload);
 }
 
-function hasGeneratedHash(path) {
-  return /(?:^|\/)[^/]+-[A-Za-z0-9_-]{8,}\.[^/]+$/.test(path);
+function outputUsesContentHash(outputOptions, output) {
+  const pattern = output.type === "asset"
+    ? outputOptions.assetFileNames
+    : output.isEntry
+      ? outputOptions.entryFileNames
+      : outputOptions.chunkFileNames;
+  if (typeof pattern !== "string" || !/\[hash(?::\d+)?\]/.test(pattern)) {
+    return false;
+  }
+  if (output.type === "chunk") {
+    return output.preliminaryFileName !== output.fileName;
+  }
+  return output.originalFileNames.length > 0;
 }
 
-function recordsForPaths(outDir, paths, rollupOutputs) {
+function recordsForPaths(outDir, paths, immutableRollupOutputs) {
   const immutable = paths
-    .filter((path) => rollupOutputs.has(path) && hasGeneratedHash(path))
+    .filter((path) => immutableRollupOutputs.has(path))
     .map((path) => recordFor(outDir, path));
   const immutablePaths = new Set(immutable.map(({ path }) => path));
   const revalidated = paths.filter((path) => !immutablePaths.has(path)).map((path) => recordFor(outDir, path));
@@ -136,13 +147,14 @@ function injectServiceWorker({ buildId, immutable, outDir, precache, serviceWork
 /**
  * Emit Maverick's verified asset manifest from Rollup's actual output graph.
  *
- * Rollup/Vite outputs are the only files classified immutable. Files copied
- * from `publicDir`, HTML entrypoints, workers, and other semantic names remain
- * revalidated even when their filename happens to resemble a hash.
+ * Only Rollup/Vite outputs produced through a naming template containing the
+ * real `[hash]` placeholder are classified immutable. Files copied from
+ * `publicDir`, explicitly named outputs, HTML entrypoints, workers, and other
+ * semantic names remain revalidated even when their filename resembles a hash.
  */
 export function maverickFrontendAssets(options = {}) {
   let resolvedConfig;
-  const rollupOutputs = new Set();
+  const immutableRollupOutputs = new Set();
   return {
     name: "maverick-frontend-assets",
     apply: "build",
@@ -150,12 +162,14 @@ export function maverickFrontendAssets(options = {}) {
     configResolved(config) {
       resolvedConfig = config;
     },
-    generateBundle(_outputOptions, bundle) {
+    generateBundle(outputOptions, bundle) {
       for (const [fileName, output] of Object.entries(bundle)) {
-        if (output.type === "chunk" || (output.type === "asset" && !fileName.endsWith(".html"))) {
-          if (!fileName.endsWith(".map")) {
-            rollupOutputs.add(fileName);
-          }
+        if (
+          !fileName.endsWith(".map")
+          && !fileName.endsWith(".html")
+          && outputUsesContentHash(outputOptions, output)
+        ) {
+          immutableRollupOutputs.add(fileName);
         }
       }
     },
@@ -168,7 +182,7 @@ export function maverickFrontendAssets(options = {}) {
       if (entrypoints.length === 0) {
         throw new Error("Maverick frontend builds require at least one HTML entrypoint.");
       }
-      let { immutable, revalidated } = recordsForPaths(outDir, paths, rollupOutputs);
+      let { immutable, revalidated } = recordsForPaths(outDir, paths, immutableRollupOutputs);
       const recordsByPath = new Map([...immutable, ...revalidated].map((record) => [record.path, record]));
       const precache = precacheRecords({
         base: resolvedConfig.base,
@@ -197,7 +211,7 @@ export function maverickFrontendAssets(options = {}) {
           precache,
           serviceWorkerPath: options.serviceWorkerPath,
         });
-        ({ immutable, revalidated } = recordsForPaths(outDir, paths, rollupOutputs));
+        ({ immutable, revalidated } = recordsForPaths(outDir, paths, immutableRollupOutputs));
       }
       const payload = {
         schema: MAVERICK_FRONTEND_ASSET_SCHEMA,

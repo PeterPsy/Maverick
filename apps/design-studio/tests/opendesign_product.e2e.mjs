@@ -632,8 +632,18 @@ async function waitForShellWidgetFrame(page, title) {
 
 async function openDesignStudioFromShell(page) {
   const shortcut = page.getByRole('button', { name: /^Design Studio(?:\.|$)/ }).first();
-  await shortcut.waitFor({ state: 'visible', timeout: 10_000 });
-  await shortcut.click();
+  if (await shortcut.isVisible().catch(() => false)) {
+    await shortcut.click();
+  } else {
+    const storage = await waitForShellWidgetFrame(page, 'Storage viewport');
+    await storage.evaluate(() => {
+      window.parent.postMessage(
+        { type: 'maverick.app.open-app', app_id: 'design-studio', params: {} },
+        window.location.origin,
+      );
+    });
+  }
+  await page.waitForURL((url) => url.pathname === '/app/design-studio', { timeout: 10_000 });
 }
 
 

@@ -50,13 +50,13 @@ class PlatformAsgiHost:
             thread_name_prefix="maverick-app-backend",
         )
         if state is None:
-            start_backend_restart_recovery(self.state)
-            start_background_hook_scheduler(self.state, shutdown_controller=self.shutdown_controller)
-            start_declared_sidecar_prewarms(
+            prewarm_threads = start_declared_sidecar_prewarms(
                 self.state,
                 trigger="core_start",
                 shutdown_controller=self.shutdown_controller,
             )
+            start_backend_restart_recovery(self.state, after_threads=prewarm_threads)
+            start_background_hook_scheduler(self.state, shutdown_controller=self.shutdown_controller)
             start_sidecar_control_server(
                 self.state,
                 shutdown_controller=self.shutdown_controller,

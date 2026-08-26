@@ -26,13 +26,13 @@ def run_platform_server(*, host: str, port: int) -> None:
     """Run the main platform host."""
     state = bootstrap_platform_state()
     shutdown_controller = EntrypointShutdownController()
-    start_backend_restart_recovery(state)
-    start_background_hook_scheduler(state, shutdown_controller=shutdown_controller)
-    start_declared_sidecar_prewarms(
+    prewarm_threads = start_declared_sidecar_prewarms(
         state,
         trigger="core_start",
         shutdown_controller=shutdown_controller,
     )
+    start_backend_restart_recovery(state, after_threads=prewarm_threads)
+    start_background_hook_scheduler(state, shutdown_controller=shutdown_controller)
     start_sidecar_control_server(state, shutdown_controller=shutdown_controller)
     app = PlatformHost(state, shutdown_controller=shutdown_controller)
     try:

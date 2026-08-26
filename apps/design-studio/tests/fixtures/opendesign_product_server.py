@@ -259,13 +259,13 @@ def main() -> None:
     if not (root / SETUP_MARKER).is_file():
         _initial_setup(state, root, arguments.web_overlay_sha256)
     shutdown_controller = EntrypointShutdownController()
-    start_backend_restart_recovery(state)
-    start_background_hook_scheduler(state, shutdown_controller=shutdown_controller)
-    start_declared_sidecar_prewarms(
+    prewarm_threads = start_declared_sidecar_prewarms(
         state,
         trigger="core_start",
         shutdown_controller=shutdown_controller,
     )
+    start_backend_restart_recovery(state, after_threads=prewarm_threads)
+    start_background_hook_scheduler(state, shutdown_controller=shutdown_controller)
     start_sidecar_control_server(state, shutdown_controller=shutdown_controller)
     app = PlatformAsgiHost(state, shutdown_controller=shutdown_controller)
     import uvicorn

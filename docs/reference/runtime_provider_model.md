@@ -87,19 +87,43 @@ without creating a provider thread.
 Agentic execution is fail-closed behind an immutable
 `CapabilityCertificate`. The certificate identifies the exact engine, adapter
 id/version/source digest, model provider, model, protocol, routing digest,
-certified upstream set, capability set, evidence suite, and expiry. Evidence
+certified upstream set, capability set, evidence suite, certified-execution TCB
+manifest/digest, and expiry. Evidence
 metadata and optional content-addressed blobs are installation-owned; neither
 workspace Storage nor an adapter controls their locators. Revocation lives in a
 separate revisioned status record and therefore takes effect without rewriting
 the certificate or a session binding.
 
-Before session binding, prewarm, and every pinned turn, Core verifies certificate
-identity, expiry/revocation, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. It then intersects certified
-capability with the pinned profile/workspace ceilings and current live
-restrictions. The resulting `EffectiveRuntimeAuthority` is ephemeral and is not
-a bearer grant. Runtime events persist only its SHA-256 digest, revision set,
-capability names, and counts; tool handles and content are omitted.
+Before session binding, prewarm, continuation, authority refresh, and every
+pinned turn, Core verifies certificate identity, expiry/revocation, the current
+code-owned TCB digest, live adapter artifact, credential reference, profile
+status, workspace binding, and upstream constraint. It then computes one
+`EffectiveRuntimeAuthority` by intersecting certificate capability, profile
+policy ceiling, workspace binding, actor policy, live authority/catalog,
+feature flags, and provider health. The snapshot distinguishes filesystem
+read/write, shell, CLI, MCP, skill catalog, attachment modalities, app
+references, confirmations, recovery, provider/upstream/data policy,
+certificate/suite/expiry, and TCB posture. It is ephemeral and not a bearer
+grant. Runtime events persist only its SHA-256 digest, revision set, capability
+names, and counts; tool handles, credentials, and content are omitted. API,
+Chat, and Settings use the same server-owned projection.
+
+Session and turn preflight validate invoked skills, every attachment modality,
+app references, CLI/MCP/shell requests, and filesystem write intent against
+that snapshot before claims, prepared locks, sessions, turns, queues, or
+provider work are persisted. Unsupported context yields one public allowlisted
+reason code; it is never ignored or merely omitted from the provider request.
+
+The single deterministic manifest in
+`core/providers/certified_execution_tcb.py` owns every component that can alter
+attestation/classification/egress, API/app admission, input composition/request
+building, tool schema/catalog, ledger/store/private state, lifecycle/recovery
+boundary, capability projection, Chat/Settings governance, and provider
+codec/transport/live policy. Suite artifacts, signing, publication, execution
+bindings, and live status all derive from its digest. The publisher recomputes
+the deployed digest. Drift—or a legacy remote certificate with no valid TCB
+identity—makes the certificate ineligible before work. Exact Codex follows its
+existing local identity path rather than being treated as hosted remote.
 
 The migrated Codex profile is `preview` and receives an expiring certificate
 backed by the packaged adapter contract suite. A code change that changes the
@@ -122,6 +146,25 @@ idempotency keys are passed only to surfaces that declare support. After a
 worker crash, only a declared safe read may return to `authorized` for retry.
 An executing mutation, destructive operation, or other ambiguous outcome moves
 to `execution_unknown` and requires reconciliation instead of automatic replay.
+
+Discovery also does not make a schema provider-public. Only an explicitly
+public Core-owned surface covered by the exact TCB can be materialized into a
+remote request. App-owned and dynamic CLI/MCP schemas, uncertified surfaces,
+and requested surfaces omitted by authorization produce bounded structured
+rejections such as `tool_schema_not_certified`; the request builder never
+silently drops them.
+
+Core filesystem capabilities are implemented by
+`ConfinedWorkspaceFilesystem`. It pins the workspace-root descriptor, opens
+every path component relative to a verified descriptor with no-follow and
+directory flags where available, never reopens a verified resource by path,
+and rejects root/parent/final symlink or rename/swap races. Reads and list
+cursors return exact resource identity/revision/digest and reject mutations;
+UTF-8 chunking does not split code points. Writes commit through the verified
+parent descriptor and roll back when confinement changes. Listing does not
+descend into `.git`, and shell cwd is entered through a verified descriptor.
+The resulting exact observation is also the source of filesystem/tool-result
+classification.
 
 ## Current Provider Reality
 
@@ -407,7 +450,12 @@ locator and stores the exact bytes under authenticated AES-256-GCM encryption.
 Associated data binds the blob to workspace, session, runtime engine, pinned
 adapter id/version, codec id/version, and schema version. The envelope persisted
 in `provider_state.json` contains only codec/encryption metadata, SHA-256,
-plaintext size, timestamp, and the opaque locator.
+plaintext size, timestamp, and the opaque locator. Its adjacent redaction-safe
+taint metadata records source-block digests, source data classes, source trust
+levels, their restrictive effective data class/trust join, codec identity,
+provider request id, and turn generation. It never stores source content or
+credentials, and the effective class is not implicitly fake/public or
+trusted-platform. Persist/load/continuation validates the metadata before use.
 
 Writes are bounded to 2 MiB per blob and 8 MiB per session, serialized under a
 namespace file lock, and attached through provider-state revision CAS. A losing
@@ -422,8 +470,23 @@ namespace and integrity binding.
 
 `AgenticEgressEvaluator` evaluates every Core-classified content block against its
 exact provider/upstream and policy revision before returning bytes to a request
-builder. Unknown data class, provenance, trust, provider, or upstream fails
-closed. Current contained revisions list only `public`, and
+builder. Attestation/declaration, effective resource classification, and this
+decision are separate records. The workspace attestation is an actor-attributed,
+timestamped, scoped, revocable CAS record exposed for mutation only through
+governed Core operator/admin surfaces; Settings may show its read-only safe
+projection. It can narrow policy but cannot promote real, secret,
+workspace-internal, or unclassified content. Browser fields, labels, flags,
+egress-policy ids, `workspace_internal_fake`, and legacy
+`declared_remote_data_class` are non-authoritative.
+
+Every prompt, orchestration block, skill, attachment, app reference, tool
+schema/result, and private-state source retains distinct canonical provenance,
+trust, and data class. Filesystem and tool-result sources inherit the exact
+resource identity, revision, digest, and matching classification record. A
+missing/incoherent match becomes `unclassified`, and the restrictive source
+join cannot be weakened by an attestation or a less-sensitive sibling.
+Unknown data class, provenance, trust, provider, or upstream fails closed.
+Current contained revisions list only `public`, and
 `workspace_internal_fake` is always denied even when a malformed policy lists
 it; no client or egress-policy id is attestation. Secret, host-operational, and
 unclassified content is always denied. Workspace paths are rewritten to `workspace://` references,

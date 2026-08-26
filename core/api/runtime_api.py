@@ -36,7 +36,7 @@ from core.authorization.errors import AuthorizationError
 from core.authorization.service import authorize_runtime_session_create, require_runtime_session_operation
 from core.observability.service import append_platform_log
 from core.observability.startup_performance import startup_timer
-from core.providers.errors import ProviderError
+from core.providers.errors import CapabilityCertificateError, ProviderError
 from core.providers.agentic_profiles import (
     build_pinned_execution_binding,
     resolve_workspace_agentic_profile,
@@ -81,6 +81,14 @@ from core.runtime.service import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.execution_binding import RuntimeExecutionBinding
+from core.runtime.authority import (
+    reject_client_data_authority,
+    validate_agentic_context_shape,
+)
+from core.runtime.authority_service import (
+    preflight_execution_binding_context,
+    preflight_runtime_context_capabilities,
+)
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_session import coerce_runtime_mode
 from core.runtime.remote_agentic_admission import (
@@ -1023,14 +1031,36 @@ def _preflight_runtime_session_creation_before_persistence(
 ) -> RuntimeSessionCreationPreflight:
     """Authorize and pin a new session before claims, prepared locks, or records."""
     _reject_client_remote_data_declaration(body)
+    validate_agentic_context_shape(
+        invoked_skills=body.get("skill_ids", ()),
+    )
+    validate_agentic_context_shape(
+        invoked_skills=body.get("invoked_skill_ids", ()),
+        attachments=body.get("attachments", ()),
+        app_references=body.get("app_references", ()),
+    )
     authorize_runtime_session_create(
         workspace_store=state.workspace_store,
         runtime_store=state.runtime_store,
         user=context.user,
         workspace_id=context.workspace_id,
     )
-    session_id = str(uuid4())
     runtime_mode = coerce_runtime_mode(body.get("runtime_mode"))
+    raw_skill_ids = body.get("skill_ids", ())
+    raw_invoked_skill_ids = body.get("invoked_skill_ids", ())
+    raw_attachments = body.get("attachments", ())
+    raw_app_references = body.get("app_references", ())
+    if runtime_mode == "plain_hosted_chat":
+        if raw_skill_ids or raw_invoked_skill_ids:
+            raise ProviderError("plain_hosted_chat_blocks_skills")
+        if raw_app_references:
+            raise ProviderError("plain_hosted_chat_blocks_app_references")
+        attachment_error = plain_hosted_chat_attachment_limit_error(
+            list(raw_attachments)
+        )
+        if attachment_error is not None:
+            raise ProviderError(attachment_error)
+    session_id = str(uuid4())
     authorized_profile = None
     if runtime_mode == "agentic":
         definition, workspace_binding = resolve_workspace_agentic_profile(
@@ -1052,7 +1082,11 @@ def _preflight_runtime_session_creation_before_persistence(
             agent_type_id=str(body.get("agent_type_id") or "").strip(),
         ):
             raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
-        require_remote_agentic_session_admission(definition)
+        require_remote_agentic_session_admission(
+            definition,
+            workspace_id=context.workspace_id,
+            workspace_store=getattr(state, "workspace_store", None),
+        )
         authorized_profile = (definition, workspace_binding)
     governance = state.workspace_store.get_governance(context.workspace_id)
     execution_binding = None
@@ -1077,6 +1111,43 @@ def _preflight_runtime_session_creation_before_persistence(
             authorized_definition_snapshot=authorized_profile[0],
             authorized_workspace_binding_snapshot=authorized_profile[1],
         )
+        adapter = registry.get_agentic_runtime_adapter(
+            execution_binding.runtime_engine_id
+        )
+        preflight_execution_binding_context(
+            state,
+            binding=execution_binding,
+            turn_id=f"session-admission:{session_id}",
+            live_execution_mode=resolve_runtime_execution_mode(
+                workspace_id=context.workspace_id,
+                requested_mode=body.get("requested_mode"),
+                governance=governance,
+                platform_allows_full_access=context.workspace_id == "default",
+            ),
+            actor_policy_revision=(
+                f"workspace-actor:{execution_binding.workspace_binding_id}:"
+                f"{execution_binding.workspace_binding_revision}"
+            ),
+            adapter=adapter,
+            invoked_skills=(
+                *(body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else ()),
+                *(
+                    body.get("invoked_skill_ids")
+                    if isinstance(body.get("invoked_skill_ids"), list)
+                    else ()
+                ),
+            ),
+            attachments=(
+                body.get("attachments")
+                if isinstance(body.get("attachments"), list)
+                else ()
+            ),
+            app_references=(
+                body.get("app_references")
+                if isinstance(body.get("app_references"), list)
+                else ()
+            ),
+        )
     return RuntimeSessionCreationPreflight(
         session_id=session_id,
         governance=governance,
@@ -1086,8 +1157,7 @@ def _preflight_runtime_session_creation_before_persistence(
 
 def _reject_client_remote_data_declaration(body: dict) -> None:
     """Keep data classification Core-owned on every browser/API launch path."""
-    if body.get("declared_remote_data_class") not in {None, ""}:
-        raise ProviderError("remote_data_declaration_not_accepted")
+    reject_client_data_authority(body)
 
 
 def _handle_session_collection(
@@ -1749,8 +1819,27 @@ def _handle_session_app_references_prepare(
         )
     except AuthorizationError as error:
         return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
-    raw_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
-    reference_items = [item for item in raw_references if isinstance(item, dict)]
+    raw_references = body.get("app_references", [])
+    try:
+        _reject_client_remote_data_declaration(body)
+        validate_agentic_context_shape(app_references=raw_references)
+        if session.execution_binding is not None:
+            preflight_runtime_context_capabilities(
+                state,
+                session=session,
+                turn_id=f"app-reference-admission:{session.session_id}",
+                app_references=raw_references,
+            )
+    except CapabilityCertificateError as error:
+        return json_response(
+            start_response,
+            {
+                "error": error.reason_code,
+                "detail": runtime_failure_public_message(error.reason_code),
+            },
+            status="400 Bad Request",
+        )
+    reference_items = list(raw_references)
     if runtime_session_is_plain_hosted_chat(session) and reference_items:
         return json_response(start_response, {"error": "plain_hosted_chat_blocks_app_references"}, status="400 Bad Request")
     reference_context = RuntimeAppReferenceRequestContext(
@@ -2070,6 +2159,18 @@ def _prepare_runtime_turn_submission(
     timing: RuntimeTurnSubmissionTiming | None,
     release_claim_on_failure: RuntimeClientMessageClaim | None = None,
 ) -> tuple[RuntimeTurnSubmissionDraft | None, list[bytes] | None]:
+    try:
+        _reject_client_remote_data_declaration(body)
+    except CapabilityCertificateError as error:
+        _release_client_message_claim(state, release_claim_on_failure)
+        return None, json_response(
+            start_response,
+            {
+                "error": error.reason_code,
+                "detail": runtime_failure_public_message(error.reason_code),
+            },
+            status="400 Bad Request",
+        )
     routing_profile_error = _routing_profile_error(body)
     if routing_profile_error is not None:
         _release_client_message_claim(state, release_claim_on_failure)
@@ -2085,13 +2186,46 @@ def _prepare_runtime_turn_submission(
     if timing is not None:
         timing.client_submission_started_at = _client_submission_started_at(body)
         timing.client_submission_metrics.update(_client_submission_metrics(body))
-    attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
+    raw_attachments = body.get("attachments", [])
+    raw_app_references = body.get("app_references", [])
+    try:
+        validate_agentic_context_shape(
+            invoked_skills=body.get("skill_ids", []),
+        )
+        validate_agentic_context_shape(
+            invoked_skills=body.get("invoked_skill_ids", []),
+            attachments=raw_attachments,
+            app_references=raw_app_references,
+        )
+    except CapabilityCertificateError as error:
+        _release_client_message_claim(state, release_claim_on_failure)
+        return None, json_response(
+            start_response,
+            {
+                "error": error.reason_code,
+                "detail": runtime_failure_public_message(error.reason_code),
+            },
+            status="400 Bad Request",
+        )
+    if session.execution_binding is not None:
+        if body.get("skill_ids"):
+            _release_client_message_claim(state, release_claim_on_failure)
+            reason_code = "agentic_session_skill_catalog_immutable"
+            return None, json_response(
+                start_response,
+                {
+                    "error": reason_code,
+                    "detail": runtime_failure_public_message(reason_code),
+                },
+                status="400 Bad Request",
+            )
+    attachments = raw_attachments if isinstance(raw_attachments, list) else []
     attachment_items = [item for item in attachments if isinstance(item, dict)]
     input_text = str(body.get("input_text") or body.get("message") or "").strip()
     if not input_text and not attachment_items:
         _release_client_message_claim(state, release_claim_on_failure)
         return None, json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
-    app_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
+    app_references = raw_app_references if isinstance(raw_app_references, list) else []
     raw_invoked_skill_ids = body.get("invoked_skill_ids", [])
     if not isinstance(raw_invoked_skill_ids, list) or any(not isinstance(item, str) for item in raw_invoked_skill_ids):
         _release_client_message_claim(state, release_claim_on_failure)
@@ -2117,6 +2251,26 @@ def _prepare_runtime_turn_submission(
         if attachment_limit_error is not None:
             _release_client_message_claim(state, release_claim_on_failure)
             return None, json_response(start_response, {"error": attachment_limit_error}, status="400 Bad Request")
+    elif session.execution_binding is not None:
+        try:
+            preflight_runtime_context_capabilities(
+                state,
+                session=session,
+                turn_id=f"context-admission:{session.session_id}:{client_message_id or 'new'}",
+                invoked_skills=invoked_skills,
+                attachments=attachment_items,
+                app_references=app_references,
+            )
+        except CapabilityCertificateError as error:
+            _release_client_message_claim(state, release_claim_on_failure)
+            return None, json_response(
+                start_response,
+                {
+                    "error": error.reason_code,
+                    "detail": runtime_failure_public_message(error.reason_code),
+                },
+                status="400 Bad Request",
+            )
     reference_validate_started_at = time.perf_counter()
     app_reference_context = RuntimeAppReferenceRequestContext(
         state,
@@ -2231,6 +2385,17 @@ def _queue_runtime_turn_response(
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)
         return json_response(start_response, {"error": error.reason_code}, status="400 Bad Request")
+    except CapabilityCertificateError as error:
+        if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
+            _release_client_message_claim(state, release_claim_on_failure)
+        return json_response(
+            start_response,
+            {
+                "error": error.reason_code,
+                "detail": runtime_failure_public_message(error.reason_code),
+            },
+            status="400 Bad Request",
+        )
     except RuntimeTurnQueueRejectedError as error:
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)

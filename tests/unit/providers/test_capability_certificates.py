@@ -352,7 +352,7 @@ class CapabilityCertificateTest(unittest.TestCase):
             with self.assertRaisesRegex(CapabilityCertificateError, "certificate_evidence_blob_corrupt"):
                 store.get(evidence_ref)
 
-    def test_legacy_evidence_digest_remains_valid_after_schema_extension(self) -> None:
+    def test_legacy_remote_evidence_without_tcb_identity_fails_closed(self) -> None:
         legacy_fields = (
             "suite_id",
             "suite_version",
@@ -382,14 +382,16 @@ class CapabilityCertificateTest(unittest.TestCase):
             now=NOW,
         )
 
-        validated = validate_certificate_for_binding(
-            legacy_store,
-            binding=legacy_binding,
-            adapter=self.adapter,
-            now=NOW,
-        )
-
-        self.assertEqual(validated.evidence_digest, legacy_digest)
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "certificate_evidence_corrupt|certificate_tcb_identity_missing",
+        ):
+            validate_certificate_for_binding(
+                legacy_store,
+                binding=legacy_binding,
+                adapter=self.adapter,
+                now=NOW,
+            )
 
         tampered_evidence = replace(legacy_evidence, suite_version="tampered")
         tampered_store = certified_test_provider_store(

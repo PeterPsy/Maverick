@@ -21,6 +21,55 @@ THOUGHT_SIGNATURE = "opaque-google-thought-signature"
 
 
 class GoogleInteractionsCodecTest(unittest.TestCase):
+    def test_distinct_json_sources_are_encoded_as_text_without_losing_block_boundaries(self) -> None:
+        transport = _ScriptedTransport([_text_stream("interaction-json", "done")])
+        client = GoogleInteractionsAgenticClient(state_mode="stateful", transport=transport)
+        request = _request("request-json")
+        request = replace(
+            request,
+            content_blocks=(
+                request.content_blocks[0],
+                AgenticRequestContentBlock(
+                    "request-json:skill",
+                    "system",
+                    "public",
+                    "skill",
+                    "trusted_actor",
+                    "application/json",
+                    b'{"skill_id":"fixture"}',
+                ),
+                request.content_blocks[1],
+                AgenticRequestContentBlock(
+                    "request-json:attachment",
+                    "user",
+                    "public",
+                    "attachment",
+                    "trusted_actor",
+                    "application/json",
+                    b'{"relative_path":"storage/uploaded/fixture.txt"}',
+                ),
+            ),
+        )
+
+        events = asyncio.run(_events(client, request))
+
+        self.assertEqual(events[-1].event_type, "completed")
+        payload = transport.payloads[0]
+        self.assertEqual(
+            payload["system_instruction"],
+            'Use synthetic fixture data only.\n\n{"skill_id":"fixture"}',
+        )
+        self.assertEqual(
+            payload["input"][0]["content"],
+            [
+                {"type": "text", "text": "Read fixture value four."},
+                {
+                    "type": "text",
+                    "text": '{"relative_path":"storage/uploaded/fixture.txt"}',
+                },
+            ],
+        )
+
     def test_stateful_function_call_preserves_interaction_and_exact_result_pair(self) -> None:
         transport = _ScriptedTransport([_tool_stream("interaction-1")])
         client = GoogleInteractionsAgenticClient(state_mode="stateful", transport=transport)

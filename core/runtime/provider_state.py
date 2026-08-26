@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from core.runtime.private_payload_models import PRIVATE_PAYLOAD_ENCRYPTION_PROFILE
+from core.egress.classification import (
+    KNOWN_DATA_CLASSES,
+    KNOWN_TRUST_LEVELS,
+    join_data_classes,
+    join_trust_levels,
+)
 
 
 @dataclass(frozen=True)
@@ -22,6 +28,14 @@ class ProviderPrivateEnvelope:
     size_bytes: int
     encryption_profile: str
     created_at: datetime
+    source_block_digests: tuple[str, ...] = ()
+    source_data_classes: tuple[str, ...] = ("unclassified",)
+    source_trust_levels: tuple[str, ...] = ("untrusted_external",)
+    effective_data_class: str = "unclassified"
+    effective_trust_level: str = "untrusted_external"
+    codec_identity: str = ""
+    provider_request_id: str | None = None
+    turn_generation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -48,6 +62,19 @@ def provider_private_envelope_from_document(
 ) -> ProviderPrivateEnvelope:
     """Hydrate and minimally validate persisted private-envelope metadata."""
     payload = dict(document)
+    payload["source_block_digests"] = tuple(payload.get("source_block_digests", ()))
+    payload["source_data_classes"] = tuple(
+        payload.get("source_data_classes", ("unclassified",)) or ("unclassified",)
+    )
+    payload["source_trust_levels"] = tuple(
+        payload.get("source_trust_levels", ("untrusted_external",))
+        or ("untrusted_external",)
+    )
+    payload.setdefault("effective_data_class", "unclassified")
+    payload.setdefault("effective_trust_level", "untrusted_external")
+    payload.setdefault("codec_identity", "")
+    payload.setdefault("provider_request_id", None)
+    payload.setdefault("turn_generation", None)
     envelope = ProviderPrivateEnvelope(**payload)
     if not envelope.schema_version or not envelope.codec_id or not envelope.codec_version:
         raise ValueError("Provider private envelope identity is incomplete.")
@@ -61,6 +88,21 @@ def provider_private_envelope_from_document(
         raise ValueError("Provider private envelope size is invalid.")
     if envelope.encryption_profile != PRIVATE_PAYLOAD_ENCRYPTION_PROFILE:
         raise ValueError("Provider private envelope encryption profile is unsupported.")
+    if any(not _is_sha256(value) for value in envelope.source_block_digests):
+        raise ValueError("Provider private envelope source digest is invalid.")
+    if any(value not in KNOWN_DATA_CLASSES for value in envelope.source_data_classes):
+        raise ValueError("Provider private envelope source data class is invalid.")
+    if any(value not in KNOWN_TRUST_LEVELS for value in envelope.source_trust_levels):
+        raise ValueError("Provider private envelope source trust is invalid.")
+    if envelope.effective_data_class != join_data_classes(envelope.source_data_classes):
+        raise ValueError("Provider private envelope effective data class is invalid.")
+    if envelope.effective_trust_level != join_trust_levels(envelope.source_trust_levels):
+        raise ValueError("Provider private envelope effective trust is invalid.")
+    expected_codec_identity = ":".join(
+        (envelope.codec_id, envelope.codec_version, envelope.schema_version)
+    )
+    if envelope.codec_identity and envelope.codec_identity != expected_codec_identity:
+        raise ValueError("Provider private envelope codec identity is invalid.")
     return envelope
 
 
@@ -73,3 +115,8 @@ def runtime_provider_state_from_document(document: Mapping[str, object]) -> Runt
     elif envelope is not None and not isinstance(envelope, ProviderPrivateEnvelope):
         raise ValueError("Provider private envelope must be an object.")
     return RuntimeProviderState(**payload)
+
+
+def _is_sha256(value: object) -> bool:
+    text = str(value or "")
+    return len(text) == 64 and all(character in "0123456789abcdefABCDEF" for character in text)

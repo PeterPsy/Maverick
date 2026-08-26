@@ -33,8 +33,8 @@ from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.runtime.authority import (
     intersect_runtime_policies,
-    resolve_effective_runtime_authority,
 )
+from core.runtime.authority_service import resolve_runtime_authority_snapshot
 from core.runtime.hosted_agentic_engine import (
     HostedAgenticEngineAdapter,
     build_hosted_turn_status_callback,
@@ -56,6 +56,7 @@ from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolCatalogBuilder
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
+from core.workspaces.data_governance import resource_classification_for_observation
 from core.secrets.models import SecretResolutionContext
 from core.secrets.secret_resolution import resolve_secret_for_runtime
 
@@ -100,13 +101,12 @@ def build_hosted_agentic_engine_adapter(
 
     def authority_refresher(context):
         try:
-            return resolve_effective_runtime_authority(
-                state.provider_store,
-                binding=context.binding,
+            return resolve_runtime_authority_snapshot(
+                state,
+                session=context.session,
                 adapter=adapter_holder["adapter"],
                 turn_id=context.correlation_id,
                 currently_authorized_tool_handles=authorized_core_tool_handles(context.binding),
-                live_execution_mode=context.session.effective_mode,
             )
         except CapabilityCertificateError as error:
             raise HostedAgenticLoopError(error.reason_code) from error
@@ -116,10 +116,12 @@ def build_hosted_agentic_engine_adapter(
         request_builder=HostedAgenticRequestBuilder(
             egress_evaluator=state.agentic_egress_evaluator,
             classifier=classifier or classify_hosted_content_fail_closed,
+            attestation_resolver=state.workspace_store.get_data_attestation,
         ),
         tool_orchestrator_resolver=lambda context, _actor: _tool_orchestrator(
             context,
             ledger=state.runtime_tool_ledger,
+            workspace_store=state.workspace_store,
         ),
         tool_ledger=state.runtime_tool_ledger,
         private_state_service=state.provider_private_state_service,
@@ -145,9 +147,7 @@ def classify_hosted_content_fail_closed(
     provenance: str,
     _content: object,
 ) -> HostedContentClassification:
-    """Classify only public platform tool schemas; every content value stays unclassified."""
-    if provenance == "tool_schema":
-        return HostedContentClassification("public", "trusted_platform")
+    """Fail closed; certified Core schemas bypass this generic classifier entirely."""
     trust = {
         "provider_state": "trusted_platform",
         "platform_instruction": "trusted_platform",
@@ -191,7 +191,7 @@ def _provider_runtimes() -> HostedProviderRuntimeRegistry:
     return registry
 
 
-def _tool_orchestrator(context, *, ledger) -> RuntimeToolOrchestrator:
+def _tool_orchestrator(context, *, ledger, workspace_store) -> RuntimeToolOrchestrator:
     root = Path(context.session.workspace_root)
     return RuntimeToolOrchestrator(
         catalog_builder=RuntimeToolCatalogBuilder(
@@ -200,6 +200,22 @@ def _tool_orchestrator(context, *, ledger) -> RuntimeToolOrchestrator:
             core_capabilities=build_core_runtime_tool_capabilities(
                 workspace_id=context.session.workspace_id,
                 workspace_root=root,
+                resource_classification_resolver=lambda observation, provenance: (
+                    resource_classification_for_observation(
+                        workspace_store.get_resource_classification(
+                            workspace_id=observation.workspace_id,
+                            resource_kind=observation.resource_kind,
+                            resource_ref=observation.resource_ref,
+                        ),
+                        workspace_id=observation.workspace_id,
+                        resource_kind=observation.resource_kind,
+                        resource_ref=observation.resource_ref,
+                        resource_identity=observation.resource_identity,
+                        resource_revision=observation.resource_revision,
+                        resource_digest=observation.resource_digest,
+                        provenance=provenance,
+                    )
+                ),
             ),
         ),
         ledger=ledger,

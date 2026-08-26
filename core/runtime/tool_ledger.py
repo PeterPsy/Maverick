@@ -8,6 +8,7 @@ import hashlib
 import hmac
 from uuid import NAMESPACE_URL, uuid5
 
+from core.egress.classification import CanonicalSourceClassification
 from core.runtime.store import RuntimeStore
 from core.runtime.tool_confirmation_ledger import (
     DEFAULT_CONFIRMATION_TTL_SECONDS,
@@ -146,6 +147,7 @@ class RuntimeToolLedger:
         failure_reason: str | None = None,
         result_private_ref: str | None = None,
         result_summary: dict[str, object] | None = None,
+        result_classification: CanonicalSourceClassification | None = None,
         now: datetime | None = None,
     ) -> ToolInvocationRecord:
         if state not in _TRANSITIONS[record.state]:
@@ -156,6 +158,46 @@ class RuntimeToolLedger:
             failure_reason=failure_reason,
             result_private_ref=result_private_ref,
             result_summary=result_summary,
+            result_data_class=(
+                result_classification.data_class
+                if result_classification is not None
+                else record.result_data_class
+            ),
+            result_trust_level=(
+                result_classification.trust_level
+                if result_classification is not None
+                else record.result_trust_level
+            ),
+            result_provenance=(
+                result_classification.provenance
+                if result_classification is not None
+                else record.result_provenance
+            ),
+            result_source_ref=(
+                result_classification.source_ref
+                if result_classification is not None
+                else record.result_source_ref
+            ),
+            result_source_revision=(
+                result_classification.source_revision
+                if result_classification is not None
+                else record.result_source_revision
+            ),
+            result_source_digest=(
+                result_classification.source_digest
+                if result_classification is not None
+                else record.result_source_digest
+            ),
+            result_resource_identity=(
+                result_classification.resource_identity
+                if result_classification is not None
+                else record.result_resource_identity
+            ),
+            result_classification_revision=(
+                result_classification.classification_revision
+                if result_classification is not None
+                else record.result_classification_revision
+            ),
             revision=record.revision + 1,
             updated_at=now or datetime.now(tz=UTC),
         )

@@ -86,6 +86,7 @@ class RuntimeTurnContext:
     timeout_seconds: int | None = None
     prepared_handle: object | None = None
     effective_authority: "EffectiveRuntimeAuthority | None" = None
+    input_sources: tuple[object, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -14,6 +14,10 @@ from core.egress import (
 )
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
+from core.workspaces.data_governance import (
+    issue_fake_data_attestation,
+    revoke_data_attestation,
+)
 from tests.support.collections import FakeCollection
 
 
@@ -108,7 +112,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
                 self.assertIsNone(result.exported_content)
                 self.assertEqual(result.decision.reason_code, reason)
 
-    def test_legacy_fake_declaration_is_denied_even_if_a_policy_lists_it(self) -> None:
+    def test_fake_class_requires_separate_attestation_and_verified_resource(self) -> None:
         policy = AgenticEgressPolicy(
             policy_id="malformed-fixture-policy",
             revision="1",
@@ -127,7 +131,125 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
         )
 
         self.assertFalse(result.decision.export_allowed)
-        self.assertEqual(result.decision.reason_code, "egress_data_class_denied")
+        self.assertEqual(
+            result.decision.reason_code,
+            "egress_fake_data_attestation_required",
+        )
+
+        attestation = issue_fake_data_attestation(
+            workspace_id="default",
+            actor_id="operator-1",
+            actor_kind="platform_operator",
+            scope_type="resource_prefixes",
+            resource_prefixes=("storage/generated",),
+            expected_revision=0,
+            now=NOW,
+        )
+        unverified = self.evaluator.evaluate(
+            block=self.block(data_class="workspace_internal_fake"),
+            content="client-authored classification",
+            destination_provider_id="fixture-provider",
+            destination_upstream_id=None,
+            policy=policy,
+            data_attestation=attestation,
+            now=NOW,
+        )
+        self.assertFalse(unverified.decision.export_allowed)
+        self.assertEqual(
+            unverified.decision.reason_code,
+            "egress_fake_data_classification_unverified",
+        )
+
+        verified_block = self.block(
+            content_block_id="block-verified-fake",
+            data_class="workspace_internal_fake",
+            source_ref="storage/generated/fixture.txt",
+            source_revision="size:7:mtime:8",
+            resource_identity="dev:1:ino:2",
+            classification_revision=1,
+        )
+        allowed = self.evaluator.evaluate(
+            block=verified_block,
+            content="server-classified synthetic fixture",
+            destination_provider_id="fixture-provider",
+            destination_upstream_id=None,
+            policy=policy,
+            data_attestation=attestation,
+            now=NOW,
+        )
+        self.assertTrue(allowed.decision.export_allowed)
+
+        out_of_scope = self.evaluator.evaluate(
+            block=self.block(
+                content_block_id="block-out-of-scope",
+                data_class="workspace_internal_fake",
+                source_ref="workspace-data/records/real.json",
+                source_revision="size:7:mtime:8",
+                resource_identity="dev:1:ino:3",
+                classification_revision=1,
+            ),
+            content="not covered",
+            destination_provider_id="fixture-provider",
+            destination_upstream_id=None,
+            policy=policy,
+            data_attestation=attestation,
+            now=NOW,
+        )
+        self.assertEqual(
+            out_of_scope.decision.reason_code,
+            "egress_fake_data_attestation_scope_denied",
+        )
+
+        revoked = revoke_data_attestation(
+            attestation,
+            actor_id="operator-2",
+            expected_revision=1,
+            reason="fixture retired",
+            now=NOW,
+        )
+        denied_after_revocation = self.evaluator.evaluate(
+            block=verified_block,
+            content="server-classified synthetic fixture",
+            destination_provider_id="fixture-provider",
+            destination_upstream_id=None,
+            policy=policy,
+            data_attestation=revoked,
+            now=NOW,
+        )
+        self.assertEqual(
+            denied_after_revocation.decision.reason_code,
+            "egress_fake_data_attestation_revoked",
+        )
+
+    def test_attestation_never_reclassifies_real_or_public_data(self) -> None:
+        attestation = issue_fake_data_attestation(
+            workspace_id="default",
+            actor_id="operator-1",
+            actor_kind="platform_operator",
+            scope_type="workspace",
+            expected_revision=0,
+            now=NOW,
+        )
+        fake_only_policy = AgenticEgressPolicy(
+            policy_id="fake-only-policy",
+            revision="1",
+            allowed_data_classes=("workspace_internal_fake",),
+            allowed_provider_ids=("fixture-provider",),
+            allowed_upstream_ids=(),
+        )
+        for data_class in ("public", "workspace_internal", "credential_or_secret", "unclassified"):
+            with self.subTest(data_class=data_class):
+                result = self.evaluator.evaluate(
+                    block=self.block(data_class=data_class),
+                    content="classification must remain unchanged",
+                    destination_provider_id="fixture-provider",
+                    destination_upstream_id=None,
+                    policy=fake_only_policy,
+                    data_attestation=attestation,
+                    now=NOW,
+                )
+                self.assertFalse(result.decision.export_allowed)
+                self.assertEqual(result.decision.data_class, data_class)
 
     def test_workspace_path_is_rewritten_and_other_host_path_is_denied(self) -> None:
         rewritten = self.evaluator.evaluate(

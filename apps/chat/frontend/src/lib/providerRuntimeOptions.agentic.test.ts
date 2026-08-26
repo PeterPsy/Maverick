@@ -55,6 +55,30 @@ function agenticProfile(
     containment_status: "GO",
     certified: true,
     certificate: { effective_status: "active" },
+    effective_capabilities: {
+      status: "active",
+      reason_code: null,
+      snapshot_digest: "fixture-capability-snapshot",
+      capabilities: {
+        streaming: true,
+        tool_orchestration: true,
+        cli: false,
+        mcp: false,
+        skill_catalog: false,
+        filesystem_list: true,
+        filesystem_read: true,
+        filesystem_write: false,
+        shell: false,
+        interrupt: true,
+        same_turn_steering: false,
+        recovery: true,
+        confirmation_resume: true,
+        provider_private_state: true,
+        attachment_modalities: [],
+        app_references: false,
+        confirmations: true,
+      },
+    },
     default_reasoning_effort: "high",
     supported_reasoning_efforts: reasoningOptions,
   };
@@ -110,6 +134,9 @@ describe("remote agentic provider runtime options", () => {
     const activeCertificate = agenticProfile("google-ai-studio", modelId);
     activeCertificate.workspace_profile_binding_id = "binding-active-certificate";
     activeCertificate.certificate = { effective_status: "active" };
+    const missingEffectiveSnapshot = agenticProfile("google-ai-studio", modelId);
+    missingEffectiveSnapshot.workspace_profile_binding_id = "binding-missing-effective";
+    delete missingEffectiveSnapshot.effective_capabilities;
 
     const providers = providerItemsFromPayload({
       workspace_id: "default",
@@ -119,7 +146,7 @@ describe("remote agentic provider runtime options", () => {
       ],
       agentic_profiles: {
         default_binding_id: null,
-        items: [missingCertification, inactiveCertificate, activeCertificate],
+        items: [missingCertification, inactiveCertificate, missingEffectiveSnapshot, activeCertificate],
       },
     });
 

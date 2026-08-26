@@ -1,7 +1,7 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-26
-Matrix revision: `2026-08-26-r8`
+Matrix revision: `2026-08-26-r9`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==5`
@@ -79,6 +79,7 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
+| Certified execution TCB | canonical manifest/digest covers every authority-changing Core, Chat, Settings, codec, transport, store, and policy component; drift rejects signing/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -98,7 +99,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus final response at every certificate-bound reasoning effort | manifest step available; not run for r8 |
+| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus final response at every certificate-bound reasoning effort | manifest step available; not run for r9 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the candidate profile and never manufactures a
@@ -138,7 +139,7 @@ other provenance remain denied. Revision 11 is historical and suspended.
 Revision 12 retains the exact `fake-data preview` warning label but removes fake
 classification authority: its policy lists only Core-classified `public`, its
 egress id is `remote-agentic-contained@2`, and central admission remains
-NO-GO. The r8 certification manifest retains both `fixture_contract` and
+NO-GO. The r9 certification manifest retains both `fixture_contract` and
 `live_probe`; the live step has not been run for this candidate.
 
 ## Fail-closed conditions

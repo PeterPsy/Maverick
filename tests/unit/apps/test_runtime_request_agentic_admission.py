@@ -12,6 +12,7 @@ import core.apps.runtime_requests as runtime_requests
 from core.api.platform_state import bootstrap_platform_state
 from core.providers.agentic_profiles import resolve_workspace_agentic_profile
 from core.providers.errors import ProviderError
+from core.providers.errors import CapabilityCertificateError
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW,
     MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
@@ -68,6 +69,86 @@ class RuntimeRequestAgenticAdmissionTest(unittest.TestCase):
                         actor_user_id="user:admin",
                     )
             self.assertEqual(self.runtime_store.method_calls, [])
+
+    def test_app_cannot_submit_policy_or_classification_authority(self) -> None:
+        for authority_fields in (
+            {"data_class": "workspace_internal_fake"},
+            {"egress_policy_id": "browser-policy"},
+            {"attestation_revision": 99},
+        ):
+            with self.subTest(authority_fields=authority_fields), self.assertRaisesRegex(
+                CapabilityCertificateError,
+                "runtime_client_authority_not_accepted",
+            ):
+                runtime_requests._preflight_runtime_request_before_persistence(
+                    self.state,
+                    request={
+                        "agent_id": "chat",
+                        "runtime_mode": "agentic",
+                        **authority_fields,
+                    },
+                    workspace_id="default",
+                    app_id="sensor-hub",
+                    actor_user_id="user:admin",
+                )
+        self.assertEqual(self.runtime_store.method_calls, [])
+
+    def test_unsupported_context_fails_before_app_session_or_stream_persistence(self) -> None:
+        state = SimpleNamespace(
+            provider_store=object(),
+            provider_registry=object(),
+            runtime_store=Mock(),
+            workspace_store=SimpleNamespace(get_governance=lambda _workspace_id: object()),
+        )
+        definition = object()
+        binding = SimpleNamespace(binding_id="binding-codex", revision=2)
+        execution_binding = SimpleNamespace(
+            runtime_engine_id="codex",
+            workspace_binding_id="binding-codex",
+            workspace_binding_revision=2,
+        )
+        registry = SimpleNamespace(get_agentic_runtime_adapter=lambda _engine_id: object())
+        with patch.object(
+            runtime_requests,
+            "_authorize_new_agentic_app_session",
+            return_value=(definition, binding),
+        ), patch.object(
+            runtime_requests,
+            "effective_provider_registry",
+            return_value=registry,
+        ), patch.object(
+            runtime_requests,
+            "resolve_runtime_execution_mode",
+            return_value="sandbox",
+        ), patch.object(
+            runtime_requests,
+            "build_pinned_execution_binding",
+            return_value=execution_binding,
+        ), patch.object(
+            runtime_requests,
+            "preflight_execution_binding_context",
+            side_effect=CapabilityCertificateError(
+                "agentic_app_references_not_effective"
+            ),
+        ) as capability_preflight:
+            with self.assertRaisesRegex(
+                CapabilityCertificateError,
+                "agentic_app_references_not_effective",
+            ):
+                runtime_requests._preflight_runtime_request_before_persistence(
+                    state,
+                    request={
+                        "agent_id": "chat",
+                        "runtime_mode": "agentic",
+                        "app_references": [{"app_id": "crm"}],
+                    },
+                    workspace_id="default",
+                    app_id="sensor-hub",
+                    actor_user_id="user:admin",
+                )
+
+        capability_preflight.assert_called_once()
+        self.assertEqual(state.runtime_store.method_calls, [])
 
     def test_remote_stream_request_is_rejected_before_reservation(self) -> None:
         request = {

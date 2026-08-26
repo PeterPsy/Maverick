@@ -581,6 +581,20 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
           <small>Binding ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Profile ${escapeHtml(humanizeAgenticCode(item.profile_status))} · Certificate ${escapeHtml(humanizeAgenticCode(certificate?.effective_status || 'missing'))} / ${escapeHtml(humanizeAgenticCode(item.certificate_eligibility))}</small>
         </span>
       </div>` : ''}
+      <div class="settings-provider-usage-unavailable settings-agentic-capability-state">
+        <span class="material-symbols-rounded" aria-hidden="true">verified_user</span>
+        <span>
+          <strong>Effective capabilities · ${escapeHtml(item.effective_capabilities.status)}</strong>
+          <small>Snapshot ${escapeHtml(item.effective_capabilities.snapshot_digest)} · execution ${escapeHtml(item.effective_capabilities.execution_mode || 'unavailable')} · TCB ${escapeHtml(String(item.effective_capabilities.tcb?.posture || 'unavailable'))}</small>
+          ${item.effective_capabilities.reason_code ? `<small>Reason ${escapeHtml(humanizeAgenticCode(item.effective_capabilities.reason_code))}</small>` : ''}
+          <small>Filesystem read ${item.effective_capabilities.capabilities.filesystem_read === true ? 'yes' : 'no'} · write ${item.effective_capabilities.capabilities.filesystem_write === true ? 'yes' : 'no'} · shell ${item.effective_capabilities.capabilities.shell === true ? 'yes' : 'no'} · CLI ${item.effective_capabilities.capabilities.cli === true ? 'yes' : 'no'} · MCP ${item.effective_capabilities.capabilities.mcp === true ? 'yes' : 'no'}</small>
+          <small>Skills ${item.effective_capabilities.capabilities.skill_catalog === true ? 'yes' : 'no'} · app references ${item.effective_capabilities.capabilities.app_references === true ? 'yes' : 'no'} · attachment modes ${escapeHtml(Array.isArray(item.effective_capabilities.capabilities.attachment_modalities) ? item.effective_capabilities.capabilities.attachment_modalities.join(', ') || 'none' : 'none')} · confirmations ${item.effective_capabilities.capabilities.confirmations === true ? 'yes' : 'no'} · recovery ${item.effective_capabilities.capabilities.recovery === true ? 'yes' : 'no'}</small>
+          <small>Provider ${escapeHtml(item.effective_capabilities.provider?.provider_id || 'unavailable')} · upstream ${escapeHtml(item.effective_capabilities.provider?.effective_upstream_ids?.join(', ') || 'none')} · health ${escapeHtml(item.effective_capabilities.provider?.health_status || 'unavailable')}</small>
+          <small>Data classes ${escapeHtml(item.effective_capabilities.data_policy?.allowed_remote_data_classes?.join(', ') || 'none')} · collection ${escapeHtml(item.effective_capabilities.data_policy?.collection || 'deny')} · ZDR ${item.effective_capabilities.data_policy?.require_zdr ? 'required' : 'not required'}</small>
+          <small>Certificate ${escapeHtml(item.effective_capabilities.certificate?.certificate_id || 'unavailable')} · suite ${escapeHtml(item.effective_capabilities.certificate?.suite_id || 'unavailable')}@${escapeHtml(item.effective_capabilities.certificate?.suite_version || 'unavailable')} · expires ${escapeHtml(item.effective_capabilities.certificate?.expires_at || 'unavailable')}</small>
+          <small>Workspace declaration (read-only): ${escapeHtml(item.data_policy.attestation_state)}${item.data_policy.attestation.revision === null ? '' : ` · revision ${item.data_policy.attestation.revision}`}${item.data_policy.attestation.scope ? ` · scope ${escapeHtml(item.data_policy.attestation.scope.resource_prefixes.join(', ') || 'workspace')}` : ''}</small>
+        </span>
+      </div>
       ${agenticModelUsageHtml(item, state)}
       <div class="settings-agentic-controls">
         ${isRemote ? `<label class="settings-platform-field">

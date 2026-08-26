@@ -28,8 +28,8 @@ from core.runtime.execution_binding import canonical_digest
 
 
 GOOGLE_CERTIFICATION_SUITE_ID = "maverick-google-interactions-agentic-contract"
-GOOGLE_CERTIFICATION_SUITE_VERSION = "8"
-GOOGLE_CERTIFICATION_MATRIX_REVISION = "2026-08-26-r8"
+GOOGLE_CERTIFICATION_SUITE_VERSION = "9"
+GOOGLE_CERTIFICATION_MATRIX_REVISION = "2026-08-26-r9"
 GOOGLE_CERTIFICATION_VALIDITY_DAYS = 45
 
 
@@ -60,6 +60,10 @@ def publish_google_preview_certificate(
         run_signature=signed_run.signature,
         certification_started_at=run.started_at,
         certification_outcome=run.outcome,
+        tcb_manifest_id=run.tcb_manifest_id,
+        tcb_manifest_version=run.tcb_manifest_version,
+        tcb_structure_digest=run.tcb_structure_digest,
+        tcb_live_digest=run.tcb_live_digest,
     )
     certificate = CapabilityCertificate(
         certificate_id=definition.capability_certificate_id,
@@ -85,6 +89,10 @@ def publish_google_preview_certificate(
         evidence_refs=evidence.evidence_refs,
         issued_at=run.completed_at,
         expires_at=run.completed_at + timedelta(days=GOOGLE_CERTIFICATION_VALIDITY_DAYS),
+        tcb_manifest_id=run.tcb_manifest_id,
+        tcb_manifest_version=run.tcb_manifest_version,
+        tcb_structure_digest=run.tcb_structure_digest,
+        tcb_live_digest=run.tcb_live_digest,
     )
     return publish_capability_certificate(store, certificate=certificate, evidence=evidence)
 
@@ -106,7 +114,9 @@ def _capabilities() -> RuntimeCapabilitySet:
     return RuntimeCapabilitySet(
         streaming=True, tool_orchestration=True, cli=False, mcp=False,
         skill_catalog=False, filesystem_list=True, filesystem_read=True, filesystem_write=False,
-        shell=False, interrupt=True, same_turn_steering=False, recovery=True,
+        shell=False, interrupt=True, same_turn_steering=False, recovery=False,
         confirmation_resume=True, provider_private_state=True,
         attachment_modalities=(),
+        app_references=False,
+        confirmations=True,
     )

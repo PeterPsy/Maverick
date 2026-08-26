@@ -8,6 +8,13 @@ import hashlib
 import hmac
 from typing import Literal
 
+from core.egress.classification import (
+    KNOWN_DATA_CLASSES,
+    KNOWN_TRUST_LEVELS,
+    join_data_classes,
+    join_trust_levels,
+)
+from core.providers.agentic_protocol import AgenticSourceMetadata
 from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.private_payload_models import (
     PRIVATE_PAYLOAD_ENCRYPTION_PROFILE,
@@ -69,6 +76,8 @@ class ProviderPrivateStateService:
         payload: bytes,
         expected_revision: int,
         turn_generation: str | None = None,
+        source_metadata: tuple[AgenticSourceMetadata, ...] = (),
+        provider_request_id: str | None = None,
         now: datetime | None = None,
     ) -> RuntimeProviderState:
         """Encrypt a blob and atomically attach its metadata to provider state."""
@@ -112,6 +121,32 @@ class ProviderPrivateStateService:
         except RuntimePrivatePayloadError as error:
             raise ProviderPrivateStateError(_provider_reason(error.reason_code)) from error
         timestamp = now or datetime.now(tz=UTC)
+        source_block_digests = tuple(
+            metadata.source_block_digest.lower()
+            for metadata in source_metadata
+            if _is_sha256(metadata.source_block_digest)
+        )
+        complete_metadata = (
+            bool(source_metadata)
+            and len(source_block_digests) == len(source_metadata)
+            and all(
+                metadata.source_data_class in KNOWN_DATA_CLASSES
+                and metadata.source_trust_level in KNOWN_TRUST_LEVELS
+                for metadata in source_metadata
+            )
+        )
+        source_data_classes = (
+            tuple(metadata.source_data_class for metadata in source_metadata)
+            if complete_metadata
+            else ("unclassified",)
+        )
+        source_trust_levels = (
+            tuple(metadata.source_trust_level for metadata in source_metadata)
+            if complete_metadata
+            else ("untrusted_external",)
+        )
+        if not complete_metadata:
+            source_block_digests = ()
         envelope = ProviderPrivateEnvelope(
             schema_version=schema_version,
             codec_id=codec_id,
@@ -122,6 +157,14 @@ class ProviderPrivateStateService:
             size_bytes=len(normalized_payload),
             encryption_profile=PRIVATE_PAYLOAD_ENCRYPTION_PROFILE,
             created_at=timestamp,
+            source_block_digests=source_block_digests,
+            source_data_classes=source_data_classes,
+            source_trust_levels=source_trust_levels,
+            effective_data_class=join_data_classes(source_data_classes),
+            effective_trust_level=join_trust_levels(source_trust_levels),
+            codec_identity=":".join((codec_id, codec_version, schema_version)),
+            provider_request_id=provider_request_id or current.provider_request_id,
+            turn_generation=turn_generation,
         )
         updated = replace(
             current,
@@ -268,3 +311,8 @@ def _provider_reason(reason_code: str) -> str:
     if reason_code.endswith("integrity_failed"):
         return "provider_private_integrity_failed"
     return "provider_private_state_unavailable"
+
+
+def _is_sha256(value: object) -> bool:
+    text = str(value or "")
+    return len(text) == 64 and all(character in "0123456789abcdefABCDEF" for character in text)

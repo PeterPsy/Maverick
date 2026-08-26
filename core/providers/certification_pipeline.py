@@ -24,6 +24,10 @@ from core.providers.certification_manifests import (
     get_certification_manifest,
     resolve_manifest_path,
 )
+from core.providers.certified_execution_tcb import (
+    certified_tcb_identity,
+    validate_remote_tcb_identity,
+)
 from core.providers.errors import CapabilityCertificateError
 from core.runtime.execution_binding import canonical_digest
 
@@ -47,6 +51,10 @@ class CertificationRunResult:
     started_at: datetime
     completed_at: datetime
     outcome: str
+    tcb_manifest_id: str = ""
+    tcb_manifest_version: str = ""
+    tcb_structure_digest: str = ""
+    tcb_live_digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,13 @@ def signed_run_from_json(value: str) -> SignedCertificationRun:
         run_payload = dict(payload["run"])
         run_payload["evidence_refs"] = tuple(run_payload["evidence_refs"])
         run_payload["step_results"] = tuple(run_payload["step_results"])
+        for field in (
+            "tcb_manifest_id",
+            "tcb_manifest_version",
+            "tcb_structure_digest",
+            "tcb_live_digest",
+        ):
+            run_payload.setdefault(field, "")
         for field in ("started_at", "completed_at"):
             run_payload[field] = datetime.fromisoformat(run_payload[field])
         return SignedCertificationRun(
@@ -113,9 +128,9 @@ def execute_certification_suite(
     start = started_at or datetime.now(tz=UTC)
     _require_aware(start)
     source_commit = _git_commit(cwd)
+    tcb_identity = certified_tcb_identity(cwd)
     matrix_bytes = resolve_manifest_path(cwd, manifest.matrix_path).read_bytes()
-    artifact_paths = tuple(resolve_manifest_path(cwd, item) for item in manifest.artifact_paths)
-    bundle_digest = _artifact_bundle_digest(cwd, artifact_paths)
+    bundle_digest = tcb_identity.live_digest
     step_results: list[dict[str, object]] = []
     for step in selected_steps:
         completed = subprocess.run(
@@ -137,8 +152,18 @@ def execute_certification_suite(
     _require_clean_checkout(cwd)
     if _git_commit(cwd) != source_commit:
         raise CapabilityCertificateError("certification_source_commit_changed")
+    final_tcb_identity = certified_tcb_identity(cwd)
+    if final_tcb_identity != tcb_identity:
+        raise CapabilityCertificateError("certificate_tcb_drift")
     end = datetime.now(tz=UTC)
-    summary = {"manifest_digest": manifest.digest, "steps": tuple(step_results)}
+    summary = {
+        "manifest_digest": manifest.digest,
+        "tcb_manifest_id": tcb_identity.manifest_id,
+        "tcb_manifest_version": tcb_identity.manifest_version,
+        "tcb_structure_digest": tcb_identity.structure_digest,
+        "tcb_live_digest": tcb_identity.live_digest,
+        "steps": tuple(step_results),
+    }
     test_run_id = canonical_digest(
         {
             "suite_id": suite_id,
@@ -146,6 +171,7 @@ def execute_certification_suite(
             "source_commit": source_commit,
             "adapter_artifact_digest": adapter_artifact_digest,
             "artifact_bundle_digest": bundle_digest,
+            "tcb_identity": tcb_identity,
             "matrix_revision": manifest.matrix_revision,
             "matrix_digest": hashlib.sha256(matrix_bytes).hexdigest(),
             "started_at": start,
@@ -169,6 +195,10 @@ def execute_certification_suite(
         started_at=start,
         completed_at=end,
         outcome="passed",
+        tcb_manifest_id=tcb_identity.manifest_id,
+        tcb_manifest_version=tcb_identity.manifest_version,
+        tcb_structure_digest=tcb_identity.structure_digest,
+        tcb_live_digest=tcb_identity.live_digest,
     )
 
 
@@ -177,8 +207,10 @@ def sign_certification_run(
     *,
     signer_key_id: str,
     private_key: Ed25519PrivateKey,
+    cwd: Path | None = None,
 ) -> SignedCertificationRun:
     validate_completed_run(run)
+    _validate_run_tcb(run, cwd=cwd)
     key_id = _required(signer_key_id, "certification_signer_key_missing")
     signature = private_key.sign(_run_payload(run))
     return SignedCertificationRun(
@@ -192,8 +224,10 @@ def verify_certification_run(
     signed: SignedCertificationRun,
     *,
     trusted_keys: Mapping[str, Ed25519PublicKey],
+    cwd: Path | None = None,
 ) -> CertificationRunResult:
     validate_completed_run(signed.run)
+    _validate_run_tcb(signed.run, cwd=cwd)
     public_key = trusted_keys.get(signed.signer_key_id)
     if public_key is None:
         raise CapabilityCertificateError("certification_signer_untrusted")
@@ -220,6 +254,8 @@ def validate_completed_run(run: CertificationRunResult) -> None:
         run.matrix_digest,
         run.result_summary_digest,
         run.manifest_digest,
+        run.tcb_structure_digest,
+        run.tcb_live_digest,
     ):
         _sha256(value)
     if not run.evidence_refs:
@@ -232,6 +268,13 @@ def validate_completed_run(run: CertificationRunResult) -> None:
     manifest = get_certification_manifest(run.suite_id, run.suite_version)
     if run.manifest_digest != manifest.digest:
         raise CapabilityCertificateError("certification_manifest_mismatch")
+    if (
+        run.tcb_manifest_id != manifest.tcb_manifest_id
+        or run.tcb_manifest_version != manifest.tcb_manifest_version
+        or run.tcb_structure_digest != manifest.tcb_structure_digest
+        or run.artifact_bundle_digest != run.tcb_live_digest
+    ):
+        raise CapabilityCertificateError("certificate_tcb_identity_mismatch")
     expected_steps = tuple(
         (step.step_id, step.kind, canonical_digest(step.command))
         for step in manifest.steps
@@ -246,6 +289,10 @@ def validate_completed_run(run: CertificationRunResult) -> None:
         raise CapabilityCertificateError("certification_run_not_passed")
     expected_summary = canonical_digest({
         "manifest_digest": run.manifest_digest,
+        "tcb_manifest_id": run.tcb_manifest_id,
+        "tcb_manifest_version": run.tcb_manifest_version,
+        "tcb_structure_digest": run.tcb_structure_digest,
+        "tcb_live_digest": run.tcb_live_digest,
         "steps": run.step_results,
     })
     if run.result_summary_digest != expected_summary:
@@ -266,6 +313,15 @@ def validate_run_against_manifest(
     manifest = get_certification_manifest(run.suite_id, run.suite_version)
     if run.manifest_digest != manifest.digest:
         raise CapabilityCertificateError("certification_manifest_mismatch")
+    current_tcb = validate_remote_tcb_identity(
+        manifest_id=run.tcb_manifest_id,
+        manifest_version=run.tcb_manifest_version,
+        structure_digest=run.tcb_structure_digest,
+        live_digest=run.tcb_live_digest,
+        root=cwd,
+    )
+    if run.artifact_bundle_digest != current_tcb.live_digest:
+        raise CapabilityCertificateError("certification_artifact_bundle_mismatch")
     expected_steps = tuple(
         (step.step_id, step.kind, canonical_digest(step.command)) for step in manifest.steps
     )
@@ -280,13 +336,24 @@ def validate_run_against_manifest(
         raise CapabilityCertificateError("certification_matrix_revision_mismatch")
     if run.matrix_digest != hashlib.sha256(matrix.read_bytes()).hexdigest():
         raise CapabilityCertificateError("certification_matrix_digest_mismatch")
-    artifacts = tuple(resolve_manifest_path(cwd, item) for item in manifest.artifact_paths)
-    if run.artifact_bundle_digest != _artifact_bundle_digest(cwd, artifacts):
-        raise CapabilityCertificateError("certification_artifact_bundle_mismatch")
     deployed = deployed_source_commit or _git_commit(cwd)
     if run.source_commit != deployed:
         raise CapabilityCertificateError("certification_source_commit_mismatch")
     return manifest
+
+
+def _validate_run_tcb(
+    run: CertificationRunResult,
+    *,
+    cwd: Path | None,
+) -> None:
+    validate_remote_tcb_identity(
+        manifest_id=run.tcb_manifest_id,
+        manifest_version=run.tcb_manifest_version,
+        structure_digest=run.tcb_structure_digest,
+        live_digest=run.tcb_live_digest,
+        root=cwd,
+    )
 
 
 def _selected_manifest_steps(

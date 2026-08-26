@@ -59,11 +59,11 @@ from core.runtime.hosted_agentic_stream import (
     consume_hosted_provider_step,
 )
 from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
+from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.provider_private_state import ProviderPrivateStateService
 from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
-from core.runtime.tool_filesystem_listing import list_workspace_entries
 from core.runtime.tool_orchestrator import RuntimeToolInvocationOutcome
 from core.runtime.tool_ledger import RuntimeToolLedger
 
@@ -117,7 +117,7 @@ class HostedAgenticLoop:
             tool_filesystem_listing_module,
             tool_orchestrator_module,
             build_core_runtime_tool_capabilities,
-            list_workspace_entries,
+            ConfinedWorkspaceFilesystem.list_entries,
         )
 
     async def execute(
@@ -191,8 +191,9 @@ class HostedAgenticLoop:
             budget.tighten(policy)
             egress_policy = hosted_egress_policy(context, budget.policy)
             authority = self.authority_refresher(context)
+            effective_context = replace(context, effective_authority=authority)
             actor_context = self.actor_context_resolver(
-                replace(context, effective_authority=authority)
+                effective_context
             )
             provider_private_state = private_state.read(context, authority)
             tool_orchestrator = self.tool_orchestrator_resolver(context, actor_context)
@@ -201,7 +202,7 @@ class HostedAgenticLoop:
                 context=actor_context,
             )
             request = self.request_builder.build(
-                context=context,
+                context=effective_context,
                 step=step,
                 input_text=context.input_text,
                 catalog=catalog,
@@ -212,7 +213,7 @@ class HostedAgenticLoop:
                 max_output_tokens=max(1, budget.policy.max_output_tokens - budget.output_tokens),
             )
             budget.begin_step(request, provider_runtime.cost_estimator(request))
-            private_state.persist_request_identity(context, request.request_id)
+            private_state.persist_request_identity(context, request)
             yield event(
                 "provider.request.sent",
                 {"request_id": request.request_id, "step": step + 1},
@@ -304,6 +305,7 @@ class HostedAgenticLoop:
                     provider_tool_name=response.tool_call.provider_tool_name,
                     result=result,
                     is_error=is_error,
+                    invocation=outcome.invocation,
                 )
             )
         raise HostedAgenticLoopError("agent_step_limit_reached")

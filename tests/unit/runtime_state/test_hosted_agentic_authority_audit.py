@@ -35,6 +35,9 @@ class HostedAgenticAuthorityAuditTest(unittest.TestCase):
             "core.runtime.authority_service.resolve_effective_runtime_authority",
             return_value=harness.authority,
         ) as resolve, patch(
+            "core.runtime.authority_service.live_runtime_actor_policy",
+            return_value=(True, "workspace-actor:test:1"),
+        ), patch(
             "core.runtime.authority_service.record_runtime_event",
             record,
         ):

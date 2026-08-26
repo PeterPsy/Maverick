@@ -6,9 +6,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from core.providers.agentic_models import (
-    AgenticProfileDefinitionStatus,
-)
+from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.providers.agentic_migration import migrate_agentic_runtime_schema
 from core.providers.agentic_profiles import (
     CODEX_PREVIOUS_PROFILE_REVISIONS,
@@ -23,6 +21,7 @@ from core.providers.errors import (
     CapabilityCertificateError,
 )
 from core.providers.certificate_service import validate_certificate_for_binding
+from core.providers.certified_execution_tcb import certified_tcb_identity
 from core.providers.certificate_projection import certificate_profile_status
 from core.providers.builtin_certification import ensure_codex_preview_certificate
 from core.providers.agentic_workspace_policy import egress_policy_for_definition
@@ -226,6 +225,7 @@ class AgenticProfilesTest(unittest.TestCase):
                 )
 
     def test_remote_reasoning_is_validated_against_the_certificate(self) -> None:
+        tcb = certified_tcb_identity()
         profile = SimpleNamespace(
             definition_id="profile-google",
             revision="1",
@@ -270,6 +270,10 @@ class AgenticProfilesTest(unittest.TestCase):
                     evidence_digest="evidence-google",
                     certified_reasoning_efforts=("minimal", "low", "medium", "high"),
                     default_reasoning_effort="high",
+                    tcb_manifest_id=tcb.manifest_id,
+                    tcb_manifest_version=tcb.manifest_version,
+                    tcb_structure_digest=tcb.structure_digest,
+                    tcb_live_digest=tcb.live_digest,
                 ),
             ),
             patch(

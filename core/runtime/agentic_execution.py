@@ -49,6 +49,7 @@ async def execute_agentic_runtime_turn(
     input_text: str,
     correlation_id: str,
     effective_authority: EffectiveRuntimeAuthority,
+    input_sources: tuple[object, ...] = (),
     invoked_skills: list[SkillDefinition] | None = None,
     timeout_seconds: int | None = None,
     event_sink: RuntimeExecutionEventSink | None = None,
@@ -139,6 +140,7 @@ async def execute_agentic_runtime_turn(
         timeout_seconds=timeout_seconds,
         prepared_handle=prepared.prepared_handle,
         effective_authority=effective_authority,
+        input_sources=input_sources,
     )
     output_text = ""
     delta_output = ""

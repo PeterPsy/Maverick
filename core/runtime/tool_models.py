@@ -50,6 +50,14 @@ class ToolInvocationRecord:
     revision: int
     created_at: datetime
     updated_at: datetime
+    result_data_class: str = "unclassified"
+    result_trust_level: str = "untrusted_tool_output"
+    result_provenance: str = "tool_result"
+    result_source_ref: str = ""
+    result_source_revision: str = ""
+    result_source_digest: str = ""
+    result_resource_identity: str = ""
+    result_classification_revision: int | None = None
 
 
 @dataclass(frozen=True)

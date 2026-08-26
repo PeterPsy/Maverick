@@ -11,7 +11,11 @@ from core.providers.agentic_protocol import (
     AgenticToolDefinition,
     AgenticToolResult,
 )
-from core.runtime.tool_catalog import RuntimeCoreCapabilityHandler, RuntimeToolActorContext
+from core.runtime.tool_catalog import (
+    RuntimeCoreCapabilityHandler,
+    RuntimeToolActorContext,
+    RuntimeToolSurfaceResult,
+)
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_schema import provider_tool_name
 
@@ -66,7 +70,12 @@ class AgenticFilesystemListProbe:
         """Execute the exact real handler and require the isolated marker result."""
         if call.provider_tool_name != self.definition.name:
             raise ValueError("probe_tool_name_invalid")
-        result = self.handler(call.arguments, self.context, None)
+        raw_result = self.handler(call.arguments, self.context, None)
+        result = (
+            raw_result.payload
+            if isinstance(raw_result, RuntimeToolSurfaceResult)
+            else raw_result
+        )
         entries = result.get("entries") if isinstance(result, dict) else None
         if not isinstance(entries, list) or not any(
             isinstance(item, dict)

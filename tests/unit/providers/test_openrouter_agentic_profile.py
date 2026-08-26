@@ -160,6 +160,7 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             certificate.evidence_digest
         )
         self.assertTrue(certificate.certified_capabilities.filesystem_list)
+        self.assertFalse(certificate.certified_capabilities.recovery)
         self.assertEqual(
             certificate.certified_reasoning_efforts,
             ("minimal", "low", "medium", "high"),

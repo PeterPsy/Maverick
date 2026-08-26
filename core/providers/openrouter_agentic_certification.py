@@ -22,8 +22,8 @@ from core.runtime.execution_binding import canonical_digest
 
 
 OPENROUTER_CERTIFICATION_SUITE_ID = "maverick-openrouter-agentic-contract"
-OPENROUTER_CERTIFICATION_SUITE_VERSION = "8"
-OPENROUTER_CERTIFICATION_MATRIX_REVISION = "2026-08-26-r8"
+OPENROUTER_CERTIFICATION_SUITE_VERSION = "9"
+OPENROUTER_CERTIFICATION_MATRIX_REVISION = "2026-08-26-r9"
 OPENROUTER_CERTIFICATION_VALIDITY_DAYS = 30
 
 
@@ -56,6 +56,10 @@ def publish_openrouter_preview_certificate(
         matrix_revision=run.matrix_revision, matrix_digest=run.matrix_digest,
         signer_key_id=signed_run.signer_key_id, run_signature=signed_run.signature,
         certification_started_at=run.started_at, certification_outcome=run.outcome,
+        tcb_manifest_id=run.tcb_manifest_id,
+        tcb_manifest_version=run.tcb_manifest_version,
+        tcb_structure_digest=run.tcb_structure_digest,
+        tcb_live_digest=run.tcb_live_digest,
     )
     certificate = CapabilityCertificate(
         certificate_id=definition.capability_certificate_id, schema_version="3",
@@ -72,9 +76,11 @@ def publish_openrouter_preview_certificate(
         certified_capabilities=RuntimeCapabilitySet(
             streaming=True, tool_orchestration=True, cli=False, mcp=False,
             skill_catalog=False, filesystem_list=True, filesystem_read=True, filesystem_write=False,
-            shell=False, interrupt=True, same_turn_steering=False, recovery=True,
+            shell=False, interrupt=True, same_turn_steering=False, recovery=False,
             confirmation_resume=True, provider_private_state=True,
             attachment_modalities=(),
+            app_references=False,
+            confirmations=True,
         ),
         certified_reasoning_efforts=OPENROUTER_CERTIFIED_REASONING_EFFORTS,
         default_reasoning_effort=OPENROUTER_DEFAULT_REASONING_EFFORT,
@@ -82,5 +88,9 @@ def publish_openrouter_preview_certificate(
         test_run_id=evidence.test_run_id, evidence_digest=evidence.evidence_digest,
         evidence_refs=evidence.evidence_refs, issued_at=run.completed_at,
         expires_at=run.completed_at + timedelta(days=OPENROUTER_CERTIFICATION_VALIDITY_DAYS),
+        tcb_manifest_id=run.tcb_manifest_id,
+        tcb_manifest_version=run.tcb_manifest_version,
+        tcb_structure_digest=run.tcb_structure_digest,
+        tcb_live_digest=run.tcb_live_digest,
     )
     return publish_capability_certificate(store, certificate=certificate, evidence=evidence)

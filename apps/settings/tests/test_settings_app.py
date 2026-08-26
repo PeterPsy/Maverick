@@ -691,7 +691,15 @@ settings.agentic_admin = {
     data_policy: {
       collection: 'deny',
       require_zdr: true,
-      attestation_state: 'unavailable'
+      attestation_state: 'not_attested',
+      attestation: {
+        state: 'not_attested',
+        authoritative: false,
+        declaration: null,
+        scope: null,
+        revision: null,
+        updated_at: null
+      }
     },
     profile_policy_ceiling: {
       allowed_remote_data_classes: ['public'],
@@ -735,7 +743,32 @@ settings.agentic_admin = {
     health: 'blocked',
     blocked_reason: 'hosted_agent_runtime_disabled',
     containment_status: 'NO-GO',
-    containment_reason: 'hosted_agent_runtime_disabled'
+    containment_reason: 'hosted_agent_runtime_disabled',
+    effective_capabilities: {
+      status: 'blocked',
+      reason_code: 'hosted_agent_runtime_disabled',
+      snapshot_digest: 'blocked-snapshot-digest',
+      capabilities: {
+        filesystem_read: false,
+        filesystem_write: false,
+        shell: false,
+        cli: false,
+        mcp: false,
+        skill_catalog: false,
+        app_references: false,
+        attachment_modalities: [],
+        confirmations: false,
+        recovery: false
+      },
+      provider: { health_status: 'unavailable' },
+      data_policy: {
+        allowed_remote_data_classes: [],
+        collection: 'deny',
+        require_zdr: false
+      },
+      certificate: {},
+      tcb: { posture: 'ineligible' }
+    }
   }]
 };
 settings.runtime.all_sessions = [{
@@ -755,7 +788,9 @@ for (const expected of [
   'Provider google-ai-studio · upstream google-ai-studio',
   'Data destination google-ai-studio → google-ai-studio · google-ai-studio',
   'Egress policy remote-agentic-contained@2 · Core-classified data none',
-  'Data policy collection=deny · ZDR required · attestation unavailable',
+  'Data policy collection=deny · ZDR required · attestation not_attested',
+  'Effective capabilities · blocked',
+  'Workspace declaration (read-only): not_attested',
   'Binding Disabled · Profile Suspended · Certificate Revoked / Ineligible',
   'Google agentic Gemini 3.5 Pro · fake-data preview',
   'Quarantined: Remote Agentic State Ambiguous',
@@ -791,6 +826,16 @@ assert.equal(hostedProviderRoutingDraft(state, 'nvidia/nemotron-3-ultra-550b-a55
                 check=False,
             )
         self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
+    def test_effective_snapshot_does_not_reclassify_exact_codex_as_remote(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        controller_source = (
+            app_root / "frontend" / "src" / "agenticBindingController.ts"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("item.runtime_engine_id !== 'codex'", controller_source)
+        self.assertIn("item.effective_capabilities.status !== 'active'", controller_source)
+        self.assertIn("item.containment_status === 'NO-GO'", controller_source)
 
     def test_persistence_migration_requires_dry_run_and_explicit_cleanup(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

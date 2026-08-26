@@ -388,7 +388,44 @@ export type AgenticCertificate = {
   expires_at: string;
   revoked_at: string | null;
   status_revision: number | null;
-  certified_capabilities: Record<string, boolean>;
+  certified_capabilities: Record<string, boolean | string[]>;
+  tcb?: {
+    manifest_id: string | null;
+    manifest_version: string | null;
+    structure_digest: string | null;
+    live_digest: string | null;
+  };
+};
+
+export type AgenticEffectiveCapabilities = {
+  status: 'active' | 'blocked';
+  reason_code: string | null;
+  snapshot_digest: string;
+  computed_at?: string;
+  execution_mode?: 'sandbox' | 'full-access';
+  capabilities: Record<string, boolean | string[]>;
+  allowed_tool_handles?: string[];
+  provider?: {
+    provider_id?: string;
+    model_id?: string;
+    protocol?: string;
+    certified_upstream_ids?: string[];
+    effective_upstream_ids?: string[];
+    health_status?: string;
+    health_revision?: string;
+  };
+  data_policy?: {
+    allowed_remote_data_classes?: string[];
+    collection?: string;
+    require_zdr?: boolean;
+  };
+  certificate?: {
+    certificate_id?: string;
+    suite_id?: string;
+    suite_version?: string;
+    expires_at?: string | null;
+  };
+  tcb?: { posture?: string; [key: string]: unknown };
 };
 
 export type AgenticCredentialBinding = {
@@ -445,6 +482,7 @@ export type AgenticAdminItem = {
   binding_status: 'missing' | 'enabled' | 'disabled';
   profile_status: string;
   certificate_eligibility: string;
+  effective_capabilities: AgenticEffectiveCapabilities;
   upstream_provider_ids: string[];
   data_destination: {
     provider_id: string;
@@ -460,7 +498,20 @@ export type AgenticAdminItem = {
   data_policy: {
     collection: string;
     require_zdr: boolean;
-    attestation_state: 'unavailable';
+    attestation_state: 'not_attested' | 'active' | 'revoked' | 'invalid';
+    attestation: {
+      state: 'not_attested' | 'active' | 'revoked' | 'invalid';
+      authoritative: boolean;
+      declaration: string | null;
+      scope: {
+        type: 'workspace' | 'resource_prefixes';
+        resource_prefixes: string[];
+      } | null;
+      revision: number | null;
+      updated_at: string | null;
+      attested_at?: string;
+      revoked_at?: string | null;
+    };
   };
 };
 

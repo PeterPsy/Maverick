@@ -20,7 +20,11 @@ export function skillIdsVisibleInComposer({
     activationMode !== "explicit"
     || !provider
     || providerUsesPlainHostedRuntime(provider)
-    || provider.capabilities?.supports_skills !== true
+    || (
+      provider.provider_role === "runtime_engine"
+        ? provider.agentic_effective_capabilities?.capabilities.skill_catalog !== true
+        : provider.capabilities?.supports_skills !== true
+    )
     || (sourceAppId && !sourceAppSupportsSkillInvocations)
   ) {
     return [];

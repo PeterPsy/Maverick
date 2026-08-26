@@ -63,7 +63,7 @@ def _new_input_steps(
     for block in request.content_blocks:
         if block.role == "system":
             continue
-        if block.role != "user" or not block.content_type.startswith("text/"):
+        if block.role != "user" or not _textual_content_type(block.content_type):
             raise GoogleInteractionsProtocolError("provider_request_invalid")
         content.append({"type": "text", "text": _decode_utf8(block.content)})
     if not content:
@@ -115,10 +115,14 @@ def _system_instruction(request: AgenticModelRequest) -> str:
     for block in request.content_blocks:
         if block.role != "system":
             continue
-        if not block.content_type.startswith("text/"):
+        if not _textual_content_type(block.content_type):
             raise GoogleInteractionsProtocolError("provider_request_invalid")
         values.append(_decode_utf8(block.content))
     return "\n\n".join(values)
+
+
+def _textual_content_type(value: str) -> bool:
+    return value.startswith("text/") or value == "application/json"
 
 
 def _thinking_level(reasoning_effort: str | None) -> dict[str, str]:

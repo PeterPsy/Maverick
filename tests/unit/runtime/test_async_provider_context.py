@@ -80,6 +80,7 @@ class AsyncProviderContextTest(unittest.TestCase):
             session_id="agentic-context",
             workspace_id="default",
             agent_id="chat",
+            owner_user_id="user-context",
             start_path=self.state.repository_root,
         )
         migrate_agentic_runtime_schema(
@@ -203,6 +204,15 @@ def _state(repository_root: Path) -> SimpleNamespace:
         provider_store=provider_store,
         secret_store=secret_store,
         runtime_store=runtime_store,
+        identity_store=SimpleNamespace(
+            get_user=lambda _user_id: SimpleNamespace(platform_role="member")
+        ),
+        workspace_store=SimpleNamespace(
+            get_membership=lambda **_kwargs: SimpleNamespace(
+                status="active",
+                role="member",
+            )
+        ),
         runtime_event_bus=RuntimeEventBus(),
         runtime_thread_event_bus=RuntimeThreadEventBus(),
         repository_root=repository_root,

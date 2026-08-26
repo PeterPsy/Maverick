@@ -11,7 +11,9 @@ from core.providers.agentic_models import RuntimeDataClass
 
 EgressProvenance = Literal[
     "platform_instruction",
+    "prompt",
     "user_input",
+    "orchestration_context",
     "skill",
     "attachment",
     "app_reference",
@@ -39,6 +41,10 @@ class AgenticEgressContentBlock:
     provenance: EgressProvenance
     trust_level: EgressTrustLevel
     content_type: str
+    source_ref: str = ""
+    source_revision: str = ""
+    resource_identity: str = ""
+    classification_revision: int | None = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +80,9 @@ class AgenticEgressDecision:
     policy_revision: str
     reason_code: str
     decided_at: datetime
+    classification_revision: int | None = None
+    attestation_id: str | None = None
+    attestation_revision: int | None = None
 
 
 @dataclass(frozen=True)

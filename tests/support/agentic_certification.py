@@ -15,6 +15,7 @@ from core.providers.certificate_service import (
     publish_capability_certificate,
     runtime_adapter_artifact_digest,
 )
+from core.providers.certified_execution_tcb import certified_tcb_identity
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.runtime.authority import resolve_effective_runtime_authority
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
@@ -23,6 +24,7 @@ from tests.support.collections import FakeCollection
 
 def fake_capability_evidence(adapter: object, *, now: datetime):
     artifact_digest = runtime_adapter_artifact_digest(adapter)
+    tcb = certified_tcb_identity()
     return build_capability_evidence(
         suite_id="fake-agentic-contract",
         suite_version="1",
@@ -31,6 +33,10 @@ def fake_capability_evidence(adapter: object, *, now: datetime):
         result_summary_digest=canonical_digest({"result": "passed"}),
         evidence_refs=("platform-evidence:test:fake-agentic-contract",),
         recorded_at=now,
+        tcb_manifest_id=tcb.manifest_id,
+        tcb_manifest_version=tcb.manifest_version,
+        tcb_structure_digest=tcb.structure_digest,
+        tcb_live_digest=tcb.live_digest,
     )
 
 
@@ -126,6 +132,10 @@ def certified_test_provider_store(
             evidence_refs=evidence.evidence_refs,
             issued_at=now,
             expires_at=now + timedelta(days=validity_days),
+            tcb_manifest_id=evidence.tcb_manifest_id,
+            tcb_manifest_version=evidence.tcb_manifest_version,
+            tcb_structure_digest=evidence.tcb_structure_digest,
+            tcb_live_digest=evidence.tcb_live_digest,
         ),
     )
     return store

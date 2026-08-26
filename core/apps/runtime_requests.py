@@ -26,10 +26,19 @@ from core.providers.agentic_workspace_policy import actor_selection_allowed
 from core.providers.service import effective_provider_registry, resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.execution_binding import RuntimeExecutionBinding
+from core.runtime.authority import (
+    reject_client_data_authority,
+    validate_agentic_context_shape,
+)
+from core.runtime.authority_service import (
+    preflight_execution_binding_context,
+    preflight_runtime_context_capabilities,
+)
 from core.runtime.app_streams import RuntimeAppStreamError, RuntimeAppStreamRecord
 from core.runtime.remote_agentic_admission import (
     require_remote_agentic_session_admission,
 )
+from core.runtime.plain_hosted_text import runtime_session_is_plain_hosted_chat
 from core.runtime.runtime_session import (
     RuntimeSessionRecord,
     coerce_runtime_mode,
@@ -104,26 +113,27 @@ def apply_app_runtime_requests(
         raise AppHostingError("App dependency backend requests must be a list.")
     dependency_results: list[dict[str, Any]] = []
     for request in dependency_backend_requests:
-        if isinstance(request, dict):
-            dependency_results.append(
-                _apply_one_dependency_backend_request(
-                    state,
-                    request=request,
-                    workspace_id=workspace_id,
-                    app_id=app_id,
-                    source_root=source_root,
-                    backend_entrypoint=backend_entrypoint,
-                    data_root=data_root,
-                    parsed=parsed,
-                    start_path=start_path,
-                    actor_user_id=actor_user_id,
-                )
+        if not isinstance(request, dict):
+            raise AppHostingError("App dependency backend requests must contain objects.")
+        dependency_results.append(
+            _apply_one_dependency_backend_request(
+                state,
+                request=request,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                source_root=source_root,
+                backend_entrypoint=backend_entrypoint,
+                data_root=data_root,
+                parsed=parsed,
+                start_path=start_path,
+                actor_user_id=actor_user_id,
             )
+        )
     _attach_dependency_backend_request_results(result, dependency_results)
     results: list[dict[str, Any]] = []
     for request in requests:
         if not isinstance(request, dict):
-            continue
+            raise AppHostingError("App runtime launch requests must contain objects.")
         results.append(
             _apply_one_runtime_request(
                 state,
@@ -141,8 +151,9 @@ def apply_app_runtime_requests(
     if not isinstance(interrupt_requests, list):
         raise AppHostingError("App runtime interrupt requests must be a list.")
     for request in interrupt_requests:
-        if isinstance(request, dict):
-            results.append(_apply_one_runtime_interrupt_request(state, request=request, workspace_id=workspace_id, app_id=app_id))
+        if not isinstance(request, dict):
+            raise AppHostingError("App runtime interrupt requests must contain objects.")
+        results.append(_apply_one_runtime_interrupt_request(state, request=request, workspace_id=workspace_id, app_id=app_id))
     visible_results: list[dict[str, Any]] = []
     for request_result in results:
         visible = bool(request_result.pop("_visible", True))
@@ -610,6 +621,14 @@ def _preflight_runtime_request_before_persistence(
 ) -> RuntimeRequestPreflight:
     """Authorize an existing session or exact new-session pin before reservation."""
     _reject_app_remote_data_declaration(request)
+    validate_agentic_context_shape(
+        invoked_skills=request.get("skill_ids", []),
+    )
+    validate_agentic_context_shape(
+        invoked_skills=request.get("invoked_skill_ids", []),
+        attachments=request.get("attachments", []),
+        app_references=request.get("app_references", []),
+    )
     existing_session_id = _text(request.get("runtime_session_id"))
     if existing_session_id:
         session = _existing_runtime_session_for_request(
@@ -619,6 +638,32 @@ def _preflight_runtime_request_before_persistence(
             app_id=app_id,
         )
         require_turn_queue_session_executable(state.runtime_store, session)
+        if runtime_session_is_plain_hosted_chat(session):
+            if request.get("skill_ids") or request.get("invoked_skill_ids"):
+                raise ProviderError("plain_hosted_chat_blocks_skills")
+            if request.get("app_references"):
+                raise ProviderError("plain_hosted_chat_blocks_app_references")
+        if session.execution_binding is not None:
+            raw_skill_ids = request.get("skill_ids", [])
+            raw_invoked_skill_ids = request.get("invoked_skill_ids", [])
+            raw_attachments = request.get("attachments", [])
+            raw_app_references = request.get("app_references", [])
+            validate_agentic_context_shape(
+                invoked_skills=raw_invoked_skill_ids,
+                attachments=raw_attachments,
+                app_references=raw_app_references,
+            )
+            validate_agentic_context_shape(invoked_skills=raw_skill_ids)
+            if raw_skill_ids:
+                raise ProviderError("agentic_session_skill_catalog_immutable")
+            preflight_runtime_context_capabilities(
+                state,
+                session=session,
+                turn_id=f"app-turn-admission:{session.session_id}",
+                invoked_skills=raw_invoked_skill_ids,
+                attachments=raw_attachments,
+                app_references=raw_app_references,
+            )
         return RuntimeRequestPreflight(
             existing_session=session,
             session_id=None,
@@ -629,8 +674,23 @@ def _preflight_runtime_request_before_persistence(
     if not agent_id:
         raise AppHostingError("Runtime launch request requires agent_id.")
     runtime_mode = coerce_runtime_mode(request.get("runtime_mode"))
+    if runtime_mode == "plain_hosted_chat":
+        if request.get("skill_ids") or request.get("invoked_skill_ids"):
+            raise ProviderError("plain_hosted_chat_blocks_skills")
+        if request.get("app_references"):
+            raise ProviderError("plain_hosted_chat_blocks_app_references")
     authorized_profile = None
     if runtime_mode == "agentic":
+        raw_skill_ids = request.get("skill_ids", [])
+        raw_invoked_skill_ids = request.get("invoked_skill_ids", [])
+        raw_attachments = request.get("attachments", [])
+        raw_app_references = request.get("app_references", [])
+        validate_agentic_context_shape(
+            invoked_skills=raw_skill_ids,
+            attachments=raw_attachments,
+            app_references=raw_app_references,
+        )
+        validate_agentic_context_shape(invoked_skills=raw_invoked_skill_ids)
         authorized_profile = _authorize_new_agentic_app_session(
             state,
             request=request,
@@ -646,21 +706,38 @@ def _preflight_runtime_request_before_persistence(
             state.provider_store,
             registry=getattr(state, "provider_registry", None),
         )
+        execution_mode = resolve_runtime_execution_mode(
+            workspace_id=workspace_id,
+            requested_mode=request.get("requested_mode"),
+            governance=governance,
+            platform_allows_full_access=workspace_id == "default",
+        )
         execution_binding = build_pinned_execution_binding(
             state.provider_store,
             registry,
             session_id=session_id,
             workspace_id=workspace_id,
-            execution_mode=resolve_runtime_execution_mode(
-                workspace_id=workspace_id,
-                requested_mode=request.get("requested_mode"),
-                governance=governance,
-                platform_allows_full_access=workspace_id == "default",
-            ),
+            execution_mode=execution_mode,
             workspace_binding_id=_text(request.get("workspace_profile_binding_id")) or None,
             reasoning_effort=_text(request.get("reasoning_effort")) or None,
             authorized_definition_snapshot=authorized_profile[0],
             authorized_workspace_binding_snapshot=authorized_profile[1],
+        )
+        preflight_execution_binding_context(
+            state,
+            binding=execution_binding,
+            turn_id=f"app-session-admission:{session_id}",
+            live_execution_mode=execution_mode,
+            actor_policy_revision=(
+                f"workspace-actor:{execution_binding.workspace_binding_id}:"
+                f"{execution_binding.workspace_binding_revision}"
+            ),
+            invoked_skills=(
+                *raw_skill_ids,
+                *raw_invoked_skill_ids,
+            ),
+            attachments=raw_attachments,
+            app_references=raw_app_references,
         )
     return RuntimeRequestPreflight(
         existing_session=None,
@@ -724,14 +801,17 @@ def _authorize_new_agentic_app_session(
         agent_type_id=_text(request.get("agent_type_id")) or agent_id,
     ):
         raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
-    require_remote_agentic_session_admission(definition)
+    require_remote_agentic_session_admission(
+        definition,
+        workspace_id=workspace_id,
+        workspace_store=getattr(state, "workspace_store", None),
+    )
     return definition, workspace_binding
 
 
 def _reject_app_remote_data_declaration(request: dict[str, Any]) -> None:
     """Reject app-authored session classification rather than interpreting it."""
-    if request.get("declared_remote_data_class") not in {None, ""}:
-        raise ProviderError("remote_data_declaration_not_accepted")
+    reject_client_data_authority(request)
 
 
 def _validated_runtime_request_attachments(

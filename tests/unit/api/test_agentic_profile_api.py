@@ -51,7 +51,11 @@ class AgenticProfileApiTest(unittest.TestCase):
             workspace_id="default",
             execution_mode="sandbox",
         )
-        state = SimpleNamespace(provider_store=provider_store, secret_store=None)
+        state = SimpleNamespace(
+            provider_store=provider_store,
+            secret_store=None,
+            workspace_store=SimpleNamespace(get_governance=lambda _workspace_id: None),
+        )
 
         payload = workspace_provider_status(state, workspace_id="default")
 
@@ -68,6 +72,13 @@ class AgenticProfileApiTest(unittest.TestCase):
         self.assertTrue(profile["selectable"])
         self.assertEqual(profile["containment_status"], "GO")
         self.assertEqual(profile["certificate"]["effective_status"], "active")
+        effective = profile["effective_capabilities"]
+        self.assertEqual(effective["status"], "active")
+        self.assertTrue(effective["capabilities"]["skill_catalog"])
+        self.assertTrue(effective["capabilities"]["app_references"])
+        self.assertEqual(effective["capabilities"]["attachment_modalities"], ("file",))
+        self.assertEqual(effective["tcb"]["posture"], "exact_local_contract")
+        self.assertNotIn("credential", json.dumps(effective, default=str).lower())
 
         runtime_binding = build_pinned_execution_binding(
             provider_store,
@@ -172,6 +183,14 @@ class AgenticProfileApiTest(unittest.TestCase):
                 "hosted_agent_runtime_disabled",
             )
             self.assertEqual(profiles[provider_id]["certificate_eligibility"], "ineligible")
+            effective = profiles[provider_id]["effective_capabilities"]
+            self.assertEqual(effective["status"], "blocked")
+            self.assertEqual(effective["reason_code"], "hosted_agent_runtime_disabled")
+            self.assertFalse(any(
+                value
+                for value in effective["capabilities"].values()
+                if isinstance(value, bool)
+            ))
 
     def test_status_only_projects_profiles_selectable_by_the_human_actor(self) -> None:
         provider_store = ProviderDocumentStore(

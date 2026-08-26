@@ -21,6 +21,10 @@ class WorkspaceGovernanceError(WorkspaceError):
     """Raised when a governance policy blocks an operation."""
 
 
+class WorkspaceDataGovernanceError(WorkspaceGovernanceError):
+    """Raised for invalid or conflicting data-governance mutations."""
+
+
 class WorkspaceQuotaExceededError(WorkspaceError):
     """Raised when a workspace exceeds an operational limit."""
 

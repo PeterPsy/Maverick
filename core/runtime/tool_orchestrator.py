@@ -6,6 +6,10 @@ from dataclasses import dataclass
 import json
 from typing import Literal
 
+from core.egress.classification import (
+    fail_closed_classification,
+    join_classifications,
+)
 from core.cli.models import CliInvocationContext
 from core.cli.runner import CliRunner
 from core.mcp.models import McpInvocationContext
@@ -16,6 +20,7 @@ from core.runtime.tool_catalog import (
     RuntimeToolCatalog,
     RuntimeToolCatalogBuilder,
     RuntimeToolDescriptor,
+    RuntimeToolSurfaceResult,
 )
 from core.runtime.tool_errors import RuntimeToolError, RuntimeToolSchemaError
 from core.runtime.tool_ledger import RuntimeToolLedger
@@ -186,12 +191,30 @@ class RuntimeToolOrchestrator:
             arguments = self.ledger.load_arguments(executing)
             validate_tool_arguments(descriptor.original_input_schema, arguments)
             crossed_effect_boundary = True
-            result = self._invoke_surface(
+            surface_result = self._invoke_surface(
                 descriptor=descriptor,
                 arguments=arguments,
                 context=context,
                 idempotency_key=(executing.idempotency_key if descriptor.supports_idempotency else None),
             )
+            if isinstance(surface_result, RuntimeToolSurfaceResult):
+                result = surface_result.payload
+                classification = join_classifications(
+                    (surface_result.classification,)
+                ).sources[0]
+            else:
+                result = surface_result
+                resolver = self.catalog_builder.result_classification_resolver
+                classification = (
+                    join_classifications(
+                        (resolver(descriptor.handle, arguments, result, context),)
+                    ).sources[0]
+                    if resolver is not None
+                    else fail_closed_classification(
+                        provenance="tool_result",
+                        source_ref=descriptor.handle,
+                    )
+                )
             encoded = json.dumps(
                 result, ensure_ascii=False, allow_nan=False, separators=(",", ":"), sort_keys=True
             ).encode("utf-8")
@@ -208,12 +231,18 @@ class RuntimeToolOrchestrator:
                 "root_type": "object",
                 "field_count": len(result),
                 "serialized_bytes": len(encoded),
+                "data_class": classification.data_class,
+                "trust_level": classification.trust_level,
+                "source_revision": classification.source_revision,
+                "resource_identity": classification.resource_identity,
+                "classification_revision": classification.classification_revision,
             }
             return self.ledger.transition(
                 executing,
                 "succeeded",
                 result_private_ref=private_ref,
                 result_summary=summary,
+                result_classification=classification,
             )
         except RuntimeToolError as error:
             state = (
@@ -237,7 +266,7 @@ class RuntimeToolOrchestrator:
         arguments: dict[str, object],
         context: RuntimeToolActorContext,
         idempotency_key: str | None,
-    ) -> dict[str, object]:
+    ) -> dict[str, object] | RuntimeToolSurfaceResult:
         caller_kind = "sandbox_agent" if context.execution_mode == "sandbox" else "full_access_agent"
         if descriptor.surface_kind == "cli":
             return self.cli_runner.run_command(

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import json
 import os
 from unittest.mock import patch
 
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.egress.agentic_policy import AgenticEgressEvaluator
+from core.egress.classification import content_sha256, validated_classification
 from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.mcp.tool_registry import McpToolRegistry
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
@@ -389,6 +391,8 @@ class HostedAgenticHarness:
                 entrypoint_path=None,
                 effect_class="read",
                 safe_to_retry=True,
+                schema_public=True,
+                certified_tcb_component="tool-schema-catalog",
             ),
             self._read,
         )
@@ -407,6 +411,8 @@ class HostedAgenticHarness:
                 entrypoint_path=None,
                 effect_class="mutating",
                 supports_idempotency=True,
+                schema_public=True,
+                certified_tcb_component="tool-schema-catalog",
             ),
             self._mutate,
         )
@@ -423,10 +429,14 @@ class HostedAgenticHarness:
                     build_core_runtime_tool_capabilities(
                         workspace_id="default",
                         workspace_root=self.root / "workspaces" / "default",
+                        resource_classification_resolver=(
+                            self._classify_fixture_resource
+                        ),
                     )
                     if self.filesystem_list
                     else ()
                 ),
+                result_classification_resolver=self._classify_fixture_result,
             ),
             ledger=ledger,
         )
@@ -438,6 +448,40 @@ class HostedAgenticHarness:
     def _mutate(self, arguments, _context):
         self.mcp_calls += 1
         return {"value": arguments["value"] + 1}
+
+    @staticmethod
+    def _classify_fixture_result(handle, _arguments, result, _context):
+        payload = json.dumps(
+            result,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        return validated_classification(
+            data_class="public",
+            provenance="tool_result",
+            trust_level="untrusted_tool_output",
+            source_ref=f"fixture-contract:{handle}",
+            source_revision="fixture-contract-v1",
+            source_digest=content_sha256(payload),
+            resource_identity=f"fixture-contract:{handle}:v1",
+            classification_revision=1,
+        )
+
+    @staticmethod
+    def _classify_fixture_resource(observation, provenance):
+        """Classify only the synthetic workspace observed by this test harness."""
+        return validated_classification(
+            data_class="public",
+            provenance=provenance,
+            trust_level="untrusted_tool_output",
+            source_ref=observation.resource_ref,
+            source_revision=observation.resource_revision,
+            source_digest=observation.resource_digest,
+            resource_identity=observation.resource_identity,
+            classification_revision=1,
+        )
 
     @property
     def read_tool_name(self) -> str:

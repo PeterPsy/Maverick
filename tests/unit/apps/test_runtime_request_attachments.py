@@ -188,6 +188,7 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
             patch.object(runtime_requests, "_authorize_new_agentic_app_session", return_value=(object(), object())),
             patch.object(runtime_requests, "effective_provider_registry", return_value=object()),
             patch.object(runtime_requests, "build_pinned_execution_binding", side_effect=lambda *_args, **kwargs: self._codex_execution_binding(**kwargs)),
+            patch.object(runtime_requests, "preflight_execution_binding_context", return_value=None),
             patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", lambda *_args, **_kwargs: None),
             patch.object(runtime_requests, "submit_runtime_turn_async", fake_submit_runtime_turn_async),
         ):
@@ -255,8 +256,10 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
             patch.object(runtime_requests, "_authorize_new_agentic_app_session", return_value=(object(), object())),
             patch.object(runtime_requests, "effective_provider_registry", return_value=object()),
             patch.object(runtime_requests, "build_pinned_execution_binding", side_effect=lambda *_args, **kwargs: self._codex_execution_binding(**kwargs)),
+            patch.object(runtime_requests, "preflight_execution_binding_context", return_value=None),
             patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", lambda *_args, **_kwargs: None),
             patch.object(runtime_submission_runtime, "resolve_runtime_engine_for_session", fake_resolve_runtime_engine_for_session),
+            patch.object(runtime_submission_runtime, "preflight_runtime_context_capabilities", return_value=None),
             patch.object(runtime_submission_runtime.ResolvedRuntimeEngine, "execution_kwargs", return_value={}),
             patch.object(runtime_submission_runtime, "_build_launch_spec_for_execution", lambda *_args, **_kwargs: None),
             patch.object(runtime_submission_runtime, "execute_runtime_turn", fake_execute_runtime_turn),

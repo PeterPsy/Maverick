@@ -24,6 +24,12 @@ from core.providers.store import ProviderStore
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.store import RuntimeStore
 from core.secrets.store import SecretStore
+from core.workspaces.data_governance import (
+    WorkspaceDataGovernanceService,
+    attestation_safe_projection,
+)
+from core.workspaces.errors import WorkspaceDataGovernanceError
+from core.workspaces.store import WorkspaceStore
 
 
 def runtime_provider_command_specs(
@@ -32,6 +38,7 @@ def runtime_provider_command_specs(
     runtime_store: RuntimeStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     secret_store: SecretStore | None = None,
+    workspace_store: WorkspaceStore | None = None,
     observability_store=None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     """Build runtime and provider command specs."""
@@ -193,6 +200,84 @@ def runtime_provider_command_specs(
             "requires_new_dry_run": True,
         }
 
+    def _workspace_attestation_status_handler(
+        arguments: dict[str, Any],
+        context: CliInvocationContext,
+    ) -> dict[str, Any]:
+        command_id = "core.providers.agentic.attestation.status"
+        workspace_id = str(arguments.get("workspace_id") or context.workspace_id or "").strip()
+        if workspace_store is None:
+            return {"command_id": command_id, "error": "data_governance_store_unavailable"}
+        if not workspace_id:
+            return {"command_id": command_id, "error": "workspace_id_required"}
+        return {
+            "command_id": command_id,
+            "workspace_id": workspace_id,
+            "attestation": attestation_safe_projection(
+                workspace_store.get_data_attestation(workspace_id)
+            ),
+        }
+
+    def _workspace_attestation_issue_handler(
+        arguments: dict[str, Any],
+        context: CliInvocationContext,
+    ) -> dict[str, Any]:
+        command_id = "core.providers.agentic.attestation.issue"
+        workspace_id = str(arguments.get("workspace_id") or context.workspace_id or "").strip()
+        actor_id = str(context.user_id or "").strip()
+        if workspace_store is None:
+            return {"command_id": command_id, "error": "data_governance_store_unavailable"}
+        if not workspace_id:
+            return {"command_id": command_id, "error": "workspace_id_required"}
+        if not actor_id:
+            return {"command_id": command_id, "error": "operator_actor_required"}
+        if arguments.get("confirmation") != "fake-data-scope-reviewed":
+            return {"command_id": command_id, "error": "attestation_confirmation_required"}
+        try:
+            record = WorkspaceDataGovernanceService(workspace_store).issue_attestation(
+                workspace_id=workspace_id,
+                actor_id=actor_id,
+                actor_kind="platform_operator",
+                scope_type=str(arguments.get("scope_type") or ""),
+                resource_prefixes=tuple(arguments.get("resource_prefixes") or ()),
+                expected_revision=int(arguments.get("expected_revision", -1)),
+            )
+        except (TypeError, ValueError, WorkspaceDataGovernanceError) as error:
+            return {"command_id": command_id, "error": str(error)}
+        return {
+            "command_id": command_id,
+            "workspace_id": workspace_id,
+            "attestation": attestation_safe_projection(record),
+        }
+
+    def _workspace_attestation_revoke_handler(
+        arguments: dict[str, Any],
+        context: CliInvocationContext,
+    ) -> dict[str, Any]:
+        command_id = "core.providers.agentic.attestation.revoke"
+        workspace_id = str(arguments.get("workspace_id") or context.workspace_id or "").strip()
+        actor_id = str(context.user_id or "").strip()
+        if workspace_store is None:
+            return {"command_id": command_id, "error": "data_governance_store_unavailable"}
+        if not workspace_id:
+            return {"command_id": command_id, "error": "workspace_id_required"}
+        if not actor_id:
+            return {"command_id": command_id, "error": "operator_actor_required"}
+        try:
+            record = WorkspaceDataGovernanceService(workspace_store).revoke_attestation(
+                workspace_id=workspace_id,
+                actor_id=actor_id,
+                expected_revision=int(arguments.get("expected_revision", -1)),
+                reason=str(arguments.get("reason") or ""),
+            )
+        except (TypeError, ValueError, WorkspaceDataGovernanceError) as error:
+            return {"command_id": command_id, "error": str(error)}
+        return {
+            "command_id": command_id,
+            "workspace_id": workspace_id,
+            "attestation": attestation_safe_projection(record),
+        }
+
     return [
         (
             core_cli_command(
@@ -299,6 +384,86 @@ def runtime_provider_command_specs(
                 safe_to_retry=False,
             ),
             _remote_agentic_containment_apply_handler,
+        ),
+        (
+            replace(
+                core_cli_command(
+                    command_id="core.providers.agentic.attestation.status",
+                    path_segments=["core", "providers", "agentic", "attestation", "status"],
+                    description="Inspect the read-only workspace fake-data attestation projection.",
+                    owner_id="providers",
+                    invocation_policy=OPERATOR_ONLY,
+                    argument_schema={
+                        "type": "object",
+                        "properties": {"workspace_id": {"type": "string"}},
+                        "additionalProperties": False,
+                    },
+                ),
+                effect_class="read",
+                safe_to_retry=True,
+            ),
+            _workspace_attestation_status_handler,
+        ),
+        (
+            replace(
+                core_cli_command(
+                    command_id="core.providers.agentic.attestation.issue",
+                    path_segments=["core", "providers", "agentic", "attestation", "issue"],
+                    description="Issue a CAS-revisioned fake-data-only workspace declaration.",
+                    owner_id="providers",
+                    invocation_policy=OPERATOR_ONLY,
+                    argument_schema={
+                        "type": "object",
+                        "properties": {
+                            "workspace_id": {"type": "string"},
+                            "scope_type": {
+                                "type": "string",
+                                "enum": ["workspace", "resource_prefixes"],
+                            },
+                            "resource_prefixes": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "expected_revision": {"type": "integer", "minimum": 0},
+                            "confirmation": {
+                                "type": "string",
+                                "enum": ["fake-data-scope-reviewed"],
+                            },
+                        },
+                        "required": ["scope_type", "expected_revision", "confirmation"],
+                        "additionalProperties": False,
+                    },
+                ),
+                effect_class="mutating",
+                supports_idempotency=False,
+                safe_to_retry=False,
+            ),
+            _workspace_attestation_issue_handler,
+        ),
+        (
+            replace(
+                core_cli_command(
+                    command_id="core.providers.agentic.attestation.revoke",
+                    path_segments=["core", "providers", "agentic", "attestation", "revoke"],
+                    description="Revoke one workspace fake-data declaration by expected revision.",
+                    owner_id="providers",
+                    invocation_policy=OPERATOR_ONLY,
+                    argument_schema={
+                        "type": "object",
+                        "properties": {
+                            "workspace_id": {"type": "string"},
+                            "expected_revision": {"type": "integer", "minimum": 1},
+                            "reason": {"type": "string", "minLength": 1, "maxLength": 512},
+                        },
+                        "required": ["expected_revision", "reason"],
+                        "additionalProperties": False,
+                    },
+                ),
+                effect_class="mutating",
+                supports_idempotency=False,
+                safe_to_retry=False,
+            ),
+            _workspace_attestation_revoke_handler,
         ),
     ]
 

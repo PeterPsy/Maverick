@@ -12,7 +12,12 @@ from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_provider_selection_authority
 from core.providers.models import ProviderDefinition, ProviderHostedSelection, ProviderSelection, ProviderSpeechSelection
-from core.providers.errors import ProviderError, ProviderNotFoundError
+from core.providers.errors import (
+    CapabilityCertificateError,
+    ProviderError,
+    ProviderNotFoundError,
+)
+from core.providers.agentic_adapter import RuntimeHealthContext
 from core.providers.capability_models import CapabilityCertificate
 from core.providers.agentic_models import ActorSelectionPolicy
 from core.providers.agentic_workspace_admin import (
@@ -44,10 +49,23 @@ from core.providers.service import (
     resolve_workspace_provider_status,
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
-from core.runtime.execution_binding import canonical_digest
+from core.runtime.execution_binding import (
+    build_runtime_execution_binding,
+    canonical_digest,
+)
+from core.runtime.async_runtime import run_runtime_coroutine
+from core.runtime.authority import (
+    blocked_runtime_capability_payload,
+    effective_runtime_capability_payload,
+    resolve_effective_runtime_authority,
+)
+from core.runtime.authority_service import resolve_runtime_authority_snapshot
+from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
 from core.runtime.remote_agentic_admission import remote_agentic_containment_reason
+from core.runtime.routing import resolve_runtime_execution_mode
 from core.runtime.public_status import public_runtime_recovery_reason_code
 from core.usage.quota import record_provider_quota_snapshots
+from core.workspaces.data_governance import attestation_safe_projection
 
 
 def provider_model_settings_payload(definition: ProviderDefinition, selection: ProviderSelection | None) -> dict[str, object]:
@@ -413,11 +431,24 @@ def _agentic_egress_policy_payload(
     }
 
 
-def _agentic_data_policy_payload(routing_constraint) -> dict[str, object]:
+def _agentic_data_policy_payload(
+    routing_constraint,
+    *,
+    state: PlatformState | None = None,
+    workspace_id: str | None = None,
+) -> dict[str, object]:
+    workspace_store = None if state is None else getattr(state, "workspace_store", None)
+    get_attestation = getattr(workspace_store, "get_data_attestation", None)
+    attestation = attestation_safe_projection(
+        get_attestation(workspace_id)
+        if callable(get_attestation) and workspace_id
+        else None
+    )
     return {
         "collection": routing_constraint.data_collection_policy,
         "require_zdr": routing_constraint.require_zdr,
-        "attestation_state": "unavailable",
+        "attestation_state": attestation["state"],
+        "attestation": attestation,
     }
 
 
@@ -527,6 +558,19 @@ def workspace_agentic_profile_status(
             and certificate_active
             and rollout_selectable
         )
+        effective_capabilities = _profile_effective_capability_snapshot(
+            state,
+            definition=definition,
+            binding=binding,
+            certificate=certificate,
+            eligible=selectable,
+            blocked_reason=(
+                containment_reason
+                or (None if certificate_active else "certificate_inactive")
+                or (None if binding.enabled else "workspace_profile_binding_disabled")
+                or (None if rollout_selectable else "profile_definition_invalid")
+            ),
+        )
         items.append(
             {
                 "workspace_profile_binding_id": binding.binding_id,
@@ -571,13 +615,16 @@ def workspace_agentic_profile_status(
                     policy=binding.workspace_policy_ceiling,
                 ),
                 "data_policy": _agentic_data_policy_payload(
-                    definition.routing_constraint
+                    definition.routing_constraint,
+                    state=state,
+                    workspace_id=workspace_id,
                 ),
                 "allowed_remote_data_classes": binding.workspace_policy_ceiling.allowed_remote_data_classes,
                 "tool_handle_mode": binding.workspace_policy_ceiling.tool_handle_mode,
                 "allowed_tool_handles": binding.workspace_policy_ceiling.allowed_tool_handles,
                 "max_estimated_cost_microusd": binding.workspace_policy_ceiling.max_estimated_cost_microusd,
                 "policy_ceiling_digest": canonical_digest(binding.workspace_policy_ceiling),
+                "effective_capabilities": effective_capabilities,
             }
         )
     items.sort(key=lambda item: (not bool(item["is_default"]), str(item["display_name"])))
@@ -586,6 +633,103 @@ def workspace_agentic_profile_status(
         "default_binding_id": None if default is None else default["workspace_profile_binding_id"],
         "items": items,
     }
+
+
+def _profile_effective_capability_snapshot(
+    state: PlatformState,
+    *,
+    definition,
+    binding,
+    certificate: CapabilityCertificate | None,
+    eligible: bool,
+    blocked_reason: str | None,
+) -> dict[str, object]:
+    """Calculate a conservative, non-bearer profile projection for Chat/Settings."""
+    certified = None if certificate is None else certificate.certified_capabilities
+    if not eligible or certificate is None:
+        return blocked_runtime_capability_payload(
+            blocked_reason or "runtime_authority_unavailable",
+            certified_capabilities=certified,
+        )
+    try:
+        registry = effective_provider_registry(
+            state.provider_store,
+            registry=getattr(state, "provider_registry", None),
+        )
+        adapter = registry.get_agentic_runtime_adapter(definition.runtime_engine_id)
+        workspace_store = getattr(state, "workspace_store", None)
+        governance_resolver = getattr(workspace_store, "get_governance", None)
+        if not callable(governance_resolver):
+            raise CapabilityCertificateError("runtime_authority_unavailable")
+        execution_mode = resolve_runtime_execution_mode(
+            workspace_id=binding.workspace_id,
+            governance=governance_resolver(binding.workspace_id),
+            platform_allows_full_access=binding.workspace_id == "default",
+        )
+        execution_binding = build_runtime_execution_binding(
+            session_id=f"capability-projection:{binding.binding_id}",
+            workspace_id=binding.workspace_id,
+            profile_definition_id=definition.definition_id,
+            profile_definition_revision=definition.revision,
+            workspace_binding_id=binding.binding_id,
+            workspace_binding_revision=binding.revision,
+            capability_certificate_id=certificate.certificate_id,
+            certificate_evidence_digest=certificate.evidence_digest,
+            runtime_engine_id=certificate.runtime_engine_id,
+            adapter_id=certificate.adapter_id,
+            adapter_version=certificate.adapter_version,
+            adapter_artifact_digest=certificate.adapter_artifact_digest,
+            model_provider_id=certificate.model_provider_id,
+            model_id=certificate.model_id,
+            provider_protocol=certificate.provider_protocol,
+            provider_api_version=certificate.provider_api_version,
+            routing_constraint=definition.routing_constraint,
+            credential_binding_id=binding.credential_binding_id,
+            reasoning_effort=certificate.default_reasoning_effort,
+            certified_reasoning_efforts=certificate.certified_reasoning_efforts,
+            default_reasoning_effort=certificate.default_reasoning_effort,
+            execution_mode=execution_mode,
+            profile_policy_ceiling=definition.policy_ceiling,
+            workspace_policy_ceiling=binding.workspace_policy_ceiling,
+            egress_policy_id=binding.egress_policy_id,
+            egress_policy_revision=binding.egress_policy_revision,
+            created_at=datetime.now(tz=UTC),
+            tcb_manifest_id=certificate.tcb_manifest_id,
+            tcb_manifest_version=certificate.tcb_manifest_version,
+            tcb_structure_digest=certificate.tcb_structure_digest,
+            tcb_live_digest=certificate.tcb_live_digest,
+        )
+        health = run_runtime_coroutine(
+            adapter.health(RuntimeHealthContext(binding=execution_binding))
+        )
+        handle_resolver = getattr(adapter, "currently_authorized_tool_handles", None)
+        handles = (
+            tuple(handle_resolver(execution_binding))
+            if callable(handle_resolver)
+            else (
+                authorized_core_tool_handles(execution_binding)
+                if execution_binding.runtime_engine_id == "maverick-tool-loop"
+                else ()
+            )
+        )
+        authority = resolve_effective_runtime_authority(
+            state.provider_store,
+            binding=execution_binding,
+            adapter=adapter,
+            turn_id=f"capability-projection:{binding.binding_id}",
+            currently_authorized_tool_handles=handles,
+            live_execution_mode=execution_mode,
+            health_status=health.status,
+            health_revision=f"runtime-health:{canonical_digest(health)}",
+            actor_policy_allowed=True,
+            actor_policy_revision=f"workspace-actor:{binding.binding_id}:{binding.revision}",
+        )
+        return effective_runtime_capability_payload(authority)
+    except (CapabilityCertificateError, ProviderError, ValueError) as error:
+        return blocked_runtime_capability_payload(
+            str(getattr(error, "reason_code", None) or error),
+            certified_capabilities=certified,
+        )
 
 
 def _agentic_model_reasoning(
@@ -660,6 +804,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
         )
         binding = bindings_by_definition.get((definition.definition_id, definition.revision))
         certificate_payload = None
+        certificate = None
         try:
             certificate = state.provider_store.get_capability_certificate(
                 definition.capability_certificate_id
@@ -690,6 +835,23 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             certificate=certificate_payload,
             credential_bindings=credential_bindings,
             registry=registry,
+        )
+        effective_capabilities = (
+            blocked_runtime_capability_payload(
+                blocked_reason or "workspace_binding_missing",
+                certified_capabilities=(
+                    None if certificate is None else certificate.certified_capabilities
+                ),
+            )
+            if binding is None
+            else _profile_effective_capability_snapshot(
+                state,
+                definition=definition,
+                binding=binding,
+                certificate=certificate,
+                eligible=blocked_reason is None,
+                blocked_reason=blocked_reason,
+            )
         )
         containment_reason = remote_agentic_containment_reason(definition)
         effective_policy = (
@@ -730,7 +892,9 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                     policy=effective_policy,
                 ),
                 "data_policy": _agentic_data_policy_payload(
-                    definition.routing_constraint
+                    definition.routing_constraint,
+                    state=state,
+                    workspace_id=workspace_id,
                 ),
                 "profile_policy_ceiling": asdict(definition.policy_ceiling),
                 "rollout_status": None if status is None else status.rollout_status,
@@ -764,6 +928,7 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                     if containment_reason is not None
                     else (certificate_payload or {}).get("effective_status", "missing")
                 ),
+                "effective_capabilities": effective_capabilities,
             }
         )
     items.sort(
@@ -842,6 +1007,12 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
         "effective_status": effective_status,
         "status_revision": None if status is None else status.revision,
         "revoked_at": None if status is None else status.revoked_at,
+        "tcb": {
+            "manifest_id": certificate.tcb_manifest_id or None,
+            "manifest_version": certificate.tcb_manifest_version or None,
+            "structure_digest": certificate.tcb_structure_digest or None,
+            "live_digest": certificate.tcb_live_digest or None,
+        },
     }
 
 
@@ -874,6 +1045,7 @@ def runtime_session_agentic_governance_payload(
 
     certificate_effective_status = "missing"
     certificate_expires_at = None
+    certificate = None
     try:
         certificate = state.provider_store.get_capability_certificate(
             binding.capability_certificate_id
@@ -910,6 +1082,34 @@ def runtime_session_agentic_governance_payload(
     except ProviderNotFoundError:
         pass
 
+    if containment_reason is not None:
+        effective_capabilities = blocked_runtime_capability_payload(
+            containment_reason,
+            certified_capabilities=(
+                None if certificate is None else certificate.certified_capabilities
+            ),
+        )
+    else:
+        try:
+            registry = effective_provider_registry(
+                state.provider_store,
+                registry=getattr(state, "provider_registry", None),
+            )
+            authority = resolve_runtime_authority_snapshot(
+                state,
+                session=session,
+                adapter=registry.get_agentic_runtime_adapter(binding.runtime_engine_id),
+                turn_id=f"capability-projection:{session.session_id}",
+            )
+            effective_capabilities = effective_runtime_capability_payload(authority)
+        except (AuthorizationError, ProviderError, ValueError) as error:
+            effective_capabilities = blocked_runtime_capability_payload(
+                str(getattr(error, "reason_code", None) or getattr(error, "reason", None) or error),
+                certified_capabilities=(
+                    None if certificate is None else certificate.certified_capabilities
+                ),
+            )
+
     return {
         "display_name": None if definition is None else definition.display_name,
         "profile_definition_id": binding.profile_definition_id,
@@ -937,7 +1137,9 @@ def runtime_session_agentic_governance_payload(
             policy=binding.workspace_policy_ceiling_snapshot,
         ),
         "data_policy": _agentic_data_policy_payload(
-            binding.routing_constraint_snapshot
+            binding.routing_constraint_snapshot,
+            state=state,
+            workspace_id=session.workspace_id,
         ),
         "certificate_posture": {
             "certificate_id": binding.capability_certificate_id,
@@ -950,6 +1152,7 @@ def runtime_session_agentic_governance_payload(
             "expires_at": certificate_expires_at,
             "pinned_evidence_digest": binding.certificate_evidence_digest,
         },
+        "effective_capabilities": effective_capabilities,
     }
 
 

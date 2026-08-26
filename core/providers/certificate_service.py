@@ -15,6 +15,10 @@ from core.providers.capability_models import (
     CapabilityCertificateStatus,
     CapabilityEvidenceRecord,
 )
+from core.providers.certified_execution_tcb import (
+    is_exact_codex_identity,
+    validate_remote_tcb_identity,
+)
 from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
@@ -38,6 +42,10 @@ _EXECUTED_EVIDENCE_FIELDS = (
     "run_signature",
     "certification_started_at",
     "certification_outcome",
+    "tcb_manifest_id",
+    "tcb_manifest_version",
+    "tcb_structure_digest",
+    "tcb_live_digest",
 )
 
 
@@ -107,6 +115,10 @@ def build_capability_evidence(
     run_signature: str = "",
     certification_started_at: datetime | None = None,
     certification_outcome: str = "",
+    tcb_manifest_id: str = "",
+    tcb_manifest_version: str = "",
+    tcb_structure_digest: str = "",
+    tcb_live_digest: str = "",
 ) -> CapabilityEvidenceRecord:
     """Build one self-identifying evidence record from platform-owned references."""
     _require_aware(recorded_at, "certificate_evidence_time_invalid")
@@ -127,6 +139,10 @@ def build_capability_evidence(
         "run_signature": run_signature,
         "certification_started_at": certification_started_at,
         "certification_outcome": certification_outcome,
+        "tcb_manifest_id": tcb_manifest_id,
+        "tcb_manifest_version": tcb_manifest_version,
+        "tcb_structure_digest": tcb_structure_digest,
+        "tcb_live_digest": tcb_live_digest,
     }
     return CapabilityEvidenceRecord(evidence_digest=canonical_digest(payload), **payload)
 
@@ -140,6 +156,7 @@ def publish_capability_certificate(
 ) -> CapabilityCertificate:
     """Persist matching immutable evidence/certificate and initialize active status."""
     _validate_certificate_shape(certificate)
+    _validate_certificate_tcb(certificate)
     if certificate.evidence_digest != evidence.evidence_digest:
         raise CapabilityCertificateError("certificate_evidence_mismatch")
     for field_name in ("suite_id", "suite_version", "test_run_id", "adapter_artifact_digest"):
@@ -147,6 +164,14 @@ def publish_capability_certificate(
             raise CapabilityCertificateError("certificate_evidence_identity_mismatch")
     if certificate.evidence_refs != evidence.evidence_refs:
         raise CapabilityCertificateError("certificate_evidence_refs_mismatch")
+    for field_name in (
+        "tcb_manifest_id",
+        "tcb_manifest_version",
+        "tcb_structure_digest",
+        "tcb_live_digest",
+    ):
+        if getattr(certificate, field_name) != getattr(evidence, field_name):
+            raise CapabilityCertificateError("certificate_tcb_evidence_mismatch")
     store.save_capability_evidence(evidence)
     stored = store.save_capability_certificate(certificate)
     status = store.get_capability_certificate_status(certificate.certificate_id)
@@ -253,6 +278,7 @@ def validate_certificate_for_binding(
     for field_name in ("suite_id", "suite_version", "test_run_id", "adapter_artifact_digest"):
         if getattr(certificate, field_name) != getattr(evidence, field_name):
             raise CapabilityCertificateError("certificate_evidence_identity_mismatch")
+    _validate_binding_tcb(certificate, binding)
     timestamp = now or datetime.now(tz=UTC)
     if timestamp >= certificate.expires_at:
         raise CapabilityCertificateError("certificate_expired")
@@ -346,6 +372,53 @@ def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:
     ):
         raise CapabilityCertificateError("certificate_default_reasoning_effort_invalid")
     _evidence_refs(certificate.evidence_refs)
+
+
+def _validate_certificate_tcb(certificate: CapabilityCertificate) -> None:
+    if is_exact_codex_identity(
+        runtime_engine_id=certificate.runtime_engine_id,
+        adapter_id=certificate.adapter_id,
+        model_provider_id=certificate.model_provider_id,
+        provider_protocol=certificate.provider_protocol,
+    ):
+        return
+    validate_remote_tcb_identity(
+        manifest_id=certificate.tcb_manifest_id,
+        manifest_version=certificate.tcb_manifest_version,
+        structure_digest=certificate.tcb_structure_digest,
+        live_digest=certificate.tcb_live_digest,
+    )
+
+
+def _validate_binding_tcb(
+    certificate: CapabilityCertificate,
+    binding: RuntimeExecutionBinding,
+) -> None:
+    if is_exact_codex_identity(
+        runtime_engine_id=certificate.runtime_engine_id,
+        adapter_id=certificate.adapter_id,
+        model_provider_id=certificate.model_provider_id,
+        provider_protocol=certificate.provider_protocol,
+    ):
+        return
+    _validate_certificate_tcb(certificate)
+    if not all(
+        (
+            binding.tcb_manifest_id,
+            binding.tcb_manifest_version,
+            binding.tcb_structure_digest,
+            binding.tcb_live_digest,
+        )
+    ):
+        raise CapabilityCertificateError("certificate_tcb_binding_missing")
+    for field_name in (
+        "tcb_manifest_id",
+        "tcb_manifest_version",
+        "tcb_structure_digest",
+        "tcb_live_digest",
+    ):
+        if getattr(binding, field_name) != getattr(certificate, field_name):
+            raise CapabilityCertificateError("certificate_tcb_binding_mismatch")
 
 
 def _evidence_refs(values: tuple[str, ...]) -> tuple[str, ...]:

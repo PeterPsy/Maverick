@@ -142,6 +142,7 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         self.assertEqual(evidence.matrix_revision, GOOGLE_CERTIFICATION_MATRIX_REVISION)
         self.assertEqual(evidence.certification_outcome, "passed")
         self.assertTrue(certificate.certified_capabilities.filesystem_list)
+        self.assertFalse(certificate.certified_capabilities.recovery)
         self.assertEqual(
             certificate.certified_reasoning_efforts,
             ("high",),
@@ -192,7 +193,7 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
         self.assertEqual(
             classify_hosted_content_fail_closed(None, "tool_schema", {}).data_class,
-            "public",
+            "unclassified",
         )
 
     def test_classifier_ignores_persisted_legacy_declaration(self) -> None:

@@ -49,6 +49,10 @@ class RuntimeExecutionBinding:
     binding_digest: str
     created_at: datetime
     legacy_inferred: bool = False
+    tcb_manifest_id: str = ""
+    tcb_manifest_version: str = ""
+    tcb_structure_digest: str = ""
+    tcb_live_digest: str = ""
 
 
 def build_runtime_execution_binding(
@@ -81,8 +85,34 @@ def build_runtime_execution_binding(
     certificate_evidence_digest: str,
     created_at: datetime,
     legacy_inferred: bool = False,
+    tcb_manifest_id: str = "",
+    tcb_manifest_version: str = "",
+    tcb_structure_digest: str = "",
+    tcb_live_digest: str = "",
 ) -> RuntimeExecutionBinding:
     """Build one self-digesting immutable execution binding."""
+    if (
+        runtime_engine_id != "codex"
+        or adapter_id != "codex-app-server"
+        or model_provider_id != "codex"
+        or provider_protocol != "codex-app-server-stdio"
+    ) and not any(
+        (
+            tcb_manifest_id,
+            tcb_manifest_version,
+            tcb_structure_digest,
+            tcb_live_digest,
+        )
+    ):
+        # Lazy import avoids a module cycle: the TCB manifest itself uses the
+        # canonical digest helper defined in this module.
+        from core.providers.certified_execution_tcb import certified_tcb_identity
+
+        current_tcb = certified_tcb_identity()
+        tcb_manifest_id = current_tcb.manifest_id
+        tcb_manifest_version = current_tcb.manifest_version
+        tcb_structure_digest = current_tcb.structure_digest
+        tcb_live_digest = current_tcb.live_digest
     for label, digest in (
         ("certificate evidence", certificate_evidence_digest),
         ("adapter artifact", adapter_artifact_digest),
@@ -129,6 +159,10 @@ def build_runtime_execution_binding(
         binding_digest="",
         created_at=created_at,
         legacy_inferred=legacy_inferred,
+        tcb_manifest_id=tcb_manifest_id,
+        tcb_manifest_version=tcb_manifest_version,
+        tcb_structure_digest=tcb_structure_digest,
+        tcb_live_digest=tcb_live_digest,
     )
     return replace(record, binding_digest=canonical_digest(record))
 
@@ -155,7 +189,14 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload = dict(document)
     legacy_compatible_binding_fields = tuple(
         field_name
-        for field_name in ("certified_reasoning_efforts", "default_reasoning_effort")
+        for field_name in (
+            "certified_reasoning_efforts",
+            "default_reasoning_effort",
+            "tcb_manifest_id",
+            "tcb_manifest_version",
+            "tcb_structure_digest",
+            "tcb_live_digest",
+        )
         if (
             field_name not in payload
             or (
@@ -193,6 +234,10 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     )
     payload.setdefault("default_reasoning_effort", None)
     payload.setdefault("legacy_inferred", False)
+    payload.setdefault("tcb_manifest_id", "")
+    payload.setdefault("tcb_manifest_version", "")
+    payload.setdefault("tcb_structure_digest", "")
+    payload.setdefault("tcb_live_digest", "")
     binding = RuntimeExecutionBinding(**payload)
     digest_matches = binding.binding_digest == canonical_digest(binding)
     if not digest_matches:

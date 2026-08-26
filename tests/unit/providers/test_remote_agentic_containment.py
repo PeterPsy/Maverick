@@ -140,7 +140,15 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                 {
                     "collection": "provider_contract",
                     "require_zdr": False,
-                    "attestation_state": "unavailable",
+                    "attestation_state": "not_attested",
+                    "attestation": {
+                        "state": "not_attested",
+                        "authoritative": False,
+                        "declaration": None,
+                        "scope": None,
+                        "revision": None,
+                        "updated_at": None,
+                    },
                 },
             )
             self.assertEqual(
@@ -151,6 +159,12 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                 governance["certificate_posture"]["eligibility"],
                 "ineligible",
             )
+            self.assertEqual(governance["effective_capabilities"]["status"], "blocked")
+            self.assertFalse(any(
+                value
+                for value in governance["effective_capabilities"]["capabilities"].values()
+                if isinstance(value, bool)
+            ))
             self.assertNotIn("credential_binding_id", str(public_session))
         settings = workspace_agentic_admin_status(
             SimpleNamespace(
@@ -177,6 +191,11 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
         self.assertEqual(remote_item["certificate"]["effective_status"], "revoked")
         self.assertNotIn("revocation_reason", remote_item["certificate"])
         self.assertEqual(remote_item["certificate_eligibility"], "ineligible")
+        self.assertEqual(remote_item["effective_capabilities"]["status"], "blocked")
+        self.assertEqual(
+            remote_item["effective_capabilities"]["tcb"]["posture"],
+            "ineligible",
+        )
         self.assertEqual(
             remote_item["data_destination"],
             {
@@ -202,7 +221,15 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
             {
                 "collection": "provider_contract",
                 "require_zdr": False,
-                "attestation_state": "unavailable",
+                "attestation_state": "not_attested",
+                "attestation": {
+                    "state": "not_attested",
+                    "authoritative": False,
+                    "declaration": None,
+                    "scope": None,
+                    "revision": None,
+                    "updated_at": None,
+                },
             },
         )
         self.assertEqual(self._codex_snapshot(), codex_before)

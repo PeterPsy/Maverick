@@ -3,12 +3,17 @@ from __future__ import annotations
 from threading import Lock
 import time
 from typing import TYPE_CHECKING, Callable
+from uuid import uuid4
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.providers.service import resolve_runtime_engine_for_session
 from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, assert_plain_hosted_chat_input_allowed, runtime_session_is_plain_hosted_chat
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.execution import execute_runtime_turn
-from core.runtime.provider_input_context import runtime_provider_input_text
+from core.runtime.provider_input_context import (
+    runtime_provider_input_sources,
+    runtime_provider_input_text,
+)
+from core.runtime.authority_service import preflight_runtime_context_capabilities
 from core.runtime.resolved_runtime_engine import (
     ResolvedRuntimeEngine,
     build_optional_local_launch_spec,
@@ -98,6 +103,17 @@ def submit_runtime_turn(
         resolved_engine = ResolvedRuntimeEngine(*resolve_runtime_engine_for_session(state.provider_store, session=session, registry=getattr(state, "provider_registry", None)))
         provider = resolved_engine.provider
         provider_id = resolved_engine.provider_id
+    resolved_turn_id = turn_id or str(uuid4())
+    if not plain_hosted:
+        preflight_runtime_context_capabilities(
+            state,
+            session=session,
+            turn_id=resolved_turn_id,
+            adapter=resolved_engine.agentic_adapter,
+            invoked_skills=invoked_skills,
+            attachments=attachments,
+            app_references=app_references,
+        )
     with runtime_turn_queue_fence(queue_fence):
         turn, events, created = _queue_turn_with_event_result(
             state,
@@ -108,7 +124,7 @@ def submit_runtime_turn(
             attachments=attachments,
             app_references=app_references,
             invoked_skill_ids=[skill.skill_id for skill in invoked_skills],
-            turn_id=turn_id,
+            turn_id=resolved_turn_id,
             received_perf_counter=received_perf_counter,
             submission_timing=submission_timing,
             client_message_claim=client_message_claim,
@@ -233,6 +249,13 @@ def submit_runtime_turn(
                     state, session=session, input_text=input_text,
                     app_references=execution_app_references, attachments=attachments,
                 )
+                provider_input_sources = runtime_provider_input_sources(
+                    state,
+                    session=session,
+                    input_text=input_text,
+                    app_references=execution_app_references,
+                    attachments=attachments,
+                )
                 provider_input_metadata = {
                     "provider_input_build_ms": (time.perf_counter() - provider_input_started_at) * 1000,
                     "app_reference_count": app_reference_count,
@@ -267,6 +290,7 @@ def submit_runtime_turn(
                         session=provider_session,
                         provider=provider,
                         input_text=provider_input_text,
+                        input_sources=provider_input_sources,
                         invoked_skills=invoked_skills,
                         launch_spec=launch_spec,
                         **resolved_engine.execution_kwargs(state, provider_session, correlation_id=turn.turn_id),

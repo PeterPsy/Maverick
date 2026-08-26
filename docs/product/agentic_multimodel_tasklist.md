@@ -2,95 +2,146 @@
 
 Status date: 2026-08-26
 
-Target: Phase-0 remote containment; remote agentic release is NO-GO
+Target: Phase 1 security boundary and certified TCB implemented; remote agentic
+release remains **NO-GO**.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
-2.1 (2026-08-16), and ADR 0010.
+2.1 (2026-08-16), the definitive parity plan in workspace Storage, and ADR
+0010.
 
-This tasklist records implementation state without treating code presence as
-certification evidence. A checked implementation item still requires its phase
-gate and relevant tests. Remote providers remain candidate preview profiles
-until the later attestation, recovery, certification, and operational gates are
-reviewed. A legacy certificate or client declaration is not authorization.
+Checked implementation items mean that the repository gate and its focused
+tests passed for the recorded source. They do not mean that a provider live
+probe ran, that a behavioral certificate was issued, or that preview, canary,
+or production activation is approved.
 
-## Phase 0 — containment status
+## Phase 0 — material containment closure
 
 - [x] Hosted, Google, and OpenRouter agentic switches default off; unknown
-  hosted agentic identities fail closed while Codex and plain hosted text keep
-  their prior paths.
-- [x] New remote sessions fail before persistence, pinned remote sessions fail
-  again before dispatch, and client/browser fake-data declarations cannot
-  authorize either path.
-- [x] API and app preflight carry the authorized binding/definition snapshot and
-  final pin into creation. Binding revision, default, or immutable-definition
-  drift fails before claims, prepared locks, app-stream reservations, sessions,
-  threads, turns, or provider work can be created.
-- [x] Store-backed dry-run/apply containment plans binding disablement, profile
-  suspension, suite-v8 certificate revocation/ineligibility, and ambiguous
-  session quarantine; provider records use revision CAS and session quarantine
-  uses the serialized lifecycle handoff. Apply is partial, non-idempotent, and
-  not safe to retry: every error or conflict requires a new dry-run/review and
-  emits structured partial-count audit rather than a success claim.
-- [x] Remote inventory reads every archive page and correlates each ordered
-  provider step with a persisted final output or one or more ledger-backed
-  proposals. A step with neither outcome is ambiguous; four tool steps plus a
-  final response are not treated as a proposal gap.
-- [x] `session_status=recovery_required` persists, projects safely through APIs
-  and Settings/Chat through an allowlisted public reason, removes operational
-  authority from associated runtime tokens, and blocks further turn/queue
-  admission without claiming a complete recovery engine.
-- [x] Chat excludes contained profiles from new-chat selection and synthesizes
-  neither consent nor fake classification. For a contained historical pin, the
-  server projects the exact display name, provider/upstream/data destination,
-  egress/data policy, certificate posture, and NO-GO state; Chat renders that
-  projection without browser classification. Settings keeps the same governance
-  facts visible. Neither browser sends a data-classification control.
-- [ ] Review the real-store dry-run plan, execute the digest-bound live apply,
-  verify post-apply state, and record the audit result. Until then the
-  operational status is `live_apply_pending_review`.
+  hosted-agentic identities fail closed while exact Codex and
+  `plain_hosted_chat` retain their prior paths.
+- [x] Remote creation and dispatch are contained before persistence/egress;
+  browser declarations, legacy `declared_remote_data_class`, policy ids, and
+  `workspace_internal_fake` grant no authority.
+- [x] The revision-CAS containment saga disables bindings, suspends profiles,
+  revokes legacy remote certificates, and quarantines ambiguous sessions after
+  complete paginated inventory.
+- [x] Chat and Settings show authoritative containment/governance projections
+  without browser classification controls or credential authority.
+- [x] The reviewed real-store containment operation and post-apply verification
+  were materially completed before this phase. Recorded evidence:
+  - source containment revision
+    `69d9e10fea641f805c1c52801b7fd60a027b02f9`;
+  - applied plan digest
+    `02484a30f9ea7254c5deebd69e5af4416a22d8aecc006d81b7b5d6aad9c4578d`;
+  - audit saga `4a6ab3ee-8b55-40c4-9dd6-2eba17bd9bdc`;
+  - apply artifact SHA-256
+    `5cd77cf01ab3e4ed12ca0ab76d3774dadf0482bd892821fb8883ef3cb2ab6898`;
+  - post-apply zero-target digest
+    `56253919e93461e67b62a068e6e8718638475d05173dfff97b2912dcbeed2e77`;
+  - post-apply artifact SHA-256
+    `c6daa0b542edc92ef09116b323b1b024d3d1f94ef53aa85344eb55ea4aad733c`.
 
-## Completed implementation boundaries
+This is a material P0 containment record only. It is not a remote release,
+provider certification, preview/canary, migration approval, or production
+completion claim.
 
-- [x] ADR and threat model define profile/binding separation, immutable session
-  pinning, provider-private state, certificates, tool control, and egress.
-- [x] Profile definitions, workspace bindings, immutable execution bindings,
-  prepared-session barrier, provider-state CAS, and legacy session migration.
-- [x] Async provider-neutral adapter contract and optional local lifecycle.
-- [x] Certificate/evidence domain, signed certification runner, expiry,
-  revocation, and live restrictive authority intersection.
-- [x] Existing CLI/MCP/app-interface resolution reused for tool orchestration;
-  persistent invocation, confirmation, and replay controls.
-- [x] Bounded encrypted provider-private state and fail-closed per-block egress.
-- [x] Deterministic hosted loop, sequential tools, budgets, streaming,
-  cancellation, and recovery coverage.
-- [x] Google and fixed-upstream OpenRouter codecs/transports plus candidate
-  preview definitions and dated matrices.
-- [x] Settings and Chat governance/selection surfaces.
-- [x] Independent kill switches for the normative rollout boundaries.
-- [x] Canonical architecture, security, reference, app README, provider runbook,
-  and certification-evidence documentation mapped.
+## Phase 1 — security boundary and certified TCB
 
-## Later parity and preview gates still open
+### Attestation, classification, and egress
 
-- [ ] Run the complete Google certification manifest on the exact deployable
-  commit and adapter bundle: deterministic conformance, operator-only synthetic
-  live probe, behavioral conformance validation, then certificate publication.
-  Ordinary repository checks explicitly select `fixture_contract` and never
-  start the retained `live_probe`; fixture-only output cannot be signed,
-  verified, published, or used as certificate evidence.
-- [ ] Persist its immutable evidence in the platform-owned store, sign the run
-  with a trusted CI key, publish a Google preview certificate, and complete the
-  one-workspace canary.
-- [ ] Repeat the full independent two-step manifest, behavioral validation,
-  evidence signing/publication, catalog/ZDR reconfirmation, and canary flow
-  before enabling OpenRouter.
-- [ ] Record the focused agentic, fast, and applicable pre-merge suite results
-  for the candidate commit; no certificate may substitute for these gates.
-- [ ] Rehearse certificate/binding/provider kill switches, cancellation,
-  ambiguous-side-effect recovery, and rollback with retained audit evidence.
-- [ ] Close production blockers in `SECURITY.md` and
-  `docs/security/production_readiness.md` under a separate security review and
-  release decision. Preview completion must not check this item implicitly.
+- [x] Workspace fake-data attestation is an explicit actor-attributed,
+  timestamped, scoped, revocable CAS record in the official JSON/document-store
+  boundary, with redaction-safe audit and operator-only issue/revoke commands.
+- [x] API, Chat, and Settings receive only a read-only projection. Attestation,
+  resource classification, and the final egress decision remain distinct;
+  client inputs, labels, flags, and policy ids cannot manufacture any of them.
+- [x] A fake-data declaration can only narrow policy. It never promotes real,
+  secret, workspace-internal, or unclassified content to public/fake, and the
+  legacy declaration is non-authoritative and absent from continuations.
+
+### Resource-derived provenance and private state
+
+- [x] Canonical provenance/trust/data-class records use a restrictive,
+  fail-closed join. Prompt, orchestration, skill, attachment, app reference,
+  filesystem/tool result, and provider-private sources remain distinct.
+- [x] Filesystem/tool results bind classification to the exact observed resource
+  identity, revision, and digest. Missing/incoherent classification becomes
+  `unclassified` and cannot egress.
+- [x] Encrypted provider-private state persists only redaction-safe source
+  digests/classes/trust, effective class, codec, request id, and turn generation;
+  content, credentials, and resolution authority never enter public APIs/audit.
+
+### Certified schemas and execution TCB
+
+- [x] Tool schemas are public only when Core-owned, explicitly public, and
+  covered by the exact certified TCB. App-owned, CLI/MCP-dynamic, omitted, or
+  uncertified schemas fail before egress with an allowlisted structured reason.
+- [x] One code-owned deterministic certified-execution manifest covers data
+  governance/classification/egress, API and app admission, input/request
+  composition, catalog/schema, ledger/store/private state, lifecycle/recovery
+  boundary, capability projection, Chat/Settings governance, and provider
+  codec/transport/live policy.
+- [x] Suite, bundle, signing, verification, issuance/publication, execution
+  binding, and live status derive from that manifest and digest. The publisher
+  recomputes it; runtime drift or legacy missing TCB identity fails before
+  create, continuation, refresh, or dispatch. Exact Codex is not reclassified
+  as hosted remote.
+- [x] Google and OpenRouter suite v9 manifests retain ordered
+  `fixture_contract` then operator-only `live_probe`; ordinary checks explicitly
+  select only the fixture step.
+
+### Filesystem confinement
+
+- [x] Read/list/write and shell cwd use a pinned workspace root and
+  descriptor-relative component opens with `O_NOFOLLOW`/`O_DIRECTORY` where
+  available. Verified resources are never reopened by pathname, `.git` is not
+  traversed, and root/parent/final symlink and rename swaps fail closed.
+- [x] Chunk reads and listing cursors bind resource identity/version, detect
+  mutation, preserve UTF-8 boundaries, and feed resource-derived
+  classification. Repeated Linux race tests leave zero escaped reads/writes.
+
+### Effective capabilities and UI governance
+
+- [x] One effective snapshot intersects certificate, profile ceiling, workspace
+  binding, actor policy, live authority, feature flags, and provider health.
+  It exposes filesystem read/write, shell, CLI, MCP, skills, attachments, app
+  references, confirmations, recovery, provider/data policy, certificate/suite/
+  expiry, and TCB posture without credentials.
+- [x] The same snapshot gates session/turn admission, continuation/refresh,
+  request building, tool catalog, APIs, Chat, and Settings. Skills, unsupported
+  attachment modes/app references, CLI/MCP/shell, and unauthorized writes are
+  rejected before persistence or provider work with public allowlisted reasons;
+  unsupported input is never silently ignored.
+- [x] Exact Codex and `plain_hosted_chat` non-regression tests preserve their
+  established behavior while hosted-agentic paths without effective authority
+  fail closed.
+
+### P1 exit gate
+
+- [x] False data classification: `0`.
+- [x] Undetected TCB drift: `0`.
+- [x] Filesystem escape in repeated Linux race tests: `0`.
+- [x] Capability overstatement: `0`.
+- [x] Unsupported context silently ignored: `0`.
+
+## Later parity and release gates — still open
+
+- [ ] Phase 2 provider-step journal and complete recovery engine.
+- [ ] Phase 3 finalization reserve.
+- [ ] Phase 4 complete semantic envelope, AGENTS materialization, and new tool
+  contracts.
+- [ ] Run each complete provider manifest on an exact clean deployable commit:
+  deterministic fixture, operator-only synthetic live probe, behavioral
+  validation, signing, verification, and immutable certificate publication.
+- [ ] Complete provider onboarding, leakage/security review, one-workspace
+  canary, rollback rehearsal, and explicit preview release decision.
+- [ ] Close all production blockers in `SECURITY.md` and
+  `docs/security/production_readiness.md` under a separate security review.
+
+`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false. No remote binding,
+profile, or certificate is enabled by P1; no Google/OpenRouter session, provider
+HTTP/SSE request, live probe, real-store migration/apply/restart, canary,
+production release, or push is part of this closure.
 
 ## Evidence and acceptance links
 
@@ -102,8 +153,3 @@ reviewed. A legacy certificate or client declaration is not authorization.
   and `docs/reference/openrouter_agentic_certification_matrix.md`
 - Security posture: `docs/security/threat_model.md` and
   `docs/security/production_readiness.md`
-
-This tasklist does not claim that current repository checks are green. Phase 0
-is not operationally complete: the real-store dry-run, separately approved
-apply, and post-apply verification remain open. Internal preview and production
-readiness remain later, separate gates.

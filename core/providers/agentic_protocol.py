@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from core.providers.agentic_models import RoutingConstraint, RuntimeDataClass
@@ -23,6 +23,20 @@ AgenticModelEventType = Literal[
 
 
 @dataclass(frozen=True)
+class AgenticSourceMetadata:
+    """Redaction-safe source taint; raw source content and credentials are absent."""
+
+    source_block_digest: str
+    source_data_class: RuntimeDataClass
+    source_trust_level: str
+    provenance: str
+    source_ref: str = ""
+    source_revision: str = ""
+    resource_identity: str = ""
+    classification_revision: int | None = None
+
+
+@dataclass(frozen=True)
 class AgenticRequestContentBlock:
     """One transformed block approved for the exact request destination."""
 
@@ -33,6 +47,7 @@ class AgenticRequestContentBlock:
     trust_level: str
     content_type: str
     content: bytes
+    source_metadata: AgenticSourceMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +57,7 @@ class AgenticToolDefinition:
     name: str
     description: str
     input_schema: dict[str, object]
+    source_metadata: AgenticSourceMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +69,7 @@ class AgenticToolResult:
     content_type: str
     content: bytes
     is_error: bool
+    source_metadata: AgenticSourceMetadata | None = None
 
 
 @dataclass(frozen=True)
@@ -64,6 +81,11 @@ class AgenticProviderPrivateState:
     schema_version: str
     content_type: str
     content: bytes
+    source_metadata: tuple[AgenticSourceMetadata, ...] = ()
+    effective_data_class: RuntimeDataClass = "unclassified"
+    effective_trust_level: str = "untrusted_external"
+    provider_request_id: str | None = None
+    turn_generation: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +103,7 @@ class AgenticModelRequest:
     provider_private_state: AgenticProviderPrivateState | None
     routing_constraint: RoutingConstraint
     max_output_tokens: int
+    source_metadata: tuple[AgenticSourceMetadata, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import hashlib
 import hmac
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import NAMESPACE_URL, uuid5
 
 from core.egress.agentic_models import (
@@ -23,6 +24,9 @@ from core.egress.agentic_transforms import (
 from core.observability.service import record_platform_audit
 from core.observability.store import ObservabilityStore
 
+if TYPE_CHECKING:
+    from core.workspaces.data_governance import WorkspaceDataAttestation
+
 
 MAX_EGRESS_BLOCK_BYTES = 1_048_576
 _DIGEST_DOMAIN = b"maverick.agentic-egress.content.v1\x00"
@@ -38,7 +42,9 @@ _KNOWN_DATA_CLASSES = {
 }
 _KNOWN_PROVENANCE = {
     "platform_instruction",
+    "prompt",
     "user_input",
+    "orchestration_context",
     "skill",
     "attachment",
     "app_reference",
@@ -56,7 +62,6 @@ _ALWAYS_DENIED_DATA_CLASSES = {
     "credential_or_secret",
     "host_operational_metadata",
     "unclassified",
-    "workspace_internal_fake",
 }
 
 
@@ -84,6 +89,7 @@ class AgenticEgressEvaluator:
         destination_provider_id: str,
         destination_upstream_id: str | None,
         policy: AgenticEgressPolicy,
+        data_attestation: WorkspaceDataAttestation | None = None,
         workspace_root: Path | None = None,
         now: datetime | None = None,
     ) -> AgenticEgressResult:
@@ -97,6 +103,7 @@ class AgenticEgressEvaluator:
             destination_upstream_id=destination_upstream_id,
             policy=policy,
             source=source,
+            data_attestation=data_attestation,
         )
         exported: bytes | None = None
         transformation: str | None = None
@@ -114,6 +121,18 @@ class AgenticEgressEvaluator:
             )
         allowed = reason is None and exported is not None
         reason_code = "egress_allowed" if allowed else str(reason or "egress_denied")
+        attestation_id = (
+            data_attestation.attestation_id
+            if block.data_class == "workspace_internal_fake"
+            and data_attestation is not None
+            else None
+        )
+        attestation_revision = (
+            data_attestation.revision
+            if block.data_class == "workspace_internal_fake"
+            and data_attestation is not None
+            else None
+        )
         decision_id = str(
             uuid5(
                 NAMESPACE_URL,
@@ -133,6 +152,14 @@ class AgenticEgressEvaluator:
                         destination_upstream_id or "direct",
                         policy.policy_id,
                         policy.revision,
+                        str(block.classification_revision or "unverified"),
+                        attestation_id or "no-attestation",
+                        str(attestation_revision or "no-revision"),
+                        (
+                            data_attestation.status
+                            if data_attestation is not None
+                            else "missing"
+                        ),
                     ]
                 ),
             )
@@ -157,6 +184,9 @@ class AgenticEgressEvaluator:
             policy_revision=policy.revision,
             reason_code=reason_code,
             decided_at=timestamp,
+            classification_revision=block.classification_revision,
+            attestation_id=attestation_id,
+            attestation_revision=attestation_revision,
         )
         if self.decision_store is not None:
             decision = self.decision_store.initialize_egress_decision(
@@ -174,6 +204,7 @@ class AgenticEgressEvaluator:
         destination_upstream_id: str | None,
         policy: AgenticEgressPolicy,
         source: bytes,
+        data_attestation: WorkspaceDataAttestation | None,
     ) -> str | None:
         if len(source) > MAX_EGRESS_BLOCK_BYTES:
             return "egress_block_too_large"
@@ -181,6 +212,13 @@ class AgenticEgressEvaluator:
             return "egress_policy_invalid"
         if block.data_class not in _KNOWN_DATA_CLASSES or block.data_class in _ALWAYS_DENIED_DATA_CLASSES:
             return "egress_data_class_denied"
+        if block.data_class == "workspace_internal_fake":
+            attestation_reason = _fake_data_attestation_denial(
+                block,
+                data_attestation,
+            )
+            if attestation_reason is not None:
+                return attestation_reason
         if block.provenance not in _KNOWN_PROVENANCE:
             return "egress_provenance_unknown"
         if block.trust_level not in _KNOWN_TRUST:
@@ -228,6 +266,32 @@ def public_remote_egress_policy(
         allowed_provider_ids=(provider_id,),
         allowed_upstream_ids=upstream_ids,
     )
+
+
+def _fake_data_attestation_denial(
+    block: AgenticEgressContentBlock,
+    attestation: WorkspaceDataAttestation | None,
+) -> str | None:
+    """Require both actual resource classification and a separate declaration."""
+    if attestation is None:
+        return "egress_fake_data_attestation_required"
+    if attestation.workspace_id != block.workspace_id:
+        return "egress_fake_data_attestation_workspace_mismatch"
+    if attestation.status == "revoked" and attestation.well_formed:
+        return "egress_fake_data_attestation_revoked"
+    if not attestation.authoritative:
+        return "egress_fake_data_attestation_invalid"
+    if (
+        not block.source_ref
+        or not block.source_revision
+        or not block.resource_identity
+        or not isinstance(block.classification_revision, int)
+        or block.classification_revision < 1
+    ):
+        return "egress_fake_data_classification_unverified"
+    if not attestation.covers_resource(block.source_ref):
+        return "egress_fake_data_attestation_scope_denied"
+    return None
 
 
 def _content_digest(key: bytes, content: bytes) -> str:

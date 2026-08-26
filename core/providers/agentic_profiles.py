@@ -333,6 +333,10 @@ def build_pinned_execution_binding(
         created_at=timestamp,
         certificate_evidence_digest=certificate.evidence_digest,
         legacy_inferred=legacy_inferred,
+        tcb_manifest_id=certificate.tcb_manifest_id,
+        tcb_manifest_version=certificate.tcb_manifest_version,
+        tcb_structure_digest=certificate.tcb_structure_digest,
+        tcb_live_digest=certificate.tcb_live_digest,
     )
     validate_certificate_for_binding(
         store,

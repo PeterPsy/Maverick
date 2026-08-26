@@ -93,6 +93,7 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             workspace_id=binding.workspace_id,
             agent_id="chat",
             execution_binding=binding,
+            owner_user_id="user:test-admin",
             now=timestamp,
             start_path=repo_root,
         )
@@ -120,6 +121,15 @@ class AgenticTurnSubmissionTest(unittest.TestCase):
             runtime_event_bus=None,
             runtime_thread_event_bus=None,
             repository_root=repo_root,
+            identity_store=SimpleNamespace(
+                get_user=lambda _user_id: SimpleNamespace(platform_role="admin")
+            ),
+            workspace_store=SimpleNamespace(
+                get_membership=lambda **_kwargs: SimpleNamespace(
+                    role="admin",
+                    status="active",
+                )
+            ),
         )
 
         with patch.dict(

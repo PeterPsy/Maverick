@@ -7,6 +7,11 @@ from datetime import UTC, datetime
 from core.providers.agentic_models import AgenticProfileDefinition
 from core.providers.capability_models import CapabilityCertificate, CapabilityCertificateStatus
 from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.certified_execution_tcb import (
+    is_exact_codex_identity,
+    validate_remote_tcb_identity,
+)
+from core.providers.errors import CapabilityCertificateError
 from core.runtime.execution_binding import canonical_digest
 
 
@@ -45,4 +50,19 @@ def certificate_profile_status(
         return "adapter_version_mismatch"
     if certificate.adapter_artifact_digest != runtime_adapter_artifact_digest(adapter):
         return "adapter_artifact_mismatch"
+    if not is_exact_codex_identity(
+        runtime_engine_id=certificate.runtime_engine_id,
+        adapter_id=certificate.adapter_id,
+        model_provider_id=certificate.model_provider_id,
+        provider_protocol=certificate.provider_protocol,
+    ):
+        try:
+            validate_remote_tcb_identity(
+                manifest_id=certificate.tcb_manifest_id,
+                manifest_version=certificate.tcb_manifest_version,
+                structure_digest=certificate.tcb_structure_digest,
+                live_digest=certificate.tcb_live_digest,
+            )
+        except CapabilityCertificateError as error:
+            return error.reason_code.removeprefix("certificate_")
     return "active"

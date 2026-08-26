@@ -17,6 +17,10 @@ from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
 class HostedContentClassification:
     data_class: RuntimeDataClass
     trust_level: str
+    source_ref: str = ""
+    source_revision: str = ""
+    resource_identity: str = ""
+    classification_revision: int | None = None
 
 
 @dataclass(frozen=True)

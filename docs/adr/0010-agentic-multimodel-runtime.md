@@ -4,11 +4,14 @@
 
 Accepted on 2026-08-16 as the ADR-0 gate for the agentic multimodel runtime.
 
-Phase-0 containment amendment accepted on 2026-08-25 and hardened on
-2026-08-26: remote agentic execution
-is **NO-GO** until the revision-bound server attestation designed in Phase 1
-exists. This amendment supersedes earlier preview-enablement language below;
-Codex agentic and plain hosted text are not contained.
+Phase-0 containment was accepted on 2026-08-25 and materially closed on
+2026-08-26. The Phase-1 security-boundary amendment was implemented on the same
+date: revision-bound server attestation, resource-derived classification,
+certified schemas/TCB, fd-relative confinement, and one effective-capability
+snapshot now exist. Remote agentic execution nevertheless remains **NO-GO**:
+the availability flag is false and no remote profile, binding, certificate,
+behavioral evidence, canary, or production gate is enabled. Codex agentic and
+plain hosted text are not contained or reclassified as hosted remote.
 
 This decision authorizes implementation in the order described below. It does
 not authorize production use or remote-provider processing of real workspace
@@ -81,9 +84,46 @@ applied. The audit records structured partial counts and a safe failure code,
 never claims success for an incomplete plan, and requires a new dry-run and
 human review before any later apply. A successful apply also consumes its
 reviewed digest and still requires a fresh dry-run for post-apply verification.
-Phase 0 is not operationally complete; the gate remains
-`live_apply_pending_review` until a separately approved apply and verification
-occur.
+The material Phase-0 operation is recorded by source revision
+`69d9e10fea641f805c1c52801b7fd60a027b02f9`, reviewed plan digest
+`02484a30f9ea7254c5deebd69e5af4416a22d8aecc006d81b7b5d6aad9c4578d`,
+audit saga `4a6ab3ee-8b55-40c4-9dd6-2eba17bd9bdc`, apply artifact SHA-256
+`5cd77cf01ab3e4ed12ca0ab76d3774dadf0482bd892821fb8883ef3cb2ab6898`,
+post-apply zero-target digest
+`56253919e93461e67b62a068e6e8718638475d05173dfff97b2912dcbeed2e77`,
+and post-apply artifact SHA-256
+`c6daa0b542edc92ef09116b323b1b024d3d1f94ef53aa85344eb55ea4aad733c`.
+These facts close material containment only; they do not claim remote release,
+certification, migration approval, canary, or production completion.
+
+### 0A. Phase-1 authority is server-owned and code-bound
+
+A workspace fake-data attestation is a dedicated CAS record with workspace,
+actor, declaration, scope, timestamps, revision, and revocation. Only governed
+operator/admin Core surfaces mutate it; Settings and Chat receive a read-only,
+redaction-safe projection. It is distinct from the effective classification of
+each exact resource/version and from the final per-block egress decision. A
+declaration can narrow authority but never promote real, secret,
+workspace-internal, or unclassified data. Client declarations, UI labels,
+feature flags, egress-policy ids, and legacy `declared_remote_data_class` are
+not attestations and are not propagated to continuation requests.
+
+Every provider input source carries canonical provenance, trust, data class,
+resource identity/revision/digest when applicable, and a restrictive join.
+Missing or inconsistent classification becomes `unclassified`. The effective
+authority used by admission, continuation, request building, catalogs, API,
+Chat, and Settings is one intersection of certificate, profile ceiling,
+workspace binding, actor policy, live authority, feature flags, and provider
+health. Unsupported skills, modalities, references, tool surfaces, and writes
+fail with allowlisted reason codes before persistence or egress.
+
+The certified execution TCB is one deterministic code-owned manifest. It covers
+all authority-changing Core and UI surfaces and is the sole source for suite,
+artifact, signing/publication, execution-binding, and live-status digests. The
+publisher recomputes the digest; drift or missing legacy identity makes a
+remote certificate ineligible before create, continuation, refresh, or
+dispatch. This implementation boundary does not itself make remote execution
+available.
 
 ### 1. Definitions and workspace bindings are separate
 
@@ -179,9 +219,10 @@ child events after a live rebind without weakening workspace authorization.
 
 Agentic availability is derived from an immutable `CapabilityCertificate` plus
 a revisioned status record. A certificate identifies the exact runtime engine,
-adapter version and artifact digest, provider, model/revision, protocol/API
-version, certified upstreams, routing digest, capability set, suite version,
-test run, evidence digest, issue time, and expiry.
+adapter version and artifact digest, certified execution TCB manifest/digest,
+provider, model/revision, protocol/API version, certified upstreams, routing
+digest, capability set, suite version, test run, evidence digest, issue time,
+and expiry.
 
 Vendor capability flags are only onboarding prerequisites. They never grant
 Maverick runtime authority. Expired, revoked, mismatched, or upstream-ineligible
@@ -196,11 +237,12 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v8 manifests contain both
+publication. Google and OpenRouter suite-v9 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
-certificate evidence.
+certificate evidence. Every stage recomputes the live TCB digest instead of
+accepting one supplied by a caller.
 
 ### 4. Runtime adapters are asynchronous and provider-agnostic
 
@@ -229,6 +271,22 @@ Canonical handles are typed (`cli:`, `mcp:`, `app-interface:`, and
 handles. Discovery does not imply invocation authority; every call is resolved
 and authorized again immediately before execution.
 
+A provider-visible tool schema is public only when its surface is Core-owned,
+explicitly declared public, and included by the exact certified TCB. App-owned,
+dynamic CLI/MCP, omitted, and otherwise uncertified schemas fail closed before
+request egress. The catalog retains a bounded structured rejection with an
+allowlisted reason code; it never silently drops an unsupported requested
+surface.
+
+Core filesystem read, list, write, and shell-cwd admission use a pinned
+workspace-root descriptor. Each component is opened relative to an already
+verified descriptor with no-follow/directory flags where the platform provides
+them; verified resources are not reopened by pathname. Identity/version-bound
+chunks and cursors reject mutation, UTF-8 chunks never split a code point, and
+listing never descends into `.git`. Final/parent symlinks, root or directory
+rename/swap, and validation/use races fail closed for reads, lists, writes, and
+shell cwd. The same exact observation supplies resource-derived classification.
+
 ### 6. Tool side effects are journaled before execution
 
 Every provider tool proposal creates a `ToolInvocationRecord` before validation
@@ -253,7 +311,12 @@ execution binding or ordinary session API. An envelope stores only a Core-issued
 opaque locator, schema/codec/encryption versions, digest, size, and timestamp.
 
 Private blobs use authenticated encryption with AAD binding workspace, session,
-engine, adapter, codec, and schema. They are subject to per-record and
+engine, adapter, codec, and schema. The provider-state envelope additionally
+retains only redaction-safe source block digests, source data classes/trust
+levels, their restrictive effective join, codec identity, provider request id,
+and turn generation. The joined class is never assumed fake, public, or
+trusted-platform. Private content and credentials remain inside the encrypted
+blob and are absent from APIs and audits. Blobs are subject to per-record and
 per-session quotas and explicit retention. Only the matching adapter and the
 authorized recovery path may resolve them through the Core service. Codec,
 digest, or version mismatch requires explicit recovery; no best-effort parsing
@@ -270,6 +333,14 @@ app reference, tool schema, tool result, and provider-state block receives an
 data class, provenance, trust, policy revision, reason, transformation, and
 domain-separated HMAC digests; they do not include source or transformed
 content.
+
+Prompt, orchestration, skill, attachment, app reference, filesystem/tool
+result, and provider-private sources keep distinct provenance. Filesystem and
+tool-result classification comes from the exact resource identity, revision,
+and digest observed by Core, never from the model or browser. A missing or
+incoherent resource classification produces `unclassified`, and the
+restrictive join prevents an attestation or less-sensitive sibling block from
+promoting it.
 
 Unknown classification, provenance, trust, destination, or policy fails closed.
 Current contained profile revisions list only Core-classified `public` content;
@@ -311,6 +382,9 @@ normative so both adapters implement the same semantics.
 | Certificate status | `providers/agentic_capability_certificate_statuses.json` / `provider_agentic_capability_certificate_statuses` | `certificate_id`, revision CAS |
 | Evidence metadata | `providers/agentic_capability_evidence.json` / `provider_agentic_capability_evidence` | evidence digest, insert-only |
 | Evidence blob | `data/control-plane/provider-evidence/<digest-prefix>/<digest>` or configured platform blob adapter | content-addressed, create-if-absent, digest verified |
+| Workspace data attestation | `workspaces/data_attestations.json` / `workspace_data_attestations` | workspace id, revision CAS; actor/scope/timestamps/revocation required |
+| Resource classification | `workspaces/resource_classifications.json` / `workspace_resource_classifications` | classification id plus exact workspace/resource identity/revision/digest, revision CAS |
+| Data-governance audit | `workspaces/data_governance_audits.json` / `workspace_data_governance_audits` | audit id, append-only redaction-safe mutation fact |
 | Execution binding / session lifecycle | `runtime/sessions/<session_id>/session.json` | binding embedded in a single immutable aggregate insert; `unprepared -> prepared` publication uses a one-way CAS, while lifecycle status transitions are serialized by `session_lifecycle_handoff` and are not provider-record CAS |
 | Provider state | `runtime/sessions/<session_id>/provider_state.json` | `session_id`, insert-if-absent then revision/generation CAS |
 | Continuation handoff | `runtime/continuation_handoffs.json` | one workspace-scoped record per predecessor session; immutable compatibility evidence plus monotonic phase/revision CAS |
@@ -337,7 +411,8 @@ operation that returns whether an exact identity-and-revision query matched.
 Store services never emulate CAS with an unlocked read followed by write.
 Revision starts at zero. Successful mutable writes increment by exactly one.
 These record-CAS rules apply to provider definition status, workspace binding,
-certificate status, provider state, and other explicitly revisioned records.
+certificate status, workspace attestation/classification, provider state, and
+other explicitly revisioned records.
 They do not turn the runtime-session lifecycle into a revisioned provider
 record: session quarantine acquires the session lifecycle handoff, re-reads the
 aggregate, validates the legal transition, and persists the new status under
@@ -426,6 +501,16 @@ Every runtime-token validation also re-reads its owning session; a missing or
 `recovery_required` owner has no operational bearer authority even if the token
 record is still cryptographically valid and marked active.
 
+The canonical effective snapshot is the restrictive intersection of the
+capability certificate, profile policy ceiling, workspace binding, actor
+policy, live authority/catalog, process feature flags, and provider health. It
+separately reports filesystem read/write, shell, CLI, MCP, skill catalog,
+attachment modalities, app references, confirmations, recovery,
+provider/upstream/data policy, certificate/suite/expiry, and TCB posture. The
+same snapshot is projected without credentials to API, Chat, and Settings and
+is recomputed before admission, continuation, request construction, catalog
+materialization, confirmation resume, and dispatch.
+
 Until the open runtime bearer authority, CSRF, app WebSocket, frontend/backend
 isolation, and recovery-policy blockers in `SECURITY.md` are closed:
 
@@ -457,7 +542,9 @@ to provide live narrowing for already-pinned sessions.
 Values `0`, `false`, `no`, and `off` disable a surface. Values `1`, `true`,
 `yes`, and `on` enable its switch. An absent value uses the declared default;
 an invalid configured value fails closed. Remote flags do not bypass the
-independent Phase-0 attestation barrier. Disabling egress enforcement blocks hosted export rather than
+independent server-owned availability and attestation boundary;
+`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false for this decision state.
+Disabling egress enforcement blocks hosted export rather than
 bypassing evaluation. Enabling the parallel-tool-call switch does not override
 the MVP's sequential policy ceilings or codec rejection; it only reserves an
 independent rollout control for a future implementation.
@@ -476,7 +563,10 @@ The accepted order is:
    `fake-data preview` warning label;
 8. expose binding/certificate/session controls in Settings and Chat;
 9. add OpenRouter fixed-upstream privacy routing;
-10. complete concurrency, recovery, leakage, sub-agent, and rollback hardening.
+10. complete concurrency, recovery, leakage, sub-agent, and rollback hardening;
+11. close the Phase-1 attestation/classification, certified-schema/TCB,
+    descriptor-relative filesystem, and effective-capability gates without
+    enabling a remote profile.
 
 Every phase has focused tests and a checkpoint commit. A later phase cannot
 weaken an earlier boundary.
@@ -505,5 +595,7 @@ remote profile beyond the contained preview.
 - Control-plane and runtime stores gain real CAS semantics shared by JSON,
   MongoDB, and tests.
 - Remote agentic execution remains NO-GO while local Codex and plain hosted
-  text retain their existing behavior; reopening requires the later attestation
-  and recovery gates, not a browser declaration or a flag alone.
+  text retain their existing behavior. Phase 1 supplies the server-owned
+  attestation and certified boundary, but reopening still requires Phase 2+
+  recovery, complete live/behavioral certification, onboarding, leakage review,
+  canary, and release gates—not a browser declaration or a flag alone.

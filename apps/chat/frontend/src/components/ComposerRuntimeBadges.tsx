@@ -29,6 +29,37 @@ export function ComposerRuntimeBadges({
   const certificateExpiring = agenticCertificateExpiringSoon(selectedProvider?.agentic_certificate_expires_at);
   const contained = selectedProvider?.agentic_containment_status === "NO-GO";
   const destinationLabel = selectedProvider?.agentic_data_destination?.display_label || "destination unavailable";
+  const effective = selectedProvider?.agentic_effective_capabilities || null;
+  const effectiveCapabilities = effective?.capabilities;
+  const effectiveExecutionMode = effective?.execution_mode || executionMode;
+  const hasAgenticProfile = Boolean(selectedProvider?.workspace_profile_binding_id);
+  const effectiveAuthorityUnavailable = hasAgenticProfile && effective?.status !== "active";
+  const policyLimited = Boolean(
+    hasAgenticProfile &&
+    effective?.status === "active" &&
+    effectiveExecutionMode === "full-access" &&
+    (!effectiveCapabilities?.filesystem_write || !effectiveCapabilities?.shell),
+  );
+  const executionBadge = effectiveAuthorityUnavailable
+    ? {
+        ariaLabel: "Runtime authority unavailable",
+        className: "is-sandbox",
+        icon: "gpp_bad",
+        title: `Runtime authority unavailable · ${effective?.reason_code || "server capability snapshot missing"}`,
+      }
+    : policyLimited
+      ? {
+          ariaLabel: "Policy-limited runtime",
+          className: "is-sandbox",
+          icon: "policy",
+          title: "Full-access boundary with server-enforced capability restrictions",
+        }
+      : {
+          ariaLabel: effectiveExecutionMode === "full-access" ? "Full access runtime" : "Sandbox runtime",
+          className: effectiveExecutionMode === "full-access" ? "is-full-access" : "is-sandbox",
+          icon: effectiveExecutionMode === "full-access" ? "admin_panel_settings" : "lock",
+          title: effectiveExecutionMode === "full-access" ? "Full access runtime" : "Sandbox runtime",
+        };
   const showAgenticProfile = Boolean(
     selectedProvider?.workspace_profile_binding_id && (!locked || contained),
   );
@@ -46,6 +77,24 @@ export function ComposerRuntimeBadges({
     selectedProvider?.agentic_certificate_posture?.eligibility
       ? `certificate eligibility ${selectedProvider.agentic_certificate_posture.eligibility}`
       : null,
+    effective ? `effective authority ${effective.status} · snapshot ${effective.snapshot_digest}` : null,
+    effective?.execution_mode ? `execution ${effective.execution_mode}` : null,
+    effectiveCapabilities
+      ? `filesystem read ${yesNo(effectiveCapabilities.filesystem_read)} / write ${yesNo(effectiveCapabilities.filesystem_write)} · shell ${yesNo(effectiveCapabilities.shell)} · CLI ${yesNo(effectiveCapabilities.cli)} · MCP ${yesNo(effectiveCapabilities.mcp)}`
+      : null,
+    effectiveCapabilities
+      ? `skills ${yesNo(effectiveCapabilities.skill_catalog)} · app references ${yesNo(effectiveCapabilities.app_references)} · attachments ${effectiveCapabilities.attachment_modalities.join(", ") || "none"} · confirmations ${yesNo(effectiveCapabilities.confirmations)} · recovery ${yesNo(effectiveCapabilities.recovery)}`
+      : null,
+    effective?.provider
+      ? `provider ${effective.provider.provider_id || "unknown"} · upstream ${(effective.provider.effective_upstream_ids || []).join(", ") || "none"} · health ${effective.provider.health_status || "unknown"}`
+      : null,
+    effective?.data_policy
+      ? `effective data policy ${(effective.data_policy.allowed_remote_data_classes || []).join(", ") || "none"} · collection ${effective.data_policy.collection || "deny"} · ZDR ${effective.data_policy.require_zdr ? "required" : "not required"}`
+      : null,
+    effective?.certificate
+      ? `effective certificate ${effective.certificate.certificate_id || "unknown"} · suite ${effective.certificate.suite_id || "unknown"}@${effective.certificate.suite_version || "unknown"} · expires ${effective.certificate.expires_at || "unknown"}`
+      : null,
+    effective?.tcb?.posture ? `TCB ${effective.tcb.posture}` : null,
   ].filter(Boolean).join(" · ");
   return (
     <div className="chatapp-composer__runtime-badges">
@@ -74,18 +123,20 @@ export function ComposerRuntimeBadges({
       ) : null}
       {executionMode ? (
         <span
-          aria-label={executionMode === "full-access" ? "Full access runtime" : "Sandbox runtime"}
-          className={`chatapp-execution-chip ${executionMode === "full-access" ? "is-full-access" : "is-sandbox"}`}
+          aria-label={executionBadge.ariaLabel}
+          className={`chatapp-execution-chip ${executionBadge.className}`}
           role="img"
-          title={executionMode === "full-access" ? "Full access runtime" : "Sandbox runtime"}
+          title={executionBadge.title}
         >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            {executionMode === "full-access" ? "admin_panel_settings" : "lock"}
-          </span>
+          <span aria-hidden="true" className="material-symbols-rounded">{executionBadge.icon}</span>
         </span>
       ) : null}
     </div>
   );
+}
+
+function yesNo(value: boolean): "yes" | "no" {
+  return value ? "yes" : "no";
 }
 
 function agenticCertificateExpiringSoon(value: string | null | undefined): boolean {

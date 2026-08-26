@@ -22,11 +22,16 @@ from core.runtime.remote_agentic_admission import (
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.turn_queue_admission import require_turn_queue_session_executable
+from core.workspaces.data_governance import (
+    issue_fake_data_attestation,
+    revoke_data_attestation,
+)
 
 
 def _identity(provider_id: str):
     return SimpleNamespace(
         runtime_engine_id="hosted-agent-runtime",
+        adapter_id="hosted-agent-adapter",
         model_provider_id=provider_id,
         provider_protocol=f"{provider_id}-agentic-v1",
     )
@@ -79,9 +84,66 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
                 require_remote_agentic_dispatch(_identity("future-provider"))
         self.assertEqual(raised.exception.reason_code, "remote_agentic_provider_unapproved")
 
+    def test_certified_attestation_gate_requires_active_matching_workspace_record(self) -> None:
+        environment = {
+            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME: "1",
+            MAVERICK_FEATURE_GOOGLE_AGENTIC_PREVIEW: "1",
+        }
+        active = issue_fake_data_attestation(
+            workspace_id="workspace-1",
+            actor_id="operator-1",
+            actor_kind="platform_operator",
+            scope_type="workspace",
+            expected_revision=0,
+            now=datetime(2026, 8, 26, tzinfo=UTC),
+        )
+        revoked = revoke_data_attestation(
+            active,
+            actor_id="operator-2",
+            expected_revision=1,
+            reason="fixture retired",
+            now=datetime(2026, 8, 26, tzinfo=UTC),
+        )
+        with patch.dict("os.environ", environment, clear=True), patch(
+            "core.runtime.remote_agentic_admission.REMOTE_AGENTIC_ATTESTATION_AVAILABLE",
+            True,
+        ):
+            with self.assertRaisesRegex(
+                AgenticProfileError,
+                "remote_agentic_attestation_required",
+            ):
+                require_remote_agentic_session_admission(
+                    _identity("google-ai-studio"),
+                    workspace_id="workspace-1",
+                )
+            require_remote_agentic_session_admission(
+                _identity("google-ai-studio"),
+                workspace_id="workspace-1",
+                workspace_attestation=active,
+            )
+            with self.assertRaisesRegex(
+                AgenticProfileError,
+                "remote_agentic_attestation_workspace_mismatch",
+            ):
+                require_remote_agentic_session_admission(
+                    _identity("google-ai-studio"),
+                    workspace_id="workspace-2",
+                    workspace_attestation=active,
+                )
+            with self.assertRaisesRegex(
+                AgenticProfileError,
+                "remote_agentic_attestation_revoked",
+            ):
+                require_remote_agentic_session_admission(
+                    _identity("google-ai-studio"),
+                    workspace_id="workspace-1",
+                    workspace_attestation=revoked,
+                )
+
     def test_codex_and_plain_hosted_text_are_not_remote_agentic(self) -> None:
         codex = SimpleNamespace(
             runtime_engine_id="codex",
+            adapter_id="codex-app-server",
             model_provider_id="codex",
             provider_protocol="codex-app-server-stdio",
         )
@@ -98,6 +160,25 @@ class RemoteAgenticAdmissionTest(unittest.TestCase):
                 codex,
                 declared_remote_data_class="public",
             )
+
+    def test_codex_like_but_non_exact_identities_are_remote_and_fail_closed(self) -> None:
+        for adapter_id, protocol in (
+            ("hosted-impostor", "codex-app-server-stdio"),
+            ("codex-app-server", "hosted-codex-compatible"),
+        ):
+            identity = SimpleNamespace(
+                runtime_engine_id="codex",
+                adapter_id=adapter_id,
+                model_provider_id="codex",
+                provider_protocol=protocol,
+            )
+            with self.subTest(adapter_id=adapter_id, protocol=protocol), patch.dict(
+                "os.environ", {}, clear=True
+            ), self.assertRaisesRegex(
+                AgenticProfileError,
+                "hosted_agent_runtime_disabled",
+            ):
+                require_remote_agentic_session_admission(identity)
 
     def test_recovery_required_and_contained_pins_have_explicit_queue_reasons(self) -> None:
         base = dict(

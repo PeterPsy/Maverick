@@ -26,6 +26,8 @@ class RuntimeCapabilitySet:
     confirmation_resume: bool
     provider_private_state: bool
     attachment_modalities: tuple[str, ...]
+    app_references: bool = False
+    confirmations: bool = False
 
 
 @dataclass(frozen=True)
@@ -48,6 +50,10 @@ class CapabilityEvidenceRecord:
     run_signature: str = ""
     certification_started_at: datetime | None = None
     certification_outcome: str = ""
+    tcb_manifest_id: str = ""
+    tcb_manifest_version: str = ""
+    tcb_structure_digest: str = ""
+    tcb_live_digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,10 @@ class CapabilityCertificate:
     evidence_refs: tuple[str, ...]
     issued_at: datetime
     expires_at: datetime
+    tcb_manifest_id: str = ""
+    tcb_manifest_version: str = ""
+    tcb_structure_digest: str = ""
+    tcb_live_digest: str = ""
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,20 @@ export type AgenticEgressPolicy = {
 export type AgenticDataPolicy = {
   collection: string;
   require_zdr: boolean;
-  attestation_state: string;
+  attestation_state: "not_attested" | "active" | "revoked" | "invalid";
+  attestation: {
+    state: "not_attested" | "active" | "revoked" | "invalid";
+    authoritative: boolean;
+    declaration: "fake_data_only" | null;
+    scope: {
+      type: "workspace" | "resource_prefixes";
+      resource_prefixes: string[];
+    } | null;
+    revision: number | null;
+    updated_at: string | null;
+    attested_at?: string;
+    revoked_at?: string | null;
+  };
 };
 
 export type AgenticCertificatePosture = {
@@ -23,6 +36,58 @@ export type AgenticCertificatePosture = {
   eligibility: string;
   expires_at: string | null;
   pinned_evidence_digest: string;
+};
+
+export type AgenticEffectiveCapabilities = {
+  status: "active" | "blocked";
+  reason_code: string | null;
+  snapshot_digest: string;
+  computed_at?: string;
+  execution_mode?: "sandbox" | "full-access";
+  capabilities: {
+    streaming: boolean;
+    tool_orchestration: boolean;
+    cli: boolean;
+    mcp: boolean;
+    skill_catalog: boolean;
+    filesystem_list: boolean;
+    filesystem_read: boolean;
+    filesystem_write: boolean;
+    shell: boolean;
+    interrupt: boolean;
+    same_turn_steering: boolean;
+    recovery: boolean;
+    confirmation_resume: boolean;
+    provider_private_state: boolean;
+    attachment_modalities: string[];
+    app_references: boolean;
+    confirmations: boolean;
+  };
+  provider?: {
+    provider_id?: string;
+    model_id?: string;
+    protocol?: string;
+    certified_upstream_ids?: string[];
+    effective_upstream_ids?: string[];
+    health_status?: string;
+    health_revision?: string;
+  };
+  data_policy?: {
+    allowed_remote_data_classes?: string[];
+    collection?: string;
+    require_zdr?: boolean;
+  };
+  certificate?: {
+    certificate_id?: string;
+    suite_id?: string;
+    suite_version?: string;
+    expires_at?: string | null;
+  };
+  tcb?: {
+    posture?: string;
+    [key: string]: unknown;
+  };
+  allowed_tool_handles?: string[];
 };
 
 export type AgenticSessionGovernance = {
@@ -43,6 +108,7 @@ export type AgenticSessionGovernance = {
   egress_policy: AgenticEgressPolicy;
   data_policy: AgenticDataPolicy;
   certificate_posture: AgenticCertificatePosture;
+  effective_capabilities: AgenticEffectiveCapabilities;
 };
 
 export type ProviderItem = {
@@ -70,6 +136,7 @@ export type ProviderItem = {
   agentic_egress_policy?: AgenticEgressPolicy | null;
   agentic_data_policy?: AgenticDataPolicy | null;
   agentic_certificate_posture?: AgenticCertificatePosture | null;
+  agentic_effective_capabilities?: AgenticEffectiveCapabilities | null;
   default_reasoning_effort?: string | null;
   supported_reasoning_efforts?: ProviderReasoningOption[];
   input_modalities?: string[];
@@ -167,6 +234,7 @@ export type AgenticProfileItem = {
   data_policy?: AgenticDataPolicy;
   allowed_tool_handles?: string[];
   max_estimated_cost_microusd?: number | null;
+  effective_capabilities?: AgenticEffectiveCapabilities;
   certificate?: {
     effective_status?: string;
     expires_at?: string;

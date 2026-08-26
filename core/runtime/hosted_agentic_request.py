@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Callable, TYPE_CHECKING
 from uuid import NAMESPACE_URL, uuid5
 
 from core.egress.agentic_models import (
@@ -11,22 +12,34 @@ from core.egress.agentic_models import (
     AgenticEgressPolicy,
 )
 from core.egress.agentic_policy import AgenticEgressEvaluator
+from core.egress.classification import (
+    fail_closed_classification,
+    validated_classification,
+)
 from core.providers.agentic_protocol import (
     AgenticModelRequest,
     AgenticProviderPrivateState,
     AgenticRequestContentBlock,
+    AgenticSourceMetadata,
     AgenticToolDefinition,
     AgenticToolResult,
 )
+from core.providers.certified_execution_tcb import is_certified_tcb_component
+from core.providers.errors import CapabilityCertificateError
 from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
+    HostedContentClassification,
     HostedContentClassifier,
 )
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
     require_agentic_feature,
 )
+from core.runtime.authority import validate_effective_context_capabilities
 from core.runtime.tool_catalog import RuntimeToolCatalog
+
+if TYPE_CHECKING:
+    from core.workspaces.data_governance import WorkspaceDataAttestation
 
 
 HOSTED_TOOL_USE_INSTRUCTION = (
@@ -44,9 +57,14 @@ class HostedAgenticRequestBuilder:
         *,
         egress_evaluator: AgenticEgressEvaluator,
         classifier: HostedContentClassifier,
+        attestation_resolver: Callable[
+            [str], WorkspaceDataAttestation | None
+        ]
+        | None = None,
     ) -> None:
         self.egress_evaluator = egress_evaluator
         self.classifier = classifier
+        self.attestation_resolver = attestation_resolver
 
     def build(
         self,
@@ -62,6 +80,8 @@ class HostedAgenticRequestBuilder:
         max_output_tokens: int,
     ) -> AgenticModelRequest:
         binding = context.binding
+        self._validate_context_capabilities(context)
+        self._validate_catalog_before_egress(catalog)
         request_id = str(
             uuid5(
                 NAMESPACE_URL,
@@ -69,9 +89,6 @@ class HostedAgenticRequestBuilder:
             )
         )
         content_blocks: list[AgenticRequestContentBlock] = []
-        system_instruction = HOSTED_TOOL_USE_INSTRUCTION
-        if context.session.system_prompt:
-            system_instruction = f"{system_instruction}\n\n{context.session.system_prompt}"
         content_blocks.append(
             self._content_block(
                 context=context,
@@ -79,25 +96,105 @@ class HostedAgenticRequestBuilder:
                 index=len(content_blocks),
                 role="system",
                 provenance="platform_instruction",
-                content=system_instruction,
+                content=HOSTED_TOOL_USE_INSTRUCTION,
                 content_type="text/plain",
                 egress_policy=egress_policy,
                 destination_upstream_id=destination_upstream_id,
+                classification=HostedContentClassification(
+                    "public",
+                    "trusted_platform",
+                    source_ref="core:hosted-tool-use-instruction",
+                    source_revision="1",
+                    resource_identity="core:hosted-tool-use-instruction:1",
+                    classification_revision=1,
+                ),
             )
         )
-        content_blocks.append(
-            self._content_block(
-                context=context,
-                request_id=request_id,
-                index=len(content_blocks),
-                role="user",
-                provenance="user_input",
-                content=input_text,
-                content_type="text/plain",
-                egress_policy=egress_policy,
-                destination_upstream_id=destination_upstream_id,
+        if context.session.system_prompt:
+            content_blocks.append(
+                self._content_block(
+                    context=context,
+                    request_id=request_id,
+                    index=len(content_blocks),
+                    role="system",
+                    provenance="prompt",
+                    content=context.session.system_prompt,
+                    content_type="text/plain",
+                    egress_policy=egress_policy,
+                    destination_upstream_id=destination_upstream_id,
+                )
             )
-        )
+        input_sources = tuple(getattr(context, "input_sources", ()) or ())
+        if input_sources:
+            for source in input_sources:
+                source_classification = getattr(source, "classification", None)
+                content_blocks.append(
+                    self._content_block(
+                        context=context,
+                        request_id=request_id,
+                        index=len(content_blocks),
+                        role=str(getattr(source, "role", "user") or "user"),
+                        provenance=str(
+                            getattr(source, "provenance", "unclassified")
+                            or "unclassified"
+                        ),
+                        content=getattr(source, "content", None),
+                        content_type=str(
+                            getattr(source, "content_type", "application/json")
+                            or "application/json"
+                        ),
+                        egress_policy=egress_policy,
+                        destination_upstream_id=destination_upstream_id,
+                        classification=(
+                            HostedContentClassification(
+                                source_classification.data_class,
+                                source_classification.trust_level,
+                                source_ref=source_classification.source_ref,
+                                source_revision=source_classification.source_revision,
+                                resource_identity=source_classification.resource_identity,
+                                classification_revision=(
+                                    source_classification.classification_revision
+                                ),
+                            )
+                            if source_classification is not None
+                            else None
+                        ),
+                    )
+                )
+        else:
+            content_blocks.append(
+                self._content_block(
+                    context=context,
+                    request_id=request_id,
+                    index=len(content_blocks),
+                    role="user",
+                    provenance="user_input",
+                    content=input_text,
+                    content_type="text/plain",
+                    egress_policy=egress_policy,
+                    destination_upstream_id=destination_upstream_id,
+                )
+            )
+        for skill in tuple(getattr(context, "invoked_skills", ()) or ()):
+            content_blocks.append(
+                self._content_block(
+                    context=context,
+                    request_id=request_id,
+                    index=len(content_blocks),
+                    role="system",
+                    provenance="skill",
+                    content={
+                        "skill_id": str(getattr(skill, "skill_id", "")),
+                        "name": str(getattr(skill, "name", "")),
+                        "description": str(getattr(skill, "description", "")),
+                        "owner_kind": str(getattr(skill, "owner_kind", "")),
+                        "owner_id": str(getattr(skill, "owner_id", "")),
+                    },
+                    content_type="application/json",
+                    egress_policy=egress_policy,
+                    destination_upstream_id=destination_upstream_id,
+                )
+            )
         tools = tuple(
             self._tool_definition(
                 context=context,
@@ -126,6 +223,16 @@ class HostedAgenticRequestBuilder:
             )
             for result in tool_results
         )
+        source_metadata = tuple(
+            metadata
+            for metadata in (
+                *(block.source_metadata for block in content_blocks),
+                *(tool.source_metadata for tool in tools),
+                *(result.source_metadata for result in approved_tool_results),
+                *(() if private_state is None else private_state.source_metadata),
+            )
+            if metadata is not None
+        )
         return AgenticModelRequest(
             schema_version="1",
             request_id=request_id,
@@ -138,6 +245,7 @@ class HostedAgenticRequestBuilder:
             provider_private_state=private_state,
             routing_constraint=binding.routing_constraint_snapshot,
             max_output_tokens=max_output_tokens,
+            source_metadata=source_metadata,
         )
 
     def _content_block(
@@ -152,10 +260,11 @@ class HostedAgenticRequestBuilder:
         content_type: str,
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
+        classification: HostedContentClassification | None = None,
     ) -> AgenticRequestContentBlock:
-        classification = self.classifier(context, provenance, content)
+        classification = classification or self.classifier(context, provenance, content)
         content_block_id = f"{request_id}:content:{index}"
-        exported = self._evaluate(
+        exported, metadata = self._evaluate(
             context=context,
             content_block_id=content_block_id,
             provenance=provenance,
@@ -173,6 +282,7 @@ class HostedAgenticRequestBuilder:
             trust_level=classification.trust_level,
             content_type=content_type,
             content=exported,
+            source_metadata=metadata,
         )
 
     def _request_tool_result(
@@ -184,8 +294,8 @@ class HostedAgenticRequestBuilder:
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
     ) -> AgenticToolResult:
-        classification = self.classifier(context, "tool_result", result.content)
-        exported = self._evaluate(
+        classification = _tool_result_classification(result)
+        exported, metadata = self._evaluate(
             context=context,
             content_block_id=(
                 f"{request_id}:tool-result:{result.provider_tool_call_id}"
@@ -203,6 +313,7 @@ class HostedAgenticRequestBuilder:
             content_type=result.content_type,
             content=exported,
             is_error=result.is_error,
+            source_metadata=metadata,
         )
 
     def _tool_definition(
@@ -220,7 +331,16 @@ class HostedAgenticRequestBuilder:
             "description": descriptor.description,
             "input_schema": descriptor.input_schema,
         }
-        exported = self._evaluate(
+        self._validate_descriptor_schema(descriptor)
+        classification = HostedContentClassification(
+            "public",
+            "trusted_platform",
+            source_ref=f"core-tool-schema:{descriptor.handle}",
+            source_revision=descriptor.certified_tcb_component,
+            resource_identity=f"core-tool-schema:{descriptor.handle}:{descriptor.certified_tcb_component}",
+            classification_revision=1,
+        )
+        exported, metadata = self._evaluate(
             context=context,
             content_block_id=f"{request_id}:tool-schema:{index}",
             provenance="tool_schema",
@@ -228,6 +348,7 @@ class HostedAgenticRequestBuilder:
             content_type="application/json",
             egress_policy=egress_policy,
             destination_upstream_id=destination_upstream_id,
+            classification=classification,
         )
         try:
             transformed = json.loads(exported.decode("utf-8"))
@@ -235,9 +356,61 @@ class HostedAgenticRequestBuilder:
                 name=str(transformed["name"]),
                 description=str(transformed["description"]),
                 input_schema=dict(transformed["input_schema"]),
+                source_metadata=metadata,
             )
         except (UnicodeDecodeError, ValueError, KeyError, TypeError) as error:
             raise HostedAgenticLoopError("tool_schema_egress_invalid") from error
+
+    @staticmethod
+    def _validate_context_capabilities(context) -> None:
+        authority = getattr(context, "effective_authority", None)
+        if authority is None:
+            raise HostedAgenticLoopError("runtime_authority_unavailable")
+        attachments: list[dict[str, object]] = []
+        app_references: list[dict[str, object]] = []
+        for source in tuple(getattr(context, "input_sources", ()) or ()):
+            provenance = str(getattr(source, "provenance", "") or "")
+            if provenance == "attachment":
+                attachments.append(
+                    {
+                        "content_type": str(
+                            getattr(source, "capability_modality", "") or ""
+                        )
+                    }
+                )
+            elif provenance == "app_reference":
+                app_references.append({"server_materialized": True})
+        try:
+            validate_effective_context_capabilities(
+                authority,
+                invoked_skills=tuple(getattr(context, "invoked_skills", ()) or ()),
+                attachments=attachments,
+                app_references=app_references,
+            )
+        except CapabilityCertificateError as error:
+            raise HostedAgenticLoopError(error.reason_code) from error
+
+    @staticmethod
+    def _validate_catalog_before_egress(catalog: RuntimeToolCatalog) -> None:
+        if catalog.rejections:
+            rejection = min(
+                catalog.rejections,
+                key=lambda item: (item.handle, item.reason_code),
+            )
+            raise HostedAgenticLoopError(rejection.reason_code)
+        for descriptor in catalog.descriptors:
+            HostedAgenticRequestBuilder._validate_descriptor_schema(descriptor)
+
+    @staticmethod
+    def _validate_descriptor_schema(descriptor) -> None:
+        if (
+            descriptor.schema_owner_kind != "core"
+            or descriptor.schema_data_class != "public"
+            or descriptor.schema_trust_level != "trusted_platform"
+            or not descriptor.certified_tcb_component
+            or not is_certified_tcb_component(descriptor.certified_tcb_component)
+        ):
+            raise HostedAgenticLoopError("tool_schema_not_certified")
 
     def _private_state(
         self,
@@ -250,7 +423,17 @@ class HostedAgenticRequestBuilder:
     ) -> AgenticProviderPrivateState | None:
         if state is None:
             return None
-        exported = self._evaluate(
+        classification = HostedContentClassification(
+            state.effective_data_class,
+            state.effective_trust_level,
+            source_ref=f"provider-state:{state.provider_request_id or 'legacy'}",
+            source_revision=state.turn_generation or "legacy",
+            resource_identity=(
+                f"provider-state:{context.session.session_id}:{state.provider_request_id or 'legacy'}"
+            ),
+            classification_revision=(1 if state.provider_request_id and state.turn_generation else None),
+        )
+        exported, metadata = self._evaluate(
             context=context,
             content_block_id=f"{request_id}:provider-state",
             provenance="provider_state",
@@ -258,6 +441,7 @@ class HostedAgenticRequestBuilder:
             content_type=state.content_type,
             egress_policy=egress_policy,
             destination_upstream_id=destination_upstream_id,
+            classification=classification,
         )
         return AgenticProviderPrivateState(
             codec_id=state.codec_id,
@@ -265,6 +449,11 @@ class HostedAgenticRequestBuilder:
             schema_version=state.schema_version,
             content_type=state.content_type,
             content=exported,
+            source_metadata=(*state.source_metadata, metadata),
+            effective_data_class=classification.data_class,
+            effective_trust_level=classification.trust_level,
+            provider_request_id=state.provider_request_id,
+            turn_generation=state.turn_generation,
         )
 
     def _evaluate(
@@ -278,12 +467,23 @@ class HostedAgenticRequestBuilder:
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
         classification=None,
-    ) -> bytes:
+    ) -> tuple[bytes, AgenticSourceMetadata]:
         require_agentic_feature(
             MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
             "agentic_egress_enforcement_disabled",
         )
         classification = classification or self.classifier(context, provenance, content)
+        data_attestation = None
+        if classification.data_class == "workspace_internal_fake":
+            if self.attestation_resolver is not None:
+                try:
+                    data_attestation = self.attestation_resolver(
+                        context.session.workspace_id
+                    )
+                except Exception as error:
+                    raise HostedAgenticLoopError(
+                        "egress_fake_data_attestation_unavailable"
+                    ) from error
         result = self.egress_evaluator.evaluate(
             block=AgenticEgressContentBlock(
                 content_block_id=content_block_id,
@@ -294,13 +494,67 @@ class HostedAgenticRequestBuilder:
                 provenance=provenance,
                 trust_level=classification.trust_level,
                 content_type=content_type,
+                source_ref=str(getattr(classification, "source_ref", "") or ""),
+                source_revision=str(
+                    getattr(classification, "source_revision", "") or ""
+                ),
+                resource_identity=str(
+                    getattr(classification, "resource_identity", "") or ""
+                ),
+                classification_revision=getattr(
+                    classification,
+                    "classification_revision",
+                    None,
+                ),
             ),
             content=content,
             destination_provider_id=context.binding.model_provider_id,
             destination_upstream_id=destination_upstream_id,
             policy=egress_policy,
+            data_attestation=data_attestation,
             workspace_root=Path(context.session.workspace_root),
         )
         if not result.decision.export_allowed or result.exported_content is None:
-            raise HostedAgenticLoopError("egress_denied")
-        return result.exported_content
+            raise HostedAgenticLoopError(result.decision.reason_code)
+        source_ref = str(getattr(classification, "source_ref", "") or content_block_id)
+        source_revision = str(
+            getattr(classification, "source_revision", "") or context.correlation_id
+        )
+        resource_identity = str(
+            getattr(classification, "resource_identity", "") or content_block_id
+        )
+        return result.exported_content, AgenticSourceMetadata(
+            source_block_digest=result.decision.source_digest,
+            source_data_class=classification.data_class,
+            source_trust_level=classification.trust_level,
+            provenance=provenance,
+            source_ref=source_ref,
+            source_revision=source_revision,
+            resource_identity=resource_identity,
+            classification_revision=getattr(classification, "classification_revision", None),
+        )
+
+
+def _tool_result_classification(result: AgenticToolResult) -> HostedContentClassification:
+    metadata = result.source_metadata
+    if metadata is None:
+        fallback = fail_closed_classification(provenance="tool_result")
+    else:
+        fallback = validated_classification(
+            data_class=metadata.source_data_class,
+            provenance=metadata.provenance,
+            trust_level=metadata.source_trust_level,
+            source_ref=metadata.source_ref,
+            source_revision=metadata.source_revision,
+            source_digest=metadata.source_block_digest,
+            resource_identity=metadata.resource_identity,
+            classification_revision=metadata.classification_revision,
+        )
+    return HostedContentClassification(
+        fallback.data_class,
+        fallback.trust_level,
+        source_ref=fallback.source_ref,
+        source_revision=fallback.source_revision,
+        resource_identity=fallback.resource_identity,
+        classification_revision=fallback.classification_revision,
+    )

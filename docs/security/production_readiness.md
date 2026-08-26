@@ -42,32 +42,43 @@ ADR-0010 approves the architecture and implementation sequence for hosted
 agentic model providers. It does not close any launch blocker. Until a separate
 production security gate is approved, remote agentic profiles must remain
 disabled by default, explicitly marked preview, and blocked by the independent
-Phase-0 admission barrier. Current profile policy lists only Core-classified
-public content, while the legacy fake class is always denied. Capability
-certificates attest only to one exact
-engine/adapter/provider/model/protocol/upstream combination and evidence suite;
-they are not a platform production-safety certificate.
+server-owned availability/admission boundary. P0 material containment is
+recorded in the agentic tasklist, and P1 implements the security boundary, but
+`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false and no remote binding,
+profile, or certificate is enabled. Current profile policy lists only
+Core-classified public content, while the legacy fake class is always denied.
+Capability certificates attest only to one exact
+engine/adapter/provider/model/protocol/upstream/TCB combination and evidence
+suite; they are not a platform production-safety certificate.
 
 Core now persists certificate evidence/certificates as immutable control-plane
-records, keeps revocation in a CAS status record, verifies live adapter and
-upstream identity before execution, and records only a redaction-safe effective
-authority digest. This closes the certificate-object implementation slice; it
-does not relax the remote containment gate or any platform launch blocker.
+records, keeps revocation in a CAS status record, and binds them to the one
+deterministic code-owned certified-execution TCB. Signing, verification,
+publication, execution binding, and live status recompute/compare the same
+digest; drift or a legacy missing identity fails closed. Effective authority is
+one intersection of certificate, profile, workspace, actor, live catalog,
+feature flags, and provider health and is reused by admission, dispatch, API,
+Chat, and Settings. This closes the P1 repository implementation slice; it does
+not relax containment or any platform launch blocker.
 
-The runtime now also persists per-block fail-closed egress decisions before
-export and keeps provider-private/tool payloads in restart-safe, integrity-bound
-encrypted session storage with explicit codec and quota failures. Audit records
-contain keyed digests but no content, and generic provider events cannot carry
-thought signatures. The shared hosted loop now passes deterministic
+The runtime now also separates actor-attributed CAS workspace attestation,
+exact resource classification, and per-block fail-closed egress decisions.
+Canonical provenance/trust/data-class joins, certified Core-only schemas, and
+descriptor-relative race-safe filesystem observations prevent client promotion,
+silent schema omission, and path-race classification. Provider-private/tool
+payloads remain in restart-safe integrity-bound encrypted session storage;
+public state retains only redaction-safe source digests/classes/trust, effective
+class, codec/request identity, and turn generation. The shared hosted loop
+passes deterministic
 fixture-provider coverage for streaming, bounded sequential tools, persisted
 confirmation, cancellation, restart deduplication, terminal outages, mid-step
 revocation, egress drift, prompt-injection containment, explicit private-state
 quota/integrity failures, child-agent binding isolation, and conservative
 recovery. The operator runbook documents canary, observation, incident
-recovery, and control-plane-first rollback. These phase-9 controls do not close
-the production gate: remote profiles remain disabled until provider-specific
-live evidence, leakage review, production key management, and the platform
-blockers above are completed.
+recovery, and control-plane-first rollback. These controls do not close the
+production gate: Phase 2+ recovery/finalization/semantic work, provider-specific
+live and behavioral evidence, onboarding, leakage review, canary, production
+key management, and the platform blockers above remain open.
 
 ## Design Studio OpenDesign Gate
 

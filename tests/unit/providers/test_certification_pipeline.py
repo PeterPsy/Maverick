@@ -101,6 +101,40 @@ class CertificationPipelineTest(unittest.TestCase):
                 run, cwd=self.root, deployed_source_commit="b" * 40
             )
 
+    def test_tcb_drift_blocks_signing_verification_and_publication_validation(self) -> None:
+        run = self._execute()
+        private_key = Ed25519PrivateKey.generate()
+        signed = sign_certification_run(
+            run,
+            signer_key_id="ci-2026",
+            private_key=private_key,
+            cwd=self.root,
+        )
+
+        with mock.patch(
+            "core.providers.certified_execution_tcb.compute_certified_tcb_digest",
+            return_value="f" * 64,
+        ):
+            with self.assertRaisesRegex(CapabilityCertificateError, "certificate_tcb_drift"):
+                sign_certification_run(
+                    run,
+                    signer_key_id="ci-2026",
+                    private_key=private_key,
+                    cwd=self.root,
+                )
+            with self.assertRaisesRegex(CapabilityCertificateError, "certificate_tcb_drift"):
+                verify_certification_run(
+                    signed,
+                    trusted_keys={"ci-2026": private_key.public_key()},
+                    cwd=self.root,
+                )
+            with self.assertRaisesRegex(CapabilityCertificateError, "certificate_tcb_drift"):
+                validate_run_against_manifest(
+                    run,
+                    cwd=self.root,
+                    deployed_source_commit=run.source_commit,
+                )
+
     def test_unknown_suite_cannot_supply_an_arbitrary_command(self) -> None:
         with self.assertRaisesRegex(CapabilityCertificateError, "manifest_unknown"):
             execute_certification_suite(
@@ -122,13 +156,13 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "30afb688b6f3b45c756dcc8db3da1be3af50d2f1ed10e485ae91cbabcb7da685"
+                "ff71f74a091e26bb00df2732aec65498cffbca48ebc7fb065208ad5019e4867e"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "a9aaf0e2c5d9bdb05ae87ee1e87111fdb302d751e61b859d7290307cf896cad3"
+                "bbf2fe35da58557b5adb05f44377897c6e7e65ffbcdf8613eba3faeededf1f70"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 
 from core.execution_policy.models import ExecutionMode
@@ -12,11 +12,43 @@ from core.providers.agentic_models import (
 )
 from core.providers.capability_models import RuntimeCapabilitySet
 from core.providers.certificate_service import validate_certificate_for_binding
+from core.providers.certified_execution_tcb import is_exact_codex_identity
 from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
-from core.runtime.agentic_feature_flags import parallel_tool_calls_enabled
+from core.runtime.failure_messages import public_runtime_failure_reason_code
+from core.runtime.agentic_feature_flags import (
+    MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+    MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+    MAVERICK_FEATURE_AGENTIC_PROFILES,
+    MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+    MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+    MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+    feature_enabled,
+    parallel_tool_calls_enabled,
+    provider_preview_feature,
+)
+
+
+_CLIENT_AUTHORITY_FIELDS = frozenset(
+    {
+        "agentic_egress_policy_id",
+        "allowed_remote_data_classes",
+        "attestation",
+        "attestation_id",
+        "attestation_revision",
+        "classification",
+        "classification_revision",
+        "data_attestation",
+        "data_class",
+        "effective_data_class",
+        "egress_policy_id",
+        "egress_policy_revision",
+        "source_data_class",
+        "trust_level",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +66,26 @@ class EffectiveRuntimeAuthority:
     health_revision: str
     authority_digest: str
     computed_at: datetime
+    actor_policy_allowed: bool = True
+    actor_policy_revision: str = "runtime-actor:unknown"
+    feature_flag_revision: str = "runtime-features:unknown"
+    provider_health_status: str = "healthy"
+    provider_id: str = ""
+    model_id: str = ""
+    provider_protocol: str = ""
+    certified_upstream_ids: tuple[str, ...] = ()
+    effective_upstream_ids: tuple[str, ...] = ()
+    allowed_remote_data_classes: tuple[str, ...] = ()
+    data_collection_policy: str = "deny"
+    require_zdr: bool = False
+    certificate_suite_id: str = ""
+    certificate_suite_version: str = ""
+    certificate_expires_at: datetime | None = None
+    tcb_manifest_id: str = ""
+    tcb_manifest_version: str = ""
+    tcb_structure_digest: str = ""
+    tcb_live_digest: str = ""
+    tcb_posture: str = "unavailable"
 
 
 def resolve_effective_runtime_authority(
@@ -47,6 +99,8 @@ def resolve_effective_runtime_authority(
     health_status: str = "healthy",
     health_revision: str = "runtime-health:unknown",
     observed_upstream_id: str | None = None,
+    actor_policy_allowed: bool = True,
+    actor_policy_revision: str = "runtime-actor:unknown",
     now: datetime | None = None,
 ) -> EffectiveRuntimeAuthority:
     """Intersect certified capability with every pinned and live restriction."""
@@ -60,6 +114,8 @@ def resolve_effective_runtime_authority(
     )
     if health_status not in {"healthy", "degraded"}:
         raise CapabilityCertificateError("runtime_health_unavailable")
+    if not actor_policy_allowed:
+        raise CapabilityCertificateError("runtime_actor_policy_denied")
     workspace_binding = validate_live_runtime_binding_governance(
         store,
         binding=binding,
@@ -69,7 +125,35 @@ def resolve_effective_runtime_authority(
         binding.workspace_policy_ceiling_snapshot,
         workspace_binding.workspace_policy_ceiling,
     )
-    capabilities = _narrow_capabilities(certificate.certified_capabilities, policy)
+    policy_capabilities = _narrow_capabilities(
+        certificate.certified_capabilities,
+        policy,
+    )
+    feature_capabilities, feature_revision = _feature_capability_ceiling(
+        binding,
+        certificate.certified_capabilities,
+    )
+    health_capabilities = _health_capability_ceiling(
+        certificate.certified_capabilities,
+        health_status=health_status,
+    )
+    execution_mode: ExecutionMode = (
+        "sandbox"
+        if "sandbox" in {binding.execution_mode, live_execution_mode}
+        else "full-access"
+    )
+    execution_mode_capabilities = _execution_mode_capability_ceiling(
+        certificate.certified_capabilities,
+        execution_mode=execution_mode,
+    )
+    capabilities = intersect_runtime_capabilities(
+        certificate.certified_capabilities,
+        policy_capabilities,
+        feature_capabilities,
+        health_capabilities,
+        execution_mode_capabilities,
+    )
+    capabilities = _confirmation_capability_ceiling(capabilities, policy)
     tool_handles = _allowed_tool_handles(
         currently_authorized_tool_handles,
         binding.profile_policy_ceiling_snapshot,
@@ -78,13 +162,24 @@ def resolve_effective_runtime_authority(
     )
     if not capabilities.tool_orchestration:
         tool_handles = ()
+    else:
+        tool_handles = _narrow_handles_to_capabilities(tool_handles, capabilities)
+    exact_codex = is_exact_codex_identity(
+        runtime_engine_id=binding.runtime_engine_id,
+        adapter_id=binding.adapter_id,
+        model_provider_id=binding.model_provider_id,
+        provider_protocol=binding.provider_protocol,
+    )
+    # The exact local Codex app-server contract predates a live catalog API.
+    # Hosted runtimes, by contrast, treat an empty live handle set as no tool
+    # authority rather than as permission to fall back to the certificate.
+    if tool_handles or not exact_codex:
+        capabilities = _narrow_capabilities_to_live_handles(
+            capabilities,
+            tool_handles,
+        )
     status = store.get_capability_certificate_status(certificate.certificate_id)
     status_revision = 0 if status is None else status.revision
-    execution_mode: ExecutionMode = (
-        "sandbox"
-        if "sandbox" in {binding.execution_mode, live_execution_mode}
-        else "full-access"
-    )
     authority = EffectiveRuntimeAuthority(
         execution_binding_id=binding.execution_binding_id,
         turn_id=turn_id,
@@ -103,6 +198,39 @@ def resolve_effective_runtime_authority(
         health_revision=str(health_revision or "runtime-health:unknown"),
         authority_digest="",
         computed_at=timestamp,
+        actor_policy_allowed=True,
+        actor_policy_revision=str(actor_policy_revision or "runtime-actor:unknown"),
+        feature_flag_revision=feature_revision,
+        provider_health_status=health_status,
+        provider_id=binding.model_provider_id,
+        model_id=binding.model_id,
+        provider_protocol=binding.provider_protocol,
+        certified_upstream_ids=tuple(certificate.certified_upstream_ids),
+        effective_upstream_ids=tuple(
+            item
+            for item in binding.routing_constraint_snapshot.allowed_upstream_ids
+            if item in certificate.certified_upstream_ids
+        ),
+        allowed_remote_data_classes=policy.allowed_remote_data_classes,
+        data_collection_policy=binding.routing_constraint_snapshot.data_collection_policy,
+        require_zdr=binding.routing_constraint_snapshot.require_zdr,
+        certificate_suite_id=certificate.suite_id,
+        certificate_suite_version=certificate.suite_version,
+        certificate_expires_at=certificate.expires_at,
+        tcb_manifest_id=certificate.tcb_manifest_id,
+        tcb_manifest_version=certificate.tcb_manifest_version,
+        tcb_structure_digest=certificate.tcb_structure_digest,
+        tcb_live_digest=certificate.tcb_live_digest,
+        tcb_posture=(
+            "exact_local_contract"
+            if is_exact_codex_identity(
+                runtime_engine_id=certificate.runtime_engine_id,
+                adapter_id=certificate.adapter_id,
+                model_provider_id=certificate.model_provider_id,
+                provider_protocol=certificate.provider_protocol,
+            )
+            else "active"
+        ),
     )
     return replace(authority, authority_digest=canonical_digest(authority))
 
@@ -196,6 +324,10 @@ def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> d
         "egress_policy_id": authority.egress_policy_id,
         "policy_revision_set": authority.policy_revision_set,
         "health_revision": authority.health_revision,
+        "provider_health_status": authority.provider_health_status,
+        "actor_policy_revision": authority.actor_policy_revision,
+        "feature_flag_revision": authority.feature_flag_revision,
+        "tcb_posture": authority.tcb_posture,
         "allowed_tool_handle_count": len(authority.allowed_tool_handles),
         "allowed_capabilities": tuple(
             name
@@ -203,6 +335,234 @@ def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> d
             if value is True
         ),
     }
+
+
+def effective_runtime_capability_payload(
+    authority: EffectiveRuntimeAuthority,
+) -> dict[str, object]:
+    """Project the one server-owned snapshot without bearer or credential authority."""
+    return {
+        "status": "active",
+        "reason_code": None,
+        "snapshot_digest": authority.authority_digest,
+        "computed_at": authority.computed_at,
+        "execution_mode": authority.execution_mode,
+        "capabilities": asdict(authority.allowed_capabilities),
+        "allowed_tool_handles": authority.allowed_tool_handles,
+        "provider": {
+            "provider_id": authority.provider_id,
+            "model_id": authority.model_id,
+            "protocol": authority.provider_protocol,
+            "certified_upstream_ids": authority.certified_upstream_ids,
+            "effective_upstream_ids": authority.effective_upstream_ids,
+            "health_status": authority.provider_health_status,
+            "health_revision": authority.health_revision,
+        },
+        "data_policy": {
+            "allowed_remote_data_classes": authority.allowed_remote_data_classes,
+            "collection": authority.data_collection_policy,
+            "require_zdr": authority.require_zdr,
+        },
+        "certificate": {
+            "certificate_id": authority.certificate_id,
+            "suite_id": authority.certificate_suite_id,
+            "suite_version": authority.certificate_suite_version,
+            "expires_at": authority.certificate_expires_at,
+        },
+        "tcb": {
+            "manifest_id": authority.tcb_manifest_id or None,
+            "manifest_version": authority.tcb_manifest_version or None,
+            "structure_digest": authority.tcb_structure_digest or None,
+            "live_digest": authority.tcb_live_digest or None,
+            "posture": authority.tcb_posture,
+        },
+        "policy_revisions": authority.policy_revision_set,
+        "actor_policy_revision": authority.actor_policy_revision,
+        "feature_flag_revision": authority.feature_flag_revision,
+    }
+
+
+def blocked_runtime_capability_payload(
+    reason_code: str,
+    *,
+    certified_capabilities: RuntimeCapabilitySet | None = None,
+) -> dict[str, object]:
+    """Return a fail-closed UI/API snapshot when live authority is unavailable."""
+    reference = certified_capabilities or RuntimeCapabilitySet(
+        streaming=False,
+        tool_orchestration=False,
+        cli=False,
+        mcp=False,
+        skill_catalog=False,
+        filesystem_list=False,
+        filesystem_read=False,
+        filesystem_write=False,
+        shell=False,
+        interrupt=False,
+        same_turn_steering=False,
+        recovery=False,
+        confirmation_resume=False,
+        provider_private_state=False,
+        attachment_modalities=(),
+        app_references=False,
+        confirmations=False,
+    )
+    capabilities = _disabled_capabilities(reference)
+    normalized_reason = public_runtime_failure_reason_code(reason_code)
+    digest_payload = {
+        "status": "blocked",
+        "reason_code": normalized_reason,
+        "capabilities": capabilities,
+    }
+    return {
+        "status": "blocked",
+        "reason_code": normalized_reason,
+        "snapshot_digest": canonical_digest(digest_payload),
+        "capabilities": asdict(capabilities),
+        "provider": {"health_status": "unavailable"},
+        "data_policy": {
+            "allowed_remote_data_classes": (),
+            "collection": "deny",
+            "require_zdr": False,
+        },
+        "certificate": {},
+        "tcb": {"posture": "ineligible"},
+        "allowed_tool_handles": (),
+    }
+
+
+def validate_effective_context_capabilities(
+    authority: EffectiveRuntimeAuthority,
+    *,
+    invoked_skills: object = (),
+    attachments: object = (),
+    app_references: object = (),
+    requested_operations: tuple[str, ...] = (),
+) -> None:
+    """Reject every unsupported context item explicitly before persistence/egress."""
+    validate_agentic_context_shape(
+        invoked_skills=invoked_skills,
+        attachments=attachments,
+        app_references=app_references,
+    )
+    capabilities = authority.allowed_capabilities
+    if _has_items(invoked_skills) and not capabilities.skill_catalog:
+        raise CapabilityCertificateError("agentic_skill_catalog_not_effective")
+    attachment_items = tuple(attachments or ())
+    if attachment_items:
+        certified_modalities = set(capabilities.attachment_modalities)
+        for attachment in attachment_items:
+            modality = _attachment_modality(attachment)
+            if not modality:
+                raise CapabilityCertificateError("agentic_attachment_metadata_invalid")
+            if modality not in certified_modalities and "file" not in certified_modalities:
+                raise CapabilityCertificateError(
+                    "agentic_attachment_modality_not_certified"
+                )
+    if _has_items(app_references) and not capabilities.app_references:
+        raise CapabilityCertificateError("agentic_app_references_not_effective")
+    operation_capabilities = {
+        "filesystem_read": capabilities.filesystem_read,
+        "filesystem_write": capabilities.filesystem_write,
+        "shell": capabilities.shell,
+        "cli": capabilities.cli,
+        "mcp": capabilities.mcp,
+        "confirmation": capabilities.confirmations,
+        "recovery": capabilities.recovery,
+    }
+    reason_codes = {
+        "filesystem_read": "agentic_filesystem_read_not_effective",
+        "filesystem_write": "agentic_filesystem_write_not_effective",
+        "shell": "agentic_shell_not_effective",
+        "cli": "agentic_cli_not_effective",
+        "mcp": "agentic_mcp_not_effective",
+        "confirmation": "agentic_confirmation_not_effective",
+        "recovery": "agentic_recovery_not_effective",
+    }
+    for operation in requested_operations:
+        if operation not in operation_capabilities:
+            raise CapabilityCertificateError("agentic_context_operation_unknown")
+        if not operation_capabilities[operation]:
+            raise CapabilityCertificateError(reason_codes[operation])
+
+
+def validate_agentic_context_shape(
+    *,
+    invoked_skills: object = (),
+    attachments: object = (),
+    app_references: object = (),
+) -> None:
+    """Reject malformed context instead of coercing or silently filtering it."""
+    skill_items = _sequence_items(
+        invoked_skills,
+        reason_code="agentic_skill_metadata_invalid",
+    )
+    for item in skill_items:
+        if isinstance(item, str):
+            if not item.strip():
+                raise CapabilityCertificateError("agentic_skill_metadata_invalid")
+            continue
+        skill_id = getattr(item, "skill_id", None)
+        if not isinstance(skill_id, str) or not skill_id.strip():
+            raise CapabilityCertificateError("agentic_skill_metadata_invalid")
+    for value, reason_code in (
+        (attachments, "agentic_attachment_metadata_invalid"),
+        (app_references, "agentic_app_reference_metadata_invalid"),
+    ):
+        items = _sequence_items(value, reason_code=reason_code)
+        if any(not isinstance(item, dict) for item in items):
+            raise CapabilityCertificateError(reason_code)
+
+
+def reject_client_data_authority(payload: object) -> None:
+    """Reject browser/app attempts to submit classification or egress authority."""
+    if not isinstance(payload, dict):
+        raise CapabilityCertificateError("runtime_client_authority_not_accepted")
+    declared = payload.get("declared_remote_data_class")
+    if declared is not None and declared != "":
+        raise CapabilityCertificateError("remote_data_declaration_not_accepted")
+    for key in _CLIENT_AUTHORITY_FIELDS:
+        if key in payload and _client_authority_value_present(payload[key]):
+            raise CapabilityCertificateError("runtime_client_authority_not_accepted")
+    for field_name in ("attachments", "app_references"):
+        values = payload.get(field_name)
+        if not isinstance(values, (list, tuple)):
+            continue
+        for value in values:
+            if not isinstance(value, dict):
+                continue
+            if any(
+                key in value and _client_authority_value_present(value[key])
+                for key in _CLIENT_AUTHORITY_FIELDS
+            ):
+                raise CapabilityCertificateError(
+                    "runtime_client_authority_not_accepted"
+                )
+
+
+def intersect_runtime_capabilities(
+    *capabilities: RuntimeCapabilitySet,
+) -> RuntimeCapabilitySet:
+    """Return a monotonic intersection; no input can overstate a certificate."""
+    if not capabilities:
+        raise ValueError("At least one runtime capability set is required.")
+    first = capabilities[0]
+    boolean_fields = tuple(
+        name
+        for name, value in asdict(first).items()
+        if isinstance(value, bool)
+    )
+    modalities = _tuple_intersection(
+        *(item.attachment_modalities for item in capabilities)
+    )
+    return replace(
+        first,
+        **{
+            field_name: all(getattr(item, field_name) for item in capabilities)
+            for field_name in boolean_fields
+        },
+        attachment_modalities=modalities,
+    )
 
 
 def _narrow_capabilities(
@@ -221,11 +581,237 @@ def _narrow_capabilities(
         cli=certified.cli and "cli" in surfaces,
         mcp=certified.mcp and "mcp" in surfaces,
         skill_catalog=certified.skill_catalog and tools_allowed,
+        app_references=certified.app_references and "app-interface" in surfaces,
         filesystem_list=certified.filesystem_list and policy.allow_filesystem_list,
         filesystem_read=certified.filesystem_read and policy.allow_filesystem_read,
         filesystem_write=certified.filesystem_write and policy.allow_filesystem_write,
         shell=certified.shell and policy.allow_shell,
     )
+
+
+def _feature_capability_ceiling(
+    binding: RuntimeExecutionBinding,
+    certified: RuntimeCapabilitySet,
+) -> tuple[RuntimeCapabilitySet, str]:
+    flag_names = (
+        MAVERICK_FEATURE_AGENTIC_PROFILES,
+        MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+        MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+        MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+    )
+    resolved = {name: feature_enabled(name) for name in flag_names}
+    hosted_remote = binding.runtime_engine_id == "maverick-tool-loop"
+    if hosted_remote:
+        hosted_names = (
+            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+            MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+        )
+        resolved.update({name: feature_enabled(name) for name in hosted_names})
+        provider_flag = provider_preview_feature(binding.model_provider_id)
+        if provider_flag is not None:
+            resolved[provider_flag[0]] = feature_enabled(provider_flag[0])
+    ceiling = certified
+    if not (
+        resolved[MAVERICK_FEATURE_AGENTIC_PROFILES]
+        and resolved[MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT]
+    ):
+        ceiling = _disabled_capabilities(certified)
+    elif hosted_remote and not all(resolved.values()):
+        ceiling = _disabled_capabilities(certified)
+    else:
+        ceiling = replace(
+            certified,
+            confirmation_resume=(
+                certified.confirmation_resume
+                and resolved[MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION]
+            ),
+            confirmations=(
+                certified.confirmations
+                and resolved[MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION]
+            ),
+            provider_private_state=(
+                certified.provider_private_state
+                and resolved[MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE]
+            ),
+        )
+    revision = f"runtime-features:{canonical_digest(resolved)}"
+    return ceiling, revision
+
+
+def _health_capability_ceiling(
+    certified: RuntimeCapabilitySet,
+    *,
+    health_status: str,
+) -> RuntimeCapabilitySet:
+    if health_status == "healthy":
+        return certified
+    return replace(
+        certified,
+        tool_orchestration=False,
+        cli=False,
+        mcp=False,
+        filesystem_write=False,
+        shell=False,
+        recovery=False,
+        confirmation_resume=False,
+        confirmations=False,
+    )
+
+
+def _execution_mode_capability_ceiling(
+    certified: RuntimeCapabilitySet,
+    *,
+    execution_mode: ExecutionMode,
+) -> RuntimeCapabilitySet:
+    if execution_mode == "full-access":
+        return certified
+    return replace(certified, shell=False)
+
+
+def _confirmation_capability_ceiling(
+    capabilities: RuntimeCapabilitySet,
+    policy: AgenticRuntimePolicy,
+) -> RuntimeCapabilitySet:
+    confirmation_required = (
+        policy.require_confirmation_for_mutating
+        or policy.require_confirmation_for_destructive
+    )
+    if not confirmation_required or capabilities.confirmations:
+        return capabilities
+    # Tool handles carry no trustworthy effect class until catalog resolution.
+    # With confirmation unavailable, retaining any tool authority could
+    # overstate a mutating or destructive handle, so the ceiling is all-tools.
+    return replace(
+        capabilities,
+        tool_orchestration=False,
+        cli=False,
+        mcp=False,
+        filesystem_list=False,
+        filesystem_read=False,
+        filesystem_write=False,
+        shell=False,
+    )
+
+
+def _disabled_capabilities(reference: RuntimeCapabilitySet) -> RuntimeCapabilitySet:
+    return replace(
+        reference,
+        **{
+            field_name: False
+            for field_name, value in asdict(reference).items()
+            if isinstance(value, bool)
+        },
+        attachment_modalities=(),
+    )
+
+
+def _narrow_capabilities_to_live_handles(
+    capabilities: RuntimeCapabilitySet,
+    handles: tuple[str, ...],
+) -> RuntimeCapabilitySet:
+    allowed = set(handles)
+    narrowed = replace(
+        capabilities,
+        cli=capabilities.cli and any(item.startswith("cli:") for item in allowed),
+        mcp=capabilities.mcp and any(item.startswith("mcp:") for item in allowed),
+        filesystem_list=(
+            capabilities.filesystem_list
+            and "core-capability:filesystem.list" in allowed
+        ),
+        filesystem_read=(
+            capabilities.filesystem_read
+            and "core-capability:filesystem.read" in allowed
+        ),
+        filesystem_write=(
+            capabilities.filesystem_write
+            and "core-capability:filesystem.write" in allowed
+        ),
+        shell=(
+            capabilities.shell
+            and "core-capability:shell.run" in allowed
+        ),
+    )
+    return replace(
+        narrowed,
+        tool_orchestration=(
+            narrowed.tool_orchestration
+            and any(
+                (
+                    narrowed.cli,
+                    narrowed.mcp,
+                    narrowed.filesystem_list,
+                    narrowed.filesystem_read,
+                    narrowed.filesystem_write,
+                    narrowed.shell,
+                    any(item.startswith("app-interface:") for item in allowed),
+                )
+            )
+        ),
+    )
+
+
+def _narrow_handles_to_capabilities(
+    handles: tuple[str, ...],
+    capabilities: RuntimeCapabilitySet,
+) -> tuple[str, ...]:
+    def effective(handle: str) -> bool:
+        if handle.startswith("cli:"):
+            return capabilities.cli
+        if handle.startswith("mcp:"):
+            return capabilities.mcp
+        return {
+            "core-capability:filesystem.list": capabilities.filesystem_list,
+            "core-capability:filesystem.read": capabilities.filesystem_read,
+            "core-capability:filesystem.write": capabilities.filesystem_write,
+            "core-capability:shell.run": capabilities.shell,
+        }.get(handle, True)
+
+    return tuple(handle for handle in handles if effective(handle))
+
+
+def _has_items(value: object) -> bool:
+    return isinstance(value, (list, tuple)) and bool(value)
+
+
+def _client_authority_value_present(value: object) -> bool:
+    return value is not None and value != ""
+
+
+def _sequence_items(value: object, *, reason_code: str) -> tuple[object, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise CapabilityCertificateError(reason_code)
+    return tuple(value)
+
+
+def _attachment_modality(attachment: dict[str, object]) -> str:
+    content_type = str(
+        attachment.get("type") or attachment.get("content_type") or ""
+    ).strip().lower()
+    if not content_type:
+        return ""
+    if content_type.startswith("image/"):
+        return "image"
+    if content_type.startswith("audio/"):
+        return "audio"
+    if content_type.startswith("video/"):
+        return "video"
+    if content_type.startswith("text/") or content_type == "application/json":
+        return "text"
+    if content_type == "application/pdf":
+        return "pdf"
+    if content_type in {
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        return "document"
+    if content_type in {
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }:
+        return "spreadsheet"
+    return "file"
 
 
 def _allowed_tool_handles(current: tuple[str, ...], *policies: AgenticRuntimePolicy) -> tuple[str, ...]:

@@ -14,6 +14,7 @@ import { skillIdsVisibleInComposer } from "../lib/skillMentionPolicy";
 
 type UseChatComposerContextParams = {
   activeAppContext: ActiveAppContext | null;
+  appReferencesAllowed: boolean;
   addAttachments: (files: File[]) => void;
   externalFileDrop: ExternalFileDrop | null;
   externalMentionDrop: ExternalMentionDrop | null;
@@ -31,6 +32,7 @@ type UseChatComposerContextParams = {
 
 export function useChatComposerContext({
   activeAppContext,
+  appReferencesAllowed,
   addAttachments,
   externalFileDrop,
   externalMentionDrop,
@@ -54,9 +56,21 @@ export function useChatComposerContext({
       sourceAppId: skillMentionContext.sourceAppId,
       sourceAppSupportsSkillInvocations,
     }));
-    const governedItems = mentionItems.filter((item) => item.kind !== "skill" || visibleSkillIds.has(item.id));
-    return mergeSelectedReferenceMentionItems(governedItems, selectedReferences);
-  }, [mentionItems, selectedReferences, skillMentionContext, sourceAppSupportsSkillInvocations]);
+    const governedItems = mentionItems.filter((item) => (
+      (item.kind !== "skill" || visibleSkillIds.has(item.id))
+      && (appReferencesAllowed || item.kind === "skill")
+    ));
+    return mergeSelectedReferenceMentionItems(
+      governedItems,
+      appReferencesAllowed ? selectedReferences : [],
+    );
+  }, [appReferencesAllowed, mentionItems, selectedReferences, skillMentionContext, sourceAppSupportsSkillInvocations]);
+
+  useEffect(() => {
+    if (!appReferencesAllowed) {
+      setSelectedReferences([]);
+    }
+  }, [appReferencesAllowed]);
 
   useEffect(() => {
     void loadMentionItems();
@@ -145,13 +159,20 @@ export function useChatComposerContext({
 
   const handleSearchReferences = useCallback(
     async (query: string, signal: AbortSignal): Promise<MentionItem[]> => {
+      if (!appReferencesAllowed) {
+        return [];
+      }
       const references = await searchComposerReferences(query, signal, activeAppContext?.app_id || "", workspaceId);
       return references.map(referenceMentionItem);
     },
-    [activeAppContext?.app_id, workspaceId],
+    [activeAppContext?.app_id, appReferencesAllowed, workspaceId],
   );
 
   function handleReferenceAdd(reference: AppReference) {
+    if (!appReferencesAllowed) {
+      setComposerError("The selected runtime profile is not certified for app references.");
+      return;
+    }
     setSelectedReferences((current) => {
       const key = referenceKey(reference);
       return current.some((item) => referenceKey(item) === key) ? current : [...current, reference];

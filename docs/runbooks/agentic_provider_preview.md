@@ -15,11 +15,26 @@ Certificate evidence must be produced and published through
 `docs/runbooks/agentic_certification_evidence.md` before this activation
 runbook begins. This runbook never manufactures or repairs a certificate.
 
-## Phase-0 containment procedure
+## Phase-0 containment record and rollback procedure
+
+Material P0 containment completed before this P1 repository closure. Preserve
+the following redaction-safe evidence together: source revision
+`69d9e10fea641f805c1c52801b7fd60a027b02f9`, plan digest
+`02484a30f9ea7254c5deebd69e5af4416a22d8aecc006d81b7b5d6aad9c4578d`,
+audit saga `4a6ab3ee-8b55-40c4-9dd6-2eba17bd9bdc`, apply artifact SHA-256
+`5cd77cf01ab3e4ed12ca0ab76d3774dadf0482bd892821fb8883ef3cb2ab6898`,
+post-apply zero-target digest
+`56253919e93461e67b62a068e6e8718638475d05173dfff97b2912dcbeed2e77`,
+and post-apply artifact SHA-256
+`c6daa0b542edc92ef09116b323b1b024d3d1f94ef53aa85344eb55ea4aad733c`.
+This closes material containment only; it is not release, certification,
+preview/canary, migration, or production evidence.
 
 Do not run a live Google/OpenRouter probe, certification live step, provider
-HTTP request, or containment apply while reviewing the implementation. Obtain a
-redaction-safe real-store plan through the operator-only Core CLI:
+HTTP request, or another containment apply while reviewing P1. The following
+commands remain the control-plane-first rollback procedure for a future
+incident. Obtain a new redaction-safe real-store plan through the operator-only
+Core CLI:
 
 ```bash
 maverick core cli run core.providers.agentic.containment.dry-run --operator --json
@@ -57,8 +72,8 @@ and require zero
 remaining enabled/default remote bindings, selectable remote profiles, eligible
 current remote suite-v8 certificates, or ambiguous unquarantined sessions.
 Codex state and hosted text selection must be unchanged. Preserve the audit
-digest and counts. Until apply plus that verification completes, the Phase-0
-operational exit gate remains open.
+digest and counts. Never infer release readiness from a successful containment
+operation.
 
 ## Invariants
 
@@ -81,11 +96,22 @@ operational exit gate remains open.
   side effects become `execution_unknown` and are not replayed automatically.
 - Provider-private bytes and tool payloads remain encrypted Core state. Never
   copy them into tickets, logs, prompts, analytics, or ordinary exports.
+- Workspace attestation is a separate actor-attributed, scoped, revocable CAS
+  record. Resource classification and the final egress decision remain
+  independent; declaration can only narrow. Browser fields, policy ids, and UI
+  labels have no authority.
+- The effective capability snapshot is the intersection of certificate,
+  profile, workspace, actor, live catalog, feature flags, and health and is
+  shared by admission, request/catalog construction, API, Chat, and Settings.
+- Remote certificates bind the canonical code-owned execution TCB. Any drift or
+  missing legacy TCB identity is ineligible before creation, continuation,
+  authority refresh, or dispatch.
 
-## Future pre-activation gate (suspended until Phase 1+)
+## Future pre-activation gate (suspended until Phase 2+ and release review)
 
-This section is retained as future work and must not be executed during Phase
-0. Feature flags alone cannot reopen remote agentic admission.
+This section is retained as future work and must not be executed as part of P1.
+`REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false; feature flags alone
+cannot reopen remote agentic admission.
 
 An operator must verify all of the following before enabling a workspace
 binding:
@@ -99,8 +125,9 @@ binding:
    deployed code and dated provider catalog.
 3. A provider credential is delivered by a Core credential binding. No raw key
    is present in a workspace record, environment file, request body, or log.
-4. A revision-bound, server-verifiable attestation defined by the later phase
-   proves the allowed data classification; no client declaration is accepted.
+4. The active revision-bound server attestation is actor-attributed, scoped,
+   unrevoked, and matched to exact Core resource classifications. It may only
+   narrow policy; no client declaration or policy id is accepted.
 5. The workspace policy is at least as restrictive as the profile: read-only
    Core filesystem capability, bounded steps/tokens/cost, no shell or writes,
    and confirmation retained for mutating/destructive classes.
@@ -119,11 +146,22 @@ Use Settings as the normal control surface. Its agentic panel reads:
 - `GET /api/providers/agentic/certificates`
 - `GET /api/providers/agentic/workspace-bindings`
 
-During Phase 0, `POST /api/providers/agentic/workspace-bindings` may disable a
+Attestation mutation is intentionally not a browser surface. Trusted operators
+use only the Core commands
+`core.providers.agentic.attestation.status`,
+`core.providers.agentic.attestation.issue` (expected revision plus the exact
+`fake-data-scope-reviewed` confirmation), and
+`core.providers.agentic.attestation.revoke` (expected revision plus reason).
+Every mutation records the authenticated actor and an append-only redaction-safe
+audit fact. Do not issue an attestation merely to exercise P1 or to bypass the
+false availability gate.
+
+While containment is active, `POST /api/providers/agentic/workspace-bindings` may disable a
 remote binding but cannot enable one. No fake-data confirmation field exists.
 Settings preserves the full preview label and shows provider, upstream, data
-destination, effective egress/data policy, attestation unavailable, and
-certificate state; it has no browser data-class checkbox. A revision conflict
+destination, effective egress/data policy, the read-only attestation projection,
+effective capability/TCB posture, and certificate state; it has no browser
+data-class checkbox. A revision conflict
 requires a fresh read and operator review; never overwrite it blindly.
 
 ## Canary and observation

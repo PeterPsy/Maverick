@@ -44,7 +44,7 @@ class ChildExecutionBindingTest(unittest.TestCase):
             capability_certificate_id="certificate-child-fixture",
             certificate_evidence_digest="a" * 64,
             runtime_engine_id="codex",
-            adapter_id="fake-hosted-adapter",
+            adapter_id="codex-app-server",
             adapter_version="1",
             adapter_artifact_digest="b" * 64,
             model_provider_id="codex",

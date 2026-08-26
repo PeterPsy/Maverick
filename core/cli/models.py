@@ -43,6 +43,8 @@ class CliCommandDefinition:
     effect_class: CliEffectClass = "unclassified"
     supports_idempotency: bool = False
     safe_to_retry: bool = False
+    schema_public: bool = False
+    certified_tcb_component: str | None = None
 
 
 @dataclass(frozen=True)

@@ -139,6 +139,7 @@ export function selectedProviderForSession({
           agentic_egress_policy: governance?.egress_policy || null,
           agentic_data_policy: governance?.data_policy || null,
           agentic_certificate_posture: governance?.certificate_posture || null,
+          agentic_effective_capabilities: governance?.effective_capabilities || null,
         };
       }
       const pinned = providers.find((provider) => provider.workspace_profile_binding_id === pinnedBindingId);
@@ -243,10 +244,15 @@ export function useChatAppController({
     const isHostedSession = activeThread
       ? activeSession?.runtime_mode === "plain_hosted_chat"
       : providerUsesPlainHostedRuntime(selectedProvider);
-    if (!isHostedSession) {
-      return null;
+    if (isHostedSession) {
+      return selectedProvider?.input_modalities || [];
     }
-    return selectedProvider?.input_modalities || [];
+    if (selectedProvider?.provider_role === "runtime_engine") {
+      const effectiveModalities = selectedProvider.agentic_effective_capabilities
+        ?.capabilities.attachment_modalities;
+      return effectiveModalities || [];
+    }
+    return null;
   }, [activeSession?.runtime_mode, activeThread, selectedProvider]);
   const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments({ allowedInputModalities: allowedAttachmentInputModalities });
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
@@ -295,6 +301,8 @@ export function useChatAppController({
     selectedProvider,
     sourceAppId,
   ]);
+  const appReferencesAllowed = selectedProvider?.provider_role === "runtime_engine"
+    && selectedProvider.agentic_effective_capabilities?.capabilities.app_references === true;
   const interAgentRefreshScope = `${activeThread?.runtime_session_id || ""}:${activeInterAgentGraphRunId || ""}`;
   interAgentRefreshScopeRef.current = interAgentRefreshScope;
   const runtimeCanStopTurn = isActiveRuntimeTurnBusyForThread(activeTurn, activeThread);
@@ -320,6 +328,7 @@ export function useChatAppController({
     setSelectedReferences,
   } = useChatComposerContext({
     activeAppContext,
+    appReferencesAllowed,
     addAttachments,
     externalFileDrop,
     externalMentionDrop,
@@ -488,7 +497,7 @@ export function useChatAppController({
     stopActiveSubmission,
   } = useMessageSubmission({
     activeInterAgentRun,
-    activeAppContext,
+    activeAppContext: appReferencesAllowed ? activeAppContext : null,
     activeThread,
     activeTurn,
     attachments,

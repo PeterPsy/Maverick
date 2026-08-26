@@ -358,16 +358,6 @@ class RuntimeToolOrchestratorTest(unittest.TestCase):
         self.assertEqual(outcome.invocation.state, "succeeded")
         self.assertEqual(self.app_resolver.calls, 1)
 
-    def test_unclassified_and_unauthorized_tools_are_not_materialized(self) -> None:
-        self.cli_registry.register_command(
-            replace(
-                self.cli_registry.get_command("fixture.read"),
-                command_id="fixture.unknown",
-                effect_class="unclassified",
-            ),
-            self._read,
-        )
-
     def test_core_filesystem_policy_blocks_escape_and_confirms_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -30,6 +30,11 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "workspace_governance": (("workspace_id",),),
     "workspace_quotas": (("workspace_id",),),
     "active_workspace_selections": (("user_id",),),
+    "workspace_data_attestations": (("workspace_id",),),
+    "workspace_resource_classifications": (
+        ("workspace_id", "resource_kind", "resource_ref"),
+    ),
+    "workspace_data_governance_audits": (("audit_id",),),
     "identity_users": (("user_id",), ("username",)),
     "identity_credentials": (("user_id",),),
     "identity_auth_sessions": (("session_id",),),
@@ -155,6 +160,15 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
         ControlPlaneCollectionSpec("workspace_governance", collections.workspace.governance),
         ControlPlaneCollectionSpec("workspace_quotas", collections.workspace.quotas),
         ControlPlaneCollectionSpec("active_workspace_selections", collections.workspace.active_workspace_selections),
+        ControlPlaneCollectionSpec("workspace_data_attestations", collections.workspace.data_attestations),
+        ControlPlaneCollectionSpec(
+            "workspace_resource_classifications",
+            collections.workspace.resource_classifications,
+        ),
+        ControlPlaneCollectionSpec(
+            "workspace_data_governance_audits",
+            collections.workspace.data_governance_audits,
+        ),
         ControlPlaneCollectionSpec("identity_users", collections.identity.users),
         ControlPlaneCollectionSpec("identity_credentials", collections.identity.credentials),
         ControlPlaneCollectionSpec("identity_auth_sessions", collections.identity.auth_sessions),
@@ -222,6 +236,16 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             quotas=JsonFileCollection(workspace_state_root / "quotas.json"),
             active_workspace_selections=JsonFileCollection(
                 workspace_state_root / "active_workspace_selections.json"
+            ),
+            data_attestations=JsonFileCollection(
+                workspace_state_root / "data_attestations.json"
+            ),
+            resource_classifications=JsonFileCollection(
+                workspace_state_root / "resource_classifications.json"
+            ),
+            data_governance_audits=JsonFileCollection(
+                workspace_state_root / "data_governance_audits.json",
+                append_only_upserts=True,
             ),
         ),
         identity=IdentityCollections(
@@ -294,6 +318,9 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             governance=collection("workspace_governance"),
             quotas=collection("workspace_quotas"),
             active_workspace_selections=collection("active_workspace_selections"),
+            data_attestations=collection("workspace_data_attestations"),
+            resource_classifications=collection("workspace_resource_classifications"),
+            data_governance_audits=collection("workspace_data_governance_audits"),
         ),
         identity=IdentityCollections(
             users=collection("identity_users"),

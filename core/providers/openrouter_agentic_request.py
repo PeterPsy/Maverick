@@ -97,18 +97,31 @@ def _new_messages(
         (item for item in state.history if item.get("role") == "system"),
         None,
     )
+    system_values: list[str] = []
     for block in request.content_blocks:
-        if block.role not in {"system", "user"} or not block.content_type.startswith("text/"):
+        if block.role not in {"system", "user"} or not _textual_content_type(
+            block.content_type
+        ):
             raise OpenRouterAgenticProtocolError("provider_request_invalid")
-        message = {"role": block.role, "content": _decode_utf8(block.content)}
-        if block.role == "system" and existing_system is not None:
-            if message != existing_system:
-                raise OpenRouterAgenticProtocolError("provider_request_invalid")
+        content = _decode_utf8(block.content)
+        if block.role == "system":
+            system_values.append(content)
             continue
-        values.append(message)
+        values.append({"role": "user", "content": content})
+    if system_values:
+        system_message = {"role": "system", "content": "\n\n".join(system_values)}
+        if existing_system is not None:
+            if system_message != existing_system:
+                raise OpenRouterAgenticProtocolError("provider_request_invalid")
+        else:
+            values.insert(0, system_message)
     if not any(item["role"] == "user" for item in values):
         raise OpenRouterAgenticProtocolError("provider_request_invalid")
     return tuple(values)
+
+
+def _textual_content_type(value: str) -> bool:
+    return value.startswith("text/") or value == "application/json"
 
 
 def _tool_results_by_id(

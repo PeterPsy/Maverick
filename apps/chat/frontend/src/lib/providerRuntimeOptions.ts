@@ -15,6 +15,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
       profile.containment_status !== "NO-GO" &&
       profile.enabled &&
       profile.certified === true &&
+      profile.effective_capabilities?.status === "active" &&
       (profile.rollout_status === "preview" || profile.rollout_status === "available") &&
       profile.certificate?.effective_status === "active",
   );
@@ -56,6 +57,12 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
           agentic_data_destination: profile.data_destination || null,
           agentic_egress_policy: profile.egress_policy || null,
           agentic_data_policy: profile.data_policy || null,
+          agentic_effective_capabilities: profile.effective_capabilities || null,
+          capabilities: {
+            ...(engine?.capabilities || {}),
+            supports_skills: profile.effective_capabilities?.capabilities.skill_catalog === true,
+          },
+          input_modalities: profile.effective_capabilities?.capabilities.attachment_modalities || [],
           default_reasoning_effort: reasoning.defaultEffort,
           supported_reasoning_efforts: reasoning.options,
         };

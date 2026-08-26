@@ -12,6 +12,30 @@ function provider({ supportsSkills = true, plainHosted = false } = {}): Provider
     status: "active",
     default_model_family: null,
     capabilities: { supports_skills: supportsSkills },
+    agentic_effective_capabilities: plainHosted ? null : {
+      status: supportsSkills ? "active" : "blocked",
+      reason_code: supportsSkills ? null : "agentic_skill_catalog_not_effective",
+      snapshot_digest: "fixture-capability-snapshot",
+      capabilities: {
+        streaming: true,
+        tool_orchestration: true,
+        cli: true,
+        mcp: true,
+        skill_catalog: supportsSkills,
+        filesystem_list: true,
+        filesystem_read: true,
+        filesystem_write: true,
+        shell: true,
+        interrupt: true,
+        same_turn_steering: true,
+        recovery: true,
+        confirmation_resume: true,
+        provider_private_state: false,
+        attachment_modalities: ["file"],
+        app_references: true,
+        confirmations: true,
+      },
+    },
   };
 }
 
@@ -38,6 +62,23 @@ describe("skill mention policy", () => {
       availableSkillIds: ["storage-ops", "crm-search"],
       provider: provider(),
     })).toEqual(["crm-search"]);
+  });
+
+  it("fails closed for every agentic runtime without a server snapshot", () => {
+    const codex = provider();
+    codex.agentic_effective_capabilities = null;
+    const remote = { ...codex, provider_id: "hosted-agentic" };
+
+    expect(skillIdsVisibleInComposer({
+      activationMode: "explicit",
+      availableSkillIds: ["storage-ops"],
+      provider: codex,
+    })).toEqual([]);
+    expect(skillIdsVisibleInComposer({
+      activationMode: "explicit",
+      availableSkillIds: ["storage-ops"],
+      provider: remote,
+    })).toEqual([]);
   });
 
   it("treats an empty allowlist as all skills but hides implicit sessions", () => {

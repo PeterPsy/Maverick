@@ -6,6 +6,11 @@ Scope: trusted CI or operator-controlled certification worker
 
 Production status: **not approved; no complete two-step certificate evidence recorded**
 
+P1 repository closure executes only the explicitly selected deterministic
+`fixture_contract` steps for Google and OpenRouter. It does not execute
+`live_probe`, produce behavioral evidence, sign/publish a remote certificate,
+or make any provider HTTP/SSE request.
+
 This procedure is the only supported path from an executed provider suite to a
 Google or OpenRouter capability certificate. Bootstrap publishes candidate
 profile definitions only. Test source files, fixture names, matrix rows, or a
@@ -20,9 +25,9 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
 - the dated matrix revision declared by the provider certificate module;
-- the exact adapter artifact digest and a reviewed explicit list of the adapter,
-  codec, transport, hosted-loop, policy, and focused-test artifacts in the
-  certification bundle;
+- the exact adapter artifact digest and the code-owned certified-execution TCB
+  manifest in `core/providers/certified_execution_tcb.py`; callers do not
+  provide or narrow its component list or digest;
 - the exact certificate-bound reasoning-effort tuple and default represented by
   the profile under test;
 - a platform evidence reference allocated by the authoritative evidence store.
@@ -53,7 +58,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 8 \
+  --suite-version 9 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -62,8 +67,8 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `8`, matrix revision `2026-08-26-r8`, and the OpenRouter manifest. The
-Google suite uses version `8` and matrix revision `2026-08-26-r8`. The
+version `9`, matrix revision `2026-08-26-r9`, and the OpenRouter manifest. The
+Google suite uses version `9` and matrix revision `2026-08-26-r9`. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.
@@ -100,12 +105,14 @@ The trust sequence is indivisible:
    manifest digest, and canonical command digests;
 4. signing, independent verification, and immutable certificate publication.
 
-Phase-0 containment still blocks remote admission after a valid certificate;
-certification evidence cannot substitute for the later release gates.
+The server-owned availability boundary still blocks remote admission after a
+valid certificate; certification evidence cannot substitute for later
+recovery, preview, canary, security-review, or production gates.
 
 The runner records and signs the source commit, suite identity/version, matrix
-revision and digest, adapter digest, complete artifact-bundle digest, command
-result digest, evidence references, timestamps, and `passed` outcome. Raw
+revision and digest, adapter digest, certified TCB manifest id/version/digest,
+complete artifact-bundle digest, command result digest, evidence references,
+timestamps, and `passed` outcome. Raw
 credentials, provider payloads, prompts, tool arguments/results, and private
 continuation state must not appear in the signed JSON or evidence reference.
 
@@ -122,19 +129,26 @@ signature against its configured trusted public keys, and call exactly one of:
   `core/providers/openrouter_agentic_certification.py`.
 
 Those functions recheck the deployed source commit, suite manifest and step
-command digests, matrix bytes, complete artifact bundle, and deployed adapter
-digest before publishing immutable evidence and certificate records through
-the provider store. There is deliberately no bootstrap
+command digests, matrix bytes, complete artifact bundle, deployed adapter
+digest, and the current certified-execution TCB manifest/digest before
+publishing immutable evidence and certificate records through the provider
+store. The publisher computes the digest from deployed files and never trusts
+a caller-supplied digest. Signing, verification, issuance, execution binding,
+continuation/authority refresh, and live status use the same identity. There is
+deliberately no bootstrap
 fallback. A mismatch, untrusted signer, duplicate conflicting identity,
 invalid evidence reference, or publisher failure leaves the candidate
 uncertified; a binding must not be enabled until both records and active status
 read back consistently.
 
-The deployed adapter digest includes each declared operational module and
-function directly. A source change in the shared stream consumer,
-filesystem-list traversal, tool orchestration, request translation, provider
-codec, or transport must change that digest and invalidate older certificates;
-digesting the built-in `function` type is never acceptable.
+The TCB includes every component able to change attestation/classification/
+egress, runtime API/app admission, input composition/request building, tool
+schema/catalog, ledger/store/private state, lifecycle/recovery boundary,
+capability projection, Chat/Settings governance, and provider codec/transport/
+live policy. Drift in any component invalidates an older remote certificate
+before creation, continuation, refresh, or dispatch. A legacy remote
+certificate without a valid TCB identity is ineligible; exact Codex remains its
+separate local identity.
 
 After publication, read the certificate and evidence back through the
 platform-authority provider surface and verify that all signed identities match

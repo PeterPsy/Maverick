@@ -460,6 +460,13 @@ class ProviderDocumentStore:
             raise ProviderNotFoundError(f"Capability evidence `{evidence_digest}` was not found.")
         payload = dict(document)
         payload["evidence_refs"] = tuple(payload.get("evidence_refs", ()))
+        for field_name in (
+            "tcb_manifest_id",
+            "tcb_manifest_version",
+            "tcb_structure_digest",
+            "tcb_live_digest",
+        ):
+            payload.setdefault(field_name, "")
         return CapabilityEvidenceRecord(**payload)
 
     def save_capability_certificate(self, record: CapabilityCertificate) -> CapabilityCertificate:
@@ -545,8 +552,17 @@ def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
     payload["evidence_refs"] = tuple(payload.get("evidence_refs", ()))
     capabilities = dict(payload["certified_capabilities"])
     capabilities.setdefault("filesystem_list", False)
+    capabilities.setdefault("app_references", False)
+    capabilities.setdefault("confirmations", False)
     capabilities["attachment_modalities"] = tuple(capabilities.get("attachment_modalities", ()))
     payload["certified_capabilities"] = RuntimeCapabilitySet(**capabilities)
+    for field_name in (
+        "tcb_manifest_id",
+        "tcb_manifest_version",
+        "tcb_structure_digest",
+        "tcb_live_digest",
+    ):
+        payload.setdefault(field_name, "")
     return CapabilityCertificate(**payload)
 
 

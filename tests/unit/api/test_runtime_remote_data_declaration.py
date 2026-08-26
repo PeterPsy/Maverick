@@ -158,27 +158,72 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
             claim_client_message.assert_not_called()
 
     def test_client_fake_declaration_is_not_synthesized_or_accepted(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            state, app, cookie = self._platform(temp_dir)
-            binding = self._remote_binding(state)
+        for declaration in (
+            "workspace_internal_fake",
+            {"data_class": "workspace_internal_fake"},
+        ):
+            with self.subTest(declaration=declaration), tempfile.TemporaryDirectory() as temp_dir:
+                state, app, cookie = self._platform(temp_dir)
+                binding = self._remote_binding(state)
 
-            status, payload, _headers = self._invoke(
-                app,
-                path="/api/runtime/sessions",
-                method="POST",
-                body={
-                    "agent_id": "chat",
-                    "source_app_id": "chat",
-                    "runtime_mode": "agentic",
-                    "workspace_profile_binding_id": binding.binding_id,
-                    "declared_remote_data_class": "workspace_internal_fake",
-                },
-                cookie=cookie,
-            )
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={
+                        "agent_id": "chat",
+                        "source_app_id": "chat",
+                        "runtime_mode": "agentic",
+                        "workspace_profile_binding_id": binding.binding_id,
+                        "declared_remote_data_class": declaration,
+                    },
+                    cookie=cookie,
+                )
 
-            self.assertEqual(status, 409)
-            self.assertEqual(payload["error"], "remote_data_declaration_not_accepted")
-            self.assertEqual(state.runtime_store.list_all_sessions(), [])
+                self.assertEqual(status, 409)
+                self.assertEqual(
+                    payload["error"],
+                    "remote_data_declaration_not_accepted",
+                )
+                self.assertEqual(state.runtime_store.list_all_sessions(), [])
+
+    def test_client_policy_attestation_and_classification_fields_are_rejected(self) -> None:
+        cases = (
+            {"data_class": "workspace_internal_fake"},
+            {"egress_policy_id": "fake-data"},
+            {"attestation_id": "browser-forged-attestation"},
+            {
+                "attachments": [
+                    {
+                        "content_type": "image/png",
+                        "data_class": "public",
+                    }
+                ]
+            },
+        )
+        for index, authority_fields in enumerate(cases):
+            with self.subTest(authority_fields=authority_fields), tempfile.TemporaryDirectory() as temp_dir:
+                state, app, cookie = self._platform(temp_dir)
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={
+                        "agent_id": "chat",
+                        "source_app_id": "chat",
+                        "runtime_mode": "agentic",
+                        "client_message_id": f"client-authority-{index}",
+                        **authority_fields,
+                    },
+                    cookie=cookie,
+                )
+
+                self.assertEqual(status, 409)
+                self.assertEqual(
+                    payload["error"],
+                    "runtime_client_authority_not_accepted",
+                )
+                self.assertEqual(state.runtime_store.list_all_sessions(), [])
 
     def test_plain_hosted_session_rejects_agentic_remote_data_declaration(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -210,6 +255,60 @@ class RuntimeRemoteDataDeclarationApiTest(AppReferenceApiTestSupport, unittest.T
 
             self.assertEqual(status, 409)
             self.assertEqual(payload["error"], "remote_data_declaration_not_accepted")
+
+    def test_existing_turn_rejects_client_classification_before_persistence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state, app, cookie = self._platform(temp_dir)
+            with patch(
+                "core.api.runtime_api._prewarm_new_runtime_session",
+                return_value=None,
+            ):
+                create_status, created, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={
+                        "agent_id": "chat",
+                        "source_app_id": "chat",
+                        "runtime_mode": "agentic",
+                    },
+                    cookie=cookie,
+                )
+            self.assertEqual(create_status, 201)
+            session_id = created["session_id"]
+            before = state.runtime_store.list_turns(session_id)
+
+            status, payload, _headers = self._invoke(
+                app,
+                path=f"/api/runtime/sessions/{session_id}/turns",
+                method="POST",
+                body={
+                    "input_text": "must not persist",
+                    "declared_remote_data_class": "workspace_internal_fake",
+                },
+                cookie=cookie,
+            )
+
+            self.assertEqual(status, 400)
+            self.assertEqual(payload["error"], "remote_data_declaration_not_accepted")
+            self.assertEqual(state.runtime_store.list_turns(session_id), before)
+
+            status, payload, _headers = self._invoke(
+                app,
+                path=f"/api/runtime/sessions/{session_id}/turns",
+                method="POST",
+                body={
+                    "input_text": "must not persist either",
+                    "egress_policy_id": "browser-selected-policy",
+                },
+                cookie=cookie,
+            )
+            self.assertEqual(status, 400)
+            self.assertEqual(
+                payload["error"],
+                "runtime_client_authority_not_accepted",
+            )
+            self.assertEqual(state.runtime_store.list_turns(session_id), before)
 
     def _platform(self, temp_dir: str):
         repo_root = self._repo_root(temp_dir)

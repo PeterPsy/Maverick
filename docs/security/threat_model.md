@@ -137,6 +137,11 @@ grant when policy requires it, and a crash after the side-effect boundary
 produces `execution_unknown` instead of automatic replay. Prompt instructions
 cannot expand this authority.
 
+Provider-visible schemas are not trusted merely because a registry discovers
+them. Only explicitly public Core-owned schemas covered by the exact TCB may
+egress. App-owned, dynamic CLI/MCP, omitted, or uncertified surfaces block the
+request with an allowlisted structured reason instead of being silently hidden.
+
 ### Remote model content exfiltration
 
 An injected prompt, malicious tool result, compromised app reference, or
@@ -152,10 +157,21 @@ operational metadata, and unclassified content are always denied. Audit records
 contain domain-separated HMAC digests and reason metadata, never raw content.
 Redaction is a secondary transform rather than the trust boundary.
 
+Workspace declaration, exact resource classification, and the egress decision
+are independent. The declaration is an actor-attributed, scoped, timestamped,
+revocable CAS record; browser input, egress-policy ids, feature flags, UI labels,
+`workspace_internal_fake`, and the legacy declaration field cannot create or
+replace it. Even a valid fake-data attestation only narrows authority. Prompt,
+skill, attachment, app-reference, filesystem/tool-result, and provider-private
+sources retain distinct provenance/trust/classes, and a restrictive join keeps
+missing or mismatched resource classification `unclassified`.
+
 Residual risk remains because content classification and prompt/tool-result
-provenance are new enforcement paths. Remote agentic execution therefore stays
-disabled and independently contained until leakage tests, server-verifiable
-attestation, and the broader production blockers are closed.
+provenance are security-critical enforcement paths. Phase-1 repository tests
+cover false-promotion and leakage-safe metadata, but remote agentic execution
+stays disabled and independently contained until complete live/behavioral
+certification, recovery, leakage review, canary, and the broader production
+blockers are closed.
 
 ### Profile, certificate, or routing substitution
 
@@ -171,6 +187,15 @@ defaults are not consulted after session creation. Live state may only narrow
 the pinned ceiling. OpenRouter agentic requests use an explicit certified
 upstream allowlist, no fallback, required parameters, denied data collection,
 and policy-required ZDR; no eligible endpoint means no request.
+
+The certificate also binds the one code-owned certified-execution TCB manifest
+and digest. It covers every authority-changing Core path plus Chat/Settings
+governance. Suite construction, artifact bundle, signature/publication,
+execution binding, and live status derive from that same manifest; the
+publisher recomputes it. Drift in runtime API, classifier, input composition,
+ledger/store, lifecycle, codec/transport, or UI governance invalidates remote
+authority before create, continuation, refresh, or dispatch. Legacy remote
+certificates with no valid TCB identity fail closed.
 
 ### Confirmation and side-effect replay
 
@@ -324,6 +349,15 @@ Same-turn message admission uses the same runtime-session `turn_submit` authoriz
 
 A non-default workspace runtime or app process reads or writes outside the workspace boundary.
 
+Agentic Core filesystem operations pin the workspace-root descriptor and open
+every component descriptor-relative with no-follow/directory flags where
+available. They do not reopen verified paths, never descend automatically into
+`.git`, bind chunks/list cursors to identity and version, and revalidate the
+descriptor chain around use/commit. Repeated Linux tests swap final symlinks,
+parents, directories, and the root during read/list/write and shell-cwd
+admission; the fail-closed result must leave no outside read or write. Broader
+app/backend sandboxing remains a production blocker.
+
 ### Secret exposure
 
 Secrets leak through files, logs, runtime state, generated files, or outbound actions.
@@ -402,6 +436,12 @@ The near-term goals are:
 - explicit disclosure that current local bootstrap and deployment are not production-safe
 - immutable runtime execution binding with live authority that can only narrow
 - per-content remote-provider egress decisions plus independent remote admission
+- revisioned server-owned attestation separated from resource classification
+  and egress, with a fail-closed provenance/trust/data-class join
+- a single deterministic certified-execution TCB and certified public schemas
+- descriptor-relative race-safe workspace filesystem primitives
+- one effective-capability intersection shared by admission, runtime, API, Chat,
+  and Settings
 - persistent one-shot tool confirmation and no replay of uncertain side effects
 
 ## Non-Goals For The First Public Release

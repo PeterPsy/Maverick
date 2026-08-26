@@ -30,7 +30,7 @@ import {
   sendRuntimeTurn,
   uploadWorkspaceFile,
 } from "./api/client";
-import type { AgentTypeSummary, AppDependenciesPayload, ChatThread, RuntimeSession, RuntimeTurn } from "./api/client";
+import type { AgentTypeSummary, AppDependenciesPayload, ChatThread, ProviderItem, RuntimeSession, RuntimeTurn } from "./api/client";
 import { clearAgentRuntimeConfigCache } from "./hooks/useChatRuntimeControls";
 
 vi.mock("./hooks/useRuntimeEvents", () => ({
@@ -266,6 +266,35 @@ function uploadedWorkspaceFile(filename: string) {
   };
 }
 
+function effectiveCodexCapabilities(): NonNullable<ProviderItem["agentic_effective_capabilities"]> {
+  return {
+    status: "active",
+    reason_code: null,
+    snapshot_digest: "codex-effective-snapshot",
+    execution_mode: "sandbox",
+    capabilities: {
+      streaming: true,
+      tool_orchestration: true,
+      cli: true,
+      mcp: true,
+      skill_catalog: true,
+      filesystem_list: false,
+      filesystem_read: true,
+      filesystem_write: true,
+      shell: false,
+      interrupt: true,
+      same_turn_steering: true,
+      recovery: true,
+      confirmation_resume: false,
+      provider_private_state: false,
+      attachment_modalities: ["file"],
+      app_references: true,
+      confirmations: false,
+    },
+    tcb: { posture: "exact_local_contract" },
+  };
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   clearAgentRuntimeConfigCache();
@@ -279,6 +308,7 @@ beforeEach(() => {
       provider_role: "runtime_engine",
       status: "active",
       default_model_family: "gpt-5.6-sol",
+      agentic_effective_capabilities: effectiveCodexCapabilities(),
     },
     items: [],
   });

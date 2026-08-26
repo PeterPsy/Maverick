@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from core.workspaces.errors import WorkspaceMembershipError, WorkspaceNotFoundError
+from core.workspaces.errors import WorkspaceDataGovernanceError
+from core.workspaces.data_governance import (
+    WorkspaceDataAttestation,
+    WorkspaceDataGovernanceAudit,
+    WorkspaceResourceClassification,
+    resource_classification_is_well_formed,
+)
 from core.workspaces.files import build_export_manifest
 from core.workspaces.models import (
     ActiveWorkspaceSelection,
@@ -30,6 +38,16 @@ class DocumentCollection(Protocol):
         ...
 
     def delete_one(self, query: dict[str, Any]) -> Any:
+        ...
+
+    def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
+        ...
+
+    def insert_one_if_absent(
+        self,
+        query: dict[str, Any],
+        document: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
         ...
 
 
@@ -84,6 +102,40 @@ class WorkspaceStore(Protocol):
     def delete_active_workspace(self, user_id: str) -> None:
         ...
 
+    def get_data_attestation(self, workspace_id: str) -> WorkspaceDataAttestation | None:
+        ...
+
+    def save_data_attestation(
+        self,
+        record: WorkspaceDataAttestation,
+        *,
+        expected_revision: int,
+    ) -> WorkspaceDataAttestation:
+        ...
+
+    def save_resource_classification(
+        self,
+        record: WorkspaceResourceClassification,
+        *,
+        expected_revision: int,
+    ) -> WorkspaceResourceClassification:
+        ...
+
+    def get_resource_classification(
+        self,
+        *,
+        workspace_id: str,
+        resource_kind: str,
+        resource_ref: str,
+    ) -> WorkspaceResourceClassification | None:
+        ...
+
+    def append_data_governance_audit(
+        self,
+        record: WorkspaceDataGovernanceAudit,
+    ) -> WorkspaceDataGovernanceAudit:
+        ...
+
 
 @dataclass(frozen=True)
 class WorkspaceCollections:
@@ -94,6 +146,9 @@ class WorkspaceCollections:
     governance: DocumentCollection
     quotas: DocumentCollection
     active_workspace_selections: DocumentCollection
+    data_attestations: DocumentCollection | None = None
+    resource_classifications: DocumentCollection | None = None
+    data_governance_audits: DocumentCollection | None = None
 
 
 class WorkspaceDocumentStore:
@@ -199,6 +254,128 @@ class WorkspaceDocumentStore:
     def delete_active_workspace(self, user_id: str) -> None:
         self.collections.active_workspace_selections.delete_one({"user_id": user_id})
 
+    def get_data_attestation(self, workspace_id: str) -> WorkspaceDataAttestation | None:
+        collection = self._data_governance_collection("data_attestations")
+        document = collection.find_one({"workspace_id": workspace_id})
+        return None if document is None else _data_attestation(document, workspace_id=workspace_id)
+
+    def save_data_attestation(
+        self,
+        record: WorkspaceDataAttestation,
+        *,
+        expected_revision: int,
+    ) -> WorkspaceDataAttestation:
+        if not record.well_formed:
+            raise WorkspaceDataGovernanceError("attestation_invalid")
+        if (
+            not isinstance(expected_revision, int)
+            or isinstance(expected_revision, bool)
+            or expected_revision < 0
+            or record.revision != expected_revision + 1
+        ):
+            raise WorkspaceDataGovernanceError("attestation_revision_conflict")
+        collection = self._data_governance_collection("data_attestations")
+        payload = asdict(record)
+        if expected_revision == 0:
+            _, created = collection.insert_one_if_absent(
+                {"workspace_id": record.workspace_id},
+                payload,
+            )
+            if not created:
+                raise WorkspaceDataGovernanceError("attestation_revision_conflict")
+            return record
+        updated = collection.compare_and_set(
+            {"workspace_id": record.workspace_id, "revision": expected_revision},
+            {"$set": payload},
+        )
+        if not updated:
+            raise WorkspaceDataGovernanceError("attestation_revision_conflict")
+        return record
+
+    def save_resource_classification(
+        self,
+        record: WorkspaceResourceClassification,
+        *,
+        expected_revision: int,
+    ) -> WorkspaceResourceClassification:
+        if not resource_classification_is_well_formed(record):
+            raise WorkspaceDataGovernanceError("resource_classification_invalid")
+        if (
+            not isinstance(expected_revision, int)
+            or isinstance(expected_revision, bool)
+            or expected_revision < 0
+            or record.revision != expected_revision + 1
+        ):
+            raise WorkspaceDataGovernanceError(
+                "resource_classification_revision_conflict"
+            )
+        collection = self._data_governance_collection("resource_classifications")
+        query = {
+            "workspace_id": record.workspace_id,
+            "resource_kind": record.resource_kind,
+            "resource_ref": record.resource_ref,
+        }
+        payload = asdict(record)
+        if expected_revision == 0:
+            _, created = collection.insert_one_if_absent(query, payload)
+            if not created:
+                raise WorkspaceDataGovernanceError("resource_classification_revision_conflict")
+            return record
+        updated = collection.compare_and_set(
+            {**query, "revision": expected_revision},
+            {"$set": payload},
+        )
+        if not updated:
+            raise WorkspaceDataGovernanceError("resource_classification_revision_conflict")
+        return record
+
+    def get_resource_classification(
+        self,
+        *,
+        workspace_id: str,
+        resource_kind: str,
+        resource_ref: str,
+    ) -> WorkspaceResourceClassification | None:
+        collection = self._data_governance_collection("resource_classifications")
+        document = collection.find_one(
+            {
+                "workspace_id": workspace_id,
+                "resource_kind": resource_kind,
+                "resource_ref": resource_ref,
+            }
+        )
+        return None if document is None else _resource_classification(document)
+
+    def append_data_governance_audit(
+        self,
+        record: WorkspaceDataGovernanceAudit,
+    ) -> WorkspaceDataGovernanceAudit:
+        collection = self._data_governance_collection("data_governance_audits")
+        _, created = collection.insert_one_if_absent(
+            {"audit_id": record.audit_id},
+            asdict(record),
+        )
+        if not created:
+            raise WorkspaceDataGovernanceError("data_governance_audit_conflict")
+        return record
+
+    def list_data_governance_audits(
+        self,
+        *,
+        workspace_id: str,
+    ) -> list[WorkspaceDataGovernanceAudit]:
+        collection = self._data_governance_collection("data_governance_audits")
+        return [
+            WorkspaceDataGovernanceAudit(**document)
+            for document in collection.find({"workspace_id": workspace_id})
+        ]
+
+    def _data_governance_collection(self, name: str) -> DocumentCollection:
+        collection = getattr(self.collections, name)
+        if collection is None:
+            raise WorkspaceDataGovernanceError("data_governance_store_unavailable")
+        return collection
+
 
 def export_manifest_for_files(
     workspace_id: str,
@@ -216,3 +393,54 @@ def export_manifest_for_files(
         app_bindings=app_bindings,
         schema_versions=schema_versions,
     )
+
+
+def _data_attestation(
+    document: dict[str, Any],
+    *,
+    workspace_id: str,
+) -> WorkspaceDataAttestation:
+    """Hydrate historical documents as non-authoritative unless every field exists."""
+    payload = dict(document)
+    epoch = datetime(1970, 1, 1, tzinfo=UTC)
+    payload.setdefault("attestation_id", "legacy-unverified")
+    payload["workspace_id"] = workspace_id
+    payload.setdefault("declaration", "legacy_unverified")
+    payload.setdefault("scope_type", "invalid")
+    raw_prefixes = payload.get("resource_prefixes", ())
+    if isinstance(raw_prefixes, (list, tuple)):
+        payload["resource_prefixes"] = tuple(raw_prefixes)
+    else:
+        payload["scope_type"] = "invalid"
+        payload["resource_prefixes"] = ()
+    payload.setdefault("status", "revoked")
+    payload.setdefault("revision", 0)
+    payload.setdefault("attested_by_actor_id", "")
+    payload.setdefault("attested_by_actor_kind", "")
+    payload.setdefault("attested_at", epoch)
+    payload.setdefault("updated_at", epoch)
+    payload.setdefault("revoked_by_actor_id", None)
+    payload.setdefault("revoked_at", None)
+    payload.setdefault("revocation_reason", "legacy_attestation_unverified")
+    allowed = WorkspaceDataAttestation.__dataclass_fields__
+    return WorkspaceDataAttestation(**{key: value for key, value in payload.items() if key in allowed})
+
+
+def _resource_classification(document: dict[str, Any]) -> WorkspaceResourceClassification:
+    payload = dict(document)
+    epoch = datetime(1970, 1, 1, tzinfo=UTC)
+    payload.setdefault("classification_id", "legacy-unverified")
+    payload.setdefault("workspace_id", "")
+    payload.setdefault("resource_kind", "")
+    payload.setdefault("resource_ref", "")
+    payload.setdefault("resource_identity", "")
+    payload.setdefault("resource_revision", "")
+    payload.setdefault("resource_digest", "")
+    payload.setdefault("data_class", "unclassified")
+    payload.setdefault("trust_level", "untrusted_external")
+    payload.setdefault("revision", 0)
+    payload.setdefault("classified_by_actor_id", "")
+    payload.setdefault("classified_at", epoch)
+    payload.setdefault("updated_at", epoch)
+    allowed = WorkspaceResourceClassification.__dataclass_fields__
+    return WorkspaceResourceClassification(**{key: value for key, value in payload.items() if key in allowed})

@@ -10,12 +10,68 @@ from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.service import install_store_app, register_app_source_from_contract
 from core.providers.agentic_profiles import build_pinned_execution_binding
+from core.providers.errors import CapabilityCertificateError
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_prepare_rejects_unsupported_reference_before_materialization(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            create_runtime_session(
+                state.runtime_store,
+                session_id="sess-prepare-blocked",
+                workspace_id="default",
+                agent_id="chat",
+                owner_user_id="user:admin",
+                requested_mode="sandbox",
+                start_path=repo_root,
+                execution_binding=build_pinned_execution_binding(
+                    state.provider_store,
+                    state.provider_registry,
+                    session_id="sess-prepare-blocked",
+                    workspace_id="default",
+                    execution_mode="sandbox",
+                ),
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch(
+                "core.api.runtime_api.preflight_runtime_context_capabilities",
+                side_effect=CapabilityCertificateError(
+                    "agentic_app_references_not_effective"
+                ),
+            ) as preflight, patch(
+                "core.api.runtime_api.materialize_runtime_app_references_with_metrics"
+            ) as materialize:
+                status, payload, _headers = self._invoke(
+                    app,
+                    path=(
+                        "/api/runtime/sessions/sess-prepare-blocked/"
+                        "app-references/prepare"
+                    ),
+                    method="POST",
+                    body={"app_references": [{"app_id": "records"}]},
+                    cookie=cookie,
+                )
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "agentic_app_references_not_effective")
+        preflight.assert_called_once()
+        materialize.assert_not_called()
+
     def test_runtime_turn_skips_app_reference_discovery_when_empty(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
@@ -99,6 +155,7 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 session_id="sess-1",
                 workspace_id="default",
                 agent_id="chat",
+                owner_user_id="user:admin",
                 requested_mode="sandbox",
                 start_path=repo_root,
                 execution_binding=build_pinned_execution_binding(

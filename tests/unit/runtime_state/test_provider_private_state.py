@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import UTC, datetime
 import json
+from types import SimpleNamespace
 import unittest
 
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
+from core.providers.agentic_protocol import AgenticSourceMetadata
 from core.runtime.execution_binding import build_runtime_execution_binding
+from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
+from core.runtime.hosted_agentic_state import HostedAgenticStateBridge
 from core.runtime.private_payload_store import EncryptedRuntimePrivatePayloadStore
 from core.runtime.provider_private_state import (
     ProviderPrivateStateError,
     ProviderPrivateStateService,
 )
-from core.runtime.provider_state import RuntimeProviderState
+from core.runtime.provider_state import RuntimeProviderState, runtime_provider_state_from_document
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from tests.support.collections import FakeCollection
@@ -190,6 +195,109 @@ class ProviderPrivateStateServiceTest(unittest.TestCase):
             with self.subTest(size=len(payload)):
                 with self.assertRaises(ProviderPrivateStateError):
                     self._store_signature(payload)
+
+    def test_taint_metadata_survives_persist_load_and_is_never_private_content(self) -> None:
+        source_metadata = (
+            AgenticSourceMetadata(
+                source_block_digest="1" * 64,
+                source_data_class="public",
+                source_trust_level="trusted_platform",
+                provenance="tool_schema",
+            ),
+            AgenticSourceMetadata(
+                source_block_digest="2" * 64,
+                source_data_class="personal_data",
+                source_trust_level="untrusted_tool_output",
+                provenance="tool_result",
+            ),
+        )
+
+        state = self.service.store_state(
+            session_id=self.session.session_id,
+            adapter_id=self.binding.adapter_id,
+            adapter_version=self.binding.adapter_version,
+            codec_id="fake-thought-codec",
+            codec_version="2",
+            schema_version="1",
+            content_type="application/vnd.fake.private-state",
+            payload=b"private-provider-continuation",
+            expected_revision=0,
+            turn_generation="turn-generation-7",
+            source_metadata=source_metadata,
+            provider_request_id="provider-request-7",
+            now=NOW,
+        )
+
+        envelope = state.provider_private_envelope
+        assert envelope is not None
+        self.assertEqual(envelope.source_block_digests, ("1" * 64, "2" * 64))
+        self.assertEqual(envelope.source_data_classes, ("public", "personal_data"))
+        self.assertEqual(
+            envelope.source_trust_levels,
+            ("trusted_platform", "untrusted_tool_output"),
+        )
+        self.assertEqual(envelope.effective_data_class, "personal_data")
+        self.assertEqual(envelope.effective_trust_level, "untrusted_tool_output")
+        self.assertEqual(envelope.codec_identity, "fake-thought-codec:2:1")
+        self.assertEqual(envelope.provider_request_id, "provider-request-7")
+        self.assertEqual(envelope.turn_generation, "turn-generation-7")
+        reloaded = runtime_provider_state_from_document(asdict(state))
+        self.assertEqual(reloaded, state)
+        serialized = json.dumps(asdict(reloaded), default=str)
+        self.assertNotIn("private-provider-continuation", serialized)
+
+        continuation = HostedAgenticStateBridge(
+            service=self._service(),
+            codec=HostedProviderPrivateCodec(
+                codec_id="fake-thought-codec",
+                codec_version="2",
+                schema_version="1",
+                content_type="application/vnd.fake.private-state",
+            ),
+        ).read(
+            SimpleNamespace(session=self.session, binding=self.binding),
+            SimpleNamespace(
+                allowed_capabilities=SimpleNamespace(provider_private_state=True)
+            ),
+        )
+        assert continuation is not None
+        self.assertEqual(continuation.content, b"private-provider-continuation")
+        self.assertEqual(continuation.effective_data_class, "personal_data")
+        self.assertEqual(
+            tuple(item.source_data_class for item in continuation.source_metadata),
+            ("public", "personal_data"),
+        )
+        self.assertEqual(continuation.provider_request_id, "provider-request-7")
+        self.assertEqual(continuation.turn_generation, "turn-generation-7")
+
+    def test_missing_or_invalid_taint_metadata_serializes_fail_closed(self) -> None:
+        state = self.service.store_state(
+            session_id=self.session.session_id,
+            adapter_id=self.binding.adapter_id,
+            adapter_version=self.binding.adapter_version,
+            codec_id="fake-thought-codec",
+            codec_version="2",
+            schema_version="1",
+            content_type="application/vnd.fake.private-state",
+            payload=b"legacy-private-state",
+            expected_revision=0,
+            turn_generation="turn-generation-1",
+            source_metadata=(
+                AgenticSourceMetadata(
+                    source_block_digest="browser-digest",
+                    source_data_class="public",
+                    source_trust_level="trusted_platform",
+                    provenance="browser",
+                ),
+            ),
+            now=NOW,
+        )
+
+        envelope = state.provider_private_envelope
+        assert envelope is not None
+        self.assertEqual(envelope.source_block_digests, ())
+        self.assertEqual(envelope.source_data_classes, ("unclassified",))
+        self.assertEqual(envelope.effective_data_class, "unclassified")
 
 
 if __name__ == "__main__":

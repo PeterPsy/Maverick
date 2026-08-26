@@ -37,6 +37,7 @@ Known launch blockers currently include:
 - same-origin mounted app frontend isolation
 - app backend and lifecycle hook sandboxing gaps
 - recovery automation full-access risk
+- same-origin XSS and data-remanence review for any future private PWA cache
 
 ## Safe Testing Expectations
 
@@ -75,6 +76,17 @@ Maverick's intended security model is stricter than a personal-assistant trust m
 - platform control-plane state and secrets are not app-owned data
 
 This model is still being hardened. Public documentation must not claim production readiness until the audit blockers are closed.
+
+The PWA cache rollout is governed by
+`docs/adr/0011-pwa-cache-and-offline-boundaries.md`. M2 persists only verified
+static shell assets and public branding. Private app read models, Storage file
+bytes, and offline writes remain disabled by default behind independent
+fail-closed switches. Credentials, secrets, Browser sessions, Speech audio,
+temporary archives, and all agentic authority/control-plane state are
+network-only and must never enter Cache API, IndexedDB, or OPFS. Browser-side
+encryption with a key available to the same JavaScript is not accepted as an
+XSS boundary. A later private-cache rollout requires scoped cleanup, privacy
+review, bounded retention, and explicit physical-device evidence.
 
 App-owned HTTP sidecars that declare sandbox compatibility use the generic
 fail-closed process boundary documented in

@@ -1,0 +1,83 @@
+{
+  "schema": "maverick.frontend-assets.v1",
+  "build_id": "19024c667f5019f17b2c3e89ea3a0fe7478bf199e1d440273878ec1d3444c884",
+  "entrypoints": [
+    "index.html",
+    "widgets/fitness-coach-sidebar/index.html",
+    "widgets/fitness-coach-sidebar-footer/index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/api-DXBWx-jI.js",
+      "sha256": "f79697d848d26e362fa7b019d7edfc9873f94ce82e737665be1c1cbe8ea6a4c4",
+      "size_bytes": 6601
+    },
+    {
+      "path": "assets/app-BCZIxCEs.js",
+      "sha256": "155af9dff8fb51d6bfb15cf39fbcd2eb5324a927aaa59a396e0923815064f577",
+      "size_bytes": 74586
+    },
+    {
+      "path": "assets/app-CJl-fSM1.css",
+      "sha256": "bac8e10b7ce2c870537af3de9a6cc25bd5a81e439da5e6f85f542fe80ad5b4dd",
+      "size_bytes": 34989
+    },
+    {
+      "path": "assets/count-down-fitness-coach-AWlrmdI5.mp3",
+      "sha256": "7f8814b4d5a6136bd21725e22fd362cf707967c8c808e155678f4d2258e952aa",
+      "size_bytes": 60654
+    },
+    {
+      "path": "assets/dumbbell-CE24J-Eu.js",
+      "sha256": "b27c8ee42e4c56ab5a0f2a02706d103830869c9da4df364ef8c7718ff4586ea9",
+      "size_bytes": 194460
+    },
+    {
+      "path": "assets/index-BJPdadYL.css",
+      "sha256": "b233e390ccc563259de061a74465ded59b351b12918a7ff9b43e03a6e701d06d",
+      "size_bytes": 5361
+    },
+    {
+      "path": "assets/index-CXfbSY4A.css",
+      "sha256": "2179beb9509ea41661bfbcafb5d96f9a05e0e9bef34da7a7263ed3d6db22feb2",
+      "size_bytes": 1351
+    },
+    {
+      "path": "assets/plus-8w2-RZ3y.js",
+      "sha256": "2b823a2b94d570a3a750e5b50e3d0a23e79f083f0d5919db6b1b4181f7c1d063",
+      "size_bytes": 153
+    },
+    {
+      "path": "assets/rest-icon-BGvWVrKM.svg",
+      "sha256": "ddcb40a569bd0cc39475c4430eb9320e288571e73f7cd18526e051b3eb030121",
+      "size_bytes": 9032
+    },
+    {
+      "path": "assets/widgets/fitness-coach-sidebar/index-BkfZWyOj.js",
+      "sha256": "5e0770026432f71324039b53e958d695b2ccbed406cbed59bfb8dcc5c2877044",
+      "size_bytes": 4655
+    },
+    {
+      "path": "assets/widgets/fitness-coach-sidebar-footer/index-UBSPXvN5.js",
+      "sha256": "80741d1ff102aada217cdc75f5d972e1756ef7281018dde2319bc354da6afcde",
+      "size_bytes": 1720
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "index.html",
+      "sha256": "3ef05398f1a22ff9a1d56634be5a3e5d9879c55a1b4ca6bbfdac6256d144a8bb",
+      "size_bytes": 717
+    },
+    {
+      "path": "widgets/fitness-coach-sidebar/index.html",
+      "sha256": "a6f934ad00f97091ad072952fb079549b35bcfce4bb846e532ebefb945cb2999",
+      "size_bytes": 687
+    },
+    {
+      "path": "widgets/fitness-coach-sidebar-footer/index.html",
+      "sha256": "30bf3979aa63a37d8fe88396b94a5e4f5a15cca8c26fc5c2e64e44eed5782ec8",
+      "size_bytes": 709
+    }
+  ]
+}

@@ -8,6 +8,12 @@ import subprocess
 from typing import Any
 
 from core.apps.errors import AppHostingError, AppLifecycleError
+from core.apps.frontend_assets import (
+    FRONTEND_ASSET_MANIFEST_NAME,
+    FrontendAssetManifestError,
+    load_frontend_asset_manifest,
+    write_conservative_frontend_asset_manifest,
+)
 from core.apps.models import WorkspaceAppBindingRecord
 from core.apps.store import AppStore
 from core.apps.surfaces import resolve_workspace_app_surface
@@ -34,6 +40,14 @@ def build_workspace_app_frontend(
     frontend_root = (source_root / frontend_mount).resolve()
     if not frontend_root.exists() or not frontend_root.is_dir():
         raise AppLifecycleError(f"Frontend build for app `{app_id}` did not produce `{frontend_mount}`.")
+    try:
+        asset_manifest = load_frontend_asset_manifest(frontend_root)
+        if asset_manifest is None:
+            write_conservative_frontend_asset_manifest(frontend_root)
+        asset_manifest = load_frontend_asset_manifest(frontend_root, required=True, verify_files=True)
+        assert asset_manifest is not None
+    except FrontendAssetManifestError as error:
+        raise AppLifecycleError(f"Frontend build for app `{app_id}` produced an invalid asset manifest: {error}") from error
 
     event = {
         "type": "maverick.app.frontend-changed",
@@ -52,6 +66,12 @@ def build_workspace_app_frontend(
         "source_record_id": binding.source_record_id,
         "frontend_mount": frontend_mount,
         "build_root": str(build_root),
+        "asset_manifest": {
+            "path": str(frontend_root / FRONTEND_ASSET_MANIFEST_NAME),
+            "build_id": asset_manifest.build_id,
+            "immutable_assets": len(asset_manifest.immutable),
+            "revalidated_assets": len(asset_manifest.revalidated),
+        },
         "event": event,
     }
 

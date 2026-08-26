@@ -31,6 +31,7 @@ def status_line(status_code: int) -> str:
         201: "Created",
         204: "No Content",
         206: "Partial Content",
+        304: "Not Modified",
         400: "Bad Request",
         401: "Unauthorized",
         403: "Forbidden",
@@ -67,6 +68,8 @@ def json_response(
         ("Content-Type", "application/json; charset=utf-8"),
         ("Content-Length", str(len(body))),
     ]
+    if not headers or not any(name.lower() == "cache-control" for name, _value in headers):
+        response_headers.append(("Cache-Control", "private, no-store"))
     if headers:
         response_headers.extend(headers)
     start_response(status, response_headers)

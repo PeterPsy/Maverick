@@ -8,7 +8,7 @@ describe('work player presentation', () => {
   const mediaPlaybackResolverSource = readFileSync(new URL('./mediaPlaybackResolver.ts', import.meta.url), 'utf8');
   const mediaPlaybackMetricsSource = readFileSync(new URL('./mediaPlaybackMetrics.ts', import.meta.url), 'utf8');
   const gradientBarsSource = readFileSync(new URL('./components/ui/gradient-bars-background.tsx', import.meta.url), 'utf8');
-  const restIcon = readFileSync(new URL('../public/rest-icon.svg', import.meta.url), 'utf8');
+  const restIcon = readFileSync(new URL('./assets/rest-icon.svg', import.meta.url), 'utf8');
 
   it('contains workout media instead of cropping it', () => {
     expect(styles).toMatch(/\.player-media video,\s*\.player-media img\s*{[\s\S]*object-fit:\s*contain;/);
@@ -226,7 +226,8 @@ describe('work player presentation', () => {
 
   it('uses the rest icon in workout rest blocks and the active rest player overlay', () => {
     expect(restIcon).toContain('<svg width="40" height="40"');
-    expect(appSource).toContain("const REST_ICON_SRC = 'rest-icon.svg';");
+    expect(appSource).toContain("import restIconSrc from './assets/rest-icon.svg';");
+    expect(appSource).toContain('const REST_ICON_SRC = restIconSrc;');
     expect(appSource).toContain('className="rest-block-layout"');
     expect(appSource).toContain('className="player-rest-overlay"');
     expect(appSource).toContain('<RestIconImage className="player-rest-icon" />');
@@ -272,11 +273,12 @@ describe('work player presentation', () => {
   });
 
   it('uses the bundled countdown sound for timed work and rest segments', () => {
-    const countdownSound = readFileSync(new URL('../public/count-down-fitness-coach.mp3', import.meta.url));
+    const countdownSound = readFileSync(new URL('./assets/count-down-fitness-coach.mp3', import.meta.url));
     const checksum = createHash('sha256').update(countdownSound).digest('hex');
     expect(countdownSound.byteLength).toBe(60654);
     expect(checksum).toBe('7f8814b4d5a6136bd21725e22fd362cf707967c8c808e155678f4d2258e952aa');
-    expect(appSource).toContain("const COUNTDOWN_SOUND_SRC = '/apps/fitness-coach/count-down-fitness-coach.mp3';");
+    expect(appSource).toContain("import countdownSoundSrc from './assets/count-down-fitness-coach.mp3';");
+    expect(appSource).toContain('const COUNTDOWN_SOUND_SRC = countdownSoundSrc;');
     expect(appSource).toContain('const COUNTDOWN_SOUND_LEAD_MS = 3800;');
     expect(appSource).toContain('const audio = new Audio(COUNTDOWN_SOUND_SRC);');
     expect(appSource).toContain("if (!segment || paused || segment.type === 'work' && segment.mode === 'reps') return;");

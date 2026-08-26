@@ -98,6 +98,9 @@ class AppFrontendBuildTests(AppHostingTestBase):
             self.assertEqual(result["app_id"], "buildable")
             self.assertEqual(result["workspace_id"], "default")
             self.assertEqual(result["frontend_mount"], "frontend/dist")
+            self.assertEqual(result["asset_manifest"]["immutable_assets"], 0)
+            self.assertEqual(result["asset_manifest"]["revalidated_assets"], 1)
+            self.assertTrue((app_root / "frontend" / "dist" / "maverick-frontend-assets.json").is_file())
             build_calls = [call for call in run.call_args_list if call.args and call.args[0] == ["npm", "run", "build"]]
             self.assertEqual(len(build_calls), 1)
             self.assertEqual(build_calls[0].kwargs["cwd"], app_root / "frontend")

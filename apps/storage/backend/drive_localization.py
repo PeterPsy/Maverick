@@ -250,6 +250,7 @@ def drive_media_stream_response(
     localization_id: str = "",
     source_version: str = "",
     range_header: str = "",
+    if_range_header: str = "",
     request_method: str = "GET",
     streaming_response_supported: bool = False,
 ) -> dict[str, Any]:
@@ -265,6 +266,9 @@ def drive_media_stream_response(
         requested_source_version=source_version,
         operation=operation,
     )
+    current_etag = _media_etag(target=target, source_version=_source_version(file_record))
+    if range_header and if_range_header and if_range_header.strip() != f'"{current_etag}"':
+        range_header = ""
     cleanup_drive_local_cache(data_root=data_root, current_file_record=file_record, keep_localization_id=target.localization_id)
     metadata = _read_localization_metadata(target)
     if metadata and _localization_metadata_is_stale(target, metadata):

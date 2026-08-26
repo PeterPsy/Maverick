@@ -92,6 +92,43 @@ class AppFileGatewayIntegrationTests(unittest.TestCase):
                     self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
                     self.assertEqual(body, content.encode("utf-8"))
 
+    def test_private_gateway_authorizes_before_evaluating_if_none_match(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo_root = self._repo_root(temp)
+            state = bootstrap_platform_state(start_path=repo_root)
+            binding = self._install_minimal_app(repo_root, state)
+            data_root = Path(binding.data_root)
+            media_path = data_root / "private" / "report.pdf"
+            media_path.parent.mkdir(parents=True)
+            media_path.write_bytes(b"private")
+            token = "gw_test_private_conditional_1234"
+            manifest_root = data_root / "run" / "file-gateway"
+            manifest_root.mkdir(parents=True)
+            (manifest_root / f"{token}.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "maverick.app.file_gateway.v1",
+                        "app_id": "website-studio",
+                        "access": "authenticated",
+                        "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=15)).isoformat(),
+                        "allowed_paths": [str(media_path.resolve())],
+                        "file_response": {"path": str(media_path), "etag": "private-revision"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            app = PlatformHost(state, start_path=repo_root)
+
+            status, body, headers = self._invoke_raw(
+                app,
+                path=f"/api/apps/website-studio/backend/file/{token}",
+                extra_environ={"HTTP_IF_NONE_MATCH": '"private-revision"'},
+            )
+
+        self.assertEqual(status, 401)
+        self.assertIn(b"authentication_required", body)
+        self.assertNotIn("ETag", headers)
+
     def _repo_root(self, temp_dir: str) -> Path:
         repo_root = Path(temp_dir) / "maverick"
         for name in ("core", "apps", "workspaces", "scripts"):

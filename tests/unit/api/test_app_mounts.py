@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ from types import SimpleNamespace
 
 from core.api.app_mounts import STREAM_RESPONSE_CHUNK_BYTES, _apply_app_secret_writes, _backend_request_headers, _backend_route_supports_streaming, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, _serve_app_stream_response, backend_entrypoint_timeout_seconds, is_public_app_static_asset, serve_frontend
 from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
+from core.apps.frontend_assets import FRONTEND_ASSET_MANIFEST_NAME
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.secrets.app_delivery import app_secret_target
 from core.secrets.errors import SecretPolicyError
@@ -36,6 +38,7 @@ class AppMountsTestCase(unittest.TestCase):
             asset_dir = root / "assets"
             asset_dir.mkdir()
             (asset_dir / "app-abc12345.js").write_text("console.log('app')", encoding="utf-8")
+            _write_asset_manifest(root, immutable_paths=["assets/app-abc12345.js"])
 
             status, headers = _serve(root, "/assets/app-abc12345.js", cross_origin=True)
 
@@ -51,6 +54,7 @@ class AppMountsTestCase(unittest.TestCase):
             asset_dir.mkdir()
             source = ("const message = 'startup-cache';\n" * 200).encode("utf-8")
             (asset_dir / "app-abc12345.js").write_bytes(source)
+            _write_asset_manifest(root, immutable_paths=["assets/app-abc12345.js"])
 
             status, headers, body = _serve_body(
                 root,
@@ -93,10 +97,21 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertNotIn(b"root", body_map)
         self.assertNotIn(b"root", body_source)
 
-    def test_unhashed_assets_are_not_public_by_extension_only(self) -> None:
-        self.assertFalse(is_public_app_static_asset("assets/app.js"))
-        self.assertFalse(is_public_app_static_asset("assets/app-abc123.js"))
+    def test_safe_built_assets_are_public_independently_of_filename_shape(self) -> None:
+        self.assertTrue(is_public_app_static_asset("assets/app.js"))
+        self.assertTrue(is_public_app_static_asset("assets/app-abc123.js"))
         self.assertTrue(is_public_app_static_asset("assets/app-abc12345.js"))
+
+    def test_filename_shape_alone_never_grants_immutable_caching(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "assets").mkdir()
+            (root / "assets" / "app-looks-hashed-abc12345.js").write_text("export {};", encoding="utf-8")
+
+            status, headers = _serve(root, "/assets/app-looks-hashed-abc12345.js", cross_origin=True)
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(headers["Cache-Control"], "public, max-age=86400, must-revalidate")
 
     def test_backend_entrypoint_timeout_comes_from_app_contract(self) -> None:
         parsed = build_parsed_app_contract(
@@ -233,6 +248,73 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(headers["Content-Disposition"], 'inline; filename="clip.mp4"')
         self.assertEqual(body, b"2345")
 
+    def test_app_file_response_returns_not_modified_without_a_body(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "clip.mp4"
+            media_path.write_bytes(b"0123456789")
+
+            status, headers, body = _serve_file_response(
+                root=root,
+                file_response={"path": str(media_path), "etag": "clip-etag"},
+                environ={"REQUEST_METHOD": "GET", "HTTP_IF_NONE_MATCH": '"older", W/"clip-etag"'},
+            )
+
+        self.assertEqual(status, "304 Not Modified")
+        self.assertEqual(body, b"")
+        self.assertEqual(headers["ETag"], '"clip-etag"')
+        self.assertEqual(headers["Cache-Control"], "private, no-cache")
+        self.assertEqual(headers["Vary"], "Cookie")
+        self.assertNotIn("Content-Length", headers)
+
+    def test_app_file_response_if_range_only_resumes_matching_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "clip.mp4"
+            media_path.write_bytes(b"0123456789")
+            response = {"path": str(media_path), "etag": "clip-etag"}
+
+            match = _serve_file_response(
+                root=root,
+                file_response=response,
+                environ={"REQUEST_METHOD": "GET", "HTTP_RANGE": "bytes=2-5", "HTTP_IF_RANGE": '"clip-etag"'},
+            )
+            mismatch = _serve_file_response(
+                root=root,
+                file_response=response,
+                environ={"REQUEST_METHOD": "GET", "HTTP_RANGE": "bytes=2-5", "HTTP_IF_RANGE": '"older"'},
+            )
+            weak = _serve_file_response(
+                root=root,
+                file_response=response,
+                environ={"REQUEST_METHOD": "GET", "HTTP_RANGE": "bytes=2-5", "HTTP_IF_RANGE": 'W/"clip-etag"'},
+            )
+
+        self.assertEqual((match[0], match[2]), ("206 Partial Content", b"2345"))
+        self.assertEqual((mismatch[0], mismatch[2]), ("200 OK", b"0123456789"))
+        self.assertEqual((weak[0], weak[2]), ("200 OK", b"0123456789"))
+        self.assertNotIn("Content-Range", mismatch[1])
+
+    def test_app_file_response_immutable_policy_requires_an_explicit_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "stable.bin"
+            media_path.write_bytes(b"stable")
+
+            _status, without_revision, _body = _serve_file_response(
+                root=root,
+                file_response={"path": str(media_path), "cache_policy": "immutable"},
+                environ={"REQUEST_METHOD": "GET"},
+            )
+            _status, with_revision, _body = _serve_file_response(
+                root=root,
+                file_response={"path": str(media_path), "cache_policy": "immutable", "etag": "sha256-stable"},
+                environ={"REQUEST_METHOD": "GET"},
+            )
+
+        self.assertEqual(without_revision["Cache-Control"], "private, no-cache")
+        self.assertEqual(with_revision["Cache-Control"], "private, max-age=31536000, immutable")
+
     def test_app_file_response_allows_safe_extra_headers(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -299,6 +381,29 @@ class AppMountsTestCase(unittest.TestCase):
 
             self.assertEqual(status, "200 OK")
             self.assertEqual(headers["Content-Disposition"], 'attachment; filename="folder.zip"')
+            self.assertEqual(body, b"zip")
+            self.assertFalse(media_path.exists())
+
+    def test_app_file_response_never_returns_not_modified_for_ephemeral_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "run" / "exports" / "folder.zip"
+            media_path.parent.mkdir(parents=True)
+            media_path.write_bytes(b"zip")
+
+            status, headers, body = _serve_file_response(
+                root=root,
+                file_response={
+                    "path": str(media_path),
+                    "etag": "zip-revision",
+                    "delete_after_send": True,
+                    "download": True,
+                },
+                environ={"REQUEST_METHOD": "GET", "HTTP_IF_NONE_MATCH": '"zip-revision"'},
+            )
+
+            self.assertEqual(status, "200 OK")
+            self.assertEqual(headers["Cache-Control"], "no-store")
             self.assertEqual(body, b"zip")
             self.assertFalse(media_path.exists())
 
@@ -549,6 +654,8 @@ class AppMountsTestCase(unittest.TestCase):
             {
                 "CONTENT_TYPE": "application/json",
                 "HTTP_RANGE": "bytes=2-5",
+                "HTTP_IF_NONE_MATCH": '"file-revision"',
+                "HTTP_IF_RANGE": '"file-revision"',
                 "HTTP_ORIGIN": "https://studio.example",
                 "HTTP_HOST": "studio.example",
                 "HTTP_X_FORWARDED_PROTO": "https",
@@ -560,6 +667,8 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(headers["content_type"], "application/json")
         self.assertEqual(headers["content-type"], "application/json")
         self.assertEqual(headers["range"], "bytes=2-5")
+        self.assertEqual(headers["if-none-match"], '"file-revision"')
+        self.assertEqual(headers["if-range"], '"file-revision"')
         self.assertEqual(headers["origin"], "https://studio.example")
         self.assertEqual(headers["host"], "studio.example")
         self.assertEqual(headers["x-forwarded-proto"], "https")
@@ -1147,6 +1256,25 @@ def _serve_file_gateway_manifest(
         )
     )
     return str(captured["status"]), captured["headers"], body  # type: ignore[return-value]
+
+
+def _write_asset_manifest(root: Path, *, immutable_paths: list[str]) -> None:
+    index = root / "index.html"
+    if not index.exists():
+        index.write_text("<!doctype html>", encoding="utf-8")
+
+    def record(relative: str) -> dict[str, object]:
+        body = (root / relative).read_bytes()
+        return {"path": relative, "sha256": hashlib.sha256(body).hexdigest(), "size_bytes": len(body)}
+
+    payload = {
+        "schema": "maverick.frontend-assets.v1",
+        "build_id": "a" * 64,
+        "entrypoints": ["index.html"],
+        "immutable": [record(path) for path in immutable_paths],
+        "revalidated": [record("index.html")],
+    }
+    (root / FRONTEND_ASSET_MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _secret_store() -> SecretDocumentStore:

@@ -399,8 +399,6 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn(b"App Store", payload)
         self.assertIn(b"catalog-folder-section", payload)
         self.assertIn(b"stalePinsSection", payload)
-        self.assertIn(b"app-folder-data.js", payload)
-        self.assertIn(b"app-folder-lightbox.js", payload)
         self.assertNotIn(b"Most Popular Apps", payload)
         self.assertNotIn(b"Manage Apps", payload)
         self.assertNotIn(b"Server Apps", payload)
@@ -410,17 +408,13 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn(b'detail-title-separator', payload)
         self.assertNotIn(b'today-heading', payload)
         self.assertNotIn(b'todayLabel', payload)
-        self.assertIn(b"/apps/app-store/assets/main.css?v=20260514-stale-pin-cleanup", payload)
-        self.assertIn(b"/apps/app-store/assets/frontend-presentation.js?v=20260514-stale-pin-cleanup", payload)
-        self.assertIn(b"/apps/app-store/assets/app-icons.js?v=20260810-design-studio-icon", payload)
-        self.assertIn(b"/apps/app-store/assets/app-folder-data.js?v=20260514-stale-pin-cleanup", payload)
-        self.assertIn(b"/apps/app-store/assets/app-folder-lightbox.js?v=20260514-stale-pin-cleanup", payload)
-        self.assertIn(b"/apps/app-store/assets/app-folders.js?v=20260514-stale-pin-cleanup", payload)
-        self.assertIn(b"/apps/app-store/assets/main.js?v=20260514-stale-pin-cleanup", payload)
+        self.assertIn(b'type="module"', payload)
+        self.assertIn(b"/apps/app-store/assets/app-", payload)
+        self.assertNotIn(b"?v=", payload)
 
     def test_frontend_dist_separates_server_promotion_from_public_submission(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
-        frontend_js = (app_root / "frontend" / "dist" / "assets" / "main.js").read_text(encoding="utf-8")
+        frontend_js = (app_root / "frontend" / "src" / "assets" / "main.js").read_text(encoding="utf-8")
         frontend_html = (app_root / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
 
         self.assertIn("Promote to server app", frontend_js)
@@ -441,9 +435,9 @@ class AppStoreAppTestCase(unittest.TestCase):
 
     def test_frontend_dist_uses_material_app_icons(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
-        icon_js = (app_root / "frontend" / "dist" / "assets" / "app-icons.js").read_text(encoding="utf-8")
-        frontend_js = (app_root / "frontend" / "dist" / "assets" / "main.js").read_text(encoding="utf-8")
-        frontend_css = (app_root / "frontend" / "dist" / "assets" / "main.css").read_text(encoding="utf-8")
+        icon_js = (app_root / "frontend" / "src" / "assets" / "app-icons.js").read_text(encoding="utf-8")
+        frontend_js = (app_root / "frontend" / "src" / "assets" / "main.js").read_text(encoding="utf-8")
+        frontend_css = (app_root / "frontend" / "src" / "assets" / "main.css").read_text(encoding="utf-8")
 
         self.assertIn('"storage": "cloud"', icon_js)
         self.assertIn('"app-store": "storefront"', icon_js)
@@ -472,18 +466,18 @@ class AppStoreAppTestCase(unittest.TestCase):
 
     def test_frontend_dist_groups_app_folders_by_all_declared_surfaces(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
-        folder_data_js = (app_root / "frontend" / "dist" / "assets" / "app-folder-data.js").read_text(encoding="utf-8")
-        folder_js = (app_root / "frontend" / "dist" / "assets" / "app-folders.js").read_text(encoding="utf-8")
-        folder_css = (app_root / "frontend" / "dist" / "assets" / "app-folders.css").read_text(encoding="utf-8")
-        frontend_js = (app_root / "frontend" / "dist" / "assets" / "main.js").read_text(encoding="utf-8")
-        frontend_css = (app_root / "frontend" / "dist" / "assets" / "main.css").read_text(encoding="utf-8")
-        lightbox_css = (app_root / "frontend" / "dist" / "assets" / "app-folder-lightbox.css").read_text(encoding="utf-8")
+        folder_data_js = (app_root / "frontend" / "src" / "assets" / "app-folder-data.js").read_text(encoding="utf-8")
+        folder_js = (app_root / "frontend" / "src" / "assets" / "app-folders.js").read_text(encoding="utf-8")
+        folder_css = (app_root / "frontend" / "src" / "assets" / "app-folders.css").read_text(encoding="utf-8")
+        frontend_js = (app_root / "frontend" / "src" / "assets" / "main.js").read_text(encoding="utf-8")
+        frontend_css = (app_root / "frontend" / "src" / "assets" / "main.css").read_text(encoding="utf-8")
+        lightbox_css = (app_root / "frontend" / "src" / "assets" / "app-folder-lightbox.css").read_text(encoding="utf-8")
         frontend_html = (app_root / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
 
         self.assertIn("function folderIdsForApp", folder_data_js)
         self.assertIn("Platform Extensions", folder_data_js)
         self.assertIn("supporting_frontend", folder_data_js)
-        self.assertIn("No App View", (app_root / "frontend" / "dist" / "assets" / "app-folder-lightbox.js").read_text(encoding="utf-8"))
+        self.assertIn("No App View", (app_root / "frontend" / "src" / "assets" / "app-folder-lightbox.js").read_text(encoding="utf-8"))
         self.assertIn("matchedFolderIds", folder_data_js)
         self.assertIn("folderIdsForApp(app, activeSurface).forEach", folder_data_js)
         self.assertIn("shouldUseTwoStepFolderOpen", folder_js)
@@ -547,9 +541,9 @@ function createElement(tagName) {{
 }}
 const context = {{ window: {{}}, document: {{ createElement }} }};
 vm.createContext(context);
-vm.runInContext(fs.readFileSync(`${{root}}/frontend/dist/assets/frontend-presentation.js`, "utf8"), context);
-vm.runInContext(fs.readFileSync(`${{root}}/frontend/dist/assets/app-icons.js`, "utf8"), context);
-vm.runInContext(fs.readFileSync(`${{root}}/frontend/dist/assets/app-folder-data.js`, "utf8"), context);
+vm.runInContext(fs.readFileSync(`${{root}}/frontend/src/assets/frontend-presentation.js`, "utf8"), context);
+vm.runInContext(fs.readFileSync(`${{root}}/frontend/src/assets/app-icons.js`, "utf8"), context);
+vm.runInContext(fs.readFileSync(`${{root}}/frontend/src/assets/app-folder-data.js`, "utf8"), context);
 const presentation = context.window.MaverickFrontendPresentation;
 const icons = context.window.MaverickAppIcons;
 const foldersApi = context.window.MaverickAppFolderData;
@@ -593,11 +587,11 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
 
     def test_frontend_dist_has_skeleton_loading_states(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
-        frontend_js = (app_root / "frontend" / "dist" / "assets" / "main.js").read_text(encoding="utf-8")
-        frontend_css = (app_root / "frontend" / "dist" / "assets" / "main.css").read_text(encoding="utf-8")
-        folder_css = (app_root / "frontend" / "dist" / "assets" / "app-folders.css").read_text(encoding="utf-8")
-        shortcut_js = (app_root / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js").read_text(encoding="utf-8")
-        shortcut_css = (app_root / "frontend" / "dist" / "widgets" / "app-shortcuts" / "styles.css").read_text(encoding="utf-8")
+        frontend_js = (app_root / "frontend" / "src" / "assets" / "main.js").read_text(encoding="utf-8")
+        frontend_css = (app_root / "frontend" / "src" / "assets" / "main.css").read_text(encoding="utf-8")
+        folder_css = (app_root / "frontend" / "src" / "assets" / "app-folders.css").read_text(encoding="utf-8")
+        shortcut_js = (app_root / "frontend" / "src" / "widgets" / "app-shortcuts" / "main.js").read_text(encoding="utf-8")
+        shortcut_css = (app_root / "frontend" / "src" / "widgets" / "app-shortcuts" / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("renderLoading", frontend_js)
         self.assertIn("renderFolderGridSkeleton", frontend_js)
@@ -709,16 +703,15 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
         self.assertEqual(status_widget, 200)
         self.assertIn("text/html", widget_headers["Content-Type"])
         self.assertIn(b"App shortcuts", widget_body)
-        self.assertIn(b"styles.css?v=20260514-all-apps-sidebar", widget_body)
-        self.assertIn(b"frontend-presentation.js?v=20260514-all-apps-sidebar", widget_body)
-        self.assertIn(b"app-icons.js?v=20260810-design-studio-icon", widget_body)
-        self.assertIn(b"main.js?v=20260514-all-apps-sidebar", widget_body)
+        self.assertIn(b'type="module"', widget_body)
+        self.assertIn(b"/apps/app-store/assets/widgets/app-shortcuts/index-", widget_body)
+        self.assertNotIn(b"?v=", widget_body)
         shortcut_script = (
-            Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js"
+            Path(__file__).resolve().parents[1] / "frontend" / "src" / "widgets" / "app-shortcuts" / "main.js"
         ).read_text()
-        icon_script = (Path(__file__).resolve().parents[1] / "frontend" / "dist" / "assets" / "app-icons.js").read_text()
+        icon_script = (Path(__file__).resolve().parents[1] / "frontend" / "src" / "assets" / "app-icons.js").read_text()
         shortcut_styles = (
-            Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "styles.css"
+            Path(__file__).resolve().parents[1] / "frontend" / "src" / "widgets" / "app-shortcuts" / "styles.css"
         ).read_text()
         self.assertIn("MaverickAppIcons.renderIcon", shortcut_script)
         self.assertIn("logo?.kind === \"image\"", icon_script)

@@ -53,6 +53,8 @@ import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlock
 import { completeWorkoutAfterConfirmedStart } from './workoutCompletion';
 import { PREPARATION_BLOCK_SECONDS, runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
+import countdownSoundSrc from './assets/count-down-fitness-coach.mp3';
+import restIconSrc from './assets/rest-icon.svg';
 
 const EMPTY_EXERCISE: Partial<Exercise> = {
   title: '',
@@ -71,8 +73,8 @@ type PlayerSession = {
   workout: Workout;
   startPromise: Promise<StartWorkoutPayload>;
 };
-const REST_ICON_SRC = 'rest-icon.svg';
-const COUNTDOWN_SOUND_SRC = '/apps/fitness-coach/count-down-fitness-coach.mp3';
+const REST_ICON_SRC = restIconSrc;
+const COUNTDOWN_SOUND_SRC = countdownSoundSrc;
 const COUNTDOWN_SOUND_LEAD_MS = 3800;
 const inlineVideoPlaybackProps = {
   playsInline: true,

@@ -1,0 +1,96 @@
+{
+  "schema": "maverick.frontend-assets.v1",
+  "build_id": "eff9d2a72d27b12fe132eea51262a8d8df163d3531a8d00e7c6c39e56b1a53df",
+  "entrypoints": [
+    "index.html"
+  ],
+  "immutable": [
+    {
+      "path": "assets/LoginPaperBackground-ByLPNYpV.js",
+      "sha256": "685befcf358f2b2a6701f1ebc50bbb0cdde728391d81172df16469b60ee145a8",
+      "size_bytes": 25087
+    },
+    {
+      "path": "assets/index-8bLPTgc8.css",
+      "sha256": "0d6bd20615de2b7a631c03d1c84b5db625e5c1538d5eafe01df7994fb6b73ac3",
+      "size_bytes": 70405
+    },
+    {
+      "path": "assets/index-DrWsCIjK.js",
+      "sha256": "0686204889af266912d15b88c1e41d8934eb03a5ad60939801fff744a7b11232",
+      "size_bytes": 278842
+    }
+  ],
+  "revalidated": [
+    {
+      "path": "app-icon-lightcolor.png",
+      "sha256": "5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0",
+      "size_bytes": 95846
+    },
+    {
+      "path": "favicon.ico",
+      "sha256": "fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912",
+      "size_bytes": 270622
+    },
+    {
+      "path": "index.html",
+      "sha256": "31d0dcc9c2d4ea49d414a280ef053b681e3ac97b437c5593244946baca047e64",
+      "size_bytes": 1977
+    },
+    {
+      "path": "manifest.webmanifest",
+      "sha256": "68094b835f2838d27849bd900f816e09370984de8c3646619c0b10ee3d5f5695",
+      "size_bytes": 627
+    },
+    {
+      "path": "material-symbols-rounded.woff2",
+      "sha256": "aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97",
+      "size_bytes": 414656
+    },
+    {
+      "path": "maverick-logotype.svg",
+      "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003",
+      "size_bytes": 6739
+    },
+    {
+      "path": "maverick-mark.svg",
+      "sha256": "443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983",
+      "size_bytes": 17902
+    },
+    {
+      "path": "pwa-apple-touch-icon.png",
+      "sha256": "13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb",
+      "size_bytes": 4075
+    },
+    {
+      "path": "pwa-logo-192.png",
+      "sha256": "d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24",
+      "size_bytes": 4429
+    },
+    {
+      "path": "pwa-logo.png",
+      "sha256": "1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10",
+      "size_bytes": 16936
+    },
+    {
+      "path": "pwa-maskable-logo.png",
+      "sha256": "5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031",
+      "size_bytes": 17394
+    },
+    {
+      "path": "sidebar-logo-black.svg",
+      "sha256": "e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f",
+      "size_bytes": 6750
+    },
+    {
+      "path": "sidebar-logo.svg",
+      "sha256": "1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003",
+      "size_bytes": 6739
+    },
+    {
+      "path": "sw.js",
+      "sha256": "862ed9375f3dab02d44084be3ae62f1c7704ee22d06c1d4d52d01d606dee3819",
+      "size_bytes": 2955
+    }
+  ]
+}

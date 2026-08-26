@@ -13,8 +13,16 @@ from unittest.mock import Mock, patch
 SERVICE_ROOT = Path(__file__).resolve().parents[1] / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from opendesign_artifact_operations import RequiredArtifacts, _repair  # noqa: E402
-from opendesign_artifact_store import OpenDesignArtifactStore, StoredArtifact  # noqa: E402
+from opendesign_artifact_operations import (  # noqa: E402
+    RequiredArtifacts,
+    _repair,
+    _repair_operation_lock,
+)
+from opendesign_artifact_store import (  # noqa: E402
+    ArtifactStoreError,
+    OpenDesignArtifactStore,
+    StoredArtifact,
+)
 from opendesign_generation_model import GenerationControl, LaunchSelection  # noqa: E402
 from opendesign_migration_oci_runtime import OciMigrationRuntime  # noqa: E402
 from opendesign_release_activation import activate_protected_release  # noqa: E402
@@ -58,6 +66,19 @@ def _web(digest: str, runtime_digest: str) -> StoredArtifact:
 
 
 class OpenDesignArtifactLifecycleAuditTests(unittest.TestCase):
+    def test_overlapping_governed_repairs_fail_without_waiting_or_mutating(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-repair-lock-") as temp:
+            root = Path(temp)
+            (root / ".locks").mkdir()
+            store = SimpleNamespace(root=root)
+            with _repair_operation_lock(store):
+                with self.assertRaises(ArtifactStoreError) as raised:
+                    with _repair_operation_lock(store):
+                        self.fail("overlapping repair unexpectedly acquired the lock")
+
+        self.assertEqual(raised.exception.code, "artifact_repairing")
+        self.assertEqual(raised.exception.phase, "repair_lock")
+
     def test_release_activation_audits_candidate_and_active_rollback_pair(self) -> None:
         active = LaunchSelection(RUNTIME_ACTIVE, WEB_ACTIVE, "0.16.1", "gen_active")
         target = LaunchSelection(RUNTIME_ROLLBACK, WEB_ROLLBACK, "0.16.1", "gen_active")

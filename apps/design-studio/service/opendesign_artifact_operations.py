@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import fcntl
 import json
 import os
 from pathlib import Path
 import shutil
 import stat
 import time
-from typing import Any
+from typing import Any, Iterator
 from uuid import uuid4
 
 from core.apps.artifact_mounts import create_artifact_namespace, platform_artifact_store_root
@@ -71,7 +73,8 @@ def run_artifact_operation(
     required = _required_artifacts(data_root, manifest=manifest)
     try:
         if operation in {"repair", "provision"}:
-            result = _repair(store, required=required, manifest=manifest, data_root=data_root)
+            with _repair_operation_lock(store):
+                result = _repair(store, required=required, manifest=manifest, data_root=data_root)
         elif operation == "verify":
             result = _verify(store, required=required, max_workers=audit_workers)
         elif operation == "gc":
@@ -106,6 +109,26 @@ def run_artifact_operation(
         "store_generation": store.store_generation,
         **result,
     }
+
+
+@contextmanager
+def _repair_operation_lock(store: OpenDesignArtifactStore) -> Iterator[None]:
+    """Reject overlapping repair workflows before either mutates a package."""
+    path = store.root / ".locks/artifact-repair.lock"
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o640)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise ArtifactStoreError(
+                "artifact_repairing",
+                "repair_lock",
+                "Another governed OpenDesign repair is already running",
+            ) from error
+        yield
+    finally:
+        os.close(descriptor)
 
 
 def _repair(

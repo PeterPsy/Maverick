@@ -12,7 +12,7 @@ from threading import Lock, Thread, current_thread
 from typing import Any
 
 from core.api.sidecar_prewarm import prewarm_workspace_app_sidecars
-from core.api.sidecar_proxy import app_sidecar_startup_status
+from core.api.sidecar_proxy import app_sidecar_startup_status, stop_app_sidecars
 from core.apps.errors import AppHostingError
 from core.apps.sidecar_restart import restart_workspace_app_sidecars
 from core.apps.surfaces import resolve_workspace_app_surface
@@ -174,6 +174,17 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
             trigger="activation",
             shutdown_controller=shutdown_controller,
         )
+    if operation == "stop":
+        state.sidecar_browser_sessions.revoke_app(
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
+        stopped = stop_app_sidecars(workspace_id=workspace_id, app_id=app_id)
+        return {
+            "ready": False,
+            "browser_sessions_revoked": True,
+            "stopped_service_count": stopped,
+        }
     if operation == "status":
         binding = state.app_store.get_workspace_app_binding(
             workspace_id=workspace_id,

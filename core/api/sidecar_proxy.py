@@ -71,8 +71,9 @@ _PROXY_CHUNK_SIZE = 64 * 1024
 _REQUEST_BODY_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _SIDECAR_MANAGER = None
 _AUTO_REPAIR_LOCK = Lock()
-_AUTO_REPAIRS: dict[tuple[str, str, str], Future[None]] = {}
-_AUTO_REPAIR_BACKOFFS: dict[tuple[str, str, str], float] = {}
+AutoRepairKey = tuple[str, str, str, str]
+_AUTO_REPAIRS: dict[AutoRepairKey, Future[None]] = {}
+_AUTO_REPAIR_BACKOFFS: dict[AutoRepairKey, float] = {}
 _AUTO_REPAIR_BACKOFF_SECONDS = 60.0
 AsgiReceive = Any
 AsgiSend = Any
@@ -1039,23 +1040,36 @@ def ensure_sidecar_with_declared_auto_repair(
     except SidecarStartupError as error:
         if not error.auto_repairable or "artifact_repair" not in parsed.contract.entrypoints.hooks:
             raise
-        _run_declared_artifact_repair_singleflight(
+        repair_key = _run_declared_artifact_repair_singleflight(
             binding=binding,
             source_root=source_root,
             parsed=parsed,
             sidecar=sidecar,
             start_path=start_path,
         )
-    return manager.ensure_running(
-        workspace_id=binding.workspace_id,
-        app_id=binding.app_id,
-        source_root=source_root,
-        data_root=binding.data_root,
-        sidecar=sidecar,
-        start_path=start_path,
-        shutdown_controller=shutdown_controller,
-        verify_existing_health=verify_existing_health,
-    )
+    try:
+        running = manager.ensure_running(
+            workspace_id=binding.workspace_id,
+            app_id=binding.app_id,
+            source_root=source_root,
+            data_root=binding.data_root,
+            sidecar=sidecar,
+            start_path=start_path,
+            shutdown_controller=shutdown_controller,
+            verify_existing_health=verify_existing_health,
+        )
+    except SidecarStartupError as error:
+        _record_auto_repair_validation_failure(repair_key)
+        raise SidecarStartupError(
+            "artifact_repair_failed",
+            "artifact_repair_validation",
+            "The repaired sidecar did not pass its transactional startup gate.",
+            duration_ms=error.duration_ms,
+            startup_id=error.startup_id,
+            difference_count=error.difference_count,
+        ) from error
+    _complete_auto_repair_validation(repair_key)
+    return running
 
 
 def _run_declared_artifact_repair_singleflight(
@@ -1065,26 +1079,31 @@ def _run_declared_artifact_repair_singleflight(
     parsed: ParsedAppContract,
     sidecar: HttpSidecarSpec,
     start_path: Path,
-) -> None:
-    key = (binding.workspace_id, binding.app_id, sidecar.service_id)
+) -> AutoRepairKey:
+    key = (
+        binding.workspace_id,
+        binding.app_id,
+        sidecar.service_id,
+        str(binding.data_root),
+    )
     owner = False
     with _AUTO_REPAIR_LOCK:
-        retry_after = _AUTO_REPAIR_BACKOFFS.get(key, 0.0)
-        if retry_after > time.monotonic():
-            raise SidecarStartupError(
-                "artifact_repair_failed",
-                "artifact_repair_backoff",
-                "Declared artifact repair is in bounded backoff.",
-            )
-        _AUTO_REPAIR_BACKOFFS.pop(key, None)
         future = _AUTO_REPAIRS.get(key)
         if future is None:
+            retry_after = _AUTO_REPAIR_BACKOFFS.get(key, 0.0)
+            if retry_after > time.monotonic():
+                raise SidecarStartupError(
+                    "artifact_repair_failed",
+                    "artifact_repair_backoff",
+                    "Declared artifact repair is in bounded backoff.",
+                )
             future = Future()
             _AUTO_REPAIRS[key] = future
+            _AUTO_REPAIR_BACKOFFS[key] = time.monotonic() + _AUTO_REPAIR_BACKOFF_SECONDS
             owner = True
     if not owner:
         future.result()
-        return
+        return key
     try:
         payload = _build_workspace_hook_payload(
             workspace_id=binding.workspace_id,
@@ -1113,12 +1132,24 @@ def _run_declared_artifact_repair_singleflight(
         raise failure from error
     else:
         with _AUTO_REPAIR_LOCK:
-            _AUTO_REPAIR_BACKOFFS.pop(key, None)
+            # Keep the gate closed until the repaired daemon passes transactional startup.
+            _AUTO_REPAIR_BACKOFFS[key] = time.monotonic() + _AUTO_REPAIR_BACKOFF_SECONDS
         future.set_result(None)
     finally:
         with _AUTO_REPAIR_LOCK:
             if _AUTO_REPAIRS.get(key) is future:
                 _AUTO_REPAIRS.pop(key, None)
+    return key
+
+
+def _record_auto_repair_validation_failure(key: AutoRepairKey) -> None:
+    with _AUTO_REPAIR_LOCK:
+        _AUTO_REPAIR_BACKOFFS[key] = time.monotonic() + _AUTO_REPAIR_BACKOFF_SECONDS
+
+
+def _complete_auto_repair_validation(key: AutoRepairKey) -> None:
+    with _AUTO_REPAIR_LOCK:
+        _AUTO_REPAIR_BACKOFFS.pop(key, None)
 
 
 def current_sidecar_instance_id(target: AuthorizedSidecarTarget) -> str | None:

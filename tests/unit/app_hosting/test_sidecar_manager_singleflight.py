@@ -208,6 +208,98 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
         self.assertEqual(second.exception.phase, "artifact_repair_backoff")
         hook.assert_called_once()
 
+    def test_failed_post_repair_startup_cannot_trigger_a_second_repair(self) -> None:
+        binding = SimpleNamespace(
+            workspace_id="default",
+            app_id="design-studio",
+            data_root="/data/design-studio",
+            source_kind="builtin",
+            source_record_id="design-studio",
+        )
+        parsed = SimpleNamespace(
+            contract=SimpleNamespace(
+                entrypoints=SimpleNamespace(hooks={"artifact_repair": "hooks/repair.py"}),
+            ),
+        )
+        startup_failure = SidecarStartupError(
+            "artifact_integrity_mismatch",
+            "artifact_fast_verify",
+            "invalid runtime",
+            auto_repairable=True,
+        )
+        manager = Mock()
+        manager.ensure_running.side_effect = [
+            startup_failure,
+            startup_failure,
+            startup_failure,
+        ]
+        hook = Mock()
+        arguments = {
+            "binding": binding,
+            "source_root": Path("/apps/design-studio"),
+            "parsed": parsed,
+            "sidecar": self.sidecar,
+            "start_path": Path("/repo"),
+            "shutdown_controller": None,
+        }
+        with (
+            patch.object(sidecar_proxy, "_sidecar_manager", return_value=manager),
+            patch.object(sidecar_proxy, "_build_workspace_hook_payload", return_value={}),
+            patch.object(sidecar_proxy, "run_lifecycle_hook", hook),
+        ):
+            with self.assertRaises(SidecarStartupError) as first:
+                sidecar_proxy.ensure_sidecar_with_declared_auto_repair(**arguments)
+            with self.assertRaises(SidecarStartupError) as second:
+                sidecar_proxy.ensure_sidecar_with_declared_auto_repair(**arguments)
+
+        self.assertEqual(first.exception.code, "artifact_repair_failed")
+        self.assertEqual(first.exception.phase, "artifact_repair_validation")
+        self.assertEqual(second.exception.code, "artifact_repair_failed")
+        self.assertEqual(second.exception.phase, "artifact_repair_backoff")
+        self.assertEqual(manager.ensure_running.call_count, 3)
+        hook.assert_called_once()
+
+    def test_successful_post_repair_startup_releases_the_backoff_gate(self) -> None:
+        binding = SimpleNamespace(
+            workspace_id="default",
+            app_id="design-studio",
+            data_root="/data/design-studio",
+            source_kind="builtin",
+            source_record_id="design-studio",
+        )
+        parsed = SimpleNamespace(
+            contract=SimpleNamespace(
+                entrypoints=SimpleNamespace(hooks={"artifact_repair": "hooks/repair.py"}),
+            ),
+        )
+        startup_failure = SidecarStartupError(
+            "artifact_integrity_mismatch",
+            "artifact_fast_verify",
+            "invalid runtime",
+            auto_repairable=True,
+        )
+        running = _Running("repaired")
+        manager = Mock()
+        manager.ensure_running.side_effect = [startup_failure, running]
+        with (
+            patch.object(sidecar_proxy, "_sidecar_manager", return_value=manager),
+            patch.object(sidecar_proxy, "_build_workspace_hook_payload", return_value={}),
+            patch.object(sidecar_proxy, "run_lifecycle_hook") as hook,
+        ):
+            observed = sidecar_proxy.ensure_sidecar_with_declared_auto_repair(
+                binding=binding,
+                source_root=Path("/apps/design-studio"),
+                parsed=parsed,
+                sidecar=self.sidecar,
+                start_path=Path("/repo"),
+                shutdown_controller=None,
+            )
+
+        self.assertIs(observed, running)
+        hook.assert_called_once()
+        with sidecar_proxy._AUTO_REPAIR_LOCK:
+            self.assertFalse(sidecar_proxy._AUTO_REPAIR_BACKOFFS)
+
     def _ensure(self, *, app_id: str, data_root: str):
         return self.manager.ensure_running(
             workspace_id="default",

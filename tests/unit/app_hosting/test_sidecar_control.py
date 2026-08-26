@@ -21,6 +21,36 @@ class _Shutdown:
 
 
 class SidecarControlTests(unittest.TestCase):
+    def test_stop_revokes_browser_authority_before_stopping_the_app(self) -> None:
+        browser_sessions = Mock()
+        state = SimpleNamespace(sidecar_browser_sessions=browser_sessions)
+        request = {
+            "schema_version": "1",
+            "operation": "stop",
+            "workspace_id": "default",
+            "app_id": "design-studio",
+        }
+        with patch.object(sidecar_control, "stop_app_sidecars", return_value=1) as stop:
+            result = sidecar_control._dispatch(
+                request,
+                state=state,
+                shutdown_controller=None,
+            )
+
+        browser_sessions.revoke_app.assert_called_once_with(
+            workspace_id="default",
+            app_id="design-studio",
+        )
+        stop.assert_called_once_with(workspace_id="default", app_id="design-studio")
+        self.assertEqual(
+            result,
+            {
+                "ready": False,
+                "browser_sessions_revoked": True,
+                "stopped_service_count": 1,
+            },
+        )
+
     def test_status_aggregates_the_live_manager_without_starting_a_sidecar(self) -> None:
         binding = SimpleNamespace(data_root="/data/design-studio")
         app_store = Mock()

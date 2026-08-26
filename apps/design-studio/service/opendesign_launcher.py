@@ -154,13 +154,28 @@ def _resolve_launch_plan(binding: RuntimeBinding, manifest: dict[str, Any]) -> L
     bundle_dir = binding.bundle.path
     daemon_package = bundle_dir / "app" / "apps" / "daemon" / "package.json"
     if not daemon_package.is_file():
-        raise SystemExit("Curated OpenDesign daemon unavailable: bundle is missing the daemon package manifest.")
+        raise ArtifactStoreError(
+            "artifact_integrity_mismatch",
+            "runtime_closure_verify",
+            "The protected runtime is missing a required daemon manifest",
+            differences=1,
+        )
     if not (bundle_dir / "app" / "apps" / "daemon" / "node_modules").is_dir():
-        raise SystemExit("Curated OpenDesign daemon unavailable: imported runtime dependencies are missing.")
+        raise ArtifactStoreError(
+            "artifact_integrity_mismatch",
+            "runtime_closure_verify",
+            "The protected runtime is missing its imported dependencies",
+            differences=1,
+        )
     try:
         command = runtime_command(bundle_dir, manifest)
     except OciStageError as error:
-        raise SystemExit(f"Curated OpenDesign daemon unavailable: {error}") from error
+        raise ArtifactStoreError(
+            "artifact_integrity_mismatch",
+            "runtime_closure_verify",
+            "The protected runtime closure is incomplete or unsafe",
+            differences=1,
+        ) from error
     return LaunchPlan(
         "oci-musl-runtime",
         command,

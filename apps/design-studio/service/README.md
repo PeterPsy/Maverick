@@ -70,6 +70,10 @@ Core prewarms asynchronously with per-key
 singleflight; its browser gate is `/api/maverick-ready` with a 12-second budget.
 A failed start tears down the complete confined process group and cannot reuse a
 relay, Future, ticket, or browser session.
+The background audit is fail-closed: a mismatch first invalidates the readiness
+marker and stops the Core-owned sidecar, then performs one cross-process-locked
+repair and a direct governed restart. Failure state and the next allowed audit
+time are persisted, so the 15-second scheduler tick cannot create a repair loop.
 
 The complete daemon/source runtime build remains under `fallback_build` only as
 a separately reviewed fallback. The primary artifact requires the verified OCI

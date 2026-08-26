@@ -1016,6 +1016,14 @@ Apps may orchestrate this capability after changing app-owned selection state,
 but cannot expand its process or browser-session scope. The core must remain
 unaware of app-specific runtime artifacts, data migrations, or rollback rules.
 
+The same owner-authenticated channel exposes an internal fail-closed stop used
+by governed maintenance: Core revokes the workspace/app browser authority before
+terminating the process group. It is not an app-facing process-control API. If a
+declared automatic repair succeeds but the following transactional startup
+fails, that startup is part of the same repair attempt; Core records a bounded
+backoff and cannot run the hook again on the next request. Concurrent callers
+join the in-flight repair/startup rather than creating another process or repair.
+
 App-owned backend, CLI, MCP, and reference entrypoints do not receive the
 sidecar listener, technical token, or sidecar filesystem. A sidecar may declare
 a separate synchronous `entrypoint_access` profile. The declaration names an

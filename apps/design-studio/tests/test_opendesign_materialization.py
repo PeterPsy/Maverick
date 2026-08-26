@@ -86,6 +86,31 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             with self.assertRaisesRegex(self.launcher.LauncherError, "declared artifact capability mount"):
                 self.launcher._store_root()
 
+    def test_missing_runtime_closure_is_classified_as_repairable_integrity_failure(self) -> None:
+        bundle_root = self.root / "protected-runtime"
+        daemon_root = bundle_root / "app/apps/daemon"
+        daemon_root.mkdir(parents=True)
+        binding = SimpleNamespace(bundle=SimpleNamespace(path=bundle_root))
+
+        with self.assertRaises(self.launcher.ArtifactStoreError) as missing_manifest:
+            self.launcher._resolve_launch_plan(binding, self._pinned_manifest())
+        self.assertEqual(missing_manifest.exception.code, "artifact_integrity_mismatch")
+        self.assertEqual(missing_manifest.exception.phase, "runtime_closure_verify")
+        self.assertEqual(missing_manifest.exception.differences, 1)
+
+        (daemon_root / "package.json").write_text("{}\n", encoding="utf-8")
+        with self.assertRaises(self.launcher.ArtifactStoreError) as missing_dependencies:
+            self.launcher._resolve_launch_plan(binding, self._pinned_manifest())
+        self.assertEqual(missing_dependencies.exception.code, "artifact_integrity_mismatch")
+        self.assertEqual(missing_dependencies.exception.phase, "runtime_closure_verify")
+        self.assertEqual(missing_dependencies.exception.differences, 1)
+
+        (daemon_root / "node_modules").mkdir()
+        with self.assertRaises(self.launcher.ArtifactStoreError) as missing_runtime:
+            self.launcher._resolve_launch_plan(binding, self._pinned_manifest())
+        self.assertEqual(missing_runtime.exception.code, "artifact_integrity_mismatch")
+        self.assertEqual(missing_runtime.exception.phase, "runtime_closure_verify")
+
     def test_launcher_finalizes_recovery_only_after_verified_readiness(self) -> None:
         plan = self.launcher.LaunchPlan("test", ["daemon"], self.root, "test")
         binding = SimpleNamespace()

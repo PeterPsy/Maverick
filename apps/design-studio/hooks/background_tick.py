@@ -11,6 +11,7 @@ import sys
 import time
 
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
+from core.api.sidecar_control import request_sidecar_control
 from core.apps.artifact_mounts import platform_artifact_store_root
 
 
@@ -20,13 +21,17 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_artifact import write_canonical_json  # noqa: E402
 from opendesign_artifact_operations import run_artifact_operation  # noqa: E402
+from opendesign_repair_state import failure_identity, write_repair_state  # noqa: E402
 
 
 AUDIT_INTERVAL_SECONDS = 6 * 60 * 60
+AUDIT_FAILURE_BACKOFF_SECONDS = 60 * 60
 
 
 def main() -> None:
     payload = read_entrypoint_payload()
+    data_root = Path(payload.data_root)
+    workspace_id = str(payload.workspace_id or "default")
     namespace = (
         platform_artifact_store_root(REPOSITORY_ROOT)
         / "design-studio"
@@ -48,25 +53,41 @@ def main() -> None:
             emit_json({"ok": True, "audit": {"status": "not_due"}})
             return
         _lower_io_and_cpu_priority()
-        result = run_artifact_operation(
-            "verify",
-            data_root=Path(payload.data_root),
-            workspace_id=str(payload.workspace_id or "default"),
-            audit_workers=_adaptive_audit_workers(),
-        )
-        marker_path.parent.mkdir(mode=0o750, exist_ok=True)
-        marker_path.parent.chmod(0o750)
-        write_canonical_json(
+        attempted_at = int(time.time() * 1000)
+        try:
+            result = run_artifact_operation(
+                "verify",
+                data_root=data_root,
+                workspace_id=workspace_id,
+                audit_workers=_adaptive_audit_workers(),
+            )
+        except Exception as audit_error:
+            _handle_failed_audit(
+                audit_error,
+                marker_path=marker_path,
+                data_root=data_root,
+                workspace_id=workspace_id,
+                attempted_at_epoch_ms=attempted_at,
+            )
+            return
+        _write_audit_marker(
             marker_path,
             {
-                "schema_version": "1",
+                "schema_version": "2",
+                "status": "passed",
+                "attempted_at_epoch_ms": attempted_at,
                 "verified_at_epoch_ms": int(time.time() * 1000),
+                "next_attempt_at_epoch_ms": attempted_at + AUDIT_INTERVAL_SECONDS * 1000,
                 "store_generation": result["store_generation"],
                 "runtime_count": len(result["audited_runtime"]),
                 "web_count": len(result["audited_web"]),
+                "auto_repair_requested": False,
+                "audit_error_code": None,
+                "audit_phase": None,
+                "recovery_error_code": None,
+                "recovery_phase": None,
             },
         )
-        marker_path.chmod(0o640)
         emit_json(
             {
                 "ok": True,
@@ -81,6 +102,176 @@ def main() -> None:
         os.close(descriptor)
 
 
+def _handle_failed_audit(
+    audit_error: BaseException,
+    *,
+    marker_path: Path,
+    data_root: Path,
+    workspace_id: str,
+    attempted_at_epoch_ms: int,
+) -> None:
+    audit_code, audit_phase = failure_identity(
+        audit_error,
+        default_code="artifact_integrity_mismatch",
+        default_phase="artifact_full_verify",
+    )
+    _invalidate_transactional_readiness(data_root)
+    _write_audit_marker(
+        marker_path,
+        {
+            "schema_version": "2",
+            "status": "repairing",
+            "attempted_at_epoch_ms": attempted_at_epoch_ms,
+            "verified_at_epoch_ms": None,
+            "next_attempt_at_epoch_ms": (
+                attempted_at_epoch_ms + AUDIT_FAILURE_BACKOFF_SECONDS * 1000
+            ),
+            "store_generation": None,
+            "runtime_count": 0,
+            "web_count": 0,
+            "auto_repair_requested": True,
+            "audit_error_code": audit_code,
+            "audit_phase": audit_phase,
+            "recovery_error_code": None,
+            "recovery_phase": None,
+        },
+    )
+    try:
+        recovery = _recover_failed_audit(
+            data_root=data_root,
+            workspace_id=workspace_id,
+        )
+    except Exception as recovery_error:
+        recovery_code, recovery_phase = failure_identity(recovery_error)
+        _write_audit_marker(
+            marker_path,
+            {
+                "schema_version": "2",
+                "status": "failed",
+                "attempted_at_epoch_ms": attempted_at_epoch_ms,
+                "verified_at_epoch_ms": None,
+                "next_attempt_at_epoch_ms": (
+                    attempted_at_epoch_ms + AUDIT_FAILURE_BACKOFF_SECONDS * 1000
+                ),
+                "store_generation": None,
+                "runtime_count": 0,
+                "web_count": 0,
+                "auto_repair_requested": True,
+                "audit_error_code": audit_code,
+                "audit_phase": audit_phase,
+                "recovery_error_code": recovery_code,
+                "recovery_phase": recovery_phase,
+            },
+        )
+        emit_json(
+            {
+                "ok": False,
+                "audit": {
+                    "status": "failed_closed",
+                    "error_code": recovery_code,
+                    "phase": recovery_phase,
+                    "retry_after_seconds": AUDIT_FAILURE_BACKOFF_SECONDS,
+                },
+            }
+        )
+        raise SystemExit(1) from None
+
+    verified_at = int(time.time() * 1000)
+    _write_audit_marker(
+        marker_path,
+        {
+            "schema_version": "2",
+            "status": "recovered",
+            "attempted_at_epoch_ms": attempted_at_epoch_ms,
+            "verified_at_epoch_ms": verified_at,
+            "next_attempt_at_epoch_ms": verified_at + AUDIT_INTERVAL_SECONDS * 1000,
+            "store_generation": recovery["store_generation"],
+            "runtime_count": recovery["runtime_count"],
+            "web_count": recovery["web_count"],
+            "auto_repair_requested": True,
+            "audit_error_code": audit_code,
+            "audit_phase": audit_phase,
+            "recovery_error_code": None,
+            "recovery_phase": None,
+        },
+    )
+    emit_json(
+        {
+            "ok": True,
+            "audit": {
+                "status": "recovered",
+                "runtime_count": recovery["runtime_count"],
+                "web_count": recovery["web_count"],
+            },
+        }
+    )
+
+
+def _recover_failed_audit(*, data_root: Path, workspace_id: str) -> dict[str, object]:
+    """Revoke readiness, stop the invalid daemon, repair once, and restart directly."""
+    write_repair_state(data_root, state="repairing")
+    try:
+        _invalidate_transactional_readiness(data_root)
+        request_sidecar_control(
+            REPOSITORY_ROOT,
+            operation="stop",
+            workspace_id=workspace_id,
+            app_id="design-studio",
+            timeout_seconds=10,
+        )
+        repair = run_artifact_operation(
+            "repair",
+            data_root=data_root,
+            workspace_id=workspace_id,
+            auto=True,
+        )
+        restarted = request_sidecar_control(
+            REPOSITORY_ROOT,
+            operation="restart",
+            workspace_id=workspace_id,
+            app_id="design-studio",
+            timeout_seconds=20,
+        )
+        readiness = restarted.get("readiness")
+        if (
+            repair.get("status") != "ready"
+            or restarted.get("status") != "ready"
+            or not isinstance(readiness, dict)
+            or readiness.get("ready") is not True
+        ):
+            raise RuntimeError("Governed background repair did not pass restart readiness")
+    except Exception as error:
+        code, phase = failure_identity(error)
+        write_repair_state(
+            data_root,
+            state="failed",
+            error_code=code,
+            phase=phase,
+        )
+        raise
+    write_repair_state(data_root, state="idle")
+    return {
+        "store_generation": repair["store_generation"],
+        "runtime_count": len(repair.get("retained_runtime_artifacts", [])),
+        "web_count": len(repair.get("retained_web_overlays", [])),
+    }
+
+
+def _invalidate_transactional_readiness(data_root: Path) -> None:
+    try:
+        (data_root / "opendesign" / "maverick-ready.json").unlink(missing_ok=True)
+    except OSError:
+        # The Core-owned stop remains the authoritative process gate.
+        pass
+
+
+def _write_audit_marker(path: Path, payload: dict[str, object]) -> None:
+    path.parent.mkdir(mode=0o750, exist_ok=True)
+    path.parent.chmod(0o750)
+    write_canonical_json(path, payload)
+    path.chmod(0o640)
+
+
 def _audit_due(path: Path) -> bool:
     if path.is_symlink():
         return True
@@ -88,8 +279,14 @@ def _audit_due(path: Path) -> bool:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return True
-    observed = payload.get("verified_at_epoch_ms") if isinstance(payload, dict) else None
-    return not isinstance(observed, int) or time.time() * 1000 - observed >= AUDIT_INTERVAL_SECONDS * 1000
+    if not isinstance(payload, dict):
+        return True
+    now = time.time() * 1000
+    next_attempt = payload.get("next_attempt_at_epoch_ms")
+    if isinstance(next_attempt, int):
+        return now >= next_attempt
+    observed = payload.get("verified_at_epoch_ms")
+    return not isinstance(observed, int) or now - observed >= AUDIT_INTERVAL_SECONDS * 1000
 
 
 def _under_pressure() -> bool:

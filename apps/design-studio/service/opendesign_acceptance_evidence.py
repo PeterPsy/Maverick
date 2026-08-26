@@ -122,6 +122,46 @@ def validate_execution(value: object, *, repository_root: Path) -> dict[str, obj
     return dict(value)
 
 
+def validate_migration_execution(
+    value: object,
+    *,
+    repository_root: Path,
+    parent_product_run_id: str,
+) -> dict[str, object]:
+    """Bind the real migration/rollback smoke to the same current-source product run."""
+    if not isinstance(value, dict) or value.get("schema_version") != "1":
+        raise ValueError("Migration evidence execution metadata is missing")
+    started = _timestamp(value.get("started_at"), "started_at")
+    completed = _timestamp(value.get("completed_at"), "completed_at")
+    duration_ms = _number(value.get("duration_ms"), "duration_ms")
+    run_id = value.get("run_id")
+    command = value.get("required_command")
+    if (
+        completed < started
+        or duration_ms <= 0
+        or abs(duration_ms - (completed - started).total_seconds() * 1000) > 2_000
+        or not isinstance(run_id, str)
+        or UUID.fullmatch(run_id) is None
+        or not isinstance(parent_product_run_id, str)
+        or UUID.fullmatch(parent_product_run_id) is None
+        or value.get("parent_product_run_id") != parent_product_run_id
+        or value.get("runner")
+        != "apps/design-studio/service/smoke_opendesign_migration.py"
+        or command
+        != [
+            "python3",
+            "apps/design-studio/service/smoke_opendesign_migration.py",
+            "--evidence-output",
+            "apps/design-studio/service/opendesign_migration_acceptance_0_16_1.json",
+            "--parent-product-run-id",
+            parent_product_run_id,
+        ]
+    ):
+        raise ValueError("Migration evidence execution metadata is invalid")
+    validate_source_attestation(value.get("source"), repository_root=repository_root)
+    return dict(value)
+
+
 def validate_launch_performance(value: object) -> dict[str, Any]:
     """Recompute every release SLO from raw samples instead of trusting passed flags."""
     if not isinstance(value, dict) or value.get("schema_version") != "2":

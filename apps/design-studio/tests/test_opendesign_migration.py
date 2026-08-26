@@ -473,7 +473,7 @@ class OpenDesignMigrationTests(unittest.TestCase):
     def test_real_migration_acceptance_binds_the_pinned_artifact_without_workspace_data(self) -> None:
         acceptance = json.loads(ACCEPTANCE_PATH.read_text(encoding="utf-8"))
         forward = acceptance["forward_fixture_migration"]
-        self.assertEqual(acceptance["schema_version"], "1")
+        self.assertEqual(acceptance["schema_version"], "2")
         self.assertEqual(forward["source"]["od_version"], "0.10.1")
         self.assertEqual(forward["target"]["artifact_sha256"], NEW_DIGEST)
         self.assertTrue(forward["target"]["real_materialized_daemon"])

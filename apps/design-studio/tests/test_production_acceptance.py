@@ -15,7 +15,11 @@ REPOSITORY_ROOT = APP_ROOT.parents[1]
 SERVICE_ROOT = APP_ROOT / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from opendesign_acceptance_evidence import validate_execution, validate_launch_performance  # noqa: E402
+from opendesign_acceptance_evidence import (  # noqa: E402
+    validate_execution,
+    validate_launch_performance,
+    validate_migration_execution,
+)
 PRODUCT_EVIDENCE = SERVICE_ROOT / "opendesign_product_acceptance_0_16_1.json"
 HOSTED_EVIDENCE = SERVICE_ROOT / "opendesign_hosted_acceptance_0_16_1.json"
 GLOBAL_ACCEPTANCE = SERVICE_ROOT / "opendesign_production_acceptance_0_16_1.json"
@@ -138,7 +142,13 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
 
     def test_migration_and_rollback_are_a_separate_real_gate(self) -> None:
         migration = _read_json(MIGRATION_EVIDENCE)
-        self.assertEqual(migration["schema_version"], "1")
+        self.assertEqual(migration["schema_version"], "2")
+        product = _read_json(PRODUCT_EVIDENCE)
+        validate_migration_execution(
+            migration.get("execution"),
+            repository_root=REPOSITORY_ROOT,
+            parent_product_run_id=product["execution"]["run_id"],
+        )
         self.assertIs(migration["workspace_data_migrated"], False)
         source = migration["forward_fixture_migration"]["source"]
         self.assertEqual(source["tree_sha256_before"], source["tree_sha256_after"])

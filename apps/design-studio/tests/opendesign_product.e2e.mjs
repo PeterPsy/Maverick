@@ -18,6 +18,7 @@ const artifactStoreRoot = process.env.MAVERICK_APP_ARTIFACT_STORE_ROOT
 process.env.MAVERICK_APP_ARTIFACT_STORE_ROOT = artifactStoreRoot;
 const serverFixture = path.join(scriptDir, 'fixtures', 'opendesign_product_server.py');
 const migrationSmoke = path.join(appRoot, 'service', 'smoke_opendesign_migration.py');
+const migrationEvidence = path.join(appRoot, 'service', 'opendesign_migration_acceptance_0_16_1.json');
 const acceptanceEvidenceHelper = path.join(appRoot, 'service', 'opendesign_acceptance_evidence.py');
 const python = process.env.MAVERICK_OPENDESIGN_E2E_PYTHON
   || path.join(repoRoot, '.venv', 'bin', 'python');
@@ -315,6 +316,9 @@ try {
   assert(networkProof.isolatedRequests > 0, 'Browser did not send requests to the isolated sidecar origin');
   assert(!networkProof.maverickCookieForwarded, 'A Maverick session cookie reached the sidecar origin');
   assert(!networkProof.browserBearerForwarded, 'A browser bearer reached the sidecar origin');
+  if (profile === 'release') {
+    await runMigrationSmoke({ evidencePath: migrationEvidence, parentRunId: runId });
+  }
 
   const evidence = buildEvidence({
     correlationA,
@@ -1090,8 +1094,14 @@ async function storageRead(page, workspaceRelativePath) {
 }
 
 
-async function runMigrationSmoke() {
-  const child = spawn(python, [migrationSmoke], {
+async function runMigrationSmoke({ evidencePath, parentRunId }) {
+  const child = spawn(python, [
+    migrationSmoke,
+    '--evidence-output',
+    evidencePath,
+    '--parent-product-run-id',
+    parentRunId,
+  ], {
     cwd: path.dirname(migrationSmoke),
     env: process.env,
     stdio: ['ignore', 'ignore', 'pipe'],

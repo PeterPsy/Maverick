@@ -11,6 +11,8 @@ from pathlib import Path
 import sqlite3
 import sys
 from tempfile import TemporaryDirectory
+import time
+from uuid import UUID, uuid4
 
 SERVICE_ROOT = Path(__file__).resolve().parent
 REPOSITORY_ROOT = SERVICE_ROOT.parents[2]
@@ -24,6 +26,7 @@ from opendesign_artifact import (
     write_canonical_json,
 )
 from opendesign_artifact_store import OpenDesignArtifactStore
+from opendesign_acceptance_evidence import build_source_attestation
 from opendesign_generation_control import load_generation_control, write_generation_control
 from opendesign_generation_model import GenerationControl, LaunchSelection
 from opendesign_migration import migrate_controlled_copy, rollback_controlled_copy
@@ -42,7 +45,18 @@ LEGACY_ID = "design_0123456789ab"
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-output", type=Path)
+    parser.add_argument("--parent-product-run-id")
     arguments = parser.parse_args()
+    started_at = datetime.now(tz=UTC)
+    started = time.monotonic()
+    parent_product_run_id = str(arguments.parent_product_run_id or "")
+    if arguments.evidence_output is not None:
+        try:
+            parsed_parent_run_id = UUID(parent_product_run_id)
+        except ValueError as error:
+            parser.error("--parent-product-run-id must be supplied with --evidence-output")
+        if parsed_parent_run_id.version != 4:
+            parser.error("--parent-product-run-id must be a UUIDv4")
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
     validate_bundle_manifest(manifest, require_artifact_digest=True)
     asset = selected_asset(manifest, require_artifact_digest=True)
@@ -223,11 +237,39 @@ def main() -> None:
             "real_rollback": rollback_evidence,
         }
         if arguments.evidence_output is not None:
-            write_canonical_json(arguments.evidence_output, _acceptance_evidence(result))
+            completed_at = datetime.now(tz=UTC)
+            write_canonical_json(
+                arguments.evidence_output,
+                _acceptance_evidence(
+                    result,
+                    execution={
+                        "schema_version": "1",
+                        "run_id": str(uuid4()),
+                        "parent_product_run_id": parent_product_run_id,
+                        "runner": "apps/design-studio/service/smoke_opendesign_migration.py",
+                        "required_command": [
+                            "python3",
+                            "apps/design-studio/service/smoke_opendesign_migration.py",
+                            "--evidence-output",
+                            "apps/design-studio/service/opendesign_migration_acceptance_0_16_1.json",
+                            "--parent-product-run-id",
+                            parent_product_run_id,
+                        ],
+                        "started_at": started_at.isoformat().replace("+00:00", "Z"),
+                        "completed_at": completed_at.isoformat().replace("+00:00", "Z"),
+                        "duration_ms": round((time.monotonic() - started) * 1000, 3),
+                        "source": build_source_attestation(REPOSITORY_ROOT),
+                    },
+                ),
+            )
         print(json.dumps(result, indent=2, sort_keys=True))
 
 
-def _acceptance_evidence(result: dict[str, object]) -> dict[str, object]:
+def _acceptance_evidence(
+    result: dict[str, object],
+    *,
+    execution: dict[str, object],
+) -> dict[str, object]:
     source = result["source"]
     target = result["target"]
     rollback = result["real_rollback"]
@@ -237,8 +279,9 @@ def _acceptance_evidence(result: dict[str, object]) -> dict[str, object]:
     if not isinstance(rollback_active, dict):
         raise SystemExit("OpenDesign rollback smoke produced malformed active selection")
     return {
-        "schema_version": "1",
+        "schema_version": "2",
         "executed_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+        "execution": execution,
         "forward_fixture_migration": {
             "api_import_read_back": "byte_identical",
             "legacy_mapping_sha256": result["mapping_sha256"],

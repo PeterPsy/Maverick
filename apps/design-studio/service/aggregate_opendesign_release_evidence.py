@@ -15,7 +15,11 @@ from benchmark_opendesign_change_to_live import (
 )
 from opendesign_artifact import read_bundle_manifest, selected_asset, sha256_file
 from opendesign_artifact_store import OpenDesignArtifactStore
-from opendesign_acceptance_evidence import validate_execution, validate_launch_performance
+from opendesign_acceptance_evidence import (
+    validate_execution,
+    validate_launch_performance,
+    validate_migration_execution,
+)
 from opendesign_supply_chain import read_json
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -151,7 +155,7 @@ def _validate_source_documents(value: object) -> dict[str, dict[str, str]]:
 
 def _migration_preservation_proofs(migration: object) -> tuple[bool, bool]:
     """Validate the stable, redaction-safe real migration evidence schema."""
-    if not isinstance(migration, dict) or migration.get("schema_version") != "1":
+    if not isinstance(migration, dict) or migration.get("schema_version") != "2":
         raise ValueError("migration/rollback smoke evidence did not pass independently")
     forward = migration.get("forward_fixture_migration")
     rollback = migration.get("rollback")
@@ -279,7 +283,12 @@ def main() -> int:
         web_digest=str(opendesign.get("web_overlay_sha256") or ""),
     )
     repository_root = Path(__file__).resolve().parents[3]
-    validate_execution(ui.get("execution"), repository_root=repository_root)
+    execution = validate_execution(ui.get("execution"), repository_root=repository_root)
+    validate_migration_execution(
+        migration.get("execution"),
+        repository_root=repository_root,
+        parent_product_run_id=str(execution["run_id"]),
+    )
     result = aggregate(
         ui,
         migration,

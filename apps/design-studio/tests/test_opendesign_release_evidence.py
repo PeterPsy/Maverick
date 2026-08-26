@@ -277,7 +277,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertIn(evidence["schema_version"], {"4", "5"})
+        self.assertEqual(evidence["schema_version"], "5")
         self.assertEqual(evidence["status"], "passed")
         self.assertEqual(evidence["scenario_count"], 14)
         self.assertTrue(evidence["rollback_gate_separate"])
@@ -386,7 +386,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
     @staticmethod
     def _migration() -> dict:
         return {
-            "schema_version": "1",
+            "schema_version": "2",
             "workspace_data_migrated": False,
             "forward_fixture_migration": {
                 "api_import_read_back": "byte_identical",

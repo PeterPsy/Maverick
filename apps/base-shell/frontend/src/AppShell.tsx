@@ -112,7 +112,7 @@ export function AppShell() {
   const persistedPinnedAppIdsRef = useRef(pinnedAppIds);
   const persistedPinnedAppsVersionRef = useRef(0);
   const shellLoadVersionRef = useRef(0);
-  const reconnectRevalidationRequiredRef = useRef(connectivity.onlineActionsBlocked);
+  const handledReconnectRevisionRef = useRef(connectivity.reconnectRevision);
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;
   const hasSettingsShortcut = Boolean(settingsShortcutApp);
@@ -352,17 +352,16 @@ export function AppShell() {
   }, []);
 
   useEffect(() => {
-    if (connectivity.onlineActionsBlocked) {
-      reconnectRevalidationRequiredRef.current = true;
+    if (
+      connectivity.status !== "online"
+      || connectivity.reconnectRevision <= handledReconnectRevisionRef.current
+    ) {
       return;
     }
-    if (connectivity.status !== "online" || !reconnectRevalidationRequiredRef.current) {
-      return;
-    }
-    reconnectRevalidationRequiredRef.current = false;
+    handledReconnectRevisionRef.current = connectivity.reconnectRevision;
     setSession(null);
     void loadShellState();
-  }, [connectivity.onlineActionsBlocked, connectivity.status]);
+  }, [connectivity.reconnectRevision, connectivity.status]);
 
   useEffect(() => {
     applyShellThemeToDocument(shellTheme);

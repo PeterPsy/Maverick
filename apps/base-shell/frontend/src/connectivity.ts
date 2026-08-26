@@ -8,6 +8,7 @@ export type MaverickConnectivityState = {
   freshness: MaverickFreshness;
   lastSuccessfulAt: string | null;
   onlineActionsBlocked: boolean;
+  reconnectRevision: number;
   source: "device" | "network";
   status: MaverickConnectionStatus;
   syncState: MaverickSyncState;
@@ -17,6 +18,7 @@ export const DEFAULT_MAVERICK_CONNECTIVITY_STATE: MaverickConnectivityState = {
   freshness: "unverified",
   lastSuccessfulAt: null,
   onlineActionsBlocked: false,
+  reconnectRevision: 0,
   source: "network",
   status: "online",
   syncState: "idle",
@@ -86,12 +88,13 @@ export async function verifyMaverickConnection(): Promise<boolean> {
 
 export function recordMaverickNetworkSuccess(at = new Date()): void {
   const timestamp = at.toISOString();
+  const reconnectRevision = state.reconnectRevision + (state.onlineActionsBlocked ? 1 : 0);
   try {
     window.localStorage.setItem(LAST_SUCCESS_STORAGE_KEY, timestamp);
   } catch {
     // Connectivity must not depend on persistent browser storage.
   }
-  state = deriveConnectivityState("online", timestamp, at.getTime());
+  state = deriveConnectivityState("online", timestamp, at.getTime(), false, reconnectRevision);
   emitChange();
 }
 
@@ -104,6 +107,7 @@ export function deriveConnectivityState(
   lastSuccessfulAt: string | null,
   now = Date.now(),
   onlineActionsBlocked = status === "offline",
+  reconnectRevision = 0,
 ): MaverickConnectivityState {
   const lastSuccessMs = lastSuccessfulAt ? Date.parse(lastSuccessfulAt) : Number.NaN;
   const hasValidTimestamp = Number.isFinite(lastSuccessMs) && lastSuccessMs <= now + MAX_CLOCK_SKEW_MS;
@@ -116,6 +120,7 @@ export function deriveConnectivityState(
     freshness,
     lastSuccessfulAt: hasValidTimestamp ? new Date(lastSuccessMs).toISOString() : null,
     onlineActionsBlocked,
+    reconnectRevision,
     source: status === "offline" || onlineActionsBlocked ? "device" : "network",
     status,
     syncState: status === "online" ? "idle" : status === "checking" ? "checking" : "offline",
@@ -142,7 +147,13 @@ function initialConnectivityState(): MaverickConnectivityState {
 
 function setConnectionStatus(status: MaverickConnectionStatus): void {
   const onlineActionsBlocked = status === "online" ? false : status === "offline" || state.onlineActionsBlocked;
-  state = deriveConnectivityState(status, state.lastSuccessfulAt, Date.now(), onlineActionsBlocked);
+  state = deriveConnectivityState(
+    status,
+    state.lastSuccessfulAt,
+    Date.now(),
+    onlineActionsBlocked,
+    state.reconnectRevision,
+  );
   emitChange();
 }
 

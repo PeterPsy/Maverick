@@ -43,4 +43,23 @@ describe("Maverick connectivity", () => {
     await Promise.resolve();
     expect(connectivity.getMaverickConnectivitySnapshot()).toMatchObject({ status: "online", onlineActionsBlocked: false, source: "network" });
   });
+
+  it("retains a monotonic reconnect revision across coalesced snapshots", async () => {
+    vi.resetModules();
+    const connectivity = await import("../src/connectivity");
+    connectivity.recordMaverickNetworkSuccess(new Date("2026-08-26T12:00:00Z"));
+    const initialRevision = connectivity.getMaverickConnectivitySnapshot().reconnectRevision;
+
+    connectivity.recordMaverickNetworkFailure();
+    connectivity.recordMaverickNetworkSuccess(new Date("2026-08-26T12:01:00Z"));
+
+    expect(connectivity.getMaverickConnectivitySnapshot()).toMatchObject({
+      onlineActionsBlocked: false,
+      reconnectRevision: initialRevision + 1,
+      status: "online",
+    });
+
+    connectivity.recordMaverickNetworkSuccess(new Date("2026-08-26T12:02:00Z"));
+    expect(connectivity.getMaverickConnectivitySnapshot().reconnectRevision).toBe(initialRevision + 1);
+  });
 });

@@ -158,7 +158,32 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
 
-  it("hides stale authenticated state until reconnect session revalidation completes", async () => {
+  it("revalidates shell state when offline and online snapshots are coalesced", async () => {
+    api.getSession.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.getSession).toHaveBeenCalledOnce();
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+
+    await act(async () => {
+      recordMaverickNetworkFailure();
+      recordMaverickNetworkSuccess(new Date("2026-08-26T12:01:30Z"));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.getSession).toHaveBeenCalledTimes(2);
+    expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("default");
+    expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
+  });
+
+  it("hides stale authenticated state until coalesced reconnect revalidation completes", async () => {
     await act(async () => {
       root.render(<AppShell />);
       await Promise.resolve();
@@ -166,14 +191,11 @@ describe("AppShell bootstrap", () => {
     });
     expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
 
-    await act(async () => {
-      recordMaverickNetworkFailure();
-      await Promise.resolve();
-    });
     let resolveSession: ((value: SessionPayload) => void) | undefined;
     api.getSession.mockReturnValueOnce(new Promise((resolve) => { resolveSession = resolve; }));
 
     await act(async () => {
+      recordMaverickNetworkFailure();
       recordMaverickNetworkSuccess(new Date("2026-08-26T12:02:00Z"));
       await Promise.resolve();
     });

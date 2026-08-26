@@ -18,7 +18,13 @@ from uuid import uuid4
 from core.apps.artifact_mounts import create_artifact_namespace, platform_artifact_store_root
 from core.api.sidecar_control import request_sidecar_control
 from core.shared.repository import discover_repository_root
-from opendesign_artifact import is_sha256, read_bundle_manifest, selected_asset, write_canonical_json
+from opendesign_artifact import (
+    ArtifactError,
+    is_sha256,
+    selected_asset,
+    sha256_file,
+    write_canonical_json,
+)
 from opendesign_artifact_audit import (
     fully_audited_runtime,
     fully_audited_web_overlay_for_any_runtime,
@@ -26,11 +32,16 @@ from opendesign_artifact_audit import (
 from opendesign_artifact_store import ArtifactStoreError, OpenDesignArtifactStore, StoredArtifact
 from opendesign_bootstrap import bootstrap_empty_generation
 from opendesign_generation_control import load_generation_control_metadata
+from opendesign_runtime_sources import (
+    RUNTIME_SOURCE_CATALOG_PATH,
+    RuntimeArtifactSource,
+    RuntimeSourceCatalog,
+    load_runtime_source_catalog,
+)
 from opendesign_web_overlay import VerifiedWebOverlay
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent
-MANIFEST_PATH = SERVICE_ROOT / "opendesign_bundle.json"
 SELECTION_PATH = SERVICE_ROOT / "opendesign_release_selection.json"
 TRUST_CONTRACT_PATH = SERVICE_ROOT / "opendesign_web_trust.json"
 APP_ID = "design-studio"
@@ -69,12 +80,19 @@ def run_artifact_operation(
 
     namespace = _namespace(repository, create=operation in {"repair", "provision", "gc"})
     store = OpenDesignArtifactStore(namespace)
-    manifest = read_bundle_manifest(MANIFEST_PATH)
+    runtime_sources = load_runtime_source_catalog()
+    manifest = runtime_sources.by_role["current"].manifest
     required = _required_artifacts(data_root, manifest=manifest)
+    _validate_required_runtime_sources(required, runtime_sources=runtime_sources)
     try:
         if operation in {"repair", "provision"}:
             with _repair_operation_lock(store):
-                result = _repair(store, required=required, manifest=manifest, data_root=data_root)
+                result = _repair(
+                    store,
+                    required=required,
+                    runtime_sources=runtime_sources,
+                    data_root=data_root,
+                )
         elif operation == "verify":
             result = _verify(store, required=required, max_workers=audit_workers)
         elif operation == "gc":
@@ -135,69 +153,39 @@ def _repair(
     store: OpenDesignArtifactStore,
     *,
     required: RequiredArtifacts,
-    manifest: dict[str, Any],
+    runtime_sources: RuntimeSourceCatalog,
     data_root: Path,
 ) -> dict[str, Any]:
-    asset = selected_asset(manifest, require_artifact_digest=True)
-    runtime_invalid_identity = _known_invalid_identity(store, kind="runtime", digest=required.current_runtime)
-    try:
-        if runtime_invalid_identity is not None:
-            raise ArtifactStoreError(
-                "artifact_integrity_mismatch",
-                "audited_repair_handoff",
-                "OpenDesign runtime was rejected by a prior full audit",
-            )
-        runtime = fully_audited_runtime(
-            store,
-            required.current_runtime,
-            file_manifest_sha256=str(asset["file_manifest_sha256"]),
-            opendesign_version=str(manifest["upstream"]["release_version"]),
-            upstream_commit=str(manifest["upstream"]["commit"]),
+    current_source = runtime_sources.source_for_digest(required.current_runtime)
+    if current_source is None:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "runtime_source_catalog",
+            "The current OpenDesign runtime has no exact materialization source",
         )
-        runtime_repaired = False
-    except ArtifactStoreError:
-        runtime_invalid_identity = runtime_invalid_identity or store.package_identity(
-            "runtime", required.current_runtime
-        )
-        runtime = store.publish_runtime(
-            SERVICE_ROOT / "artifacts",
-            manifest=manifest,
-            repair=True,
-            invalid_package_identity=runtime_invalid_identity,
-        )
-        runtime = fully_audited_runtime(
-            store,
-            required.current_runtime,
-            file_manifest_sha256=str(asset["file_manifest_sha256"]),
-            opendesign_version=str(manifest["upstream"]["release_version"]),
-            upstream_commit=str(manifest["upstream"]["commit"]),
-        )
-        _clear_invalid_marker(store, kind="runtime", digest=required.current_runtime)
-        runtime_repaired = True
-    if runtime.artifact_sha256 != required.current_runtime:
-        raise ArtifactStoreError("runtime_binding_invalid", "repair", "Published runtime differs from release selection")
+    runtime, runtime_repaired = _retain_or_repair_runtime(
+        store,
+        digest=required.current_runtime,
+        source=current_source,
+        required=True,
+    )
     retained_runtime: list[str] = [runtime.artifact_sha256]
+    repaired_runtime: list[str] = [runtime.artifact_sha256] if runtime_repaired else []
     required_runtime = {required.active_runtime, required.rollback_runtime}
     for digest in _unique((required.active_runtime, required.rollback_runtime, *required.optional_runtime)):
         if digest == required.current_runtime:
             continue
-        try:
-            fully_audited_runtime(
-                store,
-                digest,
-                file_manifest_sha256=None,
-                opendesign_version="0.16.1",
-                upstream_commit=None,
-            )
-        except ArtifactStoreError as error:
-            if digest in required_runtime:
-                raise ArtifactStoreError(
-                    "artifact_missing",
-                    "repair",
-                    "A declared active or rollback OpenDesign runtime is not retained in the protected store",
-                ) from error
+        retained, repaired = _retain_or_repair_runtime(
+            store,
+            digest=digest,
+            source=runtime_sources.source_for_digest(digest),
+            required=digest in required_runtime,
+        )
+        if retained is None:
             continue
         retained_runtime.append(digest)
+        if repaired:
+            repaired_runtime.append(digest)
     repaired_web: list[str] = []
     retained_web: list[str] = []
     runtime_candidates = _unique(
@@ -255,12 +243,91 @@ def _repair(
     return {
         "runtime_artifact_sha256": runtime.artifact_sha256,
         "runtime_repaired": runtime_repaired,
+        "repaired_runtime_artifacts": repaired_runtime,
         "retained_runtime_artifacts": retained_runtime,
         "web_overlay_sha256": required.fresh_web_overlay,
         "repaired_web_overlays": repaired_web,
         "retained_web_overlays": retained_web,
         "data_generation_bootstrapped": bootstrapped,
     }
+
+
+def _retain_or_repair_runtime(
+    store: OpenDesignArtifactStore,
+    *,
+    digest: str,
+    source: RuntimeArtifactSource | None,
+    required: bool,
+) -> tuple[StoredArtifact | None, bool]:
+    invalid_identity = _known_invalid_identity(store, kind="runtime", digest=digest)
+    try:
+        if invalid_identity is not None:
+            raise ArtifactStoreError(
+                "artifact_integrity_mismatch",
+                "audited_repair_handoff",
+                "OpenDesign runtime was rejected by a prior full audit",
+            )
+        stored = _fully_audited_runtime_source(store, digest=digest, source=source)
+        return stored, False
+    except ArtifactStoreError as error:
+        if source is None:
+            if required:
+                raise ArtifactStoreError(
+                    "artifact_missing",
+                    "repair_source_verify",
+                    "A required OpenDesign runtime has no pinned repair source",
+                ) from error
+            return None, False
+    invalid_identity = invalid_identity or store.package_identity("runtime", digest)
+    try:
+        artifact_directory = source.artifact_directory(SERVICE_ROOT / "artifacts")
+    except ArtifactError as error:
+        raise ArtifactStoreError(
+            "artifact_missing",
+            "repair_source_verify",
+            "The exact signed OpenDesign runtime repair source is unavailable",
+        ) from error
+    published = store.publish_runtime(
+        artifact_directory,
+        manifest=source.manifest,
+        repair=True,
+        invalid_package_identity=invalid_identity,
+        artifact_verifier=source.verify_artifact_directory,
+    )
+    if published.artifact_sha256 != digest:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "repair",
+            "Published runtime differs from its source-catalog digest",
+        )
+    stored = _fully_audited_runtime_source(store, digest=digest, source=source)
+    _clear_invalid_marker(store, kind="runtime", digest=digest)
+    return stored, True
+
+
+def _fully_audited_runtime_source(
+    store: OpenDesignArtifactStore,
+    *,
+    digest: str,
+    source: RuntimeArtifactSource | None,
+) -> StoredArtifact:
+    if source is None:
+        return fully_audited_runtime(
+            store,
+            digest,
+            file_manifest_sha256=None,
+            opendesign_version="0.16.1",
+            upstream_commit=None,
+        )
+    asset = selected_asset(source.manifest, require_artifact_digest=True)
+    return fully_audited_runtime(
+        store,
+        digest,
+        file_manifest_sha256=str(asset["file_manifest_sha256"]),
+        opendesign_version=str(source.manifest["upstream"]["release_version"]),
+        upstream_commit=str(source.manifest["upstream"]["commit"]),
+    )
+
 
 def _status(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> dict[str, Any]:
     runtime_states: dict[str, str] = {}
@@ -465,6 +532,25 @@ def _required_artifacts(data_root: Path, *, manifest: dict[str, Any]) -> Require
     )
 
 
+def _validate_required_runtime_sources(
+    required: RequiredArtifacts,
+    *,
+    runtime_sources: RuntimeSourceCatalog,
+) -> None:
+    if runtime_sources.by_role["current"].artifact_sha256 != required.current_runtime:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "runtime_source_catalog",
+            "The current runtime selection differs from its source catalog",
+        )
+    if runtime_sources.by_role["rollback"].artifact_sha256 != required.rollback_runtime:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "runtime_source_catalog",
+            "The rollback runtime selection differs from its source catalog",
+        )
+
+
 def _bootstrap_fresh_generation(data_root: Path, *, runtime: StoredArtifact, web: StoredArtifact) -> bool:
     generation_root = data_root / "opendesign"
     if (generation_root / "control.json").exists() or (generation_root / "control.json").is_symlink():
@@ -514,9 +600,10 @@ def _read_selection() -> dict[str, Any]:
         "active_web_overlay_sha256",
         "rollback_runtime_artifact_sha256",
         "rollback_web_overlay_sha256",
+        "runtime_source_catalog_sha256",
         "quarantine_retention_days",
     }
-    if not isinstance(payload, dict) or set(payload) != expected or payload.get("schema_version") != "2":
+    if not isinstance(payload, dict) or set(payload) != expected or payload.get("schema_version") != "3":
         raise ArtifactStoreError("runtime_binding_invalid", "release_selection", "Release selection schema is invalid")
     if any(
         not is_sha256(payload.get(field))
@@ -524,11 +611,26 @@ def _read_selection() -> dict[str, Any]:
             "active_web_overlay_sha256",
             "rollback_runtime_artifact_sha256",
             "rollback_web_overlay_sha256",
+            "runtime_source_catalog_sha256",
         )
     ):
         raise ArtifactStoreError("runtime_binding_invalid", "release_selection", "Release selection digest is invalid")
     if payload["active_web_overlay_sha256"] == payload["rollback_web_overlay_sha256"]:
         raise ArtifactStoreError("runtime_binding_invalid", "release_selection", "Release overlays must be distinct")
+    try:
+        catalog_sha256 = sha256_file(RUNTIME_SOURCE_CATALOG_PATH)
+    except ArtifactError as error:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "runtime_source_catalog",
+            "The runtime source catalog is unavailable",
+        ) from error
+    if payload["runtime_source_catalog_sha256"] != catalog_sha256:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "runtime_source_catalog",
+            "The release selection does not bind the runtime source catalog",
+        )
     retention = payload["quarantine_retention_days"]
     if isinstance(retention, bool) or not isinstance(retention, int) or not 1 <= retention <= 365:
         raise ArtifactStoreError("runtime_binding_invalid", "release_selection", "Release retention is invalid")

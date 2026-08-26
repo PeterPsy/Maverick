@@ -41,6 +41,7 @@ NAMESPACE_MARKER = ".maverick-artifact-namespace.json"
 RECEIPT_SCHEMA_VERSION = "1"
 VERIFIER_VERSION = "opendesign-store-v1"
 FailureInjector = Callable[[str], None]
+ArtifactVerifier = Callable[[dict[str, Any], Path], dict[str, Any]]
 
 
 class ArtifactStoreError(ArtifactError):
@@ -91,10 +92,12 @@ class OpenDesignArtifactStore:
         repair: bool = False,
         invalid_package_identity: tuple[int, int] | None = None,
         failure_injector: FailureInjector | None = None,
+        artifact_verifier: ArtifactVerifier | None = None,
     ) -> StoredArtifact:
         """Materialize, fully audit, receipt, fsync, and atomically publish runtime."""
         try:
-            asset = verify_artifact_set(manifest, artifact_directory)
+            verifier = artifact_verifier or verify_artifact_set
+            asset = verifier(manifest, artifact_directory)
             artifact_sha256 = str(asset["sha256"])
             file_manifest_sha256 = str(asset["file_manifest_sha256"])
             archive_path = artifact_directory / str(asset["file"])

@@ -66,10 +66,12 @@ run on publication, activation, repair, release certification, and background
 maintenance. Provision, repair, and activation audit already-present packages
 too; a valid fast receipt never waives those lifecycle gates. Active and
 rollback generations are selected explicitly;
-`opendesign_release_selection.json` schema v2 binds the rollback web overlay
-to its retained runtime digest so a fresh install cannot advertise a partial
-or incompatible rollback pair. Unreferenced entries are never used as a
-fallback.
+`opendesign_release_selection.json` schema v3 binds both the rollback pair and
+the SHA-256 of `opendesign_runtime_sources.json`. That catalog in turn binds
+the current and rollback runtime digests to distinct, committed manifests and
+verification profiles. A fresh install therefore materializes and fully audits
+both exact runtime sources instead of assuming that the rollback is already in
+the store. Unreferenced entries are never used as a fallback.
 
 Each immutable web overlay carries a file-level manifest, archive digest,
 runtime/upstream compatibility, lockfile and toolchain digests, CycloneDX SBOM,
@@ -103,6 +105,16 @@ python3 apps/design-studio/service/bootstrap_opendesign_generation.py \
   --data-root /path/to/new-empty-design-studio-data/opendesign
 python3 apps/design-studio/service/smoke_opendesign_sidecar.py
 ```
+
+The ignored deployment payload has a strict layout. The current signed OCI
+derivation remains directly under `service/artifacts/`; the independently
+retained rollback set is under
+`service/artifacts/runtime/<rollback-runtime-sha256>/`. Web overlay payloads
+remain under `service/artifacts/open-design-web/<overlay-sha256>/`. The
+materializer verifies the catalog-bound manifest, provenance signature and all
+asset digests for each runtime, publishes both into the protected namespace,
+and performs a full post-publication audit of each digest. Missing rollback
+payload is an installation failure, never a request to use a newer store entry.
 
 For the one-time v1 rollout, pass the currently active v1 runtime digest once
 with `--compatible-runtime-artifact-sha256`; the canonical overlay will then be

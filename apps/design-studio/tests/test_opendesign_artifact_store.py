@@ -72,7 +72,7 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
 
         required = _required_artifacts(self.root / "fresh-data", manifest=manifest)
 
-        self.assertEqual(selection["schema_version"], "2")
+        self.assertEqual(selection["schema_version"], "3")
         self.assertEqual(
             required.rollback_runtime,
             selection["rollback_runtime_artifact_sha256"],
@@ -86,10 +86,11 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
         with patch(
             "opendesign_artifact_operations._read_selection",
             return_value={
-                "schema_version": "2",
+                "schema_version": "3",
                 "active_web_overlay_sha256": "a" * 64,
                 "rollback_runtime_artifact_sha256": current,
                 "rollback_web_overlay_sha256": "b" * 64,
+                "runtime_source_catalog_sha256": "c" * 64,
                 "quarantine_retention_days": 14,
             },
         ):

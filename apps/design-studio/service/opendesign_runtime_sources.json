@@ -1,0 +1,21 @@
+{
+  "schema_version": "1",
+  "sources": [
+    {
+      "role": "current",
+      "artifact_sha256": "6997f3ab7800c31c027bb1cdd9c9f7634e638b39577c74632eee3b0ce440c5fe",
+      "manifest": "opendesign_bundle.json",
+      "manifest_sha256": "4059f6618335c7cd41a4a0f434a591d0b194896284fb1aa437d5cb48fc836180",
+      "source_subdirectory": ".",
+      "verifier_profile": "current-v2"
+    },
+    {
+      "role": "rollback",
+      "artifact_sha256": "e56a2144e23941e020bf059385f62627be43324d316de32425abd15d8ddc76ef",
+      "manifest": "opendesign_bundle_rollback_0_16_1.json",
+      "manifest_sha256": "ad0cd31d79af7f659f1ea7b16d6d785d59f9e97757e713b9b524dd0d3d461824",
+      "source_subdirectory": "runtime/e56a2144e23941e020bf059385f62627be43324d316de32425abd15d8ddc76ef",
+      "verifier_profile": "transactional-v1"
+    }
+  ]
+}

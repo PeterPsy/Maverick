@@ -394,8 +394,17 @@ def _ed25519_scalar_mult(point: tuple[int, int], scalar: int) -> tuple[int, int]
     return result
 
 
-def verify_artifact_set(manifest: dict[str, Any], artifact_directory: Path) -> dict[str, Any]:
-    validate_bundle_manifest(manifest, require_artifact_digest=True)
+def verify_artifact_set(
+    manifest: dict[str, Any],
+    artifact_directory: Path,
+    *,
+    verifier_profile: str = "current-v2",
+) -> dict[str, Any]:
+    validate_bundle_manifest(
+        manifest,
+        require_artifact_digest=True,
+        verifier_profile=verifier_profile,
+    )
     if artifact_directory.is_symlink() or not artifact_directory.is_dir():
         raise ArtifactError("OpenDesign artifact directory must be a real directory")
     asset = selected_asset(manifest, require_artifact_digest=True)

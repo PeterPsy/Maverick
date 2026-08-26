@@ -217,6 +217,12 @@ class OpenDesignArtifactLifecycleAuditTests(unittest.TestCase):
         manifest = {
             "upstream": {"release_version": "0.16.1", "commit": "e" * 40},
         }
+        runtime_sources = SimpleNamespace(
+            source_for_digest=lambda digest: SimpleNamespace(
+                manifest=manifest,
+                artifact_sha256=digest,
+            ),
+        )
         store = Mock(spec=OpenDesignArtifactStore)
         store.fast_web_overlay.return_value = _web(WEB_ACTIVE, RUNTIME_ACTIVE)
 
@@ -248,7 +254,7 @@ class OpenDesignArtifactLifecycleAuditTests(unittest.TestCase):
             result = _repair(
                 store,
                 required=required,
-                manifest=manifest,
+                runtime_sources=runtime_sources,
                 data_root=Path("/data/design-studio"),
             )
 

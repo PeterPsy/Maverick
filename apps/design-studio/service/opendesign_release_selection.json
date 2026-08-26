@@ -1,7 +1,8 @@
 {
-  "schema_version": "2",
+  "schema_version": "3",
   "active_web_overlay_sha256": "76465d47b848595d0144ca93461b898f63a83603d4d7fcf10e4c008474369aad",
-  "rollback_runtime_artifact_sha256": "eb9b91cf7a4348bea16936d101051958a5883749581f0f818eaf6d79d357adc2",
-  "rollback_web_overlay_sha256": "0823d046389b72f180427cae205d8f13d5e4da141adbaa2035689007aa197cd2",
+  "rollback_runtime_artifact_sha256": "e56a2144e23941e020bf059385f62627be43324d316de32425abd15d8ddc76ef",
+  "rollback_web_overlay_sha256": "c8f647c0a85575427834400e108a96728fa109f34a6f14e6ea0e1cad19310b74",
+  "runtime_source_catalog_sha256": "13e8601c960b3ef491650339c937d298e5cb17b4ae1a452487da1e91ce0b56ae",
   "quarantine_retention_days": 14
 }

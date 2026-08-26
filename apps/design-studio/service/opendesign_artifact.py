@@ -22,6 +22,31 @@ ARTIFACT_DIGEST_FIELDS = {
     "signature": "signature_sha256",
     "public_key": "public_key_sha256",
 }
+_BOUNDARY_ENVIRONMENT_BY_VERIFIER_PROFILE = {
+    "current-v2": [
+        "OD_ACTIVATION_ID",
+        "OD_DATA_GENERATION",
+        "OD_MAVERICK_READY_MARKER",
+        "OD_MAVERICK_DEFER_PLUGIN_CATALOG",
+        "OD_MAVERICK_STARTUP_NONCE",
+        "OD_REQUIRE_API_TOKEN_ON_LOOPBACK",
+        "OD_RUNTIME_ARTIFACT_SHA256",
+        "OD_STATIC_DIR",
+        "OD_STATIC_REGISTRY_ROOT",
+        "OD_WEB_OVERLAY_SHA256",
+    ],
+    "transactional-v1": [
+        "OD_ACTIVATION_ID",
+        "OD_DATA_GENERATION",
+        "OD_MAVERICK_READY_MARKER",
+        "OD_MAVERICK_STARTUP_NONCE",
+        "OD_REQUIRE_API_TOKEN_ON_LOOPBACK",
+        "OD_RUNTIME_ARTIFACT_SHA256",
+        "OD_STATIC_DIR",
+        "OD_STATIC_REGISTRY_ROOT",
+        "OD_WEB_OVERLAY_SHA256",
+    ],
+}
 
 
 class ArtifactError(RuntimeError):
@@ -38,7 +63,12 @@ def read_bundle_manifest(path: Path) -> dict[str, Any]:
     return payload
 
 
-def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_digest: bool) -> None:
+def validate_bundle_manifest(
+    manifest: dict[str, Any],
+    *,
+    require_artifact_digest: bool,
+    verifier_profile: str = "current-v2",
+) -> None:
     expected_top_level = {
         "schema_version",
         "upstream",
@@ -125,18 +155,10 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
         raise ArtifactError("OpenDesign boundary patch path is not authorized")
     if required_string(boundary, "pre_sha256") != "61c966b4a3a99e7098e37a943436e8b5d52563d1bace24a0e398b200ac0135e8":
         raise ArtifactError("OpenDesign boundary patch preimage is not authorized")
-    if boundary.get("required_environment") != [
-        "OD_ACTIVATION_ID",
-        "OD_DATA_GENERATION",
-        "OD_MAVERICK_READY_MARKER",
-        "OD_MAVERICK_DEFER_PLUGIN_CATALOG",
-        "OD_MAVERICK_STARTUP_NONCE",
-        "OD_REQUIRE_API_TOKEN_ON_LOOPBACK",
-        "OD_RUNTIME_ARTIFACT_SHA256",
-        "OD_STATIC_DIR",
-        "OD_STATIC_REGISTRY_ROOT",
-        "OD_WEB_OVERLAY_SHA256",
-    ]:
+    expected_environment = _BOUNDARY_ENVIRONMENT_BY_VERIFIER_PROFILE.get(verifier_profile)
+    if expected_environment is None:
+        raise ArtifactError("OpenDesign bundle verifier profile is unsupported")
+    if boundary.get("required_environment") != expected_environment:
         raise ArtifactError("OpenDesign boundary patch environment is not authorized")
     post_sha256 = boundary.get("post_sha256")
     if require_artifact_digest and not is_sha256(post_sha256):

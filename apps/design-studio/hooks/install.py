@@ -30,7 +30,9 @@ def main() -> None:
             "status": provisioned["status"],
             "store_generation": provisioned["store_generation"],
             "runtime_artifact_sha256": provisioned["runtime_artifact_sha256"],
+            "retained_runtime_artifacts": provisioned["retained_runtime_artifacts"],
             "web_overlay_sha256": provisioned["web_overlay_sha256"],
+            "retained_web_overlays": provisioned["retained_web_overlays"],
         }
     emit_json(result)
 

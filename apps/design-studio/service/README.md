@@ -35,6 +35,16 @@ python3 apps/design-studio/service/import_opendesign_oci.py \
 python3 apps/design-studio/service/materialize_opendesign.py
 ```
 
+`opendesign_runtime_sources.json` is the release-bound source catalog. Its raw
+SHA-256 is pinned by schema-v3 `opendesign_release_selection.json`; each entry
+then pins one role, runtime digest, committed manifest digest, payload location,
+and verifier profile. The current signed set is read from `artifacts/`, while
+the retained transactional rollback is read from
+`artifacts/runtime/<rollback-runtime-sha256>/`. The materializer refuses a
+missing source and publishes plus fully audits both roles, so a clean platform
+store does not depend on an out-of-band pre-existing rollback package. Repair
+uses the same exact source binding and never substitutes another generation.
+
 Import is fail-closed for agent runs. It requires a live
 `MAVERICK_RUNTIME_SESSION_ID` in its process ancestry. Each command runs in a
 new process group; loss of the runtime attachment or termination stops the whole
@@ -100,11 +110,12 @@ per-file prefix or construct a retry framework.
 The generated artifact and its external file manifest, CycloneDX SBOM, license
 inventory, NOTICE, signed provenance, signature, and public key stay under
 ignored `service/artifacts/`. The committed manifest pins every digest and the
-artifact size. `materialize_opendesign.py` verifies the complete signed set and
-atomically publishes it into the platform artifact namespace outside the
-source tree. An invalid digest generation is moved to retained quarantine and
-replaced from staging; it is never overwritten or repaired file-by-file. The
-launcher uses the receipt fast path for the exact active
+artifact size. The catalog-bound rollback manifest pins the equivalent retained
+set independently. `materialize_opendesign.py` verifies both complete signed
+sets and atomically publishes them into the platform artifact namespace outside
+the source tree. An invalid digest generation is moved to retained quarantine
+and replaced from staging; it is never overwritten or repaired file-by-file.
+The launcher uses the receipt fast path for the exact active
 runtime/overlay/version/data selection.
 
 Web overlays have their own archive and manifest-v2 file/mode inventory, compatible runtime

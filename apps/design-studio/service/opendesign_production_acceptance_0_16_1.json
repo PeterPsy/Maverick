@@ -402,6 +402,10 @@
         {
           "kind": "test",
           "ref": "apps/design-studio/tests/test_opendesign_health.py"
+        },
+        {
+          "kind": "test",
+          "ref": "apps/design-studio/tests/test_opendesign_acceptance_evidence.py"
         }
       ]
     },

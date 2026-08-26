@@ -18,6 +18,7 @@ const artifactStoreRoot = process.env.MAVERICK_APP_ARTIFACT_STORE_ROOT
 process.env.MAVERICK_APP_ARTIFACT_STORE_ROOT = artifactStoreRoot;
 const serverFixture = path.join(scriptDir, 'fixtures', 'opendesign_product_server.py');
 const migrationSmoke = path.join(appRoot, 'service', 'smoke_opendesign_migration.py');
+const acceptanceEvidenceHelper = path.join(appRoot, 'service', 'opendesign_acceptance_evidence.py');
 const python = process.env.MAVERICK_OPENDESIGN_E2E_PYTHON
   || path.join(repoRoot, '.venv', 'bin', 'python');
 const bundleContract = JSON.parse(await readFile(path.join(appRoot, 'service', 'opendesign_bundle.json'), 'utf8'));
@@ -44,6 +45,8 @@ process.env.PLAYWRIGHT_BROWSERS_PATH ||= process.env.MAVERICK_PLAYWRIGHT_BROWSER
 const { chromium } = await import('playwright');
 let server = null;
 let browser = null;
+const runId = crypto.randomUUID();
+const runStartedAtEpochMs = Date.now();
 
 
 class ProfileComplete extends Error {
@@ -126,6 +129,7 @@ try {
         }),
       ],
       canonicalEntity: { od_project_id: projectA.projectId, od_run_id: '' },
+      execution: await productExecutionEvidence(),
     }));
   }
   const uploaded = await platformRequest(page, '/api/workspace-files/uploads', {
@@ -226,6 +230,7 @@ try {
       profile,
       scenarios,
       canonicalEntity: { od_project_id: projectA.projectId, od_run_id: successful.runId },
+      execution: await productExecutionEvidence(),
     }));
   }
 
@@ -234,7 +239,8 @@ try {
   const coreRestarts = [];
   let bootstrapCountBeforeRestart = networkProof.bootstrapPosts;
   for (let iteration = 0; iteration < 10; iteration += 1) {
-    await page.goto(`${platformOrigin}/health`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${platformOrigin}/app/storage`, { waitUntil: 'domcontentloaded' });
+    await waitForShellWidgetFrame(page, 'Storage viewport');
     await delay(100);
     const startedAt = performance.now();
     await stopServer(server);
@@ -243,8 +249,9 @@ try {
     const coreReadyAt = server.wp10CoreReadyAt;
     const readiness = await waitForTransactionalReadiness(page);
     const transactionalReadyAt = performance.now();
-    await page.goto(`${platformOrigin}/app/design-studio`, { waitUntil: 'domcontentloaded' });
-    sidecar = await waitForSidecarFrame(page, '', networkProof, true);
+    const interfaceStartedAt = performance.now();
+    await openDesignStudioFromShell(page);
+    sidecar = await waitForUsableOpenDesign(page, networkProof);
     const browserReadyAt = performance.now();
     const daemonReadyMs = Number(readiness.body?.opendesign?.runtime?.timings_ms?.daemon_ready_ms);
     assert(Number.isFinite(daemonReadyMs) && daemonReadyMs > 0, 'Core restart omitted daemon readiness timing');
@@ -258,7 +265,7 @@ try {
       core_boot_ms: rounded(coreReadyAt - server.wp10StartedAt),
       prewarm_after_core_health_ms: rounded(transactionalReadyAt - coreReadyAt),
       interface_after_core_health_ms: rounded(browserReadyAt - coreReadyAt),
-      interface_after_transactional_ready_ms: rounded(browserReadyAt - transactionalReadyAt),
+      interface_after_transactional_ready_ms: rounded(browserReadyAt - interfaceStartedAt),
       resources,
     });
     assert(networkProof.bootstrapPosts > bootstrapCountBeforeRestart, 'Restart did not mint a fresh one-shot browser session');
@@ -317,6 +324,7 @@ try {
     successful,
     profile,
     performanceEvidence,
+    execution: await productExecutionEvidence(),
   });
   if (evidenceOutputPath) {
     await mkdir(path.dirname(evidenceOutputPath), { recursive: true });
@@ -622,6 +630,36 @@ async function waitForShellWidgetFrame(page, title) {
 }
 
 
+async function openDesignStudioFromShell(page) {
+  const shortcut = page.getByRole('button', { name: /^Design Studio(?:\.|$)/ }).first();
+  await shortcut.waitFor({ state: 'visible', timeout: 10_000 });
+  await shortcut.click();
+}
+
+
+async function waitForUsableOpenDesign(page, networkProof, excludedFrame = null) {
+  const wrapper = await waitForShellWidgetFrame(page, 'Design Studio viewport');
+  const sidecar = await waitForSidecarFrame(page, '', networkProof, true, excludedFrame);
+  await wrapper.locator('.design-studio-host[data-phase="ready"]').waitFor({
+    state: 'visible',
+    timeout: 10_000,
+  });
+  await Promise.any([
+    sidecar.locator('[data-testid="maverick-project-view"]').waitFor({
+      state: 'visible',
+      timeout: 10_000,
+    }),
+    wrapper.locator('.design-studio-empty button').waitFor({
+      state: 'visible',
+      timeout: 10_000,
+    }),
+  ]).catch(() => {
+    throw new Error('OpenDesign signaled ready without a usable project or empty-state surface');
+  });
+  return sidecar;
+}
+
+
 async function createRun(frame, project, message) {
   const suffix = crypto.randomUUID();
   const response = await frameRequest(frame, '/api/runs', {
@@ -791,7 +829,7 @@ async function benchmarkWarmTickets(page, count) {
     instances.add(String(launch.body?.sidecar_instance_id || ''));
   }
   assert(instances.size === 1 && !instances.has(''), 'Warm ticket benchmark remounted or lost the sidecar instance');
-  return { ...distribution(durations), same_sidecar_instance: true };
+  return { ...measuredDistribution(durations), same_sidecar_instance: true };
 }
 
 
@@ -811,8 +849,7 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
     const startedAt = performance.now();
     await wrapper.goto(wrapperUrl, { waitUntil: 'domcontentloaded' });
     const wrapperReadyAt = performance.now();
-    const frame = await waitForSidecarFrame(page, '', networkProof, true, previousSidecar);
-    await frame.locator('body').waitFor({ state: 'visible', timeout: 5_000 });
+    const frame = await waitForUsableOpenDesign(page, networkProof, previousSidecar);
     const finishedAt = performance.now();
     durations.push(rounded(finishedAt - startedAt));
     wrapperDurations.push(rounded(wrapperReadyAt - startedAt));
@@ -823,18 +860,16 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
     frameTransferBytes.push(framePerformance.transfer_bytes);
     await delay(300);
   }
-  const interfaceDistribution = distribution(frameDurations);
+  const interfaceDistribution = measuredDistribution(durations);
   return {
-    // The app-owned first-paint clock starts when the wrapper document is
-    // mounted. Keep Core/shell document serving visible, but do not charge it
-    // twice to the Design Studio interface SLO.
     ...interfaceDistribution,
-    full_wrapper_remount: distribution(durations),
-    wrapper_dom_content_loaded: distribution(wrapperDurations),
-    sidecar_frame_ready: interfaceDistribution,
-    sidecar_navigation: distribution(frameNavigationDurations),
-    sidecar_response: distribution(frameResponseDurations),
-    sidecar_resource_transfer_bytes: distribution(frameTransferBytes),
+    measurement_scope: 'wrapper_navigation_to_transactional_ui_ready',
+    full_wrapper_remount: measuredDistribution(durations),
+    wrapper_dom_content_loaded: measuredDistribution(wrapperDurations),
+    sidecar_frame_ready: measuredDistribution(frameDurations),
+    sidecar_navigation: measuredDistribution(frameNavigationDurations),
+    sidecar_response: measuredDistribution(frameResponseDurations),
+    sidecar_resource_transfer_bytes: measuredDistribution(frameTransferBytes),
   };
 }
 
@@ -921,9 +956,15 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     cold.count === 10 && cold.p95_ms <= 4_000 && cold.max_ms <= 8_000,
     `Cold transactional readiness SLO failed: ${diagnostic}`,
   );
+  assert(
+    interfaceAfterTransactionalReady.count === 10
+      && interfaceAfterTransactionalReady.p95_ms <= 1_500
+      && interfaceAfterTransactionalReady.p99_ms <= 2_500,
+    `Cold interface SLO failed: ${diagnostic}`,
+  );
   const resourceSamples = coreRestarts.map((sample) => sample.resources);
   return {
-    schema_version: '1',
+    schema_version: '2',
     warm_browser_ticket: warmTickets,
     warm_interface: warmOpenings,
     cold_maverick_ready: cold,
@@ -931,7 +972,10 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     full_core_restart: fullRestart,
     core_boot: coreBoot,
     prewarm_after_core_health: prewarmAfterCoreHealth,
-    interface_after_transactional_ready: interfaceAfterTransactionalReady,
+    cold_interface: {
+      ...interfaceAfterTransactionalReady,
+      measurement_scope: 'prewarmed_shell_action_to_transactional_ui_ready',
+    },
     core_restart_count: coreRestarts.length,
     resources: {
       cpu_ticks_max: Math.max(...resourceSamples.map((sample) => sample.cpu_ticks)),
@@ -956,6 +1000,11 @@ function distribution(samples) {
     p99_ms: rounded(percentile(99)),
     max_ms: rounded(values.at(-1)),
   };
+}
+
+
+function measuredDistribution(samples) {
+  return { ...distribution(samples), samples_ms: samples.map(rounded) };
 }
 
 
@@ -1025,7 +1074,7 @@ async function runMigrationSmoke() {
 }
 
 
-function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful, profile, performanceEvidence }) {
+function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful, profile, performanceEvidence, execution }) {
   const scenarios = [
     ['login_open', 'Login and open Design Studio', correlationA, { isolated_origin: true, ready_endpoint: true }],
     ['create_project_ui', 'Create and open a project from the Maverick sidebar', correlationA, {
@@ -1055,6 +1104,7 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
     profile,
     scenarios,
     performanceEvidence,
+    execution,
     canonicalEntity: {
       od_project_id: projectA.projectId,
       od_run_id: successful.runId,
@@ -1088,9 +1138,9 @@ function scenario(id, name, proof, correlation = null) {
 }
 
 
-function buildProfileEvidence({ profile, scenarios, canonicalEntity, performanceEvidence = null }) {
+function buildProfileEvidence({ profile, scenarios, canonicalEntity, performanceEvidence = null, execution }) {
   return {
-    schema_version: '1',
+    schema_version: '2',
     gate: `design-studio-e2e-${profile}`,
     profile,
     status: 'passed',
@@ -1115,6 +1165,7 @@ function buildProfileEvidence({ profile, scenarios, canonicalEntity, performance
     },
     canonical_entity: canonicalEntity,
     scenarios,
+    execution,
     ...(performanceEvidence ? { performance: performanceEvidence } : {}),
     redaction: {
       full_prompt_recorded: false,
@@ -1123,6 +1174,63 @@ function buildProfileEvidence({ profile, scenarios, canonicalEntity, performance
       host_path_recorded: false,
     },
   };
+}
+
+
+async function productExecutionEvidence() {
+  const completedAtEpochMs = Date.now();
+  const source = await acceptanceSourceAttestation();
+  if (profile === 'release') {
+    assert(source.working_tree_clean === true, 'Release evidence requires committed product inputs');
+  }
+  return {
+    schema_version: '1',
+    run_id: runId,
+    runner: 'apps/design-studio/tests/opendesign_product.e2e.mjs',
+    profile,
+    started_at: new Date(runStartedAtEpochMs).toISOString(),
+    completed_at: new Date(completedAtEpochMs).toISOString(),
+    duration_ms: completedAtEpochMs - runStartedAtEpochMs,
+    required_command: [
+      'npm',
+      'run',
+      'test:e2e',
+      '--prefix',
+      'apps/design-studio',
+      '--',
+      '--evidence-output',
+      'apps/design-studio/service/opendesign_product_acceptance_0_16_1.json',
+    ],
+    source,
+  };
+}
+
+
+async function acceptanceSourceAttestation() {
+  const child = spawn(python, [
+    acceptanceEvidenceHelper,
+    'source-attestation',
+    '--repository-root',
+    repoRoot,
+  ], {
+    cwd: repoRoot,
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  let diagnostic = '';
+  child.stdout.on('data', (chunk) => { output += String(chunk); });
+  child.stderr.on('data', (chunk) => { diagnostic = `${diagnostic}${String(chunk)}`.slice(-4_096); });
+  const code = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (status) => resolve(status));
+  });
+  if (code !== 0) {
+    throw new Error(`Acceptance source attestation failed: ${redactedDiagnostic(diagnostic)}`);
+  }
+  const source = JSON.parse(output);
+  assert(source && typeof source === 'object', 'Acceptance source attestation is invalid');
+  return source;
 }
 
 

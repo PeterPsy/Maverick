@@ -51,9 +51,15 @@ class ReleaseEvidenceTests(unittest.TestCase):
         benchmark = self._benchmark()
 
         provenance = self._provenance()
-        result = aggregate(ui, migration, benchmark, release_provenance=provenance)
+        result = aggregate(
+            ui,
+            migration,
+            benchmark,
+            release_provenance=provenance,
+            source_documents=self._documents(),
+        )
 
-        self.assertEqual(result["schema_version"], "4")
+        self.assertEqual(result["schema_version"], "5")
         self.assertEqual(result["scenario_count"], 14)
         self.assertTrue(result["rollback_gate_separate"])
         self.assertEqual(result["scenarios"][-1]["id"], "upgrade_rollback")
@@ -64,7 +70,13 @@ class ReleaseEvidenceTests(unittest.TestCase):
 
         ui["scenarios"][4]["status"] = "failed"
         with self.assertRaisesRegex(ValueError, "canonical passed scenarios"):
-            aggregate(ui, migration, benchmark, release_provenance=provenance)
+            aggregate(
+                ui,
+                migration,
+                benchmark,
+                release_provenance=provenance,
+                source_documents=self._documents(),
+            )
 
     def test_aggregator_rejects_arbitrary_duplicate_scenarios_and_false_rollback_proofs(self) -> None:
         scenarios = [
@@ -106,6 +118,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 migration,
                 self._benchmark(),
                 release_provenance=self._provenance(),
+                source_documents=self._documents(),
             )
 
         duplicated = copy.deepcopy(ui)
@@ -116,6 +129,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 migration,
                 self._benchmark(),
                 release_provenance=self._provenance(),
+                source_documents=self._documents(),
             )
 
         rejected_source = copy.deepcopy(migration)
@@ -126,6 +140,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 rejected_source,
                 self._benchmark(),
                 release_provenance=self._provenance(),
+                source_documents=self._documents(),
             )
         rejected_rollback = copy.deepcopy(migration)
         rejected_rollback["rollback"]["forward_generation_preserved"] = False
@@ -135,6 +150,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 rejected_rollback,
                 self._benchmark(),
                 release_provenance=self._provenance(),
+                source_documents=self._documents(),
             )
 
     def test_aggregator_rejects_signed_overlay_inputs_from_an_older_patch_series(self) -> None:
@@ -170,7 +186,67 @@ class ReleaseEvidenceTests(unittest.TestCase):
         stale["web_patch_sha256"]["web-build"] = "9" * 64
 
         with self.assertRaisesRegex(ValueError, "current patch series"):
-            aggregate(ui, migration, self._benchmark(), release_provenance=stale)
+            aggregate(
+                ui,
+                migration,
+                self._benchmark(),
+                release_provenance=stale,
+                source_documents=self._documents(),
+            )
+
+    def test_aggregator_recomputes_samples_and_gates_the_complete_interface(self) -> None:
+        ui = {
+            "profile": "release",
+            "performance": self._performance(),
+            "status": "passed",
+            "opendesign": {
+                "runtime_artifact_sha256": "a" * 64,
+                "web_overlay_sha256": "b" * 64,
+            },
+            "scenarios": [
+                {"id": identifier, "status": "passed"}
+                for identifier in (
+                    "login_open",
+                    "create_project_ui",
+                    "storage_import",
+                    "runtime_start",
+                    "incremental_sse",
+                    "generated_preview",
+                    "cancel_long_run",
+                    "storage_export",
+                    "restart_reload",
+                    "deep_link",
+                    "workspace_isolation",
+                    "forbidden_routes",
+                    "secret_boundary",
+                )
+            ],
+        }
+        arguments = {
+            "migration": self._migration(),
+            "benchmark": self._benchmark(),
+            "release_provenance": self._provenance(),
+            "source_documents": self._documents(),
+        }
+
+        tampered = copy.deepcopy(ui)
+        tampered["performance"]["warm_browser_ticket"]["p95_ms"] = 1
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            aggregate(tampered, **arguments)
+
+        excluded_wrapper = copy.deepcopy(ui)
+        excluded_wrapper["performance"]["warm_interface"]["full_wrapper_remount"]["p95_ms"] = 500
+        with self.assertRaisesRegex(ValueError, "does not match|excludes"):
+            aggregate(excluded_wrapper, **arguments)
+
+        slow_cold_interface = copy.deepcopy(ui)
+        for sample in slow_cold_interface["performance"]["samples"]:
+            sample["interface_after_transactional_ready_ms"] = 2_600
+        slow_cold_interface["performance"]["cold_interface"].update(
+            {"p50_ms": 2_600, "p95_ms": 2_600, "p99_ms": 2_600, "max_ms": 2_600}
+        )
+        with self.assertRaisesRegex(ValueError, "SLOs did not pass"):
+            aggregate(slow_cold_interface, **arguments)
 
     def test_committed_change_to_live_benchmark_proves_a_real_uncached_patch_build(self) -> None:
         evidence = json.loads(
@@ -201,7 +277,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(evidence["schema_version"], "4")
+        self.assertIn(evidence["schema_version"], {"4", "5"})
         self.assertEqual(evidence["status"], "passed")
         self.assertEqual(evidence["scenario_count"], 14)
         self.assertTrue(evidence["rollback_gate_separate"])
@@ -248,13 +324,43 @@ class ReleaseEvidenceTests(unittest.TestCase):
 
     @staticmethod
     def _performance() -> dict:
-        distribution = {"count": 30, "p50_ms": 100, "p95_ms": 200, "p99_ms": 250, "max_ms": 260}
+        warm_samples = [100.0] * 27 + [200.0, 250.0, 260.0]
+        distribution = {
+            "count": 30,
+            "p50_ms": 100,
+            "p95_ms": 250,
+            "p99_ms": 260,
+            "max_ms": 260,
+            "samples_ms": warm_samples,
+        }
         cold = {"count": 10, "p50_ms": 1000, "p95_ms": 2000, "p99_ms": 2000, "max_ms": 2000}
+        restart_samples = [
+            {
+                "iteration": index + 1,
+                "cold_maverick_ready_ms": 1_000 if index < 9 else 2_000,
+                "interface_after_transactional_ready_ms": 500 if index < 9 else 1_000,
+                "resources": {"rss_kib": 100, "process_count": 2},
+            }
+            for index in range(10)
+        ]
+        warm_interface = {
+            **distribution,
+            "measurement_scope": "wrapper_navigation_to_transactional_ui_ready",
+            "full_wrapper_remount": dict(distribution),
+        }
         return {
-            "schema_version": "1",
-            "warm_browser_ticket": dict(distribution),
-            "warm_interface": dict(distribution),
+            "schema_version": "2",
+            "warm_browser_ticket": {**distribution, "same_sidecar_instance": True},
+            "warm_interface": warm_interface,
             "cold_maverick_ready": cold,
+            "cold_interface": {
+                "count": 10,
+                "p50_ms": 500,
+                "p95_ms": 1000,
+                "p99_ms": 1000,
+                "max_ms": 1000,
+                "measurement_scope": "prewarmed_shell_action_to_transactional_ui_ready",
+            },
             "daemon_internal_ready": cold,
             "core_restart_count": 10,
             "resources": {
@@ -263,8 +369,18 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 "disk_read_bytes_max": 0,
                 "process_count_max": 2,
             },
-            "samples": [{"iteration": index + 1} for index in range(10)],
+            "samples": restart_samples,
             "targets_met": True,
+        }
+
+    @staticmethod
+    def _documents() -> dict[str, dict[str, str]]:
+        return {
+            name: {
+                "path": f"apps/design-studio/service/{name}.json",
+                "sha256": character * 64,
+            }
+            for name, character in (("ui", "1"), ("migration", "2"), ("benchmark", "3"))
         }
 
     @staticmethod

@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = APP_ROOT.parents[1]
 SERVICE_ROOT = APP_ROOT / "service"
+sys.path.insert(0, str(SERVICE_ROOT))
+
+from opendesign_acceptance_evidence import validate_execution, validate_launch_performance  # noqa: E402
 PRODUCT_EVIDENCE = SERVICE_ROOT / "opendesign_product_acceptance_0_16_1.json"
 HOSTED_EVIDENCE = SERVICE_ROOT / "opendesign_hosted_acceptance_0_16_1.json"
 GLOBAL_ACCEPTANCE = SERVICE_ROOT / "opendesign_production_acceptance_0_16_1.json"
@@ -47,6 +53,7 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
     def test_product_evidence_covers_real_pinned_path_and_all_scenarios(self) -> None:
         evidence = _read_json(PRODUCT_EVIDENCE)
 
+        self.assertEqual(evidence["schema_version"], "2")
         self.assertEqual(evidence["gate"], "design-studio-e2e-release")
         self.assertEqual(evidence["profile"], "release")
         self.assertEqual(evidence["status"], "passed")
@@ -101,7 +108,8 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertNotEqual(canceled["correlation"]["od_run_id"], evidence["canonical_entity"]["od_run_id"])
         self.assertTrue(canceled["proof"]["repeated_cancel_safe"])
 
-        performance = evidence["performance"]
+        validate_execution(evidence.get("execution"), repository_root=REPOSITORY_ROOT)
+        performance = validate_launch_performance(evidence.get("performance"))
         self.assertIs(performance["targets_met"], True)
         self.assertEqual(performance["warm_browser_ticket"]["count"], 30)
         self.assertLessEqual(performance["warm_browser_ticket"]["p95_ms"], 300)
@@ -109,9 +117,20 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertEqual(performance["warm_interface"]["count"], 30)
         self.assertLessEqual(performance["warm_interface"]["p95_ms"], 1500)
         self.assertLessEqual(performance["warm_interface"]["p99_ms"], 2500)
+        self.assertEqual(
+            performance["warm_interface"]["measurement_scope"],
+            "wrapper_navigation_to_transactional_ui_ready",
+        )
+        self.assertEqual(
+            performance["warm_interface"]["samples_ms"],
+            performance["warm_interface"]["full_wrapper_remount"]["samples_ms"],
+        )
         self.assertEqual(performance["cold_maverick_ready"]["count"], 10)
         self.assertLessEqual(performance["cold_maverick_ready"]["p95_ms"], 4000)
         self.assertLessEqual(performance["cold_maverick_ready"]["max_ms"], 8000)
+        self.assertEqual(performance["cold_interface"]["count"], 10)
+        self.assertLessEqual(performance["cold_interface"]["p95_ms"], 1500)
+        self.assertLessEqual(performance["cold_interface"]["p99_ms"], 2500)
         self.assertEqual(performance["core_restart_count"], 10)
         self.assertEqual(len(performance["samples"]), 10)
         self.assertGreater(performance["resources"]["rss_kib_max"], 0)
@@ -134,11 +153,20 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         )
 
         release = _read_json(RELEASE_EVIDENCE)
-        self.assertEqual(release["schema_version"], "4")
+        self.assertEqual(release["schema_version"], "5")
         self.assertEqual(release["gate"], "design-studio-opendesign-release")
         self.assertEqual(release["scenario_count"], 14)
         self.assertEqual(release["scenarios"][-1]["id"], "upgrade_rollback")
         self.assertTrue(release["rollback_gate_separate"])
+        expected_sources = {
+            "ui": PRODUCT_EVIDENCE,
+            "migration": MIGRATION_EVIDENCE,
+            "benchmark": SERVICE_ROOT / "opendesign_change_to_live_benchmark_0_16_1.json",
+        }
+        for name, source_path in expected_sources.items():
+            binding = release["sources"][name]
+            self.assertEqual(binding["path"], source_path.relative_to(REPOSITORY_ROOT).as_posix())
+            self.assertEqual(binding["sha256"], _sha256_file(source_path))
 
     def test_product_evidence_is_redaction_safe(self) -> None:
         evidence = _read_json(PRODUCT_EVIDENCE)
@@ -202,9 +230,44 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
                 self.assertFalse(Path(reference).is_absolute(), reference)
                 self.assertTrue((REPOSITORY_ROOT / reference).is_file(), reference)
 
+    def test_declared_python_gates_execute_against_current_sources(self) -> None:
+        acceptance = _read_json(GLOBAL_ACCEPTANCE)
+        modules = sorted(
+            {
+                _module_name(str(item["ref"]))
+                for criterion in acceptance["criteria"]
+                for item in criterion["evidence"]
+                if item.get("kind") == "test"
+                and str(item.get("ref") or "").endswith(".py")
+                and str(item.get("ref") or "") != "apps/design-studio/tests/test_production_acceptance.py"
+            }
+        )
+        self.assertGreaterEqual(len(modules), 20)
+        completed = subprocess.run(
+            [sys.executable, "-m", "unittest", *modules],
+            cwd=REPOSITORY_ROOT,
+            text=True,
+            capture_output=True,
+            timeout=900,
+            check=False,
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            (completed.stderr or completed.stdout)[-8_000:],
+        )
+
 
 def _read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _module_name(relative_path: str) -> str:
+    return relative_path.removesuffix(".py").replace("/", ".")
 
 
 if __name__ == "__main__":

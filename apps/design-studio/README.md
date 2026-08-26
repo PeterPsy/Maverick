@@ -474,7 +474,7 @@ artifact into the granted project root. It is not an in-process runtime mock.
 npm run test:e2e:quick --prefix apps/design-studio
 npm run test:e2e:affected --prefix apps/design-studio
 npm run test:e2e:release --prefix apps/design-studio -- \
-  --evidence-output /owned/evidence/opendesign-ui-release.json
+  --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
 python3 -m unittest \
   apps/design-studio/tests/test_opendesign_dev_apply_integration.py
 npm run test:e2e:migration --prefix apps/design-studio \
@@ -525,10 +525,23 @@ and workspace-isolation scenarios, every source/forward preservation proof, and
 the independent rollback result. Before emitting `passed`, it verifies the
 selected signed overlay and matches its upstream commit, lockfile digest,
 runtime compatibility, and both web patch digests to the current bundle,
-supply-chain inventory, and `patches/series.json`. The schema-3
-`service/opendesign_release_acceptance_0_16_1.json` remains redaction-safe
-historical evidence but predates this series binding; a new real release run
-must replace it with schema 4 before it is current release evidence. Each UI
+supply-chain inventory, and `patches/series.json`.
+
+Release performance is recomputed from the raw samples in schema 2 evidence.
+Warm interface time covers the complete wrapper navigation through the trusted
+`maverick.opendesign.ready` bridge message and usable project view; it no longer
+excludes wrapper DOM loading. After each real Core restart, Chromium keeps an
+already-open shell, waits for the declared prewarm, and measures the first user
+action through that same transactional UI-ready boundary. Both warm and cold
+interface distributions are gated at P95 1.5 seconds and P99 2.5 seconds.
+Ticket and `/api/maverick-ready` budgets remain independently gated.
+
+The UI evidence records a UUID, ordered UTC start/completion timestamps, the
+canonical command, raw samples, and a SHA-256 inventory of all current Core,
+base-shell, Storage, and Design Studio inputs. Production acceptance recomputes
+that inventory and executes every referenced Python gate; a `passed` flag or an
+existing filename is not sufficient. The schema-5 release aggregate also binds
+the exact UI, migration, and benchmark documents by path and SHA-256. Each UI
 scenario carries the full app/runtime correlation join, while the separate
 rollback scenario carries only bounded migration proof.
 The 24 global criteria and stable evidence references are tracked in

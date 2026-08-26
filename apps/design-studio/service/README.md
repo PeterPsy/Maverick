@@ -453,7 +453,7 @@ Run and validate the committed redaction-safe records with:
 npm run test:e2e:quick --prefix apps/design-studio
 npm run test:e2e:affected --prefix apps/design-studio
 npm run test:e2e:release --prefix apps/design-studio -- \
-  --evidence-output /owned/evidence/opendesign-ui-release.json
+  --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
 npm run test:e2e:migration --prefix apps/design-studio \
   > /owned/evidence/opendesign-migration.json
 python3 apps/design-studio/service/aggregate_opendesign_release_evidence.py \
@@ -471,14 +471,19 @@ fourteenth scenario to `aggregate_opendesign_release_evidence.py`. The
 aggregator requires the exact canonical UI id set, restart/workspace isolation,
 all rollback preservation proofs, and a signature-verified overlay whose
 upstream, lockfile, runtime compatibility, and `web-build`/`web-react` digests
-match the current reviewed contracts. It emits schema 4. The committed schema-3
-`opendesign_release_acceptance_0_16_1.json` is redaction-safe historical
-evidence, but a new complete run is required before it can be replaced by
-current series-bound evidence; it contains no prompt, cookie, bearer, provider
-payload, environment, host path, or secret value.
+match the current reviewed contracts. The UI gate records raw samples and gates
+the complete warm wrapper remount plus the first usable interface after cold
+Core prewarm at P95 1.5 seconds and P99 2.5 seconds. Its schema-2 execution
+record is content-bound to the current Core, base-shell, Storage, and Design
+Studio inputs. The aggregator independently recomputes every percentile and
+emits schema 5 with SHA-256 bindings for its UI, migration, and benchmark input
+documents. The records contain no prompt, cookie, bearer, provider payload,
+environment, host path, or secret value.
 `opendesign_production_acceptance_0_16_1.json` maps every global acceptance
-criterion to a stable test, proof, or canonical document. Neither record
-authorizes migration of an existing workspace data root.
+criterion to a stable test, proof, or canonical document. The production test
+recomputes the UI source attestation and executes every referenced Python test;
+it does not accept `passed` booleans or file presence as execution proof.
+Neither record authorizes migration of an existing workspace data root.
 
 The deployed-origin gate is separate: `opendesign_hosted_acceptance_0_16_1.json`
 is emitted by `tests/opendesign_hosted_smoke.e2e.mjs` against the configured

@@ -15,6 +15,7 @@ from benchmark_opendesign_change_to_live import (
 )
 from opendesign_artifact import read_bundle_manifest, selected_asset, sha256_file
 from opendesign_artifact_store import OpenDesignArtifactStore
+from opendesign_acceptance_evidence import validate_execution, validate_launch_performance
 from opendesign_supply_chain import read_json
 
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -41,6 +42,7 @@ def aggregate(
     benchmark: dict,
     *,
     release_provenance: dict,
+    source_documents: dict[str, dict[str, str]],
 ) -> dict:
     scenarios = ui.get("scenarios")
     identifiers = [scenario.get("id") for scenario in scenarios] if isinstance(scenarios, list) else []
@@ -101,8 +103,9 @@ def aggregate(
     identifiers = [item.get("id") for item in aggregated]
     if len(aggregated) != 14 or len(set(identifiers)) != 14:
         raise ValueError("aggregated release scenario inventory is incomplete or duplicated")
+    documents = _validate_source_documents(source_documents)
     return {
-        "schema_version": "4",
+        "schema_version": "5",
         "gate": "design-studio-opendesign-release",
         "status": "passed",
         "opendesign": opendesign,
@@ -115,46 +118,35 @@ def aggregate(
         "launch_performance": performance,
         "scenarios": aggregated,
         "sources": {
-            "ui_gate": ui.get("gate"),
-            "migration_gate": "design-studio-migration-rollback-smoke",
-            "benchmark_gate": benchmark.get("gate"),
+            "ui": {**documents["ui"], "gate": ui.get("gate")},
+            "migration": {
+                **documents["migration"],
+                "gate": "design-studio-migration-rollback-smoke",
+            },
+            "benchmark": {**documents["benchmark"], "gate": benchmark.get("gate")},
         },
     }
 
 
 def _validate_launch_performance(value: object) -> dict:
-    if not isinstance(value, dict) or value.get("schema_version") != "1" or value.get("targets_met") is not True:
-        raise ValueError("release launch performance evidence is missing or invalid")
-    warm_ticket = value.get("warm_browser_ticket")
-    warm_interface = value.get("warm_interface")
-    cold = value.get("cold_maverick_ready")
-    resources = value.get("resources")
-    if not all(isinstance(item, dict) for item in (warm_ticket, warm_interface, cold, resources)):
-        raise ValueError("release launch performance evidence is missing or invalid")
-    if (
-        warm_ticket.get("count") != 30
-        or _metric(warm_ticket.get("p95_ms")) > 300
-        or _metric(warm_ticket.get("p99_ms")) > 750
-        or warm_interface.get("count") != 30
-        or _metric(warm_interface.get("p95_ms")) > 1500
-        or _metric(warm_interface.get("p99_ms")) > 2500
-        or cold.get("count") != 10
-        or _metric(cold.get("p95_ms")) > 4000
-        or _metric(cold.get("max_ms")) > 8000
-        or value.get("core_restart_count") != 10
-        or not isinstance(value.get("samples"), list)
-        or len(value["samples"]) != 10
-        or not 0 < _metric(resources.get("rss_kib_max")) < float("inf")
-        or not 0 < _metric(resources.get("process_count_max")) < float("inf")
-    ):
-        raise ValueError("release launch performance SLOs did not pass")
-    return value
+    return validate_launch_performance(value)
 
 
-def _metric(value: object) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return float("inf")
-    return float(value)
+def _validate_source_documents(value: object) -> dict[str, dict[str, str]]:
+    if not isinstance(value, dict) or set(value) != {"ui", "migration", "benchmark"}:
+        raise ValueError("release source document bindings are incomplete")
+    result: dict[str, dict[str, str]] = {}
+    for name, document in value.items():
+        if (
+            not isinstance(document, dict)
+            or not isinstance(document.get("path"), str)
+            or Path(document["path"]).is_absolute()
+            or not isinstance(document.get("sha256"), str)
+            or SHA256.fullmatch(document["sha256"]) is None
+        ):
+            raise ValueError("release source document binding is invalid")
+        result[name] = {"path": document["path"], "sha256": document["sha256"]}
+    return result
 
 
 def _migration_preservation_proofs(migration: object) -> tuple[bool, bool]:
@@ -286,11 +278,32 @@ def main() -> int:
         runtime_digest=str(opendesign.get("runtime_artifact_sha256") or ""),
         web_digest=str(opendesign.get("web_overlay_sha256") or ""),
     )
-    result = aggregate(ui, migration, benchmark, release_provenance=provenance)
+    repository_root = Path(__file__).resolve().parents[3]
+    validate_execution(ui.get("execution"), repository_root=repository_root)
+    result = aggregate(
+        ui,
+        migration,
+        benchmark,
+        release_provenance=provenance,
+        source_documents={
+            "ui": _source_document(arguments.ui, repository_root=repository_root),
+            "migration": _source_document(arguments.migration, repository_root=repository_root),
+            "benchmark": _source_document(arguments.benchmark, repository_root=repository_root),
+        },
+    )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(result, sort_keys=True))
     return 0
+
+
+def _source_document(path: Path, *, repository_root: Path) -> dict[str, str]:
+    resolved = path.resolve()
+    try:
+        relative = resolved.relative_to(repository_root.resolve()).as_posix()
+    except ValueError as error:
+        raise ValueError("release evidence sources must be inside the repository") from error
+    return {"path": relative, "sha256": sha256_file(resolved)}
 
 
 if __name__ == "__main__":

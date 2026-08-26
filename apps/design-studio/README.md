@@ -463,12 +463,52 @@ digests without a source-cache hit, activates through readiness and the scoped
 browser-remount event, restores the exact initial selection, and records phase
 timings. The canonical ceiling is 180 seconds.
 
-Production-path acceptance runs the official materialized OCI daemon, the
-real Maverick ASGI host and sidecar broker, the real Storage app, and headless
+### Verification and release-certification policy
+
+Design Studio verification is risk-tiered. The complete production acceptance
+is a scheduled release-certification gate, not a per-commit or ordinary merge
+gate:
+
+1. Routine changes run the smallest relevant unit, frontend, and focused
+   integration tests. UI changes normally add `test:e2e:quick`.
+2. Changes that cross app boundaries or touch the hosted wrapper run
+   `test:e2e:affected` and the integration gates selected by the changed paths.
+3. A designated release candidate or a critical-path change runs the complete
+   release profile, migration/rollback, change-to-live benchmark, hosted smoke
+   when a deployed HTTPS installation is in scope, and production acceptance.
+
+Critical-path changes include artifact identity, signature or materialization;
+protected-store and sandbox mounts; repair or crash recovery; sidecar lifecycle
+or concurrency; transactional readiness and browser-ticket security; data
+generation, migration or rollback; release cutover; and the SLO measurement
+path. The reviewer may elevate another change when its concrete risk reaches
+one of those boundaries.
+
+Full release certification requires a quiet, controlled host because it
+restarts Core and sidecars and records performance distributions. It must be
+scheduled as an explicit release operation rather than forcing unrelated agents
+to stop for normal development closure. Lower-tier verification should use
+isolated worktrees and bounded tests wherever possible.
+
+Source-bound evidence becoming stale after a later Core, base-shell, Storage,
+or Design Studio change does not by itself prove a regression and does not
+block a routine commit or merge. It means only that the previous evidence must
+not be described as certification of the newer source revision. A routine
+closure may record that fact as a waiver together with the focused tests and
+live health checks that were actually completed. Waivers are not permitted for
+a designated production release/cutover or for an unmitigated critical-path
+change.
+
+When tier 3 is selected, production-path acceptance runs the official
+materialized OCI daemon, the real Maverick ASGI host and sidecar broker, the
+real Storage app, and headless
 Chromium against two temporary workspaces. The only provider substitute is an
 external statically compiled process that implements the Codex app-server
 protocol; it crosses the normal sandbox/process boundary and writes the test
 artifact into the granted project root. It is not an in-process runtime mock.
+
+The commands below are the tier-3 release-certification workflow. The quick and
+affected profiles may be run independently for the lower tiers.
 
 ```bash
 npm run test:e2e:quick --prefix apps/design-studio

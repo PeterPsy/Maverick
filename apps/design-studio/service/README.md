@@ -436,7 +436,24 @@ candidate through restart/readiness/remount, restores the exact initial
 selection, and records separate timings. Static performance booleans are not
 accepted as release evidence.
 
-The release path is exercised by `tests/opendesign_product.e2e.mjs`. It creates
+Verification follows the risk-tiered policy in `../README.md`. Focused tests and
+the quick or affected browser profiles are the normal development and pre-merge
+gates. The complete benchmark, release browser profile, migration/rollback,
+hosted smoke, and production acceptance are reserved for a designated release
+candidate or a change to artifact trust, protected mounts, recovery, sidecar
+lifecycle, transactional readiness, browser-ticket security, data generation,
+cutover, or the measured SLO path.
+
+The full gate must run as a scheduled release operation on a quiet host; it is
+not a per-commit requirement and must not routinely force unrelated agents to
+stop. Evidence that no longer matches a later source inventory is historical,
+not proof of a failure. Normal development may close with an explicit freshness
+waiver and the focused results actually obtained, but must not claim that the
+older record certifies the newer revision. Release/cutover certification and
+unmitigated critical-path changes do not permit that waiver.
+
+When full release certification is selected, the release path is exercised by
+`tests/opendesign_product.e2e.mjs`. It creates
 a new temporary Maverick installation with two synthetic workspaces, boots the
 materialized official `ghcr.io/nexu-io/od:0.16.1` closure through the declared
 launcher, and drives the isolated UI with real Chromium. Core, the Unix sidecar
@@ -447,7 +464,7 @@ without entering the OpenDesign or core process and without logging prompts.
 The browser asserts the isolated `/api/maverick-ready` response before onboarding and
 again after the core/sidecar restart, then verifies the persisted project.
 
-Run and validate the committed redaction-safe records with:
+Run and validate the committed redaction-safe release records with:
 
 ```bash
 npm run test:e2e:quick --prefix apps/design-studio

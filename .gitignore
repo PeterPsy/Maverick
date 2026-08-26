@@ -27,6 +27,7 @@ tmp/cleanup-backups/
 logs/
 data/control-plane/
 data/bootstrap-secrets/
+data/recovery-snapshots/
 tmp/
 output/
 runtime/

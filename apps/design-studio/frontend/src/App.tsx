@@ -34,6 +34,7 @@ export function App() {
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef(0);
   const startupFailureRef = useRef<SidecarDiagnostic | null>(null);
+  const transactionalReadyRef = useRef(false);
   const stopStartupStatusPollRef = useRef<() => void>(() => undefined);
   const navigationRef = useRef<OpenDesignNavigation>(initialNavigation());
   const settingsRequestRef = useRef(initialSettingsRequest());
@@ -153,6 +154,9 @@ export function App() {
         return;
       }
       if (event.data.type === "maverick.opendesign.ready" && event.data.version === 1) {
+        if (transactionalReadyRef.current) {
+          return;
+        }
         stopStartupStatusPollRef.current();
         stopStartupStatusPollRef.current = () => undefined;
         if (startupFailureRef.current) {
@@ -161,6 +165,7 @@ export function App() {
           setLoadingVisible(false);
           return;
         }
+        transactionalReadyRef.current = true;
         setDiagnostic(null);
         setPhase("ready");
         setLoadingVisible(false);
@@ -207,6 +212,7 @@ export function App() {
     stopStartupStatusPollRef.current = () => undefined;
     submittedFrameRef.current = null;
     startupFailureRef.current = null;
+    transactionalReadyRef.current = false;
     sidecarOriginRef.current = "";
     deliveredSettingsRequestRef.current = "";
     settingsDeliveryAttemptsRef.current = 0;
@@ -216,13 +222,13 @@ export function App() {
     setStartupLabel("Avvio runtime verificato");
     launchStartedRef.current = performance.now();
     loadingTimer = window.setTimeout(() => {
-      if (canceled) {
+      if (canceled || transactionalReadyRef.current) {
         return;
       }
       setLoadingVisible(true);
     }, LOADING_STATE_DELAY_MS);
     statusPollTimer = window.setTimeout(() => {
-      if (canceled) {
+      if (canceled || transactionalReadyRef.current) {
         return;
       }
       stopStatusPoll = startNonOverlappingPoll({
@@ -363,28 +369,6 @@ export function App() {
 
   useEffect(() => () => window.clearTimeout(retryTimerRef.current), []);
 
-  function handleFrameLoad() {
-    if (submittedFrameRef.current !== frameRef.current) {
-      return;
-    }
-    if (startupFailureRef.current) {
-      setDiagnostic(startupFailureRef.current);
-      setPhase("error");
-      setLoadingVisible(false);
-      return;
-    }
-    stopStartupStatusPollRef.current();
-    stopStartupStatusPollRef.current = () => undefined;
-    setDiagnostic(null);
-    setPhase("ready");
-    setLoadingVisible(false);
-    retryCountRef.current = 0;
-    recordFirstPaint(launchStartedRef.current, "iframe.load", appId);
-    launchStartedRef.current = 0;
-    postNavigation();
-    postTheme();
-  }
-
   function handleFrameError() {
     if (submittedFrameRef.current !== frameRef.current) {
       return;
@@ -478,7 +462,6 @@ export function App() {
         referrerPolicy="no-referrer"
         allow="fullscreen"
         allowFullScreen
-        onLoad={handleFrameLoad}
         onError={handleFrameError}
       />
 

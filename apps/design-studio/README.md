@@ -228,6 +228,13 @@ ticket through a transient form POST targeted at the iframe. The ticket is
 cleared from the form immediately and is never put in a URL, fragment,
 localStorage, log, or persisted React state.
 
+An iframe `load` event is transport-only and never marks the product ready: an
+HTTP 401, 410, or 503 document produces the same browser event. The wrapper
+keeps its governed startup phase and status polling until the exact iframe
+window, on the exact sidecar origin, posts version 1 of
+`maverick.opendesign.ready`. Only that message exposes ready controls, stops
+polling, and records `first_paint_ms`; duplicate or stale messages are ignored.
+
 After the `303`, the OpenDesign UI and all of its API requests stay same-origin
 on the opaque sidecar host. The wrapper exposes accessible loading/degraded/
 error recovery and reload/fullscreen controls. Maverick shell navigation

@@ -195,6 +195,11 @@ renders a second project list. A scalar `od_project_id` selects the real
 `/projects/<id>` router path at bootstrap; `od_run_id` is forwarded only in the
 versioned, origin/source-bound navigation message. Reload obtains a new
 one-shot ticket instead of replaying an old session bootstrap.
+Iframe `load` is deliberately not a readiness signal because browser error
+documents load successfully too. The host transitions to ready and emits first
+paint telemetry only after version 1 of `maverick.opendesign.ready` arrives
+from the exact launched origin and iframe window; a component test covers
+401/410/503-style loads, wrong origin/source/version, and duplicate messages.
 
 The OpenDesign contract uses a 16 GiB virtual-address ceiling. This is a bound
 on address space, not a claim of physical allocation: Node/V8 and WebAssembly

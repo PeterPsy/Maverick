@@ -145,16 +145,17 @@ host metadata, or runtime bearer authority to a remote model provider.
 
 Every outbound content block receives a fail-closed Core `EgressDecision` bound
 to destination provider/upstream, data class, provenance, trust level, and an
-immutable policy revision. Unknown values are denied. The initial preview
-allows only public or explicitly fake data; secrets, credentials, bearer tokens,
-host operational metadata, and unclassified content are always denied. Audit
-records contain domain-separated HMAC digests and reason metadata, never raw
-content. Redaction is a secondary transform rather than the trust boundary.
+immutable policy revision. Unknown values are denied. Current contained
+profiles list only content that Core classifies as public, and the legacy
+fake-data class is always denied; secrets, credentials, bearer tokens, host
+operational metadata, and unclassified content are always denied. Audit records
+contain domain-separated HMAC digests and reason metadata, never raw content.
+Redaction is a secondary transform rather than the trust boundary.
 
 Residual risk remains because content classification and prompt/tool-result
 provenance are new enforcement paths. Remote agentic execution therefore stays
-disabled by default and fake-data-only until leakage tests and the broader
-production blockers are closed.
+disabled and independently contained until leakage tests, server-verifiable
+attestation, and the broader production blockers are closed.
 
 ### Profile, certificate, or routing substitution
 
@@ -336,8 +337,10 @@ provider-private envelopes, tool results, or egress audit content.
 
 Each remotely exported agentic content block is classified by data class,
 provenance, and trust and matched to the exact provider/upstream policy. Unknown
-metadata and destinations fail closed. The fake-data preview permits only public
-or explicitly fake data; credentials, host metadata, unclassified content, and
+metadata and destinations fail closed. The `fake-data preview` text is retained
+as a warning label, while current policy lists only Core-classified public data
+and always denies the legacy fake class. Credentials, host metadata,
+unclassified content, and
 unmapped absolute host paths are denied. Persisted egress records use keyed,
 domain-separated digests so low-entropy prompts cannot be recovered by hashing
 guesses.
@@ -398,7 +401,7 @@ The near-term goals are:
 - clear separation between control-plane state and app-owned data
 - explicit disclosure that current local bootstrap and deployment are not production-safe
 - immutable runtime execution binding with live authority that can only narrow
-- per-content remote-provider egress decisions and fake-data-only preview gates
+- per-content remote-provider egress decisions plus independent remote admission
 - persistent one-shot tool confirmation and no replay of uncertain side effects
 
 ## Non-Goals For The First Public Release

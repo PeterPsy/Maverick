@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 from core.providers.certification_manifests import (
+    CertificationStepManifest,
     CertificationSuiteManifest,
     get_certification_manifest,
     resolve_manifest_path,
@@ -103,9 +104,11 @@ def execute_certification_suite(
     evidence_refs: tuple[str, ...],
     started_at: datetime | None = None,
     environment: Mapping[str, str] | None = None,
+    step_kinds: Sequence[str] | None = None,
 ) -> CertificationRunResult:
-    """Run the code-owned manifest and return evidence only after every step passes."""
+    """Run selected code-owned steps; only a complete run is certificate evidence."""
     manifest = get_certification_manifest(suite_id, suite_version)
+    selected_steps = _selected_manifest_steps(manifest, step_kinds=step_kinds)
     _require_clean_checkout(cwd)
     start = started_at or datetime.now(tz=UTC)
     _require_aware(start)
@@ -114,7 +117,7 @@ def execute_certification_suite(
     artifact_paths = tuple(resolve_manifest_path(cwd, item) for item in manifest.artifact_paths)
     bundle_digest = _artifact_bundle_digest(cwd, artifact_paths)
     step_results: list[dict[str, object]] = []
-    for step in manifest.steps:
+    for step in selected_steps:
         completed = subprocess.run(
             step.command, cwd=cwd,
             env=dict(environment) if environment is not None else None,
@@ -221,8 +224,24 @@ def validate_completed_run(run: CertificationRunResult) -> None:
         _sha256(value)
     if not run.evidence_refs:
         raise CapabilityCertificateError("certificate_evidence_ref_invalid")
-    if {str(item.get("kind")) for item in run.step_results} != {"fixture_contract", "live_probe"}:
+    if {str(item.get("kind")) for item in run.step_results} != {
+        "fixture_contract",
+        "live_probe",
+    }:
         raise CapabilityCertificateError("certification_required_steps_missing")
+    manifest = get_certification_manifest(run.suite_id, run.suite_version)
+    if run.manifest_digest != manifest.digest:
+        raise CapabilityCertificateError("certification_manifest_mismatch")
+    expected_steps = tuple(
+        (step.step_id, step.kind, canonical_digest(step.command))
+        for step in manifest.steps
+    )
+    actual_steps = tuple(
+        (item.get("step_id"), item.get("kind"), item.get("command_digest"))
+        for item in run.step_results
+    )
+    if actual_steps != expected_steps:
+        raise CapabilityCertificateError("certification_step_manifest_mismatch")
     if any(item.get("outcome") != "passed" or item.get("exit_code") != 0 for item in run.step_results):
         raise CapabilityCertificateError("certification_run_not_passed")
     expected_summary = canonical_digest({
@@ -268,6 +287,26 @@ def validate_run_against_manifest(
     if run.source_commit != deployed:
         raise CapabilityCertificateError("certification_source_commit_mismatch")
     return manifest
+
+
+def _selected_manifest_steps(
+    manifest: CertificationSuiteManifest,
+    *,
+    step_kinds: Sequence[str] | None,
+) -> tuple[CertificationStepManifest, ...]:
+    if step_kinds is None:
+        return manifest.steps
+    normalized = tuple(str(kind or "").strip() for kind in step_kinds)
+    if (
+        not normalized
+        or any(not kind for kind in normalized)
+        or len(set(normalized)) != len(normalized)
+    ):
+        raise CapabilityCertificateError("certification_step_selection_invalid")
+    available = {step.kind for step in manifest.steps}
+    if any(kind not in available for kind in normalized):
+        raise CapabilityCertificateError("certification_step_selection_invalid")
+    return tuple(step for step in manifest.steps if step.kind in normalized)
 
 
 def _artifact_bundle_digest(cwd: Path, paths: Sequence[Path]) -> str:

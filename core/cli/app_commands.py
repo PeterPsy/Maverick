@@ -301,6 +301,7 @@ def _workspace_app_command_specs(
                         data_root=_data_root,
                         parsed=_parsed,
                         start_path=_start_path or Path.cwd(),
+                        actor_user_id=context.user_id,
                     )
                 return result
 

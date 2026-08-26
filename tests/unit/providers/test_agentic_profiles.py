@@ -173,6 +173,28 @@ class AgenticProfilesTest(unittest.TestCase):
                 now=NOW,
             )
 
+    def test_pinning_rejects_every_authorized_profile_identity_drift(self) -> None:
+        profile, binding = ensure_codex_workspace_profile(self.provider_store, definition=self.codex, selection=self.selection(), now=NOW)
+        changed_definition = replace(profile, revision="changed-definition")
+        cases = (
+            ("binding", profile, replace(binding, binding_id="changed-binding")),
+            ("default", profile, replace(binding, is_default=False, revision=binding.revision + 1)),
+            ("revision", profile, replace(binding, revision=binding.revision + 1)),
+            ("definition", changed_definition, replace(binding, definition_revision=changed_definition.revision, revision=binding.revision + 1)),
+        )
+        for label, current_definition, current_binding in cases:
+            with self.subTest(drift=label), self.assertRaisesRegex(
+                AgenticProfileError, "workspace_profile_binding_changed"
+            ), patch(
+                "core.providers.agentic_profiles.resolve_workspace_agentic_profile",
+                return_value=(current_definition, current_binding),
+            ):
+                build_pinned_execution_binding(
+                    self.provider_store, self.registry, session_id="session-drift", workspace_id="default",
+                    execution_mode="sandbox", authorized_definition_snapshot=profile,
+                    authorized_workspace_binding_snapshot=binding, now=NOW,
+                )
+
     def test_existing_profile_revision_rejects_changed_adapter_artifact(self) -> None:
         profile, _binding = ensure_codex_workspace_profile(
             self.provider_store,
@@ -223,7 +245,7 @@ class AgenticProfilesTest(unittest.TestCase):
             workspace_id="default",
             credential_binding_id="credential-google",
             workspace_policy_ceiling=SimpleNamespace(),
-            egress_policy_id="fake-data-remote-preview",
+            egress_policy_id="remote-agentic-contained",
             egress_policy_revision="1",
             revision=0,
             created_at=NOW,

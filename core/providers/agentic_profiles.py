@@ -262,10 +262,12 @@ def build_pinned_execution_binding(
     execution_mode: ExecutionMode,
     workspace_binding_id: str | None = None,
     reasoning_effort: str | None = None,
+    authorized_definition_snapshot: AgenticProfileDefinition | None = None,
+    authorized_workspace_binding_snapshot: WorkspaceAgenticProfileBinding | None = None,
     legacy_inferred: bool = False,
     now: datetime | None = None,
 ) -> RuntimeExecutionBinding:
-    """Resolve a workspace profile once and return its immutable session snapshot."""
+    """Resolve the current profile, fence an authorized snapshot, and build its pin."""
     if not feature_enabled(MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT):
         raise AgenticProfileError("agentic_adapter_contract_disabled")
     timestamp = now or utcnow()
@@ -273,6 +275,12 @@ def build_pinned_execution_binding(
         store,
         workspace_id=workspace_id,
         binding_id=workspace_binding_id,
+    )
+    _require_authorized_profile_snapshot(
+        definition=definition,
+        binding=binding,
+        authorized_definition=authorized_definition_snapshot,
+        authorized_binding=authorized_workspace_binding_snapshot,
     )
     model_provider = registry.get_provider_definition(definition.model_provider_id)
     if model_provider.requires_credentials and not binding.credential_binding_id:
@@ -333,6 +341,29 @@ def build_pinned_execution_binding(
         now=timestamp,
     )
     return runtime_binding
+
+
+def _require_authorized_profile_snapshot(
+    *,
+    definition: AgenticProfileDefinition,
+    binding: WorkspaceAgenticProfileBinding,
+    authorized_definition: AgenticProfileDefinition | None,
+    authorized_binding: WorkspaceAgenticProfileBinding | None,
+) -> None:
+    """Reject any profile drift between actor admission and immutable pinning."""
+    if (authorized_definition is None) != (authorized_binding is None):
+        raise AgenticProfileError("authorized_profile_snapshot_incomplete")
+    if authorized_definition is None or authorized_binding is None:
+        return
+    if (
+        authorized_binding.definition_id != authorized_definition.definition_id
+        or authorized_binding.definition_revision != authorized_definition.revision
+        or binding.definition_id != definition.definition_id
+        or binding.definition_revision != definition.revision
+        or binding != authorized_binding
+        or definition != authorized_definition
+    ):
+        raise AgenticProfileError("workspace_profile_binding_changed")
 
 
 def _validated_reasoning_effort(

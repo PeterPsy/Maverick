@@ -659,7 +659,7 @@ settings.agentic_admin = {
   items: [{
     definition_id: 'google-agentic-gemini-3-5-pro-preview',
     definition_revision: '8',
-    display_name: 'Google agentic Gemini 3.5 Pro',
+    display_name: 'Google agentic Gemini 3.5 Pro · fake-data preview',
     runtime_engine_id: 'maverick-tool-loop',
     model_provider_id: 'google-ai-studio',
     model_id: 'gemini-3.5-pro',
@@ -677,8 +677,24 @@ settings.agentic_admin = {
       allowed_quantizations: []
     },
     upstream_provider_ids: ['google-ai-studio'],
+    data_destination: {
+      provider_id: 'google-ai-studio',
+      endpoint_id: 'google-ai-studio',
+      upstream_provider_ids: ['google-ai-studio'],
+      display_label: 'google-ai-studio → google-ai-studio · google-ai-studio'
+    },
+    egress_policy: {
+      policy_id: 'remote-agentic-contained',
+      revision: '2',
+      allowed_remote_data_classes: []
+    },
+    data_policy: {
+      collection: 'deny',
+      require_zdr: true,
+      attestation_state: 'unavailable'
+    },
     profile_policy_ceiling: {
-      allowed_remote_data_classes: ['public', 'workspace_internal_fake'],
+      allowed_remote_data_classes: ['public'],
       allowed_tool_handles: [],
       tool_handle_mode: 'none',
       max_estimated_cost_microusd: 100000,
@@ -710,8 +726,8 @@ settings.agentic_admin = {
         require_confirmation_for_mutating: true,
         require_confirmation_for_destructive: true
       },
-      egress_policy_id: 'fake-data-remote-preview',
-      egress_policy_revision: '1',
+      egress_policy_id: 'remote-agentic-contained',
+      egress_policy_revision: '2',
       created_at: '2026-08-01T00:00:00Z',
       updated_at: '2026-08-25T00:00:00Z'
     },
@@ -737,13 +753,17 @@ const containmentHtml = settingsPanelHtml(settings, state);
 for (const expected of [
   'Remote agentic release: NO-GO',
   'Provider google-ai-studio · upstream google-ai-studio',
+  'Data destination google-ai-studio → google-ai-studio · google-ai-studio',
+  'Egress policy remote-agentic-contained@2 · Core-classified data none',
+  'Data policy collection=deny · ZDR required · attestation unavailable',
   'Binding Disabled · Profile Suspended · Certificate Revoked / Ineligible',
-  'Google agentic Gemini 3.5 Pro',
+  'Google agentic Gemini 3.5 Pro · fake-data preview',
   'Quarantined: Remote Agentic State Ambiguous',
   'Pinned remote profile contained (NO-GO): Hosted Agent Runtime Disabled'
 ]) {
   assert.ok(containmentHtml.includes(expected), `missing containment projection: ${expected}`);
 }
+assert.ok(!containmentHtml.includes('data-agentic-field="allow_public_data"'));
 
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'mode', 'only');
 updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'provider_id', 'open-inference');

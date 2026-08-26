@@ -350,13 +350,12 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         state = SimpleNamespace(runtime_store=runtime_store)
 
         with self.assertRaisesRegex(runtime_requests.AppHostingError, "hidden"):
-            runtime_requests._runtime_session_for_request(
+            runtime_requests._preflight_runtime_request_before_persistence(
                 state,
                 request={"runtime_session_id": "hidden-child"},
                 workspace_id="default",
                 app_id="video-studio",
-                parsed=SimpleNamespace(),
-                start_path=repo_root,
+                actor_user_id=None,
             )
         with self.assertRaisesRegex(runtime_requests.AppHostingError, "hidden"):
             runtime_requests._apply_one_runtime_interrupt_request(
@@ -367,15 +366,11 @@ class RuntimeRequestsTestCase(unittest.TestCase):
             )
 
     def test_app_runtime_request_pins_authorized_agentic_profile_before_publish(self) -> None:
-        governance = object()
-        provider_store = object()
+        governance = SimpleNamespace(allow_full_access_runtime=False)
         registry = object()
+        definition = object()
+        workspace_binding = SimpleNamespace(binding_id="binding-codex", revision=3)
         routing = SimpleNamespace(effective_mode="sandbox")
-        binding = object()
-        workspace_binding = SimpleNamespace(
-            egress_policy_id="local-runtime-no-remote-egress",
-            workspace_policy_ceiling=SimpleNamespace(allowed_remote_data_classes=()),
-        )
         created = SimpleNamespace(
             session_id="runtime-app-session",
             system_prompt="bounded app prompt",
@@ -384,55 +379,60 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         )
         state = SimpleNamespace(
             runtime_store=object(),
-            provider_store=provider_store,
+            provider_store=object(),
             provider_registry=registry,
             app_store=object(),
             observability_store=None,
-            workspace_store=SimpleNamespace(get_governance=lambda _workspace_id: governance),
+            workspace_store=SimpleNamespace(
+                get_governance=lambda _workspace_id: governance
+            ),
         )
-
+        request = {
+            "agent_id": "chat",
+            "agent_type_id": "chat",
+            "requested_mode": "sandbox",
+        }
         with (
             patch.object(runtime_requests, "_materialized_system_prompt", return_value="bounded app prompt"),
             patch.object(runtime_requests, "build_runtime_routing", return_value=routing),
+            patch.object(runtime_requests, "resolve_runtime_execution_mode", return_value="sandbox"),
             patch.object(runtime_requests, "effective_provider_registry", return_value=registry),
             patch.object(
                 runtime_requests,
-                "resolve_workspace_agentic_profile",
-                return_value=(object(), workspace_binding),
+                "_authorize_new_agentic_app_session",
+                return_value=(definition, workspace_binding),
             ),
             patch.object(
                 runtime_requests,
-                "resolve_runtime_actor_roles",
-                return_value=("admin", "user:admin", "admin"),
-            ),
-            patch.object(runtime_requests, "actor_selection_allowed", return_value=True),
-            patch.object(runtime_requests, "build_pinned_execution_binding", return_value=binding) as pin,
+                "build_pinned_execution_binding",
+                side_effect=lambda *_args, **kwargs: SimpleNamespace(
+                    session_id=kwargs["session_id"],
+                    workspace_id=kwargs["workspace_id"],
+                    execution_mode=kwargs["execution_mode"],
+                ),
+            ) as pin,
             patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", return_value=None),
             patch.object(runtime_requests, "create_runtime_session", return_value=created) as create_session,
             patch.object(runtime_requests, "transition_runtime_session", return_value=created),
             patch.object(runtime_requests, "create_runtime_thread"),
         ):
-            observed = runtime_requests._runtime_session_for_request(
-                state,
-                request={
-                    "agent_id": "chat",
-                    "agent_type_id": "chat",
-                    "requested_mode": "sandbox",
-                },
-                workspace_id="default",
-                app_id="design-studio",
-                parsed=SimpleNamespace(),
-                start_path=Path("/repo"),
-                actor_user_id="user:admin",
+            preflight = runtime_requests._preflight_runtime_request_before_persistence(
+                state, request=request, workspace_id="default",
+                app_id="design-studio", actor_user_id="user:admin",
             )
-
+            observed = runtime_requests._runtime_session_for_request(
+                state, request=request, workspace_id="default",
+                app_id="design-studio", parsed=SimpleNamespace(),
+                start_path=Path("/repo"), actor_user_id="user:admin",
+                preflight=preflight,
+            )
         self.assertIs(observed, created)
-        pin.assert_called_once()
-        self.assertEqual(pin.call_args.kwargs["execution_mode"], "sandbox")
-        self.assertEqual(pin.call_args.kwargs["workspace_id"], "default")
-        self.assertIs(create_session.call_args.kwargs["execution_binding"], binding)
+        self.assertIs(pin.call_args.kwargs["authorized_definition_snapshot"], definition)
+        self.assertIs(pin.call_args.kwargs["authorized_workspace_binding_snapshot"], workspace_binding)
+        self.assertIs(create_session.call_args.kwargs["execution_binding"], preflight.execution_binding)
+        self.assertEqual(preflight.execution_binding.session_id, pin.call_args.kwargs["session_id"])
         self.assertIs(create_session.call_args.kwargs["routing"], routing)
-        self.assertEqual(create_session.call_args.kwargs["runtime_mode"], "agentic")
+        self.assertIsNone(create_session.call_args.kwargs["declared_remote_data_class"])
 
     def test_dependency_backend_request_result_is_only_exposed_to_callback(self) -> None:
         callback_payloads: list[dict[str, object]] = []

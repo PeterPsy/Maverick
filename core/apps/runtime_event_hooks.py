@@ -147,6 +147,7 @@ def dispatch_source_app_runtime_event(
         data_root=binding.data_root,
         parsed=parsed,
         start_path=start_path,
+        actor_user_id=session.owner_user_id,
     )
     return result
 
@@ -306,6 +307,7 @@ def _apply_runtime_requests(
     data_root: str,
     parsed,
     start_path: Path | None,
+    actor_user_id: str | None = None,
 ) -> None:
     from core.apps.runtime_requests import apply_app_runtime_requests
 
@@ -319,4 +321,5 @@ def _apply_runtime_requests(
         data_root=data_root,
         parsed=parsed,
         start_path=start_path or state.repository_root,
+        actor_user_id=actor_user_id,
     )

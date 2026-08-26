@@ -546,12 +546,11 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
   const enabled = Boolean(binding?.enabled);
   const available = !contained && certificate?.effective_status === 'active' && item.rollout_status !== 'disabled' && item.rollout_status !== 'suspended';
   const usageSummary = agenticModelUsageSummary(item, state);
-  const displayName = item.display_name.replace(/\s*·\s*fake-data preview$/i, '');
   return `<details class="settings-model-accordion settings-agentic-runtime" data-settings-model-accordion="agentic-${escapeAttr(key)}">
     <summary>
       <span class="settings-model-summary-copy">
         <span class="settings-kicker">${escapeHtml(item.model_provider_id)}</span>
-        <strong>${escapeHtml(displayName)}</strong>
+        <strong>${escapeHtml(item.display_name)}</strong>
         <small>${escapeHtml(item.model_id)}${binding?.is_default ? ' · Default' : ''}${usageSummary ? ` · ${escapeHtml(usageSummary)}` : ''}</small>
       </span>
       <span class="settings-agentic-summary-badges">
@@ -576,6 +575,9 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
         <span>
           <strong>NO-GO · ${escapeHtml(humanizeAgenticCode(item.containment_reason || 'remote agentic contained'))}</strong>
           <small>Provider ${escapeHtml(item.model_provider_id)} · upstream ${escapeHtml(item.upstream_provider_ids.join(', ') || 'none')}</small>
+          <small>Data destination ${escapeHtml(item.data_destination.display_label)}</small>
+          <small>Egress policy ${escapeHtml(item.egress_policy.policy_id)}@${escapeHtml(item.egress_policy.revision)} · Core-classified data ${escapeHtml(item.egress_policy.allowed_remote_data_classes.join(', ') || 'none')}</small>
+          <small>Data policy collection=${escapeHtml(item.data_policy.collection)} · ZDR ${item.data_policy.require_zdr ? 'required' : 'not required'} · attestation ${escapeHtml(item.data_policy.attestation_state)}</small>
           <small>Binding ${escapeHtml(humanizeAgenticCode(item.binding_status))} · Profile ${escapeHtml(humanizeAgenticCode(item.profile_status))} · Certificate ${escapeHtml(humanizeAgenticCode(certificate?.effective_status || 'missing'))} / ${escapeHtml(humanizeAgenticCode(item.certificate_eligibility))}</small>
         </span>
       </div>` : ''}
@@ -602,7 +604,6 @@ function agenticRuntimeBindingHtml(item: AgenticAdminItem, state: SettingsPanelS
             ${agenticCheckbox('tool_access_enabled', `Allow tools (${policy.allowed_tool_handles.length || 0})`, toolEnabled, isSaving || contained)}
             ${agenticCheckbox('require_confirmation_for_mutating', 'Confirm mutating tools', policy.require_confirmation_for_mutating, isSaving || contained, item.profile_policy_ceiling.require_confirmation_for_mutating)}
             ${agenticCheckbox('require_confirmation_for_destructive', 'Confirm destructive tools', policy.require_confirmation_for_destructive, isSaving || contained, item.profile_policy_ceiling.require_confirmation_for_destructive)}
-            ${item.profile_policy_ceiling.allowed_remote_data_classes.includes('public') ? agenticCheckbox('allow_public_data', 'Permit public data', policy.allowed_remote_data_classes.includes('public'), isSaving || contained) : ''}
           </details>
         </div>
       </div>

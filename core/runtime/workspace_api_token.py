@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 from core.execution_policy.models import ExecutionMode
+from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_session import RuntimeApiTokenRecord
 from core.secrets.bootstrap import resolve_bootstrap_secret
 
@@ -148,6 +149,14 @@ def validate_workspace_api_token_lifecycle(
         or record.mode != str(claims["mode"])
     ):
         return None, "runtime_token_mismatch"
+    try:
+        session = store.get_session(record.session_id)
+    except RuntimeSessionNotFoundError:
+        return None, "runtime_session_unavailable"
+    if session.workspace_id != record.workspace_id:
+        return None, "runtime_token_mismatch"
+    if session.status == "recovery_required":
+        return None, "runtime_session_recovery_required"
     return claims, None
 
 

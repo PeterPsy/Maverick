@@ -41,8 +41,10 @@ Unacceptable current uses:
 ADR-0010 approves the architecture and implementation sequence for hosted
 agentic model providers. It does not close any launch blocker. Until a separate
 production security gate is approved, remote agentic profiles must remain
-disabled by default, explicitly marked preview, and limited to public or fake
-data by Core egress policy. Capability certificates attest only to one exact
+disabled by default, explicitly marked preview, and blocked by the independent
+Phase-0 admission barrier. Current profile policy lists only Core-classified
+public content, while the legacy fake class is always denied. Capability
+certificates attest only to one exact
 engine/adapter/provider/model/protocol/upstream combination and evidence suite;
 they are not a platform production-safety certificate.
 
@@ -50,14 +52,14 @@ Core now persists certificate evidence/certificates as immutable control-plane
 records, keeps revocation in a CAS status record, verifies live adapter and
 upstream identity before execution, and records only a redaction-safe effective
 authority digest. This closes the certificate-object implementation slice; it
-does not relax the fake-data-only preview gate or any platform launch blocker.
+does not relax the remote containment gate or any platform launch blocker.
 
 The runtime now also persists per-block fail-closed egress decisions before
 export and keeps provider-private/tool payloads in restart-safe, integrity-bound
 encrypted session storage with explicit codec and quota failures. Audit records
 contain keyed digests but no content, and generic provider events cannot carry
 thought signatures. The shared hosted loop now passes deterministic
-fake-provider coverage for streaming, bounded sequential tools, persisted
+fixture-provider coverage for streaming, bounded sequential tools, persisted
 confirmation, cancellation, restart deduplication, terminal outages, mid-step
 revocation, egress drift, prompt-injection containment, explicit private-state
 quota/integrity failures, child-agent binding isolation, and conservative

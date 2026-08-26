@@ -46,6 +46,7 @@ from core.providers.service import (
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.remote_agentic_admission import remote_agentic_containment_reason
+from core.runtime.public_status import public_runtime_recovery_reason_code
 from core.usage.quota import record_provider_quota_snapshots
 
 
@@ -342,10 +343,14 @@ def _speech_model_endpoint(options, model_id: str | None) -> str | None:
     return str(endpoint) if endpoint else None
 
 
-def runtime_session_payload(session: RuntimeSessionRecord) -> dict[str, object]:
+def runtime_session_payload(
+    session: RuntimeSessionRecord,
+    *,
+    state: PlatformState | None = None,
+) -> dict[str, object]:
     """Return public runtime session metadata."""
     containment_reason = remote_agentic_containment_reason(session.execution_binding)
-    return {
+    payload = {
         "session_id": session.session_id,
         "workspace_id": session.workspace_id,
         "agent_id": session.agent_id,
@@ -357,11 +362,62 @@ def runtime_session_payload(session: RuntimeSessionRecord) -> dict[str, object]:
         "updated_at": session.updated_at,
         "ended_at": session.ended_at,
         "last_progress_at": session.last_progress_at,
-        "recovery_reason_code": session.recovery_reason_code,
+        "recovery_reason_code": public_runtime_recovery_reason_code(
+            status=session.status,
+            reason_code=session.recovery_reason_code,
+        ),
         "agentic_containment": {
             "status": "NO-GO" if containment_reason else "GO",
             "reason_code": containment_reason,
         },
+    }
+    if state is not None and session.execution_binding is not None:
+        payload["agentic_governance"] = runtime_session_agentic_governance_payload(
+            state,
+            session=session,
+        )
+    return payload
+
+
+def _agentic_data_destination_payload(
+    *,
+    provider_id: str,
+    endpoint_id: str,
+    upstream_provider_ids,
+) -> dict[str, object]:
+    upstreams = tuple(str(item) for item in upstream_provider_ids)
+    routed_destination = ", ".join(upstreams)
+    display_label = (
+        f"{provider_id} → {routed_destination} · {endpoint_id}"
+        if routed_destination
+        else f"{provider_id} · {endpoint_id}"
+    )
+    return {
+        "provider_id": provider_id,
+        "endpoint_id": endpoint_id,
+        "upstream_provider_ids": upstreams,
+        "display_label": display_label,
+    }
+
+
+def _agentic_egress_policy_payload(
+    *,
+    policy_id: str,
+    revision: str,
+    policy,
+) -> dict[str, object]:
+    return {
+        "policy_id": policy_id,
+        "revision": revision,
+        "allowed_remote_data_classes": policy.allowed_remote_data_classes,
+    }
+
+
+def _agentic_data_policy_payload(routing_constraint) -> dict[str, object]:
+    return {
+        "collection": routing_constraint.data_collection_policy,
+        "require_zdr": routing_constraint.require_zdr,
+        "attestation_state": "unavailable",
     }
 
 
@@ -504,6 +560,19 @@ def workspace_agentic_profile_status(
                 ),
                 "egress_policy_id": binding.egress_policy_id,
                 "egress_policy_revision": binding.egress_policy_revision,
+                "data_destination": _agentic_data_destination_payload(
+                    provider_id=definition.model_provider_id,
+                    endpoint_id=definition.routing_constraint.endpoint_id,
+                    upstream_provider_ids=definition.routing_constraint.allowed_upstream_ids,
+                ),
+                "egress_policy": _agentic_egress_policy_payload(
+                    policy_id=binding.egress_policy_id,
+                    revision=binding.egress_policy_revision,
+                    policy=binding.workspace_policy_ceiling,
+                ),
+                "data_policy": _agentic_data_policy_payload(
+                    definition.routing_constraint
+                ),
                 "allowed_remote_data_classes": binding.workspace_policy_ceiling.allowed_remote_data_classes,
                 "tool_handle_mode": binding.workspace_policy_ceiling.tool_handle_mode,
                 "allowed_tool_handles": binding.workspace_policy_ceiling.allowed_tool_handles,
@@ -623,6 +692,19 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
             registry=registry,
         )
         containment_reason = remote_agentic_containment_reason(definition)
+        effective_policy = (
+            definition.policy_ceiling
+            if binding is None
+            else binding.workspace_policy_ceiling
+        )
+        effective_egress_policy_id = (
+            definition.egress_policy_id if binding is None else binding.egress_policy_id
+        )
+        effective_egress_policy_revision = (
+            definition.egress_policy_revision
+            if binding is None
+            else binding.egress_policy_revision
+        )
         items.append(
             {
                 "definition_id": definition.definition_id,
@@ -637,6 +719,19 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 "adapter_version_constraint": definition.adapter_version_constraint,
                 "routing_constraint": asdict(definition.routing_constraint),
                 "upstream_provider_ids": definition.routing_constraint.allowed_upstream_ids,
+                "data_destination": _agentic_data_destination_payload(
+                    provider_id=definition.model_provider_id,
+                    endpoint_id=definition.routing_constraint.endpoint_id,
+                    upstream_provider_ids=definition.routing_constraint.allowed_upstream_ids,
+                ),
+                "egress_policy": _agentic_egress_policy_payload(
+                    policy_id=effective_egress_policy_id,
+                    revision=effective_egress_policy_revision,
+                    policy=effective_policy,
+                ),
+                "data_policy": _agentic_data_policy_payload(
+                    definition.routing_constraint
+                ),
                 "profile_policy_ceiling": asdict(definition.policy_ceiling),
                 "rollout_status": None if status is None else status.rollout_status,
                 "certificate": certificate_payload,
@@ -747,7 +842,114 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
         "effective_status": effective_status,
         "status_revision": None if status is None else status.revision,
         "revoked_at": None if status is None else status.revoked_at,
-        "revocation_reason": None if status is None else status.revocation_reason,
+    }
+
+
+def runtime_session_agentic_governance_payload(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+) -> dict[str, object] | None:
+    """Project exact pinned governance without exposing credential authority."""
+    binding = session.execution_binding
+    if binding is None:
+        return None
+    containment_reason = remote_agentic_containment_reason(binding)
+    definition = None
+    rollout_status = None
+    try:
+        definition = state.provider_store.get_agentic_profile_definition(
+            binding.profile_definition_id,
+            binding.profile_definition_revision,
+        )
+        definition_status = state.provider_store.get_agentic_profile_definition_status(
+            definition.definition_id,
+            definition.revision,
+        )
+        rollout_status = (
+            None if definition_status is None else definition_status.rollout_status
+        )
+    except ProviderNotFoundError:
+        pass
+
+    certificate_effective_status = "missing"
+    certificate_expires_at = None
+    try:
+        certificate = state.provider_store.get_capability_certificate(
+            binding.capability_certificate_id
+        )
+        certificate_status = state.provider_store.get_capability_certificate_status(
+            certificate.certificate_id
+        )
+        certificate_payload = capability_certificate_payload(
+            certificate,
+            certificate_status,
+        )
+        certificate_effective_status = str(
+            certificate_payload["effective_status"]
+        )
+        certificate_expires_at = certificate_payload["expires_at"]
+        if certificate.evidence_digest != binding.certificate_evidence_digest:
+            certificate_effective_status = "binding_mismatch"
+        elif definition is not None and certificate_effective_status == "active":
+            try:
+                registry = effective_provider_registry(
+                    state.provider_store,
+                    registry=getattr(state, "provider_registry", None),
+                )
+                certificate_effective_status = certificate_profile_status(
+                    certificate,
+                    certificate_status,
+                    definition=definition,
+                    adapter=registry.get_agentic_runtime_adapter(
+                        definition.runtime_engine_id
+                    ),
+                )
+            except ProviderError:
+                certificate_effective_status = "adapter_unavailable"
+    except ProviderNotFoundError:
+        pass
+
+    return {
+        "display_name": None if definition is None else definition.display_name,
+        "profile_definition_id": binding.profile_definition_id,
+        "profile_definition_revision": binding.profile_definition_revision,
+        "workspace_binding_id": binding.workspace_binding_id,
+        "workspace_binding_revision": binding.workspace_binding_revision,
+        "runtime_engine_id": binding.runtime_engine_id,
+        "model_provider_id": binding.model_provider_id,
+        "model_id": binding.model_id,
+        "rollout_status": rollout_status,
+        "containment": {
+            "status": "NO-GO" if containment_reason else "GO",
+            "reason_code": containment_reason,
+        },
+        "data_destination": _agentic_data_destination_payload(
+            provider_id=binding.model_provider_id,
+            endpoint_id=binding.routing_constraint_snapshot.endpoint_id,
+            upstream_provider_ids=(
+                binding.routing_constraint_snapshot.allowed_upstream_ids
+            ),
+        ),
+        "egress_policy": _agentic_egress_policy_payload(
+            policy_id=binding.egress_policy_id,
+            revision=binding.egress_policy_revision,
+            policy=binding.workspace_policy_ceiling_snapshot,
+        ),
+        "data_policy": _agentic_data_policy_payload(
+            binding.routing_constraint_snapshot
+        ),
+        "certificate_posture": {
+            "certificate_id": binding.capability_certificate_id,
+            "effective_status": certificate_effective_status,
+            "eligibility": (
+                "ineligible"
+                if containment_reason is not None
+                else certificate_effective_status
+            ),
+            "expires_at": certificate_expires_at,
+            "pinned_evidence_digest": binding.certificate_evidence_digest,
+        },
     }
 
 
@@ -765,7 +967,7 @@ def workspace_runtime_status(
             actor_roles=actor_roles,
         ),
         "sessions": [
-            runtime_session_payload(session)
+            runtime_session_payload(session, state=state)
             for session in state.runtime_store.list_sessions(workspace_id)
         ],
     }

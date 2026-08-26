@@ -1,3 +1,50 @@
+export type AgenticDataDestination = {
+  provider_id: string;
+  endpoint_id: string;
+  upstream_provider_ids: string[];
+  display_label: string;
+};
+
+export type AgenticEgressPolicy = {
+  policy_id: string;
+  revision: string;
+  allowed_remote_data_classes: string[];
+};
+
+export type AgenticDataPolicy = {
+  collection: string;
+  require_zdr: boolean;
+  attestation_state: string;
+};
+
+export type AgenticCertificatePosture = {
+  certificate_id: string;
+  effective_status: string;
+  eligibility: string;
+  expires_at: string | null;
+  pinned_evidence_digest: string;
+};
+
+export type AgenticSessionGovernance = {
+  display_name: string | null;
+  profile_definition_id: string;
+  profile_definition_revision: string;
+  workspace_binding_id: string;
+  workspace_binding_revision: number;
+  runtime_engine_id: string;
+  model_provider_id: string;
+  model_id: string;
+  rollout_status: string | null;
+  containment: {
+    status: "GO" | "NO-GO";
+    reason_code: string | null;
+  };
+  data_destination: AgenticDataDestination;
+  egress_policy: AgenticEgressPolicy;
+  data_policy: AgenticDataPolicy;
+  certificate_posture: AgenticCertificatePosture;
+};
+
 export type ProviderItem = {
   provider_id: string;
   label: string;
@@ -19,6 +66,10 @@ export type ProviderItem = {
   agentic_max_estimated_cost_microusd?: number | null;
   agentic_containment_status?: "GO" | "NO-GO";
   agentic_containment_reason?: string | null;
+  agentic_data_destination?: AgenticDataDestination | null;
+  agentic_egress_policy?: AgenticEgressPolicy | null;
+  agentic_data_policy?: AgenticDataPolicy | null;
+  agentic_certificate_posture?: AgenticCertificatePosture | null;
   default_reasoning_effort?: string | null;
   supported_reasoning_efforts?: ProviderReasoningOption[];
   input_modalities?: string[];
@@ -111,6 +162,9 @@ export type AgenticProfileItem = {
   adapter_id?: string;
   adapter_version_constraint?: string;
   egress_policy_id?: string;
+  data_destination?: AgenticDataDestination;
+  egress_policy?: AgenticEgressPolicy;
+  data_policy?: AgenticDataPolicy;
   allowed_tool_handles?: string[];
   max_estimated_cost_microusd?: number | null;
   certificate?: {
@@ -412,12 +466,12 @@ export type RuntimeSession = {
   provider_thread_ready?: boolean;
   runtime_ready?: boolean;
   prewarm_total_ms?: number;
-  declared_remote_data_class?: string | null;
   recovery_reason_code?: string | null;
   agentic_containment?: {
     status: "GO" | "NO-GO";
     reason_code: string | null;
   } | null;
+  agentic_governance?: AgenticSessionGovernance | null;
   predecessor_session_id?: string | null;
   lineage_root_session_id?: string | null;
   continuation_successor_session_id?: string | null;

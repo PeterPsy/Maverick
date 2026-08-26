@@ -1,10 +1,10 @@
 # Agentic certification evidence procedure
 
-Status date: 2026-08-21
+Status date: 2026-08-26
 
 Scope: trusted CI or operator-controlled certification worker
 
-Production status: **not approved; synthetic preview evidence only**
+Production status: **not approved; no complete two-step certificate evidence recorded**
 
 This procedure is the only supported path from an executed provider suite to a
 Google or OpenRouter capability certificate. Bootstrap publishes candidate
@@ -17,7 +17,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
 
 - an Ed25519 private key held by trusted CI and a stable `signer_key_id` whose
   public key is installed in the certificate publisher trust set;
-- a synthetic-only provider credential delivered for the live probe;
+- a synthetic-only provider credential delivered only to the operator-controlled
+  live-probe worker;
 - the dated matrix revision declared by the provider certificate module;
 - the exact adapter artifact digest and a reviewed explicit list of the adapter,
   codec, transport, hosted-loop, policy, and focused-test artifacts in the
@@ -27,8 +28,10 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
 - a platform evidence reference allocated by the authoritative evidence store.
 
 Abort if `git status --short` is non-empty, the matrix/catalog has not been
-reconfirmed, the live probe is omitted, or the credential/workspace contains
-non-synthetic data.
+reconfirmed, the live step is omitted, or the credential/workspace contains
+non-synthetic data. Ordinary repository-test workers must not receive a provider
+credential or send provider traffic; the complete certification worker is a
+separate trusted environment.
 
 ## Execute and sign
 
@@ -36,8 +39,16 @@ Create an output directory outside the repository. The runner opens its output
 with create-only semantics and emits nothing when the command exits non-zero.
 The runner selects a code-owned, versioned manifest from `suite-id` and
 `suite-version`. It accepts no command, matrix path/revision, artifact list, or
-probe entrypoint from the CLI. Every manifest contains a fixture/contract step
-and a distinct operator-only live synthetic probe step; both must pass.
+probe entrypoint from the CLI. Every current remote manifest contains one
+deterministic `fixture_contract` step and one distinct operator-only
+`live_probe` step; both must pass in canonical order before the run can be
+signed, verified, or published.
+
+Normal repository tests may call `execute_certification_suite` with
+`step_kinds=("fixture_contract",)` to exercise deterministic conformance without
+provider traffic. That explicit selection does not remove or rewrite the live
+step in the manifest. The resulting incomplete run is deliberately rejected by
+completed-run validation and can never be certificate evidence.
 
 ```bash
 python3 scripts/run_agentic_certification.py \
@@ -51,11 +62,11 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `8`, matrix revision `2026-08-21-r7`, and the OpenRouter manifest. The
-Google suite uses version `8` and matrix revision `2026-08-21-r7`. The
-canonical matrices, artifact bundles, commands, and live probe entrypoints live in
-`core/providers/certification_manifests.py`.
-Do not reuse a Google artifact bundle, result, live probe, or evidence reference.
+version `8`, matrix revision `2026-08-26-r8`, and the OpenRouter manifest. The
+Google suite uses version `8` and matrix revision `2026-08-26-r8`. The
+canonical matrices, artifact bundles, commands, and live-probe entrypoints live
+in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
+bundle, result, live probe, or evidence reference.
 
 Both live probes must make the provider call the exact generated alias for
 `core-capability:filesystem.list`, execute the real Core handler over an
@@ -65,23 +76,32 @@ three sequential tool rounds plus a final response at every effort. The Google
 probe requires two sequential tool rounds plus a final response at its single
 certified effort, for exactly three provider requests. Requests are paced (one
 second by default) so the probe itself does not justify diagnosing a quota
-incident. A Google failure must preserve the redaction-safe
-distinction among `quota_exceeded`, `resource_exhausted`, and
-`rate_limit_exceeded`; do not infer a project-quota cause from the broader
-family alone.
+incident. A Google failure must preserve the redaction-safe distinction among
+`quota_exceeded`, `resource_exhausted`, and `rate_limit_exceeded`; do not infer a
+project-quota cause from the broader family alone.
 
 Before its first completion request, the OpenRouter probe must fetch both the
 official model endpoint catalog and ZDR endpoint catalog. It fails closed unless
 the exact `deepinfra/fp8` record is active, FP8, ZDR-listed, has enough completion
 capacity, and declares every endpoint-gated translated parameter. In
 particular, the request must not reintroduce `parallel_tool_calls` while the
-endpoint does not declare it.
-The required set is derived from the translated completion payload rather than
-maintained as a second hard-coded parameter list.
-OpenRouter may stream more than one indexed proposal despite that omission.
-The certified decoder must retain and execute only the validated index-0 call,
-discard later indexes, and continue through a new provider step; a missing or
-conflicting primary call remains terminal.
+endpoint does not declare it. The required set is derived from the translated
+completion payload rather than maintained as a second hard-coded parameter
+list. OpenRouter may stream more than one indexed proposal despite that
+omission. The certified decoder must retain and execute only the validated
+index-0 call, discard later indexes, and continue through a new provider step;
+a missing or conflicting primary call remains terminal.
+
+The trust sequence is indivisible:
+
+1. deterministic conformance through `fixture_contract`;
+2. synthetic provider behavior through `live_probe`;
+3. behavioral conformance validation of both successful results, their order,
+   manifest digest, and canonical command digests;
+4. signing, independent verification, and immutable certificate publication.
+
+Phase-0 containment still blocks remote admission after a valid certificate;
+certification evidence cannot substitute for the later release gates.
 
 The runner records and signs the source commit, suite identity/version, matrix
 revision and digest, adapter digest, complete artifact-bundle digest, command

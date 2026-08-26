@@ -4,7 +4,8 @@
 
 Accepted on 2026-08-16 as the ADR-0 gate for the agentic multimodel runtime.
 
-Phase-0 containment amendment accepted on 2026-08-25: remote agentic execution
+Phase-0 containment amendment accepted on 2026-08-25 and hardened on
+2026-08-26: remote agentic execution
 is **NO-GO** until the revision-bound server attestation designed in Phase 1
 exists. This amendment supersedes earlier preview-enablement language below;
 Codex agentic and plain hosted text are not contained.
@@ -48,21 +49,41 @@ data declarations, browser consent, and the legacy
 `workspace_internal_fake` value cannot authorize a session.
 
 Admission rejects a new remote execution binding before the session aggregate,
-provider state, turn, thread, or other runtime record is persisted. Existing
-pinned remote sessions are rejected again at queue admission and provider-start
-handoff. Ambiguous persisted sessions transition idempotently to
-`recovery_required`, expose only a redaction-safe reason, and cannot accept a
-new turn; this is quarantine support, not the Phase-2 recovery engine.
+provider state, turn, thread, claim, prepared-session lock, or app-stream
+reservation is persisted. API and app preflight carry one authorized governance
+snapshot and immutable pin into creation. If the binding id, binding revision,
+default selection, or complete immutable definition differs when the pin is
+materialized, admission fails rather than silently authorizing one binding and
+using another. Existing pinned remote sessions are rejected again at queue
+admission and provider-start handoff. Browser and app requests cannot classify
+session data; Core interprets neither an egress-policy id nor a persisted legacy
+declaration as attestation. Ambiguous persisted sessions transition to
+`recovery_required` through the serialized session lifecycle handoff, expose
+only an allowlisted public reason, lose runtime bearer authority, and cannot
+accept a new turn; this is quarantine support, not the Phase-2 recovery engine.
 
 The operator containment service inventories all stores through their JSON or
-Mongo abstraction, plans or applies revision-CAS transitions, disables remote
-workspace bindings, suspends remote profile revisions, revokes current remote
-suite-v8 certificates, and quarantines ambiguous sessions. Dry-run is
-non-mutating and emits identities, revisions, counts, per-target digests, and a
-whole-plan digest without credential or private provider data. Apply requires
-the reviewed plan digest and is idempotent. Phase 0 is implementation-ready and
-dry-run-verifiable, but the operational gate remains
-`live_apply_pending_review` until apply and post-apply verification occur.
+Mongo abstraction. It correlates each ordered provider step with either a
+persisted final output or one or more real ledger-backed proposals, reading the
+complete immutable event archive across every page. A step with neither outcome
+is ambiguous; aggregate request-minus-invocation arithmetic is not evidence.
+The plan disables remote workspace bindings, suspends remote profile revisions,
+revokes current remote suite-v8 certificates, and quarantines ambiguous
+sessions. Dry-run is non-mutating and emits identities, revisions, counts,
+per-target digests, and a whole-plan digest without credential or private
+provider data.
+
+Apply is a partially ordered saga, not a transaction and not an idempotent or
+safe-to-retry command. Provider binding/profile/certificate status writes use
+record revision CAS; session quarantine is a distinct serialized lifecycle
+transition. A failure or CAS/lifecycle conflict can leave earlier targets
+applied. The audit records structured partial counts and a safe failure code,
+never claims success for an incomplete plan, and requires a new dry-run and
+human review before any later apply. A successful apply also consumes its
+reviewed digest and still requires a fresh dry-run for post-apply verification.
+Phase 0 is not operationally complete; the gate remains
+`live_apply_pending_review` until a separately approved apply and verification
+occur.
 
 ### 1. Definitions and workspace bindings are separate
 
@@ -172,6 +193,15 @@ store. A certificate stores only immutable digests and opaque evidence ids.
 Workspace Storage may receive an explicit redaction-safe export, but it is not
 authoritative evidence.
 
+Certification follows one trust sequence: deterministic conformance, an
+operator-only synthetic live probe, behavioral conformance validation of the
+complete ordered manifest and canonical command digests, then certificate
+publication. Google and OpenRouter suite-v8 manifests contain both
+`fixture_contract` and `live_probe`. Repository tests may explicitly select the
+fixture step so normal CI sends no provider traffic, but an incomplete run is
+rejected by signing, verification, and publication and can never become
+certificate evidence.
+
 ### 4. Runtime adapters are asynchronous and provider-agnostic
 
 `AgenticRuntimeEngineAdapter` owns async validate, prepare, execute, cancel,
@@ -242,24 +272,29 @@ domain-separated HMAC digests; they do not include source or transformed
 content.
 
 Unknown classification, provenance, trust, destination, or policy fails closed.
-The legacy preview policy described public and explicitly fake internal data,
-but Phase-0 containment authorizes neither class for remote agentic execution.
-Secrets, bearer authority, host operational metadata, unclassified content,
-and client-supplied classification are never remotely exportable.
+Current contained profile revisions list only Core-classified `public` content;
+`workspace_internal_fake` is always denied by the egress evaluator even if a
+malformed policy lists it. The historical `fake-data preview` display label is
+retained verbatim as a warning, not an attestation or authority grant. In Phase
+0 the independent central admission barrier authorizes no remote agentic
+execution. Secrets, bearer authority, host operational metadata, unclassified
+content, and client-supplied classification are never remotely exportable.
 
 OpenRouter agentic routing pins certified upstreams, disables fallback, requires
 parameters, denies data collection, and enforces ZDR when the egress policy
 requires it. No eligible upstream means no request. Effective upstream drift is
 verified against the certificate.
 
-The first certified OpenRouter preview uses Chat Completions v1, DeepSeek V4
+The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. Hardening changed the certified shared bundle to adapter
-version 3. Google preview revisions 1 and 2 and OpenRouter preview revision 1
-are suspended; Google revision 3 and OpenRouter revision 2 carry new immutable
-certificates for the exact v3 artifact rather than reusing earlier evidence.
+accepted as complete. The current contained definitions are Google revision 13
+and OpenRouter revision 12, both bound to
+`maverick-hosted-tool-loop==5`; older revisions are suspended rather than
+overwritten. Their certification manifests retain the distinct deterministic
+fixture and synthetic live steps. No live probe is run by ordinary repository
+checks, and no fixture-only result is certificate evidence.
 
 ## Concrete persistence map
 
@@ -276,7 +311,7 @@ normative so both adapters implement the same semantics.
 | Certificate status | `providers/agentic_capability_certificate_statuses.json` / `provider_agentic_capability_certificate_statuses` | `certificate_id`, revision CAS |
 | Evidence metadata | `providers/agentic_capability_evidence.json` / `provider_agentic_capability_evidence` | evidence digest, insert-only |
 | Evidence blob | `data/control-plane/provider-evidence/<digest-prefix>/<digest>` or configured platform blob adapter | content-addressed, create-if-absent, digest verified |
-| Execution binding / preparation barrier | `runtime/sessions/<session_id>/session.json` | binding embedded in a single immutable aggregate insert; `unprepared -> prepared` publication uses a one-way CAS |
+| Execution binding / session lifecycle | `runtime/sessions/<session_id>/session.json` | binding embedded in a single immutable aggregate insert; `unprepared -> prepared` publication uses a one-way CAS, while lifecycle status transitions are serialized by `session_lifecycle_handoff` and are not provider-record CAS |
 | Provider state | `runtime/sessions/<session_id>/provider_state.json` | `session_id`, insert-if-absent then revision/generation CAS |
 | Continuation handoff | `runtime/continuation_handoffs.json` | one workspace-scoped record per predecessor session; immutable compatibility evidence plus monotonic phase/revision CAS |
 | Tool invocation | `runtime/sessions/<session_id>/tool_invocations.json` | `invocation_id`, revision CAS |
@@ -301,6 +336,12 @@ operation that returns whether an exact identity-and-revision query matched.
 
 Store services never emulate CAS with an unlocked read followed by write.
 Revision starts at zero. Successful mutable writes increment by exactly one.
+These record-CAS rules apply to provider definition status, workspace binding,
+certificate status, provider state, and other explicitly revisioned records.
+They do not turn the runtime-session lifecycle into a revisioned provider
+record: session quarantine acquires the session lifecycle handoff, re-reads the
+aggregate, validates the legal transition, and persists the new status under
+that serialization boundary.
 Late provider-state writes additionally match the current turn generation and
 cannot change stopped, cancelled, failed, or recovery-required lifecycle state.
 Continuation transfer first CAS-fences the predecessor provider-state revision;
@@ -336,6 +377,14 @@ reconstruct the legacy default-based runtime path.
 binding when the pinning reader cutover occurs. Chat session selection never
 mutates that projection. All repository consumers are migrated in the same
 feature, and the legacy runtime reader is removed before Definition of Done.
+
+Runtime session projections carry the authoritative public governance snapshot
+needed to render historical pins: the exact immutable display name, provider,
+model, endpoint and upstream destination, effective egress/data policy, current
+certificate posture, and containment state. Chat renders those fields without
+reconstructing policy or classification in the browser. A contained historical
+pin remains visible as `fake-data preview` and NO-GO but never becomes a
+selectable new-chat option.
 
 ## Failure semantics
 
@@ -373,6 +422,9 @@ hosted runtime and tool orchestrator must bind every operation to the persisted
 session, workspace, actor, execution mode, execution binding, current grants,
 and current invocation policy. Client/model payloads cannot supply profile,
 credential, owner, grant, tool authority, private locator, or policy fields.
+Every runtime-token validation also re-reads its owning session; a missing or
+`recovery_required` owner has no operational bearer authority even if the token
+record is still cryptographically valid and marked active.
 
 Until the open runtime bearer authority, CSRF, app WebSocket, frontend/backend
 isolation, and recovery-policy blockers in `SECURITY.md` are closed:
@@ -419,8 +471,9 @@ The accepted order is:
 3. add certificates and effective-authority narrowing;
 4. add governed tool orchestration and persistent confirmation/replay state;
 5. add egress and provider-private state;
-6. prove the hosted loop with deterministic fake adapters/providers;
-7. certify one current GA provider for fake-data preview;
+6. prove the hosted loop with deterministic fixture adapters/providers;
+7. define one current GA provider candidate while retaining the exact
+   `fake-data preview` warning label;
 8. expose binding/certificate/session controls in Settings and Chat;
 9. add OpenRouter fixed-upstream privacy routing;
 10. complete concurrency, recovery, leakage, sub-agent, and rollback hardening.
@@ -438,7 +491,7 @@ The phase-9 gate covers cancellation races, terminal provider outages,
 mid-session certificate revocation, live egress-policy drift, prompt injection,
 provider-private quota/integrity failure, confirmation replay, child-agent
 binding isolation, and an operator rollback runbook. It does not promote either
-remote profile beyond fake-data preview.
+remote profile beyond the contained preview.
 
 ## Consequences
 

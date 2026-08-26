@@ -9,7 +9,8 @@ import unittest
 from core.egress import (
     AgenticEgressContentBlock,
     AgenticEgressEvaluator,
-    fake_data_preview_egress_policy,
+    AgenticEgressPolicy,
+    public_remote_egress_policy,
 )
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
@@ -45,7 +46,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
             observability_store=self.observability,
             decision_store=self.decision_store,
         )
-        self.policy = fake_data_preview_egress_policy(provider_id="fake-provider")
+        self.policy = public_remote_egress_policy(provider_id="fixture-provider")
 
     def block(self, **updates: object) -> AgenticEgressContentBlock:
         values: dict[str, object] = {
@@ -53,7 +54,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
             "session_id": "session-1",
             "turn_id": "turn-1",
             "workspace_id": "default",
-            "data_class": "workspace_internal_fake",
+            "data_class": "public",
             "provenance": "user_input",
             "trust_level": "trusted_actor",
             "content_type": "text/plain",
@@ -61,13 +62,13 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
         values.update(updates)
         return AgenticEgressContentBlock(**values)  # type: ignore[arg-type]
 
-    def test_fake_data_is_exported_and_audit_contains_only_hmac_metadata(self) -> None:
-        secret_phrase = "synthetic customer fixture alpha"
+    def test_public_data_is_exported_and_audit_contains_only_hmac_metadata(self) -> None:
+        secret_phrase = "public fixture alpha"
 
         result = self.evaluator.evaluate(
             block=self.block(),
             content=secret_phrase,
-            destination_provider_id="fake-provider",
+            destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
             now=NOW,
@@ -88,16 +89,16 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
 
     def test_unknown_class_provenance_trust_and_destination_fail_closed(self) -> None:
         scenarios = (
-            (self.block(data_class="future_class"), "fake-provider", "egress_data_class_denied"),
-            (self.block(provenance="future_source"), "fake-provider", "egress_provenance_unknown"),
-            (self.block(trust_level="future_trust"), "fake-provider", "egress_trust_unknown"),
+            (self.block(data_class="future_class"), "fixture-provider", "egress_data_class_denied"),
+            (self.block(provenance="future_source"), "fixture-provider", "egress_provenance_unknown"),
+            (self.block(trust_level="future_trust"), "fixture-provider", "egress_trust_unknown"),
             (self.block(), "other-provider", "egress_destination_denied"),
         )
         for block, provider_id, reason in scenarios:
             with self.subTest(reason=reason):
                 result = self.evaluator.evaluate(
                     block=block,
-                    content="fake content",
+                    content="denied fixture content",
                     destination_provider_id=provider_id,
                     destination_upstream_id=None,
                     policy=self.policy,
@@ -107,11 +108,32 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
                 self.assertIsNone(result.exported_content)
                 self.assertEqual(result.decision.reason_code, reason)
 
+    def test_legacy_fake_declaration_is_denied_even_if_a_policy_lists_it(self) -> None:
+        policy = AgenticEgressPolicy(
+            policy_id="malformed-fixture-policy",
+            revision="1",
+            allowed_data_classes=("workspace_internal_fake",),
+            allowed_provider_ids=("fixture-provider",),
+            allowed_upstream_ids=(),
+        )
+
+        result = self.evaluator.evaluate(
+            block=self.block(data_class="workspace_internal_fake"),
+            content="client-authored classification",
+            destination_provider_id="fixture-provider",
+            destination_upstream_id=None,
+            policy=policy,
+            now=NOW,
+        )
+
+        self.assertFalse(result.decision.export_allowed)
+        self.assertEqual(result.decision.reason_code, "egress_data_class_denied")
+
     def test_workspace_path_is_rewritten_and_other_host_path_is_denied(self) -> None:
         rewritten = self.evaluator.evaluate(
             block=self.block(),
             content="read /srv/maverick/workspaces/default/generated/report.txt",
-            destination_provider_id="fake-provider",
+            destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
             workspace_root=Path("/srv/maverick/workspaces/default"),
@@ -120,7 +142,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
         denied = self.evaluator.evaluate(
             block=self.block(content_block_id="block-2"),
             content="read /etc/shadow",
-            destination_provider_id="fake-provider",
+            destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
             now=NOW,
@@ -147,7 +169,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
                     "The installation root is `/home/ubuntu/projects/maverick-v3`."
                 ),
             },
-            destination_provider_id="fake-provider",
+            destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
             workspace_root=Path("/srv/maverick/workspaces/default"),
@@ -156,7 +178,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
         denied = self.evaluator.evaluate(
             block=self.block(content_block_id="block-user-host-path"),
             content="read /home/ubuntu/.ssh/id_ed25519",
-            destination_provider_id="fake-provider",
+            destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
             now=NOW,
@@ -184,7 +206,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
         transformed = self.evaluator.evaluate(
             block=self.block(),
             content=content,
-            destination_provider_id="fake-provider",
+            destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
             now=NOW,
@@ -192,7 +214,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
         denied = self.evaluator.evaluate(
             block=self.block(content_block_id="block-secret", data_class="credential_or_secret"),
             content=content,
-            destination_provider_id="fake-provider",
+            destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
             now=NOW,
@@ -211,7 +233,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
         first = self.evaluator.evaluate(
             block=block,
             content={"api_key": "provider-e2e-secret-json", "fixture": True},
-            destination_provider_id="fake-provider",
+            destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
             now=NOW,
@@ -219,7 +241,7 @@ class AgenticEgressEvaluatorTest(unittest.TestCase):
         retried = self.evaluator.evaluate(
             block=block,
             content={"fixture": True, "api_key": "provider-e2e-secret-json"},
-            destination_provider_id="fake-provider",
+            destination_provider_id="fixture-provider",
             destination_upstream_id=None,
             policy=self.policy,
             now=NOW.replace(microsecond=1),

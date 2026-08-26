@@ -54,7 +54,7 @@ class AgenticWorkspaceAdminTest(unittest.TestCase):
             allowed_agent_type_ids=(),
         )
         policy_patch = {
-            "allowed_remote_data_classes": ["workspace_internal_fake"],
+            "allowed_remote_data_classes": ["public"],
             "tool_access_enabled": False,
             "max_estimated_cost_microusd": 100_000,
         }

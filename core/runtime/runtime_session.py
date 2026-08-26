@@ -41,7 +41,7 @@ RUNTIME_SESSION_KINDS = {"chat_root", "inter_agent_participant", "system"}
 RUNTIME_THREAD_VISIBILITIES = {"user", "hidden"}
 RUNTIME_MODES = {"agentic", "plain_hosted_chat"}
 SKILL_ACTIVATION_MODES = {"implicit", "explicit"}
-DECLARABLE_REMOTE_DATA_CLASSES = {"public", "workspace_internal_fake"}
+LEGACY_DECLARED_REMOTE_DATA_CLASSES = {"public", "workspace_internal_fake"}
 
 
 @dataclass(frozen=True)
@@ -160,11 +160,11 @@ def coerce_skill_activation_mode(value: object | None) -> SkillActivationMode:
 
 
 def coerce_declared_remote_data_class(value: object | None) -> RuntimeDataClass | None:
-    """Accept only data classes a user can safely attest for an entire session."""
+    """Normalize legacy stored metadata; this value never grants admission."""
     if value is None or value == "":
         return None
     normalized = str(value).strip()
-    if normalized in DECLARABLE_REMOTE_DATA_CLASSES:
+    if normalized in LEGACY_DECLARED_REMOTE_DATA_CLASSES:
         return normalized  # type: ignore[return-value]
     raise ValueError("Unsupported declared remote data class.")
 

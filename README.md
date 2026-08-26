@@ -94,6 +94,7 @@ For local service installs, hosted evaluation, MongoDB, nginx, certbot, systemd,
 - **Widgets:** small app-owned surfaces that can render inside other apps without source imports.
 - **Runtime agents and skills:** provider-backed agent sessions that use workspace-owned skills and runtime roots.
 - **Provider abstraction:** Codex is the default concrete runtime backend today. Hosted model providers such as OpenRouter are separate text-generation providers for fast/plain hosted chat and do not replace the agentic Codex runtime.
+- **Remote agentic containment:** Google, OpenRouter, and any other hosted agentic runtime are Phase-0 **NO-GO** and fail closed before persistence and dispatch. Their certification manifests retain both deterministic fixture conformance and an operator-only synthetic live probe; ordinary repository checks select only the fixture step, while fixture-only output is ineligible for signing, verification, publication, or certificate evidence. This repository does not claim an operational apply, executed live-provider probe, or completed remote release gate. Exact Codex agentic and `plain_hosted_chat` behavior remain separate.
 - **Persistence abstraction:** JSON is the default local control-plane adapter; MongoDB is optional for hosted evaluation.
 
 ## Apps Are The Integration Layer

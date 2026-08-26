@@ -350,12 +350,12 @@ def _request(request_id: str, *, private_state=None, tool_results=()) -> Agentic
         reasoning_effort="medium",
         content_blocks=(
             AgenticRequestContentBlock(
-                f"{request_id}:system", "system", "workspace_internal_fake",
+                f"{request_id}:system", "system", "public",
                 "platform_instruction", "trusted_platform", "text/plain",
                 b"Use synthetic fixture data only.",
             ),
             AgenticRequestContentBlock(
-                f"{request_id}:user", "user", "workspace_internal_fake",
+                f"{request_id}:user", "user", "public",
                 "user_input", "trusted_actor", "text/plain", b"Read fixture value four.",
             ),
         ),

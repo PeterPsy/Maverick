@@ -223,7 +223,8 @@ only selects the model. During OpenRouter execution, Maverick
 translates the saved per-model preference into the OpenRouter `provider`
 request object.
 
-OpenRouter also has one separate agentic fake-data preview. It pins
+OpenRouter also has one separate contained agentic candidate whose exact
+display label retains the historical `fake-data preview` warning. It pins
 `deepseek/deepseek-v4-flash` to `deepinfra/fp8` through
 `openrouter-chat-completions` v1 and the shared `maverick-tool-loop`. Unlike
 plain hosted chat, this profile does not inherit workspace OpenRouter routing
@@ -419,12 +420,13 @@ namespace and integrity binding.
 
 ## Hosted Agentic Egress Records
 
-`AgenticEgressEvaluator` evaluates every classified content block against its
+`AgenticEgressEvaluator` evaluates every Core-classified content block against its
 exact provider/upstream and policy revision before returning bytes to a request
 builder. Unknown data class, provenance, trust, provider, or upstream fails
-closed. The preview policy exports only `public` and
-`workspace_internal_fake`; secret, host-operational, and unclassified content
-is always denied. Workspace paths are rewritten to `workspace://` references,
+closed. Current contained revisions list only `public`, and
+`workspace_internal_fake` is always denied even when a malformed policy lists
+it; no client or egress-policy id is attestation. Secret, host-operational, and
+unclassified content is always denied. Workspace paths are rewritten to `workspace://` references,
 other host paths are denied, and recognizable sensitive text must be redacted.
 
 The complete decision metadata is inserted first into the session-owned

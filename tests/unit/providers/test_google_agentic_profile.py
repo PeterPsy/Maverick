@@ -11,8 +11,12 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from core.api.platform_state import bootstrap_platform_state
 from core.providers.certificate_service import runtime_adapter_artifact_digest
-from core.providers.certification_pipeline import execute_certification_suite, sign_certification_run
-from core.providers.errors import ProviderNotFoundError
+from core.providers.certification_pipeline import (
+    SignedCertificationRun,
+    execute_certification_suite,
+    sign_certification_run,
+)
+from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 from core.providers.google_agentic_certification import (
     GOOGLE_CERTIFICATION_MATRIX_REVISION,
     GOOGLE_CERTIFICATION_SUITE_ID,
@@ -63,7 +67,9 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         self.assertEqual(profile.adapter_version_constraint, "==5")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.provider_api_version, "v1")
-        self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public", "workspace_internal_fake"))
+        self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
+        self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
+        self.assertEqual(profile.egress_policy_revision, "2")
         self.assertEqual(
             profile.policy_ceiling.allowed_tool_handles,
             (
@@ -80,6 +86,15 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
             "core.providers.certification_pipeline._git_commit", return_value="a" * 40
         ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=completed):
+            fixture_run = execute_certification_suite(
+                cwd=repository_root,
+                suite_id=GOOGLE_CERTIFICATION_SUITE_ID,
+                suite_version=GOOGLE_CERTIFICATION_SUITE_VERSION,
+                adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
+                evidence_refs=("platform-evidence:test-run:google-fixture",),
+                started_at=NOW,
+                step_kinds=("fixture_contract",),
+            )
             run = execute_certification_suite(
                 cwd=repository_root,
                 suite_id=GOOGLE_CERTIFICATION_SUITE_ID,
@@ -87,6 +102,25 @@ class GoogleAgenticProfileTest(unittest.TestCase):
                 adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
                 evidence_refs=("platform-evidence:test-run:google",),
                 started_at=NOW,
+            )
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "certification_required_steps_missing",
+        ):
+            publish_google_preview_certificate(
+                state.provider_store,
+                definition=profile,
+                adapter=adapter,
+                signed_run=SignedCertificationRun(
+                    run=fixture_run,
+                    signer_key_id="test-ci",
+                    signature="fixture-only-is-not-certificate-evidence",
+                ),
+                trusted_keys={"test-ci": private_key.public_key()},
+            )
+        with self.assertRaises(ProviderNotFoundError):
+            state.provider_store.get_capability_certificate(
+                profile.capability_certificate_id
             )
         signed = sign_certification_run(
             run,
@@ -161,17 +195,17 @@ class GoogleAgenticProfileTest(unittest.TestCase):
             "public",
         )
 
-    def test_classifier_honors_only_persisted_session_fake_data_declaration(self) -> None:
+    def test_classifier_ignores_persisted_legacy_declaration(self) -> None:
         context = SimpleNamespace(
-            session=SimpleNamespace(declared_remote_data_class="workspace_internal_fake")
+            session=SimpleNamespace(declared_remote_data_class="legacy-non-authoritative")
         )
         self.assertEqual(
             classify_hosted_content_fail_closed(context, "user_input", "fixture").data_class,
-            "workspace_internal_fake",
+            "unclassified",
         )
         self.assertEqual(
             classify_hosted_content_fail_closed(context, "tool_result", {"fixture": True}).data_class,
-            "workspace_internal_fake",
+            "unclassified",
         )
 
 

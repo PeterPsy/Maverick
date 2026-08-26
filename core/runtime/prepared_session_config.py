@@ -32,7 +32,6 @@ def prepared_session_fingerprint(body: Mapping[str, object], *, agent_id: str) -
         "hosted_model_id": _text(body.get("hosted_model_id")) or None,
         "workspace_profile_binding_id": _text(body.get("workspace_profile_binding_id")) or None,
         "reasoning_effort": _text(body.get("reasoning_effort")) or None,
-        "declared_remote_data_class": _text(body.get("declared_remote_data_class")) or None,
         "title": _text(body.get("title")),
         "agent_label": _text(body.get("agent_label")),
     }

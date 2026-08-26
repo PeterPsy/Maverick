@@ -141,24 +141,18 @@ def build_hosted_agentic_engine_adapter(
 
 
 def classify_hosted_content_fail_closed(
-    context,
+    _context,
     provenance: str,
     _content: object,
 ) -> HostedContentClassification:
-    """Classify only provider-owned state and public tool schemas automatically."""
+    """Classify only public platform tool schemas; every content value stays unclassified."""
     if provenance == "tool_schema":
         return HostedContentClassification("public", "trusted_platform")
-    if provenance == "provider_state":
-        return HostedContentClassification("workspace_internal_fake", "trusted_platform")
-    if (
-        provenance in {"platform_instruction", "user_input", "tool_result"}
-        and context is not None
-        and getattr(context.session, "declared_remote_data_class", None)
-        == "workspace_internal_fake"
-    ):
-        trust = "untrusted_tool_output" if provenance == "tool_result" else "trusted_actor"
-        return HostedContentClassification("workspace_internal_fake", trust)
-    trust = "untrusted_tool_output" if provenance == "tool_result" else "trusted_actor"
+    trust = {
+        "provider_state": "trusted_platform",
+        "platform_instruction": "trusted_platform",
+        "tool_result": "untrusted_tool_output",
+    }.get(provenance, "trusted_actor")
     return HostedContentClassification("unclassified", trust)
 
 

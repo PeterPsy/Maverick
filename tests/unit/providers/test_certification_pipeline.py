@@ -9,6 +9,7 @@ from unittest import mock
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from core.providers.certification_pipeline import (
+    SignedCertificationRun,
     execute_certification_suite,
     sign_certification_run,
     validate_run_against_manifest,
@@ -16,6 +17,11 @@ from core.providers.certification_pipeline import (
 )
 from core.providers.errors import CapabilityCertificateError
 from core.providers.google_agentic_certification import GOOGLE_CERTIFICATION_SUITE_VERSION
+from core.providers.certification_manifests import (
+    GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
+    OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
+)
+from core.runtime.execution_binding import canonical_digest
 
 
 class CertificationPipelineTest(unittest.TestCase):
@@ -40,6 +46,34 @@ class CertificationPipelineTest(unittest.TestCase):
         self.assertTrue(verified.test_run_id.startswith("run:"))
         self.assertEqual(len(verified.source_commit), 40)
         self.assertEqual(len(verified.artifact_bundle_digest), 64)
+
+    def test_fixture_only_run_cannot_be_signed_or_verified(self) -> None:
+        run = self._execute(step_kinds=("fixture_contract",))
+        private_key = Ed25519PrivateKey.generate()
+
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "certification_required_steps_missing",
+        ):
+            sign_certification_run(
+                run,
+                signer_key_id="ci-2026",
+                private_key=private_key,
+            )
+
+        unsigned_fixture_claim = SignedCertificationRun(
+            run=run,
+            signer_key_id="ci-2026",
+            signature="not-certificate-evidence",
+        )
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "certification_required_steps_missing",
+        ):
+            verify_certification_run(
+                unsigned_fixture_claim,
+                trusted_keys={"ci-2026": private_key.public_key()},
+            )
 
     def test_failed_suite_emits_no_run_result(self) -> None:
         failed = mock.Mock(returncode=2, stdout=b"", stderr=b"failed")
@@ -75,19 +109,81 @@ class CertificationPipelineTest(unittest.TestCase):
                 evidence_refs=("platform-evidence:test",), started_at=self.started_at,
             )
 
-    def _execute(self):
+    def test_remote_manifests_bind_fixture_and_live_probe_commands(self) -> None:
+        expected_live_commands = {
+            "google-ai-studio": (
+                "python3",
+                "scripts/run_google_interactions_probe.py",
+            ),
+            "openrouter": (
+                "python3",
+                "scripts/run_openrouter_agentic_probe.py",
+            ),
+        }
+        expected_command_digests = {
+            ("google-ai-studio", "fixture_contract"): (
+                "30afb688b6f3b45c756dcc8db3da1be3af50d2f1ed10e485ae91cbabcb7da685"
+            ),
+            ("google-ai-studio", "live_probe"): (
+                "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
+            ),
+            ("openrouter", "fixture_contract"): (
+                "a9aaf0e2c5d9bdb05ae87ee1e87111fdb302d751e61b859d7290307cf896cad3"
+            ),
+            ("openrouter", "live_probe"): (
+                "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
+            ),
+        }
+        for manifest in (
+            GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,
+            OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
+        ):
+            with self.subTest(provider_id=manifest.provider_id):
+                self.assertEqual(
+                    tuple(step.kind for step in manifest.steps),
+                    ("fixture_contract", "live_probe"),
+                )
+                self.assertEqual(
+                    manifest.steps[1].command,
+                    expected_live_commands[manifest.provider_id],
+                )
+                for step in manifest.steps:
+                    self.assertEqual(
+                        canonical_digest(step.command),
+                        expected_command_digests[(manifest.provider_id, step.kind)],
+                    )
+
+    def _execute(self, *, step_kinds: tuple[str, ...] | None = None):
         passed = mock.Mock(returncode=0, stdout=b"passed", stderr=b"")
         with mock.patch("core.providers.certification_pipeline._require_clean_checkout"), mock.patch(
             "core.providers.certification_pipeline._git_commit", return_value="a" * 40
-        ), mock.patch("core.providers.certification_pipeline.subprocess.run", return_value=passed):
-            return self._execute_unpatched()
+        ), mock.patch(
+            "core.providers.certification_pipeline.subprocess.run",
+            return_value=passed,
+        ) as run_subprocess:
+            result = self._execute_unpatched(step_kinds=step_kinds)
+        expected_steps = [
+            step
+            for step in GOOGLE_AGENTIC_CERTIFICATION_MANIFEST.steps
+            if step_kinds is None or step.kind in step_kinds
+        ]
+        self.assertEqual(
+            [call.args[0] for call in run_subprocess.call_args_list],
+            [step.command for step in expected_steps],
+        )
+        self.assertEqual(
+            [item["command_digest"] for item in result.step_results],
+            [canonical_digest(step.command) for step in expected_steps],
+        )
+        return result
 
-    def _execute_unpatched(self):
+    def _execute_unpatched(self, *, step_kinds: tuple[str, ...] | None = None):
         return execute_certification_suite(
             cwd=self.root, suite_id=self.suite_id, suite_version=self.suite_version,
             adapter_artifact_digest=self.digest,
             evidence_refs=("platform-evidence:test-run:result",),
             started_at=self.started_at,
+            step_kinds=step_kinds,
         )
 
 

@@ -35,7 +35,7 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                 AgenticRequestContentBlock(
                     content_block_id="block-1",
                     role="user",
-                    data_class="workspace_internal_fake",
+                    data_class="public",
                     provenance="user_input",
                     trust_level="trusted_actor",
                     content_type="text/plain",

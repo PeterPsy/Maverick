@@ -1,7 +1,7 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-08-21
-Matrix revision: `2026-08-21-r7`
+Status date: 2026-08-26
+Matrix revision: `2026-08-26-r8`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
 Adapter: `maverick-hosted-tool-loop==5`
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==5`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `11` (revision `10` suspended) |
+| Immutable profile revision | `12` (revision `11` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -25,7 +25,7 @@ Adapter: `maverick-hosted-tool-loop==5`
 | Mixed response handling | provisional text plus one tool call is retained privately and continued |
 | Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
-| Remote data classes | `public`, `workspace_internal_fake` |
+| Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
 | Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
 | Certificate lifetime after a successful signed run | 30 days |
 
@@ -85,7 +85,7 @@ Primary references:
 | No eligible endpoint | HTTP and streamed 404 normalization fixtures | not certified |
 | Tool call id/name/count | fragmented arguments, exact pairing, secondary-index serialization, and duplicate-primary rejection | not certified |
 | Mixed text then tool | provisional narration is not finalized or duplicated; one call continues to the next step | not certified |
-| Multi-step continuation | three sequential live tool rounds followed by a final response at every reasoning effort | not certified |
+| Multi-step continuation | deterministic fixtures for three sequential tool rounds followed by a final response at every reasoning effort | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
@@ -98,13 +98,17 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
+| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus final response at every certificate-bound reasoning effort | manifest step available; not run for r8 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the candidate profile and never manufactures a
-certificate. Certification requires the complete suite plus a fresh
-operator-run synthetic live probe, reconfirmation of endpoint and ZDR catalogs,
-an immutable result bound to source commit, suite version, adapter artifact
-bundle and this matrix revision, and an Ed25519 signature from a trusted CI key.
+certificate. Certification requires deterministic fixture conformance, the
+operator-only synthetic live probe with fresh catalog/ZDR reconfirmation,
+behavioral validation of the complete ordered manifest and canonical command
+digests, and only then an immutable signed result and publication. Repository
+checks explicitly select `fixture_contract` and never start the retained
+`live_probe`; fixture-only output is rejected by signing, verification, and
+publication.
 The executable signing and publication workflow is defined in
 `docs/runbooks/agentic_certification_evidence.md`.
 
@@ -122,18 +126,20 @@ step. Revision 10 retains only the fully validated index-0 call in private
 continuation state. Later indexed proposals are neither emitted nor executed;
 after the primary result is replayed, the model can request remaining work in a
 new sequential step. A missing index-0 call or a conflicting second index-0
-identity still fails closed. Revision 10 remains uncertified and hidden until
-the complete r6 suite, catalog preflight, signed live probe, and publication
-workflow succeed.
+identity still fails closed. Revision 10 is historical and suspended.
 
 Revision 11 carries the corrected shared hosted-loop budget accounting and
 egress transformation contract. A provider request keeps a conservative
 reservation until priced usage replaces it; missing usage remains charged at
 the worst case. Absolute host paths found inside untrusted tool output are
 redacted after exact workspace-root rewriting, while host paths from every
-other provenance remain denied. Revision 11 remains hidden until the complete
-r7 suite, catalog preflight, signed live probe, and publication workflow
-succeed.
+other provenance remain denied. Revision 11 is historical and suspended.
+
+Revision 12 retains the exact `fake-data preview` warning label but removes fake
+classification authority: its policy lists only Core-classified `public`, its
+egress id is `remote-agentic-contained@2`, and central admission remains
+NO-GO. The r8 certification manifest retains both `fixture_contract` and
+`live_probe`; the live step has not been run for this candidate.
 
 ## Fail-closed conditions
 

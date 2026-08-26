@@ -387,7 +387,6 @@ export type AgenticCertificate = {
   effective_status: string;
   expires_at: string;
   revoked_at: string | null;
-  revocation_reason: string | null;
   status_revision: number | null;
   certified_capabilities: Record<string, boolean>;
 };
@@ -447,6 +446,22 @@ export type AgenticAdminItem = {
   profile_status: string;
   certificate_eligibility: string;
   upstream_provider_ids: string[];
+  data_destination: {
+    provider_id: string;
+    endpoint_id: string;
+    upstream_provider_ids: string[];
+    display_label: string;
+  };
+  egress_policy: {
+    policy_id: string;
+    revision: string;
+    allowed_remote_data_classes: string[];
+  };
+  data_policy: {
+    collection: string;
+    require_zdr: boolean;
+    attestation_state: 'unavailable';
+  };
 };
 
 export type AgenticAdminPayload = {

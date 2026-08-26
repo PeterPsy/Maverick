@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 import json
@@ -24,12 +25,20 @@ from core.providers.agentic_profiles import (
 from core.providers.agentic_workspace_policy import actor_selection_allowed
 from core.providers.service import effective_provider_registry, resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.execution_binding import RuntimeExecutionBinding
 from core.runtime.app_streams import RuntimeAppStreamError, RuntimeAppStreamRecord
-from core.runtime.runtime_session import runtime_session_allows_user_thread
-from core.runtime.runtime_session import coerce_declared_remote_data_class, coerce_runtime_mode
+from core.runtime.remote_agentic_admission import (
+    require_remote_agentic_session_admission,
+)
+from core.runtime.runtime_session import (
+    RuntimeSessionRecord,
+    coerce_runtime_mode,
+    runtime_session_allows_user_thread,
+)
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
-from core.runtime.routing import build_runtime_routing
+from core.runtime.routing import build_runtime_routing, resolve_runtime_execution_mode
 from core.runtime.runtime_threads import create_runtime_thread
+from core.runtime.turn_queue_admission import require_turn_queue_session_executable
 from core.runtime.service import (
     claim_runtime_turn_cancellation,
     create_runtime_session,
@@ -46,6 +55,7 @@ from core.secrets.errors import SecretError
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
+from core.workspaces.models import WorkspaceGovernanceRecord
 
 
 RUNTIME_REQUEST_KEYS = ("runtime_session_requests", "runtime_launch_requests")
@@ -53,6 +63,16 @@ RUNTIME_INTERRUPT_REQUEST_KEYS = ("runtime_turn_interrupt_requests", "runtime_in
 DEPENDENCY_BACKEND_REQUEST_KEYS = ("dependency_backend_requests",)
 MAX_RUNTIME_REQUEST_ATTACHMENTS = 5
 ATTACHMENT_STORAGE_PREFIXES = (("storage", "uploaded"), ("storage", "generated"))
+
+
+@dataclass(frozen=True)
+class RuntimeRequestPreflight:
+    """Persistence-free session or pin authorized for one app runtime request."""
+
+    existing_session: RuntimeSessionRecord | None
+    session_id: str | None
+    governance: WorkspaceGovernanceRecord | None
+    execution_binding: RuntimeExecutionBinding | None
 
 
 def apply_app_runtime_requests(
@@ -311,6 +331,13 @@ def _apply_one_runtime_request(
     stream_requested = bool(request.get("create_stream"))
     actor_id = _text(actor_user_id) or "system"
     try:
+        preflight = _preflight_runtime_request_before_persistence(
+            state,
+            request=request,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            actor_user_id=actor_user_id,
+        )
         if stream_requested:
             idempotency_key = _text(request.get("idempotency_key"))
             if not idempotency_key:
@@ -360,6 +387,7 @@ def _apply_one_runtime_request(
             parsed=parsed,
             start_path=start_path,
             actor_user_id=actor_user_id,
+            preflight=preflight,
         )
         session = _apply_project_root_capability(
             state,
@@ -476,20 +504,10 @@ def _runtime_session_for_request(
     parsed: ParsedAppContract,
     start_path: Path,
     actor_user_id: str | None = None,
+    preflight: RuntimeRequestPreflight,
 ):
-    existing_session_id = _text(request.get("runtime_session_id"))
-    if existing_session_id:
-        try:
-            session = state.runtime_store.get_session(existing_session_id)
-        except RuntimeSessionNotFoundError as exc:
-            raise AppHostingError(f"Runtime session `{existing_session_id}` was not found.") from exc
-        if session.workspace_id != workspace_id:
-            raise AppHostingError(f"Runtime session `{existing_session_id}` is outside workspace `{workspace_id}`.")
-        if not runtime_session_allows_user_thread(session):
-            raise AppHostingError(f"Runtime session `{existing_session_id}` is hidden and must be operated through inter-agent APIs.")
-        if session.source_app_id != app_id:
-            raise AppHostingError(f"Runtime session `{existing_session_id}` is owned by another source app.")
-        return session
+    if preflight.existing_session is not None:
+        return preflight.existing_session
     agent_id = _text(request.get("agent_id") or request.get("agent_type_id"))
     if not agent_id:
         raise AppHostingError("Runtime launch request requires agent_id.")
@@ -500,8 +518,10 @@ def _runtime_session_for_request(
         app_id=app_id,
         start_path=start_path,
     )
-    session_id = str(uuid4())
-    governance = state.workspace_store.get_governance(workspace_id)
+    session_id = preflight.session_id
+    governance = preflight.governance
+    if session_id is None or governance is None:
+        raise ProviderError("runtime_request_preflight_incomplete")
     routing = build_runtime_routing(
         session_id=session_id,
         workspace_id=workspace_id,
@@ -512,54 +532,19 @@ def _runtime_session_for_request(
         start_path=start_path,
     )
     runtime_mode = coerce_runtime_mode(request.get("runtime_mode"))
-    declared_remote_data_class = coerce_declared_remote_data_class(
-        request.get("declared_remote_data_class")
-    )
-    execution_binding = None
-    if runtime_mode == "agentic":
-        registry = effective_provider_registry(
-            state.provider_store,
-            registry=getattr(state, "provider_registry", None),
+    execution_binding = preflight.execution_binding
+    if (
+        (runtime_mode == "agentic") != (execution_binding is not None)
+        or (
+            execution_binding is not None
+            and (
+                execution_binding.session_id != session_id
+                or execution_binding.workspace_id != workspace_id
+                or execution_binding.execution_mode != routing.effective_mode
+            )
         )
-        _definition, workspace_binding = resolve_workspace_agentic_profile(
-            state.provider_store,
-            workspace_id=workspace_id,
-            binding_id=_text(request.get("workspace_profile_binding_id")) or None,
-        )
-        platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
-            state,
-            user_id=_text(actor_user_id) or None,
-            workspace_id=workspace_id,
-        )
-        if not actor_selection_allowed(
-            workspace_binding,
-            user_id=user_id,
-            platform_role=platform_role,
-            workspace_role=workspace_role,
-            agent_type_id=_text(request.get("agent_type_id")) or agent_id,
-        ):
-            raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
-        if workspace_binding.egress_policy_id == "fake-data-remote-preview":
-            declared_remote_data_class = "workspace_internal_fake"
-        elif declared_remote_data_class is not None:
-            raise ProviderError("remote_data_declaration_not_applicable")
-        if (
-            declared_remote_data_class is not None
-            and declared_remote_data_class
-            not in workspace_binding.workspace_policy_ceiling.allowed_remote_data_classes
-        ):
-            raise ProviderError("remote_data_class_not_allowed")
-        execution_binding = build_pinned_execution_binding(
-            state.provider_store,
-            registry,
-            session_id=session_id,
-            workspace_id=workspace_id,
-            execution_mode=routing.effective_mode,
-            workspace_binding_id=_text(request.get("workspace_profile_binding_id")) or None,
-            reasoning_effort=_text(request.get("reasoning_effort")) or None,
-        )
-    elif declared_remote_data_class is not None:
-        raise ProviderError("remote_data_declaration_not_applicable")
+    ):
+        raise ProviderError("runtime_request_preflight_pin_mismatch")
     session = create_runtime_session(
         state.runtime_store,
         session_id=session_id,
@@ -569,7 +554,7 @@ def _runtime_session_for_request(
         runtime_mode=runtime_mode,
         hosted_provider_id=request.get("hosted_provider_id"),
         hosted_model_id=request.get("hosted_model_id"),
-        declared_remote_data_class=declared_remote_data_class,
+        declared_remote_data_class=None,
         system_prompt=system_prompt,
         skill_ids=_list_of_text(request.get("skill_ids")),
         skill_activation_mode=request.get("skill_activation_mode"),
@@ -613,6 +598,140 @@ def _runtime_session_for_request(
         now=session.started_at or session.updated_at,
     )
     return session
+
+
+def _preflight_runtime_request_before_persistence(
+    state,
+    *,
+    request: dict[str, Any],
+    workspace_id: str,
+    app_id: str,
+    actor_user_id: str | None,
+) -> RuntimeRequestPreflight:
+    """Authorize an existing session or exact new-session pin before reservation."""
+    _reject_app_remote_data_declaration(request)
+    existing_session_id = _text(request.get("runtime_session_id"))
+    if existing_session_id:
+        session = _existing_runtime_session_for_request(
+            state,
+            session_id=existing_session_id,
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
+        require_turn_queue_session_executable(state.runtime_store, session)
+        return RuntimeRequestPreflight(
+            existing_session=session,
+            session_id=None,
+            governance=None,
+            execution_binding=None,
+        )
+    agent_id = _text(request.get("agent_id") or request.get("agent_type_id"))
+    if not agent_id:
+        raise AppHostingError("Runtime launch request requires agent_id.")
+    runtime_mode = coerce_runtime_mode(request.get("runtime_mode"))
+    authorized_profile = None
+    if runtime_mode == "agentic":
+        authorized_profile = _authorize_new_agentic_app_session(
+            state,
+            request=request,
+            workspace_id=workspace_id,
+            agent_id=agent_id,
+            actor_user_id=actor_user_id,
+        )
+    session_id = str(uuid4())
+    governance = state.workspace_store.get_governance(workspace_id)
+    execution_binding = None
+    if authorized_profile is not None:
+        registry = effective_provider_registry(
+            state.provider_store,
+            registry=getattr(state, "provider_registry", None),
+        )
+        execution_binding = build_pinned_execution_binding(
+            state.provider_store,
+            registry,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            execution_mode=resolve_runtime_execution_mode(
+                workspace_id=workspace_id,
+                requested_mode=request.get("requested_mode"),
+                governance=governance,
+                platform_allows_full_access=workspace_id == "default",
+            ),
+            workspace_binding_id=_text(request.get("workspace_profile_binding_id")) or None,
+            reasoning_effort=_text(request.get("reasoning_effort")) or None,
+            authorized_definition_snapshot=authorized_profile[0],
+            authorized_workspace_binding_snapshot=authorized_profile[1],
+        )
+    return RuntimeRequestPreflight(
+        existing_session=None,
+        session_id=session_id,
+        governance=governance,
+        execution_binding=execution_binding,
+    )
+
+
+def _existing_runtime_session_for_request(
+    state,
+    *,
+    session_id: str,
+    workspace_id: str,
+    app_id: str,
+) -> RuntimeSessionRecord:
+    try:
+        session = state.runtime_store.get_session(session_id)
+    except RuntimeSessionNotFoundError as exc:
+        raise AppHostingError(f"Runtime session `{session_id}` was not found.") from exc
+    if session.workspace_id != workspace_id:
+        raise AppHostingError(
+            f"Runtime session `{session_id}` is outside workspace `{workspace_id}`."
+        )
+    if not runtime_session_allows_user_thread(session):
+        raise AppHostingError(
+            f"Runtime session `{session_id}` is hidden and must be operated through inter-agent APIs."
+        )
+    if session.source_app_id != app_id:
+        raise AppHostingError(
+            f"Runtime session `{session_id}` is owned by another source app."
+        )
+    return session
+
+
+def _authorize_new_agentic_app_session(
+    state,
+    *,
+    request: dict[str, Any],
+    workspace_id: str,
+    agent_id: str,
+    actor_user_id: str | None,
+):
+    """Resolve actor/profile policy and run the central remote admission gate."""
+    definition, workspace_binding = resolve_workspace_agentic_profile(
+        state.provider_store,
+        workspace_id=workspace_id,
+        binding_id=_text(request.get("workspace_profile_binding_id")) or None,
+        enforce_remote_admission=False,
+    )
+    platform_role, user_id, workspace_role = resolve_runtime_actor_roles(
+        state,
+        user_id=_text(actor_user_id) or None,
+        workspace_id=workspace_id,
+    )
+    if not actor_selection_allowed(
+        workspace_binding,
+        user_id=user_id,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
+        agent_type_id=_text(request.get("agent_type_id")) or agent_id,
+    ):
+        raise AuthorizationError("workspace_agentic_profile_selection_forbidden")
+    require_remote_agentic_session_admission(definition)
+    return definition, workspace_binding
+
+
+def _reject_app_remote_data_declaration(request: dict[str, Any]) -> None:
+    """Reject app-authored session classification rather than interpreting it."""
+    if request.get("declared_remote_data_class") not in {None, ""}:
+        raise ProviderError("remote_data_declaration_not_accepted")
 
 
 def _validated_runtime_request_attachments(

@@ -6,7 +6,7 @@ from core.egress.agentic_models import (
     AgenticEgressPolicy,
     AgenticEgressResult,
 )
-from core.egress.agentic_policy import AgenticEgressEvaluator, fake_data_preview_egress_policy
+from core.egress.agentic_policy import AgenticEgressEvaluator, public_remote_egress_policy
 
 from core.egress.models import (
     BrowserEgressPolicy,
@@ -30,6 +30,6 @@ __all__ = [
     "EgressTarget",
     "evaluate_browser_egress_url",
     "evaluate_browser_redirect_chain",
-    "fake_data_preview_egress_policy",
+    "public_remote_egress_policy",
     "resolve_browser_egress_url_addresses",
 ]

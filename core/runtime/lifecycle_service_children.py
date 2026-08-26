@@ -24,6 +24,7 @@ def transition_runtime_session(
     *,
     session_id: str,
     target_status: RuntimeSessionStatus,
+    expected_status: RuntimeSessionStatus | None = None,
     error_detail: str | None = None,
     forced_stop_reason: str | None = None,
     recovery_reason_code: str | None = None,
@@ -34,11 +35,10 @@ def transition_runtime_session(
     """Transition one runtime session between canonical lifecycle statuses."""
     timestamp = now or utcnow()
     location = store.get_session(session_id)
-    with store.session_lifecycle_handoff(
-        workspace_id=location.workspace_id,
-        session_id=location.session_id,
-    ):
+    with store.session_lifecycle_handoff(workspace_id=location.workspace_id, session_id=location.session_id):
         session = store.get_session(session_id)
+        if expected_status is not None and session.status != expected_status:
+            raise RuntimeTransitionError("runtime_session_expected_status_changed")
         allowed: dict[RuntimeSessionStatus, set[RuntimeSessionStatus]] = {
             "created": {"running", "stopped", "failed", "recovery_required"},
             "running": {"stopping", "stopped", "failed", "recovery_required"},

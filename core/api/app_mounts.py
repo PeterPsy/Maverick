@@ -23,7 +23,7 @@ from core.api.secret_grant_targets import (
     assert_consumer_resource_scope_allowed,
 )
 from core.api.http import StartResponse, json_response, max_json_body_bytes, query_params, read_json_body, read_request_body_bytes, status_line, text_response
-from core.api.http_validators import if_none_match_matches, if_range_matches, strong_etag
+from core.api.http_validators import format_etag, if_none_match_matches, if_range_matches, is_strong_etag
 from core.api.platform_state import PlatformState
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
@@ -982,11 +982,11 @@ def _serve_app_file_response(
     file_name = _safe_header_filename(str(file_response.get("file_name") or path.name))
     disposition = "attachment" if _truthy(file_response.get("download")) or not _safe_inline_file_response_type(content_type) else "inline"
     explicit_etag = bool(str(file_response.get("etag") or "").strip())
-    etag = strong_etag(str(file_response.get("etag") or f"{path.stat().st_mtime_ns:x}-{size:x}"), fallback="file")
+    etag = format_etag(str(file_response.get("etag") or f"{path.stat().st_mtime_ns:x}-{size:x}"), fallback="file")
     cache_control = _app_binary_cache_control(
         file_response,
         delete_after_send=delete_after_send,
-        explicit_etag=explicit_etag,
+        has_strong_etag=explicit_etag and is_strong_etag(etag),
     )
     base_headers = [
         ("Content-Type", content_type),
@@ -1073,7 +1073,7 @@ def _app_binary_cache_control(
     response: Mapping[str, Any],
     *,
     delete_after_send: bool = False,
-    explicit_etag: bool = False,
+    has_strong_etag: bool = False,
 ) -> str:
     """Return the canonical private cache policy for an app-owned binary."""
 
@@ -1082,7 +1082,7 @@ def _app_binary_cache_control(
     if delete_after_send or requested_policy == "ephemeral" or "no-store" in requested_control:
         return "no-store"
     wants_immutable = requested_policy == "immutable" or "immutable" in requested_control
-    if wants_immutable and explicit_etag:
+    if wants_immutable and has_strong_etag:
         return "private, max-age=31536000, immutable"
     return "private, no-cache"
 
@@ -1133,7 +1133,11 @@ def _serve_app_stream_response(
     file_name = _safe_header_filename(str(stream_response.get("file_name") or "download"))
     disposition = "attachment" if _truthy(stream_response.get("download")) or not _safe_inline_file_response_type(content_type) else "inline"
     explicit_etag = method in {"GET", "HEAD"} and bool(str(stream_response.get("etag") or "").strip())
-    cache_control = _app_binary_cache_control(stream_response, explicit_etag=explicit_etag)
+    etag = format_etag(str(stream_response.get("etag") or "stream"), fallback="stream")
+    cache_control = _app_binary_cache_control(
+        stream_response,
+        has_strong_etag=explicit_etag and is_strong_etag(etag),
+    )
     headers = [
         ("Content-Type", content_type),
         ("Cache-Control", cache_control),
@@ -1143,7 +1147,6 @@ def _serve_app_stream_response(
         ("Content-Disposition", f'{disposition}; filename="{file_name}"'),
         *_stream_response_observability_headers(stream_response),
     ]
-    etag = strong_etag(str(stream_response.get("etag") or "stream"), fallback="stream")
     if method in {"GET", "HEAD"}:
         headers.append(("ETag", etag))
         headers.append(("Accept-Ranges", "bytes"))

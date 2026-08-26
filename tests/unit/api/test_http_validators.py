@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from core.api.http_validators import if_none_match_matches, if_range_matches, parse_entity_tag_list, strong_etag
+from core.api.http_validators import format_etag, if_none_match_matches, if_range_matches, is_strong_etag, parse_entity_tag_list
 
 
 class HttpValidatorsTestCase(unittest.TestCase):
@@ -34,10 +34,12 @@ class HttpValidatorsTestCase(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertFalse(if_range_matches(value, '"revision-1"'))
 
-    def test_strong_etag_normalizes_backend_values(self) -> None:
-        self.assertEqual(strong_etag("revision-1"), '"revision-1"')
-        self.assertEqual(strong_etag('W/"revision-1"'), '"revision-1"')
-        self.assertEqual(strong_etag("bad\r\nvalue"), '"badvalue"')
+    def test_format_etag_preserves_backend_validator_strength(self) -> None:
+        self.assertEqual(format_etag("revision-1"), '"revision-1"')
+        self.assertEqual(format_etag('W/"revision-1"'), 'W/"revision-1"')
+        self.assertEqual(format_etag("bad\r\nvalue"), '"badvalue"')
+        self.assertTrue(is_strong_etag('"revision-1"'))
+        self.assertFalse(is_strong_etag('W/"revision-1"'))
 
 
 if __name__ == "__main__":

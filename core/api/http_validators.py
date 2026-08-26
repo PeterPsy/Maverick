@@ -91,16 +91,25 @@ def if_range_matches(value: str, current_etag: str) -> bool:
     return bool(candidate and current and not candidate.weak and not current.weak and candidate.opaque == current.opaque)
 
 
-def strong_etag(value: str, *, fallback: str = "resource") -> str:
-    """Format a backend revision as a safe strong HTTP entity-tag."""
+def format_etag(value: str, *, fallback: str = "resource") -> str:
+    """Format a backend revision without changing its validator strength."""
 
     text = str(value or "").strip()
     parsed = parse_single_entity_tag(text)
     if parsed is not None:
-        text = parsed.opaque
-    else:
-        if text.startswith("W/"):
-            text = text[2:].strip()
-        text = text.strip('"')
+        prefix = "W/" if parsed.weak else ""
+        return f'{prefix}"{parsed.opaque}"'
+    weak = text.startswith("W/")
+    if weak:
+        text = text[2:].strip()
+    text = text.strip('"')
     clean = "".join(character for character in text if ord(character) >= 0x21 and character not in {'"', "\x7f"})
-    return f'"{clean or fallback}"'
+    prefix = "W/" if weak else ""
+    return f'{prefix}"{clean or fallback}"'
+
+
+def is_strong_etag(value: str) -> bool:
+    """Return whether ``value`` is one valid strong entity-tag."""
+
+    parsed = parse_single_entity_tag(value)
+    return parsed is not None and not parsed.weak

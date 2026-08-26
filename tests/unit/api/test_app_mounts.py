@@ -205,6 +205,32 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertNotIn("Accept-Ranges", headers)
         self.assertNotIn("ETag", headers)
 
+    def test_get_stream_response_preserves_weak_etag_and_rejects_immutable_policy(self) -> None:
+        captured: dict[str, object] = {}
+
+        def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+            captured["status"] = status
+            captured["headers"] = dict(headers)
+
+        body = b"".join(
+            _serve_app_stream_response(
+                environ={"REQUEST_METHOD": "GET"},
+                start_response=start_response,
+                stream_response={
+                    "etag": 'W/"semantic-equivalence-only"',
+                    "cache_policy": "immutable",
+                },
+                stream=None,
+            )
+        )
+
+        headers = captured["headers"]
+        assert isinstance(headers, dict)
+        self.assertEqual(captured["status"], "200 OK")
+        self.assertEqual(headers["ETag"], 'W/"semantic-equivalence-only"')
+        self.assertEqual(headers["Cache-Control"], "private, no-cache")
+        self.assertEqual(body, b"")
+
     def test_non_json_backend_body_is_spooled_to_app_data_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -294,6 +320,32 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual((mismatch[0], mismatch[2]), ("200 OK", b"0123456789"))
         self.assertEqual((weak[0], weak[2]), ("200 OK", b"0123456789"))
         self.assertNotIn("Content-Range", mismatch[1])
+
+    def test_app_file_response_never_promotes_a_weak_backend_etag(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "clip.mp4"
+            media_path.write_bytes(b"0123456789")
+
+            status, headers, body = _serve_file_response(
+                root=root,
+                file_response={
+                    "path": str(media_path),
+                    "etag": 'W/"semantic-equivalence-only"',
+                    "cache_policy": "immutable",
+                },
+                environ={
+                    "REQUEST_METHOD": "GET",
+                    "HTTP_RANGE": "bytes=2-5",
+                    "HTTP_IF_RANGE": '"semantic-equivalence-only"',
+                },
+            )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(headers["ETag"], 'W/"semantic-equivalence-only"')
+        self.assertEqual(headers["Cache-Control"], "private, no-cache")
+        self.assertNotIn("Content-Range", headers)
+        self.assertEqual(body, b"0123456789")
 
     def test_app_file_response_immutable_policy_requires_an_explicit_revision(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

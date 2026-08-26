@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -139,7 +140,12 @@ class OpenDesignTruthfulHealthTests(unittest.TestCase):
             }
             status_path = generation / "launcher-status.json"
             status_path.write_text(json.dumps(status), encoding="utf-8")
-            self.assertTrue(backend_service._opendesign_runtime_status(str(data_root))["operational"])
+            with patch.object(
+                backend_service,
+                "_opendesign_sidecar_manager_status",
+                return_value={"state": "ready", "phase": "health_ready"},
+            ):
+                self.assertTrue(backend_service._opendesign_runtime_status(str(data_root))["operational"])
 
             (generation / "repair-state.json").write_text(
                 json.dumps(
@@ -153,7 +159,23 @@ class OpenDesignTruthfulHealthTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            self.assertFalse(backend_service._opendesign_runtime_status(str(data_root))["operational"])
+            with patch.object(
+                backend_service,
+                "_opendesign_sidecar_manager_status",
+                return_value={"state": "ready", "phase": "health_ready"},
+            ):
+                self.assertFalse(backend_service._opendesign_runtime_status(str(data_root))["operational"])
+
+            (generation / "repair-state.json").unlink()
+            with patch.object(
+                backend_service,
+                "_opendesign_sidecar_manager_status",
+                return_value={"state": "starting", "phase": "daemon_ready"},
+            ):
+                starting = backend_service._opendesign_runtime_status(str(data_root))
+            self.assertFalse(starting["operational"])
+            self.assertFalse(starting["health"]["browser_ready"])
+            self.assertEqual(starting["sidecar_manager"]["phase"], "daemon_ready")
 
 
 if __name__ == "__main__":

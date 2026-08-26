@@ -85,7 +85,11 @@ def status_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "commit": OPENDESIGN_COMMIT,
             "mode": OPENDESIGN_MODE,
             "bundle": _opendesign_bundle_summary(),
-            "runtime": _opendesign_runtime_status(payload["data_root"]),
+            "runtime": _opendesign_runtime_status(
+                payload["data_root"],
+                workspace_id=str(payload.get("workspace_id") or "default"),
+                app_id=app_id,
+            ),
         },
     }
 
@@ -1599,7 +1603,12 @@ def _opendesign_bundle_summary() -> dict[str, Any]:
     }
 
 
-def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
+def _opendesign_runtime_status(
+    data_root: str,
+    *,
+    workspace_id: str = "default",
+    app_id: str = "design-studio",
+) -> dict[str, Any]:
     status_path = Path(data_root) / "opendesign" / "launcher-status.json"
     if status_path.is_symlink() or not status_path.is_file():
         return {"operational": False, "bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
@@ -1662,7 +1671,23 @@ def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
             "observed_at_epoch_ms": repair.get("observed_at_epoch_ms"),
             "auto_repairable": False,
         }
-    operational = heartbeat_fresh and all(
+    manager = _opendesign_sidecar_manager_status(
+        workspace_id=workspace_id,
+        app_id=app_id,
+    )
+    manager_ready = manager.get("state") == "ready"
+    if not manager_ready:
+        health = {
+            **health,
+            "sidecar_process_running": False,
+            "daemon_ready": False,
+            "activation_committed": False,
+            "browser_ready": False,
+        }
+        declared_failure = manager.get("last_failure")
+        if last_failure is None and isinstance(declared_failure, dict):
+            last_failure = declared_failure
+    operational = heartbeat_fresh and manager_ready and all(
         health.get(key) is True
         for key in (
             "adapter_configured",
@@ -1685,6 +1710,7 @@ def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
         "phase": str(payload.get("phase") or "unknown"),
         "health": health,
         "timings_ms": payload.get("timings_ms") if isinstance(payload.get("timings_ms"), dict) else {},
+        "sidecar_manager": manager,
         "last_failure": last_failure,
         "active": {
             "runtime_artifact_sha256": active["runtime_artifact_sha256"],
@@ -1693,6 +1719,51 @@ def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
             "data_generation": str(active.get("data_generation") or ""),
         },
     }
+
+
+def _opendesign_sidecar_manager_status(*, workspace_id: str, app_id: str) -> dict[str, Any]:
+    """Read Core-owned live prewarm state without starting or probing a process."""
+    try:
+        from core.api.sidecar_control import request_sidecar_control
+        from core.shared.repository import discover_repository_root
+
+        payload = request_sidecar_control(
+            discover_repository_root(start_path=Path(__file__)),
+            operation="status",
+            workspace_id=workspace_id,
+            app_id=app_id,
+            timeout_seconds=0.5,
+        )
+        services = payload.get("services") if isinstance(payload, dict) else None
+        matches = [
+            item
+            for item in services or []
+            if isinstance(item, dict) and item.get("sidecar_id") == "opendesign"
+        ]
+        if len(matches) != 1:
+            raise ValueError("OpenDesign live sidecar status is missing")
+        observed = matches[0]
+        return {
+            key: observed[key]
+            for key in (
+                "state",
+                "phase",
+                "duration_ms",
+                "updated_at",
+                "last_failure",
+            )
+            if key in observed
+        }
+    except Exception as error:
+        return {
+            "state": "failed",
+            "phase": getattr(error, "phase", "sidecar_manager_status"),
+            "last_failure": {
+                "code": getattr(error, "code", "daemon_ready_timeout"),
+                "phase": getattr(error, "phase", "sidecar_manager_status"),
+                "auto_repairable": False,
+            },
+        }
 
 
 def _opendesign_repair_state(path: Path) -> dict[str, Any]:

@@ -258,23 +258,30 @@ class HttpSidecarManager:
         sidecar: HttpSidecarSpec,
         start_path: Path,
         shutdown_controller: EntrypointShutdownController | None,
+        verify_existing_health: bool = False,
     ) -> RunningSidecar:
         key = (workspace_id, app_id, sidecar.service_id, data_root)
         stale: RunningSidecar | None = None
+        existing: RunningSidecar | None = None
         owner = False
         with self._lock:
             running = self._running.get(key)
             if running is not None and running.process.poll() is None:
-                return running
-            if running is not None:
+                if not verify_existing_health:
+                    return running
+                existing = running
+            elif running is not None:
                 self._running.pop(key, None)
                 stale = running
-            startup = self._starting.get(key)
-            if startup is None:
-                startup = SidecarStartup()
-                self._starting[key] = startup
-                self._status[key] = _startup_status_payload(startup, state="starting")
-                owner = True
+            if existing is None:
+                startup = self._starting.get(key)
+                if startup is None:
+                    startup = SidecarStartup()
+                    self._starting[key] = startup
+                    self._status[key] = _startup_status_payload(startup, state="starting")
+                    owner = True
+        if existing is not None:
+            return self._verify_existing_sidecar_health(key, existing, sidecar=sidecar)
         if stale is not None:
             self._cleanup_sidecar(stale)
         if not owner:
@@ -345,6 +352,49 @@ class HttpSidecarManager:
             if failure is error:
                 raise failure
             raise failure from error
+
+    def _verify_existing_sidecar_health(
+        self,
+        key: tuple[str, str, str, str],
+        running: RunningSidecar,
+        *,
+        sidecar: HttpSidecarSpec,
+    ) -> RunningSidecar:
+        try:
+            _probe_sidecar_health(running, sidecar=sidecar)
+        except SidecarStartupError as failure:
+            removed = False
+            with self._lock:
+                if self._running.get(key) is running:
+                    self._running.pop(key, None)
+                    removed = True
+                    self._status[key] = {
+                        "state": "failed",
+                        "phase": failure.phase,
+                        "duration_ms": failure.duration_ms,
+                        "updated_at": _utc_timestamp(),
+                        "last_failure": failure.public_payload(),
+                    }
+            if removed:
+                self._cleanup_sidecar(running)
+            raise
+        with self._lock:
+            if self._running.get(key) is not running or running.process.poll() is not None:
+                raise SidecarStartupError(
+                    "startup_cancelled",
+                    "health_recheck",
+                    "HTTP sidecar changed while readiness was being checked.",
+                )
+            previous = self._status.get(key, {})
+            self._status[key] = {
+                "state": "ready",
+                "phase": "health_recheck",
+                "instance_id": running.instance_id,
+                "duration_ms": previous.get("duration_ms", 0.0),
+                "updated_at": _utc_timestamp(),
+                "last_failure": None,
+            }
+        return running
 
     def _start_sidecar(
         self,
@@ -459,6 +509,13 @@ class HttpSidecarManager:
         with self._lock:
             keys = [key for key in self._running if key[:2] == (workspace_id, app_id)]
             running_sidecars = [self._running.pop(key) for key in keys]
+            for key in keys:
+                self._status[key] = {
+                    "state": "stopped",
+                    "phase": "stop_app",
+                    "updated_at": _utc_timestamp(),
+                    "last_failure": None,
+                }
             startups = [
                 startup
                 for key, startup in self._starting.items()
@@ -485,8 +542,27 @@ class HttpSidecarManager:
     ) -> dict[str, object]:
         """Return the latest redaction-safe lifecycle state without starting a sidecar."""
         key = (workspace_id, app_id, sidecar_id, data_root)
+        stale: RunningSidecar | None = None
         with self._lock:
-            return dict(self._status.get(key, {"state": "not_started", "phase": "idle"}))
+            running = self._running.get(key)
+            if running is not None and running.process.poll() is not None:
+                self._running.pop(key, None)
+                stale = running
+                failure = SidecarStartupError(
+                    "daemon_spawn_failed",
+                    "health_status",
+                    "HTTP sidecar exited after startup.",
+                )
+                self._status[key] = {
+                    "state": "failed",
+                    "phase": failure.phase,
+                    "updated_at": _utc_timestamp(),
+                    "last_failure": failure.public_payload(),
+                }
+            status = dict(self._status.get(key, {"state": "not_started", "phase": "idle"}))
+        if stale is not None:
+            self._cleanup_sidecar(stale)
+        return status
 
     def current_instance_id(
         self,
@@ -531,6 +607,25 @@ def stop_app_sidecars(*, workspace_id: str, app_id: str) -> int:
     if manager is not None:
         return manager.stop_app(workspace_id=workspace_id, app_id=app_id)
     return 0
+
+
+def app_sidecar_startup_status(
+    *,
+    workspace_id: str,
+    app_id: str,
+    sidecar_id: str,
+    data_root: str,
+) -> dict[str, object]:
+    """Read live manager state without creating or starting a sidecar."""
+    manager = _SIDECAR_MANAGER
+    if manager is None:
+        return {"state": "not_started", "phase": "idle"}
+    return manager.startup_status(
+        workspace_id=workspace_id,
+        app_id=app_id,
+        sidecar_id=sidecar_id,
+        data_root=data_root,
+    )
 
 
 def sidecar_error_payload(error: AppHostingError, *, default_code: str) -> dict[str, object]:
@@ -904,6 +999,7 @@ def ensure_authorized_sidecar_running(
     *,
     start_path: Path,
     shutdown_controller: EntrypointShutdownController | None,
+    verify_existing_health: bool = False,
 ) -> RunningSidecar:
     """Start or reuse an already-authorized sidecar for browser bootstrap."""
     return ensure_sidecar_with_declared_auto_repair(
@@ -913,6 +1009,7 @@ def ensure_authorized_sidecar_running(
         sidecar=target.sidecar,
         start_path=start_path,
         shutdown_controller=shutdown_controller,
+        verify_existing_health=verify_existing_health,
     )
 
 
@@ -924,6 +1021,7 @@ def ensure_sidecar_with_declared_auto_repair(
     sidecar: HttpSidecarSpec,
     start_path: Path,
     shutdown_controller: EntrypointShutdownController | None,
+    verify_existing_health: bool = False,
 ) -> RunningSidecar:
     """Start a sidecar and perform at most one declared, singleflight repair."""
     manager = _sidecar_manager()
@@ -936,6 +1034,7 @@ def ensure_sidecar_with_declared_auto_repair(
             sidecar=sidecar,
             start_path=start_path,
             shutdown_controller=shutdown_controller,
+            verify_existing_health=verify_existing_health,
         )
     except SidecarStartupError as error:
         if not error.auto_repairable or "artifact_repair" not in parsed.contract.entrypoints.hooks:
@@ -955,6 +1054,7 @@ def ensure_sidecar_with_declared_auto_repair(
         sidecar=sidecar,
         start_path=start_path,
         shutdown_controller=shutdown_controller,
+        verify_existing_health=verify_existing_health,
     )
 
 
@@ -1590,6 +1690,47 @@ def _wait_for_sidecar_health(
         "health_wait",
         f"HTTP sidecar `{sidecar.service_id}` did not become ready: {last_error}",
     )
+
+
+def _probe_sidecar_health(running: RunningSidecar, *, sidecar: HttpSidecarSpec) -> None:
+    """Revalidate transactional readiness before granting fresh authority."""
+    started = time.monotonic()
+    if running.process.poll() is not None:
+        raise SidecarStartupError(
+            "daemon_spawn_failed",
+            "health_recheck",
+            "HTTP sidecar exited before its readiness recheck.",
+            duration_ms=(time.monotonic() - started) * 1000,
+        )
+    connection = UnixRelayHTTPConnection(running, timeout=0.75)
+    try:
+        connection.request(
+            "GET",
+            sidecar.health.path,
+            headers={
+                "Authorization": f"Bearer {running.token}",
+                "Connection": "close",
+                "Host": f"{running.host}:{running.port}",
+            },
+        )
+        response = connection.getresponse()
+        response.read(65_537)
+    except (OSError, http.client.HTTPException) as error:
+        raise SidecarStartupError(
+            "daemon_ready_timeout",
+            "health_recheck",
+            "HTTP sidecar readiness recheck failed.",
+            duration_ms=(time.monotonic() - started) * 1000,
+        ) from error
+    finally:
+        connection.close()
+    if not 200 <= response.status < 300:
+        raise SidecarStartupError(
+            "activation_incomplete",
+            "health_recheck",
+            "HTTP sidecar is not transactionally ready.",
+            duration_ms=(time.monotonic() - started) * 1000,
+        )
 
 
 def _raise_if_startup_cancelled(cancel_event: Event, *, phase: str) -> None:

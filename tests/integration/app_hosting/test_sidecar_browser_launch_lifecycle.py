@@ -10,11 +10,48 @@ from unittest.mock import patch
 
 from core.api.asgi_application import PlatformAsgiHost
 from core.api.platform_state import bootstrap_platform_state
+from core.api.sidecar_proxy import SidecarStartupError
 from core.shared.entrypoints import EntrypointShutdownController
 from tests.integration.app_hosting.sidecar_browser_origin_support import SidecarBrowserOriginTestSupport
 
 
 class SidecarBrowserLaunchLifecycleTests(SidecarBrowserOriginTestSupport, unittest.TestCase):
+    def test_live_but_unready_process_cannot_receive_a_browser_ticket(self) -> None:
+        asyncio.run(self._assert_live_but_unready_process_cannot_receive_a_browser_ticket())
+
+    async def _assert_live_but_unready_process_cannot_receive_a_browser_ticket(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(Path(temp_dir))
+            state = self._state_with_sidecar(repo_root)
+            shutdown = EntrypointShutdownController()
+            self.addCleanup(shutdown.begin_shutdown)
+            app = PlatformAsgiHost(state, shutdown_controller=shutdown)
+            cookie = await self._login(app, host="maverick.localhost:8000")
+            failure = SidecarStartupError(
+                "activation_incomplete",
+                "health_recheck",
+                "redacted",
+            )
+            with (
+                patch(
+                    "core.api.sidecar_browser.ensure_authorized_sidecar_running",
+                    side_effect=failure,
+                ) as ensure,
+                patch.object(state.sidecar_browser_sessions, "issue_ticket") as issue_ticket,
+            ):
+                status, payload, _headers = await self._launch(
+                    app,
+                    platform_cookie=cookie,
+                    host="maverick.localhost:8000",
+                    origin="http://maverick.localhost:8000",
+                )
+
+            self.assertEqual(status, 503)
+            self.assertEqual(payload["error"], "activation_incomplete")
+            self.assertEqual(payload["phase"], "health_recheck")
+            self.assertTrue(ensure.call_args.kwargs["verify_existing_health"])
+            issue_ticket.assert_not_called()
+
     def test_ticket_store_failure_is_typed_only_after_transactional_health(self) -> None:
         asyncio.run(self._assert_ticket_store_failure_is_typed())
 

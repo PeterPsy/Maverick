@@ -138,8 +138,8 @@ def load_contract_from_workspace_project(
     return project_root, parsed
 
 
-def _run_hook(source_root: Path, hook_relative_path: str, *, timeout_seconds: int) -> None:
-    _run_hook_with_payload(source_root, hook_relative_path, timeout_seconds=timeout_seconds, payload={})
+def _run_hook(source_root: Path, hook_relative_path: str, *, timeout_seconds: int) -> str:
+    return _run_hook_with_payload(source_root, hook_relative_path, timeout_seconds=timeout_seconds, payload={})
 
 
 def _run_hook_with_payload(
@@ -148,7 +148,7 @@ def _run_hook_with_payload(
     *,
     timeout_seconds: int,
     payload: dict[str, object],
-) -> None:
+) -> str:
     hook_path = (source_root / hook_relative_path).resolve()
     repository_root = str(installation_paths(start_path=source_root).repository_root)
     env = dict(os.environ)
@@ -174,6 +174,7 @@ def _run_hook_with_payload(
         raise AppLifecycleError(
             f"Hook `{hook_relative_path}` failed with exit code {result.returncode}: {result.stderr.strip() or result.stdout.strip()}"
         )
+    return result.stdout
 
 
 def run_lifecycle_hook(
@@ -182,11 +183,11 @@ def run_lifecycle_hook(
     *,
     hook_name: str,
     payload: dict[str, object] | None = None,
-) -> None:
+) -> str:
     """Run one declared lifecycle hook with its configured timeout."""
     hook_path = contract.entrypoints.hooks.get(hook_name)
     if not hook_path:
-        return
+        return ""
     timeout_by_hook = {
         "install": contract.hook_timeouts.install_seconds,
         "upgrade": contract.hook_timeouts.upgrade_seconds,
@@ -201,7 +202,7 @@ def run_lifecycle_hook(
     timeout_seconds = timeout_by_hook.get(hook_name)
     if timeout_seconds is None:
         raise AppLifecycleError(f"No timeout is configured for lifecycle hook `{hook_name}`.")
-    _run_hook_with_payload(source_root, hook_path, timeout_seconds=timeout_seconds, payload=payload or {})
+    return _run_hook_with_payload(source_root, hook_path, timeout_seconds=timeout_seconds, payload=payload or {})
 
 
 def run_reactivation_hooks(
@@ -243,11 +244,40 @@ def run_health_check(
         if not hook:
             raise AppLifecycleError("Health contract requires a `health_check` hook entrypoint.")
         try:
-            run_lifecycle_hook(source_root, contract, hook_name="health_check", payload=payload)
-            return True
+            output = run_lifecycle_hook(source_root, contract, hook_name="health_check", payload=payload)
+            return _health_hook_output_is_healthy(output)
         except AppLifecycleError:
             return False
     raise AppLifecycleError(f"Unsupported health contract mode `{contract.health_contract.mode}`.")
+
+
+def _health_hook_output_is_healthy(output: str) -> bool:
+    """Honor explicit health payloads while retaining exit-only hooks."""
+    text = output.strip()
+    if not text:
+        return True
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+
+    checks: list[bool] = []
+    if "ok" in payload:
+        checks.append(payload.get("ok") is True)
+    if "operational" in payload:
+        checks.append(payload.get("operational") is True)
+    if "status_code" in payload:
+        status_code = payload.get("status_code")
+        checks.append(
+            isinstance(status_code, int)
+            and not isinstance(status_code, bool)
+            and 200 <= status_code < 400
+        )
+    if "status" in payload:
+        checks.append(str(payload.get("status") or "").strip().lower() in {"healthy", "ok", "ready"})
+    return bool(checks) and all(checks)
 
 
 def finalize_install_status(

@@ -32,6 +32,36 @@ backend_service = _load("design_studio_backend_health_test", BACKEND_ROOT / "ser
 
 
 class OpenDesignTruthfulHealthTests(unittest.TestCase):
+    def test_launcher_claims_require_matching_live_core_manager_state(self) -> None:
+        launcher = {
+            "sidecar_process_running": True,
+            "daemon_ready": True,
+            "activation_committed": True,
+            "browser_ready": True,
+        }
+
+        missing = health_hook._health_layers(
+            artifact_ready=True,
+            launcher_health=launcher,
+            manager_status={"state": "not_started", "phase": "idle"},
+        )
+        ready = health_hook._health_layers(
+            artifact_ready=True,
+            launcher_health=launcher,
+            manager_status={"state": "ready", "phase": "health_recheck"},
+        )
+
+        self.assertFalse(missing["sidecar_process_running"])
+        self.assertFalse(missing["browser_ready"])
+        self.assertTrue(ready["sidecar_process_running"])
+        self.assertTrue(ready["browser_ready"])
+
+    def test_false_health_payload_uses_a_failing_process_exit(self) -> None:
+        with self.assertRaises(SystemExit) as raised:
+            health_hook._emit_health({"ok": False, "operational": False})
+
+        self.assertEqual(raised.exception.code, 1)
+
     def test_stale_launcher_heartbeat_cannot_report_browser_ready(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-health-") as temporary:
             status = Path(temporary) / "launcher-status.json"

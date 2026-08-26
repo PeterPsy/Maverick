@@ -134,6 +134,45 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
         self.assertEqual(self._ensure(app_id="one", data_root="/data/one").instance_id, "retry")
         self.assertEqual(attempts, 2)
 
+    def test_existing_process_is_rechecked_and_evicted_when_transactional_health_is_lost(self) -> None:
+        running = _Running("stale-ready")
+        self.manager._start_sidecar = Mock(return_value=running)  # type: ignore[method-assign]
+        self.assertIs(self._ensure(app_id="one", data_root="/data/one"), running)
+        failure = SidecarStartupError(
+            "activation_incomplete",
+            "health_recheck",
+            "not transactionally ready",
+        )
+
+        with (
+            patch.object(sidecar_proxy, "_probe_sidecar_health", side_effect=failure) as probe,
+            patch.object(self.manager, "_cleanup_sidecar") as cleanup,
+            self.assertRaises(SidecarStartupError) as raised,
+        ):
+            self.manager.ensure_running(
+                workspace_id="default",
+                app_id="one",
+                source_root=Path("/apps/one"),
+                data_root="/data/one",
+                sidecar=self.sidecar,
+                start_path=Path("/repo"),
+                shutdown_controller=None,
+                verify_existing_health=True,
+            )
+
+        self.assertEqual(raised.exception.code, "activation_incomplete")
+        probe.assert_called_once_with(running, sidecar=self.sidecar)
+        cleanup.assert_called_once_with(running)
+        self.assertFalse(self.manager._running)
+        status = self.manager.startup_status(
+            workspace_id="default",
+            app_id="one",
+            sidecar_id="daemon",
+            data_root="/data/one",
+        )
+        self.assertEqual(status["state"], "failed")
+        self.assertEqual(status["last_failure"]["code"], "activation_incomplete")
+
     def test_failed_auto_repair_enters_backoff_without_a_spawn_hash_retry_loop(self) -> None:
         binding = SimpleNamespace(
             workspace_id="default",

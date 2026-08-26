@@ -45,6 +45,48 @@ class TestAppHooksAndUpgrades(AppHostingTestBase):
             self.assertTrue((app_root / "install-ran.txt").exists())
             self.assertEqual(binding.status, "failed")
 
+    def test_health_hook_explicit_false_payload_fails_even_with_zero_exit_code(self) -> None:
+        store = self.make_store()
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            app_root = repo_root / "apps" / "fail-open-health-app"
+            lifecycle_root = app_root / "backend" / "lifecycle"
+            lifecycle_root.mkdir(parents=True, exist_ok=True)
+            (lifecycle_root / "health.py").write_text(
+                "import json\nprint(json.dumps({'ok': False, 'operational': False}))\n",
+                encoding="utf-8",
+            )
+            contract = build_app_contract(
+                entrypoints=build_app_entrypoints(
+                    hooks={"health_check": "backend/lifecycle/health.py"},
+                ),
+                lifecycle=build_app_lifecycle(health_check=True),
+                health_contract=build_app_health_contract(mode="hook", degraded_on_failure=True),
+            )
+            self.write_contract(
+                app_root,
+                app_id="fail-open-health-app",
+                name="Fail-open Health App",
+                contract=contract,
+            )
+            source = register_app_source_from_contract(
+                store,
+                source_kind="platform",
+                source_path=str(app_root),
+                now=now,
+            )
+
+            binding = install_store_app(
+                store,
+                source_id=source.source_id,
+                workspace_id="default",
+                start_path=repo_root,
+                now=now,
+            )
+
+            self.assertEqual(binding.status, "failed")
+
     def test_install_hook_timeout_is_enforced(self) -> None:
         store = self.make_store()
         now = datetime.now(tz=UTC)

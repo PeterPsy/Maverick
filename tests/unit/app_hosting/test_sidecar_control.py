@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from core.api import sidecar_control
 from core.apps.sidecar_restart import SidecarRestartError
@@ -21,6 +21,52 @@ class _Shutdown:
 
 
 class SidecarControlTests(unittest.TestCase):
+    def test_status_aggregates_the_live_manager_without_starting_a_sidecar(self) -> None:
+        binding = SimpleNamespace(data_root="/data/design-studio")
+        app_store = Mock()
+        app_store.get_workspace_app_binding.return_value = binding
+        state = SimpleNamespace(app_store=app_store, repository_root=Path("/repo"))
+        sidecar = SimpleNamespace(service_id="opendesign")
+        parsed = SimpleNamespace(
+            contract=SimpleNamespace(
+                services=SimpleNamespace(http_sidecars=[sidecar]),
+            ),
+        )
+        with (
+            patch.object(
+                sidecar_control,
+                "resolve_workspace_app_surface",
+                return_value=(Path("/app"), parsed),
+            ),
+            patch.object(
+                sidecar_control,
+                "app_sidecar_startup_status",
+                return_value={
+                    "state": "ready",
+                    "phase": "health_recheck",
+                    "instance_id": "instance-1",
+                },
+            ) as startup_status,
+        ):
+            result = sidecar_control._dispatch(
+                {
+                    "schema_version": "1",
+                    "operation": "status",
+                    "workspace_id": "default",
+                    "app_id": "design-studio",
+                },
+                state=state,
+                shutdown_controller=None,
+            )
+
+        self.assertEqual(result["services"][0]["state"], "ready")
+        startup_status.assert_called_once_with(
+            workspace_id="default",
+            app_id="design-studio",
+            sidecar_id="opendesign",
+            data_root="/data/design-studio",
+        )
+
     def test_owner_authenticated_client_reaches_the_live_server_thread(self) -> None:
         with tempfile.TemporaryDirectory(prefix="sidecar-control-") as temporary:
             repository = Path(temporary)

@@ -12,8 +12,10 @@ from threading import Lock, Thread, current_thread
 from typing import Any
 
 from core.api.sidecar_prewarm import prewarm_workspace_app_sidecars
+from core.api.sidecar_proxy import app_sidecar_startup_status
 from core.apps.errors import AppHostingError
 from core.apps.sidecar_restart import restart_workspace_app_sidecars
+from core.apps.surfaces import resolve_workspace_app_surface
 
 
 _MAX_MESSAGE_BYTES = 64 * 1024
@@ -172,6 +174,32 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
             trigger="activation",
             shutdown_controller=shutdown_controller,
         )
+    if operation == "status":
+        binding = state.app_store.get_workspace_app_binding(
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
+        _source_root, parsed = resolve_workspace_app_surface(
+            state.app_store,
+            binding=binding,
+            start_path=state.repository_root,
+        )
+        return {
+            "workspace_id": workspace_id,
+            "app_id": app_id,
+            "services": [
+                {
+                    "sidecar_id": sidecar.service_id,
+                    **app_sidecar_startup_status(
+                        workspace_id=workspace_id,
+                        app_id=app_id,
+                        sidecar_id=sidecar.service_id,
+                        data_root=binding.data_root,
+                    ),
+                }
+                for sidecar in parsed.contract.services.http_sidecars
+            ],
+        }
     if operation == "restart":
         return restart_workspace_app_sidecars(
             state.app_store,

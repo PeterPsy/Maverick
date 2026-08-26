@@ -430,6 +430,7 @@ def _run_daemon(
         )
         return_code = _wait_for_daemon_exit(
             daemon,
+            env=env,
             generation_root=generation_root,
             startup_id=startup_id,
             timings=timings,
@@ -459,6 +460,7 @@ def _run_daemon(
 def _wait_for_daemon_exit(
     daemon: subprocess.Popen[bytes],
     *,
+    env: dict[str, str],
     generation_root: Path,
     startup_id: str,
     timings: dict[str, float],
@@ -467,6 +469,25 @@ def _wait_for_daemon_exit(
         try:
             return daemon.wait(timeout=STATUS_HEARTBEAT_SECONDS)
         except subprocess.TimeoutExpired:
+            try:
+                readiness = _wait_for_json_readiness(
+                    daemon,
+                    env=env,
+                    path="/api/maverick-ready",
+                    timeout_seconds=0.75,
+                )
+            except LauncherError as error:
+                raise LauncherError(
+                    error.code,
+                    "readiness_monitor",
+                    "OpenDesign transactional readiness recheck failed",
+                ) from error
+            if readiness.get("ready") is not True:
+                raise LauncherError(
+                    "activation_incomplete",
+                    "readiness_monitor",
+                    "OpenDesign transactional readiness was lost",
+                )
             _update_health_status(
                 generation_root,
                 startup_id=startup_id,

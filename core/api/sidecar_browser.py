@@ -95,6 +95,7 @@ def handle_sidecar_browser_launch(
             target,
             start_path=start_path,
             shutdown_controller=shutdown_controller,
+            verify_existing_health=True,
         )
     except AppHostingError as error:
         return json_response(

@@ -113,6 +113,7 @@ def prewarm_workspace_app_sidecars(
                 sidecar=sidecar,
                 start_path=item["start_path"],
                 shutdown_controller=shutdown_controller,
+                verify_existing_health=True,
             )
             instances.append(running.instance_id)
     return {
@@ -187,6 +188,7 @@ def _prewarm_one(
                 sidecar=sidecar,
                 start_path=start_path,
                 shutdown_controller=shutdown_controller,
+                verify_existing_health=True,
             )
     except Exception as error:
         logger.warning(

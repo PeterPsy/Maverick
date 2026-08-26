@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -134,6 +135,35 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         wait_for_maverick.assert_called_once_with(
             daemon,
             env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
+        )
+
+    def test_launcher_heartbeat_fails_closed_when_transactional_readiness_is_lost(self) -> None:
+        daemon = Mock()
+        daemon.wait.side_effect = subprocess.TimeoutExpired(cmd="daemon", timeout=1)
+        with (
+            patch.object(
+                self.launcher,
+                "_wait_for_json_readiness",
+                return_value={"ready": False},
+            ) as readiness,
+            patch.object(self.launcher, "_update_health_status"),
+            self.assertRaises(self.launcher.LauncherError) as raised,
+        ):
+            self.launcher._wait_for_daemon_exit(
+                daemon,
+                env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
+                generation_root=self.root / "generation",
+                startup_id="startup-test",
+                timings={},
+            )
+
+        self.assertEqual(raised.exception.code, "activation_incomplete")
+        self.assertEqual(raised.exception.phase, "readiness_monitor")
+        readiness.assert_called_once_with(
+            daemon,
+            env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
+            path="/api/maverick-ready",
+            timeout_seconds=0.75,
         )
 
     def test_existing_digest_directory_is_never_replaced_after_tampering(self) -> None:

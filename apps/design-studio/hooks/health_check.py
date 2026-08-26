@@ -17,7 +17,7 @@ def main() -> None:
     payload = read_entrypoint_payload()
     state = ensure_state(payload.data_root)
     if not _declares_protected_store():
-        emit_json({"ok": True, "operational": True, "schema_version": state.get("schema_version")})
+        _emit_health({"ok": True, "operational": True, "schema_version": state.get("schema_version")})
         return
     service_root = Path(__file__).resolve().parents[1] / "service"
     sys.path.insert(0, str(service_root))
@@ -26,7 +26,7 @@ def main() -> None:
 
         artifact = run_artifact_operation("status", data_root=Path(payload.data_root))
     except Exception as error:
-        emit_json(
+        _emit_health(
             {
                 "ok": False,
                 "operational": False,
@@ -40,6 +40,21 @@ def main() -> None:
     launcher = _launcher_status(Path(payload.data_root) / "opendesign" / "launcher-status.json")
     launcher_health = launcher.get("health") if isinstance(launcher.get("health"), dict) else {}
     last_failure = launcher.get("last_failure") if isinstance(launcher.get("last_failure"), dict) else None
+    manager = _live_sidecar_status(
+        workspace_id=str(payload.workspace_id or "default"),
+        app_id=str(payload.app_id or "design-studio"),
+    )
+    if last_failure is None and manager.get("state") != "ready":
+        declared = manager.get("last_failure")
+        last_failure = (
+            dict(declared)
+            if isinstance(declared, dict)
+            else {
+                "code": "daemon_ready_timeout",
+                "phase": str(manager.get("phase") or "sidecar_manager_status"),
+                "auto_repairable": False,
+            }
+        )
     repair = _repair_status(Path(payload.data_root) / "opendesign" / "repair-state.json")
     repair_state = str(repair.get("state") or "idle")
     if repair_state == "failed":
@@ -50,22 +65,24 @@ def main() -> None:
             "auto_repairable": False,
         }
     artifact_ready = artifact.get("operational") is True
+    health = _health_layers(
+        artifact_ready=artifact_ready,
+        launcher_health=launcher_health,
+        manager_status=manager,
+        repair_state=repair_state,
+    )
     browser_ready = (
         artifact_ready
         and repair_state == "idle"
-        and launcher_health.get("browser_ready") is True
+        and health["browser_ready"] is True
         and last_failure is None
     )
-    emit_json(
+    _emit_health(
         {
             "ok": browser_ready,
             "operational": browser_ready,
             "schema_version": state.get("schema_version"),
-            "health": _health_layers(
-                artifact_ready=artifact_ready,
-                launcher_health=launcher_health,
-                repair_state=repair_state,
-            ),
+            "health": health,
             "repair_state": repair_state,
             "last_failure": last_failure,
         }
@@ -130,20 +147,63 @@ def _health_layers(
     *,
     artifact_ready: bool,
     launcher_health: dict | None = None,
+    manager_status: dict | None = None,
     repair_state: str = "idle",
 ) -> dict:
     runtime = launcher_health or {}
+    manager_ready = (manager_status or {}).get("state") == "ready"
     return {
         "adapter_configured": True,
         "artifact_available": artifact_ready,
         "artifact_verified": artifact_ready,
         "artifact_protected": artifact_ready,
         "repair_state": repair_state,
-        "sidecar_process_running": runtime.get("sidecar_process_running") is True,
-        "daemon_ready": runtime.get("daemon_ready") is True,
-        "activation_committed": runtime.get("activation_committed") is True,
-        "browser_ready": runtime.get("browser_ready") is True,
+        "sidecar_process_running": manager_ready and runtime.get("sidecar_process_running") is True,
+        "daemon_ready": manager_ready and runtime.get("daemon_ready") is True,
+        "activation_committed": manager_ready and runtime.get("activation_committed") is True,
+        "browser_ready": manager_ready and runtime.get("browser_ready") is True,
     }
+
+
+def _live_sidecar_status(*, workspace_id: str, app_id: str) -> dict:
+    try:
+        from core.api.sidecar_control import request_sidecar_control
+        from core.shared.repository import discover_repository_root
+
+        payload = request_sidecar_control(
+            discover_repository_root(start_path=Path(__file__)),
+            operation="status",
+            workspace_id=workspace_id,
+            app_id=app_id,
+            timeout_seconds=2,
+        )
+        services = payload.get("services") if isinstance(payload, dict) else None
+        if not isinstance(services, list):
+            raise ValueError("sidecar status response is invalid")
+        matches = [
+            item
+            for item in services
+            if isinstance(item, dict) and item.get("sidecar_id") == "opendesign"
+        ]
+        if len(matches) != 1:
+            raise ValueError("OpenDesign sidecar status is missing")
+        return matches[0]
+    except Exception as error:
+        return {
+            "state": "failed",
+            "phase": getattr(error, "phase", "sidecar_manager_status"),
+            "last_failure": {
+                "code": getattr(error, "code", "daemon_ready_timeout"),
+                "phase": getattr(error, "phase", "sidecar_manager_status"),
+                "auto_repairable": False,
+            },
+        }
+
+
+def _emit_health(payload: dict) -> None:
+    emit_json(payload)
+    if payload.get("ok") is not True or payload.get("operational") is not True:
+        raise SystemExit(1)
 
 
 def _declares_protected_store() -> bool:

@@ -985,8 +985,11 @@ body-only launch ticket with `POST /api/app-sidecars/browser-launch`, providing
 only its app id, declared sidecar id, and a clean root-relative landing path.
 Core resolves actor/workspace/install generation from the Maverick session,
 starts the already-authorized sidecar, and returns an origin plus form bootstrap
-instructions. The browser submits the ticket to
-`/.well-known/maverick-sidecar-bootstrap` on that origin; it never selects a
+instructions. Reusing a live process is not itself a readiness result: before
+issuing every new ticket, Core rechecks the declaration's health endpoint and
+evicts the process if that check fails. A process that is alive but no longer
+ready therefore receives no new browser authority. The browser submits the
+ticket to `/.well-known/maverick-sidecar-bootstrap` on that origin; it never selects a
 workspace, binding, technical listener, or host. Logout, workspace switch,
 disable/uninstall, sidecar restart, generation change, and core restart revoke
 the corresponding in-memory authority.
@@ -1933,6 +1936,18 @@ This may include:
 - a health MCP route
 - a validation hook
 - a storage integrity check
+
+A hook that exits unsuccessfully is unhealthy. When a successful hook emits a
+JSON object, Core must also honor explicit health indicators instead of treating
+exit code zero as sufficient: `ok` and `operational` must be true, a
+`status_code` must be successful, and a declared `status` must be one of the
+healthy states. Malformed or contradictory output fails closed. Exit-only hooks
+that emit no payload remain valid.
+
+For declared HTTP sidecars, platform health combines the app hook with the live
+sidecar manager state and the declared readiness result. A launcher heartbeat
+cannot substitute for live manager ownership, and a process-presence check
+cannot substitute for the readiness endpoint.
 
 ### Rollback support
 

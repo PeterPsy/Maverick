@@ -267,7 +267,7 @@ try {
   for (let iteration = 0; iteration < 10; iteration += 1) {
     const previousSidecar = sidecar;
     await page.goto(`${platformOrigin}/app/storage`, { waitUntil: 'domcontentloaded' });
-    await waitForShellWidgetFrame(page, 'Storage viewport');
+    const storageFrame = await waitForShellWidgetFrame(page, 'Storage viewport');
     await delay(100);
     const startedAt = performance.now();
     await stopServer(server);
@@ -307,7 +307,7 @@ try {
     };
     page.on('request', observeRequest);
     page.on('response', observeResponse);
-    await openDesignStudioFromShell(page, projectA.projectId);
+    await openDesignStudioFromShell(page, projectA.projectId, storageFrame);
     interfacePhases.shell_route_ms = rounded(performance.now() - interfaceStartedAt);
     sidecar = await waitForUsableOpenDesignInterface(
       page,
@@ -1174,9 +1174,9 @@ async function waitForShellWidgetFrame(page, title) {
 }
 
 
-async function openDesignStudioFromShell(page, projectId = '') {
+async function openDesignStudioFromShell(page, projectId = '', sourceFrame = null) {
   if (projectId) {
-    const storage = await waitForShellWidgetFrame(page, 'Storage viewport');
+    const storage = sourceFrame || await waitForShellWidgetFrame(page, 'Storage viewport');
     await storage.evaluate((odProjectId) => {
       window.parent.postMessage(
         {

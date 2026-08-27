@@ -57,7 +57,7 @@ const coldStartupOverlapDelayMs = 750;
 const port = await freePort();
 const platformOrigin = `http://maverick.localhost:${port}`;
 process.env.PLAYWRIGHT_BROWSERS_PATH ||= process.env.MAVERICK_PLAYWRIGHT_BROWSERS_PATH
-  || path.resolve(repoRoot, '..', '..', '.cache', 'ms-playwright');
+  || path.join(os.homedir(), '.cache', 'ms-playwright');
 const { chromium } = await import('playwright');
 let server = null;
 let browser = null;

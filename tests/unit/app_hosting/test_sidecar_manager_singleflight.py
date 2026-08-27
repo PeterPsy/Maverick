@@ -11,7 +11,10 @@ from unittest.mock import Mock, patch
 
 from core.api import sidecar_proxy
 from core.api.sidecar_proxy import HttpSidecarManager, SidecarStartupError
-from core.apps.contracts import build_http_sidecar_spec
+from core.apps.contracts import (
+    build_http_sidecar_browser_origin,
+    build_http_sidecar_spec,
+)
 
 
 class _LiveProcess:
@@ -322,6 +325,124 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
             "ready",
         )
 
+    def test_governed_browser_smoke_reuses_and_binds_the_live_instance(self) -> None:
+        browser_sidecar = build_http_sidecar_spec(
+            service_id="browser",
+            command=["python3", "server.py"],
+            browser_origin=build_http_sidecar_browser_origin(),
+        )
+        running = _Running("browser-instance")
+        manager = Mock()
+        manager.ensure_running.return_value = running
+        with (
+            patch.object(sidecar_proxy, "_sidecar_manager", return_value=manager),
+            patch.object(
+                sidecar_proxy,
+                "_probe_sidecar_browser_entrypoint",
+                return_value=321,
+            ) as probe,
+        ):
+            result = sidecar_proxy.smoke_declared_app_sidecar_browser_entrypoints(
+                workspace_id="default",
+                app_id="design-studio",
+                source_root=Path("/apps/design-studio"),
+                data_root="/data/design-studio",
+                sidecars=[browser_sidecar],
+                start_path=Path("/repo"),
+            )
+
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["instance_count"], 1)
+        self.assertEqual(
+            result["services"],
+            [
+                {
+                    "service_id": "browser",
+                    "instance_id": "browser-instance",
+                    "browser_entrypoint": True,
+                    "response_bytes": 321,
+                }
+            ],
+        )
+        manager.ensure_running.assert_called_once_with(
+            workspace_id="default",
+            app_id="design-studio",
+            source_root=Path("/apps/design-studio"),
+            data_root="/data/design-studio",
+            sidecar=browser_sidecar,
+            start_path=Path("/repo"),
+            shutdown_controller=None,
+            verify_existing_health=True,
+        )
+        probe.assert_called_once_with(running)
+
+    def test_governed_browser_probe_requires_bounded_html(self) -> None:
+        process = Mock()
+        process.poll.return_value = None
+        running = SimpleNamespace(
+            process=process,
+            token="technical-token",
+            host="127.0.0.1",
+            port=4123,
+            request_slots=Mock(**{"acquire.return_value": True}),
+        )
+        response = Mock()
+        response.status = 200
+        response.read.return_value = b"<!doctype html><html><body>ready</body></html>"
+        response.getheader.return_value = "text/html; charset=utf-8"
+        connection = Mock()
+        connection.getresponse.return_value = response
+        with patch.object(
+            sidecar_proxy,
+            "UnixRelayHTTPConnection",
+            return_value=connection,
+        ):
+            response_bytes = sidecar_proxy._probe_sidecar_browser_entrypoint(running)
+
+        self.assertEqual(response_bytes, len(response.read.return_value))
+        connection.request.assert_called_once_with(
+            "GET",
+            "/index.html",
+            headers={
+                "Authorization": "Bearer technical-token",
+                "Accept": "text/html",
+                "Connection": "close",
+                "Host": "127.0.0.1:4123",
+            },
+        )
+        response.read.assert_called_once_with(2_097_153)
+        connection.close.assert_called_once()
+        running.request_slots.release.assert_called_once()
+
+    def test_governed_browser_probe_rejects_a_non_html_success(self) -> None:
+        process = Mock()
+        process.poll.return_value = None
+        running = SimpleNamespace(
+            process=process,
+            token="technical-token",
+            host="127.0.0.1",
+            port=4123,
+            request_slots=Mock(**{"acquire.return_value": True}),
+        )
+        response = Mock()
+        response.status = 200
+        response.read.return_value = b'{"ready":true}'
+        response.getheader.return_value = "application/json"
+        connection = Mock()
+        connection.getresponse.return_value = response
+        with (
+            patch.object(
+                sidecar_proxy,
+                "UnixRelayHTTPConnection",
+                return_value=connection,
+            ),
+            self.assertRaises(SidecarStartupError) as raised,
+        ):
+            sidecar_proxy._probe_sidecar_browser_entrypoint(running)
+
+        self.assertEqual(raised.exception.code, "activation_incomplete")
+        self.assertEqual(raised.exception.phase, "browser_smoke")
+
     def test_failed_auto_repair_enters_backoff_without_a_spawn_hash_retry_loop(self) -> None:
         binding = SimpleNamespace(
             workspace_id="default",
@@ -448,6 +569,114 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
         hook.assert_called_once()
         with sidecar_proxy._AUTO_REPAIR_LOCK:
             self.assertFalse(sidecar_proxy._AUTO_REPAIR_BACKOFFS)
+
+    def test_successful_post_repair_browser_startup_requires_a_fresh_html_smoke(self) -> None:
+        binding = SimpleNamespace(
+            workspace_id="default",
+            app_id="design-studio",
+            data_root="/data/design-studio",
+            source_kind="builtin",
+            source_record_id="design-studio",
+        )
+        parsed = SimpleNamespace(
+            contract=SimpleNamespace(
+                entrypoints=SimpleNamespace(hooks={"artifact_repair": "hooks/repair.py"}),
+            ),
+        )
+        browser_sidecar = build_http_sidecar_spec(
+            service_id="opendesign",
+            command=["python3", "server.py"],
+            browser_origin=build_http_sidecar_browser_origin(),
+        )
+        startup_failure = SidecarStartupError(
+            "artifact_integrity_mismatch",
+            "artifact_fast_verify",
+            "invalid runtime",
+            auto_repairable=True,
+        )
+        running = _Running("repaired-browser")
+        manager = Mock()
+        manager.ensure_running.side_effect = [startup_failure, running]
+        with (
+            patch.object(sidecar_proxy, "_sidecar_manager", return_value=manager),
+            patch.object(sidecar_proxy, "_build_workspace_hook_payload", return_value={}),
+            patch.object(sidecar_proxy, "run_lifecycle_hook"),
+            patch.object(
+                sidecar_proxy,
+                "_probe_sidecar_browser_entrypoint",
+                return_value=4096,
+            ) as smoke,
+        ):
+            observed = sidecar_proxy.ensure_sidecar_with_declared_auto_repair(
+                binding=binding,
+                source_root=Path("/apps/design-studio"),
+                parsed=parsed,
+                sidecar=browser_sidecar,
+                start_path=Path("/repo"),
+                shutdown_controller=None,
+            )
+
+        self.assertIs(observed, running)
+        smoke.assert_called_once_with(running)
+        manager.stop_app.assert_not_called()
+
+    def test_failed_post_repair_browser_smoke_stops_the_repaired_consumer(self) -> None:
+        binding = SimpleNamespace(
+            workspace_id="default",
+            app_id="design-studio",
+            data_root="/data/design-studio",
+            source_kind="builtin",
+            source_record_id="design-studio",
+        )
+        parsed = SimpleNamespace(
+            contract=SimpleNamespace(
+                entrypoints=SimpleNamespace(hooks={"artifact_repair": "hooks/repair.py"}),
+            ),
+        )
+        browser_sidecar = build_http_sidecar_spec(
+            service_id="opendesign",
+            command=["python3", "server.py"],
+            browser_origin=build_http_sidecar_browser_origin(),
+        )
+        startup_failure = SidecarStartupError(
+            "artifact_integrity_mismatch",
+            "artifact_fast_verify",
+            "invalid runtime",
+            auto_repairable=True,
+        )
+        smoke_failure = SidecarStartupError(
+            "activation_incomplete",
+            "browser_smoke",
+            "invalid browser entrypoint",
+        )
+        manager = Mock()
+        manager.ensure_running.side_effect = [startup_failure, _Running("repaired-browser")]
+        with (
+            patch.object(sidecar_proxy, "_sidecar_manager", return_value=manager),
+            patch.object(sidecar_proxy, "_build_workspace_hook_payload", return_value={}),
+            patch.object(sidecar_proxy, "run_lifecycle_hook"),
+            patch.object(
+                sidecar_proxy,
+                "_probe_sidecar_browser_entrypoint",
+                side_effect=smoke_failure,
+            ),
+            self.assertRaises(SidecarStartupError) as raised,
+        ):
+            sidecar_proxy.ensure_sidecar_with_declared_auto_repair(
+                binding=binding,
+                source_root=Path("/apps/design-studio"),
+                parsed=parsed,
+                sidecar=browser_sidecar,
+                start_path=Path("/repo"),
+                shutdown_controller=None,
+            )
+
+        self.assertEqual(raised.exception.code, "artifact_repair_failed")
+        self.assertEqual(raised.exception.phase, "artifact_repair_validation")
+        manager.stop_app.assert_called_once_with(
+            workspace_id="default",
+            app_id="design-studio",
+        )
 
     def _ensure(self, *, app_id: str, data_root: str):
         return self._ensure_workspace(

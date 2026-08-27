@@ -14,6 +14,7 @@ from typing import Any
 from core.api.sidecar_prewarm import prewarm_workspace_app_sidecars
 from core.api.sidecar_proxy import (
     app_sidecar_startup_status,
+    smoke_declared_app_sidecar_browser_entrypoints,
     stop_app_sidecars,
     stop_app_sidecars_all_workspaces,
 )
@@ -224,6 +225,25 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
                 for sidecar in parsed.contract.services.http_sidecars
             ],
         }
+    if operation == "smoke":
+        binding = state.app_store.get_workspace_app_binding(
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
+        source_root, parsed = resolve_workspace_app_surface(
+            state.app_store,
+            binding=binding,
+            start_path=state.repository_root,
+        )
+        return smoke_declared_app_sidecar_browser_entrypoints(
+            workspace_id=workspace_id,
+            app_id=app_id,
+            source_root=source_root,
+            data_root=binding.data_root,
+            sidecars=parsed.contract.services.http_sidecars,
+            start_path=state.repository_root,
+            shutdown_controller=shutdown_controller,
+        )
     if operation == "restart":
         return restart_workspace_app_sidecars(
             state.app_store,

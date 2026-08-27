@@ -39,7 +39,7 @@ class OpenDesignArtifactAuthorityTests(unittest.TestCase):
             expected = {
                 "schema_version": "1",
                 "operation": "repair",
-                "status": "ready",
+                "status": "materialized",
                 "store_generation": "a" * 32,
                 "runtime_artifact_sha256": "b" * 64,
                 "web_overlay_sha256": "c" * 64,
@@ -71,6 +71,7 @@ class OpenDesignArtifactAuthorityTests(unittest.TestCase):
                     repository_root=repository,
                     auto=True,
                     audit_workers=2,
+                    complete_repair=False,
                 )
 
             self.assertEqual(result, {**expected, "data_generation_bootstrapped": True})
@@ -161,6 +162,49 @@ class OpenDesignArtifactAuthorityTests(unittest.TestCase):
             self.assertNotIn("candidate_path", json.dumps(result))
             candidate.chmod(0o755)
             private_file.chmod(0o644)
+
+    def test_repair_authority_cannot_claim_runtime_ready_after_materialization(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-authority-client-") as temp_dir:
+            repository = self._repository(Path(temp_dir))
+            stale = {
+                "schema_version": "1",
+                "operation": "repair",
+                "status": "ready",
+                "store_generation": "a" * 32,
+                "runtime_artifact_sha256": "b" * 64,
+                "web_overlay_sha256": "c" * 64,
+            }
+            completed = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout=json.dumps({"ok": True, "result": stale}),
+                stderr="",
+            )
+            with (
+                patch("opendesign_artifact_operations._is_artifact_authority", return_value=False),
+                patch(
+                    "opendesign_artifact_operations._validated_authority_command",
+                    return_value=Path("/usr/local/libexec/maverick-opendesign-artifact-authority"),
+                ),
+                patch("opendesign_artifact_operations.shutil.which", return_value="/usr/bin/sudo"),
+                patch("opendesign_artifact_operations.subprocess.run", return_value=completed),
+                patch(
+                    "opendesign_artifact_operations._bootstrap_after_authority",
+                    return_value={**stale, "data_generation_bootstrapped": False},
+                ) as bootstrapped,
+                self.assertRaises(ArtifactStoreError) as raised,
+            ):
+                run_artifact_operation(
+                    "repair",
+                    data_root=repository / "workspaces/acme/data/design-studio",
+                    workspace_id="acme",
+                    repository_root=repository,
+                    complete_repair=False,
+                )
+
+        self.assertEqual(raised.exception.code, "artifact_authority_unavailable")
+        self.assertEqual(raised.exception.phase, "artifact_authority")
+        bootstrapped.assert_not_called()
 
     def test_authority_failure_is_redacted_and_typed(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-authority-client-") as temp_dir:

@@ -797,6 +797,50 @@ def restart_declared_app_sidecars(
     }
 
 
+def smoke_declared_app_sidecar_browser_entrypoints(
+    *,
+    workspace_id: str,
+    app_id: str,
+    source_root: Path,
+    data_root: str,
+    sidecars: Iterable[HttpSidecarSpec],
+    start_path: Path,
+    shutdown_controller: EntrypointShutdownController | None = None,
+) -> dict[str, object]:
+    """Fetch each declared browser entrypoint through its live private relay."""
+    declared = tuple(sidecar for sidecar in sidecars if sidecar.browser_origin is not None)
+    if not declared:
+        raise AppHostingError(f"App `{app_id}` does not declare browser sidecars.")
+    manager = _sidecar_manager()
+    smoked: list[dict[str, object]] = []
+    for sidecar in declared:
+        running = manager.ensure_running(
+            workspace_id=workspace_id,
+            app_id=app_id,
+            source_root=source_root,
+            data_root=data_root,
+            sidecar=sidecar,
+            start_path=start_path,
+            shutdown_controller=shutdown_controller,
+            verify_existing_health=True,
+        )
+        response_bytes = _probe_sidecar_browser_entrypoint(running)
+        smoked.append(
+            {
+                "service_id": sidecar.service_id,
+                "instance_id": running.instance_id,
+                "browser_entrypoint": True,
+                "response_bytes": response_bytes,
+            }
+        )
+    return {
+        "ready": True,
+        "service_count": len(smoked),
+        "instance_count": len({str(item["instance_id"]) for item in smoked}),
+        "services": smoked,
+    }
+
+
 def handle_app_sidecar_proxy(
     state: PlatformState,
     *,
@@ -1169,7 +1213,13 @@ def ensure_sidecar_with_declared_auto_repair(
             shutdown_controller=shutdown_controller,
             verify_existing_health=verify_existing_health,
         )
+        if sidecar.browser_origin is not None:
+            _probe_sidecar_browser_entrypoint(running)
     except SidecarStartupError as error:
+        manager.stop_app(
+            workspace_id=binding.workspace_id,
+            app_id=binding.app_id,
+        )
         _record_auto_repair_validation_failure(repair_key)
         raise SidecarStartupError(
             "artifact_repair_failed",
@@ -1873,6 +1923,65 @@ def _probe_sidecar_health(running: RunningSidecar, *, sidecar: HttpSidecarSpec) 
             "HTTP sidecar is not transactionally ready.",
             duration_ms=(time.monotonic() - started) * 1000,
         )
+
+
+def _probe_sidecar_browser_entrypoint(running: RunningSidecar) -> int:
+    """Perform one bounded, authenticated HTML smoke on a declared browser sidecar."""
+    started = time.monotonic()
+    if running.process.poll() is not None:
+        raise SidecarStartupError(
+            "daemon_spawn_failed",
+            "browser_smoke",
+            "HTTP sidecar exited before its browser smoke.",
+            duration_ms=(time.monotonic() - started) * 1000,
+        )
+    if not running.request_slots.acquire(blocking=False):
+        raise SidecarStartupError(
+            "daemon_ready_timeout",
+            "browser_smoke",
+            "HTTP sidecar browser smoke could not acquire a request slot.",
+            duration_ms=(time.monotonic() - started) * 1000,
+        )
+    connection: UnixRelayHTTPConnection | None = None
+    try:
+        connection = UnixRelayHTTPConnection(running, timeout=4.0)
+        connection.request(
+            "GET",
+            "/index.html",
+            headers={
+                "Authorization": f"Bearer {running.token}",
+                "Accept": "text/html",
+                "Connection": "close",
+                "Host": f"{running.host}:{running.port}",
+            },
+        )
+        response = connection.getresponse()
+        body = response.read(2_097_153)
+    except (OSError, http.client.HTTPException) as error:
+        raise SidecarStartupError(
+            "activation_incomplete",
+            "browser_smoke",
+            "HTTP sidecar browser smoke failed.",
+            duration_ms=(time.monotonic() - started) * 1000,
+        ) from error
+    finally:
+        if connection is not None:
+            connection.close()
+        running.request_slots.release()
+    content_type = str(response.getheader("Content-Type") or "").lower()
+    if (
+        response.status != 200
+        or len(body) > 2_097_152
+        or "text/html" not in content_type
+        or b"<html" not in body[:4096].lower()
+    ):
+        raise SidecarStartupError(
+            "activation_incomplete",
+            "browser_smoke",
+            "HTTP sidecar browser smoke returned an invalid response.",
+            duration_ms=(time.monotonic() - started) * 1000,
+        )
+    return len(body)
 
 
 def _raise_if_startup_cancelled(cancel_event: Event, *, phase: str) -> None:

@@ -2,6 +2,7 @@
   "commands": {
     "design-studio": {
       "description": "Inspect Design Studio state or run a Design Studio action.",
+      "timeout_seconds": 600,
       "argument_schema": {
         "type": "object",
         "properties": {

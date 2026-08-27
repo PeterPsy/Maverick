@@ -25,6 +25,7 @@ def main() -> None:
             data_root=data_root,
             workspace_id=str(payload.workspace_id or "default"),
             auto=True,
+            complete_repair=False,
         )
     except Exception as error:
         code, phase = failure_identity(error)
@@ -36,7 +37,7 @@ def main() -> None:
         )
         raise
     write_repair_state(data_root, state="idle")
-    emit_json({"ok": result.get("status") == "ready", "repair": result})
+    emit_json({"ok": result.get("status") == "materialized", "repair": result})
 
 
 if __name__ == "__main__":

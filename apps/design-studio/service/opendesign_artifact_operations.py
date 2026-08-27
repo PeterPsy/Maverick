@@ -40,6 +40,7 @@ from opendesign_artifact_audit import (
 from opendesign_artifact_store import ArtifactStoreError, OpenDesignArtifactStore, StoredArtifact
 from opendesign_bootstrap import bootstrap_empty_generation
 from opendesign_generation_control import load_generation_control_metadata
+from opendesign_repair_state import failure_identity, write_repair_state
 from opendesign_runtime_sources import (
     RUNTIME_SOURCE_CATALOG_PATH,
     RuntimeArtifactSource,
@@ -87,9 +88,18 @@ def run_artifact_operation(
     audit_workers: int | None = None,
     candidate_path: Path | None = None,
     candidate_digest: str | None = None,
+    complete_repair: bool = True,
     _authority: bool = False,
 ) -> dict[str, Any]:
-    """Run one bounded operator action and return redaction-safe JSON."""
+    """Run one bounded operator action and return redaction-safe JSON.
+
+    A user-facing repair is not complete when immutable bytes have merely been
+    materialized.  It owns the global consumer stop and does not report
+    ``ready`` until the repaired generation has restarted and passed the
+    governed runtime smoke.  Lifecycle callers that already own the restart
+    transaction pass ``complete_repair=False`` and receive the deliberately
+    narrower ``materialized`` state.
+    """
     repository = discover_repository_root(start_path=repository_root or SERVICE_ROOT)
     started = time.monotonic()
     if operation not in {"status", "verify", "repair", "provision", "prewarm", "diagnostics", "gc", "publish-web"}:
@@ -98,6 +108,13 @@ def run_artifact_operation(
         return _prewarm(repository, workspace_id=workspace_id)
     if operation == "diagnostics":
         return _diagnostics(repository, data_root=data_root)
+    if operation == "repair" and complete_repair and not _authority:
+        return _run_governed_operator_repair(
+            repository,
+            data_root=data_root,
+            workspace_id=workspace_id,
+            audit_workers=audit_workers,
+        )
     if operation in AUTHORITY_OPERATIONS and not _authority and not _is_artifact_authority(repository):
         result = _invoke_artifact_authority(
             operation,
@@ -109,11 +126,18 @@ def run_artifact_operation(
             candidate_digest=candidate_digest,
         )
         if operation in {"repair", "provision"}:
-            return _bootstrap_after_authority(
+            if operation == "repair" and result.get("status") != "materialized":
+                raise ArtifactStoreError(
+                    "artifact_authority_unavailable",
+                    "artifact_authority",
+                    "The platform artifact authority returned an invalid repair phase",
+                )
+            bootstrapped = _bootstrap_after_authority(
                 result,
                 repository=repository,
                 data_root=data_root,
             )
+            return bootstrapped
         return result
 
     namespace = _namespace(
@@ -233,12 +257,410 @@ def run_artifact_operation(
     return {
         "schema_version": "1",
         "operation": operation,
-        "status": "ready",
+        "status": "materialized" if operation == "repair" else "ready",
         "duration_ms": _elapsed_ms(started),
         "store_generation": store.store_generation,
         **({"staging_recovery": staging_recovery} if staging_recovery is not None else {}),
         **result,
     }
+
+
+def _run_governed_operator_repair(
+    repository: Path,
+    *,
+    data_root: Path,
+    workspace_id: str,
+    audit_workers: int | None,
+) -> dict[str, Any]:
+    """Stop every live consumer and prove repaired bytes through a fresh process."""
+    started = time.monotonic()
+    requested_root = Path(data_root).resolve(strict=False)
+    workspace_roots: dict[str, Path] = {workspace_id: requested_root}
+    affected_workspace_ids: tuple[str, ...] = ()
+    materialized: dict[str, Any] | None = None
+    smoke_results: list[dict[str, object]] = []
+    write_repair_state(requested_root, state="repairing")
+    _invalidate_runtime_readiness(requested_root)
+    try:
+        stopped = request_sidecar_control(
+            repository,
+            operation="stop-all-workspaces",
+            workspace_id=workspace_id,
+            app_id=APP_ID,
+            timeout_seconds=10,
+        )
+        affected_workspace_ids = _affected_workspace_ids(stopped)
+        discovered = discover_design_studio_workspace_data_roots(
+            repository,
+            requested_workspace_id=workspace_id,
+        )
+        canonical_requested = discovered[workspace_id].resolve(strict=False)
+        if canonical_requested != requested_root:
+            raise ArtifactStoreError(
+                "runtime_binding_invalid",
+                "workspace_reference_scan",
+                "The repair data root does not match the canonical workspace registry",
+            )
+        workspace_roots = dict(sorted(discovered.items()))
+        if any(item not in workspace_roots for item in affected_workspace_ids):
+            raise ArtifactStoreError(
+                "runtime_binding_invalid",
+                "workspace_reference_scan",
+                "A live Design Studio consumer has no canonical workspace root",
+            )
+        for candidate_workspace_id, root in workspace_roots.items():
+            if candidate_workspace_id != workspace_id:
+                write_repair_state(root, state="repairing")
+            _invalidate_runtime_readiness(root)
+
+        materialized = run_artifact_operation(
+            "repair",
+            data_root=requested_root,
+            workspace_id=workspace_id,
+            repository_root=repository,
+            auto=False,
+            audit_workers=audit_workers,
+            complete_repair=False,
+        )
+        if materialized.get("status") != "materialized":
+            raise ArtifactStoreError(
+                "artifact_repair_failed",
+                "artifact_materialization",
+                "Governed artifact repair did not complete materialization",
+            )
+
+        # The requested workspace proves the operator-visible result.  Every
+        # workspace that was live before the global stop is also restored and
+        # independently smoked before the global repair can report ready.
+        restart_workspace_ids = tuple(
+            sorted({workspace_id, *affected_workspace_ids})
+        )
+        for restart_workspace_id in restart_workspace_ids:
+            restarted = request_sidecar_control(
+                repository,
+                operation="restart",
+                workspace_id=restart_workspace_id,
+                app_id=APP_ID,
+                timeout_seconds=30,
+            )
+            smoke_results.append(
+                governed_repair_runtime_smoke(
+                    repository,
+                    data_root=workspace_roots[restart_workspace_id],
+                    workspace_id=restart_workspace_id,
+                    restarted=restarted,
+                )
+            )
+        for root in workspace_roots.values():
+            write_repair_state(root, state="idle")
+    except Exception as error:
+        try:
+            request_sidecar_control(
+                repository,
+                operation="stop-all-workspaces",
+                workspace_id=workspace_id,
+                app_id=APP_ID,
+                timeout_seconds=10,
+            )
+        except Exception:
+            pass
+        code, phase = failure_identity(error)
+        for root in workspace_roots.values():
+            _invalidate_runtime_readiness(root)
+            try:
+                write_repair_state(
+                    root,
+                    state="failed",
+                    error_code=code,
+                    phase=phase,
+                )
+            except OSError:
+                pass
+        if isinstance(error, ArtifactStoreError):
+            raise
+        raise ArtifactStoreError(
+            code,
+            phase,
+            "Governed artifact repair did not pass transactional runtime validation",
+        ) from error
+
+    assert materialized is not None
+    return {
+        **materialized,
+        "status": "ready",
+        "duration_ms": _elapsed_ms(started),
+        "materialization_duration_ms": materialized.get("duration_ms"),
+        "runtime_validation": {
+            "ready": True,
+            "global_consumers_stopped": True,
+            "restarted_workspace_ids": [
+                str(item["workspace_id"]) for item in smoke_results
+            ],
+            "prewarm_complete": True,
+            "transactional_readiness_complete": True,
+            "governed_smoke_complete": True,
+            "workspaces": smoke_results,
+        },
+    }
+
+
+def governed_repair_runtime_smoke(
+    repository: Path,
+    *,
+    data_root: Path,
+    workspace_id: str,
+    restarted: dict[str, Any],
+) -> dict[str, object]:
+    """Recheck one restarted process and bind browser smoke, marker, and store state."""
+    restart_instance_id = _validated_restart_instance(restarted)
+    prewarm = request_sidecar_control(
+        repository,
+        operation="prewarm",
+        workspace_id=workspace_id,
+        app_id=APP_ID,
+        timeout_seconds=15,
+    )
+    if (
+        prewarm.get("ready") is not True
+        or prewarm.get("service_count") != 1
+        or prewarm.get("instance_count") != 1
+    ):
+        raise ArtifactStoreError(
+            "daemon_ready_timeout",
+            "repair_smoke_prewarm",
+            "The repaired sidecar did not pass its governed prewarm recheck",
+        )
+    browser_smoke = request_sidecar_control(
+        repository,
+        operation="smoke",
+        workspace_id=workspace_id,
+        app_id=APP_ID,
+        timeout_seconds=10,
+    )
+    smoke_services = browser_smoke.get("services")
+    smoke_service = (
+        smoke_services[0]
+        if isinstance(smoke_services, list) and len(smoke_services) == 1
+        else None
+    )
+    if (
+        browser_smoke.get("ready") is not True
+        or browser_smoke.get("service_count") != 1
+        or browser_smoke.get("instance_count") != 1
+        or not isinstance(smoke_service, dict)
+        or smoke_service.get("service_id") != ARTIFACT_ID
+        or smoke_service.get("instance_id") != restart_instance_id
+        or smoke_service.get("browser_entrypoint") is not True
+        or isinstance(smoke_service.get("response_bytes"), bool)
+        or not isinstance(smoke_service.get("response_bytes"), int)
+        or not 1 <= smoke_service["response_bytes"] <= 2_097_152
+    ):
+        raise ArtifactStoreError(
+            "activation_incomplete",
+            "repair_smoke_browser",
+            "The repaired sidecar did not pass its fresh browser entrypoint smoke",
+        )
+    manager_status = request_sidecar_control(
+        repository,
+        operation="status",
+        workspace_id=workspace_id,
+        app_id=APP_ID,
+        timeout_seconds=5,
+    )
+    services = manager_status.get("services")
+    if not isinstance(services, list) or len(services) != 1:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "repair_smoke_manager",
+            "The repaired sidecar manager status is invalid",
+        )
+    service = services[0]
+    if (
+        not isinstance(service, dict)
+        or service.get("sidecar_id") != ARTIFACT_ID
+        or service.get("state") != "ready"
+        or service.get("phase") != "health_recheck"
+        or service.get("instance_id") != restart_instance_id
+    ):
+        raise ArtifactStoreError(
+            "activation_incomplete",
+            "repair_smoke_manager",
+            "The repair smoke did not recheck the restarted sidecar instance",
+        )
+
+    artifact_status = run_artifact_operation(
+        "status",
+        data_root=data_root,
+        workspace_id=workspace_id,
+        repository_root=repository,
+    )
+    active = artifact_status.get("active")
+    if artifact_status.get("operational") is not True or not isinstance(active, dict):
+        raise ArtifactStoreError(
+            "artifact_integrity_mismatch",
+            "repair_smoke_artifact",
+            "The repaired active artifact binding failed its fast integrity recheck",
+        )
+    runtime_digest = active.get("runtime_artifact_sha256")
+    web_digest = active.get("web_overlay_sha256")
+    if not is_sha256(runtime_digest) or not is_sha256(web_digest):
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "repair_smoke_artifact",
+            "The repaired active artifact identity is invalid",
+        )
+
+    generation_root = Path(data_root) / "opendesign"
+    launcher = _read_runtime_smoke_record(
+        generation_root / "launcher-status.json",
+        phase="repair_smoke_launcher",
+    )
+    marker = _read_runtime_smoke_record(
+        generation_root / "maverick-ready.json",
+        phase="repair_smoke_readiness",
+    )
+    startup_id = launcher.get("startup_id")
+    health = launcher.get("health")
+    launcher_active = launcher.get("active")
+    timings = launcher.get("timings_ms")
+    required_health = (
+        "artifact_available",
+        "artifact_verified",
+        "artifact_protected",
+        "sidecar_process_running",
+        "daemon_ready",
+        "activation_committed",
+        "browser_ready",
+    )
+    required_timings = (
+        "process_spawn_ms",
+        "daemon_ready_ms",
+        "activation_commit_ms",
+        "browser_prewarm_ms",
+    )
+    if (
+        launcher.get("schema_version") != "3"
+        or launcher.get("phase") != "browser_ready"
+        or not isinstance(startup_id, str)
+        or not startup_id
+        or not isinstance(health, dict)
+        or any(health.get(key) is not True for key in required_health)
+        or not isinstance(launcher_active, dict)
+        or launcher_active.get("runtime_artifact_sha256") != runtime_digest
+        or launcher_active.get("web_overlay_sha256") != web_digest
+        or not isinstance(timings, dict)
+        or any(
+            isinstance(timings.get(key), bool)
+            or not isinstance(timings.get(key), (int, float))
+            or float(timings[key]) < 0
+            for key in required_timings
+        )
+    ):
+        raise ArtifactStoreError(
+            "activation_incomplete",
+            "repair_smoke_launcher",
+            "The repaired launcher did not prove transactional browser readiness",
+        )
+    if (
+        marker.get("schema_version") != "1"
+        or marker.get("startup_nonce") != startup_id
+        or marker.get("runtime_artifact_sha256") != runtime_digest
+        or marker.get("web_overlay_sha256") != web_digest
+    ):
+        raise ArtifactStoreError(
+            "activation_incomplete",
+            "repair_smoke_readiness",
+            "The repaired readiness marker is not bound to the active process generation",
+        )
+    return {
+        "workspace_id": workspace_id,
+        "sidecar_instance_id": restart_instance_id,
+        "startup_id": startup_id,
+        "runtime_artifact_sha256": runtime_digest,
+        "web_overlay_sha256": web_digest,
+        "fresh_health_recheck": True,
+        "browser_entrypoint_smoke": True,
+        "browser_response_bytes": smoke_service["response_bytes"],
+        "transactional_readiness": True,
+        "artifact_fast_recheck": True,
+    }
+
+
+def _validated_restart_instance(restarted: object) -> str:
+    readiness = restarted.get("readiness") if isinstance(restarted, dict) else None
+    services = readiness.get("services") if isinstance(readiness, dict) else None
+    if (
+        not isinstance(restarted, dict)
+        or restarted.get("status") != "ready"
+        or not isinstance(readiness, dict)
+        or readiness.get("ready") is not True
+        or readiness.get("service_count") != 1
+        or not isinstance(services, list)
+        or len(services) != 1
+    ):
+        raise ArtifactStoreError(
+            "daemon_ready_timeout",
+            "repair_restart",
+            "The repaired sidecar did not complete its governed restart",
+        )
+    service = services[0]
+    instance_id = service.get("instance_id") if isinstance(service, dict) else None
+    if (
+        not isinstance(service, dict)
+        or service.get("service_id") != ARTIFACT_ID
+        or not isinstance(instance_id, str)
+        or not 8 <= len(instance_id) <= 128
+    ):
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "repair_restart",
+            "The repaired sidecar restart identity is invalid",
+        )
+    return instance_id
+
+
+def _affected_workspace_ids(stopped: object) -> tuple[str, ...]:
+    affected = stopped.get("affected_workspace_ids") if isinstance(stopped, dict) else None
+    if (
+        not isinstance(affected, list)
+        or any(not isinstance(item, str) for item in affected)
+        or len(set(affected)) != len(affected)
+    ):
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "repair_global_stop",
+            "The global sidecar stop returned an invalid workspace set",
+        )
+    return tuple(sorted(affected))
+
+
+def _read_runtime_smoke_record(path: Path, *, phase: str) -> dict[str, Any]:
+    try:
+        metadata = path.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise OSError("runtime smoke record is not a regular file")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ArtifactStoreError(
+            "activation_incomplete",
+            phase,
+            "The repaired runtime smoke record is unavailable",
+        ) from error
+    if not isinstance(payload, dict):
+        raise ArtifactStoreError(
+            "activation_incomplete",
+            phase,
+            "The repaired runtime smoke record is invalid",
+        )
+    return payload
+
+
+def _invalidate_runtime_readiness(data_root: Path) -> None:
+    try:
+        (Path(data_root) / "opendesign" / "maverick-ready.json").unlink(missing_ok=True)
+    except OSError:
+        # The Core-owned global stop is still the authoritative process gate.
+        pass
 
 
 def _publish_web_candidate(

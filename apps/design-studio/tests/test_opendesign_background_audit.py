@@ -107,16 +107,21 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
             def operation(name, **_kwargs):
                 events.append(f"artifact:{name}")
                 return {
-                    "status": "ready",
+                    "status": "materialized",
                     "store_generation": "store-1",
                     "retained_runtime_artifacts": ["a" * 64, "b" * 64],
                     "retained_web_overlays": ["c" * 64],
                 }
 
+            def smoke(_root, *, workspace_id, **_kwargs):
+                events.append(f"smoke:{workspace_id}")
+                return {"transactional_readiness": True}
+
             with (
                 patch.object(background, "write_repair_state", side_effect=state),
                 patch.object(background, "request_sidecar_control", side_effect=control),
                 patch.object(background, "run_artifact_operation", side_effect=operation),
+                patch.object(background, "governed_runtime_smoke", side_effect=smoke),
             ):
                 result = background._recover_failed_audit(
                     data_root=data_root,
@@ -132,6 +137,7 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
                 "control:stop-all-workspaces",
                 "artifact:repair",
                 "control:restart",
+                "smoke:default",
                 "state:idle",
             ],
         )
@@ -161,6 +167,10 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
                     return {"affected_workspace_ids": ["bravo", "alpha"]}
                 return {"status": "ready", "readiness": {"ready": True}}
 
+            def smoke(_root, *, workspace_id, **_kwargs):
+                events.append(f"smoke:{workspace_id}")
+                return {"transactional_readiness": True}
+
             with (
                 patch.object(
                     background,
@@ -173,12 +183,13 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
                     background,
                     "run_artifact_operation",
                     return_value={
-                        "status": "ready",
+                        "status": "materialized",
                         "store_generation": "store-1",
                         "retained_runtime_artifacts": ["a" * 64],
                         "retained_web_overlays": ["b" * 64],
                     },
                 ) as repair,
+                patch.object(background, "governed_runtime_smoke", side_effect=smoke),
             ):
                 result = background._recover_failed_audit(
                     data_root=roots["alpha"],
@@ -192,6 +203,7 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
                 )
             )
         repair.assert_called_once()
+        self.assertFalse(repair.call_args.kwargs["complete_repair"])
         self.assertEqual(result["restarted_workspace_ids"], ["alpha", "bravo"])
         self.assertEqual(
             events,
@@ -200,7 +212,9 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
                 "control:stop-all-workspaces:alpha",
                 "state:bravo:repairing",
                 "control:restart:alpha",
+                "smoke:alpha",
                 "control:restart:bravo",
+                "smoke:bravo",
                 "state:alpha:idle",
                 "state:bravo:idle",
             ],

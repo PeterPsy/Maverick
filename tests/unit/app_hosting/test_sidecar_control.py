@@ -123,6 +123,65 @@ class SidecarControlTests(unittest.TestCase):
             data_root="/data/design-studio",
         )
 
+    def test_smoke_uses_declared_browser_sidecars_through_the_live_manager(self) -> None:
+        binding = SimpleNamespace(data_root="/data/design-studio")
+        app_store = Mock()
+        app_store.get_workspace_app_binding.return_value = binding
+        state = SimpleNamespace(app_store=app_store, repository_root=Path("/repo"))
+        sidecars = [SimpleNamespace(service_id="opendesign")]
+        parsed = SimpleNamespace(
+            contract=SimpleNamespace(
+                services=SimpleNamespace(http_sidecars=sidecars),
+            ),
+        )
+        expected = {
+            "ready": True,
+            "service_count": 1,
+            "instance_count": 1,
+            "services": [
+                {
+                    "service_id": "opendesign",
+                    "instance_id": "instance-1",
+                    "browser_entrypoint": True,
+                    "response_bytes": 4096,
+                }
+            ],
+        }
+        shutdown = _Shutdown()
+        with (
+            patch.object(
+                sidecar_control,
+                "resolve_workspace_app_surface",
+                return_value=(Path("/app"), parsed),
+            ),
+            patch.object(
+                sidecar_control,
+                "smoke_declared_app_sidecar_browser_entrypoints",
+                return_value=expected,
+            ) as smoke,
+        ):
+            result = sidecar_control._dispatch(
+                {
+                    "schema_version": "1",
+                    "operation": "smoke",
+                    "workspace_id": "default",
+                    "app_id": "design-studio",
+                },
+                state=state,
+                shutdown_controller=shutdown,
+            )
+
+        self.assertEqual(result, expected)
+        smoke.assert_called_once_with(
+            workspace_id="default",
+            app_id="design-studio",
+            source_root=Path("/app"),
+            data_root="/data/design-studio",
+            sidecars=sidecars,
+            start_path=Path("/repo"),
+            shutdown_controller=shutdown,
+        )
+
     def test_owner_authenticated_client_reaches_the_live_server_thread(self) -> None:
         with tempfile.TemporaryDirectory(prefix="sidecar-control-") as temporary:
             repository = Path(temporary)

@@ -55,6 +55,13 @@ def request_sidecar_control(*args, **kwargs):
     return request(*args, **kwargs)
 
 
+def governed_runtime_smoke(*args, **kwargs):
+    """Load the post-repair runtime proof only on the recovery path."""
+    from opendesign_artifact_operations import governed_repair_runtime_smoke
+
+    return governed_repair_runtime_smoke(*args, **kwargs)
+
+
 def main() -> None:
     payload = read_entrypoint_payload()
     data_root = Path(payload.data_root)
@@ -232,9 +239,10 @@ def _recover_failed_audit(*, data_root: Path, workspace_id: str) -> dict[str, ob
             data_root=data_root,
             workspace_id=workspace_id,
             auto=True,
+            complete_repair=False,
         )
-        if repair.get("status") != "ready":
-            raise RuntimeError("Governed global artifact repair did not become ready")
+        if repair.get("status") != "materialized":
+            raise RuntimeError("Governed global artifact repair did not materialize")
         for affected_workspace_id in affected_workspace_ids:
             restarted = request_sidecar_control(
                 REPOSITORY_ROOT,
@@ -252,6 +260,12 @@ def _recover_failed_audit(*, data_root: Path, workspace_id: str) -> dict[str, ob
                 raise RuntimeError(
                     "Governed background repair did not pass global restart readiness"
                 )
+            governed_runtime_smoke(
+                REPOSITORY_ROOT,
+                data_root=workspace_roots[affected_workspace_id],
+                workspace_id=affected_workspace_id,
+                restarted=restarted,
+            )
     except Exception as error:
         try:
             request_sidecar_control(

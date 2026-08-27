@@ -353,12 +353,26 @@ If a low-priority full audit later rejects an active package, the hook removes
 transactional readiness in every Design Studio workspace, asks Core to revoke
 all Design Studio browser authority and atomically stop every live consumer,
 performs exactly one globally locked repair, and restarts only the workspaces
-that were live before revocation. A partial restart is stopped globally again.
+that were live before revocation; each restart must also pass the same fresh
+health and browser-entrypoint smoke. A partial restart or smoke is stopped globally again.
 The protected audit marker binds the sorted workspace set and a digest of every
 active/rollback reference; GC uses that same union, so one workspace can never
 quarantine another workspace's generation. A failed recovery leaves all
 consumers stopped and records a one-hour persistent backoff instead of hashing
 and retrying every scheduler tick.
+
+The operator `artifact_repair` action uses the same fail-closed boundary but
+also restarts the requested workspace. The privileged authority can return only
+`status: materialized`; that phase proves immutable publication and full audit,
+not runtime readiness. The ordinary control process may promote the result to
+`status: ready` only after global consumer revocation, a fresh Core-managed
+restart, declared prewarm, an independent `/api/maverick-ready` health recheck
+on the same sidecar instance, a fresh bounded `/index.html` smoke through
+Core's private authenticated relay, the launcher's browser-prewarm evidence,
+the nonce-bound readiness marker, and a final fast store/binding recheck all
+agree. Automatic lifecycle repair deliberately requests materialization only,
+because Core already owns its enclosing singleflight restart and readiness
+transaction; this avoids recursively entering the same prewarm-family lock.
 
 The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
 

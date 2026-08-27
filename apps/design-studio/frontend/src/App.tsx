@@ -22,6 +22,7 @@ const LOADING_STATE_DELAY_MS = 500;
 const STARTUP_STATUS_POLL_DELAY_MS = 1_000;
 const STARTUP_STATUS_POLL_MS = 400;
 const MAX_RETRY_BACKOFF_MS = 8_000;
+const SHELL_NAVIGATION_HANDSHAKE_FRAMES = 20;
 
 export function App() {
   const appId = currentDesignStudioAppId();
@@ -37,6 +38,7 @@ export function App() {
   const usableReadyRef = useRef(false);
   const stopStartupStatusPollRef = useRef<() => void>(() => undefined);
   const navigationRef = useRef<OpenDesignNavigation>(initialNavigation());
+  const shellNavigationReceivedRef = useRef(false);
   const settingsRequestRef = useRef(initialSettingsRequest());
   const deliveredSettingsRequestRef = useRef("");
   const settingsDeliveryAttemptsRef = useRef(0);
@@ -127,6 +129,7 @@ export function App() {
         if (event.data.app_id && event.data.app_id !== appId) {
           return;
         }
+        shellNavigationReceivedRef.current = true;
         const params = isRecord(event.data.params)
           ? event.data.params as Record<string, string | boolean | null>
           : {};
@@ -309,10 +312,18 @@ export function App() {
 
     void (async () => {
       // Base Shell delivers canonical app parameters on the iframe load/ready
-      // handshake. Yield one paint before binding the one-shot ticket so a
-      // project deep link bootstraps its final route instead of loading Home
-      // and performing a second full navigation.
-      await nextAnimationFrame();
+      // handshake. Wait boundedly for that explicit message before binding
+      // the one-shot ticket so a project deep link bootstraps its final route
+      // instead of loading Home and performing a second full navigation.
+      for (
+        let frame = 0;
+        frame < SHELL_NAVIGATION_HANDSHAKE_FRAMES
+          && !shellNavigationReceivedRef.current
+          && !navigationRef.current.od_project_id;
+        frame += 1
+      ) {
+        await nextAnimationFrame();
+      }
       if (canceled) {
         return;
       }

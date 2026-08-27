@@ -170,16 +170,22 @@ describe("Design Studio usable frame readiness", () => {
 
   it("binds the one-shot ticket after canonical shell navigation arrives", async () => {
     window.history.replaceState({}, "", "/apps/design-studio");
-    let releaseHandshake: FrameRequestCallback | null = null;
-    vi.mocked(window.requestAnimationFrame).mockImplementationOnce((callback) => {
-      releaseHandshake = callback;
-      return 2;
+    const handshakeFrames: FrameRequestCallback[] = [];
+    vi.mocked(window.requestAnimationFrame).mockImplementation((callback) => {
+      handshakeFrames.push(callback);
+      return handshakeFrames.length + 1;
     });
 
     await act(async () => {
       root.render(<App />);
     });
-    expect(releaseHandshake).not.toBeNull();
+    expect(handshakeFrames).toHaveLength(1);
+    await act(async () => {
+      handshakeFrames.shift()?.(0);
+      await Promise.resolve();
+    });
+    expect(mocks.requestLaunch).not.toHaveBeenCalled();
+    expect(handshakeFrames).toHaveLength(1);
     await act(async () => {
       window.dispatchEvent(new MessageEvent("message", {
         data: {
@@ -190,7 +196,7 @@ describe("Design Studio usable frame readiness", () => {
         origin: window.location.origin,
         source: window.parent,
       }));
-      releaseHandshake?.(0);
+      handshakeFrames.shift()?.(0);
       await Promise.resolve();
     });
 

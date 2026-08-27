@@ -123,8 +123,16 @@ def _instrument_design_studio_startup(root: Path, *, delay_ms: int) -> None:
 
 
 def _prepare_root(root: Path) -> None:
-    for name in ("core", "apps", "workspaces", "scripts"):
+    for name in ("apps", "workspaces"):
         (root / name).mkdir(parents=True, exist_ok=True)
+    for name in ("core", "scripts"):
+        target = root / name
+        if not target.exists() and not target.is_symlink():
+            target.symlink_to(REPO_ROOT / name, target_is_directory=True)
+        if not target.is_symlink() or target.resolve(strict=True) != (REPO_ROOT / name).resolve(
+            strict=True
+        ):
+            raise RuntimeError(f"Synthetic {name} source binding drifted.")
     agents = root / "AGENTS.md"
     if not agents.exists():
         agents.write_text("# Synthetic WP10 product fixture\n", encoding="utf-8")

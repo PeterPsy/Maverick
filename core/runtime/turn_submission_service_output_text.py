@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.output_compaction import ToolOutputCompactionContext, compact_tool_call_event
 from core.runtime.runtime_events import RuntimeEventRecord
-from core.runtime.service import record_runtime_event
+from core.runtime.service import record_runtime_event, record_runtime_turn_event_once
 from core.usage.payloads import chat_usage_summary_payload
 from core.usage.service import ingest_runtime_usage
 
@@ -41,6 +41,39 @@ class _RuntimeTurnOutputRecorder:
             text = event.payload.get("text")
             if isinstance(text, str) and text:
                 self._streamed_text_parts.append(text)
+        elif event.event_type in {
+            "runtime.output.final",
+            "provider.execution.completed",
+        }:
+            delivery_id = event.payload.get("delivery_id")
+            if isinstance(delivery_id, str) and 0 < len(delivery_id) <= 128:
+                event_id = (
+                    delivery_id
+                    if event.event_type == "runtime.output.final"
+                    else str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"maverick:provider-completed:{delivery_id}",
+                        )
+                    )
+                )
+                try:
+                    saved, _inserted = record_runtime_turn_event_once(
+                        self.state.runtime_store,
+                        event_id=event_id,
+                        session_id=self.session_id,
+                        turn_id=self.turn_id,
+                        event_type=event.event_type,
+                        payload=event.payload,
+                        event_bus=self.state.runtime_event_bus,
+                    )
+                except RuntimeError as error:
+                    raise RuntimeError(
+                        "runtime_final_output_identity_conflict"
+                    ) from error
+                if saved.payload != event.payload:
+                    raise RuntimeError("runtime_final_output_identity_conflict")
+                return saved
         elif event.event_type.startswith("runtime.tool_call."):
             event = compact_tool_call_event(
                 event,

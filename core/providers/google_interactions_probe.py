@@ -193,6 +193,7 @@ def _probe_request(
     private_state=None,
     tool_results=(),
 ) -> AgenticModelRequest:
+    pairing = private_state is not None and bool(tool_results)
     return AgenticModelRequest(
         schema_version="1",
         request_id=request_id,
@@ -224,6 +225,17 @@ def _probe_request(
         # terminate as `incomplete` at medium/high before the declared tool is
         # reached, which tests the budget rather than the function-call contract.
         max_output_tokens=CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS,
+        pairing_source_journal_id=(
+            f"certification-probe:{private_state.provider_request_id}"
+            if pairing
+            else None
+        ),
+        pairing_source_turn_id=(
+            private_state.turn_generation if pairing else None
+        ),
+        pairing_source_request_id=(
+            private_state.provider_request_id if pairing else None
+        ),
     )
 
 

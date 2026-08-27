@@ -19,6 +19,7 @@ from core.runtime.authority import validate_live_runtime_binding_governance
 from core.runtime.execution_binding import RuntimeExecutionBinding
 from core.runtime.errors import RuntimeProviderStateError
 from core.runtime.provider_state import RuntimeProviderState
+from core.runtime.provider_step_admission import provider_step_admission_reason
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.store import RuntimeStore
 
@@ -96,9 +97,22 @@ def assess_runtime_session_admission(
     now: datetime | None = None,
 ) -> RuntimeAdmissionAssessment:
     """Validate direct authority or prove one conservative continuation upgrade."""
+    try:
+        persisted_session = runtime_store.get_session(session.session_id)
+    except Exception:
+        return _blocked(session, "runtime_session_unavailable")
+    if persisted_session.workspace_id != session.workspace_id:
+        return _blocked(session, "runtime_session_identity_mismatch")
+    session = persisted_session
     binding = session.execution_binding
     if session.status == "recovery_required":
         return _blocked(session, "runtime_session_recovery_required")
+    journal_reason = provider_step_admission_reason(
+        runtime_store,
+        session_id=session.session_id,
+    )
+    if journal_reason is not None:
+        return _blocked(session, journal_reason)
     if session.runtime_mode != "agentic":
         return _direct(session)
     if binding is None:

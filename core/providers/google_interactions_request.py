@@ -53,7 +53,17 @@ def _new_input_steps(
     state: GoogleInteractionState,
 ) -> tuple[dict[str, object], ...]:
     if state.pending_function_calls:
+        _validate_pairing_lineage(request)
         return tuple(_function_results(request.tool_results, state))
+    if any(
+        value is not None
+        for value in (
+            request.pairing_source_journal_id,
+            request.pairing_source_turn_id,
+            request.pairing_source_request_id,
+        )
+    ):
+        raise GoogleInteractionsProtocolError("provider_tool_result_pairing_invalid")
     if (
         set(_tool_results_by_id(request.tool_results))
         - set(state.consumed_function_call_ids)
@@ -69,6 +79,20 @@ def _new_input_steps(
     if not content:
         raise GoogleInteractionsProtocolError("provider_request_invalid")
     return ({"type": "user_input", "content": content},)
+
+
+def _validate_pairing_lineage(request: AgenticModelRequest) -> None:
+    state = request.provider_private_state
+    if (
+        not request.pairing_source_journal_id
+        or not request.pairing_source_turn_id
+        or not request.pairing_source_request_id
+        or request.correlation_id != request.pairing_source_turn_id
+        or state is None
+        or state.provider_request_id != request.pairing_source_request_id
+        or state.turn_generation != request.pairing_source_turn_id
+    ):
+        raise GoogleInteractionsProtocolError("provider_tool_result_pairing_invalid")
 
 
 def _function_results(

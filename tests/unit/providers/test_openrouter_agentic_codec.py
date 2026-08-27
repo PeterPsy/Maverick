@@ -248,6 +248,7 @@ async def _events(client, request):
 
 
 def _request(request_id: str, *, private_state=None, tool_results=()) -> AgenticModelRequest:
+    pairing = private_state is not None and bool(tool_results)
     return AgenticModelRequest(
         schema_version="1",
         request_id=request_id,
@@ -274,6 +275,15 @@ def _request(request_id: str, *, private_state=None, tool_results=()) -> Agentic
         provider_private_state=private_state,
         routing_constraint=openrouter_agentic_routing_constraint(),
         max_output_tokens=1024,
+        pairing_source_journal_id=(
+            f"journal:{private_state.provider_request_id}" if pairing else None
+        ),
+        pairing_source_turn_id=(
+            private_state.turn_generation if pairing else None
+        ),
+        pairing_source_request_id=(
+            private_state.provider_request_id if pairing else None
+        ),
     )
 
 

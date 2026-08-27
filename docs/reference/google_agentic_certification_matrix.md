@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-27
-Matrix revision: `2026-08-27-r10-p2-tcb3`
+Matrix revision: `2026-08-27-r11-p2-tcb4`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==6`
+Adapter: `maverick-hosted-tool-loop==7`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==6`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `14` (revision `13` suspended) |
+| Immutable profile revision | `15` (revision `14` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -49,7 +49,7 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
-| Certified execution TCB | manifest v3 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v4 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -61,11 +61,14 @@ Primary references:
 | Failure propagation | terminal codec reasons survive the shared loop and `runtime.turn.failed`; quota, resource exhaustion, and rate limiting remain distinct redaction-safe categories | not certified |
 | Shared tool loop | Google codec through the deterministic hosted-loop E2E | not certified |
 | Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
+| Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
+| Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
+| Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only two sequential real-filesystem-list calls plus final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r10 |
+| Live capability probe | operator-only two sequential real-filesystem-list calls plus final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r11 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
@@ -118,10 +121,17 @@ before the final response. The
 shared egress contract also redacts residual host paths found inside untrusted
 tool output while retaining fail-closed denial for every other provenance.
 
-Revision 14 pins adapter 6 and codec/schema 3 for the Phase-2 provider-step
+Revision 14 pinned adapter 6 and codec/schema 3 for the Phase-2 provider-step
 journal, preliminary proposal ledger, staged-state promotion, complete
 multi-call accounting, reconstructible pairing, effect ordering, and productive
 recovery. Suite 10 and matrix `2026-08-27-r10-p2-tcb3` add the JSON/document
 parity and Google/OpenRouter crash matrices to `fixture_contract` and bind TCB
-manifest v3. The retained `live_probe` was not selected or run, no behavioral
-evidence was created, and this candidate remains suspended and uncertified.
+manifest v3. Its retained `live_probe` was not selected or run, and revision 14
+is historical and suspended.
+
+Revision 15 pins adapter 7, suite 11, matrix
+`2026-08-27-r11-p2-tcb4`, and TCB manifest v4 for the terminal Phase-2 closure:
+same-turn pairing ownership and input lineage, containment-first quarantine,
+and private final-output outbox delivery across commit/restart crashes. The
+retained `live_probe` was not selected or run, no behavioral evidence was
+created, and this candidate remains suspended and uncertified.

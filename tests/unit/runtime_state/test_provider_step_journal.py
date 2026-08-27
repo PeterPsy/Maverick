@@ -114,6 +114,7 @@ class ProviderStepJournalTest(unittest.TestCase):
             step_index=0,
             codec=self.codec,
             pairing_source_journal_id=None,
+            request_lineage_digest="a" * 64,
             now=NOW,
         )
         retried = journal.begin_request(
@@ -125,11 +126,28 @@ class ProviderStepJournalTest(unittest.TestCase):
             step_index=0,
             codec=self.codec,
             pairing_source_journal_id=None,
+            request_lineage_digest="a" * 64,
             now=NOW.replace(second=1),
         )
 
         self.assertEqual(retried, first)
         self.assertEqual(retried.created_at, NOW)
+        with self.assertRaisesRegex(
+            RuntimeProviderStateError,
+            "provider_step_journal_identity_conflict",
+        ):
+            journal.begin_request(
+                session=self.harness.session,
+                binding=self.harness.binding,
+                provider_state=self.harness.provider_state,
+                request_id="request-journal",
+                turn_id="turn-hosted",
+                step_index=0,
+                codec=self.codec,
+                pairing_source_journal_id=None,
+                request_lineage_digest="b" * 64,
+                now=NOW.replace(second=2),
+            )
 
     def test_failure_transitions_are_durable_and_restart_idempotent(self) -> None:
         cases = (

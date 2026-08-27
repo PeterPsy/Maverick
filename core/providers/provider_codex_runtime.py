@@ -207,6 +207,7 @@ class CodexProviderAdapter(
                 "core.providers.provider_codex_wrappers",
                 "core.providers.provider_legacy_agentic_bridge",
                 "core.runtime.process_control",
+                "core.runtime.provider_step_admission",
                 "core.runtime.provider_start_handoff",
                 "core.runtime.turn_queue_admission",
                 "core.runtime.workspace_sandbox",

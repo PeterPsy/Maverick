@@ -104,6 +104,9 @@ class AgenticModelRequest:
     routing_constraint: RoutingConstraint
     max_output_tokens: int
     source_metadata: tuple[AgenticSourceMetadata, ...] = field(default_factory=tuple)
+    pairing_source_journal_id: str | None = None
+    pairing_source_turn_id: str | None = None
+    pairing_source_request_id: str | None = None
 
 
 @dataclass(frozen=True)

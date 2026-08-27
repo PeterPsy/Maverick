@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from core.runtime.errors import RuntimeTurnQueueRejectedError
+from core.runtime.provider_step_admission import provider_step_admission_reason
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.store import RuntimeStore
 from core.runtime.remote_agentic_admission import remote_agentic_containment_reason
@@ -11,6 +12,8 @@ from core.runtime.remote_agentic_admission import remote_agentic_containment_rea
 def require_turn_queue_session_executable(
     store: RuntimeStore,
     session: RuntimeSessionRecord,
+    *,
+    turn_id: str | None = None,
 ) -> None:
     """Reject turns whose session is stopped or has transferred ownership."""
     if session.status == "recovery_required":
@@ -37,4 +40,31 @@ def require_turn_queue_session_executable(
         raise RuntimeTurnQueueRejectedError(
             f"Cannot queue a runtime turn while session `{session.session_id}` is {session.status}.",
             reason_code="runtime_session_not_executable",
+        )
+    persisted = store.get_session(session.session_id)
+    if persisted.workspace_id != session.workspace_id:
+        raise RuntimeTurnQueueRejectedError(
+            "Cannot queue a runtime turn for a mismatched persisted session.",
+            reason_code="runtime_session_not_executable",
+        )
+    if persisted.status == "recovery_required":
+        raise RuntimeTurnQueueRejectedError(
+            f"Cannot queue a runtime turn while session `{session.session_id}` requires recovery.",
+            reason_code="runtime_session_recovery_required",
+        )
+    if persisted.status not in {"created", "running"}:
+        raise RuntimeTurnQueueRejectedError(
+            f"Cannot queue a runtime turn while session `{session.session_id}` is {persisted.status}.",
+            reason_code="runtime_session_not_executable",
+        )
+    journal_reason = provider_step_admission_reason(
+        store,
+        session_id=session.session_id,
+        turn_id=turn_id,
+        allow_same_turn_pairing=False,
+    )
+    if journal_reason is not None:
+        raise RuntimeTurnQueueRejectedError(
+            f"Cannot queue a runtime turn while session `{session.session_id}` has unresolved provider state.",
+            reason_code=journal_reason,
         )

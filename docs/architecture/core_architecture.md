@@ -691,14 +691,37 @@ certificate at runtime.
 
 Sequential provider requests must explicitly disable parallel tool calls when
 the selected endpoint declares that control. If it does not, the request omits
-the unsupported parameter and the decoder still rejects more than one returned
-tool call before orchestration. A provider codec reconciles every returned tool
-name with the exact request catalog before orchestration. One
+the unsupported parameter. The decoder retains every coherent indexed call;
+the preliminary ledger persists each call before resolution and the shared
+loop returns a durable `parallel_denied` result for every call without crossing
+an effect boundary. No secondary call may be silently discarded. One
 OpenAI-compatible tool call may be preceded by provisional assistant text; the
 codec keeps that text only in provider-private continuation state with the
 assistant tool call, executes the single call through the shared loop, and does
-not publish the provisional text as final output. Multiple calls and invalid
-tool-call indices remain distinct fail-closed conditions.
+not publish the provisional text as final output. Invalid or conflicting
+tool-call identities and indices remain fail-closed conditions.
+
+The provider-step journal is the continuation authority. A ready pairing can be
+used only by its original active turn and requires the exact source journal,
+turn, provider request, private-state generation, and non-tool input-lineage
+digest. Queue, token, prepare, continuation, and execute gates read persisted
+journal state. A normal new user turn cannot inherit a pairing or have its input
+silently ignored. Terminal limits, cancellation, authority/certificate
+revocation, egress denial, and execution failure must complete certified
+same-turn recovery or quarantine the pairing.
+
+Quarantine persists the allowlisted `recovery_required` session reason before
+best-effort private diagnostic detail, with bounded reread/retry for session and
+journal CAS. Diagnostic, audit, private-payload, or runtime-state projection
+failure cannot restore execution authority; a session CAS remains sufficient
+containment when the journal cannot be advanced.
+
+Final hosted text is encrypted into a deterministic Core-private outbox before
+the provider journal may complete or commit. The journal keeps only identity,
+digest, size, and separate output/completion delivery acknowledgements. Stable
+terminal event ids allow startup or same-turn retry to deliver the same output
+once without another provider request; an unprovable output is quarantined and
+never regenerated. Final text is absent from the journal and unauthorized APIs.
 
 Agentic execution failures cross the runtime boundary as a stable reason code,
 a mapped redaction-safe public message, and an optional bounded diagnostic
@@ -1786,7 +1809,7 @@ The sanitized runtime config must remove inherited MCP server and plugin section
 
 The Codex adapter owns Maverick's managed Codex model selection for runtime agents. It should discover the visible Codex model catalog through the configured Codex binary, expose the viable model and reasoning-effort options through generic provider settings, and write the workspace-selected `model` plus the session-selected `model_reasoning_effort` into each runtime-scoped Codex config instead of inheriting those values from the operator home. Reasoning is not workspace-default authority. The fallback model is `gpt-5.6-sol`. New sessions default to the deepest supported single-agent reasoning effort: `max` when the model exposes it, otherwise the next deepest advertised effort. Codex `ultra` is a multi-agent execution mode rather than a reasoning effort and must not appear in the reasoning selector. Persisted model catalogs are normalized to this contract without requiring code changes when Codex adds or removes visible models.
 
-Selectable agentic profiles bind their supported reasoning efforts and default into the immutable capability certificate and copy that exact contract into the session execution binding. `/api/providers` may use provider model metadata only for labels and descriptions; selectable values come from the active certificate. Chat renders a per-session reasoning selector only when that certified list is non-empty and does not recover missing choices from mutable model metadata. Before session creation and on every live certificate validation, Core rejects a requested effort outside the certified tuple or any mismatch between the certificate and binding. A behavior-changing built-in Codex adapter update publishes a new immutable profile revision and certificate, publishes a corresponding current binding for every enabled historical binding of the same model without rewriting the old binding, and suspends prior revisions whose adapter artifact digest is no longer current. A continuation selects the current enabled binding for the source profile/model; it must not silently move a historical non-default-model chat to the workspace default model. The declared Codex artifact bundle includes every app-server transport, thread, protocol, notification, steering, state, skill-input, configuration-policy, hook, reasoning, wrapper, sandbox, continuation-home, and legacy bridge module that can change provider behavior. Its revision-to-digest manifest is append-only: a historical digest may never be rewritten, and changing any declared artifact without adding a revision fails bootstrap and CI with `profile_revision_artifact_mismatch`. Codex profile revision 7 is the first revision certified against the expanded app-server bundle; revision 8 adds continuation-lineage ownership of the physical Codex conversation store and typed missing-thread failures; revision 9 adds admission/process fencing, live handoff revalidation, lineage snapshots, and sandbox-home identity; revision 10 binds orchestration decisions to live catalog snapshots; revision 11 adds remote-agentic containment gates at turn-queue admission and provider-start handoff. In Chat's model menu each row presents the model label as its title, the provider label as its only subtitle, and the reasoning control inline at the right; rollout, certificate, tool-count, and technical profile badges do not belong in this compact picker.
+Selectable agentic profiles bind their supported reasoning efforts and default into the immutable capability certificate and copy that exact contract into the session execution binding. `/api/providers` may use provider model metadata only for labels and descriptions; selectable values come from the active certificate. Chat renders a per-session reasoning selector only when that certified list is non-empty and does not recover missing choices from mutable model metadata. Before session creation and on every live certificate validation, Core rejects a requested effort outside the certified tuple or any mismatch between the certificate and binding. A behavior-changing built-in Codex adapter update publishes a new immutable profile revision and certificate, publishes a corresponding current binding for every enabled historical binding of the same model without rewriting the old binding, and suspends prior revisions whose adapter artifact digest is no longer current. A continuation selects the current enabled binding for the source profile/model; it must not silently move a historical non-default-model chat to the workspace default model. The declared Codex artifact bundle includes every app-server transport, thread, protocol, notification, steering, state, skill-input, configuration-policy, hook, reasoning, wrapper, sandbox, continuation-home, and legacy bridge module that can change provider behavior. Its revision-to-digest manifest is append-only: a historical digest may never be rewritten, and changing any declared artifact without adding a revision fails bootstrap and CI with `profile_revision_artifact_mismatch`. Codex profile revision 7 is the first revision certified against the expanded app-server bundle; revision 8 adds continuation-lineage ownership of the physical Codex conversation store and typed missing-thread failures; revision 9 adds admission/process fencing, live handoff revalidation, lineage snapshots, and sandbox-home identity; revision 10 binds orchestration decisions to live catalog snapshots; revision 11 adds remote-agentic containment gates at turn-queue admission and provider-start handoff; revision 12 binds turn-queue admission to the persisted provider-step quarantine/pairing gate without changing Codex execution semantics. In Chat's model menu each row presents the model label as its title, the provider label as its only subtitle, and the reasoning control inline at the right; rollout, certificate, tool-count, and technical profile badges do not belong in this compact picker.
 
 The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
 

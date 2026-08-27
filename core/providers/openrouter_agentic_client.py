@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 import math
 
 import core.providers.openrouter_agentic_models as openrouter_agentic_models_module
@@ -82,6 +83,15 @@ class OpenRouterAgenticClient:
                         yield event
                     continue
                 for event in events:
+                    if event.provider_private_state is not None:
+                        event = replace(
+                            event,
+                            provider_private_state=replace(
+                                event.provider_private_state,
+                                provider_request_id=request.request_id,
+                                turn_generation=request.correlation_id,
+                            ),
+                        )
                     yield event
             if failure is not None:
                 yield AgenticModelEvent(

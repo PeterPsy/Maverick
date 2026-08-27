@@ -8,6 +8,7 @@ from dataclasses import replace
 import json
 from threading import Event
 from typing import Callable
+from uuid import NAMESPACE_URL, uuid5
 
 import core.egress.agentic_models as agentic_egress_models_module
 import core.egress.agentic_policy as agentic_egress_policy_module
@@ -25,7 +26,11 @@ import core.runtime.hosted_provider_runtime as hosted_provider_runtime_module
 import core.runtime.tool_core_capabilities as tool_core_capabilities_module
 import core.runtime.tool_filesystem_listing as tool_filesystem_listing_module
 import core.runtime.tool_orchestrator as tool_orchestrator_module
-from core.providers.agentic_protocol import AgenticModelEvent, AgenticToolResult
+from core.providers.agentic_protocol import (
+    AgenticModelEvent,
+    AgenticModelRequest,
+    AgenticToolResult,
+)
 from core.providers.agentic_adapter import RuntimeProviderEvent, RuntimeTurnContext
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.agentic_feature_flags import (
@@ -47,7 +52,10 @@ from core.runtime.hosted_agentic_models import (
     HostedTurnStatusCallback,
     raise_if_hosted_cancelled,
 )
-from core.runtime.hosted_agentic_request import HostedAgenticRequestBuilder
+from core.runtime.hosted_agentic_request import (
+    HostedAgenticRequestBuilder,
+    hosted_request_lineage_digest,
+)
 from core.runtime.hosted_agentic_recovery import HostedAgenticRecovery
 from core.runtime.hosted_agentic_policy import (
     destination_upstream,
@@ -65,6 +73,7 @@ from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.provider_private_state import ProviderPrivateStateService
 from core.runtime.provider_step_journal import ProviderStepJournal
+from core.runtime.provider_step_models import ProviderStepJournalRecord
 from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
@@ -163,9 +172,9 @@ class HostedAgenticLoop:
             recovered_reason = self._recover_after_failure(
                 context,
                 trigger=(
-                    "cancellation_uncertain"
+                    f"cancellation_uncertain:{failure_reason}"
                     if failure_reason == "runtime_cancelled"
-                    else "execution_failure"
+                    else f"execution_failure:{failure_reason}"
                 ),
             )
             if recovered_reason is not None:
@@ -214,11 +223,56 @@ class HostedAgenticLoop:
             session_id=context.session.session_id,
             turn_id=context.correlation_id,
         )
-        if existing_turn_steps and (
-            existing_turn_steps[-1].commit_status == "committed"
-            and existing_turn_steps[-1].final_output_validated
-        ):
-            raise HostedAgenticLoopError("provider_step_already_committed")
+        committed_final = next(
+            (
+                item
+                for item in reversed(existing_turn_steps)
+                if item.commit_status == "committed"
+                and item.final_output_validated
+            ),
+            None,
+        )
+        if committed_final is not None:
+            output_text = self._read_final_output(
+                context,
+                provider_runtime,
+                committed_final,
+            )
+            if committed_final.final_output_status == "ready":
+                yield event(
+                    "runtime.output.final",
+                    {
+                        "text": output_text,
+                        "complete_text": output_text,
+                        "provider_id": context.binding.model_provider_id,
+                        "exit_code": 0,
+                        "delivery_id": committed_final.final_output_id,
+                    },
+                )
+                committed_final = self.provider_step_journal.mark_final_output_delivered(
+                    self.tool_ledger.store.get_provider_step_journal(
+                        committed_final.journal_id
+                    )
+                )
+            elif committed_final.final_output_status != "delivered":
+                raise HostedAgenticLoopError("provider_state_ambiguous")
+            if committed_final.final_completion_status == "ready":
+                yield event(
+                    "provider.execution.completed",
+                    {
+                        "output_text": output_text,
+                        "exit_code": 0,
+                        "delivery_id": committed_final.final_output_id,
+                    },
+                )
+                self.provider_step_journal.mark_final_completion_delivered(
+                    self.tool_ledger.store.get_provider_step_journal(
+                        committed_final.journal_id
+                    )
+                )
+            elif committed_final.final_completion_status != "delivered":
+                raise HostedAgenticLoopError("provider_state_ambiguous")
+            return
         start_step = (
             max(item.step_index for item in existing_turn_steps) + 1
             if existing_turn_steps
@@ -226,7 +280,8 @@ class HostedAgenticLoop:
         )
         budget.steps = len(existing_turn_steps)
         pairing_source = self.recovery.pending_pairing(
-            session_id=context.session.session_id
+            session_id=context.session.session_id,
+            turn_id=context.correlation_id,
         )
         if pairing_source is not None:
             for invocation in self.recovery.pairing_results(pairing_source):
@@ -273,6 +328,14 @@ class HostedAgenticLoop:
                 egress_policy=egress_policy,
                 destination_upstream_id=destination_upstream_id,
                 max_output_tokens=max(1, budget.policy.max_output_tokens - budget.output_tokens),
+                pairing_source=pairing_source,
+            )
+            request_lineage_digest = hosted_request_lineage_digest(request)
+            self._validate_request_pairing(
+                request,
+                pairing_source=pairing_source,
+                turn_id=context.correlation_id,
+                request_lineage_digest=request_lineage_digest,
             )
             budget.begin_step(request, provider_runtime.cost_estimator(request))
             private_state.persist_request_identity(context, request)
@@ -290,6 +353,7 @@ class HostedAgenticLoop:
                 pairing_source_journal_id=(
                     None if pairing_source is None else pairing_source.journal_id
                 ),
+                request_lineage_digest=request_lineage_digest,
             )
             step_journal = self.provider_step_journal.journal_request(step_journal)
             yield event(
@@ -393,13 +457,39 @@ class HostedAgenticLoop:
             step_journal = self.tool_ledger.store.get_provider_step_journal(
                 step_journal.journal_id
             )
-            step_journal = self.provider_step_journal.complete_stream(
-                step_journal,
-                final_output_validated=response.final_text is not None,
-            )
             if staged_envelope is None:
                 raise HostedAgenticLoopError("provider_private_state_invalid")
             if response.final_text is not None:
+                output_id = str(
+                    uuid5(
+                        NAMESPACE_URL,
+                        f"maverick:provider-final-output:{step_journal.journal_id}",
+                    )
+                )
+                private_ref, content_sha256, size_bytes = (
+                    self.private_state_service.store_final_output(
+                        session_id=context.session.session_id,
+                        adapter_id=context.binding.adapter_id,
+                        adapter_version=context.binding.adapter_version,
+                        codec_id=provider_runtime.private_codec.codec_id,
+                        codec_version=provider_runtime.private_codec.codec_version,
+                        schema_version=provider_runtime.private_codec.schema_version,
+                        journal_id=step_journal.journal_id,
+                        provider_request_id=step_journal.request_id,
+                        output_text=response.final_text,
+                    )
+                )
+                step_journal = self.provider_step_journal.stage_final_output(
+                    step_journal,
+                    output_id=output_id,
+                    private_ref=private_ref,
+                    content_sha256=content_sha256,
+                    size_bytes=size_bytes,
+                )
+                step_journal = self.provider_step_journal.complete_stream(
+                    step_journal,
+                    final_output_validated=True,
+                )
                 private_state.promote(
                     context,
                     staged_envelope,
@@ -412,12 +502,39 @@ class HostedAgenticLoop:
                             pairing_source.journal_id
                         )
                     )
-                yield event("runtime.output.final", {"text": response.final_text})
+                yield event(
+                    "runtime.output.final",
+                    {
+                        "text": response.final_text,
+                        "complete_text": response.final_text,
+                        "provider_id": context.binding.model_provider_id,
+                        "exit_code": 0,
+                        "delivery_id": output_id,
+                    },
+                )
+                step_journal = self.provider_step_journal.mark_final_output_delivered(
+                    self.tool_ledger.store.get_provider_step_journal(
+                        step_journal.journal_id
+                    )
+                )
                 yield event(
                     "provider.execution.completed",
-                    {"output_text": response.final_text, "exit_code": 0},
+                    {
+                        "output_text": response.final_text,
+                        "exit_code": 0,
+                        "delivery_id": output_id,
+                    },
+                )
+                self.provider_step_journal.mark_final_completion_delivered(
+                    self.tool_ledger.store.get_provider_step_journal(
+                        step_journal.journal_id
+                    )
                 )
                 return
+            step_journal = self.provider_step_journal.complete_stream(
+                step_journal,
+                final_output_validated=False,
+            )
             if not response.tool_calls:
                 raise HostedAgenticLoopError("provider_response_invalid")
             step_results: list[AgenticToolResult] = []
@@ -636,8 +753,82 @@ class HostedAgenticLoop:
         )
 
     def _recover_after_failure(self, context, *, trigger: str) -> str | None:
+        failure_reason = trigger.partition(":")[2] or trigger
         try:
             result = self.recover_session(context, trigger=trigger)
         except Exception:
+            result = None
+        try:
+            contained = self.recovery.contain_terminal_pairing(
+                session=context.session,
+                binding=context.binding,
+                provider_runtime=self.provider_runtimes.resolve(context.binding),
+                turn_id=context.correlation_id,
+                trigger=trigger,
+                terminal_reason_code=failure_reason,
+            )
+        except Exception:
             return "provider_state_ambiguous"
-        return None if result.recovered else result.reason_code
+        if result is None:
+            return contained or "provider_state_ambiguous"
+        if not result.recovered:
+            return result.reason_code
+        return None
+
+    def _read_final_output(self, context, provider_runtime, record) -> str:
+        if (
+            record.final_output_status not in {"ready", "delivered"}
+            or not record.final_output_id
+            or not record.final_output_private_ref
+            or not record.final_output_sha256
+            or record.final_output_size_bytes is None
+        ):
+            raise HostedAgenticLoopError("provider_state_ambiguous")
+        try:
+            return self.private_state_service.read_final_output(
+                session_id=context.session.session_id,
+                adapter_id=context.binding.adapter_id,
+                adapter_version=context.binding.adapter_version,
+                codec_id=provider_runtime.private_codec.codec_id,
+                codec_version=provider_runtime.private_codec.codec_version,
+                schema_version=provider_runtime.private_codec.schema_version,
+                private_ref=record.final_output_private_ref,
+                content_sha256=record.final_output_sha256,
+                size_bytes=record.final_output_size_bytes,
+            )
+        except Exception as error:
+            raise HostedAgenticLoopError("provider_state_ambiguous") from error
+
+    @staticmethod
+    def _validate_request_pairing(
+        request: AgenticModelRequest,
+        *,
+        pairing_source: ProviderStepJournalRecord | None,
+        turn_id: str,
+        request_lineage_digest: str,
+    ) -> None:
+        if pairing_source is None:
+            if request.tool_results or any(
+                value is not None
+                for value in (
+                    request.pairing_source_journal_id,
+                    request.pairing_source_turn_id,
+                    request.pairing_source_request_id,
+                )
+            ):
+                raise HostedAgenticLoopError("provider_pairing_ambiguous")
+            return
+        state = request.provider_private_state
+        if (
+            not request.tool_results
+            or pairing_source.turn_id != turn_id
+            or request.correlation_id != turn_id
+            or request.pairing_source_journal_id != pairing_source.journal_id
+            or request.pairing_source_turn_id != pairing_source.turn_id
+            or request.pairing_source_request_id != pairing_source.request_id
+            or pairing_source.request_lineage_digest != request_lineage_digest
+            or state is None
+            or state.provider_request_id != pairing_source.request_id
+            or state.turn_generation != pairing_source.turn_id
+        ):
+            raise HostedAgenticLoopError("provider_pairing_ambiguous")

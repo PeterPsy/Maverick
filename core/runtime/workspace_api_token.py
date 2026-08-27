@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from core.execution_policy.models import ExecutionMode
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.provider_step_admission import provider_step_admission_reason
 from core.runtime.runtime_session import RuntimeApiTokenRecord
 from core.secrets.bootstrap import resolve_bootstrap_secret
 
@@ -157,6 +158,12 @@ def validate_workspace_api_token_lifecycle(
         return None, "runtime_token_mismatch"
     if session.status == "recovery_required":
         return None, "runtime_session_recovery_required"
+    journal_reason = provider_step_admission_reason(
+        store,
+        session_id=session.session_id,
+    )
+    if journal_reason is not None:
+        return None, journal_reason
     return claims, None
 
 

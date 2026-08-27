@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.observability.service import append_platform_log
+from core.runtime.errors import RuntimeTurnNotFoundError
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -44,6 +45,21 @@ def _record_final_output(
     complete_text: str,
     exit_code: int,
 ) -> RuntimeEventRecord:
+    try:
+        existing = state.runtime_store.find_turn_event(
+            turn_id=turn_id,
+            event_type="runtime.output.final",
+        )
+    except RuntimeTurnNotFoundError:
+        existing = None
+    if existing is not None and isinstance(existing.payload.get("delivery_id"), str):
+        if (
+            existing.payload.get("complete_text") != complete_text
+            or existing.payload.get("provider_id") != provider_id
+            or existing.payload.get("exit_code") != exit_code
+        ):
+            raise RuntimeError("runtime_final_output_identity_conflict")
+        return existing
     return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),

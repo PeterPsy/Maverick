@@ -85,18 +85,19 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v3 records six maintained transitive dependency contracts. The
+- [x] Manifest v4 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
-  `core/inter_agent/generalist_context.py` closure and rejects any newly reached
-  local dependency that is not already hashed by the TCB.
+  `core/inter_agent/generalist_context.py` closure and both operator live-probe
+  entrypoints, and rejects any newly reached local dependency that is not
+  already hashed by the TCB.
 - [x] Suite, bundle, signing, verification, issuance/publication, execution
   binding, and live status derive from that manifest and digest. The publisher
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v10 / matrix
-  `2026-08-27-r10-p2-tcb3`
+- [x] Google and OpenRouter suite v11 / matrix
+  `2026-08-27-r11-p2-tcb4`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -142,8 +143,10 @@ completion claim.
 - [x] `provider_step_journal.json` and the document-store collection implement
   the same revision-CAS state machine for request ready/journaled, acceptance,
   stream/staged state, proposal/disposition/result identities, pairing,
-  commit, rollback, and quarantine. The saga is explicitly ordered across
-  collections; it does not claim a cross-collection transaction.
+  immutable request-input lineage, private final-output outbox identity,
+  delivery acknowledgement, commit, rollback, and quarantine. The saga is
+  explicitly ordered across collections; it does not claim a cross-collection
+  transaction.
 - [x] Every decoded provider call is inserted into the preliminary tool ledger
   before catalog resolution, schema validation, policy, or budget disposition.
   The record retains the safe provider name, call id/index/ordinal, request id,
@@ -163,6 +166,11 @@ completion claim.
   authoritative continuation state. Promotion occurs only after a validated
   final output or complete proposal → disposition → result/denial → pairing
   chain, followed by provider-state CAS and journal commit.
+- [x] A final response is encrypted behind a deterministic Core-private outbox
+  locator and attached to the journal before stream completion or commit.
+  `runtime.output.final` and `provider.execution.completed` use stable delivery
+  identities and independent durable acknowledgements; recovery drains the
+  same bytes without a second provider request.
 - [x] Runtime tool events enforce persisted proposal → proposed event →
   validation/disposition → started event → effect boundary → persisted result
   → completed/failed event. An ambiguous mutating boundary becomes
@@ -179,10 +187,22 @@ completion claim.
   and explicit adapter recovery. It completes only provable WAL halves,
   terminal results, pairing consumption, provider-state promotion, and commit;
   explicit no-state provider terminals can return to the prior commit.
+- [x] A committed ready pairing belongs only to its original active turn. Its
+  journal id, turn id, provider request id, private-state generation, and exact
+  non-tool input digest must all match before continuation. Ordinary new turns
+  are rejected before persistence/provider transport and never inherit or
+  silently consume an older pairing.
+- [x] Step/tool/token/cost/time termination, cancellation, authority or
+  certificate revocation, egress denial, and execution failure cannot leave a
+  ready provider pairing on a running session: same-turn recovery seals it or
+  the journal/session enters `recovery_required`.
 - [x] Unprovable acceptance, state, pairing, or tool execution transitions the
-  session by status CAS to `recovery_required`, stores bounded Core-private
-  detail, and exposes only an allowlisted public reason. Queue, continuation,
-  prepare/dispatch, and runtime token validation reject the quarantined session.
+  session by bounded reread/retry status CAS to `recovery_required` before any
+  diagnostic write. Journal containment is retried independently; bounded
+  Core-private detail is best-effort, and private-payload, audit, projection, or
+  journal-CAS failure cannot unblock the session. Only an allowlisted public
+  reason is persisted. Queue, continuation, prepare/dispatch, and runtime token
+  validation read the persisted journal and reject unresolved state.
 - [x] API, Chat, and Settings continue to show only `recovery_required` and its
   safe public cause; provider bytes, argument/result bodies, private locators,
   and recovery detail are absent.
@@ -196,6 +216,10 @@ completion claim.
 - [x] `proposed` or `started` events emitted after the effect boundary: `0`.
 - [x] Staged provider states used as authoritative before commit: `0`.
 - [x] Productive lifecycle recovery entry points missing: `0`.
+- [x] Terminal provider pairings left on running sessions: `0`.
+- [x] Cross-turn inputs silently absorbed by older pairings: `0`.
+- [x] Quarantines blocked by diagnostic or first-CAS failure: `0`.
+- [x] Provider retries or duplicate final events after durable final commit: `0`.
 
 ## Later parity and release gates — still open
 

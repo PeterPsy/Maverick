@@ -364,6 +364,7 @@ class HostedAgenticRecoveryTest(unittest.TestCase):
                     harness.binding
                 ).private_codec,
                 pairing_source_journal_id=None,
+                request_lineage_digest="1" * 64,
             )
         )
 

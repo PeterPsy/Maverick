@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Callable, TYPE_CHECKING
@@ -39,6 +40,7 @@ from core.runtime.authority import validate_effective_context_capabilities
 from core.runtime.tool_catalog import RuntimeToolCatalog
 
 if TYPE_CHECKING:
+    from core.runtime.provider_step_models import ProviderStepJournalRecord
     from core.workspaces.data_governance import WorkspaceDataAttestation
 
 
@@ -47,6 +49,30 @@ HOSTED_TOOL_USE_INSTRUCTION = (
     "a function name. If the declared functions cannot perform a requested operation, explain "
     "that limitation instead of attempting a function call."
 )
+
+
+def hosted_request_lineage_digest(request: AgenticModelRequest) -> str:
+    """Hash the exact ordered non-tool input that a continuation may not replace."""
+    payload = [
+        {
+            "role": block.role,
+            "data_class": block.data_class,
+            "provenance": block.provenance,
+            "trust_level": block.trust_level,
+            "content_type": block.content_type,
+            "content_sha256": hashlib.sha256(block.content).hexdigest(),
+        }
+        for block in request.content_blocks
+    ]
+    return hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 class HostedAgenticRequestBuilder:
@@ -78,6 +104,7 @@ class HostedAgenticRequestBuilder:
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
         max_output_tokens: int,
+        pairing_source: ProviderStepJournalRecord | None = None,
     ) -> AgenticModelRequest:
         binding = context.binding
         self._validate_context_capabilities(context)
@@ -246,6 +273,15 @@ class HostedAgenticRequestBuilder:
             routing_constraint=binding.routing_constraint_snapshot,
             max_output_tokens=max_output_tokens,
             source_metadata=source_metadata,
+            pairing_source_journal_id=(
+                None if pairing_source is None else pairing_source.journal_id
+            ),
+            pairing_source_turn_id=(
+                None if pairing_source is None else pairing_source.turn_id
+            ),
+            pairing_source_request_id=(
+                None if pairing_source is None else pairing_source.request_id
+            ),
         )
 
     def _content_block(

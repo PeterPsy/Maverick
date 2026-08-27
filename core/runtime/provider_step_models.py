@@ -30,6 +30,12 @@ ProviderCommitStatus = Literal[
     "rolled_back",
     "recovery_required",
 ]
+ProviderFinalOutputStatus = Literal[
+    "pending",
+    "not_applicable",
+    "ready",
+    "delivered",
+]
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,7 @@ class ProviderStepJournalRecord:
     base_provider_state_revision: int
     base_provider_state_digest: str | None
     pairing_source_journal_id: str | None
+    request_lineage_digest: str | None
     request_status: ProviderRequestStatus
     acceptance_status: ProviderAcceptanceStatus
     stream_status: ProviderStreamStatus
@@ -73,6 +80,12 @@ class ProviderStepJournalRecord:
     result_ids: tuple[str, ...]
     observed_call_count: int
     final_output_validated: bool
+    final_output_status: ProviderFinalOutputStatus
+    final_completion_status: ProviderFinalOutputStatus
+    final_output_id: str | None
+    final_output_private_ref: str | None
+    final_output_sha256: str | None
+    final_output_size_bytes: int | None
     stream_failure_reason_code: str | None
     recovery_reason_code: str | None
     recovery_detail_private_ref: str | None
@@ -88,6 +101,9 @@ class ProviderStepJournalRecord:
     dispositions_completed_at: datetime | None = None
     results_completed_at: datetime | None = None
     pairing_ready_at: datetime | None = None
+    final_output_ready_at: datetime | None = None
+    final_output_delivered_at: datetime | None = None
+    final_completion_delivered_at: datetime | None = None
     committed_at: datetime | None = None
     rolled_back_at: datetime | None = None
     recovery_required_at: datetime | None = None
@@ -111,8 +127,15 @@ def provider_step_journal_from_document(
     payload.setdefault("provider_api_version", None)
     payload.setdefault("base_provider_state_digest", None)
     payload.setdefault("pairing_source_journal_id", None)
+    payload.setdefault("request_lineage_digest", None)
     payload.setdefault("provider_response_id", None)
     payload.setdefault("provider_upstream_id", None)
+    payload.setdefault("final_output_status", "pending")
+    payload.setdefault("final_completion_status", "pending")
+    payload.setdefault("final_output_id", None)
+    payload.setdefault("final_output_private_ref", None)
+    payload.setdefault("final_output_sha256", None)
+    payload.setdefault("final_output_size_bytes", None)
     payload.setdefault("recovery_reason_code", None)
     payload.setdefault("recovery_detail_private_ref", None)
     payload.setdefault("stream_failure_reason_code", None)
@@ -126,6 +149,9 @@ def provider_step_journal_from_document(
         "dispositions_completed_at",
         "results_completed_at",
         "pairing_ready_at",
+        "final_output_ready_at",
+        "final_output_delivered_at",
+        "final_completion_delivered_at",
         "committed_at",
         "rolled_back_at",
         "recovery_required_at",

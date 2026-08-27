@@ -110,7 +110,7 @@ operation.
   shared by admission, request/catalog construction, API, Chat, and Settings.
 - Remote certificates bind the canonical code-owned execution TCB. Any drift or
   missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch. Manifest v3 statically audits six maintained
+  authority refresh, or dispatch. Manifest v4 statically audits six maintained
   import closures, including package initializers and the
   `core/inter_agent/generalist_context.py` content-composition path; a reached
   local dependency outside the artifact set makes identity calculation fail.
@@ -206,6 +206,9 @@ session lifecycle handoff; do not describe it as provider-record CAS. Public
 APIs expose only allowlisted quarantine reasons, while arbitrary diagnostic
 detail remains Core-owned. Runtime tokens belonging to a quarantined session
 have no operational authority even if their token record has not yet expired.
+Session containment is attempted and reread first; journal CAS and encrypted
+diagnostic writes are independent, bounded follow-ups. Never make quarantine
+conditional on a private-payload, audit, projection, or diagnostic success.
 
 Before provider acceptance, a new operator-initiated turn may be attempted only
 after the outage or policy issue is understood. After acceptance, do not retry a
@@ -220,6 +223,8 @@ For each affected step, inspect only redaction-safe journal metadata:
 - request/response ids and acceptance/stream status;
 - journal and base provider-state revisions/digests;
 - ordered proposal/disposition/result counts and pairing/commit status;
+- request-lineage digest plus final-outbox identity/digest/size/delivery status,
+  never its text or private locator;
 - public recovery reason and timestamps.
 
 Do not resolve or copy staged provider bytes, tool arguments/results, or the
@@ -231,6 +236,13 @@ consume a pairing. An explicit provider `cancelled`, `budget_exceeded`, or
 state exists. If acceptance, pairing, codec, state revision, or effect outcome
 is not provable, retain `recovery_required`; repeated restart must not change
 the terminal revision or repeat an effect.
+
+A ready pairing can continue only under its original active turn and exact
+source journal/request/input lineage. Never move it to a new user turn. A
+terminal turn must either finish certified same-turn recovery or quarantine the
+pairing. A committed final-output outbox is drained with its stable event ids;
+do not call the provider again, and quarantine if its identity or private
+payload cannot be verified.
 
 Do not manually clear `recovery_required`. Queue, continuation, prepare,
 dispatch, and token paths deliberately reject the session. Settings and Chat

@@ -142,6 +142,7 @@ class HostedAgenticRecoveryPairingTest(unittest.TestCase):
             step_index=1,
             codec=codec,
             pairing_source_journal_id=source.journal_id,
+            request_lineage_digest=source.request_lineage_digest,
         )
         child = journal.journal_request(child)
         child = journal.accept(
@@ -162,6 +163,26 @@ class HostedAgenticRecoveryPairingTest(unittest.TestCase):
             provider_request_id="request-child-final",
         )
         child = journal.stage_provider_state(child, child_envelope)
+        final_ref, final_digest, final_size = (
+            harness.private_state_service.store_final_output(
+                session_id="session-hosted",
+                adapter_id=harness.binding.adapter_id,
+                adapter_version=harness.binding.adapter_version,
+                codec_id=codec.codec_id,
+                codec_version=codec.codec_version,
+                schema_version=codec.schema_version,
+                journal_id=child.journal_id,
+                provider_request_id=child.request_id,
+                output_text="committed child final",
+            )
+        )
+        child = journal.stage_final_output(
+            child,
+            output_id="output-child-final",
+            private_ref=final_ref,
+            content_sha256=final_digest,
+            size_bytes=final_size,
+        )
         child = journal.complete_stream(child, final_output_validated=True)
         harness.private_state_service.promote_staged_state(
             session_id="session-hosted",

@@ -78,6 +78,7 @@ def _new_messages(
     pending = state.pending_tool_calls
     consumed = set(state.consumed_tool_call_ids)
     if pending:
+        _validate_pairing_lineage(request)
         pending_ids = {item.call_id for item in pending}
         if set(by_id) - consumed != pending_ids:
             raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
@@ -96,6 +97,15 @@ def _new_messages(
                 }
             )
         return tuple(messages)
+    if any(
+        value is not None
+        for value in (
+            request.pairing_source_journal_id,
+            request.pairing_source_turn_id,
+            request.pairing_source_request_id,
+        )
+    ):
+        raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
     if set(by_id) - consumed:
         raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
     values: list[dict[str, object]] = []
@@ -124,6 +134,20 @@ def _new_messages(
     if not any(item["role"] == "user" for item in values):
         raise OpenRouterAgenticProtocolError("provider_request_invalid")
     return tuple(values)
+
+
+def _validate_pairing_lineage(request: AgenticModelRequest) -> None:
+    state = request.provider_private_state
+    if (
+        not request.pairing_source_journal_id
+        or not request.pairing_source_turn_id
+        or not request.pairing_source_request_id
+        or request.correlation_id != request.pairing_source_turn_id
+        or state is None
+        or state.provider_request_id != request.pairing_source_request_id
+        or state.turn_generation != request.pairing_source_turn_id
+    ):
+        raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
 
 
 def _textual_content_type(value: str) -> bool:

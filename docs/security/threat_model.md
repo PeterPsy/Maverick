@@ -195,7 +195,7 @@ execution binding, and live status derive from that same manifest; the
 publisher recomputes it. Drift in runtime API, classifier, input composition,
 ledger/store, lifecycle, codec/transport, or UI governance invalidates remote
 authority before create, continuation, refresh, or dispatch. Legacy remote
-certificates with no valid TCB identity fail closed. Manifest v3 prevents a
+certificates with no valid TCB identity fail closed. Manifest v4 prevents a
 covered module from outsourcing authority or provider content to an unhashed
 local dependency: six code-owned contracts statically walk the relevant import
 closures and package initializers, including
@@ -248,6 +248,19 @@ pre-prepare, execution failure, and uncertain cancellation run the same pinned
 recovery. Unprovable state, pairing, or acceptance is quarantined by session
 status CAS with an allowlisted public cause and encrypted Core-private detail;
 queue, continuation, dispatch, and bearer-token paths then deny the session.
+Containment precedes diagnostic storage and independently retries session and
+journal CAS, so a private-payload, audit, projection, or journal failure cannot
+turn diagnostic availability into execution authority.
+
+A malicious or stale new turn also cannot use old provider state to suppress
+its input: continuation requires the original active turn, source journal and
+request identities, private-state generation, and exact input-lineage digest.
+Terminal failure either seals that same-turn pairing or quarantines it.
+
+Final text is encrypted in a deterministic private outbox before the journal
+can commit. Stable output/completion delivery identities make crash replay
+idempotent without another provider request. If the identity or payload cannot
+be proven, recovery quarantines rather than asking the provider to regenerate.
 
 ### Orchestrator-authored authority escalation
 

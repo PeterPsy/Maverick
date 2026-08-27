@@ -119,6 +119,7 @@ class HostedAgenticHarness:
                 processes=FakeCollection(),
                 states=FakeCollection(),
                 threads=FakeCollection(),
+                api_tokens=FakeCollection(),
                 provider_states=FakeCollection(),
                 tool_invocations=FakeCollection(),
                 tool_confirmation_grants=FakeCollection(),

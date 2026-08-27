@@ -139,6 +139,7 @@ def _request(
     tool_results=(),
     max_output_tokens: int = 128,
 ) -> AgenticModelRequest:
+    pairing = private_state is not None and bool(tool_results)
     return AgenticModelRequest(
         schema_version="1", request_id=request_id,
         correlation_id=request_id.rsplit(":", 1)[0],
@@ -158,6 +159,17 @@ def _request(
         provider_private_state=private_state,
         routing_constraint=openrouter_agentic_routing_constraint(),
         max_output_tokens=max_output_tokens,
+        pairing_source_journal_id=(
+            f"certification-probe:{private_state.provider_request_id}"
+            if pairing
+            else None
+        ),
+        pairing_source_turn_id=(
+            private_state.turn_generation if pairing else None
+        ),
+        pairing_source_request_id=(
+            private_state.provider_request_id if pairing else None
+        ),
     )
 
 

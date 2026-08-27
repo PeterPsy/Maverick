@@ -13,7 +13,7 @@ from core.runtime.provider_step_models import ProviderStepJournalRecord
 from core.runtime.store import RuntimeStore
 
 
-PROVIDER_STEP_JOURNAL_SCHEMA_VERSION = "1"
+PROVIDER_STEP_JOURNAL_SCHEMA_VERSION = "2"
 ProviderStepFaultHook = Callable[[str, ProviderStepJournalRecord], None]
 PROVEN_PROVIDER_TERMINAL_FAILURES = frozenset(
     {
@@ -47,6 +47,7 @@ class ProviderStepJournal:
         step_index: int,
         codec,
         pairing_source_journal_id: str | None,
+        request_lineage_digest: str | None = None,
         now: datetime | None = None,
     ) -> ProviderStepJournalRecord:
         """Persist REQUEST_READY before any transport operation can begin."""
@@ -58,6 +59,52 @@ class ProviderStepJournal:
                 f"{turn_id}:{request_id}",
             )
         )
+        ready_pairings = [
+            item
+            for item in self.store.list_provider_step_journals(
+                session_id=session.session_id
+            )
+            if item.commit_status == "committed" and item.pairing_status == "ready"
+        ]
+        existing_request = self.store.find_provider_step_journal_by_request(
+            session_id=session.session_id,
+            request_id=request_id,
+        )
+        own_ready_replay = (
+            existing_request is not None
+            and existing_request.journal_id == journal_id
+            and ready_pairings == [existing_request]
+        )
+        if pairing_source_journal_id is None and ready_pairings and not own_ready_replay:
+            raise RuntimeProviderStateError("provider_pairing_source_required")
+        if pairing_source_journal_id is not None:
+            source = self.store.get_provider_step_journal(pairing_source_journal_id)
+            source_envelope = source.staged_provider_state
+            current = self.store.get_provider_state(session.session_id)
+            current_envelope = current.provider_private_envelope
+            source_replay = (
+                source.pairing_status == "consumed"
+                and existing_request is not None
+                and existing_request.pairing_source_journal_id == source.journal_id
+            )
+            if (
+                source.session_id != session.session_id
+                or source.workspace_id != session.workspace_id
+                or source.turn_id != turn_id
+                or source.commit_status != "committed"
+                or (source.pairing_status != "ready" and not source_replay)
+                or source.step_index >= step_index
+                or not request_lineage_digest
+                or len(request_lineage_digest) != 64
+                or source.request_lineage_digest != request_lineage_digest
+                or source_envelope is None
+                or current_envelope is None
+                or current_envelope.opaque_state_ref
+                != source_envelope.opaque_state_ref
+                or current_envelope.provider_request_id != source.request_id
+                or current_envelope.turn_generation != source.turn_id
+            ):
+                raise RuntimeProviderStateError("provider_pairing_source_invalid")
         base_envelope = provider_state.provider_private_envelope
         record = ProviderStepJournalRecord(
             journal_id=journal_id,
@@ -82,6 +129,7 @@ class ProviderStepJournal:
                 None if base_envelope is None else base_envelope.content_sha256
             ),
             pairing_source_journal_id=pairing_source_journal_id,
+            request_lineage_digest=request_lineage_digest,
             request_status="ready",
             acceptance_status="pending",
             stream_status="pending",
@@ -99,6 +147,12 @@ class ProviderStepJournal:
             result_ids=(),
             observed_call_count=0,
             final_output_validated=False,
+            final_output_status="pending",
+            final_completion_status="pending",
+            final_output_id=None,
+            final_output_private_ref=None,
+            final_output_sha256=None,
+            final_output_size_bytes=None,
             stream_failure_reason_code=None,
             recovery_reason_code=None,
             recovery_detail_private_ref=None,
@@ -226,6 +280,13 @@ class ProviderStepJournal:
         no_calls = record.observed_call_count == 0
         if final_output_validated != no_calls:
             raise RuntimeProviderStateError("provider_stream_terminal_invalid")
+        if final_output_validated and (
+            record.final_output_status != "ready"
+            or record.final_completion_status != "ready"
+        ):
+            raise RuntimeProviderStateError("provider_final_output_not_durable")
+        if not final_output_validated and record.final_output_status != "pending":
+            raise RuntimeProviderStateError("provider_final_output_transition_invalid")
         return self._update(
             record,
             "provider_stream_completed",
@@ -234,9 +295,118 @@ class ProviderStepJournal:
             disposition_status="not_applicable" if no_calls else record.disposition_status,
             result_status="not_applicable" if no_calls else record.result_status,
             pairing_status="not_applicable" if no_calls else record.pairing_status,
+            final_output_status=(
+                record.final_output_status if no_calls else "not_applicable"
+            ),
+            final_completion_status=(
+                record.final_completion_status if no_calls else "not_applicable"
+            ),
             final_output_validated=final_output_validated,
             stream_completed_at=timestamp,
             proposals_completed_at=timestamp,
+            now=timestamp,
+        )
+
+    def stage_final_output(
+        self,
+        record: ProviderStepJournalRecord,
+        *,
+        output_id: str,
+        private_ref: str,
+        content_sha256: str,
+        size_bytes: int,
+        now: datetime | None = None,
+    ) -> ProviderStepJournalRecord:
+        """Attach a verified Core-private final-output outbox before stream commit."""
+        identity = (
+            output_id,
+            private_ref,
+            content_sha256,
+            size_bytes,
+        )
+        persisted_identity = (
+            record.final_output_id,
+            record.final_output_private_ref,
+            record.final_output_sha256,
+            record.final_output_size_bytes,
+        )
+        if record.final_output_status in {"ready", "delivered"}:
+            if persisted_identity != identity:
+                raise RuntimeProviderStateError("provider_final_output_identity_conflict")
+            return record
+        if (
+            record.final_output_status != "pending"
+            or record.commit_status != "pending"
+            or record.acceptance_status != "accepted"
+            or record.observed_call_count != 0
+            or not output_id
+            or not private_ref
+            or len(content_sha256) != 64
+            or size_bytes < 1
+        ):
+            raise RuntimeProviderStateError("provider_final_output_transition_invalid")
+        timestamp = now or datetime.now(tz=UTC)
+        return self._update(
+            record,
+            "final_output_ready",
+            final_output_status="ready",
+            final_completion_status="ready",
+            final_output_id=output_id,
+            final_output_private_ref=private_ref,
+            final_output_sha256=content_sha256,
+            final_output_size_bytes=size_bytes,
+            final_output_ready_at=timestamp,
+            now=timestamp,
+        )
+
+    def mark_final_output_delivered(
+        self,
+        record: ProviderStepJournalRecord,
+        *,
+        now: datetime | None = None,
+    ) -> ProviderStepJournalRecord:
+        """Acknowledge one stable outbox delivery after the terminal event is emitted."""
+        if record.final_output_status == "delivered":
+            return record
+        if (
+            record.commit_status != "committed"
+            or not record.final_output_validated
+            or record.final_output_status != "ready"
+            or not record.final_output_id
+            or not record.final_output_private_ref
+        ):
+            raise RuntimeProviderStateError("provider_final_output_delivery_invalid")
+        timestamp = now or datetime.now(tz=UTC)
+        return self._update(
+            record,
+            "final_output_delivered",
+            final_output_status="delivered",
+            final_output_delivered_at=timestamp,
+            now=timestamp,
+        )
+
+    def mark_final_completion_delivered(
+        self,
+        record: ProviderStepJournalRecord,
+        *,
+        now: datetime | None = None,
+    ) -> ProviderStepJournalRecord:
+        """Acknowledge the stable provider completion event independently."""
+        if record.final_completion_status == "delivered":
+            return record
+        if (
+            record.commit_status != "committed"
+            or not record.final_output_validated
+            or record.final_completion_status != "ready"
+            or not record.final_output_id
+        ):
+            raise RuntimeProviderStateError("provider_final_completion_invalid")
+        timestamp = now or datetime.now(tz=UTC)
+        return self._update(
+            record,
+            "final_completion_delivered",
+            final_completion_status="delivered",
+            final_completion_delivered_at=timestamp,
             now=timestamp,
         )
 
@@ -346,6 +516,11 @@ class ProviderStepJournal:
             raise RuntimeProviderStateError("provider_step_commit_invalid")
         if not record.final_output_validated and record.pairing_status != "ready":
             raise RuntimeProviderStateError("provider_step_commit_before_pairing")
+        if record.final_output_validated and (
+            record.final_output_status != "ready"
+            or record.final_completion_status != "ready"
+        ):
+            raise RuntimeProviderStateError("provider_final_output_not_durable")
         timestamp = now or datetime.now(tz=UTC)
         return self._update(
             record,
@@ -421,15 +596,27 @@ class ProviderStepJournal:
         now: datetime | None = None,
     ) -> ProviderStepJournalRecord:
         if record.commit_status == "recovery_required":
-            if (
-                record.recovery_reason_code != reason_code
-                or record.recovery_detail_private_ref != detail_private_ref
-            ):
+            if record.recovery_reason_code != reason_code:
                 raise RuntimeProviderStateError(
                     "provider_recovery_identity_conflict"
                 )
+            if record.recovery_detail_private_ref is None and detail_private_ref is not None:
+                return self._update(
+                    record,
+                    "recovery_detail_attached",
+                    recovery_detail_private_ref=detail_private_ref,
+                    now=now,
+                )
+            if (
+                detail_private_ref is not None
+                and record.recovery_detail_private_ref != detail_private_ref
+            ):
+                raise RuntimeProviderStateError("provider_recovery_identity_conflict")
             return record
-        if record.commit_status in {"committed", "rolled_back"}:
+        if record.commit_status == "rolled_back" or (
+            record.commit_status == "committed"
+            and record.pairing_status != "ready"
+        ):
             raise RuntimeProviderStateError("provider_terminal_step_cannot_require_recovery")
         timestamp = now or datetime.now(tz=UTC)
         return self._update(

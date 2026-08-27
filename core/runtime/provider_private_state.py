@@ -29,6 +29,8 @@ from core.runtime.store import RuntimeStore
 
 MAX_PROVIDER_PRIVATE_BLOB_BYTES = 2 * 1_048_576
 MAX_PROVIDER_PRIVATE_SESSION_BYTES = 8 * 1_048_576
+MAX_PROVIDER_FINAL_OUTPUT_BYTES = 2 * 1_048_576
+MAX_PROVIDER_FINAL_OUTPUT_SESSION_BYTES = 8 * 1_048_576
 ProviderPrivateAccessPurpose = Literal["adapter", "recovery"]
 
 _PUBLIC_PROVIDER_PRIVATE_REASONS = frozenset(
@@ -409,6 +411,184 @@ class ProviderPrivateStateService:
         except (RuntimePrivatePayloadError, TypeError, ValueError):
             return None
 
+    def store_final_output(
+        self,
+        *,
+        session_id: str,
+        adapter_id: str,
+        adapter_version: str,
+        codec_id: str,
+        codec_version: str,
+        schema_version: str,
+        journal_id: str,
+        provider_request_id: str,
+        output_text: str,
+    ) -> tuple[str, str, int]:
+        """Durably encrypt one deterministic final-output outbox payload."""
+        session, binding, _current = self._bound_state(
+            session_id=session_id,
+            adapter_id=adapter_id,
+            adapter_version=adapter_version,
+        )
+        if not journal_id or not provider_request_id or not isinstance(output_text, str):
+            raise ProviderPrivateStateError("provider_final_output_invalid")
+        try:
+            payload = json.dumps(
+                {"text": output_text},
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        except (TypeError, ValueError) as error:
+            raise ProviderPrivateStateError("provider_final_output_invalid") from error
+        private_ref = _final_output_private_ref(
+            session_id=session.session_id,
+            journal_id=journal_id,
+            provider_request_id=provider_request_id,
+        )
+        context = _private_context(
+            workspace_id=session.workspace_id,
+            session_id=session.session_id,
+            runtime_engine_id=binding.runtime_engine_id,
+            adapter_id=adapter_id,
+            adapter_version=adapter_version,
+            codec_id=codec_id,
+            codec_version=codec_version,
+            schema_version=schema_version,
+        )
+        try:
+            stored_ref = self.payload_store.put(
+                context=context,
+                locator_prefix="provider-final-output",
+                payload=payload,
+                max_blob_bytes=MAX_PROVIDER_FINAL_OUTPUT_BYTES,
+                max_session_bytes=MAX_PROVIDER_FINAL_OUTPUT_SESSION_BYTES,
+                private_ref=private_ref,
+                idempotent_ref=True,
+            )
+        except RuntimePrivatePayloadError as error:
+            reason = (
+                "provider_final_output_identity_conflict"
+                if error.reason_code == "private_payload_identity_conflict"
+                else "provider_final_output_unavailable"
+            )
+            raise ProviderPrivateStateError(reason) from error
+        return stored_ref, hashlib.sha256(payload).hexdigest(), len(payload)
+
+    def read_final_output(
+        self,
+        *,
+        session_id: str,
+        adapter_id: str,
+        adapter_version: str,
+        codec_id: str,
+        codec_version: str,
+        schema_version: str,
+        private_ref: str,
+        content_sha256: str,
+        size_bytes: int,
+    ) -> str:
+        """Read and verify one exact Core-private final-output outbox payload."""
+        session, binding, _current = self._bound_state(
+            session_id=session_id,
+            adapter_id=adapter_id,
+            adapter_version=adapter_version,
+        )
+        context = _private_context(
+            workspace_id=session.workspace_id,
+            session_id=session.session_id,
+            runtime_engine_id=binding.runtime_engine_id,
+            adapter_id=adapter_id,
+            adapter_version=adapter_version,
+            codec_id=codec_id,
+            codec_version=codec_version,
+            schema_version=schema_version,
+        )
+        try:
+            payload = self.payload_store.read(
+                context=context,
+                locator_prefix="provider-final-output",
+                private_ref=private_ref,
+            )
+        except RuntimePrivatePayloadError as error:
+            raise ProviderPrivateStateError("provider_final_output_unavailable") from error
+        if (
+            not isinstance(size_bytes, int)
+            or size_bytes < 1
+            or len(payload) != size_bytes
+            or len(content_sha256) != 64
+            or not hmac.compare_digest(
+                hashlib.sha256(payload).hexdigest(),
+                content_sha256,
+            )
+        ):
+            raise ProviderPrivateStateError("provider_final_output_integrity_failed")
+        try:
+            document = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ProviderPrivateStateError("provider_final_output_integrity_failed") from error
+        if (
+            not isinstance(document, dict)
+            or set(document) != {"text"}
+            or not isinstance(document["text"], str)
+        ):
+            raise ProviderPrivateStateError("provider_final_output_integrity_failed")
+        return document["text"]
+
+    def recover_final_output_for_request(
+        self,
+        *,
+        session_id: str,
+        adapter_id: str,
+        adapter_version: str,
+        codec_id: str,
+        codec_version: str,
+        schema_version: str,
+        journal_id: str,
+        provider_request_id: str,
+    ) -> tuple[str, str, int] | None:
+        """Recover a deterministic outbox write interrupted before WAL attachment."""
+        session, binding, _current = self._bound_state(
+            session_id=session_id,
+            adapter_id=adapter_id,
+            adapter_version=adapter_version,
+        )
+        private_ref = _final_output_private_ref(
+            session_id=session.session_id,
+            journal_id=journal_id,
+            provider_request_id=provider_request_id,
+        )
+        try:
+            payload = self.payload_store.read(
+                context=_private_context(
+                    workspace_id=session.workspace_id,
+                    session_id=session.session_id,
+                    runtime_engine_id=binding.runtime_engine_id,
+                    adapter_id=adapter_id,
+                    adapter_version=adapter_version,
+                    codec_id=codec_id,
+                    codec_version=codec_version,
+                    schema_version=schema_version,
+                ),
+                locator_prefix="provider-final-output",
+                private_ref=private_ref,
+            )
+            document = json.loads(payload.decode("utf-8"))
+        except (
+            RuntimePrivatePayloadError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ):
+            return None
+        if (
+            not isinstance(document, dict)
+            or set(document) != {"text"}
+            or not isinstance(document["text"], str)
+        ):
+            return None
+        return private_ref, hashlib.sha256(payload).hexdigest(), len(payload)
+
     def store_state(
         self,
         *,
@@ -646,6 +826,23 @@ def _staged_provider_private_ref(
         + provider_request_id.encode("utf-8")
     ).hexdigest()[:32]
     return f"provider-private:v1:{token}"
+
+
+def _final_output_private_ref(
+    *,
+    session_id: str,
+    journal_id: str,
+    provider_request_id: str,
+) -> str:
+    token = hashlib.sha256(
+        b"maverick.provider-final-output.v1\x00"
+        + session_id.encode("utf-8")
+        + b"\x00"
+        + journal_id.encode("utf-8")
+        + b"\x00"
+        + provider_request_id.encode("utf-8")
+    ).hexdigest()[:32]
+    return f"provider-final-output:v1:{token}"
 
 
 def _validate_codec(codec_id: str, codec_version: str, schema_version: str, content_type: str) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 import math
 
 import core.providers.google_interactions_models as google_interactions_models_module
@@ -94,6 +95,15 @@ class GoogleInteractionsAgenticClient:
                     continue
                 terminal_error = False
                 for event in events:
+                    if event.provider_private_state is not None:
+                        event = replace(
+                            event,
+                            provider_private_state=replace(
+                                event.provider_private_state,
+                                provider_request_id=request.request_id,
+                                turn_generation=request.correlation_id,
+                            ),
+                        )
                     yield event
                     terminal_error = terminal_error or event.event_type == "error"
                 if terminal_error:

@@ -2138,19 +2138,25 @@ class RuntimeDocumentStore:
         }
         self._remember_session_partition(record.session_id, record.workspace_id)
         history_inserted = False
+        history_document = None
         append_history_if_absent = getattr(self.collections.events, "append_history_upsert_if_absent", None)
         if callable(append_history_if_absent):
-            _history_document, history_inserted = append_history_if_absent(
-                {"workspace_id": record.workspace_id, "session_id": record.session_id, "event_id": record.event_id},
+            history_document, history_inserted = append_history_if_absent(
+                query,
                 {"$set": asdict(record)},
             )
+        tail_record = (
+            RuntimeEventRecord(**history_document)
+            if history_document is not None
+            else record
+        )
         document, tail_inserted = self._insert_one_if_absent(
             self.collections.events,
             query,
-            asdict(record),
+            asdict(tail_record),
         )
         saved = RuntimeEventRecord(**document)
-        if saved.event_id != record.event_id:
+        if saved.event_id != record.event_id or saved.payload != record.payload:
             raise RuntimeError(
                 f"Runtime turn `{record.turn_id}` terminal event identity conflicts with `{saved.event_id}`."
             )
@@ -2161,8 +2167,14 @@ class RuntimeDocumentStore:
                 history_inserted = True
         if tail_inserted:
             self._prune_session_events(saved.session_id)
-        self._append_event_to_app_streams(saved)
-        return saved, bool(history_inserted or tail_inserted)
+        inserted = (
+            history_inserted
+            if callable(append_history_if_absent)
+            else tail_inserted
+        )
+        if history_inserted or tail_inserted:
+            self._append_event_to_app_streams(saved)
+        return saved, inserted
 
     def find_turn_event(self, *, turn_id: str, event_type: str) -> RuntimeEventRecord | None:
         """Find the persisted terminal event in either bounded tail or full history."""
@@ -2966,6 +2978,7 @@ def _provider_step_identity(record: ProviderStepJournalRecord) -> tuple[object, 
         record.base_provider_state_revision,
         record.base_provider_state_digest,
         record.pairing_source_journal_id,
+        record.request_lineage_digest,
         record.created_at,
     )
 

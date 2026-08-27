@@ -65,7 +65,7 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1/P2 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v3 additionally makes the known transitive boundary executable through
+Manifest v4 additionally makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
@@ -85,7 +85,10 @@ provider-step CAS/WAL parity, bounded sequential tools, persisted confirmation,
 staged-state pairing, cancellation, crash/restart deduplication, terminal
 outages, mid-step revocation, egress drift, prompt-injection containment,
 explicit private-state quota/integrity failures, child-agent binding isolation,
-and productive lifecycle recovery. The operator runbook documents canary,
+productive lifecycle recovery, cross-turn pairing denial, terminal-limit
+containment, containment-first fault injection, and private final-output outbox
+replay with one provider request and one terminal event identity. The operator
+runbook documents canary,
 observation, incident
 recovery, and control-plane-first rollback. These controls do not close the
 production gate: Phase 3+ finalization/semantic work, provider-specific

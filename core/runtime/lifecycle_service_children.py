@@ -197,7 +197,7 @@ def _queue_runtime_turn_locked(
 ) -> RuntimeTurnRecord:
     timestamp = now or utcnow()
     session = store.get_session(session_id)
-    require_turn_queue_session_executable(store, session)
+    require_turn_queue_session_executable(store, session, turn_id=turn_id)
     record = store.save_turn(
         RuntimeTurnRecord(
             turn_id=turn_id,
@@ -262,7 +262,7 @@ def _queue_runtime_turn_if_client_message_absent_locked(
 ) -> tuple[RuntimeTurnRecord, bool]:
     timestamp = now or utcnow()
     session = store.get_session(session_id)
-    require_turn_queue_session_executable(store, session)
+    require_turn_queue_session_executable(store, session, turn_id=turn_id)
     record = RuntimeTurnRecord(
         turn_id=turn_id,
         session_id=session_id,

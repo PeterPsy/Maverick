@@ -188,6 +188,18 @@ async def execute_agentic_runtime_turn(
                     event.payload.get("reason_code") or failure_reason_code,
                     fallback="provider_execution_failed",
                 )
+            delivery_id = event.payload.get("delivery_id")
+            if (
+                event_sink is not None
+                and isinstance(delivery_id, str)
+                and 0 < len(delivery_id) <= 128
+            ):
+                event_sink(
+                    RuntimeExecutionEvent(
+                        event_type=event.event_type,
+                        payload=dict(event.payload),
+                    )
+                )
             continue
         if event.event_type == "runtime.output.final":
             output_text = str(event.payload.get("text") or output_text)

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from types import SimpleNamespace
 from threading import Event, RLock
 
+import core.runtime.provider_step_admission as provider_step_admission_module
 from core.providers.agentic_adapter import (
     RuntimeCancelContext,
     RuntimeCancelResult,
@@ -28,6 +30,7 @@ from core.runtime.provider_private_state import (
     ProviderPrivateStateError,
     public_provider_private_reason,
 )
+from core.runtime.provider_step_admission import provider_step_admission_reason
 from core.runtime.service import transition_runtime_turn
 
 
@@ -56,6 +59,7 @@ class HostedAgenticEngineAdapter:
         """Expose the shared loop and installed provider codecs to certification."""
         return (
             self.loop,
+            provider_step_admission_module,
             *self.loop.artifact_components,
             *self.loop.provider_runtimes.artifact_components(),
         )
@@ -79,7 +83,10 @@ class HostedAgenticEngineAdapter:
         return RuntimeHealth(status="healthy")
 
     async def prepare(self, context: RuntimePrepareContext) -> RuntimePrepareResult:
-        if context.session.status == "recovery_required":
+        persisted_session = self.loop.tool_ledger.store.get_session(
+            context.session.session_id
+        )
+        if persisted_session.status == "recovery_required":
             return RuntimePrepareResult(
                 ready=False,
                 metadata={"reason_code": "runtime_session_recovery_required"},
@@ -94,13 +101,32 @@ class HostedAgenticEngineAdapter:
             codec = runtime.private_codec
         except HostedAgenticLoopError as error:
             return RuntimePrepareResult(ready=False, metadata={"reason_code": error.reason_code})
-        recovered = self.loop.recover_session(context, trigger="pre_prepare")
+        persisted_context = replace(
+            context,
+            session=persisted_session,
+            provider_state=self.loop.tool_ledger.store.get_provider_state(
+                persisted_session.session_id
+            ),
+        )
+        recovered = self.loop.recover_session(persisted_context, trigger="pre_prepare")
         if not recovered.recovered:
             return RuntimePrepareResult(
                 ready=False,
                 metadata={"reason_code": recovered.reason_code},
             )
-        if context.provider_state.provider_private_envelope is not None:
+        journal_reason = provider_step_admission_reason(
+            self.loop.tool_ledger.store,
+            session_id=persisted_session.session_id,
+        )
+        if journal_reason is not None:
+            return RuntimePrepareResult(
+                ready=False,
+                metadata={"reason_code": journal_reason},
+            )
+        provider_state = self.loop.tool_ledger.store.get_provider_state(
+            persisted_session.session_id
+        )
+        if provider_state.provider_private_envelope is not None:
             try:
                 self.loop.private_state_service.read_state(
                     session_id=context.session.session_id,
@@ -118,8 +144,45 @@ class HostedAgenticEngineAdapter:
         return RuntimePrepareResult(ready=True, metadata={"transport": "hosted-api"})
 
     async def execute(self, context: RuntimeTurnContext) -> AsyncIterator[RuntimeProviderEvent]:
-        if context.session.status == "recovery_required":
+        store = self.loop.tool_ledger.store
+        persisted_session = store.get_session(context.session.session_id)
+        if persisted_session.status == "recovery_required":
             raise HostedAgenticLoopError("runtime_session_recovery_required")
+        persisted_context = replace(
+            context,
+            session=persisted_session,
+            provider_state=store.get_provider_state(persisted_session.session_id),
+        )
+        journal_reason = provider_step_admission_reason(
+            store,
+            session_id=persisted_session.session_id,
+            turn_id=context.correlation_id,
+            allow_same_turn_pairing=True,
+        )
+        if journal_reason == "provider_state_ambiguous":
+            recovered = self.loop.recover_session(
+                persisted_context,
+                trigger="pre_execute",
+            )
+            if not recovered.recovered:
+                raise HostedAgenticLoopError(recovered.reason_code)
+            journal_reason = provider_step_admission_reason(
+                store,
+                session_id=persisted_session.session_id,
+                turn_id=context.correlation_id,
+                allow_same_turn_pairing=True,
+            )
+        if journal_reason is not None:
+            runtime = self.loop.provider_runtimes.resolve(context.binding)
+            self.loop.recovery.contain_terminal_pairing(
+                session=persisted_session,
+                binding=context.binding,
+                provider_runtime=runtime,
+                turn_id=context.correlation_id,
+                trigger="pre_execute_cross_turn_pairing",
+                terminal_reason_code=journal_reason,
+            )
+            raise HostedAgenticLoopError(journal_reason)
         cancellation = Event()
         with self._lock:
             if context.correlation_id in self._cancellations:
@@ -129,7 +192,10 @@ class HostedAgenticEngineAdapter:
                 cancellation,
             )
         try:
-            async for event in self.loop.execute(context, cancellation=cancellation):
+            async for event in self.loop.execute(
+                persisted_context,
+                cancellation=cancellation,
+            ):
                 yield event
         finally:
             with self._lock:

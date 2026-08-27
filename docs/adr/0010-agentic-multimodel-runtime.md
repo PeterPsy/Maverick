@@ -126,7 +126,7 @@ all authority-changing Core and UI surfaces and is the sole source for suite,
 artifact, signing/publication, execution-binding, and live-status digests. The
 publisher recomputes the digest; drift or missing legacy identity makes a
 remote certificate ineligible before create, continuation, refresh, or
-dispatch. Manifest version 3 also declares six maintained dependency contracts
+dispatch. Manifest version 4 also declares six maintained dependency contracts
 for runtime admission, provider-input composition, classification/egress, tool
 execution, provider-state/lifecycle, and served governance. Core statically
 walks each declared local import closure, including package initializers, the
@@ -249,7 +249,7 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v10 manifests contain both
+publication. Google and OpenRouter suite-v11 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
@@ -370,8 +370,9 @@ nor analytics input and must not reach UI, ordinary logs, app hooks, or exports.
 Each outbound step owns a schema-versioned journal row containing the request
 and response ids, acceptance, pinned engine/adapter/provider/protocol/API and
 codec identity, base provider-state revision/digest, staged private reference,
-ordered proposal/disposition/result ids, pairing source/status, commit status,
-timestamps, and revision. JSON and document stores use the same
+ordered proposal/disposition/result ids, pairing source/status, immutable
+request-input lineage digest, private final-output outbox identity and delivery
+status, commit status, timestamps, and revision. JSON and document stores use the same
 insert-if-absent and compare-and-set transitions. Tool ledger, private blob,
 provider state, and journal remain distinct stores: ordered WAL repair is
 explicit and no cross-collection transaction is simulated.
@@ -389,10 +390,29 @@ with no staged state or observed call may return to the last commit.
 An accepted transport with insufficient evidence, codec/binding mismatch,
 incoherent pairing, consumed pairing without a committed child, or ambiguous
 effect instead moves the journal and session by CAS to `recovery_required`.
-The public cause is allowlisted; bounded diagnostic detail is encrypted and
-Core-owned. Restarting any terminal recovery transition is idempotent. Queue,
-continuation, prepare/dispatch, and runtime-token paths deny quarantined
+Containment first retries the authoritative session CAS from a fresh read, then
+independently retries journal quarantine. The public cause is allowlisted;
+bounded arbitrary diagnostic detail is encrypted, Core-owned, and best-effort.
+Private-payload, audit, projection, or journal-CAS failure cannot precede or
+cancel a successful session quarantine. Restarting any terminal recovery
+transition is idempotent. Queue, continuation, prepare/dispatch, and
+runtime-token paths read the persisted WAL and deny quarantined or unresolved
 sessions.
+
+A ready pairing is owned by exactly one active original turn. Continuation
+requires the source journal id, source turn and provider request identities,
+current private-state request/generation, and exact non-tool input lineage to
+match. A normal new user turn cannot claim or migrate it. If any terminal
+limit, cancellation, authority/certificate revocation, egress denial, or
+execution failure leaves such a pairing, same-turn recovery must seal it or the
+session is quarantined before ordinary work resumes.
+
+Final text is encrypted in a deterministic Core-private outbox and its
+identity, digest, and size are attached before stream completion and journal
+commit. The two terminal events have stable identities and separate durable
+acknowledgements. A crash after commit replays the same output without another
+provider request; an unprovable identity quarantines rather than regenerates.
+The journal and unauthorized APIs never contain the final text.
 
 ### 8. Remote-provider egress is decided per content block
 
@@ -433,9 +453,9 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 14
-and OpenRouter revision 13, both bound to
-`maverick-hosted-tool-loop==6`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 15
+and OpenRouter revision 14, both bound to
+`maverick-hosted-tool-loop==7`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.

@@ -11,6 +11,12 @@ P2 repository closure executes only the explicitly selected deterministic
 `live_probe`, produce behavioral evidence, sign/publish a remote certificate,
 or make any provider HTTP/SSE request.
 
+Suite 11 adds fixture-only assertions for same-turn/cross-turn pairing lineage,
+terminal limit/cancellation/revocation containment, diagnostic and CAS/projection
+faults, and final-output commit/restart idempotence. Those fixtures are
+conformance checks only: `live_probe_selected=false` remains mandatory for this
+repository closure and cannot yield certificate evidence.
+
 This procedure is the only supported path from an executed provider suite to a
 Google or OpenRouter capability certificate. Bootstrap publishes candidate
 profile definitions only. Test source files, fixture names, matrix rows, or a
@@ -24,7 +30,7 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v10 matrix revision `2026-08-27-r10-p2-tcb3` declared by the
+- the dated suite-v11 matrix revision `2026-08-27-r11-p2-tcb4` declared by the
   provider certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -59,7 +65,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 10 \
+  --suite-version 11 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -68,8 +74,8 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `10`, matrix revision `2026-08-27-r10-p2-tcb3`, and the OpenRouter
-manifest. The Google suite uses version `10` and the same matrix revision. The
+version `11`, matrix revision `2026-08-27-r11-p2-tcb4`, and the OpenRouter
+manifest. The Google suite uses version `11` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.
@@ -151,7 +157,7 @@ capability projection, Chat/Settings governance, and provider codec/transport/
 live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
-separate local identity. Manifest v3 makes the transitive inventory executable:
+separate local identity. Manifest v4 makes the transitive inventory executable:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package
 initializers and the exact `core/inter_agent/generalist_context.py` closure.

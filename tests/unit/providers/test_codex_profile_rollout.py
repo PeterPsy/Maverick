@@ -90,6 +90,7 @@ class CodexProfileRolloutTest(unittest.TestCase):
                 "core/providers/codex_app_server_runtime_lifecycle.py",
                 "core/providers/codex_app_server_runtime_resume.py",
                 "core/runtime/process_control.py",
+                "core/runtime/provider_step_admission.py",
                 "core/runtime/provider_start_handoff.py",
                 "core/runtime/turn_queue_admission.py",
             )

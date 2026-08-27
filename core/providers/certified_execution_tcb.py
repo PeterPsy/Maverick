@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="3",
+    manifest_version="4",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -143,7 +143,12 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
         CertifiedTcbComponent(
             "provider-codec-transport-policy",
             "Provider codecs/transports, certificate pipeline, execution binding, and live policy.",
-            ("core/providers", "core/secrets"),
+            (
+                "core/providers",
+                "core/secrets",
+                "scripts/run_google_interactions_probe.py",
+                "scripts/run_openrouter_agentic_probe.py",
+            ),
         ),
         CertifiedTcbComponent(
             "chat-governance",
@@ -180,8 +185,10 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/apps/runtime_requests.py",
                 "core/runtime/authority_service.py",
                 "core/runtime/provider_start_handoff.py",
+                "core/runtime/provider_step_admission.py",
                 "core/runtime/remote_agentic_admission.py",
                 "core/runtime/turn_queue_admission.py",
+                "core/runtime/workspace_api_token.py",
             ),
             (
                 "core.observability",
@@ -240,6 +247,8 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/provider_step_models.py",
                 "core/runtime/provider_state_service.py",
                 "core/runtime/turn_submission.py",
+                "core/runtime/turn_submission_service_events.py",
+                "core/runtime/turn_submission_service_output_text.py",
                 "core/recovery/backend_restart.py",
                 "core/recovery/continuation_fork.py",
             ),
@@ -303,7 +312,7 @@ def compute_certified_tcb_digest(root: Path) -> str:
     if not files:
         raise CapabilityCertificateError("certificate_tcb_artifact_empty")
     digest = hashlib.sha256()
-    digest.update(b"maverick.certified-execution-tcb.v3\x00")
+    digest.update(b"maverick.certified-execution-tcb.v4\x00")
     digest.update(CERTIFIED_EXECUTION_TCB.structure_digest.encode("ascii"))
     digest.update(b"\x00")
     for relative_path in sorted(files):

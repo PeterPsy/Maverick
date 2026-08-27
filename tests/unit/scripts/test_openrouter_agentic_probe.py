@@ -54,6 +54,8 @@ class _ProbeClient:
                 "1",
                 "application/json",
                 b"{}",
+                provider_request_id=request.request_id,
+                turn_generation=request.correlation_id,
             ),
         )
         yield AgenticModelEvent(
@@ -116,6 +118,22 @@ class OpenRouterAgenticProbeTest(unittest.TestCase):
                 for result in request.tool_results
             )
         )
+        for request in client.requests:
+            if not request.tool_results:
+                continue
+            self.assertEqual(
+                request.pairing_source_turn_id,
+                request.correlation_id,
+            )
+            self.assertEqual(
+                request.pairing_source_request_id,
+                request.provider_private_state.provider_request_id,
+            )
+            self.assertTrue(
+                request.pairing_source_journal_id.startswith(
+                    "certification-probe:"
+                )
+            )
 
 
 if __name__ == "__main__":

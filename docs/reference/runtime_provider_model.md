@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v3 also
+status, workspace binding, and upstream constraint. TCB manifest v4 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -485,6 +485,13 @@ losing writer cannot overwrite newer state; a winning replacement deletes the
 prior committed blob. Recovery can reattach a blob written immediately before
 its WAL update without treating it as committed.
 
+Validated final text uses a separate deterministic
+`provider-final-output:v1:*` encrypted namespace. The journal retains only its
+opaque locator, digest, byte count, stable delivery id, and output/completion
+acknowledgements. Content is durable before stream completion and commit,
+readable only through the exact bound adapter/codec recovery context, and never
+projected through journal APIs.
+
 Wrong adapter or codec identities, missing keys, ciphertext tamper, digest/size
 mismatch, and quota failures produce explicit provider-private recovery reasons.
 No continuation reader sees an uncommitted staged envelope and no codec is
@@ -540,7 +547,9 @@ provider-private codec access, usage, cancellation, and recovery.
 Before transport, the loop writes `REQUEST_READY` then `REQUEST_JOURNALED` to a
 schema-versioned provider-step saga. Acceptance records response/upstream ids;
 stream state is staged; ordered proposal, disposition, result, pairing, and
-commit fields advance by revision CAS. The JSON
+commit fields advance by revision CAS. A continuation must also name its source
+journal, turn, and provider request and reproduce the source's exact non-tool
+input lineage digest and current private-state generation. The JSON
 `provider_step_journal.json` collection and document-store implementation have
 the same semantics and no cross-collection transaction is claimed. The loop
 performs no blind retry after acceptance.
@@ -566,10 +575,21 @@ validates the exact pinned binding and codec, repairs only provable
 WAL/pairing/provider-state transitions, and is idempotent across restarts.
 Recovery never automatically replays an ambiguous `executing` mutation; it
 becomes `execution_unknown`. Anything else unprovable becomes a session
-status-CAS transition to `recovery_required` with allowlisted public cause and
-encrypted Core-private detail. Queue, continuation, prepare/dispatch, and token
-authority reject that status. Public provider events are bounded JSON and
-recursively reject private-state field names.
+status-CAS transition to `recovery_required` with allowlisted public cause.
+Session containment uses bounded reread/retry before independent journal CAS;
+encrypted Core-private detail is best-effort and cannot block containment.
+Queue, continuation, prepare/dispatch, and token authority read the persisted
+journal and reject unresolved state. A ready pairing is resumable only by its
+active original turn; terminal limits, cancellation, revocation, egress denial,
+or execution failure must complete same-turn recovery or quarantine it.
+
+Final output is staged in the private outbox before stream completion and
+journal commit. Stable `runtime.output.final` and
+`provider.execution.completed` delivery identities are persisted once and
+acknowledged independently. Startup and same-turn retry drain the exact bytes
+after a crash without another provider request; missing or conflicting identity
+enters quarantine. Public provider events are bounded JSON and recursively
+reject private-state field names.
 
 The deterministic fake provider certification covers multi-request streaming,
 official read and confirmed mutating tools, restart deduplication,
@@ -579,3 +599,7 @@ policy drift, explicit private-state quota/integrity failures, prompt-injection
 containment, child-agent binding isolation, JSON/document-store parity,
 Google/OpenRouter multi-call accounting, journal fault injection, event/effect
 ordering, and productive lifecycle recovery.
+The terminal-gap matrix additionally covers cross-turn Google/OpenRouter
+pairing rejection, step/cost/cancellation/revocation containment, diagnostic
+and CAS/projection faults, final-commit crashes, and repeated restart with one
+provider request and one event per terminal identity.

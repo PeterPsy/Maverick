@@ -28,6 +28,10 @@ from core.shared.repository import installation_paths
 from core.workspaces.store import WorkspaceDocumentStore
 
 DEFAULT_MONGODB_PASSWORD_REF = "platform:secret-alias/mongodb-password"
+OPENDESIGN_ARTIFACT_STORE_ROOT = Path("/var/lib/maverick/app-artifacts")
+OPENDESIGN_ARTIFACT_AUTHORITY_COMMAND = Path(
+    "/usr/local/libexec/maverick-opendesign-artifact-authority"
+)
 
 
 @dataclass(frozen=True)
@@ -156,6 +160,8 @@ def render_install_env_file(config: InstallerConfig) -> str:
         "MAVERICK_CONTROL_STORE": config.control_store,
         "MAVERICK_JSON_CONTROL_STORE_ROOT": config.json_control_store_root,
         "MAVERICK_APP_STORE_URL": existing.get("MAVERICK_APP_STORE_URL") or "https://maverick-app-store.versy.ai",
+        "MAVERICK_APP_ARTIFACT_STORE_ROOT": str(OPENDESIGN_ARTIFACT_STORE_ROOT),
+        "MAVERICK_APP_ARTIFACT_AUTHORITY_COMMAND": str(OPENDESIGN_ARTIFACT_AUTHORITY_COMMAND),
     }
     if config.control_store == "mongo":
         mongodb_password_ref = config.mongodb_password_ref or (DEFAULT_MONGODB_PASSWORD_REF if config.mongodb_password else "")
@@ -428,6 +434,16 @@ def preflight_check(
             errors.append("npm not found in PATH")
     if live_apply and shutil.which("bubblewrap") is None and shutil.which("bwrap") is None:
         errors.append("bubblewrap not found in PATH")
+    if live_apply:
+        for command, fallback in (
+            ("groupadd", Path("/usr/sbin/groupadd")),
+            ("useradd", Path("/usr/sbin/useradd")),
+            ("visudo", Path("/usr/sbin/visudo")),
+        ):
+            if shutil.which(command) is None and not fallback.is_file():
+                errors.append(f"{command} not found in PATH")
+        if os.geteuid() != 0 and shutil.which("sudo") is None and not Path("/usr/bin/sudo").is_file():
+            errors.append("sudo not found in PATH")
     if shutil.which("python3") is None:
         errors.append("python3 not found in PATH")
     return PreflightReport(errors=errors, warnings=warnings)
@@ -441,6 +457,7 @@ def apply_install_plan(
 ) -> None:
     """Apply the rendered install plan to live system paths."""
     runner = run_command or run_privileged_command
+    _install_opendesign_artifact_authority(config, run_command=runner)
     _write_tree(rendered_files, source_root=config.systemd_dir, destination_root=config.live_systemd_dir, run_command=runner)
     if config.nginx_conf_path is not None and config.live_nginx_conf_path is not None:
         nginx_content = rendered_files.get(config.nginx_conf_path)
@@ -463,6 +480,24 @@ def apply_install_plan(
     if config.live_nginx_conf_path is not None:
         runner(["nginx", "-t"])
         runner(["systemctl", "reload", "nginx"])
+
+
+def _install_opendesign_artifact_authority(config: InstallerConfig, *, run_command: Any) -> None:
+    """Install the immutable verifier snapshot and its bounded sudo entrypoint."""
+    run_command(
+        [
+            "python3",
+            str(config.repository_root / "scripts/install_opendesign_artifact_authority.py"),
+            "--repository-root",
+            str(config.repository_root),
+            "--service-user",
+            config.service_user,
+            "--store-root",
+            str(OPENDESIGN_ARTIFACT_STORE_ROOT),
+            "--command-path",
+            str(OPENDESIGN_ARTIFACT_AUTHORITY_COMMAND),
+        ]
+    )
 
 
 def request_tls_certificate(config: InstallerConfig, *, run_command: Any = None) -> None:

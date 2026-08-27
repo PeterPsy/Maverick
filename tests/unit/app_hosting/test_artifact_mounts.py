@@ -12,6 +12,7 @@ from unittest.mock import patch
 from core.apps.artifact_mounts import (
     ARTIFACT_NAMESPACE_MARKER,
     create_artifact_namespace,
+    provision_artifact_namespace,
     resolve_artifact_mounts,
 )
 from core.apps.contracts import build_http_sidecar_artifact_mount
@@ -23,11 +24,23 @@ class SidecarArtifactMountTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = self._repository(Path(temp_dir))
             store = Path(temp_dir) / "platform-artifacts"
-            with patch.dict(os.environ, {"MAVERICK_APP_ARTIFACT_STORE_ROOT": str(store)}):
-                namespace = create_artifact_namespace(
+            authority_identity = (os.geteuid() + 1, os.getegid() + 1)
+            with (
+                patch.dict(os.environ, {"MAVERICK_APP_ARTIFACT_STORE_ROOT": str(store)}),
+                patch("core.apps.artifact_mounts._repository_identity", return_value=authority_identity),
+            ):
+                namespace = provision_artifact_namespace(
                     repository_root=root,
                     app_id="design-studio",
                     artifact_id="opendesign",
+                )
+                self.assertEqual(
+                    create_artifact_namespace(
+                        repository_root=root,
+                        app_id="design-studio",
+                        artifact_id="opendesign",
+                    ),
+                    namespace,
                 )
                 mounts = resolve_artifact_mounts(
                     repository_root=root,
@@ -40,6 +53,26 @@ class SidecarArtifactMountTests(unittest.TestCase):
             self.assertNotIn(root, namespace.parents)
             marker = json.loads((namespace / ARTIFACT_NAMESPACE_MARKER).read_text(encoding="utf-8"))
             self.assertEqual(mounts[0].store_generation, marker["store_generation"])
+            self.assertNotEqual(marker["owner_uid"], marker["repository_uid"])
+            self.assertEqual((namespace / ARTIFACT_NAMESPACE_MARKER).stat().st_mode & 0o777, 0o444)
+
+    def test_repository_principal_cannot_provision_its_own_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = self._repository(Path(temp_dir))
+            store = Path(temp_dir) / "platform-artifacts"
+            with patch.dict(os.environ, {"MAVERICK_APP_ARTIFACT_STORE_ROOT": str(store)}):
+                with self.assertRaisesRegex(AppHostingError, "must differ"):
+                    provision_artifact_namespace(
+                        repository_root=root,
+                        app_id="design-studio",
+                        artifact_id="opendesign",
+                    )
+                with self.assertRaisesRegex(AppHostingError, "missing"):
+                    create_artifact_namespace(
+                        repository_root=root,
+                        app_id="design-studio",
+                        artifact_id="opendesign",
+                    )
 
     def test_repository_store_and_mutable_or_tampered_namespace_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -54,8 +87,12 @@ class SidecarArtifactMountTests(unittest.TestCase):
                     )
 
             store = Path(temp_dir) / "platform-artifacts"
-            with patch.dict(os.environ, {"MAVERICK_APP_ARTIFACT_STORE_ROOT": str(store)}):
-                namespace = create_artifact_namespace(
+            authority_identity = (os.geteuid() + 1, os.getegid() + 1)
+            with (
+                patch.dict(os.environ, {"MAVERICK_APP_ARTIFACT_STORE_ROOT": str(store)}),
+                patch("core.apps.artifact_mounts._repository_identity", return_value=authority_identity),
+            ):
+                namespace = provision_artifact_namespace(
                     repository_root=root,
                     app_id="design-studio",
                     artifact_id="opendesign",
@@ -71,7 +108,9 @@ class SidecarArtifactMountTests(unittest.TestCase):
                 marker_path = namespace / ARTIFACT_NAMESPACE_MARKER
                 marker = json.loads(marker_path.read_text(encoding="utf-8"))
                 marker["app_id"] = "other-app"
+                marker_path.chmod(0o640)
                 marker_path.write_text(json.dumps(marker), encoding="utf-8")
+                marker_path.chmod(0o444)
                 with self.assertRaisesRegex(AppHostingError, "identity"):
                     resolve_artifact_mounts(
                         repository_root=root,

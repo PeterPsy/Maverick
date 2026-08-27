@@ -19,6 +19,7 @@ import uuid
 from core.apps.artifact_mounts import create_artifact_namespace
 from opendesign_artifact import read_bundle_manifest, sha256_file, write_canonical_json
 from opendesign_artifact_audit import fully_audited_web_overlay
+from opendesign_artifact_operations import run_artifact_operation
 from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_dev_apply import _cache_root, _repo_root, _required_path, _restart_sidecars, _work_parent
 from opendesign_runtime import protected_activation_inventory, verified_overlay_from_store
@@ -135,10 +136,17 @@ def run_change_to_live_benchmark(payload: dict[str, Any], arguments: dict[str, A
             raise ChangeToLiveBenchmarkError("benchmark patch did not produce a new web overlay")
 
         store_publish_started = time.monotonic()
-        stored_candidate = store.publish_web_overlay(
-            candidate.overlay.path,
-            web_overlay_sha256=candidate.overlay.web_overlay_sha256,
-            trust_contract=benchmark_service / "opendesign_web_trust.json",
+        run_artifact_operation(
+            "publish-web",
+            data_root=Path(str(payload.get("data_root") or "")),
+            workspace_id=str(payload.get("workspace_id") or "default"),
+            repository_root=repo_root,
+            candidate_path=candidate.overlay.path,
+            candidate_digest=candidate.overlay.web_overlay_sha256,
+        )
+        stored_candidate = store.fast_web_overlay(
+            candidate.overlay.web_overlay_sha256,
+            runtime_artifact_sha256=initial.active.runtime_artifact_sha256,
         )
         store_publish_duration = round(time.monotonic() - store_publish_started, 6)
         current, verified_artifacts, overlays = protected_activation_inventory(

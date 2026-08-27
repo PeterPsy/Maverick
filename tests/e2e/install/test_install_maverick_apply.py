@@ -104,6 +104,21 @@ class InstallerApplyTestCase(unittest.TestCase):
             self.assertTrue((config.live_systemd_dir / "maverick-core.service").is_file())
             self.assertTrue(config.live_nginx_conf_path.is_file())
             self.assertTrue(config.live_nginx_enabled_path.is_symlink())
+            self.assertIn(
+                [
+                    "python3",
+                    str(repo_root / "scripts/install_opendesign_artifact_authority.py"),
+                    "--repository-root",
+                    str(repo_root),
+                    "--service-user",
+                    "ubuntu",
+                    "--store-root",
+                    "/var/lib/maverick/app-artifacts",
+                    "--command-path",
+                    "/usr/local/libexec/maverick-opendesign-artifact-authority",
+                ],
+                commands,
+            )
             self.assertIn(["systemctl", "daemon-reload"], commands)
             self.assertIn(["systemctl", "reload", "nginx"], commands)
 

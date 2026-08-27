@@ -18,7 +18,6 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1] / "service"
 REPOSITORY_ROOT = SERVICE_ROOT.parents[2]
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from opendesign_artifact import write_canonical_json  # noqa: E402
 from opendesign_repair_state import failure_identity, write_repair_state  # noqa: E402
 
 
@@ -54,7 +53,7 @@ def main() -> None:
     if _under_pressure():
         emit_json({"ok": True, "audit": {"status": "suspended", "reason": "system_pressure"}})
         return
-    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o640)
+    descriptor = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     try:
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -72,6 +71,7 @@ def main() -> None:
                 data_root=data_root,
                 workspace_id=workspace_id,
                 audit_workers=_adaptive_audit_workers(),
+                auto=True,
             )
         except Exception as audit_error:
             _handle_failed_audit(
@@ -82,24 +82,6 @@ def main() -> None:
                 attempted_at_epoch_ms=attempted_at,
             )
             return
-        _write_audit_marker(
-            marker_path,
-            {
-                "schema_version": "2",
-                "status": "passed",
-                "attempted_at_epoch_ms": attempted_at,
-                "verified_at_epoch_ms": int(time.time() * 1000),
-                "next_attempt_at_epoch_ms": attempted_at + AUDIT_INTERVAL_SECONDS * 1000,
-                "store_generation": result["store_generation"],
-                "runtime_count": len(result["audited_runtime"]),
-                "web_count": len(result["audited_web"]),
-                "auto_repair_requested": False,
-                "audit_error_code": None,
-                "audit_phase": None,
-                "recovery_error_code": None,
-                "recovery_phase": None,
-            },
-        )
         emit_json(
             {
                 "ok": True,
@@ -122,32 +104,15 @@ def _handle_failed_audit(
     workspace_id: str,
     attempted_at_epoch_ms: int,
 ) -> None:
-    audit_code, audit_phase = failure_identity(
+    # The immutable authority already persisted the redacted audit failure;
+    # this process owns only workspace readiness/recovery state.
+    failure_identity(
         audit_error,
         default_code="artifact_integrity_mismatch",
         default_phase="artifact_full_verify",
     )
+    del marker_path, attempted_at_epoch_ms
     _invalidate_transactional_readiness(data_root)
-    _write_audit_marker(
-        marker_path,
-        {
-            "schema_version": "2",
-            "status": "repairing",
-            "attempted_at_epoch_ms": attempted_at_epoch_ms,
-            "verified_at_epoch_ms": None,
-            "next_attempt_at_epoch_ms": (
-                attempted_at_epoch_ms + AUDIT_FAILURE_BACKOFF_SECONDS * 1000
-            ),
-            "store_generation": None,
-            "runtime_count": 0,
-            "web_count": 0,
-            "auto_repair_requested": True,
-            "audit_error_code": audit_code,
-            "audit_phase": audit_phase,
-            "recovery_error_code": None,
-            "recovery_phase": None,
-        },
-    )
     try:
         recovery = _recover_failed_audit(
             data_root=data_root,
@@ -155,26 +120,6 @@ def _handle_failed_audit(
         )
     except Exception as recovery_error:
         recovery_code, recovery_phase = failure_identity(recovery_error)
-        _write_audit_marker(
-            marker_path,
-            {
-                "schema_version": "2",
-                "status": "failed",
-                "attempted_at_epoch_ms": attempted_at_epoch_ms,
-                "verified_at_epoch_ms": None,
-                "next_attempt_at_epoch_ms": (
-                    attempted_at_epoch_ms + AUDIT_FAILURE_BACKOFF_SECONDS * 1000
-                ),
-                "store_generation": None,
-                "runtime_count": 0,
-                "web_count": 0,
-                "auto_repair_requested": True,
-                "audit_error_code": audit_code,
-                "audit_phase": audit_phase,
-                "recovery_error_code": recovery_code,
-                "recovery_phase": recovery_phase,
-            },
-        )
         emit_json(
             {
                 "ok": False,
@@ -188,25 +133,6 @@ def _handle_failed_audit(
         )
         raise SystemExit(1) from None
 
-    verified_at = int(time.time() * 1000)
-    _write_audit_marker(
-        marker_path,
-        {
-            "schema_version": "2",
-            "status": "recovered",
-            "attempted_at_epoch_ms": attempted_at_epoch_ms,
-            "verified_at_epoch_ms": verified_at,
-            "next_attempt_at_epoch_ms": verified_at + AUDIT_INTERVAL_SECONDS * 1000,
-            "store_generation": recovery["store_generation"],
-            "runtime_count": recovery["runtime_count"],
-            "web_count": recovery["web_count"],
-            "auto_repair_requested": True,
-            "audit_error_code": audit_code,
-            "audit_phase": audit_phase,
-            "recovery_error_code": None,
-            "recovery_phase": None,
-        },
-    )
     emit_json(
         {
             "ok": True,
@@ -275,13 +201,6 @@ def _invalidate_transactional_readiness(data_root: Path) -> None:
     except OSError:
         # The Core-owned stop remains the authoritative process gate.
         pass
-
-
-def _write_audit_marker(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(mode=0o750, exist_ok=True)
-    path.parent.chmod(0o750)
-    write_canonical_json(path, payload)
-    path.chmod(0o640)
 
 
 def _audit_due(path: Path) -> bool:

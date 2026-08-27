@@ -22,6 +22,7 @@ from core.apps.artifact_mounts import (
 from core.api.sidecar_control import request_sidecar_control
 from opendesign_artifact import read_bundle_manifest
 from opendesign_artifact_audit import fully_audited_web_overlay
+from opendesign_artifact_operations import run_artifact_operation
 from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_dev_changeset import (
     DevApplyError,
@@ -505,16 +506,26 @@ def _build_and_activate_overlay(
         work_parent=work_parent,
         runtime_session_id=str(payload.get("runtime_session_id") or "") or None,
     )
+    publication_root = publish_repo_root or repo_root
+    run_artifact_operation(
+        "publish-web",
+        data_root=Path(str(payload.get("data_root") or "")),
+        workspace_id=str(payload.get("workspace_id") or "default"),
+        repository_root=publication_root,
+        candidate_path=result.overlay.path,
+        candidate_digest=result.overlay.web_overlay_sha256,
+    )
     namespace = create_artifact_namespace(
-        repository_root=publish_repo_root or repo_root,
+        repository_root=publication_root,
         app_id="design-studio",
         artifact_id="opendesign",
     )
     store = OpenDesignArtifactStore(namespace)
-    stored_candidate = store.publish_web_overlay(
-        result.overlay.path,
-        web_overlay_sha256=result.overlay.web_overlay_sha256,
-        trust_contract=service_root / "opendesign_web_trust.json",
+    stored_candidate = store.fast_web_overlay(
+        result.overlay.web_overlay_sha256,
+        runtime_artifact_sha256=next(
+            iter(result.overlay.compatible_runtime_artifact_sha256)
+        ),
     )
     build_duration = round(time.monotonic() - build_started, 6)
     generation_root = Path(str(payload.get("data_root") or "")) / "opendesign"

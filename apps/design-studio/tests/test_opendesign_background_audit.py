@@ -55,7 +55,7 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
         self.assertEqual(payload["runtime_count"], 2)
         self.assertEqual(payload["web_count"], 1)
         self.assertEqual(payload["store_generation"], "store-generation-test")
-        self.assertEqual(mode, 0o640)
+        self.assertEqual(mode, 0o444)
 
     def test_repair_state_redacts_untyped_exception_values(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-repair-state-") as temporary:
@@ -132,7 +132,15 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
             phase = "repair_source_verify"
 
         with tempfile.TemporaryDirectory(prefix="od-background-backoff-") as temporary:
-            marker = Path(temporary) / "background-full-audit.json"
+            root = Path(temporary)
+            operations._record_full_audit_failure(
+                root,
+                error=RuntimeError("private audit detail"),
+                store_generation="store-generation-test",
+                observed_at_epoch_ms=1_000_000,
+            )
+            marker = root / "audit/background-full-audit.json"
+            before = marker.read_bytes()
             emit = Mock()
             with (
                 patch.object(background, "_recover_failed_audit", side_effect=RecoveryFailure()),
@@ -149,21 +157,30 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
             payload = json.loads(marker.read_text(encoding="utf-8"))
             with patch.object(background.time, "time", return_value=1_001):
                 due = background._audit_due(marker)
+            after = marker.read_bytes()
 
         self.assertEqual(raised.exception.code, 1)
+        self.assertEqual(after, before)
         self.assertEqual(payload["status"], "failed")
         self.assertTrue(payload["auto_repair_requested"])
         self.assertEqual(payload["audit_error_code"], "artifact_integrity_mismatch")
-        self.assertEqual(payload["recovery_error_code"], "artifact_repair_failed")
-        self.assertEqual(payload["recovery_phase"], "repair_source_verify")
+        self.assertIsNone(payload["recovery_error_code"])
+        self.assertIsNone(payload["recovery_phase"])
         self.assertNotIn("private audit detail", json.dumps(payload))
         self.assertFalse(due)
         self.assertFalse(emit.call_args.args[0]["ok"])
 
-    def test_recovery_kill_leaves_a_persistent_repairing_backoff(self) -> None:
+    def test_recovery_kill_preserves_the_authority_owned_failure_backoff(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-background-kill-") as temporary:
             root = Path(temporary)
-            marker = root / "background-full-audit.json"
+            operations._record_full_audit_failure(
+                root,
+                error=RuntimeError("audit failure"),
+                store_generation="store-generation-test",
+                observed_at_epoch_ms=2_000_000,
+            )
+            marker = root / "audit/background-full-audit.json"
+            before = marker.read_bytes()
             ready_marker = root / "data/opendesign/maverick-ready.json"
             ready_marker.parent.mkdir(parents=True)
             ready_marker.write_text("{}", encoding="utf-8")
@@ -182,9 +199,11 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
             with patch.object(background.time, "time", return_value=2_001):
                 due = background._audit_due(marker)
             marker_removed = not ready_marker.exists()
+            after = marker.read_bytes()
 
         self.assertEqual(raised.exception.code, 9)
-        self.assertEqual(payload["status"], "repairing")
+        self.assertEqual(after, before)
+        self.assertEqual(payload["status"], "failed")
         self.assertTrue(payload["auto_repair_requested"])
         self.assertFalse(due)
         self.assertTrue(marker_removed)

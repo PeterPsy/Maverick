@@ -121,12 +121,19 @@ def validated_archive_members(bundle: tarfile.TarFile) -> list[tarfile.TarInfo]:
     return members
 
 
-def verify_file_manifest(root: Path) -> dict[str, Any]:
-    expected, _directories = verify_file_manifest_inventory(root)
+def verify_file_manifest(root: Path, *, protected_modes: bool = False) -> dict[str, Any]:
+    expected, _directories = verify_file_manifest_inventory(
+        root,
+        protected_modes=protected_modes,
+    )
     return expected
 
 
-def verify_file_manifest_inventory(root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def verify_file_manifest_inventory(
+    root: Path,
+    *,
+    protected_modes: bool = False,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Verify the signed file manifest and return directory modes from the same scan."""
     manifest_path = root / FILE_MANIFEST_PATH
     try:
@@ -149,7 +156,8 @@ def verify_file_manifest_inventory(root: Path) -> tuple[dict[str, Any], list[dic
         exclude=excluded | {MATERIALIZED_MARKER_PATH},
     )
     actual["self_excluded"] = sorted(excluded)
-    if actual != expected:
+    comparison = _protected_manifest_modes(expected) if protected_modes else expected
+    if actual != comparison:
         raise ArtifactError("OpenDesign materialized file manifest mismatch")
     return expected, directories
 
@@ -160,6 +168,7 @@ def verify_materialized_bundle(
     expected_artifact_sha256: str,
     expected_file_manifest_sha256: str,
     expected_version: str,
+    protected_modes: bool = False,
 ) -> dict[str, Any]:
     if not is_sha256(expected_artifact_sha256) or not is_sha256(expected_file_manifest_sha256):
         raise ArtifactError("Pinned OpenDesign materialization digests are invalid")
@@ -181,8 +190,22 @@ def verify_materialized_bundle(
         raise ArtifactError("Materialized OpenDesign file manifest marker mismatch")
     if manifest_sha256 != expected_file_manifest_sha256:
         raise ArtifactError("Materialized OpenDesign file manifest digest does not match the pin")
-    verify_file_manifest(root)
+    verify_file_manifest(root, protected_modes=protected_modes)
     return marker
+
+
+def _protected_manifest_modes(manifest: dict[str, Any]) -> dict[str, Any]:
+    protected = {
+        "schema_version": manifest["schema_version"],
+        "self_excluded": list(manifest["self_excluded"]),
+        "files": [],
+    }
+    for entry in manifest["files"]:
+        normalized = dict(entry)
+        if normalized.get("kind") != "symlink":
+            normalized["mode"] = f"{int(str(normalized['mode']), 8) & ~0o222:04o}"
+        protected["files"].append(normalized)
+    return protected
 
 
 def read_materialized_marker(root: Path) -> dict[str, Any]:

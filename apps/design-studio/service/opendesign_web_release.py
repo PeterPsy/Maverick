@@ -8,9 +8,8 @@ import json
 import os
 from pathlib import Path
 
-from core.apps.artifact_mounts import create_artifact_namespace
 from opendesign_artifact import read_bundle_manifest, selected_asset
-from opendesign_artifact_store import OpenDesignArtifactStore
+from opendesign_artifact_operations import run_artifact_operation
 from opendesign_process import activate_runtime_attachment, signal_guard
 from opendesign_web_builder import build_release_overlay
 from opendesign_web_overlay import VerifiedWebOverlay, discover_verified_overlays
@@ -98,16 +97,12 @@ def main() -> int:
                 runtime_session_id=runtime_session_id,
                 compatible_runtime_artifact_sha256=compatible,
             )
-            namespace = create_artifact_namespace(
+            publication = run_artifact_operation(
+                "publish-web",
+                data_root=REPOSITORY_ROOT / "workspaces/default/data/design-studio",
                 repository_root=REPOSITORY_ROOT,
-                app_id="design-studio",
-                artifact_id="opendesign",
-            )
-            store = OpenDesignArtifactStore(namespace)
-            stored = store.publish_web_overlay(
-                result.overlay.path,
-                web_overlay_sha256=result.overlay.web_overlay_sha256,
-                trust_contract=SERVICE_ROOT / "opendesign_web_trust.json",
+                candidate_path=result.overlay.path,
+                candidate_digest=result.overlay.web_overlay_sha256,
             )
     except Exception as error:
         print(
@@ -132,7 +127,7 @@ def main() -> int:
                 "derivations": result.derivations,
                 "reproducible": result.reproducible,
                 "materialization_cache_hit": result.cache_hit,
-                "protected_store_generation": stored.receipt["store_generation"],
+                "protected_store_generation": publication["store_generation"],
                 "cache_keys": asdict(result.keys),
                 "metrics": [asdict(metric) for metric in result.metrics],
             },

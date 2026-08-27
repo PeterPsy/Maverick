@@ -1064,6 +1064,16 @@ network destinations, identities, or fallback commands. Missing mandatory
 namespace, mount, relay, or limit support prevents the sidecar from starting;
 host-loopback or unsandboxed fallback is invalid.
 
+Artifact namespaces have an additional host trust boundary. They are created
+and mutated only by a dedicated non-login artifact-authority UID that differs
+from the editable repository owner and the Maverick service UID. The installer
+copies the verifier, release manifests, and trust roots into a content-addressed
+root-owned snapshot, installs one root-protected no-argument sudo entrypoint,
+and grants that entrypoint only a bounded JSON operation set. App hooks can read
+the store but cannot provision a namespace, publish content, rewrite a receipt,
+or select executable verifier code. A same-principal store or an authority
+entrypoint inside the repository is invalid rather than a compatibility mode.
+
 Every HTTP sidecar declaration includes `process_policy`. The supported
 sandbox contract is deliberately singular: `inherit_host_env: false`,
 `sandbox: required`, read-only bundle, writable validated app data root,

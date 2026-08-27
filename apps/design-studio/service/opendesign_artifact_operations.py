@@ -11,11 +11,17 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import subprocess
+import tempfile
 import time
 from typing import Any, Iterator
 from uuid import uuid4
 
-from core.apps.artifact_mounts import create_artifact_namespace, platform_artifact_store_root
+from core.apps.artifact_mounts import (
+    create_artifact_namespace,
+    platform_artifact_store_root,
+    provision_artifact_namespace,
+)
 from core.api.sidecar_control import request_sidecar_control
 from core.shared.repository import discover_repository_root
 from opendesign_artifact import (
@@ -42,11 +48,16 @@ from opendesign_web_overlay import VerifiedWebOverlay
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent
+ARTIFACT_SOURCE_ROOT = Path(
+    os.environ.get("MAVERICK_OPENDESIGN_ARTIFACT_SOURCE_ROOT", SERVICE_ROOT / "artifacts")
+).resolve(strict=False)
 SELECTION_PATH = SERVICE_ROOT / "opendesign_release_selection.json"
 TRUST_CONTRACT_PATH = SERVICE_ROOT / "opendesign_web_trust.json"
 APP_ID = "design-studio"
 ARTIFACT_ID = "opendesign"
 FULL_AUDIT_INTERVAL_SECONDS = 6 * 60 * 60
+AUTHORITY_COMMAND_ENV = "MAVERICK_APP_ARTIFACT_AUTHORITY_COMMAND"
+AUTHORITY_OPERATIONS = frozenset({"verify", "repair", "provision", "gc", "publish-web"})
 
 
 @dataclass(frozen=True)
@@ -68,24 +79,71 @@ def run_artifact_operation(
     repository_root: Path | None = None,
     auto: bool = False,
     audit_workers: int | None = None,
+    candidate_path: Path | None = None,
+    candidate_digest: str | None = None,
+    _authority: bool = False,
 ) -> dict[str, Any]:
     """Run one bounded operator action and return redaction-safe JSON."""
     repository = discover_repository_root(start_path=repository_root or SERVICE_ROOT)
     started = time.monotonic()
-    if operation not in {"status", "verify", "repair", "provision", "prewarm", "diagnostics", "gc"}:
+    if operation not in {"status", "verify", "repair", "provision", "prewarm", "diagnostics", "gc", "publish-web"}:
         raise ArtifactStoreError("runtime_binding_invalid", "artifact_operation", "Unsupported artifact operation")
     if operation == "prewarm":
         return _prewarm(repository, workspace_id=workspace_id)
     if operation == "diagnostics":
         return _diagnostics(repository, data_root=data_root)
+    if operation in AUTHORITY_OPERATIONS and not _authority and not _is_artifact_authority(repository):
+        result = _invoke_artifact_authority(
+            operation,
+            repository=repository,
+            workspace_id=workspace_id,
+            auto=auto,
+            audit_workers=audit_workers,
+            candidate_path=candidate_path,
+            candidate_digest=candidate_digest,
+        )
+        if operation in {"repair", "provision"}:
+            return _bootstrap_after_authority(
+                result,
+                repository=repository,
+                data_root=data_root,
+            )
+        return result
 
-    namespace = _namespace(repository, create=operation in {"repair", "provision", "gc"})
+    namespace = _namespace(
+        repository,
+        create=operation in {"repair", "provision", "gc", "publish-web"},
+        authority=_authority,
+    )
     store = OpenDesignArtifactStore(namespace)
     staging_recovery = (
         store.recover_orphaned_staging()
-        if operation in {"repair", "provision"}
+        if operation in {"repair", "provision", "publish-web"}
         else None
     )
+    if operation == "publish-web":
+        result = _publish_web_candidate(
+            store,
+            candidate_path=candidate_path,
+            candidate_digest=candidate_digest,
+        )
+        _append_audit(
+            store.root,
+            operation=operation,
+            status="succeeded",
+            duration_ms=_elapsed_ms(started),
+            error_code=None,
+            auto=auto,
+        )
+        return {
+            "schema_version": "1",
+            "operation": operation,
+            "status": "ready",
+            "duration_ms": _elapsed_ms(started),
+            "store_generation": store.store_generation,
+            **({"staging_recovery": staging_recovery} if staging_recovery is not None else {}),
+            **result,
+        }
     runtime_sources = load_runtime_source_catalog()
     manifest = runtime_sources.by_role["current"].manifest
     required = _required_artifacts(data_root, manifest=manifest)
@@ -97,7 +155,6 @@ def run_artifact_operation(
                     store,
                     required=required,
                     runtime_sources=runtime_sources,
-                    data_root=data_root,
                 )
         elif operation == "verify":
             result = _verify(store, required=required, max_workers=audit_workers)
@@ -107,6 +164,12 @@ def run_artifact_operation(
             result = _status(store, required=required)
     except Exception as error:
         if operation != "status":
+            if operation == "verify":
+                _record_full_audit_failure(
+                    store.root,
+                    error=error,
+                    store_generation=store.store_generation,
+                )
             _append_audit(
                 store.root,
                 operation=operation,
@@ -143,6 +206,50 @@ def run_artifact_operation(
     }
 
 
+def _publish_web_candidate(
+    store: OpenDesignArtifactStore,
+    *,
+    candidate_path: Path | None,
+    candidate_digest: str | None,
+) -> dict[str, Any]:
+    if candidate_path is None or candidate_digest is None or not is_sha256(candidate_digest):
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "artifact_submission",
+            "The OpenDesign web submission identity is invalid",
+        )
+    try:
+        candidate = Path(candidate_path)
+        metadata = candidate.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise OSError("submission root is not a real directory")
+        source = candidate.resolve(strict=True)
+    except OSError as error:
+        raise ArtifactStoreError(
+            "artifact_missing",
+            "artifact_submission",
+            "The OpenDesign web submission is unavailable",
+        ) from error
+    if not source.is_dir() or source.is_symlink():
+        raise ArtifactStoreError(
+            "artifact_missing",
+            "artifact_submission",
+            "The OpenDesign web submission is unavailable",
+        )
+    stored = store.publish_web_overlay(
+        source,
+        web_overlay_sha256=candidate_digest,
+        trust_contract=TRUST_CONTRACT_PATH,
+    )
+    store.full_audit("web", candidate_digest, trust_contract=TRUST_CONTRACT_PATH)
+    return {
+        "web_overlay_sha256": stored.artifact_sha256,
+        "compatible_runtime_artifact_sha256": list(
+            stored.receipt["compatible_runtime_artifact_sha256"]
+        ),
+    }
+
+
 def _record_full_audit_success(
     store_root: Path,
     *,
@@ -164,7 +271,7 @@ def _record_full_audit_success(
         runtime_count = len(result.get("retained_runtime_artifacts", []))
         web_count = len(result.get("retained_web_overlays", []))
     path = store_root / "audit/background-full-audit.json"
-    path.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
+    _ensure_readable_audit_root(path.parent)
     write_canonical_json(
         path,
         {
@@ -183,7 +290,66 @@ def _record_full_audit_success(
             "recovery_phase": None,
         },
     )
-    path.chmod(0o640)
+    path.chmod(0o444)
+
+
+def _record_full_audit_failure(
+    store_root: Path,
+    *,
+    error: BaseException,
+    store_generation: str,
+    observed_at_epoch_ms: int | None = None,
+) -> None:
+    observed = (
+        int(time.time() * 1000)
+        if observed_at_epoch_ms is None
+        else observed_at_epoch_ms
+    )
+    code = _safe_audit_token(
+        getattr(error, "code", None),
+        default="artifact_integrity_mismatch",
+    )
+    phase = _safe_audit_token(
+        getattr(error, "phase", None),
+        default="artifact_full_verify",
+    )
+    path = store_root / "audit/background-full-audit.json"
+    _ensure_readable_audit_root(path.parent)
+    write_canonical_json(
+        path,
+        {
+            "schema_version": "2",
+            "status": "failed",
+            "attempted_at_epoch_ms": observed,
+            "verified_at_epoch_ms": None,
+            "next_attempt_at_epoch_ms": observed + 60 * 60 * 1000,
+            "store_generation": store_generation,
+            "runtime_count": 0,
+            "web_count": 0,
+            "auto_repair_requested": True,
+            "audit_error_code": code,
+            "audit_phase": phase,
+            "recovery_error_code": None,
+            "recovery_phase": None,
+        },
+    )
+    path.chmod(0o444)
+
+
+def _safe_audit_token(value: object, *, default: str) -> str:
+    if (
+        isinstance(value, str)
+        and 1 <= len(value) <= 64
+        and value[0] in "abcdefghijklmnopqrstuvwxyz"
+        and all(character in "abcdefghijklmnopqrstuvwxyz0123456789_" for character in value)
+    ):
+        return value
+    return default
+
+
+def _ensure_readable_audit_root(path: Path) -> None:
+    path.mkdir(mode=0o755, parents=True, exist_ok=True)
+    path.chmod(0o755)
 
 
 @contextmanager
@@ -211,8 +377,11 @@ def _repair(
     *,
     required: RequiredArtifacts,
     runtime_sources: RuntimeSourceCatalog,
-    data_root: Path,
+    data_root: Path | None = None,
 ) -> dict[str, Any]:
+    # Retained for direct verifier callers; workspace mutation is intentionally
+    # performed by _bootstrap_after_authority on the service side.
+    del data_root
     current_source = runtime_sources.source_for_digest(required.current_runtime)
     if current_source is None:
         raise ArtifactStoreError(
@@ -268,7 +437,7 @@ def _repair(
             else:
                 retained_web.append(digest)
                 continue
-        source = SERVICE_ROOT / "artifacts/open-design-web" / digest
+        source = ARTIFACT_SOURCE_ROOT / "open-design-web" / digest
         if not source.is_dir() or source.is_symlink():
             raise ArtifactStoreError(
                 "artifact_missing",
@@ -292,11 +461,6 @@ def _repair(
         _clear_invalid_marker(store, kind="web", digest=digest)
         repaired_web.append(digest)
         retained_web.append(digest)
-    bootstrapped = _bootstrap_fresh_generation(
-        data_root,
-        runtime=runtime,
-        web=store.fast_web_overlay(required.fresh_web_overlay, runtime_artifact_sha256=required.current_runtime),
-    )
     return {
         "runtime_artifact_sha256": runtime.artifact_sha256,
         "runtime_repaired": runtime_repaired,
@@ -305,7 +469,11 @@ def _repair(
         "web_overlay_sha256": required.fresh_web_overlay,
         "repaired_web_overlays": repaired_web,
         "retained_web_overlays": retained_web,
-        "data_generation_bootstrapped": bootstrapped,
+        # Workspace data belongs to the ordinary service principal.  The
+        # authority returns only immutable store identities; the client creates
+        # a fresh data generation after it has reopened those identities on the
+        # read-only side of the boundary.
+        "data_generation_bootstrapped": False,
     }
 
 
@@ -337,7 +505,7 @@ def _retain_or_repair_runtime(
             return None, False
     invalid_identity = invalid_identity or store.package_identity("runtime", digest)
     try:
-        artifact_directory = source.artifact_directory(SERVICE_ROOT / "artifacts")
+        artifact_directory = source.artifact_directory(ARTIFACT_SOURCE_ROOT)
     except ArtifactError as error:
         raise ArtifactStoreError(
             "artifact_missing",
@@ -491,6 +659,7 @@ def _mark_invalid(store: OpenDesignArtifactStore, *, kind: str, digest: str) -> 
     if identity is None:
         return
     path = _invalid_marker(store, kind=kind, digest=digest)
+    _ensure_readable_audit_root(path.parent)
     write_canonical_json(
         path,
         {
@@ -503,7 +672,7 @@ def _mark_invalid(store: OpenDesignArtifactStore, *, kind: str, digest: str) -> 
             "observed_at_epoch_ms": int(time.time() * 1000),
         },
     )
-    path.chmod(0o640)
+    path.chmod(0o444)
 
 
 def _known_invalid_identity(
@@ -624,6 +793,40 @@ def _bootstrap_fresh_generation(data_root: Path, *, runtime: StoredArtifact, web
     return True
 
 
+def _bootstrap_after_authority(
+    result: dict[str, Any],
+    *,
+    repository: Path,
+    data_root: Path,
+) -> dict[str, Any]:
+    runtime_digest = result.get("runtime_artifact_sha256")
+    web_digest = result.get("web_overlay_sha256")
+    if not is_sha256(runtime_digest) or not is_sha256(web_digest):
+        raise ArtifactStoreError(
+            "artifact_authority_unavailable",
+            "artifact_authority",
+            "The platform artifact authority returned an invalid materialization result",
+        )
+    namespace = create_artifact_namespace(
+        repository_root=repository,
+        app_id=APP_ID,
+        artifact_id=ARTIFACT_ID,
+    )
+    store = OpenDesignArtifactStore(namespace)
+    runtime = store.fast_runtime(runtime_digest)
+    web = store.fast_web_overlay(
+        web_digest,
+        runtime_artifact_sha256=runtime_digest,
+    )
+    returned = dict(result)
+    returned["data_generation_bootstrapped"] = _bootstrap_fresh_generation(
+        data_root,
+        runtime=runtime,
+        web=web,
+    )
+    return returned
+
+
 def _verified_overlay(stored: StoredArtifact) -> VerifiedWebOverlay:
     receipt = stored.receipt
     return VerifiedWebOverlay(
@@ -638,13 +841,310 @@ def _verified_overlay(stored: StoredArtifact) -> VerifiedWebOverlay:
     )
 
 
-def _namespace(repository: Path, *, create: bool) -> Path:
+def _namespace(repository: Path, *, create: bool, authority: bool = False) -> Path:
     if create:
-        return create_artifact_namespace(repository_root=repository, app_id=APP_ID, artifact_id=ARTIFACT_ID)
+        if authority:
+            return provision_artifact_namespace(
+                repository_root=repository,
+                app_id=APP_ID,
+                artifact_id=ARTIFACT_ID,
+            )
+        return create_artifact_namespace(
+            repository_root=repository,
+            app_id=APP_ID,
+            artifact_id=ARTIFACT_ID,
+        )
     namespace = platform_artifact_store_root(repository) / APP_ID / ARTIFACT_ID
     if not namespace.is_dir() or namespace.is_symlink():
         raise ArtifactStoreError("artifact_missing", "status", "The protected OpenDesign store is unavailable")
     return namespace
+
+
+def _is_artifact_authority(repository: Path) -> bool:
+    marker_path = (
+        platform_artifact_store_root(repository)
+        / APP_ID
+        / ARTIFACT_ID
+        / ".maverick-artifact-namespace.json"
+    )
+    try:
+        payload = json.loads(marker_path.read_text(encoding="utf-8"))
+        metadata = marker_path.stat()
+    except (OSError, json.JSONDecodeError):
+        return False
+    owner_uid = payload.get("owner_uid") if isinstance(payload, dict) else None
+    return (
+        isinstance(owner_uid, int)
+        and not isinstance(owner_uid, bool)
+        and owner_uid == os.geteuid()
+        and metadata.st_uid == os.geteuid()
+    )
+
+
+def _invoke_artifact_authority(
+    operation: str,
+    *,
+    repository: Path,
+    workspace_id: str,
+    auto: bool,
+    audit_workers: int | None,
+    candidate_path: Path | None,
+    candidate_digest: str | None,
+) -> dict[str, Any]:
+    command = _validated_authority_command(repository)
+    sudo = shutil.which("sudo")
+    if sudo is None:
+        raise ArtifactStoreError(
+            "artifact_authority_unavailable",
+            "artifact_authority",
+            "The platform artifact authority cannot be invoked",
+        )
+    with _authority_web_submission(candidate_path) as submitted_path:
+        payload = {
+            "schema_version": "1",
+            "operation": operation,
+            "workspace_id": workspace_id,
+            "auto": bool(auto),
+            "audit_workers": audit_workers,
+            "candidate_path": (
+                None if submitted_path is None else str(submitted_path.absolute())
+            ),
+            "candidate_digest": candidate_digest,
+        }
+        try:
+            completed = subprocess.run(
+                [sudo, "-n", str(command)],
+                input=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=300,
+                check=False,
+                cwd=Path("/"),
+                env={"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise ArtifactStoreError(
+                "artifact_authority_unavailable",
+                "artifact_authority",
+                "The platform artifact authority did not complete",
+            ) from error
+    try:
+        response = json.loads(completed.stdout)
+    except (json.JSONDecodeError, TypeError) as error:
+        raise ArtifactStoreError(
+            "artifact_authority_unavailable",
+            "artifact_authority",
+            "The platform artifact authority returned an invalid response",
+        ) from error
+    if completed.returncode != 0 or not isinstance(response, dict) or response.get("ok") is not True:
+        code = response.get("error_code") if isinstance(response, dict) else None
+        phase = response.get("phase") if isinstance(response, dict) else None
+        raise ArtifactStoreError(
+            str(code) if isinstance(code, str) and code else "artifact_authority_failed",
+            str(phase) if isinstance(phase, str) and phase else "artifact_authority",
+            "The platform artifact authority rejected the operation",
+        )
+    result = response.get("result")
+    if not isinstance(result, dict):
+        raise ArtifactStoreError(
+            "artifact_authority_unavailable",
+            "artifact_authority",
+            "The platform artifact authority omitted its result",
+        )
+    return result
+
+
+@contextmanager
+def _authority_web_submission(candidate_path: Path | None) -> Iterator[Path | None]:
+    """Create a non-secret, read-only handoff visible to the authority UID."""
+    if candidate_path is None:
+        yield None
+        return
+    source = Path(candidate_path)
+    try:
+        metadata = source.lstat()
+    except OSError as error:
+        raise ArtifactStoreError(
+            "artifact_missing",
+            "artifact_submission",
+            "The OpenDesign web submission is unavailable",
+        ) from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise ArtifactStoreError(
+            "artifact_missing",
+            "artifact_submission",
+            "The OpenDesign web submission is unavailable",
+        )
+    root = Path(tempfile.mkdtemp(prefix="maverick-opendesign-submission-", dir="/var/tmp"))
+    root.chmod(0o755)
+    submitted = root / "candidate"
+    try:
+        _copy_readable_submission(source, submitted)
+        yield submitted
+    finally:
+        _make_owner_writable(root)
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def _copy_readable_submission(source: Path, destination: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(source, flags)
+    try:
+        _copy_readable_submission_directory(
+            descriptor,
+            destination,
+            source_mode=stat.S_IMODE(os.fstat(descriptor).st_mode),
+        )
+    finally:
+        os.close(descriptor)
+
+
+def _copy_readable_submission_directory(
+    source_descriptor: int,
+    destination: Path,
+    *,
+    source_mode: int,
+) -> None:
+    if source_mode & 0o222 or source_mode & 0o005 != 0o005:
+        raise ArtifactStoreError(
+            "artifact_permissions_invalid",
+            "artifact_submission",
+            "The OpenDesign web submission is not sealed and authority-readable",
+        )
+    destination.mkdir(mode=0o755, parents=True, exist_ok=False)
+    for name in sorted(os.listdir(source_descriptor)):
+        if name in {".", ".."} or "/" in name or "\x00" in name:
+            raise ArtifactStoreError(
+                "artifact_integrity_mismatch",
+                "artifact_submission",
+                "The OpenDesign web submission contains an unsafe entry",
+            )
+        metadata = os.stat(name, dir_fd=source_descriptor, follow_symlinks=False)
+        target = destination / name
+        if stat.S_ISDIR(metadata.st_mode):
+            child = os.open(
+                name,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=source_descriptor,
+            )
+            try:
+                _copy_readable_submission_directory(
+                    child,
+                    target,
+                    source_mode=stat.S_IMODE(metadata.st_mode),
+                )
+            finally:
+                os.close(child)
+            continue
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ArtifactStoreError(
+                "artifact_integrity_mismatch",
+                "artifact_submission",
+                "The OpenDesign web submission contains an unsafe entry",
+            )
+        source_file = os.open(
+            name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=source_descriptor,
+        )
+        try:
+            observed = os.fstat(source_file)
+            if not stat.S_ISREG(observed.st_mode) or (
+                observed.st_dev,
+                observed.st_ino,
+            ) != (metadata.st_dev, metadata.st_ino):
+                raise ArtifactStoreError(
+                    "artifact_integrity_mismatch",
+                    "artifact_submission",
+                    "The OpenDesign web submission changed during handoff",
+                )
+            mode = stat.S_IMODE(metadata.st_mode)
+            if mode & 0o222 or not mode & 0o004:
+                raise ArtifactStoreError(
+                    "artifact_permissions_invalid",
+                    "artifact_submission",
+                    "The OpenDesign web submission is not sealed and authority-readable",
+                )
+            target_descriptor = os.open(
+                target,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                mode,
+            )
+            try:
+                while True:
+                    chunk = os.read(source_file, 1024 * 1024)
+                    if not chunk:
+                        break
+                    remaining = memoryview(chunk)
+                    while remaining:
+                        written = os.write(target_descriptor, remaining)
+                        if written <= 0:
+                            raise OSError("short artifact submission write")
+                        remaining = remaining[written:]
+                os.fsync(target_descriptor)
+            finally:
+                os.close(target_descriptor)
+            target.chmod(mode)
+        finally:
+            os.close(source_file)
+    destination.chmod(source_mode)
+
+
+def _validated_authority_command(repository: Path) -> Path:
+    configured = os.environ.get(AUTHORITY_COMMAND_ENV, "").strip()
+    if not configured:
+        raise ArtifactStoreError(
+            "artifact_authority_unavailable",
+            "artifact_authority",
+            "The platform artifact authority command is not configured",
+        )
+    command = Path(configured)
+    if not command.is_absolute():
+        raise ArtifactStoreError(
+            "artifact_authority_unavailable",
+            "artifact_authority",
+            "The platform artifact authority command is invalid",
+        )
+    try:
+        metadata = command.lstat()
+        resolved = command.resolve(strict=True)
+        resolved_metadata = resolved.stat()
+    except OSError as error:
+        raise ArtifactStoreError(
+            "artifact_authority_unavailable",
+            "artifact_authority",
+            "The platform artifact authority command is unavailable",
+        ) from error
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISREG(resolved_metadata.st_mode)
+        or resolved_metadata.st_uid != 0
+        or resolved_metadata.st_mode & 0o022
+        or resolved == repository
+        or repository in resolved.parents
+    ):
+        raise ArtifactStoreError(
+            "artifact_authority_unavailable",
+            "artifact_authority",
+            "The platform artifact authority command is not root-protected",
+        )
+    for parent in resolved.parents:
+        parent_metadata = parent.lstat()
+        if (
+            stat.S_ISLNK(parent_metadata.st_mode)
+            or not stat.S_ISDIR(parent_metadata.st_mode)
+            or parent_metadata.st_uid != 0
+            or parent_metadata.st_mode & 0o022
+        ):
+            raise ArtifactStoreError(
+                "artifact_authority_unavailable",
+                "artifact_authority",
+                "The platform artifact authority command path is not root-protected",
+            )
+        if parent == Path("/"):
+            break
+    return resolved
 
 
 def _read_selection() -> dict[str, Any]:
@@ -759,8 +1259,7 @@ def _diagnostics(repository: Path, *, data_root: Path) -> dict[str, Any]:
 
 def _append_audit(root: Path, *, operation: str, status: str, duration_ms: float, error_code: str | None, auto: bool) -> None:
     audit_root = root / "audit"
-    audit_root.mkdir(mode=0o750, exist_ok=True)
-    audit_root.chmod(0o750)
+    _ensure_readable_audit_root(audit_root)
     path = audit_root / "events.jsonl"
     if path.exists() and (path.is_symlink() or not path.is_file()):
         raise ArtifactStoreError("artifact_permissions_invalid", "audit", "Artifact audit log is unsafe")

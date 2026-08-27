@@ -81,6 +81,14 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertNotIn("MAVERICK_SECRET_STORE_KEY=", env_file)
         self.assertIn("MAVERICK_CONTROL_STORE=json", env_file)
         self.assertIn("MAVERICK_JSON_CONTROL_STORE_ROOT=data/control-plane/json", env_file)
+        self.assertIn(
+            "MAVERICK_APP_ARTIFACT_STORE_ROOT=/var/lib/maverick/app-artifacts",
+            env_file,
+        )
+        self.assertIn(
+            "MAVERICK_APP_ARTIFACT_AUTHORITY_COMMAND=/usr/local/libexec/maverick-opendesign-artifact-authority",
+            env_file,
+        )
         self.assertNotIn("MAVERICK_MONGODB_URI=", env_file)
         self.assertIn(repo_root / "data" / "bootstrap-secrets" / "secret-store.key", rendered)
         self.assertEqual(config.install_env_path, repo_root / ".env.maverick")

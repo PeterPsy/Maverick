@@ -31,6 +31,14 @@ status under
 `data/design-studio/opendesign/launcher-status.json` and records
 `mode: oci-musl-runtime`.
 
+The Maverick installer provisions that namespace under
+`/var/lib/maverick/app-artifacts` with a dedicated `maverick-artifacts`
+non-login UID. It also installs a content-addressed, root-owned snapshot of the
+Core/store verifier and a single no-argument sudo entrypoint. Lifecycle hooks,
+the launcher, and repository-editing users are read-only principals: governed
+verify, repair, GC, and signed web publication cross the bounded JSON authority
+API, while workspace data bootstrap remains with the ordinary service UID.
+
 The primary distribution recipe is declared in
 `service/opendesign_bundle.json` and implemented by
 `service/import_opendesign_oci.py`. It imports the official pinned
@@ -66,6 +74,14 @@ run on publication, activation, repair, release certification, and background
 maintenance. Provision, repair, and activation audit already-present packages
 too; a valid fast receipt never waives those lifecycle gates. Active and
 rollback generations are selected explicitly;
+
+Published regular files, manifests, receipts, and package directories have no
+write bit. More importantly, their kernel owner is the separate authority, not
+the repository owner. Runtime full audit re-verifies the materialized
+`file-manifest.json` against the source-manifest digest pinned outside the
+store; regenerating content, manifest v2, and receipt together therefore cannot
+move the trust anchor.
+
 `opendesign_release_selection.json` schema v3 binds both the rollback pair and
 the SHA-256 of `opendesign_runtime_sources.json`. That catalog in turn binds
 the current and rollback runtime digests to distinct, committed manifests and

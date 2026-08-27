@@ -18,7 +18,10 @@ import time
 from typing import Any, Callable, Iterator
 from uuid import uuid4
 
-from opendesign_archive import FILE_MANIFEST_PATH, read_materialized_marker
+from opendesign_archive import (
+    FILE_MANIFEST_PATH,
+    verify_materialized_bundle,
+)
 from opendesign_artifact import (
     ArtifactError,
     is_sha256,
@@ -88,7 +91,12 @@ class OpenDesignArtifactStore:
         self.root = _real_directory(namespace_root, label="OpenDesign artifact namespace")
         self.require_read_only_mount = require_read_only_mount
         self.namespace = self._namespace_marker()
-        self._ensure_layout(create=not require_read_only_mount)
+        visible_owner_uid = _mapped_namespace_id(
+            int(self.namespace["owner_uid"]),
+            Path("/proc/self/uid_map"),
+        )
+        self.authority_writer = os.geteuid() == visible_owner_uid
+        self._ensure_layout(create=self.authority_writer and not require_read_only_mount)
 
     @property
     def store_generation(self) -> str:
@@ -108,6 +116,7 @@ class OpenDesignArtifactStore:
         legacy_grace_seconds: int = LEGACY_STAGING_GRACE_SECONDS,
     ) -> dict[str, int]:
         """Quarantine crash-orphaned stages without touching a live publisher."""
+        self._require_authority_writer("staging_recovery")
         if self.require_read_only_mount:
             raise ArtifactStoreError(
                 "artifact_permissions_invalid",
@@ -205,6 +214,7 @@ class OpenDesignArtifactStore:
                 "verified_file_manifest": _read_json(
                     content / FILE_MANIFEST_PATH,
                     label="verified OpenDesign runtime file manifest",
+                    allow_owner_write=True,
                 ),
                 "verified_directory_entries": list(materialized.verified_directory_entries),
             }
@@ -316,7 +326,15 @@ class OpenDesignArtifactStore:
                 )
             verify_store_manifest(result.content_path, manifest, max_workers=max_workers)
             if kind == "runtime":
-                marker = read_materialized_marker(result.content_path)
+                marker = verify_materialized_bundle(
+                    result.content_path,
+                    expected_artifact_sha256=digest,
+                    expected_file_manifest_sha256=str(
+                        result.receipt["source_file_manifest_sha256"]
+                    ),
+                    expected_version=str(result.receipt["opendesign_version"]),
+                    protected_modes=True,
+                )
                 if (
                     marker["artifact_sha256"] != digest
                     or marker["file_manifest_sha256"]
@@ -375,6 +393,7 @@ class OpenDesignArtifactStore:
         trust_contract: Path | None,
         failure_injector: FailureInjector | None,
     ) -> StoredArtifact:
+        self._require_authority_writer("publish")
         _validate_kind_digest(kind, digest)
         destination = self.root / kind / digest
         with self._digest_lock(kind, digest):
@@ -397,6 +416,7 @@ class OpenDesignArtifactStore:
                     content,
                     verified_file_manifest=extra.get("verified_file_manifest"),
                     verified_directory_entries=extra.get("verified_directory_entries"),
+                    protected_modes=True,
                 )
                 write_canonical_json(stage / "manifest-v2.json", manifest)
                 validate_store_manifest(manifest)
@@ -415,7 +435,12 @@ class OpenDesignArtifactStore:
                 )
                 write_canonical_json(stage / "receipt.json", receipt)
                 _inject(failure_injector, "receipt")
-                _protect_package(stage, owner_uid=int(self.namespace["owner_uid"]), owner_gid=int(self.namespace["owner_gid"]))
+                _protect_package(
+                    stage,
+                    owner_uid=int(self.namespace["owner_uid"]),
+                    owner_gid=int(self.namespace["owner_gid"]),
+                    seal_directories=False,
+                )
                 _fsync_tree(stage)
                 _inject(failure_injector, "fsync")
                 if destination.exists() or destination.is_symlink():
@@ -426,11 +451,17 @@ class OpenDesignArtifactStore:
                             "Existing OpenDesign store generation is invalid; governed repair is required",
                         )
                     quarantine = self.root / "quarantine" / kind / f"{digest}.{int(time.time())}.{uuid4().hex[:8]}"
+                    # Some confinement layers deny renaming a directory whose
+                    # owner-write bit is absent.  Only the isolated authority
+                    # owns this inode, so temporarily reopening the package
+                    # root does not cross the trust boundary.
+                    destination.chmod(0o755)
                     os.rename(destination, quarantine)
                     _fsync_directory(quarantine.parent)
                     _inject(failure_injector, "quarantine")
                 os.rename(stage, destination)
                 activated = True
+                _seal_package_directories(destination)
                 _fsync_directory(destination.parent)
                 _inject(failure_injector, "rename")
             except OSError as error:
@@ -560,16 +591,30 @@ class OpenDesignArtifactStore:
 
     def _namespace_marker(self) -> dict[str, Any]:
         marker = _read_json(self.root / NAMESPACE_MARKER, label="artifact namespace marker")
-        expected = {"schema_version", "app_id", "artifact_id", "store_generation", "owner_uid", "owner_gid"}
+        expected = {
+            "schema_version",
+            "app_id",
+            "artifact_id",
+            "store_generation",
+            "owner_uid",
+            "owner_gid",
+            "repository_uid",
+            "repository_gid",
+        }
         if (
             set(marker) != expected
-            or marker.get("schema_version") != "1"
+            or marker.get("schema_version") != "2"
             or marker.get("artifact_id") != "opendesign"
             or not isinstance(marker.get("store_generation"), str)
             or isinstance(marker.get("owner_uid"), bool)
             or not isinstance(marker.get("owner_uid"), int)
             or isinstance(marker.get("owner_gid"), bool)
             or not isinstance(marker.get("owner_gid"), int)
+            or isinstance(marker.get("repository_uid"), bool)
+            or not isinstance(marker.get("repository_uid"), int)
+            or isinstance(marker.get("repository_gid"), bool)
+            or not isinstance(marker.get("repository_gid"), int)
+            or marker.get("owner_uid") == marker.get("repository_uid")
         ):
             raise ArtifactStoreError("artifact_permissions_invalid", "store_open", "OpenDesign namespace identity is invalid")
         owner_uid = int(marker["owner_uid"])
@@ -586,6 +631,14 @@ class OpenDesignArtifactStore:
                 )
         return marker
 
+    def _require_authority_writer(self, phase: str) -> None:
+        if not self.authority_writer or self.require_read_only_mount:
+            raise ArtifactStoreError(
+                "artifact_authority_required",
+                phase,
+                "OpenDesign artifact mutation requires the separate platform authority",
+            )
+
     def _ensure_layout(self, *, create: bool) -> None:
         for relative in (
             "runtime",
@@ -599,10 +652,28 @@ class OpenDesignArtifactStore:
         ):
             path = self.root / relative
             if create:
-                path.mkdir(parents=True, exist_ok=True, mode=0o750)
-                path.chmod(0o750)
+                path.mkdir(parents=True, exist_ok=True, mode=0o755)
+                path.chmod(0o755)
             elif not path.is_dir() or path.is_symlink():
                 raise ArtifactStoreError("artifact_missing", "store_open", "OpenDesign artifact store layout is incomplete")
+        background_lock = self.root / ".locks/background-full-audit.lock"
+        if create and not background_lock.exists():
+            descriptor = os.open(
+                background_lock,
+                os.O_RDONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                0o444,
+            )
+            os.close(descriptor)
+        _protected_file(
+            background_lock,
+            label="OpenDesign background audit lock",
+            owner_uid=_mapped_namespace_id(
+                int(self.namespace["owner_uid"]), Path("/proc/self/uid_map")
+            ),
+            owner_gid=_mapped_namespace_id(
+                int(self.namespace["owner_gid"]), Path("/proc/self/gid_map")
+            ),
+        )
 
     def _create_staging_lease(self, kind: str, digest: str) -> _StagingLease:
         with self._staging_registry_lock():
@@ -861,8 +932,15 @@ def _read_json(
     label: str,
     owner_uid: int | None = None,
     owner_gid: int | None = None,
+    allow_owner_write: bool = False,
 ) -> dict[str, Any]:
-    _protected_file(path, label=label, owner_uid=owner_uid, owner_gid=owner_gid)
+    _protected_file(
+        path,
+        label=label,
+        owner_uid=owner_uid,
+        owner_gid=owner_gid,
+        allow_owner_write=allow_owner_write,
+    )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -878,6 +956,7 @@ def _protected_file(
     label: str,
     owner_uid: int | None = None,
     owner_gid: int | None = None,
+    allow_owner_write: bool = False,
 ) -> None:
     try:
         metadata = path.lstat()
@@ -886,7 +965,7 @@ def _protected_file(
     if (
         stat.S_ISLNK(metadata.st_mode)
         or not stat.S_ISREG(metadata.st_mode)
-        or metadata.st_mode & 0o022
+        or metadata.st_mode & (0o022 if allow_owner_write else 0o222)
         or (owner_uid is not None and metadata.st_uid != owner_uid)
         or (owner_gid is not None and metadata.st_gid != owner_gid)
     ):
@@ -899,6 +978,7 @@ def _real_directory(
     label: str,
     owner_uid: int | None = None,
     owner_gid: int | None = None,
+    allow_owner_write: bool = True,
 ) -> Path:
     try:
         metadata = Path(path).lstat()
@@ -907,7 +987,7 @@ def _real_directory(
     if (
         stat.S_ISLNK(metadata.st_mode)
         or not stat.S_ISDIR(metadata.st_mode)
-        or metadata.st_mode & 0o022
+        or metadata.st_mode & (0o022 if allow_owner_write else 0o222)
         or (owner_uid is not None and metadata.st_uid != owner_uid)
         or (owner_gid is not None and metadata.st_gid != owner_gid)
     ):
@@ -915,19 +995,59 @@ def _real_directory(
     return Path(path).resolve(strict=True)
 
 
-def _protect_package(root: Path, *, owner_uid: int, owner_gid: int) -> None:
+def _protect_package(
+    root: Path,
+    *,
+    owner_uid: int,
+    owner_gid: int,
+    seal_directories: bool = True,
+) -> None:
     for path in sorted(root.rglob("*"), key=lambda item: len(item.parts), reverse=True):
         if path.is_symlink():
+            try:
+                os.lchown(path, owner_uid, owner_gid)
+            except PermissionError as error:
+                raise ArtifactStoreError(
+                    "artifact_permissions_invalid",
+                    "protect",
+                    "Cannot protect OpenDesign artifact ownership",
+                ) from error
             continue
         metadata = path.stat()
-        mode = stat.S_IMODE(metadata.st_mode) & ~0o022
+        if stat.S_ISDIR(metadata.st_mode):
+            # The package owner is a separate authority.  Published
+            # directories need no write bit and remain traversable by the
+            # unprivileged sidecar host through its read-only bind mount.
+            mode = 0o555 if seal_directories else 0o755
+        elif stat.S_ISREG(metadata.st_mode):
+            mode = 0o555 if metadata.st_mode & 0o111 else 0o444
+        else:
+            raise ArtifactStoreError(
+                "artifact_permissions_invalid",
+                "protect",
+                "Cannot protect unsupported OpenDesign artifact content",
+            )
         path.chmod(mode)
         if metadata.st_uid != owner_uid or metadata.st_gid != owner_gid:
             try:
                 os.chown(path, owner_uid, owner_gid)
             except PermissionError as error:
                 raise ArtifactStoreError("artifact_permissions_invalid", "protect", "Cannot protect OpenDesign artifact ownership") from error
-    root.chmod(stat.S_IMODE(root.stat().st_mode) & ~0o022)
+    root.chmod(0o555 if seal_directories else 0o755)
+
+
+def _seal_package_directories(root: Path) -> None:
+    for path in sorted(
+        (
+            candidate
+            for candidate in root.rglob("*")
+            if stat.S_ISDIR(candidate.lstat().st_mode)
+        ),
+        key=lambda item: len(item.parts),
+        reverse=True,
+    ):
+        path.chmod(0o555)
+    root.chmod(0o555)
 
 
 def _make_owner_writable(root: Path) -> None:
@@ -937,7 +1057,12 @@ def _make_owner_writable(root: Path) -> None:
     root.chmod(stat.S_IMODE(root.stat().st_mode) | stat.S_IWUSR)
 
 
-def _mapped_namespace_id(host_id: int, mapping_path: Path) -> int:
+def _mapped_namespace_id(
+    host_id: int,
+    mapping_path: Path,
+    *,
+    overflow_path: Path | None = None,
+) -> int:
     """Translate a host uid/gid into the id visible in the current user namespace."""
     try:
         lines = mapping_path.read_text(encoding="ascii").splitlines()
@@ -953,7 +1078,20 @@ def _mapped_namespace_id(host_id: int, mapping_path: Path) -> int:
             continue
         if length > 0 and host_start <= host_id < host_start + length:
             return namespace_start + (host_id - host_start)
-    return host_id
+    # The kernel reports an inode owned by an unmapped host principal as the
+    # namespace overflow id.  This is the normal sidecar case: only the
+    # Maverick service UID is mapped to sandbox uid 0, while the distinct
+    # artifact authority remains deliberately unmapped.
+    overflow = overflow_path or Path(
+        "/proc/sys/kernel/overflowgid"
+        if mapping_path.name == "gid_map"
+        else "/proc/sys/kernel/overflowuid"
+    )
+    try:
+        value = int(overflow.read_text(encoding="ascii").strip())
+    except (OSError, UnicodeDecodeError, ValueError):
+        return host_id
+    return value if value >= 0 else host_id
 
 
 def _regular_file_identity(path: Path) -> tuple[int, int, int, int, int]:

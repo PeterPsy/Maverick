@@ -36,6 +36,7 @@ def create_store_manifest(
     verified_file_manifest: dict[str, Any] | None = None,
     verified_directory_entries: list[dict[str, Any]] | None = None,
     max_workers: int | None = None,
+    protected_modes: bool = False,
 ) -> dict[str, Any]:
     """Inventory files, executables, symlinks, directories, modes, and bytes."""
     root = _real_directory(root)
@@ -44,6 +45,7 @@ def create_store_manifest(
             root,
             verified_file_manifest=verified_file_manifest,
             verified_directory_entries=verified_directory_entries,
+            protected_modes=protected_modes,
         )
     verified_entries = _verified_file_entries(verified_file_manifest)
     entries: list[dict[str, Any]] = []
@@ -67,7 +69,13 @@ def create_store_manifest(
                 raise StoreManifestError("Preverified OpenDesign symlink metadata changed")
             entries.append(entry)
         elif stat.S_ISDIR(metadata.st_mode):
-            entries.append({"path": relative, "kind": "directory", "mode": f"{mode:04o}"})
+            entries.append(
+                {
+                    "path": relative,
+                    "kind": "directory",
+                    "mode": _manifest_mode(mode, kind="directory", protected=protected_modes),
+                }
+            )
         elif stat.S_ISREG(metadata.st_mode):
             trusted = verified_entries.pop(relative, None)
             if trusted is None:
@@ -76,7 +84,7 @@ def create_store_manifest(
                 descriptor = {
                     "path": relative,
                     "kind": "file",
-                    "mode": f"{mode:04o}",
+                    "mode": _manifest_mode(mode, kind="file", protected=protected_modes),
                     "size_bytes": metadata.st_size,
                     "sha256": trusted["sha256"],
                 }
@@ -94,6 +102,8 @@ def create_store_manifest(
             "Preverified OpenDesign manifest contains missing filesystem entries",
             differences=len(verified_entries),
         )
+    if protected_modes:
+        entries = [_with_protected_mode(entry) for entry in entries]
     entries.sort(key=lambda item: str(item["path"]))
     file_count = sum(entry["kind"] == "file" for entry in entries)
     total_size = sum(int(entry.get("size_bytes", 0)) for entry in entries)
@@ -110,8 +120,11 @@ def _manifest_from_verified_inventory(
     *,
     verified_file_manifest: dict[str, Any],
     verified_directory_entries: list[dict[str, Any]],
+    protected_modes: bool,
 ) -> dict[str, Any]:
     entries = list(_verified_file_entries(verified_file_manifest).values())
+    if protected_modes:
+        entries = [_with_protected_mode(entry) for entry in entries]
     if verified_file_manifest.get("self_excluded") != [FILE_MANIFEST_PATH]:
         raise StoreManifestError("Preverified OpenDesign manifest exclusions are not canonical")
     for entry in verified_directory_entries:
@@ -125,7 +138,7 @@ def _manifest_from_verified_inventory(
         mode = entry.get("mode")
         if not isinstance(mode, str) or len(mode) != 4 or any(char not in "01234567" for char in mode):
             raise StoreManifestError("Preverified OpenDesign directory mode is invalid")
-        entries.append(dict(entry))
+        entries.append(_with_protected_mode(entry) if protected_modes else dict(entry))
     for relative in (FILE_MANIFEST_PATH, MATERIALIZED_MARKER_PATH):
         path = root / relative
         metadata = path.lstat()
@@ -135,7 +148,11 @@ def _manifest_from_verified_inventory(
             {
                 "path": relative,
                 "kind": "file",
-                "mode": f"{stat.S_IMODE(metadata.st_mode):04o}",
+                "mode": _manifest_mode(
+                    stat.S_IMODE(metadata.st_mode),
+                    kind="file",
+                    protected=protected_modes,
+                ),
                 "size_bytes": metadata.st_size,
                 "sha256": sha256_file(path),
             }
@@ -150,6 +167,25 @@ def _manifest_from_verified_inventory(
         "entries": entries,
     }
     return validate_store_manifest(payload)
+
+
+def _with_protected_mode(entry: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(entry)
+    if normalized.get("kind") != "symlink":
+        normalized["mode"] = _manifest_mode(
+            int(str(normalized["mode"]), 8),
+            kind=str(normalized["kind"]),
+            protected=True,
+        )
+    return normalized
+
+
+def _manifest_mode(mode: int, *, kind: str, protected: bool) -> str:
+    if protected and kind == "file":
+        mode &= ~0o222
+    elif protected and kind == "directory":
+        mode &= ~0o222
+    return f"{mode:04o}"
 
 
 def _verified_file_entries(payload: dict[str, Any] | None) -> dict[str, dict[str, Any]]:

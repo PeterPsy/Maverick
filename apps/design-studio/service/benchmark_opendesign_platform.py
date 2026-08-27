@@ -184,27 +184,29 @@ def _create_namespace(root: Path) -> Path:
     write_canonical_json(
         marker,
         {
-            "schema_version": "1",
+            "schema_version": "2",
             "app_id": "design-studio",
             "artifact_id": "opendesign",
             "store_generation": uuid4().hex,
             "owner_uid": os.geteuid(),
             "owner_gid": os.getegid(),
+            "repository_uid": os.geteuid() + 1,
+            "repository_gid": os.getegid() + 1,
         },
     )
-    marker.chmod(0o640)
+    marker.chmod(0o444)
     return namespace
 
 
 def _mutate_one_regular_mode(package: Path, content: Path) -> str:
     manifest = json.loads((package / "manifest-v2.json").read_text(encoding="utf-8"))
     for entry in manifest.get("entries", []):
-        if isinstance(entry, dict) and entry.get("kind") == "file" and entry.get("mode") == "0644":
+        if isinstance(entry, dict) and entry.get("kind") == "file" and entry.get("mode") == "0444":
             relative = str(entry["path"])
             target = content / relative
-            target.chmod(0o664)
+            target.chmod(0o644)
             return relative
-    raise PlatformBenchmarkError("The real runtime does not contain a canonical 0644 audit target")
+    raise PlatformBenchmarkError("The real runtime does not contain a sealed 0444 audit target")
 
 
 def _process_read_bytes() -> int:

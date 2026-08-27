@@ -17,6 +17,15 @@ generation. The daemon requires `OD_STATIC_DIR` and
 in the verified overlay registry. There is no fallback to web files embedded in
 the runtime closure.
 
+`scripts/install_maverick.py` installs a dedicated `maverick-artifacts`
+non-login authority, the store at `/var/lib/maverick/app-artifacts`, a
+root-owned content-addressed verifier snapshot, and the sole no-argument sudo
+launcher. Repository/app principals never write the namespace directly.
+Provision, repair, verify, GC, and signed overlay submission use a small
+validated JSON request; the launcher drops root before importing the immutable
+verifier and never accepts repository, store, trust-root, or module paths from
+that request.
+
 The primary distribution is the upstream image
 `ghcr.io/nexu-io/od:0.16.1`, pinned to OCI index
 `sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1`
@@ -74,6 +83,11 @@ protected receipt and atomically renames the generation into place. Normal
 launch hashes only the manifest-v2 metadata file to bind it to that receipt,
 then checks store identity, owner/modes, read-only mount, and exact
 runtime/overlay/data binding without scanning or hashing the closure.
+All published regular files and metadata are owner-read-only, package
+directories are sealed after atomic rename, and every inode is owned by the
+authority UID. Runtime full verification also compares the internal
+materialized file manifest to the separately pinned source-manifest SHA-256, so
+coordinated tampering with content, manifest v2, and receipt still fails.
 Full verification remains mandatory for install, activation, repair, audit,
 and release certification, including packages already present in the store.
 Core prewarms asynchronously with per-key

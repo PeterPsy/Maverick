@@ -27,7 +27,9 @@ from opendesign_artifact_store import (  # noqa: E402
     ArtifactStoreError,
     OpenDesignArtifactStore,
     _mapped_namespace_id,
+    _protect_package,
 )
+from opendesign_artifact_audit import fully_audited_runtime  # noqa: E402
 from opendesign_store_manifest import (  # noqa: E402
     StoreManifestError,
     create_store_manifest,
@@ -59,15 +61,17 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
         write_canonical_json(
             self.namespace / ".maverick-artifact-namespace.json",
             {
-                "schema_version": "1",
+                "schema_version": "2",
                 "app_id": "design-studio",
                 "artifact_id": "opendesign",
                 "store_generation": "1" * 32,
                 "owner_uid": os.geteuid(),
                 "owner_gid": os.getegid(),
+                "repository_uid": os.geteuid() + 1,
+                "repository_gid": os.getegid() + 1,
             },
         )
-        (self.namespace / ".maverick-artifact-namespace.json").chmod(0o640)
+        (self.namespace / ".maverick-artifact-namespace.json").chmod(0o444)
         self.store = OpenDesignArtifactStore(self.namespace)
         self.archive_path, self.archive_digest, self.source_manifest_digest = self._runtime_archive()
 
@@ -107,8 +111,23 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
     def test_host_owner_is_translated_into_the_current_user_namespace(self) -> None:
         mapping = self.root / "uid_map"
         mapping.write_text("         0       1000          1\n", encoding="ascii")
+        overflow = self.root / "overflowuid"
+        overflow.write_text("65534\n", encoding="ascii")
         self.assertEqual(_mapped_namespace_id(1000, mapping), 0)
-        self.assertEqual(_mapped_namespace_id(1001, mapping), 1001)
+        self.assertEqual(
+            _mapped_namespace_id(1001, mapping, overflow_path=overflow),
+            65534,
+        )
+
+    def test_reader_principal_cannot_mutate_or_recover_the_store(self) -> None:
+        reader = OpenDesignArtifactStore(self.namespace)
+        reader.authority_writer = False
+        with self.assertRaises(ArtifactStoreError) as recovery:
+            reader.recover_orphaned_staging()
+        with self.assertRaises(ArtifactStoreError) as publication:
+            self._publish_to(reader)
+        self.assertEqual(recovery.exception.code, "artifact_authority_required")
+        self.assertEqual(publication.exception.code, "artifact_authority_required")
 
     def test_manifest_v2_detects_modes_directories_symlinks_content_and_inventory_drift(self) -> None:
         content = self.root / "manifest-content"
@@ -141,6 +160,7 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
     def test_fast_receipt_path_does_not_hash_content_and_full_audit_detects_tampering(self) -> None:
         published = self._publish_runtime()
         executable = published.content_path / "bin/od"
+        executable.chmod(0o755)
         executable.chmod(0o775)
 
         fast = self.store.fast_runtime(
@@ -158,10 +178,16 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
     def test_receipt_authenticates_manifest_v2_on_fast_and_full_paths(self) -> None:
         published = self._publish_runtime()
         receipt_digest = published.receipt["file_manifest_sha256"]
+        self._make_package_writable(published.package_path)
         (published.content_path / "share/readme.txt").write_text("replacement\n", encoding="utf-8")
         replacement_manifest = create_store_manifest(published.content_path)
         self.assertNotEqual(manifest_sha256(replacement_manifest), receipt_digest)
         write_canonical_json(published.package_path / "manifest-v2.json", replacement_manifest)
+        _protect_package(
+            published.package_path,
+            owner_uid=os.geteuid(),
+            owner_gid=os.getegid(),
+        )
 
         with self.assertRaises(ArtifactStoreError) as fast_failure:
             self.store.fast_runtime(
@@ -182,13 +208,57 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
         self.assertEqual(full_failure.exception.phase, "artifact_full_verify")
         self.assertGreaterEqual(full_failure.exception.differences, 1)
 
+    def test_full_audit_is_anchored_outside_mutable_store_metadata(self) -> None:
+        published = self._publish_runtime()
+        self.assertFalse((published.package_path / "receipt.json").stat().st_mode & 0o222)
+        self.assertFalse((published.content_path / "bin/od").stat().st_mode & 0o222)
+        self.assertFalse(published.package_path.stat().st_mode & 0o222)
+        self.assertTrue(published.package_path.stat().st_mode & 0o055)
+        self._make_package_writable(published.package_path)
+        executable = published.content_path / "bin/od"
+        executable.write_text("#!/bin/sh\necho forged\n", encoding="utf-8")
+        _protect_package(
+            published.content_path,
+            owner_uid=os.geteuid(),
+            owner_gid=os.getegid(),
+        )
+        replacement_manifest = create_store_manifest(published.content_path)
+        write_canonical_json(published.package_path / "manifest-v2.json", replacement_manifest)
+        forged_receipt = dict(published.receipt)
+        forged_receipt["file_manifest_sha256"] = manifest_sha256(replacement_manifest)
+        forged_receipt["file_count"] = replacement_manifest["file_count"]
+        forged_receipt["total_size_bytes"] = replacement_manifest["total_size_bytes"]
+        write_canonical_json(published.package_path / "receipt.json", forged_receipt)
+        _protect_package(
+            published.package_path,
+            owner_uid=os.geteuid(),
+            owner_gid=os.getegid(),
+        )
+
+        with self.assertRaises(ArtifactStoreError) as raised:
+            fully_audited_runtime(
+                self.store,
+                self.archive_digest,
+                file_manifest_sha256=self.source_manifest_digest,
+                opendesign_version="0.16.1",
+                upstream_commit=UPSTREAM_COMMIT,
+            )
+
+        self.assertEqual(raised.exception.phase, "artifact_full_verify")
+        self.assertGreaterEqual(raised.exception.differences, 1)
+
     def test_receipt_tampering_fails_fast_and_repair_quarantines_instead_of_editing_in_place(self) -> None:
         published = self._publish_runtime()
         receipt_path = published.package_path / "receipt.json"
+        self._make_package_writable(published.package_path)
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
         receipt["store_generation"] = "2" * 32
         write_canonical_json(receipt_path, receipt)
-        receipt_path.chmod(0o640)
+        _protect_package(
+            published.package_path,
+            owner_uid=os.geteuid(),
+            owner_gid=os.getegid(),
+        )
 
         with self.assertRaises(ArtifactStoreError) as raised:
             self.store.fast_runtime(
@@ -207,10 +277,16 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
 
     def test_full_audit_handoff_replaces_only_the_same_invalid_inode(self) -> None:
         published = self._publish_runtime()
+        self._make_package_writable(published.package_path)
         (published.content_path / "share/readme.txt").write_text("tampered", encoding="utf-8")
         with self.assertRaises(ArtifactStoreError):
             self.store.full_audit("runtime", self.archive_digest)
         _mark_invalid(self.store, kind="runtime", digest=self.archive_digest)
+        _protect_package(
+            published.package_path,
+            owner_uid=os.geteuid(),
+            owner_gid=os.getegid(),
+        )
         identity = _known_invalid_identity(self.store, kind="runtime", digest=self.archive_digest)
         self.assertEqual(identity, self.store.package_identity("runtime", self.archive_digest))
         with self.assertRaises(ArtifactStoreError) as rejected:
@@ -236,6 +312,7 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
 
     def test_concurrent_repairs_singleflight_through_digest_lock(self) -> None:
         published = self._publish_runtime()
+        self._make_package_writable(published.package_path)
         (published.content_path / "share/readme.txt").write_text("tampered", encoding="utf-8")
 
         with ThreadPoolExecutor(max_workers=2) as executor:
@@ -256,6 +333,7 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
                 self.assertFalse((isolated / "runtime" / self.archive_digest).exists())
 
         published = self._publish_runtime()
+        self._make_package_writable(published.package_path)
         (published.content_path / "share/readme.txt").write_text("tampered", encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "quarantine"):
             self._publish_runtime(
@@ -271,6 +349,7 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
         shutil.copytree(self.namespace, rename_store_root)
         rename_store = OpenDesignArtifactStore(rename_store_root)
         active = rename_store.root / "runtime" / self.archive_digest
+        self._make_package_writable(active)
         (active / "content/share/readme.txt").write_text("tampered", encoding="utf-8")
         with self.assertRaisesRegex(RuntimeError, "rename"):
             self._publish_to(
@@ -460,6 +539,13 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
     def _crash(current: str, target: str) -> None:
         if current == target:
             raise RuntimeError(target)
+
+    @staticmethod
+    def _make_package_writable(root: Path) -> None:
+        for path in root.rglob("*"):
+            if not path.is_symlink():
+                path.chmod(path.stat().st_mode | 0o200)
+        root.chmod(root.stat().st_mode | 0o200)
 
 
 if __name__ == "__main__":

@@ -681,11 +681,14 @@ async function injectLauncherPhaseFailure(
   networkProof,
   phase,
 ) {
-  const stopped = await sidecarControl('stop');
-  assert(stopped.ok === true && stopped.result?.ready === false, `${phase} stop did not fail closed`);
+  // Arm the fixture before revoking the live browser authority. Otherwise the
+  // still-open iframe can race through the stop/write gap, start a healthy
+  // generation without the request, and make the following prewarm a no-op.
+  // The governed restart keeps stop and startup in one control transaction;
+  // any concurrent browser request joins the same doomed singleflight.
   const injection = await writeFailureInjection(phase);
-  const failedPrewarm = await sidecarControl('prewarm', 30_000);
-  assert(failedPrewarm.ok === false, `${phase} failure injection did not fail prewarm`);
+  const failedRestart = await sidecarControl('restart', 30_000);
+  assert(failedRestart.ok === false, `${phase} failure injection did not fail restart prewarm`);
   const observed = await waitForJson(injection.observedPath);
   assert(
     observed.schema_version === '1'

@@ -208,6 +208,40 @@ describe("Design Studio usable frame readiness", () => {
     );
   });
 
+  it("listens for canonical navigation before advertising app readiness", async () => {
+    window.history.replaceState({}, "", "/apps/design-studio");
+    parentPostMessage.mockImplementation((message: unknown) => {
+      if (
+        message
+        && typeof message === "object"
+        && "type" in message
+        && message.type === "maverick.app.ready"
+      ) {
+        window.dispatchEvent(new MessageEvent("message", {
+          data: {
+            type: "maverick.app.navigate",
+            app_id: "design-studio",
+            params: { od_project_id: "od_immediate_project" },
+          },
+          origin: window.location.origin,
+          source: window.parent,
+        }));
+      }
+    });
+
+    await act(async () => {
+      root.render(<App />);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestLaunch).toHaveBeenCalledWith(
+      "design-studio",
+      { od_project_id: "od_immediate_project", od_run_id: "" },
+      window.location.origin,
+      expect.any(AbortSignal),
+    );
+  });
+
   async function renderThroughBootstrap(): Promise<HTMLIFrameElement> {
     await act(async () => {
       root.render(<App />);

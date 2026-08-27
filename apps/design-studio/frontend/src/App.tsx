@@ -108,10 +108,6 @@ export function App() {
   }, [appId]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, window.location.origin);
-  }, [appId]);
-
-  useEffect(() => {
     function handleMessage(event: MessageEvent) {
       if (event.origin === window.location.origin && event.source === window.parent && isRecord(event.data)) {
         if (event.data.type === "maverick.shell.theme-changed") {
@@ -209,6 +205,11 @@ export function App() {
     }
 
     window.addEventListener("message", handleMessage);
+    // Install the navigation listener before advertising readiness. Base Shell
+    // may answer the ready message immediately; advertising first creates a
+    // race in which the canonical project route is lost and startup waits for
+    // the bounded fallback before issuing its one-shot ticket.
+    window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, window.location.origin);
     return () => window.removeEventListener("message", handleMessage);
   }, [appId, openInShell, postNavigation, postSettings, postTheme]);
 

@@ -144,6 +144,67 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
         self.assertFalse(self.manager._starting)
         self.assertFalse(self.manager._running)
 
+    def test_stop_cannot_cross_the_success_handoff_before_future_completion(self) -> None:
+        start_entered = Event()
+        release_start = Event()
+        handoff_entered = Event()
+        release_handoff = Event()
+        stop_completed = Event()
+        events: list[str] = []
+        running = _Running("handoff")
+
+        def start(**_kwargs):
+            start_entered.set()
+            self.assertTrue(release_start.wait(2))
+            return running
+
+        self.manager._start_sidecar = Mock(side_effect=start)  # type: ignore[method-assign]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            startup_result = pool.submit(
+                self._ensure,
+                app_id="one",
+                data_root="/data/one",
+            )
+            self.assertTrue(start_entered.wait(1))
+            with self.manager._lock:
+                startup = next(iter(self.manager._starting.values()))
+            original_set_result = startup.future.set_result
+
+            def complete_future(value):
+                handoff_entered.set()
+                self.assertTrue(release_handoff.wait(2))
+                events.append("future_completed")
+                return original_set_result(value)
+
+            def stop() -> int:
+                try:
+                    return self.manager.stop_app(
+                        workspace_id="default",
+                        app_id="one",
+                    )
+                finally:
+                    stop_completed.set()
+
+            with (
+                patch.object(startup.future, "set_result", side_effect=complete_future),
+                patch.object(
+                    self.manager,
+                    "_cleanup_sidecar",
+                    side_effect=lambda _running: events.append("cleanup"),
+                ),
+            ):
+                release_start.set()
+                self.assertTrue(handoff_entered.wait(1))
+                stopped = pool.submit(stop)
+                self.assertFalse(stop_completed.wait(0.05))
+                release_handoff.set()
+                self.assertIs(startup_result.result(timeout=2), running)
+                self.assertEqual(stopped.result(timeout=2), 1)
+
+        self.assertEqual(events, ["future_completed", "cleanup"])
+        self.assertFalse(self.manager._starting)
+        self.assertFalse(self.manager._running)
+
     def test_stop_app_all_workspaces_stops_only_matching_app_consumers(self) -> None:
         alpha = _Running("design-alpha")
         bravo = _Running("design-bravo")

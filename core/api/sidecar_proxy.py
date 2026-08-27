@@ -389,6 +389,12 @@ class HttpSidecarManager:
                         "updated_at": _utc_timestamp(),
                         "last_failure": None,
                     }
+                    # This is the startup-success linearization point.  The
+                    # private Future has no externally registered callbacks;
+                    # completing it while the manager lock is held prevents a
+                    # concurrent stop from cleaning the published process
+                    # before any singleflight caller can observe success.
+                    startup.future.set_result(running)
             if cancelled:
                 self._cleanup_sidecar(running)
                 raise SidecarStartupError(
@@ -397,7 +403,6 @@ class HttpSidecarManager:
                     "HTTP sidecar startup was cancelled.",
                     duration_ms=_startup_elapsed_ms(startup),
                 )
-            startup.future.set_result(running)
             return running
         except Exception as error:
             declared_failure = (

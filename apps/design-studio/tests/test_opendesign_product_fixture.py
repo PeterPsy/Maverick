@@ -45,6 +45,7 @@ class OpenDesignProductFixtureTests(unittest.TestCase):
             design_studio = installation / "apps/design-studio"
             self.assertTrue(design_studio.is_dir())
             self.assertFalse(design_studio.is_symlink())
+            self.assertFalse((design_studio / "service/artifacts").exists())
             contract = json.loads(
                 (design_studio / "app_contract.json").read_text(encoding="utf-8")
             )

@@ -149,7 +149,12 @@ def _copy_instrumented_design_studio_source(target: Path) -> None:
     shutil.copytree(
         APP_ROOT,
         target,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "node_modules"),
+        ignore=shutil.ignore_patterns(
+            "__pycache__",
+            "*.pyc",
+            "artifacts",
+            "node_modules",
+        ),
     )
     contract_path = target / "app_contract.json"
     contract = json.loads(contract_path.read_text(encoding="utf-8"))

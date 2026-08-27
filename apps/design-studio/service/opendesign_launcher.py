@@ -32,7 +32,11 @@ LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 SERVICE_ROOT = Path(__file__).resolve().parent
 MANIFEST_PATH = SERVICE_ROOT / "opendesign_bundle.json"
 READY_MARKER_NAME = "maverick-ready.json"
-DAEMON_READY_TIMEOUT_SECONDS = 8.0
+# The app contract grants Core 12 seconds for the complete transactional
+# readiness path. Reserve two seconds for activation commit, browser prewarm,
+# and the nonce-bound readiness commit instead of aborting the daemon four
+# seconds before the declared outer deadline.
+DAEMON_READY_TIMEOUT_SECONDS = 10.0
 STATUS_HEARTBEAT_SECONDS = 1.0
 STATUS_HEARTBEAT_BACKOFF_MAX_SECONDS = 8.0
 

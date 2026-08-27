@@ -198,6 +198,10 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertEqual(sidecar.bind.host, "127.0.0.1")
         self.assertEqual(sidecar.health.path, "/api/maverick-ready")
         self.assertEqual(sidecar.health.timeout_ms, 12_000)
+        launcher_source = (APP_ROOT / "service" / "opendesign_launcher.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("DAEMON_READY_TIMEOUT_SECONDS = 10.0", launcher_source)
         self.assertTrue(sidecar.proxy.streaming)
         self.assertTrue(sidecar.proxy.sse)
         self.assertFalse(sidecar.proxy.websocket)

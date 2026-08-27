@@ -92,6 +92,8 @@ Full verification remains mandatory for install, activation, repair, audit,
 and release certification, including packages already present in the store.
 Core prewarms asynchronously with per-key
 singleflight; its browser gate is `/api/maverick-ready` with a 12-second budget.
+A 10-second daemon sub-budget leaves two seconds inside that same deadline for
+activation commit, browser prewarm, and nonce-bound readiness publication.
 A failed start tears down the complete confined process group and cannot reuse a
 relay, Future, ticket, or browser session.
 The background audit is global and fail-closed. Its authority-owned marker

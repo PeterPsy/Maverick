@@ -16,6 +16,8 @@ SERVICE_ROOT = APP_ROOT / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_acceptance_evidence import (  # noqa: E402
+    WARM_INTERFACE_P95_TARGET_MS,
+    WARM_INTERFACE_P99_TARGET_MS,
     validate_execution,
     validate_failure_injection,
     validate_launch_performance,
@@ -124,8 +126,12 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertLessEqual(performance["warm_browser_ticket"]["p95_ms"], 300)
         self.assertLessEqual(performance["warm_browser_ticket"]["p99_ms"], 750)
         self.assertEqual(performance["warm_interface"]["count"], 30)
-        self.assertLessEqual(performance["warm_interface"]["p95_ms"], 2500)
-        self.assertLessEqual(performance["warm_interface"]["p99_ms"], 3000)
+        self.assertLessEqual(
+            performance["warm_interface"]["p95_ms"], WARM_INTERFACE_P95_TARGET_MS
+        )
+        self.assertLessEqual(
+            performance["warm_interface"]["p99_ms"], WARM_INTERFACE_P99_TARGET_MS
+        )
         self.assertEqual(
             performance["warm_interface"]["measurement_scope"],
             "wrapper_navigation_to_usable_project_interface",

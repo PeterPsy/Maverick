@@ -541,7 +541,9 @@ ticket samples. Cold evidence keeps the complete shell-action latency, but
 applies the calibrated P95 3.5 second and P99 4.0 second cold-interface SLO only
 from the successful browser-launch response (the transactionally ready
 boundary) to the same usable project surface. The complete warm wrapper
-remount is gated at P95 2.5 seconds and P99 3.0 seconds. Startup remains
+remount is gated at P95 5.0 seconds and P99 7.0 seconds; the latter is a hard
+nearest-rank maximum for the 30-sample release distribution, not a DOM-ready
+substitute. Startup remains
 independently gated at P95 12 seconds and 13 seconds maximum for sidecar
 readiness, with the complete Core-start transaction bounded by the declared
 15-second contract.

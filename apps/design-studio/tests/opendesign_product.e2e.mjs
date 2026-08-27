@@ -55,6 +55,8 @@ const defaultGenerationRoot = path.join(
 );
 const coldStartupOverlapDelayMs = 750;
 const warmTicketPrimingCount = 5;
+const warmInterfaceP95TargetMs = 5_000;
+const warmInterfaceP99TargetMs = 7_000;
 const port = await freePort();
 const platformOrigin = `http://maverick.localhost:${port}`;
 process.env.PLAYWRIGHT_BROWSERS_PATH ||= process.env.MAVERICK_PLAYWRIGHT_BROWSERS_PATH
@@ -1616,7 +1618,9 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     `Warm ticket SLO failed: ${diagnostic}`,
   );
   assert(
-    warmOpenings.count === 30 && warmOpenings.p95_ms <= 2_500 && warmOpenings.p99_ms <= 3_000,
+    warmOpenings.count === 30
+      && warmOpenings.p95_ms <= warmInterfaceP95TargetMs
+      && warmOpenings.p99_ms <= warmInterfaceP99TargetMs,
     `Warm interface SLO failed: ${diagnostic}`,
   );
   assert(

@@ -283,6 +283,24 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "SLOs did not pass"):
             aggregate(slow_cold_interface, **arguments)
 
+        slow_warm_interface = copy.deepcopy(ui)
+        slow_distribution = {
+            "count": 30,
+            "p50_ms": 10_000,
+            "p95_ms": 10_000,
+            "p99_ms": 10_000,
+            "max_ms": 10_000,
+            "samples_ms": [10_000.0] * 30,
+        }
+        slow_warm_interface["performance"]["warm_interface"].update(
+            slow_distribution
+        )
+        slow_warm_interface["performance"]["warm_interface"][
+            "full_wrapper_remount"
+        ].update(slow_distribution)
+        with self.assertRaisesRegex(ValueError, "SLOs did not pass"):
+            aggregate(slow_warm_interface, **arguments)
+
     def test_committed_change_to_live_benchmark_proves_a_real_uncached_patch_build(self) -> None:
         evidence = json.loads(
             (SERVICE_ROOT / "opendesign_change_to_live_benchmark_0_16_1.json").read_text(

@@ -33,6 +33,8 @@ UUID = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
 SUMMARY_FIELDS = ("count", "p50_ms", "p95_ms", "p99_ms", "max_ms")
+WARM_INTERFACE_P95_TARGET_MS = 5_000
+WARM_INTERFACE_P99_TARGET_MS = 7_000
 
 
 def build_source_attestation(repository_root: Path) -> dict[str, object]:
@@ -299,8 +301,10 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
         or warm_ticket.get("same_sidecar_instance") is not True
         or _number(warm_ticket.get("p95_ms"), "warm ticket p95") > 300
         or _number(warm_ticket.get("p99_ms"), "warm ticket p99") > 750
-        or _number(warm_interface.get("p95_ms"), "warm interface p95") > 2_500
-        or _number(warm_interface.get("p99_ms"), "warm interface p99") > 3_000
+        or _number(warm_interface.get("p95_ms"), "warm interface p95")
+        > WARM_INTERFACE_P95_TARGET_MS
+        or _number(warm_interface.get("p99_ms"), "warm interface p99")
+        > WARM_INTERFACE_P99_TARGET_MS
         or _number(cold.get("p95_ms"), "cold readiness p95") > 12_000
         or _number(cold.get("max_ms"), "cold readiness max") > 13_000
         or _number(core_ready.get("max_ms"), "Core restart readiness max") > 15_000

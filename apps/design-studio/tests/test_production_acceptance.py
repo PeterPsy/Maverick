@@ -26,6 +26,7 @@ HOSTED_EVIDENCE = SERVICE_ROOT / "opendesign_hosted_acceptance_0_16_1.json"
 GLOBAL_ACCEPTANCE = SERVICE_ROOT / "opendesign_production_acceptance_0_16_1.json"
 RELEASE_EVIDENCE = SERVICE_ROOT / "opendesign_release_acceptance_0_16_1.json"
 MIGRATION_EVIDENCE = SERVICE_ROOT / "opendesign_migration_acceptance_0_16_1.json"
+PLATFORM_EVIDENCE = SERVICE_ROOT / "opendesign_platform_benchmark_0_16_1.json"
 CORRELATION_KEYS = {
     "workspace_id",
     "local_app_id",
@@ -227,6 +228,20 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertIs(secret_proof["maverick_cookie_forwarded"], False)
         self.assertIs(secret_proof["browser_bearer_forwarded"], False)
         self.assertGreaterEqual(secret_proof["one_shot_bootstrap_count"], 2)
+
+    def test_platform_repair_benchmark_controls_the_real_archive_cache(self) -> None:
+        evidence = _read_json(PLATFORM_EVIDENCE)
+        self.assertEqual(evidence["schema_version"], "2")
+        self.assertEqual(evidence["status"], "passed")
+        repair = evidence["repair"]
+        self.assertEqual(repair["cache_state"], "controlled_archive_pages_evicted")
+        cache = repair["cache_control"]
+        self.assertEqual(cache["policy"], "posix_fadvise_dontneed")
+        self.assertIs(cache["controlled"], True)
+        self.assertIs(cache["fsync_before_eviction"], True)
+        self.assertIs(cache["inside_repair_timer"], False)
+        self.assertGreater(cache["file_count"], 0)
+        self.assertGreater(cache["bytes"], 0)
 
     def test_hosted_evidence_covers_the_public_browser_path(self) -> None:
         evidence = _read_json(HOSTED_EVIDENCE)

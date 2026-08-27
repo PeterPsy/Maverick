@@ -158,6 +158,13 @@ rotate the sidecar instance/startup nonce, preserve project data, and recover
 through the normal Core prewarm transaction. The deployed app contract does
 not export the fixture-only injection root.
 
+`benchmark_opendesign_platform.py` controls the signed archive inputs before
+timing repair: every archive, manifest, SBOM, license, notice, provenance, key,
+and signature file receives `POSIX_FADV_DONTNEED`. If that control is
+unavailable the benchmark fails rather than publishing an unknown cache state;
+dirty pages are synchronized first, and the cache-control duration is recorded
+outside the 30-second repair timer.
+
 Web overlays have their own archive and manifest-v2 file/mode inventory, compatible runtime
 digests, upstream/version pin, lockfile and toolchain digests, CycloneDX SBOM,
 license inventory, provenance, and signature. Publication and full audit verify them fail-closed against

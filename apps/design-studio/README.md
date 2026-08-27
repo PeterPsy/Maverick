@@ -514,6 +514,10 @@ every old instance fails closed, every retry rotates instance and startup
 nonce, the stale readiness marker is rejected, and the persisted project is
 readable after recovery.
 
+The platform repair benchmark separately evicts all
+signed runtime-source pages with `POSIX_FADV_DONTNEED`; an unavailable cache
+control is a failed gate, never `uncontrolled_real_archive_cache`.
+
 ### Verification and release-certification policy
 
 Design Studio verification is risk-tiered. The complete production acceptance

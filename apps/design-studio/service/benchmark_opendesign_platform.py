@@ -12,21 +12,37 @@ from pathlib import Path
 import resource
 import shutil
 import stat
+import sys
 import tempfile
 import time
 from typing import Any
 from uuid import uuid4
+
+
+SERVICE_ROOT = Path(__file__).resolve().parent
+REPOSITORY_ROOT = SERVICE_ROOT.parents[2]
+sys.path.insert(0, str(REPOSITORY_ROOT))
+sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_artifact import read_bundle_manifest, selected_asset, write_canonical_json
 from opendesign_artifact_operations import _clear_invalid_marker, _known_invalid_identity, _mark_invalid
 from opendesign_artifact_store import ArtifactStoreError, OpenDesignArtifactStore
 
 
-SERVICE_ROOT = Path(__file__).resolve().parent
 DEFAULT_OUTPUT = SERVICE_ROOT / "opendesign_platform_benchmark_0_16_1.json"
 FAST_SAMPLES = 30
 FAST_P95_TARGET_MS = 50.0
 REPAIR_TARGET_MS = 30_000.0
+RUNTIME_SOURCE_FILE_FIELDS = (
+    "file",
+    "file_manifest",
+    "license_inventory",
+    "notice",
+    "provenance",
+    "public_key",
+    "sbom",
+    "signature",
+)
 
 
 class PlatformBenchmarkError(RuntimeError):
@@ -41,6 +57,9 @@ def run_platform_benchmark(*, work_parent: Path) -> dict[str, Any]:
     source_manifest_digest = str(asset["file_manifest_sha256"])
     version = str(manifest["upstream"]["release_version"])
     upstream_commit = str(manifest["upstream"]["commit"])
+    artifact_source_root = Path(
+        os.environ.get("MAVERICK_OPENDESIGN_ARTIFACT_SOURCE_ROOT", SERVICE_ROOT / "artifacts")
+    ).resolve(strict=True)
     work_parent = work_parent.resolve(strict=True)
     started_usage = resource.getrusage(resource.RUSAGE_SELF)
     temporary = Path(tempfile.mkdtemp(prefix="opendesign-platform-benchmark-", dir=work_parent))
@@ -54,7 +73,7 @@ def run_platform_benchmark(*, work_parent: Path) -> dict[str, Any]:
         sentinel_before = sentinel.read_bytes()
 
         initial_started = time.monotonic()
-        published = store.publish_runtime(SERVICE_ROOT / "artifacts", manifest=manifest)
+        published = store.publish_runtime(artifact_source_root, manifest=manifest)
         initial_materialization_ms = _elapsed_ms(initial_started)
         if published.artifact_sha256 != artifact_digest:
             raise PlatformBenchmarkError("The signed runtime publication selected an unexpected digest")
@@ -103,9 +122,13 @@ def run_platform_benchmark(*, work_parent: Path) -> dict[str, Any]:
         else:
             raise PlatformBenchmarkError("The fast path did not fail closed after a rejected audit")
 
+        cache_control = _control_runtime_source_cache(
+            artifact_source_root,
+            asset=asset,
+        )
         repair_started = time.monotonic()
         repaired = store.publish_runtime(
-            SERVICE_ROOT / "artifacts",
+            artifact_source_root,
             manifest=manifest,
             repair=True,
             invalid_package_identity=invalid_identity,
@@ -126,7 +149,7 @@ def run_platform_benchmark(*, work_parent: Path) -> dict[str, Any]:
         repair_target_met = repair_ms <= REPAIR_TARGET_MS
         usage = resource.getrusage(resource.RUSAGE_SELF)
         evidence = {
-            "schema_version": "1",
+            "schema_version": "2",
             "gate": "design-studio-opendesign-platform-performance",
             "status": "passed" if fast_target_met and repair_target_met else "failed",
             "executed_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
@@ -156,7 +179,8 @@ def run_platform_benchmark(*, work_parent: Path) -> dict[str, Any]:
                 "timer_includes_provenance_extract_verify_receipt_fsync_quarantine_rename": True,
                 "target_ms": REPAIR_TARGET_MS,
                 "target_met": repair_target_met,
-                "cache_state": "uncontrolled_real_archive_cache",
+                "cache_state": "controlled_archive_pages_evicted",
+                "cache_control": cache_control,
                 "mutation": {"kind": "mode_drift", "relative_path": mutated_relative},
                 "quarantine_count": len(quarantine),
                 "post_repair_full_audit": True,
@@ -173,6 +197,59 @@ def run_platform_benchmark(*, work_parent: Path) -> dict[str, Any]:
     finally:
         _make_tree_removable(temporary)
         shutil.rmtree(temporary, ignore_errors=True)
+
+
+def _control_runtime_source_cache(
+    source_root: Path,
+    *,
+    asset: dict[str, Any],
+) -> dict[str, object]:
+    """Evict every signed runtime input before the timed repair extraction."""
+    advise = getattr(os, "posix_fadvise", None)
+    dontneed = getattr(os, "POSIX_FADV_DONTNEED", None)
+    if advise is None or dontneed is None:
+        raise PlatformBenchmarkError(
+            "The platform benchmark requires POSIX_FADV_DONTNEED cache control"
+        )
+    started = time.monotonic()
+    total_bytes = 0
+    controlled_files = 0
+    for field in RUNTIME_SOURCE_FILE_FIELDS:
+        name = asset.get(field)
+        if (
+            not isinstance(name, str)
+            or not name
+            or Path(name).name != name
+            or name in {".", ".."}
+        ):
+            raise PlatformBenchmarkError("The signed runtime cache-control inventory is invalid")
+        path = source_root / name
+        descriptor = -1
+        try:
+            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size < 1:
+                raise OSError("runtime source input is not a non-empty regular file")
+            os.fsync(descriptor)
+            advise(descriptor, 0, 0, dontneed)
+        except OSError as error:
+            raise PlatformBenchmarkError(
+                "The signed runtime cache state could not be controlled"
+            ) from error
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        controlled_files += 1
+        total_bytes += metadata.st_size
+    return {
+        "policy": "posix_fadvise_dontneed",
+        "controlled": True,
+        "fsync_before_eviction": True,
+        "file_count": controlled_files,
+        "bytes": total_bytes,
+        "duration_ms": round(_elapsed_ms(started), 3),
+        "inside_repair_timer": False,
+    }
 
 
 def _create_namespace(root: Path) -> Path:

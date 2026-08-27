@@ -9,6 +9,7 @@ from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     HostedCostEstimator,
     HostedProviderPrivateCodec,
+    HostedProviderStateInspector,
 )
 from core.runtime.remote_agentic_admission import require_remote_agentic_dispatch
 
@@ -23,6 +24,7 @@ class HostedProviderRuntime:
     client: AgenticModelProviderClient
     private_codec: HostedProviderPrivateCodec
     cost_estimator: HostedCostEstimator
+    private_state_inspector: HostedProviderStateInspector | None = None
 
 
 class HostedProviderRuntimeRegistry:

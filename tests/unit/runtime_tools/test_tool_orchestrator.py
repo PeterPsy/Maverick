@@ -61,7 +61,31 @@ class _FakeAppResolver(RuntimeAppInterfaceResolver):
         return {"value": arguments["value"]}
 
 
-class RuntimeToolOrchestratorTest(unittest.TestCase):
+class _FailOncePrivatePayloadStore(InMemoryRuntimeToolPrivatePayloadStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_next_put = True
+
+    def put(
+        self,
+        *,
+        workspace_id: str,
+        session_id: str,
+        payload: bytes,
+        private_ref: str | None = None,
+    ) -> str:
+        if self.fail_next_put:
+            self.fail_next_put = False
+            raise RuntimeToolError("synthetic_private_store_crash")
+        return super().put(
+            workspace_id=workspace_id,
+            session_id=session_id,
+            payload=payload,
+            private_ref=private_ref,
+        )
+
+
+class _RuntimeToolOrchestratorFixture:
     def setUp(self) -> None:
         self.cli_calls = 0
         self.mcp_calls = 0
@@ -195,6 +219,19 @@ class RuntimeToolOrchestratorTest(unittest.TestCase):
         self.assertTrue(context.idempotency_key)
         return {"value": arguments["value"] + 1}
 
+    def _propose_mutation(self, call_id: str):
+        return self.orchestrator.invoke_provider_tool(
+            provider_tool_name=provider_tool_name("mcp:fixture_mutate"),
+            provider_tool_call_id=call_id,
+            arguments={"value": 1},
+            authority=self.authority,
+            context=self.context,
+            turn_id="turn-tools",
+            policy=self.policy,
+        )
+
+
+class RuntimeToolOrchestratorTest(_RuntimeToolOrchestratorFixture, unittest.TestCase):
     def test_read_tool_executes_once_through_cli_runner(self) -> None:
         name = provider_tool_name("cli:fixture.read")
         outcome = self.orchestrator.invoke_provider_tool(
@@ -406,6 +443,7 @@ class RuntimeToolOrchestratorTest(unittest.TestCase):
                 turn_id="turn-tools",
                 policy=self.policy,
             )
+
             self.assertEqual(read.invocation.state, "succeeded")
             escaped = orchestrator.invoke_provider_tool(
                 provider_tool_name=provider_tool_name("core-capability:filesystem.read"),
@@ -438,16 +476,7 @@ class RuntimeToolOrchestratorTest(unittest.TestCase):
             ],
         )
 
-    def _propose_mutation(self, call_id: str):
-        return self.orchestrator.invoke_provider_tool(
-            provider_tool_name=provider_tool_name("mcp:fixture_mutate"),
-            provider_tool_call_id=call_id,
-            arguments={"value": 1},
-            authority=self.authority,
-            context=self.context,
-            turn_id="turn-tools",
-            policy=self.policy,
-        )
+
 
 
 if __name__ == "__main__":

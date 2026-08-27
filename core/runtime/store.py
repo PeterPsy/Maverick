@@ -35,6 +35,10 @@ from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_process import RuntimeProcessRecord
 from core.runtime.provider_state import RuntimeProviderState, runtime_provider_state_from_document
+from core.runtime.provider_step_models import (
+    ProviderStepJournalRecord,
+    provider_step_journal_from_document,
+)
 from core.runtime.continuation_handoff import (
     RuntimeContinuationHandoff,
     continuation_handoff_phase_index,
@@ -170,6 +174,7 @@ class RuntimeCollections:
     tool_confirmation_grants: DocumentCollection | None = None
     egress_decisions: DocumentCollection | None = None
     continuation_handoffs: DocumentCollection | None = None
+    provider_step_journals: DocumentCollection | None = None
 
 
 class RuntimeStore(Protocol):
@@ -184,6 +189,14 @@ class RuntimeStore(Protocol):
         ...
 
     def save_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
+        ...
+
+    def save_session_if_status(
+        self,
+        record: RuntimeSessionRecord,
+        *,
+        expected_status: str,
+    ) -> RuntimeSessionRecord:
         ...
 
     def insert_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
@@ -444,6 +457,29 @@ class RuntimeStore(Protocol):
     ) -> RuntimeProviderState:
         ...
 
+    def initialize_provider_step_journal(
+        self, record: ProviderStepJournalRecord
+    ) -> ProviderStepJournalRecord:
+        ...
+
+    def get_provider_step_journal(self, journal_id: str) -> ProviderStepJournalRecord:
+        ...
+
+    def find_provider_step_journal_by_request(
+        self, *, session_id: str, request_id: str
+    ) -> ProviderStepJournalRecord | None:
+        ...
+
+    def list_provider_step_journals(
+        self, *, session_id: str, turn_id: str | None = None
+    ) -> list[ProviderStepJournalRecord]:
+        ...
+
+    def update_provider_step_journal(
+        self, record: ProviderStepJournalRecord, *, expected_revision: int
+    ) -> ProviderStepJournalRecord:
+        ...
+
     def fence_provider_state_for_continuation(
         self,
         *,
@@ -662,6 +698,7 @@ class RuntimeDocumentStore:
         self._tool_confirmation_grants = collections.tool_confirmation_grants or InMemoryCollection()
         self._egress_decisions = collections.egress_decisions or InMemoryCollection()
         self._continuation_handoffs = collections.continuation_handoffs or InMemoryCollection()
+        self._provider_step_journals = collections.provider_step_journals or InMemoryCollection()
         self._fallback_lock = RLock()
         self._partition_index_lock = RLock()
         self._session_workspace_index: dict[str, str] = {}
@@ -722,6 +759,35 @@ class RuntimeDocumentStore:
         self._remember_session_partition(record.session_id, record.workspace_id)
         return record
 
+    def save_session_if_status(
+        self,
+        record: RuntimeSessionRecord,
+        *,
+        expected_status: str,
+    ) -> RuntimeSessionRecord:
+        """CAS one lifecycle transition without weakening immutable binding checks."""
+        current = self.get_session(record.session_id)
+        if current.workspace_id != record.workspace_id:
+            raise RuntimeProviderStateError("runtime_session_partition_mismatch")
+        if current.execution_binding != record.execution_binding:
+            raise RuntimeProviderStateError(
+                f"Runtime session `{record.session_id}` execution binding is immutable."
+            )
+        payload = asdict(record)
+        payload.pop("provider_thread_id", None)
+        applied = self.collections.sessions.compare_and_set(
+            {
+                "session_id": record.session_id,
+                "workspace_id": record.workspace_id,
+                "status": expected_status,
+            },
+            {"$set": payload},
+        )
+        if not applied:
+            raise RuntimeProviderStateError("runtime_session_status_conflict")
+        self._remember_session_partition(record.session_id, record.workspace_id)
+        return record
+
     def initialize_tool_invocation(self, record: ToolInvocationRecord) -> ToolInvocationRecord:
         if record.revision != 0 or record.state != "proposed":
             raise RuntimeProviderStateError("Initial tool invocation must be proposed at revision zero.")
@@ -733,6 +799,85 @@ class RuntimeDocumentStore:
         if not inserted:
             raise RuntimeProviderStateError(f"Tool invocation `{record.invocation_id}` already exists.")
         return ToolInvocationRecord(**existing)
+
+    def initialize_provider_step_journal(
+        self, record: ProviderStepJournalRecord
+    ) -> ProviderStepJournalRecord:
+        if (
+            record.revision != 0
+            or record.request_status != "ready"
+            or record.commit_status != "pending"
+        ):
+            raise RuntimeProviderStateError(
+                "Initial provider-step journal must be REQUEST_READY at revision zero."
+            )
+        existing, inserted = self._insert_one_if_absent(
+            self._provider_step_journals,
+            {"journal_id": record.journal_id},
+            asdict(record),
+        )
+        persisted = provider_step_journal_from_document(existing)
+        if (
+            not inserted
+            and _provider_step_replay_identity(persisted)
+            != _provider_step_replay_identity(record)
+        ):
+            raise RuntimeProviderStateError("provider_step_journal_identity_conflict")
+        return persisted
+
+    def get_provider_step_journal(self, journal_id: str) -> ProviderStepJournalRecord:
+        document = self._provider_step_journals.find_one({"journal_id": journal_id})
+        if document is None:
+            raise RuntimeProviderStateError(
+                f"Provider-step journal `{journal_id}` was not found."
+            )
+        return provider_step_journal_from_document(document)
+
+    def find_provider_step_journal_by_request(
+        self, *, session_id: str, request_id: str
+    ) -> ProviderStepJournalRecord | None:
+        document = self._provider_step_journals.find_one(
+            {"session_id": session_id, "request_id": request_id}
+        )
+        return None if document is None else provider_step_journal_from_document(document)
+
+    def list_provider_step_journals(
+        self, *, session_id: str, turn_id: str | None = None
+    ) -> list[ProviderStepJournalRecord]:
+        query: dict[str, object] = {"session_id": session_id}
+        if turn_id is not None:
+            query["turn_id"] = turn_id
+        records = [
+            provider_step_journal_from_document(document)
+            for document in self._provider_step_journals.find(query)
+        ]
+        records.sort(key=lambda item: (item.created_at, item.step_index, item.journal_id))
+        return records
+
+    def update_provider_step_journal(
+        self, record: ProviderStepJournalRecord, *, expected_revision: int
+    ) -> ProviderStepJournalRecord:
+        if record.revision != expected_revision + 1:
+            raise RuntimeProviderStateError(
+                "Provider-step journal revision must advance by one."
+            )
+        current = self.get_provider_step_journal(record.journal_id)
+        if _provider_step_identity(current) != _provider_step_identity(record):
+            raise RuntimeProviderStateError(
+                "Provider-step journal identity fields are immutable."
+            )
+        applied = self._provider_step_journals.compare_and_set(
+            {
+                "journal_id": record.journal_id,
+                "workspace_id": record.workspace_id,
+                "session_id": record.session_id,
+                "revision": expected_revision,
+            },
+            {"$set": asdict(record)},
+        )
+        if not applied:
+            raise RuntimeProviderStateError("provider_step_journal_revision_conflict")
+        return record
 
     def initialize_egress_decision(
         self,
@@ -800,8 +945,18 @@ class RuntimeDocumentStore:
         if record.revision != expected_revision + 1:
             raise RuntimeProviderStateError("Tool invocation revision must advance by one.")
         current = self.get_tool_invocation(record.invocation_id)
+        if current.resolved_tool_handle is not None and (
+            record.resolved_tool_handle != current.resolved_tool_handle
+            or record.effect_class != current.effect_class
+            or record.safe_to_retry != current.safe_to_retry
+        ):
+            raise RuntimeProviderStateError(
+                "Tool invocation identity fields are immutable."
+            )
         permitted = replace(
             current,
+            resolved_tool_handle=record.resolved_tool_handle,
+            effect_class=record.effect_class,
             state=record.state,
             confirmation_grant_id=record.confirmation_grant_id,
             result_private_ref=record.result_private_ref,
@@ -814,6 +969,12 @@ class RuntimeDocumentStore:
             result_source_digest=record.result_source_digest,
             result_resource_identity=record.result_resource_identity,
             result_classification_revision=record.result_classification_revision,
+            resolution_status=record.resolution_status,
+            disposition_id=record.disposition_id,
+            safe_to_retry=record.safe_to_retry,
+            effect_boundary_at=record.effect_boundary_at,
+            result_persisted_at=record.result_persisted_at,
+            result_id=record.result_id,
             failure_reason=record.failure_reason,
             revision=record.revision,
             updated_at=record.updated_at,
@@ -1051,6 +1212,7 @@ class RuntimeDocumentStore:
             ("processes", self.collections.processes, "process_id"),
             ("states", self.collections.states, "session_id"),
             ("provider_states", self._provider_states, "session_id"),
+            ("provider_step_journals", self._provider_step_journals, "journal_id"),
             ("tool_invocations", self._tool_invocations, "invocation_id"),
             ("tool_confirmation_grants", self._tool_confirmation_grants, "grant_id"),
             ("egress_decisions", self._egress_decisions, "decision_id"),
@@ -2769,6 +2931,7 @@ def _empty_session_deletion_counts() -> dict[str, int]:
         "processes": 0,
         "states": 0,
         "provider_states": 0,
+        "provider_step_journals": 0,
         "api_tokens": 0,
         "client_messages": 0,
         "app_streams": 0,
@@ -2778,6 +2941,40 @@ def _empty_session_deletion_counts() -> dict[str, int]:
         "egress_decisions": 0,
         "continuation_handoffs": 0,
     }
+
+
+def _provider_step_identity(record: ProviderStepJournalRecord) -> tuple[object, ...]:
+    """Return immutable saga identity fields used for retries and CAS fencing."""
+    return (
+        record.journal_id,
+        record.schema_version,
+        record.workspace_id,
+        record.session_id,
+        record.turn_id,
+        record.request_id,
+        record.step_index,
+        record.runtime_engine_id,
+        record.adapter_id,
+        record.adapter_version,
+        record.model_provider_id,
+        record.provider_protocol,
+        record.provider_api_version,
+        record.codec_id,
+        record.codec_version,
+        record.codec_schema_version,
+        record.codec_content_type,
+        record.base_provider_state_revision,
+        record.base_provider_state_digest,
+        record.pairing_source_journal_id,
+        record.created_at,
+    )
+
+
+def _provider_step_replay_identity(
+    record: ProviderStepJournalRecord,
+) -> tuple[object, ...]:
+    """Compare a repeated REQUEST_READY without treating retry time as identity."""
+    return _provider_step_identity(record)[:-1]
 
 
 def _delete_session_record_batch(

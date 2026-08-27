@@ -12,8 +12,8 @@ OPENROUTER_AGENTIC_PROVIDER_NAME = "DeepInfra"
 OPENROUTER_AGENTIC_ENDPOINT_ID = "openrouter-chat-completions-v1"
 OPENROUTER_AGENTIC_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_AGENTIC_CODEC_ID = "openrouter-chat-completions"
-OPENROUTER_AGENTIC_CODEC_VERSION = "1"
-OPENROUTER_AGENTIC_SCHEMA_VERSION = "1"
+OPENROUTER_AGENTIC_CODEC_VERSION = "2"
+OPENROUTER_AGENTIC_SCHEMA_VERSION = "2"
 OPENROUTER_AGENTIC_CONTENT_TYPE = "application/vnd.maverick.openrouter-chat-state+json"
 
 
@@ -23,14 +23,40 @@ class OpenRouterPendingToolCall:
     name: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class OpenRouterChatState:
     """Exact message continuation retained only in provider-private storage."""
 
     schema_version: str
     history: tuple[dict[str, object], ...]
-    pending_tool_call: OpenRouterPendingToolCall | None
+    pending_tool_calls: tuple[OpenRouterPendingToolCall, ...]
     consumed_tool_call_ids: tuple[str, ...]
+
+    def __init__(
+        self,
+        schema_version: str,
+        history: tuple[dict[str, object], ...],
+        pending_tool_call: OpenRouterPendingToolCall | None = None,
+        consumed_tool_call_ids: tuple[str, ...] = (),
+        *,
+        pending_tool_calls: tuple[OpenRouterPendingToolCall, ...] | None = None,
+    ) -> None:
+        """Accept the old singular constructor while persisting only v2 plural state."""
+        if pending_tool_calls is None:
+            normalized = () if pending_tool_call is None else (pending_tool_call,)
+        else:
+            normalized = tuple(pending_tool_calls)
+            if pending_tool_call is not None and normalized != (pending_tool_call,):
+                raise ValueError("OpenRouter pending tool calls conflict.")
+        object.__setattr__(self, "schema_version", schema_version)
+        object.__setattr__(self, "history", tuple(history))
+        object.__setattr__(self, "pending_tool_calls", normalized)
+        object.__setattr__(self, "consumed_tool_call_ids", tuple(consumed_tool_call_ids))
+
+    @property
+    def pending_tool_call(self) -> OpenRouterPendingToolCall | None:
+        """Compatibility projection for old single-call consumers."""
+        return self.pending_tool_calls[0] if len(self.pending_tool_calls) == 1 else None
 
 
 class OpenRouterAgenticProtocolError(RuntimeError):

@@ -64,9 +64,6 @@ class GoogleInteractionStreamDecoder:
         self.state = state
         self.new_input = new_input
         self.usage_cost = usage_cost
-        self.declared_function_names = frozenset(
-            definition.name for definition in request.tool_definitions
-        )
         self.interaction_id: str | None = None
         self.active_step: _Step | None = None
         self.steps: list[dict[str, object]] = []
@@ -131,7 +128,10 @@ class GoogleInteractionStreamDecoder:
         if interaction.get("model") != self.request.model_id:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         self.interaction_id = interaction_id
-        return self._event("accepted")
+        return self._event(
+            "accepted",
+            provider_response_id=interaction_id,
+        )
 
     def _status_update(self, payload: dict[str, object]) -> None:
         if payload.get("interaction_id") not in {None, self.interaction_id}:
@@ -151,12 +151,7 @@ class GoogleInteractionStreamDecoder:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         if step_type == "function_call":
             _required_text(value.get("id"))
-            function_name = _required_text(value.get("name"))
-            if function_name not in self.declared_function_names:
-                raise GoogleInteractionsProtocolError("provider_tool_not_declared")
-            arguments = value.get("arguments", {})
-            if not isinstance(arguments, (dict, str)):
-                raise GoogleInteractionsProtocolError("provider_response_invalid")
+            _required_text(value.get("name"))
         self.active_step = _Step(index=index, step_type=step_type, value=dict(value))
 
     def _step_delta(self, payload: dict[str, object]) -> list[AgenticModelEvent]:
@@ -200,10 +195,12 @@ class GoogleInteractionStreamDecoder:
                 "content": [{"type": "text", "text": "".join(step.text_chunks)}],
             }
         elif step.step_type == "function_call":
-            if self.function_calls:
-                raise GoogleInteractionsProtocolError("provider_parallel_tool_calls_forbidden")
-            arguments = _function_arguments(step)
-            step.value["arguments"] = arguments
+            arguments, raw_arguments = _function_arguments(step)
+            step.value["arguments"] = (
+                arguments
+                if arguments is not None
+                else raw_arguments.decode("utf-8", errors="replace")
+            )
             call = GooglePendingFunctionCall(
                 call_id=_required_text(step.value.get("id")),
                 name=_required_text(step.value.get("name")),
@@ -226,9 +223,11 @@ class GoogleInteractionStreamDecoder:
             self._event(
                 "tool_call",
                 tool_call=AgenticToolCall(
-                    provider_tool_call_id=self.function_calls[0].call_id,
-                    provider_tool_name=self.function_calls[0].name,
-                    arguments=dict(step.value["arguments"]),
+                    provider_tool_call_id=call.call_id,
+                    provider_tool_name=call.name,
+                    arguments=arguments,
+                    call_index=len(self.function_calls) - 1,
+                    arguments_raw=raw_arguments if arguments is None else None,
                 ),
             )
         ]
@@ -241,7 +240,7 @@ class GoogleInteractionStreamDecoder:
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         status = interaction.get("status")
         if status == "requires_action":
-            if len(self.function_calls) != 1 or self.output_chunks:
+            if not self.function_calls or self.output_chunks:
                 raise GoogleInteractionsProtocolError("provider_response_invalid")
         elif status == "completed":
             if self.function_calls or not self.output_chunks:
@@ -333,21 +332,38 @@ class GoogleInteractionStreamDecoder:
         )
 
 
-def _function_arguments(step: _Step) -> dict[str, object]:
+def _function_arguments(step: _Step) -> tuple[dict[str, object] | None, bytes]:
     initial = step.value.get("arguments", {})
     if step.argument_chunks:
         if initial not in ({}, ""):
             raise GoogleInteractionsProtocolError("provider_response_invalid")
         raw = "".join(step.argument_chunks)
-        try:
-            arguments = json.loads(raw)
-        except json.JSONDecodeError as error:
-            raise GoogleInteractionsProtocolError("provider_response_invalid") from error
+        raw_bytes = raw.encode("utf-8")
     else:
-        arguments = initial
+        try:
+            raw_bytes = json.dumps(
+                initial,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        except (TypeError, ValueError):
+            raw_bytes = repr(initial).encode("utf-8", errors="replace")
+    try:
+        arguments = json.loads(
+            raw_bytes,
+            parse_constant=_reject_json_constant,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return None, raw_bytes or b"null"
     if not isinstance(arguments, dict):
-        raise GoogleInteractionsProtocolError("provider_response_invalid")
-    return dict(arguments)
+        return None, raw_bytes or b"null"
+    return dict(arguments), raw_bytes
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-finite JSON constant: {value}")
 
 
 def _usage(value: object, cost: GoogleUsageCost) -> AgenticUsage:

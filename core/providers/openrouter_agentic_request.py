@@ -75,21 +75,27 @@ def _new_messages(
     state: OpenRouterChatState,
 ) -> tuple[dict[str, object], ...]:
     by_id = _tool_results_by_id(request.tool_results)
-    pending = state.pending_tool_call
+    pending = state.pending_tool_calls
     consumed = set(state.consumed_tool_call_ids)
-    if pending is not None:
-        if set(by_id) - consumed != {pending.call_id}:
+    if pending:
+        pending_ids = {item.call_id for item in pending}
+        if set(by_id) - consumed != pending_ids:
             raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
-        result = by_id[pending.call_id]
-        if result.provider_tool_name != pending.name:
-            raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
-        return (
-            {
-                "role": "tool",
-                "tool_call_id": pending.call_id,
-                "content": _decode_utf8(result.content, pairing=True),
-            },
-        )
+        messages = []
+        for item in pending:
+            result = by_id[item.call_id]
+            if result.provider_tool_name != item.name:
+                raise OpenRouterAgenticProtocolError(
+                    "provider_tool_result_pairing_invalid"
+                )
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": item.call_id,
+                    "content": _decode_utf8(result.content, pairing=True),
+                }
+            )
+        return tuple(messages)
     if set(by_id) - consumed:
         raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
     values: list[dict[str, object]] = []

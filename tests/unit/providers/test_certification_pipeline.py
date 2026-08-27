@@ -165,13 +165,13 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "ff71f74a091e26bb00df2732aec65498cffbca48ebc7fb065208ad5019e4867e"
+                "343181d72eea70e44c8a2355c7052e1a141ffffddaa0458c69e546e59c2f0c4f"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "bbf2fe35da58557b5adb05f44377897c6e7e65ffbcdf8613eba3faeededf1f70"
+                "501b98ef240027a2abf76dc5ef367bd4127e47ec8663f2cc6c6d87bd9e8f998e"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "6b4c84b4321f2e6d45acc4409d0b821dd9e79333ef78781da1b2f27d1617bf03"
+                "d2ce8f5dafe666aac03f2abc7353b5cce88ba31d71beab4412c1d7365ffb0e1c"
             ),
             "openrouter": (
-                "8a765963e95ce0575ea5981531ab9478a7cc1059f48bab657360faa2e8fac78d"
+                "520b73d64dc9bbb77df7e59e4f86cc833ce561bb0bae8875b13523bf71a5c742"
             ),
         }
         for manifest in (
@@ -190,7 +190,7 @@ class CertificationPipelineTest(unittest.TestCase):
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.matrix_revision, "2026-08-26-r9-tcb2")
+                self.assertEqual(manifest.matrix_revision, "2026-08-27-r10-p2-tcb3")
                 self.assertEqual(
                     manifest.digest,
                     expected_manifest_digests[manifest.provider_id],

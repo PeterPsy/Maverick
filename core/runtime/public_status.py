@@ -7,6 +7,10 @@ PUBLIC_RUNTIME_RECOVERY_REASON_CODES = frozenset(
     {
         "remote_agentic_state_ambiguous",
         "runtime_state_ambiguous",
+        "provider_acceptance_ambiguous",
+        "provider_pairing_ambiguous",
+        "provider_state_ambiguous",
+        "tool_execution_ambiguous",
     }
 )
 

@@ -26,6 +26,7 @@ from core.runtime.errors import (
     RuntimeSessionNotFoundError,
 )
 from core.runtime.message_admission import runtime_message_admission_handoff
+from core.runtime.hosted_agentic_lifecycle import recover_hosted_agentic_session
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
@@ -47,6 +48,21 @@ def admit_runtime_session(
 ) -> RuntimeContinuationResult:
     """Resolve current lineage, validate authority, and fork only with proof."""
     timestamp = now or datetime.now(tz=UTC)
+    if session.status == "recovery_required":
+        raise RuntimeProfileUpgradeRequiredError(
+            "runtime_session_recovery_required",
+            detail_code=session.recovery_reason_code or "runtime_state_ambiguous",
+        )
+    lifecycle_recovery = recover_hosted_agentic_session(
+        state,
+        session=session,
+        trigger="pre_admission",
+    )
+    if lifecycle_recovery.applicable and not lifecycle_recovery.recovered:
+        raise RuntimeProfileUpgradeRequiredError(
+            "runtime_session_recovery_required",
+            detail_code=lifecycle_recovery.reason_code,
+        )
     candidate = session
     last_fork: RuntimeContinuationResult | None = None
     for _hop in range(MAX_CONTINUATION_ADMISSION_HOPS):

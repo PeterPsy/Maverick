@@ -14,6 +14,7 @@ from core.providers.openrouter_agentic_models import (
     OpenRouterChatState,
     OpenRouterPendingToolCall,
 )
+from core.runtime.hosted_agentic_models import HostedProviderStateInspection
 
 
 MAX_OPENROUTER_PRIVATE_STATE_BYTES = 2 * 1_048_576
@@ -23,7 +24,7 @@ def initial_openrouter_chat_state() -> OpenRouterChatState:
     return OpenRouterChatState(
         schema_version=OPENROUTER_AGENTIC_SCHEMA_VERSION,
         history=(),
-        pending_tool_call=None,
+        pending_tool_calls=(),
         consumed_tool_call_ids=(),
     )
 
@@ -51,7 +52,7 @@ def decode_openrouter_chat_state(
         if not isinstance(payload, dict) or set(payload) != {
             "schema_version",
             "history",
-            "pending_tool_call",
+            "pending_tool_calls",
             "consumed_tool_call_ids",
         }:
             raise ValueError
@@ -66,15 +67,21 @@ def decode_openrouter_chat_state(
         ):
             raise ValueError
         validated_history = tuple(_history_message(value) for value in history)
-        pending = _pending_tool_call(payload["pending_tool_call"])
+        raw_pending = payload["pending_tool_calls"]
+        if not isinstance(raw_pending, list):
+            raise ValueError
+        pending = tuple(_pending_tool_call(item) for item in raw_pending)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as cause:
         raise OpenRouterAgenticProtocolError("provider_private_state_invalid") from cause
-    if pending is not None and pending.call_id in consumed:
+    if (
+        len({item.call_id for item in pending}) != len(pending)
+        or {item.call_id for item in pending}.intersection(consumed)
+    ):
         raise OpenRouterAgenticProtocolError("provider_private_state_invalid")
     state = OpenRouterChatState(
         schema_version=OPENROUTER_AGENTIC_SCHEMA_VERSION,
         history=validated_history,
-        pending_tool_call=pending,
+        pending_tool_calls=pending,
         consumed_tool_call_ids=tuple(consumed),
     )
     _validate_state_relationships(state)
@@ -86,14 +93,10 @@ def encode_openrouter_chat_state(state: OpenRouterChatState) -> AgenticProviderP
     payload = {
         "schema_version": state.schema_version,
         "history": state.history,
-        "pending_tool_call": (
-            None
-            if state.pending_tool_call is None
-            else {
-                "call_id": state.pending_tool_call.call_id,
-                "name": state.pending_tool_call.name,
-            }
-        ),
+        "pending_tool_calls": [
+            {"call_id": item.call_id, "name": item.name}
+            for item in state.pending_tool_calls
+        ],
         "consumed_tool_call_ids": state.consumed_tool_call_ids,
     }
     try:
@@ -116,9 +119,26 @@ def encode_openrouter_chat_state(state: OpenRouterChatState) -> AgenticProviderP
     )
 
 
-def _pending_tool_call(value: object) -> OpenRouterPendingToolCall | None:
-    if value is None:
-        return None
+def inspect_openrouter_chat_state(content: bytes) -> HostedProviderStateInspection:
+    """Decode recovery facts through the exact current OpenRouter codec."""
+    state = decode_openrouter_chat_state(
+        AgenticProviderPrivateState(
+            codec_id=OPENROUTER_AGENTIC_CODEC_ID,
+            codec_version=OPENROUTER_AGENTIC_CODEC_VERSION,
+            schema_version=OPENROUTER_AGENTIC_SCHEMA_VERSION,
+            content_type=OPENROUTER_AGENTIC_CONTENT_TYPE,
+            content=content,
+        )
+    )
+    return HostedProviderStateInspection(
+        pending_tool_calls=tuple(
+            (item.call_id, item.name) for item in state.pending_tool_calls
+        ),
+        consumed_tool_call_ids=state.consumed_tool_call_ids,
+    )
+
+
+def _pending_tool_call(value: object) -> OpenRouterPendingToolCall:
     if not isinstance(value, dict) or set(value) != {"call_id", "name"}:
         raise ValueError
     call_id = value.get("call_id")
@@ -157,8 +177,9 @@ def _validate_assistant_message(value: dict[str, object]) -> None:
     if not isinstance(details, list) or not all(isinstance(item, dict) for item in details):
         raise ValueError
     calls = value.get("tool_calls", [])
-    if not isinstance(calls, list) or len(calls) > 1:
+    if not isinstance(calls, list):
         raise ValueError
+    call_ids: set[str] = set()
     for call in calls:
         if not isinstance(call, dict) or set(call) != {"id", "type", "function"}:
             raise ValueError
@@ -172,28 +193,32 @@ def _validate_assistant_message(value: dict[str, object]) -> None:
             or not isinstance(function.get("arguments"), str)
         ):
             raise ValueError
+        if call["id"] in call_ids:
+            raise ValueError
+        call_ids.add(call["id"])
 
 
 def _validate_state_relationships(state: OpenRouterChatState) -> None:
-    pending: OpenRouterPendingToolCall | None = None
+    pending: list[OpenRouterPendingToolCall] = []
     consumed: list[str] = []
     seen_ids: set[str] = set()
     for message in state.history:
         role = message.get("role")
         if role == "assistant" and message.get("tool_calls"):
-            if pending is not None:
+            if pending:
                 raise OpenRouterAgenticProtocolError("provider_private_state_invalid")
-            call = message["tool_calls"][0]
-            function = call["function"]
-            call_id = str(call["id"])
-            if call_id in seen_ids:
-                raise OpenRouterAgenticProtocolError("provider_private_state_invalid")
-            seen_ids.add(call_id)
-            pending = OpenRouterPendingToolCall(call_id, str(function["name"]))
+            for call in message["tool_calls"]:
+                function = call["function"]
+                call_id = str(call["id"])
+                if call_id in seen_ids:
+                    raise OpenRouterAgenticProtocolError("provider_private_state_invalid")
+                seen_ids.add(call_id)
+                pending.append(
+                    OpenRouterPendingToolCall(call_id, str(function["name"]))
+                )
         elif role == "tool":
-            if pending is None or message.get("tool_call_id") != pending.call_id:
+            if not pending or message.get("tool_call_id") != pending[0].call_id:
                 raise OpenRouterAgenticProtocolError("provider_private_state_invalid")
-            consumed.append(pending.call_id)
-            pending = None
-    if pending != state.pending_tool_call or tuple(consumed) != state.consumed_tool_call_ids:
+            consumed.append(pending.pop(0).call_id)
+    if tuple(pending) != state.pending_tool_calls or tuple(consumed) != state.consumed_tool_call_ids:
         raise OpenRouterAgenticProtocolError("provider_private_state_invalid")

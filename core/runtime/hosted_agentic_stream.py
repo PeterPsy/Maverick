@@ -26,7 +26,12 @@ from core.runtime.hosted_agentic_models import (
 @dataclass(frozen=True)
 class HostedProviderStep:
     final_text: str | None
-    tool_call: AgenticToolCall | None
+    tool_calls: tuple[AgenticToolCall, ...]
+
+    @property
+    def tool_call(self) -> AgenticToolCall | None:
+        """Compatibility projection for sequential callers."""
+        return self.tool_calls[0] if len(self.tool_calls) == 1 else None
 
 
 @dataclass(frozen=True)
@@ -44,14 +49,16 @@ async def consume_hosted_provider_step(
     budget: HostedAgenticBudget,
     cancellation: Event,
     destination_upstream_id: str | None,
-    on_private_state: Callable[[AgenticModelEvent], None],
+    on_accepted: Callable[[AgenticModelEvent], None] | None = None,
+    on_tool_call: Callable[[AgenticModelEvent], dict[str, object]] | None = None,
+    on_private_state: Callable[[AgenticModelEvent], None] | None = None,
 ):
     """Yield safe runtime emissions and one terminal normalized step."""
     accepted = False
     completed = False
     final_text: str | None = None
     output_parts: list[str] = []
-    tool_call: AgenticToolCall | None = None
+    tool_calls: list[AgenticToolCall] = []
     last_ordinal = 0
     try:
         stream = client.create_response(request, credential=credential)
@@ -63,6 +70,8 @@ async def consume_hosted_provider_step(
                     raise HostedAgenticLoopError("provider_response_invalid")
                 _validate_upstream(provider_event.upstream_id, destination_upstream_id)
                 accepted = True
+                if on_accepted is not None:
+                    on_accepted(provider_event)
                 payload: dict[str, object] = {"request_id": request.request_id}
                 if provider_event.upstream_id:
                     payload["upstream_id"] = provider_event.upstream_id
@@ -93,9 +102,21 @@ async def consume_hosted_provider_step(
                 else:
                     budget.add_output_chunk(final_text)
             elif provider_event.event_type == "tool_call":
-                if tool_call is not None or provider_event.tool_call is None:
+                if provider_event.tool_call is None:
                     raise HostedAgenticLoopError("provider_response_invalid")
-                tool_call = provider_event.tool_call
+                proposed_payload = (
+                    on_tool_call(provider_event)
+                    if on_tool_call is not None
+                    else {
+                        "provider_tool_call_id": provider_event.tool_call.provider_tool_call_id,
+                        "provider_tool_name": provider_event.tool_call.provider_tool_name,
+                    }
+                )
+                tool_calls.append(provider_event.tool_call)
+                yield HostedProviderStepEmission(
+                    "runtime.tool_call.proposed",
+                    proposed_payload,
+                )
             elif provider_event.event_type == "usage":
                 if provider_event.usage is None:
                     raise HostedAgenticLoopError("provider_response_invalid")
@@ -112,7 +133,8 @@ async def consume_hosted_provider_step(
                     },
                 )
             elif provider_event.event_type == "provider_state":
-                on_private_state(provider_event)
+                if on_private_state is not None:
+                    on_private_state(provider_event)
             elif provider_event.event_type == "completed":
                 completed = True
             else:
@@ -121,10 +143,10 @@ async def consume_hosted_provider_step(
         raise
     except Exception as error:
         raise HostedAgenticLoopError("provider_response_invalid") from error
-    if not accepted or not completed or (final_text is not None) == (tool_call is not None):
+    if not accepted or not completed or (final_text is not None) == bool(tool_calls):
         raise HostedAgenticLoopError("provider_response_invalid")
     yield HostedProviderStepEmission(
-        response=HostedProviderStep(final_text=final_text, tool_call=tool_call)
+        response=HostedProviderStep(final_text=final_text, tool_calls=tuple(tool_calls))
     )
 
 
@@ -167,13 +189,26 @@ def _validate_provider_event(event: AgenticModelEvent, request_id: str, last_ord
         call is None
         or not call.provider_tool_call_id
         or not call.provider_tool_name
-        or not isinstance(call.arguments, dict)
+        or not isinstance(call.call_index, int)
+        or isinstance(call.call_index, bool)
+        or call.call_index < 0
     ):
         raise HostedAgenticLoopError("provider_response_invalid")
-    try:
-        encoded = json.dumps(call.arguments, allow_nan=False, separators=(",", ":")).encode()
-    except (TypeError, ValueError) as error:
-        raise HostedAgenticLoopError("provider_response_invalid") from error
+    if call.arguments is not None:
+        if not isinstance(call.arguments, dict) or call.arguments_raw is not None:
+            raise HostedAgenticLoopError("provider_response_invalid")
+        try:
+            encoded = json.dumps(
+                call.arguments,
+                allow_nan=False,
+                separators=(",", ":"),
+            ).encode()
+        except (TypeError, ValueError):
+            encoded = repr(call.arguments).encode("utf-8", errors="replace")
+    elif not isinstance(call.arguments_raw, bytes) or not call.arguments_raw:
+        raise HostedAgenticLoopError("provider_response_invalid")
+    else:
+        encoded = call.arguments_raw
     if len(encoded) > 1_048_576:
         raise HostedAgenticLoopError("provider_response_invalid")
 

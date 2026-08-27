@@ -76,6 +76,8 @@ class OpenRouterAgenticClient:
                     events = decoder.feed(raw_event)
                 except OpenRouterAgenticProtocolError as error:
                     failure = error
+                    for event in decoder.failure_observed_tool_events():
+                        yield event
                     for event in decoder.failure_telemetry(raw_event):
                         yield event
                     continue

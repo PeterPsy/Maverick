@@ -26,7 +26,7 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
         identity = certified_tcb_identity(self.root)
         self.assertEqual(
             identity.structure_digest,
-            "aba8b429bf260ad932b4b69ac6064429a828024a8025dd24a5ce8023ab7ed3df",
+            "c1d035031b7270e2fdd247ab8651d67d02239b0f30fa4d3c8cf039dc785d0e65",
         )
         for manifest in (
             GOOGLE_AGENTIC_CERTIFICATION_MANIFEST,

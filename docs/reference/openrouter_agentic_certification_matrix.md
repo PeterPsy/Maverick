@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-08-26
-Matrix revision: `2026-08-26-r9-tcb2`
+Status date: 2026-08-27
+Matrix revision: `2026-08-27-r10-p2-tcb3`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==5`
+Adapter: `maverick-hosted-tool-loop==6`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==5`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `12` (revision `11` suspended) |
+| Immutable profile revision | `13` (revision `12` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -20,8 +20,9 @@ Adapter: `maverick-hosted-tool-loop==5`
 | Effective provider identity | `DeepInfra` |
 | Quantization | `fp8` |
 | Context / endpoint completion limit | 1,048,576 / 65,536 tokens |
-| Tool calls | one executable sequential function call per model step |
-| Parallel request control | parameter omitted because the certified endpoint catalog does not declare it; later indexed proposals are discarded and never executed |
+| Tool calls | every indexed call is retained; execution remains sequential, so a multi-call response is denied and paired in full |
+| Parallel request control | parameter omitted because the certified endpoint catalog does not declare it; Core journals every returned call before `parallel_denied` |
+| Private codec | `openrouter-chat-completions@2`, schema `2`; ordered plural pending calls and no silent migration |
 | Mixed response handling | provisional text plus one tool call is retained privately and continued |
 | Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
@@ -79,12 +80,12 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
-| Certified execution TCB | manifest v2 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v3 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
 | No eligible endpoint | HTTP and streamed 404 normalization fixtures | not certified |
-| Tool call id/name/count | fragmented arguments, exact pairing, secondary-index serialization, and duplicate-primary rejection | not certified |
+| Tool call id/name/count | fragmented/malformed arguments, all contiguous indices, preliminary persistence, exact replay/divergence, duplicate-id rejection, full parallel denial, and ordered plural pairing | not certified |
 | Mixed text then tool | provisional narration is not finalized or duplicated; one call continues to the next step | not certified |
 | Multi-step continuation | deterministic fixtures for three sequential tool rounds followed by a final response at every reasoning effort | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -93,13 +94,13 @@ Primary references:
 | Usage, generation id and price | success and decode-failure fixtures retain telemetry; active request reservations reconcile to reported micro-USD while missing usage remains worst-case | not certified |
 | Failure propagation | distinct mixed/parallel/index codes, safe public message, diagnostic reference, and nonnumeric Chat UX | not certified |
 | Shared tool loop | real OpenRouter codec through deterministic hosted-loop E2E | not certified |
-| Cancel/recovery/confirmation | shared hosted runtime contract suite | not certified |
+| Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Outage after acceptance | terminal normalized failure with no blind retry | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus final response at every certificate-bound reasoning effort | manifest step available; not run for r9 |
+| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus final response at every certificate-bound reasoning effort | manifest step available; not run for r10 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the candidate profile and never manufactures a
@@ -136,15 +137,24 @@ the worst case. Absolute host paths found inside untrusted tool output are
 redacted after exact workspace-root rewriting, while host paths from every
 other provenance remain denied. Revision 11 is historical and suspended.
 
-Revision 12 retains the exact `fake-data preview` warning label but removes fake
+Revision 12 retained the exact `fake-data preview` warning label but removed fake
 classification authority: its policy lists only Core-classified `public`, its
 egress id is `remote-agentic-contained@2`, and central admission remains
-NO-GO. A future policy could consider `workspace_internal_fake` only with the
+NO-GO. It is now historical and suspended. A future policy could consider
+`workspace_internal_fake` only with the
 exact resource-derived classification and an active scoped workspace
-attestation; neither declaration alone can create that class. The suite-v9
-manifest retains both `fixture_contract` and `live_probe`; matrix amendment
-`2026-08-26-r9-tcb2` pins the TCB v2 transitive-coverage evidence without
-selecting the live step. The live step has not been run for this candidate.
+attestation; neither declaration alone can create that class. Its suite-v9
+manifest retained both `fixture_contract` and `live_probe`; the live step was
+not run.
+
+Revision 13 pins adapter 6 and codec/schema 2 for the Phase-2 provider-step
+journal, preliminary proposal ledger, staged-state promotion, complete indexed
+call accounting, reconstructible plural pairing, effect ordering, and
+productive recovery. Suite 10 and matrix `2026-08-27-r10-p2-tcb3` add the
+JSON/document parity and Google/OpenRouter crash matrices to
+`fixture_contract` and bind TCB manifest v3. The retained `live_probe` was not
+selected or run, no behavioral evidence was created, and this candidate
+remains suspended and uncertified.
 
 ## Fail-closed conditions
 
@@ -159,9 +169,9 @@ selecting the live step. The live step has not been run for this candidate.
 - Missing or disabled credential bindings prevent session pinning.
 - Unknown data classification is denied before transport.
 - Function results with a different id or name are rejected before transport.
-- Only the validated index-0 tool call can be persisted or executed. Later
-  indexed proposals are discarded; a missing or conflicting primary call is
-  rejected.
+- Every contiguous indexed tool call is persisted. Duplicate ids, missing
+  indices, or conflicting fragments fail closed; a multi-call response receives
+  complete `parallel_denied` dispositions and no call executes.
 - A requested reasoning effort outside the immutable certificate tuple, or a
   certificate/binding reasoning-contract mismatch, is rejected before use.
 - A single tool call preceded by text is accepted; that text remains

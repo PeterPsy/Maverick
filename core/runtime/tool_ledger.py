@@ -21,8 +21,10 @@ from core.runtime.tool_models import (
     ToolEffectClass,
     ToolInvocationRecord,
     ToolInvocationState,
+    ToolResolutionStatus,
 )
 from core.runtime.tool_private_payloads import (
+    MAX_TOOL_PRIVATE_PAYLOAD_BYTES,
     RuntimeToolPrivatePayloadStore,
     canonical_tool_arguments,
     decode_tool_arguments,
@@ -35,7 +37,7 @@ _IDEMPOTENCY_DOMAIN = b"maverick.runtime.tool-idempotency.v1\x00"
 _TRANSITIONS: dict[ToolInvocationState, frozenset[ToolInvocationState]] = {
     "proposed": frozenset({"validating", "cancelled"}),
     "validating": frozenset({"denied", "validated", "cancelled"}),
-    "validated": frozenset({"awaiting_confirmation", "authorized", "cancelled"}),
+    "validated": frozenset({"awaiting_confirmation", "authorized", "denied", "cancelled"}),
     "awaiting_confirmation": frozenset({"denied", "expired", "cancelled", "authorized"}),
     "authorized": frozenset({"executing", "cancelled"}),
     "executing": frozenset({"succeeded", "failed", "cancelled", "execution_unknown", "authorized"}),
@@ -68,38 +70,91 @@ class RuntimeToolLedger:
         session_id: str,
         turn_id: str,
         provider_tool_call_id: str,
-        tool_handle: str,
-        arguments: dict[str, object],
-        effect_class: ToolEffectClass,
+        arguments: dict[str, object] | bytes,
         policy_revision: str,
         authority_digest: str,
+        tool_handle: str | None = None,
+        provider_safe_name: str = "",
+        provider_request_id: str = "",
+        provider_event_ordinal: int = 0,
+        provider_call_index: int = 0,
+        effect_class: ToolEffectClass = "unclassified",
+        safe_to_retry: bool = False,
         now: datetime | None = None,
     ) -> tuple[ToolInvocationRecord, bool]:
         """Insert before validation; exact provider retries deduplicate."""
         timestamp = now or datetime.now(tz=UTC)
-        canonical = canonical_tool_arguments(arguments)
+        if (
+            not all(
+                isinstance(value, str) and value.strip()
+                for value in (
+                    workspace_id,
+                    session_id,
+                    turn_id,
+                    provider_tool_call_id,
+                    provider_safe_name or tool_handle or "",
+                    policy_revision,
+                    authority_digest,
+                )
+            )
+            or not isinstance(provider_event_ordinal, int)
+            or isinstance(provider_event_ordinal, bool)
+            or provider_event_ordinal < 0
+            or not isinstance(provider_call_index, int)
+            or isinstance(provider_call_index, bool)
+            or provider_call_index < 0
+        ):
+            raise RuntimeToolError("tool_proposal_identity_invalid")
+        if isinstance(arguments, dict):
+            try:
+                canonical = canonical_tool_arguments(arguments)
+            except RuntimeToolError:
+                canonical = repr(arguments).encode("utf-8", errors="replace")
+                if not canonical or len(canonical) > MAX_TOOL_PRIVATE_PAYLOAD_BYTES:
+                    raise RuntimeToolError("tool_arguments_invalid")
+                arguments_summary = {
+                    "root_type": "malformed_json",
+                    "serialized_bytes": len(canonical),
+                }
+            else:
+                arguments_summary = tool_arguments_summary(
+                    arguments,
+                    serialized_bytes=len(canonical),
+                )
+        elif isinstance(arguments, bytes) and arguments:
+            canonical = bytes(arguments)
+            arguments_summary = {
+                "root_type": "malformed_json",
+                "serialized_bytes": len(canonical),
+            }
+        else:
+            raise RuntimeToolError("tool_arguments_invalid")
         digest = tool_arguments_digest(digest_key=self._digest_key, canonical_arguments=canonical)
+        invocation_id = str(
+            uuid5(NAMESPACE_URL, f"maverick:tool:{workspace_id}:{session_id}:{turn_id}:{provider_tool_call_id}")
+        )
+        private_ref = _tool_arguments_private_ref(invocation_id)
         existing = self.store.find_tool_invocation_by_provider_call(
             session_id=session_id,
             turn_id=turn_id,
             provider_tool_call_id=provider_tool_call_id,
         )
         if existing is not None:
-            self._require_exact_replay(existing, workspace_id, tool_handle, digest)
+            self._require_exact_replay(
+                existing,
+                workspace_id,
+                provider_safe_name or tool_handle or "",
+                tool_handle,
+                digest,
+            )
+            self._persist_arguments(existing, canonical)
             return existing, False
-        private_ref = self.private_payload_store.put(
-            workspace_id=workspace_id,
-            session_id=session_id,
-            payload=canonical,
-        )
-        invocation_id = str(
-            uuid5(NAMESPACE_URL, f"maverick:tool:{workspace_id}:{session_id}:{turn_id}:{provider_tool_call_id}")
-        )
         idempotency_key = hmac.new(
             self._digest_key,
             _IDEMPOTENCY_DOMAIN + invocation_id.encode("utf-8") + digest.encode("ascii"),
             hashlib.sha256,
         ).hexdigest()
+        proposal_id = invocation_id
         record = ToolInvocationRecord(
             invocation_id=invocation_id,
             workspace_id=workspace_id,
@@ -108,7 +163,7 @@ class RuntimeToolLedger:
             provider_tool_call_id=provider_tool_call_id,
             resolved_tool_handle=tool_handle,
             arguments_private_ref=private_ref,
-            arguments_summary=tool_arguments_summary(arguments, serialized_bytes=len(canonical)),
+            arguments_summary=arguments_summary,
             arguments_digest=digest,
             idempotency_key=idempotency_key,
             effect_class=effect_class,
@@ -122,13 +177,17 @@ class RuntimeToolLedger:
             revision=0,
             created_at=timestamp,
             updated_at=timestamp,
+            proposal_id=proposal_id,
+            provider_safe_name=provider_safe_name or tool_handle or "",
+            provider_request_id=provider_request_id,
+            provider_event_ordinal=provider_event_ordinal,
+            provider_call_index=provider_call_index,
+            resolution_status=("resolved" if tool_handle else "unresolved"),
+            safe_to_retry=safe_to_retry,
         )
         try:
-            return self.store.initialize_tool_invocation(record), True
+            persisted = self.store.initialize_tool_invocation(record)
         except Exception:
-            self.private_payload_store.delete(
-                workspace_id=workspace_id, session_id=session_id, private_ref=private_ref
-            )
             raced = self.store.find_tool_invocation_by_provider_call(
                 session_id=session_id,
                 turn_id=turn_id,
@@ -136,8 +195,96 @@ class RuntimeToolLedger:
             )
             if raced is None:
                 raise
-            self._require_exact_replay(raced, workspace_id, tool_handle, digest)
+            self._require_exact_replay(
+                raced,
+                workspace_id,
+                provider_safe_name or tool_handle or "",
+                tool_handle,
+                digest,
+            )
+            self._persist_arguments(raced, canonical)
             return raced, False
+        self._persist_arguments(persisted, canonical)
+        return persisted, True
+
+    def resolve(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        tool_handle: str,
+        effect_class: ToolEffectClass,
+        safe_to_retry: bool,
+        now: datetime | None = None,
+    ) -> ToolInvocationRecord:
+        """Attach a live catalog resolution after preliminary persistence."""
+        if record.resolved_tool_handle is not None:
+            if (
+                record.resolved_tool_handle != tool_handle
+                or record.effect_class != effect_class
+            ):
+                raise RuntimeToolError("tool_provider_call_replay_mismatch")
+            return record
+        return self._replace(
+            record,
+            resolved_tool_handle=tool_handle,
+            effect_class=effect_class,
+            safe_to_retry=safe_to_retry,
+            resolution_status="resolved",
+            now=now,
+        )
+
+    def deny(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        resolution_status: ToolResolutionStatus,
+        failure_reason: str,
+        now: datetime | None = None,
+    ) -> ToolInvocationRecord:
+        """Persist a denial result before pairing; raw arguments remain private."""
+        if resolution_status not in {
+            "unknown_tool",
+            "revoked",
+            "not_authorized",
+            "schema_denied",
+            "budget_denied",
+            "parallel_denied",
+        }:
+            raise RuntimeToolError("tool_disposition_invalid")
+        if record.state == "proposed":
+            record = self.transition(record, "validating", now=now)
+        if record.state not in {"validating", "validated"}:
+            if record.state == "denied" and record.resolution_status == resolution_status:
+                return record
+            raise RuntimeToolError("tool_disposition_invalid")
+        payload = canonical_tool_arguments({"error": failure_reason})
+        private_ref = self.private_payload_store.put(
+            workspace_id=record.workspace_id,
+            session_id=record.session_id,
+            payload=payload,
+        )
+        try:
+            return self.transition(
+                record,
+                "denied",
+                failure_reason=failure_reason,
+                result_private_ref=private_ref,
+                result_summary={
+                    "root_type": "object",
+                    "field_count": 1,
+                    "serialized_bytes": len(payload),
+                    "is_error": True,
+                },
+                resolution_status=resolution_status,
+                now=now,
+            )
+        except Exception:
+            self.private_payload_store.delete(
+                workspace_id=record.workspace_id,
+                session_id=record.session_id,
+                private_ref=private_ref,
+            )
+            raise
 
     def transition(
         self,
@@ -148,10 +295,39 @@ class RuntimeToolLedger:
         result_private_ref: str | None = None,
         result_summary: dict[str, object] | None = None,
         result_classification: CanonicalSourceClassification | None = None,
+        resolution_status: ToolResolutionStatus | None = None,
         now: datetime | None = None,
     ) -> ToolInvocationRecord:
         if state not in _TRANSITIONS[record.state]:
             raise RuntimeToolError("tool_state_transition_invalid", f"{record.state}->{state}")
+        timestamp = now or datetime.now(tz=UTC)
+        effective_resolution = resolution_status or _resolution_for_state(
+            state,
+            record.resolution_status,
+        )
+        disposition_id = record.disposition_id
+        if disposition_id is None and state in {
+            "authorized",
+            "denied",
+            "cancelled",
+            "expired",
+            "execution_unknown",
+        }:
+            disposition_id = str(
+                uuid5(
+                    NAMESPACE_URL,
+                    f"maverick:tool-disposition:{record.invocation_id}:"
+                    f"{effective_resolution}",
+                )
+            )
+        result_id = record.result_id
+        if result_id is None and result_private_ref is not None:
+            result_id = str(
+                uuid5(
+                    NAMESPACE_URL,
+                    f"maverick:tool-result:{record.invocation_id}",
+                )
+            )
         updated = replace(
             record,
             state=state,
@@ -198,13 +374,79 @@ class RuntimeToolLedger:
                 if result_classification is not None
                 else record.result_classification_revision
             ),
+            resolution_status=effective_resolution,
+            disposition_id=disposition_id,
+            effect_boundary_at=(
+                timestamp if state == "executing" else record.effect_boundary_at
+            ),
+            result_persisted_at=(
+                timestamp
+                if result_private_ref is not None
+                else record.result_persisted_at
+            ),
+            result_id=result_id,
             revision=record.revision + 1,
-            updated_at=now or datetime.now(tz=UTC),
+            updated_at=timestamp,
         )
         try:
             return self.store.update_tool_invocation(updated, expected_revision=record.revision)
         except Exception as error:
             raise RuntimeToolRevisionError("tool_invocation_revision_conflict") from error
+
+    def attach_terminal_result(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        failure_reason: str | None = None,
+        now: datetime | None = None,
+    ) -> ToolInvocationRecord:
+        """Idempotently materialize a reconstructible error result after a crash."""
+        if record.result_private_ref is not None:
+            return record
+        if record.state not in {
+            "denied",
+            "failed",
+            "cancelled",
+            "expired",
+            "execution_unknown",
+        }:
+            raise RuntimeToolError("tool_result_unavailable")
+        reason = failure_reason or record.failure_reason or f"tool_{record.state}"
+        payload = canonical_tool_arguments({"error": reason})
+        private_ref = self.private_payload_store.put(
+            workspace_id=record.workspace_id,
+            session_id=record.session_id,
+            payload=payload,
+        )
+        try:
+            return self._replace(
+                record,
+                result_private_ref=private_ref,
+                result_summary={
+                    "root_type": "object",
+                    "field_count": 1,
+                    "serialized_bytes": len(payload),
+                    "is_error": True,
+                },
+                result_persisted_at=now or datetime.now(tz=UTC),
+                result_id=(
+                    record.result_id
+                    or str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            f"maverick:tool-result:{record.invocation_id}",
+                        )
+                    )
+                ),
+                now=now,
+            )
+        except Exception:
+            self.private_payload_store.delete(
+                workspace_id=record.workspace_id,
+                session_id=record.session_id,
+                private_ref=private_ref,
+            )
+            raise
 
     def confirm(
         self,
@@ -229,6 +471,42 @@ class RuntimeToolLedger:
             ttl_seconds=ttl_seconds,
             now=now,
         )
+
+    def _replace(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        now: datetime | None = None,
+        **updates: object,
+    ) -> ToolInvocationRecord:
+        updated = replace(
+            record,
+            **updates,
+            revision=record.revision + 1,
+            updated_at=now or datetime.now(tz=UTC),
+        )
+        try:
+            return self.store.update_tool_invocation(
+                updated,
+                expected_revision=record.revision,
+            )
+        except Exception as error:
+            raise RuntimeToolRevisionError("tool_invocation_revision_conflict") from error
+
+    def _persist_arguments(
+        self,
+        record: ToolInvocationRecord,
+        canonical: bytes,
+    ) -> None:
+        """Complete the deterministic private-payload half after ledger insert."""
+        persisted_ref = self.private_payload_store.put(
+            workspace_id=record.workspace_id,
+            session_id=record.session_id,
+            payload=canonical,
+            private_ref=record.arguments_private_ref,
+        )
+        if persisted_ref != record.arguments_private_ref:
+            raise RuntimeToolError("tool_private_payload_identity_conflict")
 
     def authorize(
         self,
@@ -272,12 +550,35 @@ class RuntimeToolLedger:
             return record
         if record.effect_class == "read" and safe_to_retry:
             return self.transition(record, "authorized", now=now)
-        return self.transition(
+        unknown = self.transition(
             record,
             "execution_unknown",
             failure_reason="tool_execution_outcome_unknown",
             now=now,
         )
+        return self.attach_terminal_result(unknown, now=now)
+
+    def cancel_before_effect(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        reason_code: str = "tool_recovery_cancelled_before_effect",
+        now: datetime | None = None,
+    ) -> ToolInvocationRecord:
+        """Materialize a denial result when recovery proves no effect began."""
+        if record.effect_boundary_at is not None or record.state == "executing":
+            raise RuntimeToolError("tool_execution_outcome_unknown")
+        if record.state in {"succeeded", "failed", "denied", "cancelled", "expired"}:
+            return self.attach_terminal_result(record, now=now)
+        if record.state == "execution_unknown":
+            return self.attach_terminal_result(record, now=now)
+        cancelled = self.transition(
+            record,
+            "cancelled",
+            failure_reason=reason_code,
+            now=now,
+        )
+        return self.attach_terminal_result(cancelled, now=now)
 
     def load_arguments(self, record: ToolInvocationRecord) -> dict[str, object]:
         """Read private arguments only after verifying their confirmation digest."""
@@ -292,8 +593,8 @@ class RuntimeToolLedger:
         return decode_tool_arguments(payload)
 
     def load_result(self, record: ToolInvocationRecord) -> dict[str, object]:
-        """Resolve one succeeded result from Core private storage."""
-        if record.state != "succeeded" or not record.result_private_ref:
+        """Resolve one persisted result or denial from Core private storage."""
+        if not record.result_private_ref:
             raise RuntimeToolError("tool_result_unavailable")
         payload = self.private_payload_store.read(
             workspace_id=record.workspace_id,
@@ -317,11 +618,40 @@ class RuntimeToolLedger:
 
     @staticmethod
     def _require_exact_replay(
-        record: ToolInvocationRecord, workspace_id: str, tool_handle: str, digest: str
+        record: ToolInvocationRecord,
+        workspace_id: str,
+        provider_safe_name: str,
+        tool_handle: str | None,
+        digest: str,
     ) -> None:
         if (
             record.workspace_id != workspace_id
-            or record.resolved_tool_handle != tool_handle
+            or record.provider_safe_name != provider_safe_name
+            or (
+                tool_handle is not None
+                and record.resolved_tool_handle != tool_handle
+            )
             or not hmac.compare_digest(record.arguments_digest, digest)
         ):
             raise RuntimeToolError("tool_provider_call_replay_mismatch")
+
+
+def _resolution_for_state(
+    state: ToolInvocationState,
+    current: ToolResolutionStatus,
+) -> ToolResolutionStatus:
+    return {
+        "awaiting_confirmation": "awaiting_confirmation",
+        "authorized": "authorized",
+        "succeeded": "succeeded",
+        "failed": "failed",
+        "cancelled": "cancelled",
+        "execution_unknown": "execution_unknown",
+    }.get(state, current)  # type: ignore[return-value]
+
+
+def _tool_arguments_private_ref(invocation_id: str) -> str:
+    token = hashlib.sha256(
+        b"maverick.tool-arguments-ref.v1\x00" + invocation_id.encode("utf-8")
+    ).hexdigest()[:32]
+    return f"tool-private:v1:{token}"

@@ -70,7 +70,7 @@ class OpenRouterAgenticMixedStreamTest(unittest.TestCase):
         self.assertEqual(accepted.provider_response_id, "generation-failed")
         usage = next(event.usage for event in events if event.event_type == "usage")
         self.assertEqual((usage.input_tokens, usage.output_tokens), (100, 10))
-        self.assertEqual(events[-1].error_code, "provider_tool_call_index_invalid")
+        self.assertEqual(events[-1].error_code, "provider_response_invalid")
 
     def test_decode_failure_survives_interrupted_telemetry_drain(self) -> None:
         stream = _invalid_index_stream("generation-interrupted")
@@ -83,7 +83,7 @@ class OpenRouterAgenticMixedStreamTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(events[-1].error_code, "provider_tool_call_index_invalid")
+        self.assertEqual(events[-1].error_code, "provider_response_invalid")
 
     def test_incompatible_mixed_finish_is_not_reported_as_parallel(self) -> None:
         stream = _mixed_tool_stream(
@@ -100,6 +100,10 @@ class OpenRouterAgenticMixedStreamTest(unittest.TestCase):
             )
         )
 
+        self.assertEqual(
+            [event.tool_call.provider_tool_call_id for event in events if event.tool_call],
+            ["call-1"],
+        )
         self.assertEqual(events[-1].error_code, "provider_mixed_text_and_tool_call")
 
 

@@ -123,6 +123,7 @@ class HostedAgenticHarness:
                 tool_invocations=FakeCollection(),
                 tool_confirmation_grants=FakeCollection(),
                 egress_decisions=FakeCollection(),
+                provider_step_journals=FakeCollection(),
             )
         )
         self.policy = replace(
@@ -274,6 +275,7 @@ class HostedAgenticHarness:
         credential: EphemeralCredential | None = None,
         cost_estimator=None,
         authority_refresher=None,
+        private_state_inspector=None,
     ) -> HostedAgenticEngineAdapter:
         runtimes = HostedProviderRuntimeRegistry()
         runtimes.register(
@@ -290,6 +292,7 @@ class HostedAgenticHarness:
                     content_type="application/vnd.maverick.fake-private",
                 ),
                 cost_estimator=cost_estimator or (lambda _request: 0),
+                private_state_inspector=private_state_inspector,
             )
         )
         loop = HostedAgenticLoop(

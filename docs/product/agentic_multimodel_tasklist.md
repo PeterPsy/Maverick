@@ -1,9 +1,9 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-08-26
+Status date: 2026-08-27
 
-Target: Phase 1 security boundary and certified TCB implemented; remote agentic
-release remains **NO-GO**.
+Target: Phase 2 provider-step journal, preliminary ledger, pairing, and
+productive recovery implemented; remote agentic release remains **NO-GO**.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
 2.1 (2026-08-16), the definitive parity plan in workspace Storage, and ADR
@@ -85,7 +85,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v2 records six maintained transitive dependency contracts. The
+- [x] Manifest v3 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and rejects any newly reached
@@ -95,7 +95,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v9 / matrix `2026-08-26-r9-tcb2`
+- [x] Google and OpenRouter suite v10 / matrix
+  `2026-08-27-r10-p2-tcb3`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -134,9 +135,70 @@ completion claim.
 - [x] Capability overstatement: `0`.
 - [x] Unsupported context silently ignored: `0`.
 
+## Phase 2 — provider-step journal, ledger, pairing, and recovery
+
+### Durable request saga and preliminary proposals
+
+- [x] `provider_step_journal.json` and the document-store collection implement
+  the same revision-CAS state machine for request ready/journaled, acceptance,
+  stream/staged state, proposal/disposition/result identities, pairing,
+  commit, rollback, and quarantine. The saga is explicitly ordered across
+  collections; it does not claim a cross-collection transaction.
+- [x] Every decoded provider call is inserted into the preliminary tool ledger
+  before catalog resolution, schema validation, policy, or budget disposition.
+  The record retains the safe provider name, call id/index/ordinal, request id,
+  private argument locator and HMAC, policy revision, and authority digest;
+  the resolved handle remains nullable and complete arguments remain encrypted.
+- [x] Exact call replay deduplicates. A reused call id with different name or
+  arguments fails closed. Unknown, revoked, not-authorized, schema, budget,
+  parallel, and malformed dispositions remain persisted and pairable.
+
+### Stream accounting, effects, and provider state
+
+- [x] Google and OpenRouter retain every indexed call, including OpenRouter
+  indices above zero and calls decoded before a later terminal stream error.
+  Because parallel execution remains unsupported, all calls are journaled and
+  then denied together; none is silently discarded or executed.
+- [x] Provider response state is encrypted as staged state and never read as
+  authoritative continuation state. Promotion occurs only after a validated
+  final output or complete proposal → disposition → result/denial → pairing
+  chain, followed by provider-state CAS and journal commit.
+- [x] Runtime tool events enforce persisted proposal → proposed event →
+  validation/disposition → started event → effect boundary → persisted result
+  → completed/failed event. An ambiguous mutating boundary becomes
+  `execution_unknown` and is not replayed.
+
+### Productive recovery and quarantine
+
+- [x] The exact pinned binding, adapter, provider protocol/API, and codec are
+  checked during recovery; no old codec is silently migrated. Google and
+  OpenRouter inspectors reconstruct only call-id/name pairing facts from the
+  encrypted staged bytes.
+- [x] Recovery runs from backend startup/worker-loss, continuation
+  pre-admission, hosted pre-prepare, execution failure, uncertain cancellation,
+  and explicit adapter recovery. It completes only provable WAL halves,
+  terminal results, pairing consumption, provider-state promotion, and commit;
+  explicit no-state provider terminals can return to the prior commit.
+- [x] Unprovable acceptance, state, pairing, or tool execution transitions the
+  session by status CAS to `recovery_required`, stores bounded Core-private
+  detail, and exposes only an allowlisted public reason. Queue, continuation,
+  prepare/dispatch, and runtime token validation reject the quarantined session.
+- [x] API, Chat, and Settings continue to show only `recovery_required` and its
+  safe public cause; provider bytes, argument/result bodies, private locators,
+  and recovery detail are absent.
+
+### P2 exit gate
+
+- [x] Proposal records minus provider calls observed: `0`.
+- [x] Nonterminal observed calls outside `recovery_required`: `0`.
+- [x] Next-turn pairing failures in Google/OpenRouter crash matrices: `0`.
+- [x] Duplicate side effects across repeated recovery: `0`.
+- [x] `proposed` or `started` events emitted after the effect boundary: `0`.
+- [x] Staged provider states used as authoritative before commit: `0`.
+- [x] Productive lifecycle recovery entry points missing: `0`.
+
 ## Later parity and release gates — still open
 
-- [ ] Phase 2 provider-step journal and complete recovery engine.
 - [ ] Phase 3 finalization reserve.
 - [ ] Phase 4 complete semantic envelope, AGENTS materialization, and new tool
   contracts.
@@ -149,7 +211,7 @@ completion claim.
   `docs/security/production_readiness.md` under a separate security review.
 
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false. No remote binding,
-profile, or certificate is enabled by P1; no Google/OpenRouter session, provider
+profile, or certificate is enabled by P2; no Google/OpenRouter session, provider
 HTTP/SSE request, live probe, real-store migration/apply/restart, canary,
 production release, or push is part of this closure.
 

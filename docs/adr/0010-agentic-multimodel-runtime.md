@@ -8,7 +8,10 @@ Phase-0 containment was accepted on 2026-08-25 and materially closed on
 2026-08-26. The Phase-1 security-boundary amendment was implemented on the same
 date: revision-bound server attestation, resource-derived classification,
 certified schemas/TCB, fd-relative confinement, and one effective-capability
-snapshot now exist. Remote agentic execution nevertheless remains **NO-GO**:
+snapshot now exist. The Phase-2 journal/recovery amendment was implemented on
+2026-08-27: every provider call is durably accounted, provider state is staged
+until reconstructible pairing and commit, and recovery is connected to the
+productive lifecycle. Remote agentic execution nevertheless remains **NO-GO**:
 the availability flag is false and no remote profile, binding, certificate,
 behavioral evidence, canary, or production gate is enabled. Codex agentic and
 plain hosted text are not contained or reclassified as hosted remote.
@@ -63,7 +66,8 @@ session data; Core interprets neither an egress-policy id nor a persisted legacy
 declaration as attestation. Ambiguous persisted sessions transition to
 `recovery_required` through the serialized session lifecycle handoff, expose
 only an allowlisted public reason, lose runtime bearer authority, and cannot
-accept a new turn; this is quarantine support, not the Phase-2 recovery engine.
+accept a new turn. Phase 2 now supplies the recovery engine behind that
+quarantine boundary; it does not make a remote profile available.
 
 The operator containment service inventories all stores through their JSON or
 Mongo abstraction. It correlates each ordered provider step with either a
@@ -122,7 +126,7 @@ all authority-changing Core and UI surfaces and is the sole source for suite,
 artifact, signing/publication, execution-binding, and live-status digests. The
 publisher recomputes the digest; drift or missing legacy identity makes a
 remote certificate ineligible before create, continuation, refresh, or
-dispatch. Manifest version 2 also declares six maintained dependency contracts
+dispatch. Manifest version 3 also declares six maintained dependency contracts
 for runtime admission, provider-input composition, classification/egress, tool
 execution, provider-state/lifecycle, and served governance. Core statically
 walks each declared local import closure, including package initializers, the
@@ -245,7 +249,7 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v9 manifests contain both
+publication. Google and OpenRouter suite-v10 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
@@ -297,10 +301,27 @@ shell cwd. The same exact observation supplies resource-derived classification.
 
 ### 6. Tool side effects are journaled before execution
 
-Every provider tool proposal creates a `ToolInvocationRecord` before validation
-or side effects. Private canonical arguments are encrypted behind a Core-issued
-opaque locator. Public summaries are allowlisted and bounded, and the argument
-digest is a domain-separated HMAC.
+Every decoded provider tool proposal creates a preliminary
+`ToolInvocationRecord` before catalog resolution, policy/budget disposition,
+schema validation, or side effects. Its resolved handle is nullable. The
+immutable identity retains the provider-safe name, call id, request id, stream
+ordinal/index, policy revision, and authority digest. Private canonical or
+malformed raw arguments are encrypted behind a Core-issued opaque locator;
+public summaries are allowlisted and bounded, and the argument digest is a
+domain-separated HMAC. Exact replay deduplicates, while a reused call id with a
+different name or argument digest fails closed.
+
+The preliminary row is the first WAL half and points at a deterministic
+request-scoped private locator; encrypted argument persistence is the second
+idempotent half. A crash between them therefore leaves a countable proposal
+that an exact replay can repair, never an unjournaled effect candidate.
+
+Unknown, revoked, not-authorized, schema-denied, budget-denied, and
+parallel-denied calls receive durable dispositions and denial results rather
+than disappearing. Google and OpenRouter retain all indexed calls and calls
+decoded before a later terminal stream error. Parallel execution remains
+disabled: when a provider emits multiple calls, Core persists and emits every
+proposal before denying and pairing every call.
 
 Mutating and destructive calls require a persisted one-shot
 `ToolConfirmationGrant` when policy requires it. The grant is bound to actor,
@@ -310,7 +331,9 @@ expiry. It is atomically consumed before the invocation becomes authorized.
 `executing` is persisted before crossing the side-effect boundary. After a
 crash, an uncertain mutating/destructive call becomes `execution_unknown` and
 is never replayed automatically. Read retries require an explicit safe-retry
-contract. Browser state is not authoritative.
+contract. The live event order is proposal persisted, `proposed`, validation
+and disposition, `started`, effect boundary, result persisted, then
+`completed`/`failed`; browser state is not authoritative.
 
 ### 7. Provider-private state is bounded and opaque
 
@@ -330,8 +353,46 @@ authorized recovery path may resolve them through the Core service. Codec,
 digest, or version mismatch requires explicit recovery; no best-effort parsing
 is allowed.
 
+Provider response bytes are first written as staged state under a deterministic
+request-scoped private locator. A `ProviderStepJournalRecord` attaches that
+envelope by revision CAS, but ordinary continuation reads still see only the
+last committed `RuntimeProviderState`. Core promotes the exact staged envelope
+only after either a validated final response or a complete ordered proposal,
+disposition, result/denial, and reconstructible pairing. Provider-state CAS is
+followed by journal commit; a crash between those records is repaired by the
+saga and never makes an unrelated staged blob authoritative.
+
 Thought signatures and similar protocol state are neither transcript content
 nor analytics input and must not reach UI, ordinary logs, app hooks, or exports.
+
+### 7A. Provider steps are a persistent recovery saga
+
+Each outbound step owns a schema-versioned journal row containing the request
+and response ids, acceptance, pinned engine/adapter/provider/protocol/API and
+codec identity, base provider-state revision/digest, staged private reference,
+ordered proposal/disposition/result ids, pairing source/status, commit status,
+timestamps, and revision. JSON and document stores use the same
+insert-if-absent and compare-and-set transitions. Tool ledger, private blob,
+provider state, and journal remain distinct stores: ordered WAL repair is
+explicit and no cross-collection transaction is simulated.
+
+Recovery runs at backend startup/worker loss, continuation pre-admission,
+hosted pre-prepare, uncertain cancellation, execution failure, and explicit
+adapter recovery. It uses only the pinned binding and exact current codec;
+Google and OpenRouter inspectors decode redaction-safe pending/consumed call
+identities rather than migrating vendor state. Recovery may repair an orphan
+proposal or staged-blob attachment, materialize a pre-effect denial/result,
+finish pairing, promote the exact envelope, commit, or consume a pairing only
+when persisted evidence proves that transition. An explicit provider terminal
+with no staged state or observed call may return to the last commit.
+
+An accepted transport with insufficient evidence, codec/binding mismatch,
+incoherent pairing, consumed pairing without a committed child, or ambiguous
+effect instead moves the journal and session by CAS to `recovery_required`.
+The public cause is allowlisted; bounded diagnostic detail is encrypted and
+Core-owned. Restarting any terminal recovery transition is idempotent. Queue,
+continuation, prepare/dispatch, and runtime-token paths deny quarantined
+sessions.
 
 ### 8. Remote-provider egress is decided per content block
 
@@ -372,9 +433,9 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 13
-and OpenRouter revision 12, both bound to
-`maverick-hosted-tool-loop==5`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 14
+and OpenRouter revision 13, both bound to
+`maverick-hosted-tool-loop==6`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
@@ -482,6 +543,9 @@ selectable new-chat option.
 - Provider request retries are forbidden after acceptance unless a certified
   provider idempotency/retrieval contract proves safety. Ambiguity enters
   recovery-required state.
+- Explicit provider `cancelled`, `budget_exceeded`, or `incomplete` terminal
+  state can roll back only when the journal proves that no call or staged state
+  exists; transport or codec failure after acceptance remains ambiguous.
 - Provider-state CAS conflict discards the late write and triggers
   reconciliation; it never overwrites newer continuation data.
 - Mutating/destructive tool ambiguity becomes `execution_unknown`.
@@ -558,8 +622,9 @@ independent server-owned availability and attestation boundary;
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false for this decision state.
 Disabling egress enforcement blocks hosted export rather than
 bypassing evaluation. Enabling the parallel-tool-call switch does not override
-the MVP's sequential policy ceilings or codec rejection; it only reserves an
-independent rollout control for a future implementation.
+the MVP's sequential policy ceilings: codecs account for every call and the
+shared loop durably denies/pairs all calls in a parallel response. The switch
+only reserves an independent rollout control for future parallel execution.
 
 ## Implementation sequence
 
@@ -578,7 +643,10 @@ The accepted order is:
 10. complete concurrency, recovery, leakage, sub-agent, and rollback hardening;
 11. close the Phase-1 attestation/classification, certified-schema/TCB,
     descriptor-relative filesystem, and effective-capability gates without
-    enabling a remote profile.
+    enabling a remote profile;
+12. close the Phase-2 provider-step journal, preliminary ledger, staged-state
+    pairing, effect ordering, and productive recovery gates without executing
+    a provider probe or enabling a remote profile.
 
 Every phase has focused tests and a checkpoint commit. A later phase cannot
 weaken an earlier boundary.
@@ -607,7 +675,7 @@ remote profile beyond the contained preview.
 - Control-plane and runtime stores gain real CAS semantics shared by JSON,
   MongoDB, and tests.
 - Remote agentic execution remains NO-GO while local Codex and plain hosted
-  text retain their existing behavior. Phase 1 supplies the server-owned
-  attestation and certified boundary, but reopening still requires Phase 2+
-  recovery, complete live/behavioral certification, onboarding, leakage review,
+  text retain their existing behavior. Phases 1 and 2 supply the server-owned
+  attestation/certified boundary and deterministic recovery, but reopening still
+  requires complete live/behavioral certification, onboarding, leakage review,
   canary, and release gates—not a browser declaration or a flag alone.

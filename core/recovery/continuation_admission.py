@@ -97,6 +97,8 @@ def assess_runtime_session_admission(
 ) -> RuntimeAdmissionAssessment:
     """Validate direct authority or prove one conservative continuation upgrade."""
     binding = session.execution_binding
+    if session.status == "recovery_required":
+        return _blocked(session, "runtime_session_recovery_required")
     if session.runtime_mode != "agentic":
         return _direct(session)
     if binding is None:

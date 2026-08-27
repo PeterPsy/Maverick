@@ -67,6 +67,30 @@ class PublicRuntimeStatusTest(unittest.TestCase):
             "remote_agentic_state_ambiguous",
         )
 
+    def test_p2_recovery_causes_are_visible_without_private_recovery_detail(self) -> None:
+        for reason_code in (
+            "provider_acceptance_ambiguous",
+            "provider_pairing_ambiguous",
+            "provider_state_ambiguous",
+            "tool_execution_ambiguous",
+        ):
+            with self.subTest(reason_code=reason_code):
+                session = replace(self.session, recovery_reason_code=reason_code)
+                payloads = (
+                    runtime_session_payload(session),
+                    _session_payload(session),
+                    _runtime_session_settings_payload(self.settings_state, session),
+                )
+                self.assertTrue(
+                    all(
+                        payload["recovery_reason_code"] == reason_code
+                        for payload in payloads
+                    )
+                )
+                self.assertTrue(
+                    all("recovery_detail_private_ref" not in payload for payload in payloads)
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

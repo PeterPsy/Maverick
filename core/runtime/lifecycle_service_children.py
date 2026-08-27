@@ -62,6 +62,7 @@ def transition_runtime_session(
             last_progress_at=timestamp if target_status == "running" else session.last_progress_at,
             recovery_reason_code=(recovery_reason_code or "runtime_state_ambiguous") if target_status == "recovery_required" else session.recovery_reason_code,
         )
+        saved = store.save_session_if_status(updated, expected_status=session.status)
         state = store.get_state(session_id)
         store.save_state(
             replace(
@@ -73,7 +74,6 @@ def transition_runtime_session(
                 updated_at=timestamp,
             )
         )
-        saved = store.save_session(updated)
     if observability_store is not None:
         payload = {
             "session_id": session_id,

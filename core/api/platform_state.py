@@ -113,6 +113,10 @@ def bootstrap_platform_state(
         start_path=repository_root,
         filename="provider_state.json",
     )
+    runtime_provider_step_journals = RuntimeSessionJsonCollection(
+        start_path=repository_root,
+        filename="provider_step_journal.json",
+    )
     runtime_tool_invocations = RuntimeSessionJsonCollection(
         start_path=repository_root,
         filename="tool_invocations.json",
@@ -148,6 +152,7 @@ def bootstrap_platform_state(
             app_streams=runtime_app_streams,
             app_stream_events=runtime_app_stream_events,
             provider_states=runtime_provider_states,
+            provider_step_journals=runtime_provider_step_journals,
             tool_invocations=runtime_tool_invocations,
             tool_confirmation_grants=runtime_tool_confirmation_grants,
             egress_decisions=runtime_egress_decisions,

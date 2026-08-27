@@ -14,6 +14,7 @@ from core.providers.errors import ProviderError
 from core.recovery.continuation_fork import admit_runtime_session
 from core.runtime.errors import RuntimeProfileUpgradeRequiredError, RuntimeTurnNotFoundError
 from core.runtime.plain_hosted_cancellation import reconcile_stale_plain_hosted_request_owners
+from core.runtime.hosted_agentic_lifecycle import recover_all_hosted_agentic_sessions
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION
 from core.runtime.thread_catalog_events import set_thread_availability
@@ -73,6 +74,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
     reason: str = "backend restart",
 ) -> BackendRestartRecoveryResult:
     """Resume runtime sessions whose in-memory turn workers died during backend restart."""
+    recover_all_hosted_agentic_sessions(state, trigger="startup_worker_loss")
     reconcile_stale_plain_hosted_request_owners(state.runtime_store)
     _recover_pending_cancelled_turn_terminalizations(state)
     inspected = 0

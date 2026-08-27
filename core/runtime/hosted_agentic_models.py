@@ -31,6 +31,17 @@ class HostedProviderPrivateCodec:
     content_type: str
 
 
+@dataclass(frozen=True)
+class HostedProviderStateInspection:
+    """Redaction-safe pairing facts decoded by the exact pinned codec."""
+
+    pending_tool_calls: tuple[tuple[str, str], ...]
+    consumed_tool_call_ids: tuple[str, ...]
+
+
+HostedProviderStateInspector = Callable[[bytes], HostedProviderStateInspection]
+
+
 HostedContentClassifier = Callable[[object, str, object], HostedContentClassification]
 HostedCredentialResolver = Callable[[object], EphemeralCredential | None]
 HostedPolicyResolver = Callable[[object], AgenticRuntimePolicy]

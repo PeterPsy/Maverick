@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v2 also
+status, workspace binding, and upstream constraint. TCB manifest v3 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -145,12 +145,25 @@ while returned arguments are validated against the original bounded JSON
 schema. App-interface handles include the declared interface, selected local
 provider app, and official underlying surface.
 
-Every invocation is journaled before validation and before an effect boundary.
+Every decoded invocation is inserted as a preliminary proposal before catalog
+resolution, schema checks, policy/budget disposition, or an effect boundary.
+The persisted handle is nullable; provider safe name, call id, request id,
+ordinal/index, private argument reference and HMAC, policy revision, and
+authority digest are immutable. Exact replay deduplicates, while the same call
+id with a different name or arguments fails closed. Unknown, revoked,
+not-authorized, schema, budget, malformed, and parallel denials remain durable
+and pairable. Full arguments exist only in encrypted private storage.
+The row is inserted before its deterministic encrypted-argument WAL half, so a
+restart can repair an exact replay without losing the preliminary proposal or
+accepting divergent bytes.
+
 Mutating/destructive confirmations are one-shot and consumed with CAS;
-idempotency keys are passed only to surfaces that declare support. After a
-worker crash, only a declared safe read may return to `authorized` for retry.
-An executing mutation, destructive operation, or other ambiguous outcome moves
-to `execution_unknown` and requires reconciliation instead of automatic replay.
+idempotency keys are passed only to surfaces that declare support. The event and
+effect order is proposal persisted → proposed → validation/disposition →
+started → effect boundary → result persisted → completed/failed. After a worker
+crash, only a declared safe read may return to `authorized` for retry. An
+executing mutation, destructive operation, or other ambiguous outcome moves to
+`execution_unknown` and requires reconciliation instead of automatic replay.
 
 Discovery also does not make a schema provider-public. Only an explicitly
 public Core-owned surface covered by the exact TCB can be materialized into a
@@ -462,14 +475,22 @@ provider request id, and turn generation. It never stores source content or
 credentials, and the effective class is not implicitly fake/public or
 trusted-platform. Persist/load/continuation validates the metadata before use.
 
-Writes are bounded to 2 MiB per blob and 8 MiB per session, serialized under a
-namespace file lock, and attached through provider-state revision CAS. A losing
-writer deletes its new blob; a winning replacement deletes the prior blob.
+Writes are bounded to 2 MiB per blob and 8 MiB per session and serialized under
+a namespace file lock. Streamed response state is first staged at a
+deterministic request-scoped private locator and attached to the provider-step
+journal; this does not mutate authoritative provider state. Promotion uses the
+step's base provider-state revision only after final-output validation or full
+proposal/disposition/result pairing, and journal commit follows that CAS. A
+losing writer cannot overwrite newer state; a winning replacement deletes the
+prior committed blob. Recovery can reattach a blob written immediately before
+its WAL update without treating it as committed.
+
 Wrong adapter or codec identities, missing keys, ciphertext tamper, digest/size
 mismatch, and quota failures produce explicit provider-private recovery reasons.
-The ordinary provider-state patch path rejects private envelopes and raw thought
-fields. Tool arguments use the same restart-safe encrypted store with a separate
-namespace and integrity binding.
+No continuation reader sees an uncommitted staged envelope and no codec is
+silently migrated. The ordinary provider-state patch path rejects private
+envelopes and raw thought fields. Tool arguments use the same restart-safe
+encrypted store with a separate namespace and integrity binding.
 
 ## Hosted Agentic Egress Records
 
@@ -516,26 +537,45 @@ request journaling, live authority refresh, tool catalog materialization,
 per-request egress, sequential tool execution, confirmation pause/resume,
 provider-private codec access, usage, cancellation, and recovery.
 
-The loop journals a deterministic request id in provider state before transport
-acceptance. It performs no blind retry after acceptance. Each model step,
-tool call, tool-result byte, input/output token, estimated micro-USD cost, and
-wall-clock interval is checked against a policy that may tighten but never
-loosen during the turn. Decoded streamed output also has a conservative byte
-ceiling, so a provider cannot bypass the limit by delaying usage events. Tool
-parallelism remains disabled. Result content stays
+Before transport, the loop writes `REQUEST_READY` then `REQUEST_JOURNALED` to a
+schema-versioned provider-step saga. Acceptance records response/upstream ids;
+stream state is staged; ordered proposal, disposition, result, pairing, and
+commit fields advance by revision CAS. The JSON
+`provider_step_journal.json` collection and document-store implementation have
+the same semantics and no cross-collection transaction is claimed. The loop
+performs no blind retry after acceptance.
+
+Each model step, tool call, tool-result byte, input/output token, estimated
+micro-USD cost, and wall-clock interval is checked against a policy that may
+tighten but never loosen during the turn. Decoded streamed output also has a
+conservative byte ceiling, so a provider cannot bypass the limit by delaying
+usage events. Google and OpenRouter preserve every call, including later
+OpenRouter indices and calls decoded before a terminal stream error. Parallel
+execution remains disabled, so every call in a multi-call response is first
+journaled and then denied and paired; no call is discarded. Result content stays
 in encrypted tool storage and is re-evaluated against the current egress policy
 when included in every subsequent request.
 
 Confirmation waiting is represented by the persisted invocation and
 `waiting_for_tool_confirmation` turn state. Approval consumes the exact one-shot
 grant and refreshes authority before the side effect. Cancellation makes a
-still-waiting invocation terminal. Recovery never automatically replays an
-ambiguous `executing` mutation; it becomes `execution_unknown`. Public provider
-events are bounded JSON and recursively reject private-state field names.
+still-waiting invocation terminal. Recovery is invoked by backend
+startup/worker-loss, continuation pre-admission, hosted pre-prepare, execution
+failure, uncertain cancellation, and the explicit adapter operation. It
+validates the exact pinned binding and codec, repairs only provable
+WAL/pairing/provider-state transitions, and is idempotent across restarts.
+Recovery never automatically replays an ambiguous `executing` mutation; it
+becomes `execution_unknown`. Anything else unprovable becomes a session
+status-CAS transition to `recovery_required` with allowlisted public cause and
+encrypted Core-private detail. Queue, continuation, prepare/dispatch, and token
+authority reject that status. Public provider events are bounded JSON and
+recursively reject private-state field names.
 
 The deterministic fake provider certification covers multi-request streaming,
 official read and confirmed mutating tools, restart deduplication,
 provider-private round-trip, egress records, budgets, cancellation transport
 closure, terminal outages without blind retry, mid-step certificate revocation,
 policy drift, explicit private-state quota/integrity failures, prompt-injection
-containment, child-agent binding isolation, and conservative recovery.
+containment, child-agent binding isolation, JSON/document-store parity,
+Google/OpenRouter multi-call accounting, journal fault injection, event/effect
+ordering, and productive lifecycle recovery.

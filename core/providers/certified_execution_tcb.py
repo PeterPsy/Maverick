@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="2",
+    manifest_version="3",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -218,6 +218,8 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             (
                 "core/runtime/confined_filesystem.py",
                 "core/runtime/hosted_agentic_loop.py",
+                "core/runtime/provider_step_journal.py",
+                "core/runtime/tool_ledger.py",
                 "core/runtime/tool_catalog.py",
                 "core/runtime/tool_core_capabilities.py",
                 "core/runtime/tool_orchestrator.py",
@@ -231,9 +233,15 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/providers/certificate_projection.py",
                 "core/providers/certificate_service.py",
                 "core/runtime/lifecycle_service.py",
+                "core/runtime/hosted_agentic_lifecycle.py",
+                "core/runtime/hosted_agentic_recovery.py",
                 "core/runtime/provider_private_state.py",
+                "core/runtime/provider_step_journal.py",
+                "core/runtime/provider_step_models.py",
                 "core/runtime/provider_state_service.py",
                 "core/runtime/turn_submission.py",
+                "core/recovery/backend_restart.py",
+                "core/recovery/continuation_fork.py",
             ),
             ("core.providers", "core.recovery", "core.runtime"),
         ),
@@ -295,7 +303,7 @@ def compute_certified_tcb_digest(root: Path) -> str:
     if not files:
         raise CapabilityCertificateError("certificate_tcb_artifact_empty")
     digest = hashlib.sha256()
-    digest.update(b"maverick.certified-execution-tcb.v2\x00")
+    digest.update(b"maverick.certified-execution-tcb.v3\x00")
     digest.update(CERTIFIED_EXECUTION_TCB.structure_digest.encode("ascii"))
     digest.update(b"\x00")
     for relative_path in sorted(files):

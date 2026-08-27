@@ -46,7 +46,7 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
         ):
             self.assertEqual(probe_runner._request_interval_seconds(), 30.0)
 
-    def test_function_name_must_match_the_exact_declared_catalog(self) -> None:
+    def test_unknown_function_name_reaches_the_preliminary_ledger_boundary(self) -> None:
         client = GoogleInteractionsAgenticClient(
             transport=_ScriptedTransport(
                 [
@@ -58,13 +58,14 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
             )
         )
 
-        rejected = asyncio.run(_events(client, _request("request-unknown-tool")))
+        events = asyncio.run(_events(client, _request("request-unknown-tool")))
 
-        self.assertEqual(rejected[-1].error_code, "provider_tool_not_declared")
-        self.assertFalse(any(event.event_type == "tool_call" for event in rejected))
-        self.assertTrue(any(event.event_type == "usage" for event in rejected))
+        call = next(event.tool_call for event in events if event.tool_call is not None)
+        self.assertEqual(call.provider_tool_name, "filesystem_directory_list")
+        self.assertEqual(events[-1].event_type, "completed")
+        self.assertTrue(any(event.event_type == "usage" for event in events))
 
-    def test_unknown_tool_error_survives_interrupted_telemetry_drain(self) -> None:
+    def test_unknown_tool_call_survives_interrupted_telemetry_drain(self) -> None:
         stream = _tool_stream(
             "interaction-interrupted",
             tool_name="filesystem_directory_list",
@@ -76,7 +77,8 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
 
         rejected = asyncio.run(_events(client, _request("request-interrupted")))
 
-        self.assertEqual(rejected[-1].error_code, "provider_tool_not_declared")
+        self.assertTrue(any(event.event_type == "tool_call" for event in rejected))
+        self.assertEqual(rejected[-1].error_code, "provider_unavailable")
 
     def test_probe_covers_every_certified_reasoning_effort(self) -> None:
         scripts = []

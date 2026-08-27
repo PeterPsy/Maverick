@@ -15,6 +15,7 @@ from core.providers.google_interactions_models import (
     GoogleInteractionsProtocolError,
     GooglePendingFunctionCall,
 )
+from core.runtime.hosted_agentic_models import HostedProviderStateInspection
 
 
 def initial_google_interaction_state(mode: GoogleInteractionStateMode) -> GoogleInteractionState:
@@ -125,6 +126,30 @@ def encode_google_interaction_state(state: GoogleInteractionState) -> AgenticPro
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8"),
+    )
+
+
+def inspect_google_interaction_state(
+    content: bytes,
+    *,
+    mode: GoogleInteractionStateMode,
+) -> HostedProviderStateInspection:
+    """Decode recovery facts through the exact current Google codec identity."""
+    state = decode_google_interaction_state(
+        AgenticProviderPrivateState(
+            codec_id=GOOGLE_INTERACTIONS_CODEC_ID,
+            codec_version=GOOGLE_INTERACTIONS_CODEC_VERSION,
+            schema_version=GOOGLE_INTERACTIONS_SCHEMA_VERSION,
+            content_type=GOOGLE_INTERACTIONS_CONTENT_TYPE,
+            content=content,
+        ),
+        default_mode=mode,
+    )
+    return HostedProviderStateInspection(
+        pending_tool_calls=tuple(
+            (item.call_id, item.name) for item in state.pending_function_calls
+        ),
+        consumed_tool_call_ids=state.consumed_function_call_ids,
     )
 
 

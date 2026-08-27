@@ -1,6 +1,6 @@
 # Agentic provider preview operations
 
-Status date: 2026-08-26
+Status date: 2026-08-27
 
 Scope: operator runbook
 
@@ -17,7 +17,7 @@ runbook begins. This runbook never manufactures or repairs a certificate.
 
 ## Phase-0 containment record and rollback procedure
 
-Material P0 containment completed before this P1 repository closure. Preserve
+Material P0 containment completed before this P2 repository closure. Preserve
 the following redaction-safe evidence together: source revision
 `69d9e10fea641f805c1c52801b7fd60a027b02f9`, plan digest
 `02484a30f9ea7254c5deebd69e5af4416a22d8aecc006d81b7b5d6aad9c4578d`,
@@ -31,7 +31,7 @@ This closes material containment only; it is not release, certification,
 preview/canary, migration, or production evidence.
 
 Do not run a live Google/OpenRouter probe, certification live step, provider
-HTTP request, or another containment apply while reviewing P1. The following
+HTTP request, or another containment apply while reviewing P2. The following
 commands remain the control-plane-first rollback procedure for a future
 incident. Obtain a new redaction-safe real-store plan through the operator-only
 Core CLI:
@@ -93,10 +93,12 @@ operation.
 - OpenRouter remains pinned to `deepseek/deepseek-v4-flash` through
   `deepinfra/fp8`, with fallback disabled, required parameters, denied data
   collection, required ZDR, and verified router metadata.
-- Tool calls are sequential. OpenRouter later-indexed proposals are discarded
-  and never executed; only the validated primary call can advance the loop.
-  Mutating and destructive work requires persisted confirmation. Ambiguous
-  side effects become `execution_unknown` and are not replayed automatically.
+- Tool execution is sequential. Google and OpenRouter preserve and journal
+  every indexed proposal, including later OpenRouter indices and calls decoded
+  before a terminal stream error. A multi-call response is denied and paired
+  in full; no call is discarded or executed. Mutating and destructive work
+  requires persisted confirmation. Ambiguous side effects become
+  `execution_unknown` and are not replayed automatically.
 - Provider-private bytes and tool payloads remain encrypted Core state. Never
   copy them into tickets, logs, prompts, analytics, or ordinary exports.
 - Workspace attestation is a separate actor-attributed, scoped, revocable CAS
@@ -108,14 +110,14 @@ operation.
   shared by admission, request/catalog construction, API, Chat, and Settings.
 - Remote certificates bind the canonical code-owned execution TCB. Any drift or
   missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch. Manifest v2 statically audits six maintained
+  authority refresh, or dispatch. Manifest v3 statically audits six maintained
   import closures, including package initializers and the
   `core/inter_agent/generalist_context.py` content-composition path; a reached
   local dependency outside the artifact set makes identity calculation fail.
 
-## Future pre-activation gate (suspended until Phase 2+ and release review)
+## Future pre-activation gate (suspended pending certification and release review)
 
-This section is retained as future work and must not be executed as part of P1.
+This section is retained as future work and must not be executed as part of P2.
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false; feature flags alone
 cannot reopen remote agentic admission.
 
@@ -161,7 +163,7 @@ use only the Core commands
 `fake-data-scope-reviewed` confirmation), and
 `core.providers.agentic.attestation.revoke` (expected revision plus reason).
 Every mutation records the authenticated actor and an append-only redaction-safe
-audit fact. Do not issue an attestation merely to exercise P1 or to bypass the
+audit fact. Do not issue an attestation merely to exercise P2 or to bypass the
 false availability gate.
 
 While containment is active, `POST /api/providers/agentic/workspace-bindings` may disable a
@@ -207,8 +209,34 @@ have no operational authority even if their token record has not yet expired.
 
 Before provider acceptance, a new operator-initiated turn may be attempted only
 after the outage or policy issue is understood. After acceptance, do not retry a
-request automatically. Preserve the journaled request id and continuation state
-and enter recovery; an ambiguous mutation remains `execution_unknown`.
+request automatically. Productive recovery runs at startup/worker loss,
+pre-admission, pre-prepare, uncertain cancellation, execution failure, and the
+explicit adapter operation. It reads the pinned engine/adapter/provider/API and
+exact codec from each provider-step journal; never substitute a current default
+or migrate an old codec. An ambiguous mutation remains `execution_unknown`.
+
+For each affected step, inspect only redaction-safe journal metadata:
+
+- request/response ids and acceptance/stream status;
+- journal and base provider-state revisions/digests;
+- ordered proposal/disposition/result counts and pairing/commit status;
+- public recovery reason and timestamps.
+
+Do not resolve or copy staged provider bytes, tool arguments/results, or the
+private recovery-detail locator into a ticket. Recovery may attach an orphan
+request-scoped staged blob, repair a proposal WAL half, materialize a proven
+pre-effect denial/result, finish pairing, promote exact staged state, commit, or
+consume a pairing. An explicit provider `cancelled`, `budget_exceeded`, or
+`incomplete` terminal may return to the prior commit only when no call or staged
+state exists. If acceptance, pairing, codec, state revision, or effect outcome
+is not provable, retain `recovery_required`; repeated restart must not change
+the terminal revision or repeat an effect.
+
+Do not manually clear `recovery_required`. Queue, continuation, prepare,
+dispatch, and token paths deliberately reject the session. Settings and Chat
+may show only `provider_acceptance_ambiguous`, `provider_pairing_ambiguous`,
+`provider_state_ambiguous`, `tool_execution_ambiguous`, or the generic public
+fallback; arbitrary detail remains encrypted and Core-owned.
 
 For `provider_private_integrity_failed`, `provider_private_codec_mismatch`, or
 `provider_private_state_unavailable`, stop the session and preserve encrypted

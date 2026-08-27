@@ -147,6 +147,85 @@ class ProviderPrivateStateServiceTest(unittest.TestCase):
         self.assertEqual(len(private_files), 1)
         self.assertNotIn(signature, private_files[0].read_bytes())
 
+    def test_staged_state_is_non_authoritative_until_exact_cas_promotion(self) -> None:
+        envelope = self.service.stage_state(
+            session_id=self.session.session_id,
+            adapter_id=self.binding.adapter_id,
+            adapter_version=self.binding.adapter_version,
+            codec_id="fake-thought-codec",
+            codec_version="2",
+            schema_version="1",
+            content_type="application/vnd.fake.private-state",
+            payload=b"staged-provider-state",
+            turn_generation="turn-generation-staged",
+            provider_request_id="request-staged",
+            now=NOW,
+        )
+
+        self.assertIsNone(
+            self.store.get_provider_state(self.session.session_id).provider_private_envelope
+        )
+        self.assertEqual(
+            self.service.read_staged_state(
+                session_id=self.session.session_id,
+                adapter_id=self.binding.adapter_id,
+                adapter_version=self.binding.adapter_version,
+                envelope=envelope,
+            ),
+            b"staged-provider-state",
+        )
+        promoted = self.service.promote_staged_state(
+            session_id=self.session.session_id,
+            adapter_id=self.binding.adapter_id,
+            adapter_version=self.binding.adapter_version,
+            envelope=envelope,
+            expected_revision=0,
+            now=NOW,
+        )
+        replay = self.service.promote_staged_state(
+            session_id=self.session.session_id,
+            adapter_id=self.binding.adapter_id,
+            adapter_version=self.binding.adapter_version,
+            envelope=envelope,
+            expected_revision=0,
+            now=NOW,
+        )
+
+        self.assertEqual(promoted, replay)
+        self.assertEqual(promoted.provider_private_envelope, envelope)
+
+    def test_staged_request_replay_is_idempotent_and_divergence_fails_closed(self) -> None:
+        arguments = {
+            "session_id": self.session.session_id,
+            "adapter_id": self.binding.adapter_id,
+            "adapter_version": self.binding.adapter_version,
+            "codec_id": "fake-thought-codec",
+            "codec_version": "2",
+            "schema_version": "1",
+            "content_type": "application/vnd.fake.private-state",
+            "turn_generation": "turn-generation-replay",
+            "provider_request_id": "request-replay",
+            "now": NOW,
+        }
+        first = self.service.stage_state(payload=b"stable-state", **arguments)
+        replay = self.service.stage_state(payload=b"stable-state", **arguments)
+
+        self.assertEqual(replay, first)
+        with self.assertRaisesRegex(
+            ProviderPrivateStateError,
+            "staged_state_identity_conflict",
+        ):
+            self.service.stage_state(payload=b"divergent-state", **arguments)
+        self.assertEqual(
+            self.service.read_staged_state(
+                session_id=self.session.session_id,
+                adapter_id=self.binding.adapter_id,
+                adapter_version=self.binding.adapter_version,
+                envelope=first,
+            ),
+            b"stable-state",
+        )
+
     def test_wrong_adapter_or_codec_fails_closed(self) -> None:
         self._store_signature()
 

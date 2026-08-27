@@ -75,22 +75,96 @@ class RuntimeToolOrchestrator:
         turn_id: str,
         policy: RuntimeToolConfirmationPolicy,
     ) -> RuntimeToolInvocationOutcome:
-        """Persist before validation and advance at most one serialized tool call."""
+        """Compatibility facade over observe, disposition, and execution phases."""
         catalog = self.materialize(authority=authority, context=context)
-        descriptor = catalog.by_provider_name(provider_tool_name)
-        record, created = self.ledger.propose(
+        outcome = self.observe_provider_tool(
+            provider_tool_name=provider_tool_name,
+            provider_tool_call_id=provider_tool_call_id,
+            arguments=arguments,
+            provider_request_id="legacy-provider-request",
+            provider_event_ordinal=0,
+            provider_call_index=0,
+            authority=authority,
+            context=context,
+            turn_id=turn_id,
+            policy=policy,
+        )
+        prepared = self.prepare_observed_tool(
+            outcome.invocation,
+            requested_catalog=catalog,
+            authority=authority,
+            context=context,
+            policy=policy,
+        )
+        if prepared.invocation.state != "authorized":
+            return prepared
+        return self.execute_authorized(
+            prepared.invocation,
+            authority=authority,
+            context=context,
+            policy=policy,
+        )
+
+    def observe_provider_tool(
+        self,
+        *,
+        provider_tool_name: str,
+        provider_tool_call_id: str,
+        arguments: dict[str, object] | bytes,
+        provider_request_id: str,
+        provider_event_ordinal: int,
+        provider_call_index: int,
+        authority: EffectiveRuntimeAuthority,
+        context: RuntimeToolActorContext,
+        turn_id: str,
+        policy: RuntimeToolConfirmationPolicy,
+    ) -> RuntimeToolInvocationOutcome:
+        """Persist a preliminary proposal before catalog, schema, policy, or budget."""
+        record, _created = self.ledger.propose(
             workspace_id=context.workspace_id,
             session_id=context.session_id,
             turn_id=turn_id,
             provider_tool_call_id=provider_tool_call_id,
-            tool_handle=descriptor.handle,
             arguments=arguments,
-            effect_class=descriptor.effect_class,
             policy_revision=policy.policy_revision,
             authority_digest=authority.authority_digest,
+            provider_safe_name=provider_tool_name,
+            provider_request_id=provider_request_id,
+            provider_event_ordinal=provider_event_ordinal,
+            provider_call_index=provider_call_index,
         )
-        if not created and record.state == "executing":
-            record = self.ledger.recover_executing(record, safe_to_retry=descriptor.safe_to_retry)
+        return RuntimeToolInvocationOutcome(record)
+
+    def deny_observed_tool(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        resolution_status,
+        failure_reason: str,
+    ) -> RuntimeToolInvocationOutcome:
+        return RuntimeToolInvocationOutcome(
+            self.ledger.deny(
+                record,
+                resolution_status=resolution_status,
+                failure_reason=failure_reason,
+            )
+        )
+
+    def prepare_observed_tool(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        requested_catalog: RuntimeToolCatalog,
+        authority: EffectiveRuntimeAuthority,
+        context: RuntimeToolActorContext,
+        policy: RuntimeToolConfirmationPolicy,
+    ) -> RuntimeToolInvocationOutcome:
+        """Resolve and persist a disposition without crossing the effect boundary."""
+        if record.state == "executing":
+            record = self.ledger.recover_executing(
+                record,
+                safe_to_retry=record.safe_to_retry,
+            )
         if record.state in {
             "awaiting_confirmation",
             "denied",
@@ -101,14 +175,52 @@ class RuntimeToolOrchestrator:
             "execution_unknown",
         }:
             return RuntimeToolInvocationOutcome(record)
+        try:
+            requested_descriptor = requested_catalog.by_provider_name(
+                record.provider_safe_name
+            )
+        except RuntimeToolError:
+            return self.deny_observed_tool(
+                record,
+                resolution_status="unknown_tool",
+                failure_reason="tool_not_found",
+            )
+        live_catalog = self.materialize(authority=authority, context=context)
+        try:
+            descriptor = live_catalog.by_handle(requested_descriptor.handle)
+        except RuntimeToolError:
+            revoked = requested_descriptor.handle not in authority.allowed_tool_handles
+            return self.deny_observed_tool(
+                record,
+                resolution_status="revoked" if revoked else "not_authorized",
+                failure_reason="tool_authority_revoked" if revoked else "tool_not_authorized",
+            )
+        record = self.ledger.resolve(
+            record,
+            tool_handle=descriptor.handle,
+            effect_class=descriptor.effect_class,
+            safe_to_retry=descriptor.safe_to_retry,
+        )
         if record.state == "proposed":
             record = self.ledger.transition(record, "validating")
         if record.state == "validating":
             try:
+                if record.arguments_summary.get("root_type") == "malformed_json":
+                    raise RuntimeToolSchemaError("tool_arguments_invalid")
+                arguments = self.ledger.load_arguments(record)
                 validate_tool_arguments(descriptor.original_input_schema, arguments)
             except RuntimeToolSchemaError as error:
-                record = self.ledger.transition(record, "denied", failure_reason=error.reason_code)
-                return RuntimeToolInvocationOutcome(record)
+                return self.deny_observed_tool(
+                    record,
+                    resolution_status="schema_denied",
+                    failure_reason=error.reason_code,
+                )
+            except RuntimeToolError as error:
+                return self.deny_observed_tool(
+                    record,
+                    resolution_status="schema_denied",
+                    failure_reason=error.reason_code,
+                )
             record = self.ledger.transition(record, "validated")
         if record.state == "validated":
             if self._requires_confirmation(descriptor, policy):
@@ -116,6 +228,25 @@ class RuntimeToolOrchestrator:
                     self.ledger.transition(record, "awaiting_confirmation")
                 )
             record = self.ledger.transition(record, "authorized")
+        return RuntimeToolInvocationOutcome(record)
+
+    def execute_authorized(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        authority: EffectiveRuntimeAuthority,
+        context: RuntimeToolActorContext,
+        policy: RuntimeToolConfirmationPolicy,
+    ) -> RuntimeToolInvocationOutcome:
+        """Cross the effect boundary only after the caller persisted `started`."""
+        if record.state != "authorized":
+            return RuntimeToolInvocationOutcome(record)
+        if record.resolved_tool_handle is None:
+            raise RuntimeToolError("tool_not_authorized")
+        descriptor = self.materialize(
+            authority=authority,
+            context=context,
+        ).by_handle(record.resolved_tool_handle)
         return RuntimeToolInvocationOutcome(
             self._execute(record, descriptor=descriptor, context=context, policy=policy)
         )
@@ -147,9 +278,35 @@ class RuntimeToolOrchestrator:
         context: RuntimeToolActorContext,
         policy: RuntimeToolConfirmationPolicy,
     ) -> RuntimeToolInvocationOutcome:
-        """Recompute authority, consume the grant, then cross the effect boundary."""
+        """Compatibility facade that authorizes and immediately executes."""
+        authorized = self.authorize_confirmed(
+            invocation_id=invocation_id,
+            grant_id=grant_id,
+            authority=authority,
+            context=context,
+        )
+        if authorized.invocation.state != "authorized":
+            return authorized
+        return self.execute_authorized(
+            authorized.invocation,
+            authority=authority,
+            context=context,
+            policy=policy,
+        )
+
+    def authorize_confirmed(
+        self,
+        *,
+        invocation_id: str,
+        grant_id: str,
+        authority: EffectiveRuntimeAuthority,
+        context: RuntimeToolActorContext,
+    ) -> RuntimeToolInvocationOutcome:
+        """Consume confirmation and recompute authority without executing."""
         catalog = self.materialize(authority=authority, context=context)
         pending = self.ledger.store.get_tool_invocation(invocation_id)
+        if pending.resolved_tool_handle is None:
+            raise RuntimeToolError("tool_confirmation_invalid")
         descriptor = catalog.by_handle(pending.resolved_tool_handle)
         record = self.ledger.authorize(invocation_id=invocation_id, grant_id=grant_id)
         if record.state == "expired":
@@ -158,9 +315,9 @@ class RuntimeToolOrchestrator:
             return RuntimeToolInvocationOutcome(record)
         if record.state != "authorized":
             raise RuntimeToolError("tool_confirmation_invalid")
-        return RuntimeToolInvocationOutcome(
-            self._execute(record, descriptor=descriptor, context=context, policy=policy)
-        )
+        if descriptor.handle != record.resolved_tool_handle:
+            raise RuntimeToolError("tool_confirmation_invalid")
+        return RuntimeToolInvocationOutcome(record)
     def recover_invocation(
         self,
         *,
@@ -171,6 +328,8 @@ class RuntimeToolOrchestrator:
         """Reconcile an interrupted execution without replaying ambiguous effects."""
         catalog = self.materialize(authority=authority, context=context)
         record = self.ledger.store.get_tool_invocation(invocation_id)
+        if record.resolved_tool_handle is None:
+            raise RuntimeToolError("tool_not_authorized")
         descriptor = catalog.by_handle(record.resolved_tool_handle)
         return RuntimeToolInvocationOutcome(
             self.ledger.recover_executing(record, safe_to_retry=descriptor.safe_to_retry)
@@ -250,14 +409,62 @@ class RuntimeToolOrchestrator:
                 if crossed_effect_boundary and descriptor.effect_class != "read"
                 else "failed"
             )
-            return self.ledger.transition(executing, state, failure_reason=error.reason_code)
+            return self._persist_execution_failure(
+                executing,
+                state=state,
+                reason_code=error.reason_code,
+            )
         except Exception:
             state = (
                 "execution_unknown"
                 if crossed_effect_boundary and descriptor.effect_class != "read"
                 else "failed"
             )
-            return self.ledger.transition(executing, state, failure_reason="tool_execution_failed")
+            return self._persist_execution_failure(
+                executing,
+                state=state,
+                reason_code="tool_execution_failed",
+            )
+
+    def _persist_execution_failure(
+        self,
+        executing: ToolInvocationRecord,
+        *,
+        state,
+        reason_code: str,
+    ) -> ToolInvocationRecord:
+        encoded = json.dumps(
+            {"error": reason_code},
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        private_ref = self.ledger.private_payload_store.put(
+            workspace_id=executing.workspace_id,
+            session_id=executing.session_id,
+            payload=encoded,
+        )
+        try:
+            return self.ledger.transition(
+                executing,
+                state,
+                failure_reason=reason_code,
+                result_private_ref=private_ref,
+                result_summary={
+                    "root_type": "object",
+                    "field_count": 1,
+                    "serialized_bytes": len(encoded),
+                    "is_error": True,
+                },
+            )
+        except Exception:
+            self.ledger.private_payload_store.delete(
+                workspace_id=executing.workspace_id,
+                session_id=executing.session_id,
+                private_ref=private_ref,
+            )
+            raise
 
     def _invoke_surface(
         self,

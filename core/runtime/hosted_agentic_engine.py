@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 from threading import Event, RLock
 
 from core.providers.agentic_adapter import (
@@ -78,15 +79,27 @@ class HostedAgenticEngineAdapter:
         return RuntimeHealth(status="healthy")
 
     async def prepare(self, context: RuntimePrepareContext) -> RuntimePrepareResult:
+        if context.session.status == "recovery_required":
+            return RuntimePrepareResult(
+                ready=False,
+                metadata={"reason_code": "runtime_session_recovery_required"},
+            )
         if context.local_launch_spec is not None:
             return RuntimePrepareResult(
                 ready=False,
                 metadata={"reason_code": "hosted_launch_spec_forbidden"},
             )
         try:
-            codec = self.loop.provider_runtimes.resolve(context.binding).private_codec
+            runtime = self.loop.provider_runtimes.resolve(context.binding)
+            codec = runtime.private_codec
         except HostedAgenticLoopError as error:
             return RuntimePrepareResult(ready=False, metadata={"reason_code": error.reason_code})
+        recovered = self.loop.recover_session(context, trigger="pre_prepare")
+        if not recovered.recovered:
+            return RuntimePrepareResult(
+                ready=False,
+                metadata={"reason_code": recovered.reason_code},
+            )
         if context.provider_state.provider_private_envelope is not None:
             try:
                 self.loop.private_state_service.read_state(
@@ -105,6 +118,8 @@ class HostedAgenticEngineAdapter:
         return RuntimePrepareResult(ready=True, metadata={"transport": "hosted-api"})
 
     async def execute(self, context: RuntimeTurnContext) -> AsyncIterator[RuntimeProviderEvent]:
+        if context.session.status == "recovery_required":
+            raise HostedAgenticLoopError("runtime_session_recovery_required")
         cancellation = Event()
         with self._lock:
             if context.correlation_id in self._cancellations:
@@ -130,34 +145,27 @@ class HostedAgenticEngineAdapter:
 
     async def recover(self, context: RuntimeRecoveryContext) -> RuntimeRecoveryResult:
         try:
-            codec = self.loop.provider_runtimes.resolve(context.binding).private_codec
+            self.loop.provider_runtimes.resolve(context.binding)
         except HostedAgenticLoopError as error:
             return RuntimeRecoveryResult(False, error.reason_code)
-        if context.provider_state.provider_private_envelope is not None:
-            try:
-                self.loop.private_state_service.read_state(
-                    session_id=context.session.session_id,
-                    adapter_id=self.adapter_id,
-                    adapter_version=self.adapter_version,
-                    codec_id=codec.codec_id,
-                    codec_version=codec.codec_version,
-                    schema_version=codec.schema_version,
-                    purpose="recovery",
-                )
-            except ProviderPrivateStateError as error:
-                return RuntimeRecoveryResult(False, public_provider_private_reason(error))
-        uncertain = False
-        ledger = self.loop.tool_ledger
-        for invocation in ledger.store.list_tool_invocations(
-            session_id=context.session.session_id
-        ):
-            if invocation.state != "executing":
-                continue
-            recovered = ledger.recover_executing(invocation, safe_to_retry=False)
-            uncertain = uncertain or recovered.state == "execution_unknown"
-        if uncertain:
-            return RuntimeRecoveryResult(False, "session_recovery_required")
-        return RuntimeRecoveryResult(True, "recovered")
+        result = self.loop.recover_session(context, trigger=context.trigger)
+        return RuntimeRecoveryResult(result.recovered, result.reason_code)
+
+    def recover_now(self, *, session, trigger: str):
+        """Synchronous hook for startup/admission paths that do not own an event loop."""
+        binding = session.execution_binding
+        if binding is None:
+            raise HostedAgenticLoopError("runtime_execution_binding_missing")
+        return self.loop.recover_session(
+            SimpleNamespace(
+                session=session,
+                binding=binding,
+                provider_state=self.loop.tool_ledger.store.get_provider_state(
+                    session.session_id
+                ),
+            ),
+            trigger=trigger,
+        )
 
     async def close(self, context: RuntimeCloseContext) -> RuntimeCloseResult:
         cancelled = 0

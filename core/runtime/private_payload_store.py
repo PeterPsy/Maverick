@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from contextlib import contextmanager
 import fcntl
+import hmac
 import json
 import os
 from pathlib import Path
@@ -52,15 +53,28 @@ class EncryptedRuntimePrivatePayloadStore:
         max_blob_bytes: int,
         max_session_bytes: int,
         replace_ref: str | None = None,
+        private_ref: str | None = None,
+        idempotent_ref: bool = False,
     ) -> str:
         if not payload or len(payload) > max_blob_bytes:
             raise RuntimePrivatePayloadError("private_payload_size_invalid")
         key = self._current_key()
         token = uuid4().hex
-        private_ref = f"{locator_prefix}:v1:{token}"
+        private_ref = private_ref or f"{locator_prefix}:v1:{token}"
         path = self._payload_path(context, locator_prefix, private_ref)
         path.parent.mkdir(parents=True, exist_ok=True)
         with _locked_namespace(path.parent):
+            if idempotent_ref and path.is_file():
+                existing = self.read(
+                    context=context,
+                    locator_prefix=locator_prefix,
+                    private_ref=private_ref,
+                )
+                if hmac.compare_digest(existing, payload):
+                    return private_ref
+                raise RuntimePrivatePayloadError(
+                    "private_payload_identity_conflict"
+                )
             replaced_size = self._stored_size(context, locator_prefix, replace_ref)
             current_size = sum(
                 self._document_payload_size(item)

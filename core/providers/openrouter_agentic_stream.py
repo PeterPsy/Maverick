@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+import json
 
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
@@ -23,7 +24,6 @@ from core.providers.openrouter_agentic_state import encode_openrouter_chat_state
 from core.providers.openrouter_agentic_stream_fields import (
     nonnegative_int,
     object_field,
-    parsed_arguments,
     reasoning_details,
     required_text,
     validate_router_metadata,
@@ -59,7 +59,10 @@ class OpenRouterChatStreamDecoder:
         self.text_chunks: list[str] = []
         self.reasoning_chunks: list[str] = []
         self.reasoning_details: list[dict[str, object]] = []
-        self.tool_call: _ToolCall | None = None
+        self.tool_calls: dict[int, _ToolCall] = {}
+        self.emitted_tool_calls: tuple[AgenticToolCall, ...] | None = None
+        self._tool_events: tuple[AgenticModelEvent, ...] = ()
+        self._tool_events_delivered = False
         self.finish_reason: str | None = None
         self.usage: AgenticUsage | None = None
         self.usage_emitted = False
@@ -75,22 +78,24 @@ class OpenRouterChatStreamDecoder:
             return [self._event("error", error_code=openrouter_error_reason(payload))]
         events = self._identity(payload)
         metadata = payload.get("openrouter_metadata")
-        if metadata is not None:
-            if self.saw_router_metadata:
-                raise OpenRouterAgenticProtocolError("provider_response_invalid")
-            validate_router_metadata(metadata, model_id=self.request.model_id)
-            self.saw_router_metadata = True
         choices = payload.get("choices")
         if not isinstance(choices, list) or len(choices) > 1:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
         if choices:
             events.extend(self._choice(object_field(choices[0])))
+        if metadata is not None:
+            if self.saw_router_metadata:
+                raise OpenRouterAgenticProtocolError("provider_response_invalid")
+            validate_router_metadata(metadata, model_id=self.request.model_id)
+            self.saw_router_metadata = True
         if payload.get("usage") is not None:
             if self.usage is not None:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
             self.usage = self._usage(payload["usage"])
         if self.finish_reason is not None and self.usage is not None and self.saw_router_metadata:
             events.extend(self._complete())
+        if self._tool_events and any(item in events for item in self._tool_events):
+            self._tool_events_delivered = True
         return events
 
     def finish(self) -> None:
@@ -122,6 +127,18 @@ class OpenRouterChatStreamDecoder:
             return [self._event("usage", usage=self.usage)]
         except OpenRouterAgenticProtocolError:
             return []
+
+    def failure_observed_tool_events(self) -> list[AgenticModelEvent]:
+        """Return calls assembled before a later terminal-field failure exactly once."""
+        if not self._tool_events and self.tool_calls:
+            try:
+                self._tool_call_events()
+            except OpenRouterAgenticProtocolError:
+                return []
+        if self._tool_events_delivered or not self._tool_events:
+            return []
+        self._tool_events_delivered = True
+        return list(self._tool_events)
 
     def _identity(self, payload: dict[str, object]) -> list[AgenticModelEvent]:
         generation_id = required_text(payload.get("id"))
@@ -174,6 +191,8 @@ class OpenRouterChatStreamDecoder:
             if finish_reason not in {"stop", "tool_calls"}:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
             self.finish_reason = finish_reason
+            if finish_reason == "tool_calls":
+                events.extend(self._tool_call_events())
         return events
 
     def _reasoning(self, delta: dict[str, object]) -> None:
@@ -190,39 +209,70 @@ class OpenRouterChatStreamDecoder:
         for raw_item in value:
             item = object_field(raw_item)
             index = nonnegative_int(item.get("index"))
-            if index != 0:
-                if self.tool_call is None:
-                    raise OpenRouterAgenticProtocolError("provider_tool_call_index_invalid")
-                # The shared runtime executes one call per model step. DeepInfra
-                # can still stream later array entries even though the profile is
-                # sequential, so retain only the primary entry and let the model
-                # request any remaining work after its result is replayed.
-                continue
-            self._primary_tool_delta(item)
+            self._tool_call_delta(index, item)
 
-    def _primary_tool_delta(self, item: dict[str, object]) -> None:
-        if self.tool_call is None:
-            self.tool_call = _ToolCall()
+    def _tool_call_delta(self, index: int, item: dict[str, object]) -> None:
+        tool_call = self.tool_calls.setdefault(index, _ToolCall())
         call_id = item.get("id")
         if call_id is not None:
             call_id = required_text(call_id)
-            if self.tool_call.call_id not in {None, call_id}:
-                raise OpenRouterAgenticProtocolError("provider_parallel_tool_calls_forbidden")
-            self.tool_call.call_id = call_id
+            if tool_call.call_id not in {None, call_id}:
+                raise OpenRouterAgenticProtocolError("provider_response_invalid")
+            tool_call.call_id = call_id
         if item.get("type") not in {None, "function"}:
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
         function = object_field(item.get("function"))
         name = function.get("name")
         if name is not None:
             name = required_text(name)
-            if self.tool_call.name not in {None, name}:
+            if tool_call.name not in {None, name}:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
-            self.tool_call.name = name
+            tool_call.name = name
         arguments = function.get("arguments")
         if arguments is not None:
             if not isinstance(arguments, str):
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
-            self.tool_call.argument_chunks.append(arguments)
+            tool_call.argument_chunks.append(arguments)
+
+    def _tool_call_events(self) -> list[AgenticModelEvent]:
+        """Emit every complete indexed call before later terminal fields can fail."""
+        if self.emitted_tool_calls is not None:
+            return []
+        if not self.tool_calls or set(self.tool_calls) != set(range(len(self.tool_calls))):
+            raise OpenRouterAgenticProtocolError("provider_tool_call_index_invalid")
+        calls: list[AgenticToolCall] = []
+        seen_ids: set[str] = set()
+        for index in range(len(self.tool_calls)):
+            assembled = self.tool_calls[index]
+            call_id = required_text(assembled.call_id)
+            name = required_text(assembled.name)
+            if call_id in seen_ids:
+                raise OpenRouterAgenticProtocolError("provider_response_invalid")
+            seen_ids.add(call_id)
+            raw_text = "".join(assembled.argument_chunks)
+            raw_arguments = raw_text.encode("utf-8") or b'""'
+            try:
+                parsed = json.loads(
+                    raw_text,
+                    parse_constant=_reject_json_constant,
+                )
+            except (json.JSONDecodeError, ValueError):
+                parsed = None
+            arguments = dict(parsed) if isinstance(parsed, dict) else None
+            calls.append(
+                AgenticToolCall(
+                    provider_tool_call_id=call_id,
+                    provider_tool_name=name,
+                    arguments=arguments,
+                    call_index=index,
+                    arguments_raw=(raw_arguments if arguments is None else None),
+                )
+            )
+        self.emitted_tool_calls = tuple(calls)
+        self._tool_events = tuple(
+            self._event("tool_call", tool_call=call) for call in calls
+        )
+        return list(self._tool_events)
 
     def _usage(self, value: object) -> AgenticUsage:
         usage = object_field(value)
@@ -236,49 +286,55 @@ class OpenRouterChatStreamDecoder:
 
     def _complete(self) -> list[AgenticModelEvent]:
         if self.finish_reason == "tool_calls":
-            if self.tool_call is None:
+            if self.emitted_tool_calls is None:
+                self._tool_call_events()
+            if not self.emitted_tool_calls:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
-            call_id = required_text(self.tool_call.call_id)
-            name = required_text(self.tool_call.name)
-            raw_arguments = "".join(self.tool_call.argument_chunks)
-            arguments = parsed_arguments(raw_arguments)
+            assistant_calls = []
+            pending = []
+            for index, call in enumerate(self.emitted_tool_calls):
+                assembled = self.tool_calls[index]
+                raw_arguments = "".join(assembled.argument_chunks)
+                assistant_calls.append({
+                    "id": call.provider_tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": call.provider_tool_name,
+                        "arguments": raw_arguments,
+                    },
+                })
+                pending.append(
+                    OpenRouterPendingToolCall(
+                        call.provider_tool_call_id,
+                        call.provider_tool_name,
+                    )
+                )
             assistant = self._assistant_message(
                 content="".join(self.text_chunks) or None,
-                tool_calls=[{
-                    "id": call_id,
-                    "type": "function",
-                    "function": {"name": name, "arguments": raw_arguments},
-                }],
+                tool_calls=assistant_calls,
             )
-            pending = OpenRouterPendingToolCall(call_id, name)
-            result = [
-                self._event(
-                    "tool_call",
-                    tool_call=AgenticToolCall(call_id, name, arguments),
-                )
-            ]
+            result = []
         else:
-            if self.tool_call is not None and self.text_chunks:
+            if self.tool_calls and self.text_chunks:
                 raise OpenRouterAgenticProtocolError("provider_mixed_text_and_tool_call")
-            if self.tool_call is not None or not self.text_chunks:
+            if self.tool_calls or not self.text_chunks:
                 raise OpenRouterAgenticProtocolError("provider_response_invalid")
             text = "".join(self.text_chunks)
             assistant = self._assistant_message(content=text)
-            pending = None
+            pending = []
             result = [
                 self._event("text_delta", text=chunk)
                 for chunk in self.text_chunks
             ]
         consumed = list(self.state.consumed_tool_call_ids)
-        if self.state.pending_tool_call is not None:
-            consumed.append(self.state.pending_tool_call.call_id)
-        if pending is not None and pending.call_id in consumed:
+        consumed.extend(item.call_id for item in self.state.pending_tool_calls)
+        if {item.call_id for item in pending}.intersection(consumed):
             raise OpenRouterAgenticProtocolError("provider_response_invalid")
         private_state = encode_openrouter_chat_state(
             OpenRouterChatState(
                 schema_version=self.state.schema_version,
                 history=(*self.state.history, *self.new_messages, assistant),
-                pending_tool_call=pending,
+                pending_tool_calls=tuple(pending),
                 consumed_tool_call_ids=tuple(consumed),
             )
         )
@@ -288,7 +344,7 @@ class OpenRouterChatStreamDecoder:
                 self._usage_event(),
             ]
         )
-        if pending is None:
+        if not pending:
             result.append(self._event("text_final", text="".join(self.text_chunks)))
         self.completed = True
         result.append(self._event("completed", finish_reason=str(self.finish_reason)))
@@ -316,3 +372,7 @@ class OpenRouterChatStreamDecoder:
             ordinal=self.ordinal,
             **values,
         )
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"non-finite JSON constant: {value}")

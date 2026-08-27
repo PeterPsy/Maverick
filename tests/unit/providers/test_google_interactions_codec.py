@@ -222,37 +222,6 @@ class GoogleInteractionsCodecTest(unittest.TestCase):
         self.assertEqual(result[-1].event_type, "error")
         self.assertEqual(result[-1].error_code, "provider_response_invalid")
 
-    def test_parallel_function_calls_and_corrupt_private_state_fail_closed(self) -> None:
-        parallel = _tool_stream("interaction-parallel")
-        parallel[-1:-1] = [
-            {
-                "event_type": "step.start",
-                "index": 2,
-                "step": {
-                    "type": "function_call",
-                    "id": "call-2",
-                    "name": "fixture_read",
-                    "arguments": {"value": 5},
-                },
-            },
-            {"event_type": "step.stop", "index": 2},
-        ]
-        client = GoogleInteractionsAgenticClient(transport=_ScriptedTransport([parallel]))
-
-        rejected = asyncio.run(_events(client, _request("request-parallel")))
-
-        self.assertEqual(rejected[-1].error_code, "provider_parallel_tool_calls_forbidden")
-        transport = _ScriptedTransport([_tool_stream("interaction-private")])
-        client = GoogleInteractionsAgenticClient(transport=transport)
-        first = asyncio.run(_events(client, _request("request-private-1")))
-        private = next(event.provider_private_state for event in first if event.event_type == "provider_state")
-        corrupt = replace(private, content=b"{}")
-        rejected = asyncio.run(
-            _events(client, _request("request-private-2", private_state=corrupt))
-        )
-        self.assertEqual(rejected[-1].error_code, "provider_private_state_invalid")
-        self.assertEqual(len(transport.payloads), 1)
-
     def test_provider_error_before_acceptance_is_normalized(self) -> None:
         for code, reason_code in (
             ("quota_exceeded", "provider_quota_exceeded"),

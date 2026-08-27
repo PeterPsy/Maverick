@@ -108,6 +108,7 @@ class RuntimeRecoveryContext:
     session: RuntimeSessionRecord
     binding: RuntimeExecutionBinding
     provider_state: RuntimeProviderState
+    trigger: str = "explicit_recovery"
 
 
 @dataclass(frozen=True)

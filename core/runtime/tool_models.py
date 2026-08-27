@@ -8,6 +8,22 @@ from typing import Literal
 
 
 ToolEffectClass = Literal["read", "mutating", "destructive", "unclassified"]
+ToolResolutionStatus = Literal[
+    "unresolved",
+    "resolved",
+    "unknown_tool",
+    "revoked",
+    "not_authorized",
+    "schema_denied",
+    "budget_denied",
+    "parallel_denied",
+    "awaiting_confirmation",
+    "authorized",
+    "succeeded",
+    "failed",
+    "cancelled",
+    "execution_unknown",
+]
 ToolInvocationState = Literal[
     "proposed",
     "validating",
@@ -34,7 +50,7 @@ class ToolInvocationRecord:
     session_id: str
     turn_id: str
     provider_tool_call_id: str
-    resolved_tool_handle: str
+    resolved_tool_handle: str | None
     arguments_private_ref: str
     arguments_summary: dict[str, object]
     arguments_digest: str
@@ -58,6 +74,17 @@ class ToolInvocationRecord:
     result_source_digest: str = ""
     result_resource_identity: str = ""
     result_classification_revision: int | None = None
+    proposal_id: str = ""
+    provider_safe_name: str = ""
+    provider_request_id: str = ""
+    provider_event_ordinal: int = 0
+    provider_call_index: int = 0
+    resolution_status: ToolResolutionStatus = "unresolved"
+    disposition_id: str | None = None
+    safe_to_retry: bool = False
+    effect_boundary_at: datetime | None = None
+    result_persisted_at: datetime | None = None
+    result_id: str | None = None
 
 
 @dataclass(frozen=True)

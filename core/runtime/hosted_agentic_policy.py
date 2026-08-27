@@ -68,6 +68,8 @@ def tool_event_payload(
         "invocation_id": record.invocation_id,
         "provider_tool_call_id": record.provider_tool_call_id,
         "tool_handle": record.resolved_tool_handle,
+        "provider_safe_name": record.provider_safe_name,
+        "resolution_status": record.resolution_status,
         "effect_class": record.effect_class,
         "state": display_state or record.state,
         **({"persisted_state": record.state} if display_state and display_state != record.state else {}),
@@ -83,5 +85,7 @@ def normalized_tool_result(orchestrator, outcome) -> tuple[dict[str, object], bo
     if record.state == "succeeded":
         return orchestrator.ledger.load_result(record), False
     if record.state in {"denied", "expired", "failed", "cancelled"}:
+        if record.result_private_ref:
+            return orchestrator.ledger.load_result(record), True
         return {"error": record.failure_reason or f"tool_{record.state}"}, True
     raise HostedAgenticLoopError("tool_execution_failed")

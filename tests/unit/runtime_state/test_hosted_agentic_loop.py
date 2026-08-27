@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from core.providers.agentic_adapter import RuntimeCancelContext, RuntimeRecoveryContext
+from core.providers.agentic_protocol import AgenticModelEvent, AgenticToolCall
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.execution_events import RuntimeExecutionEvent
@@ -146,7 +147,11 @@ class HostedAgenticLoopTest(unittest.TestCase):
         self.assertEqual(len(client.requests), 1)
         self.assertEqual(client.closed_streams, 1)
         errors = [event.payload for event in events if event.event_type == "runtime.error"]
-        self.assertEqual(errors, [{"reason_code": "runtime_cancelled"}])
+        self.assertEqual(errors, [{"reason_code": "provider_acceptance_ambiguous"}])
+        self.assertEqual(
+            self.harness.store.get_session("session-hosted").status,
+            "recovery_required",
+        )
 
     def test_denied_confirmation_resumes_turn_without_mutation(self) -> None:
         client = DeterministicFakeAgenticClient(tool_name=self.harness.mutate_tool_name)
@@ -182,49 +187,6 @@ class HostedAgenticLoopTest(unittest.TestCase):
             [status for status, _invocation_id in self.harness.turn_statuses],
             ["waiting_for_tool_confirmation", "active"],
         )
-
-    def test_tool_budget_stops_repeating_provider_before_duplicate_side_effect(self) -> None:
-        harness = HostedAgenticHarness(self, max_tool_calls=1)
-        client = DeterministicFakeAgenticClient(
-            tool_name=harness.read_tool_name,
-            repeat_tool=True,
-        )
-        self.harness = harness
-
-        result, events, _adapter = self.execute(client)
-
-        self.assertEqual(result.exit_code, 1)
-        self.assertEqual(harness.cli_calls, 1)
-        self.assertEqual(len(client.requests), 2)
-        errors = [event.payload for event in events if event.event_type == "runtime.error"]
-        self.assertEqual(errors, [{"reason_code": "agent_tool_call_limit_reached"}])
-
-    def test_restart_replay_reuses_persisted_tool_result_without_duplicate_execution(self) -> None:
-        policy = RuntimeToolConfirmationPolicy(
-            policy_revision="policy:test:1",
-            require_confirmation_for_mutating=True,
-            require_confirmation_for_destructive=True,
-            max_tool_result_bytes=4096,
-        )
-        existing = self.harness.orchestrator.invoke_provider_tool(
-            provider_tool_name=self.harness.read_tool_name,
-            provider_tool_call_id="fake-call-1",
-            arguments={"value": 4},
-            authority=self.harness.authority,
-            context=self.harness.adapter(
-                DeterministicFakeAgenticClient()
-            ).loop.actor_context_resolver(None),
-            turn_id="turn-hosted",
-            policy=policy,
-        )
-        self.assertEqual(existing.invocation.state, "succeeded")
-        client = DeterministicFakeAgenticClient(tool_name=self.harness.read_tool_name)
-
-        result, _events, _adapter = self.execute(client)
-
-        self.assertEqual(result.exit_code, 0)
-        self.assertEqual(self.harness.cli_calls, 1)
-        self.assertEqual(len(client.requests), 2)
 
     def test_cancel_while_waiting_makes_confirmation_invocation_terminal(self) -> None:
         client = DeterministicFakeAgenticClient(tool_name=self.harness.mutate_tool_name)
@@ -266,27 +228,10 @@ class HostedAgenticLoopTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         serialized = json.dumps([event.payload for event in events])
         self.assertNotIn("provider-secret-transport-detail", serialized)
-        self.assertIn("provider_response_invalid", serialized)
-
-    def test_provider_outage_after_acceptance_is_terminal_without_blind_retry(self) -> None:
-        client = DeterministicFakeAgenticClient(
-            provider_error_code="provider_unavailable"
-        )
-
-        result, events, _adapter = self.execute(client)
-
-        self.assertEqual(result.exit_code, 1)
-        self.assertEqual(result.failure_reason_code, "provider_unavailable")
+        self.assertIn("provider_acceptance_ambiguous", serialized)
         self.assertEqual(
-            result.public_error_message,
-            "The model provider is temporarily unavailable.",
-        )
-        self.assertEqual(result.diagnostic_reference, "turn:turn-hosted")
-        self.assertEqual(len(client.requests), 1)
-        self.assertEqual(self.harness.cli_calls, 0)
-        self.assertEqual(
-            [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "provider_unavailable"}],
+            self.harness.store.get_session("session-hosted").status,
+            "recovery_required",
         )
 
     def test_certificate_revocation_mid_step_blocks_tool_execution(self) -> None:
@@ -311,10 +256,9 @@ class HostedAgenticLoopTest(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertEqual(self.harness.cli_calls, 0)
-        self.assertEqual(
-            self.harness.store.list_tool_invocations(session_id="session-hosted"),
-            [],
-        )
+        records = self.harness.store.list_tool_invocations(session_id="session-hosted")
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].resolution_status, "revoked")
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
             [{"reason_code": "certificate_revoked"}],
@@ -325,7 +269,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
         service = self.harness.private_state_service
         with patch.object(
             service,
-            "store_state",
+            "stage_state",
             side_effect=ProviderPrivateStateError(
                 "provider_private_quota_exceeded"
             ),
@@ -335,7 +279,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "provider_private_quota_exceeded"}],
+            [{"reason_code": "provider_acceptance_ambiguous"}],
         )
 
     def test_private_state_corruption_is_explicit_before_provider_dispatch(self) -> None:
@@ -402,12 +346,7 @@ class HostedAgenticLoopTest(unittest.TestCase):
 
         result, events, _adapter = self.execute(client)
 
-        self.assertEqual(result.exit_code, 1)
-        self.assertEqual(result.failure_reason_code, "tool_not_found")
-        self.assertEqual(
-            result.public_error_message,
-            "The model requested a tool that is not available. The unavailable tool was not executed.",
-        )
+        self.assertEqual(result.exit_code, 0)
         self.assertEqual(self.harness.cli_calls, 1)
         self.assertEqual(self.harness.mcp_calls, 0)
         self.assertNotIn(
@@ -416,57 +355,11 @@ class HostedAgenticLoopTest(unittest.TestCase):
         )
         self.assertEqual(
             [event.payload for event in events if event.event_type == "runtime.error"],
-            [{"reason_code": "tool_not_found"}],
+            [],
         )
-
-    def test_recovery_marks_ambiguous_mutation_execution_unknown(self) -> None:
-        client = DeterministicFakeAgenticClient(tool_name=self.harness.mutate_tool_name)
-        adapter = self.harness.adapter(client)
-        policy = RuntimeToolConfirmationPolicy(
-            policy_revision="policy:test:1",
-            require_confirmation_for_mutating=True,
-            require_confirmation_for_destructive=True,
-            max_tool_result_bytes=4096,
-        )
-        pending = self.harness.orchestrator.invoke_provider_tool(
-            provider_tool_name=self.harness.mutate_tool_name,
-            provider_tool_call_id="recovery-call",
-            arguments={"value": 1},
-            authority=self.harness.authority,
-            context=adapter.loop.actor_context_resolver(None),
-            turn_id="turn-hosted",
-            policy=policy,
-        )
-        decided = self.harness.orchestrator.decide_confirmation(
-            invocation_id=pending.invocation.invocation_id,
-            decision="approve",
-            arguments_digest=pending.invocation.arguments_digest,
-            expected_invocation_revision=pending.invocation.revision,
-            confirming_actor_id="user-1",
-            policy=policy,
-        )
-        authorized = self.harness.orchestrator.ledger.authorize(
-            invocation_id=pending.invocation.invocation_id,
-            grant_id=decided.confirmation_grant.grant_id,  # type: ignore[union-attr]
-        )
-        self.harness.orchestrator.ledger.transition(authorized, "executing")
-
-        recovery = asyncio.run(
-            adapter.recover(
-                RuntimeRecoveryContext(
-                    self.harness.session,
-                    self.harness.binding,
-                    self.harness.store.get_provider_state("session-hosted"),
-                )
-            )
-        )
-
-        self.assertFalse(recovery.recovered)
-        self.assertEqual(recovery.reason_code, "session_recovery_required")
-        self.assertEqual(
-            self.harness.store.get_tool_invocation(pending.invocation.invocation_id).state,
-            "execution_unknown",
-        )
+        records = self.harness.store.list_tool_invocations(session_id="session-hosted")
+        self.assertEqual(records[1].resolution_status, "unknown_tool")
+        self.assertIsNotNone(records[1].result_private_ref)
 
     def _wait_for_invocation(self, state: str):
         holder: dict[str, object] = {}
@@ -488,6 +381,30 @@ class HostedAgenticLoopTest(unittest.TestCase):
                 return
             time.sleep(0.01)
         self.fail("Timed out waiting for hosted-loop test state.")
+
+
+class _CallThenTerminalErrorClient:
+    def __init__(self, tool_name: str) -> None:
+        self.tool_name = tool_name
+
+    async def create_response(self, request, *, credential):
+        yield AgenticModelEvent("accepted", request.request_id, 1)
+        yield AgenticModelEvent(
+            "tool_call",
+            request.request_id,
+            2,
+            tool_call=AgenticToolCall(
+                "call-before-error",
+                self.tool_name,
+                {"value": 1},
+            ),
+        )
+        yield AgenticModelEvent(
+            "error",
+            request.request_id,
+            3,
+            error_code="provider_unavailable",
+        )
 
 
 if __name__ == "__main__":

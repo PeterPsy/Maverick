@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-08-26
-Matrix revision: `2026-08-26-r9-tcb2`
+Status date: 2026-08-27
+Matrix revision: `2026-08-27-r10-p2-tcb3`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==5`
+Adapter: `maverick-hosted-tool-loop==6`
 
 ## Candidate combination
 
@@ -12,13 +12,14 @@ Adapter: `maverick-hosted-tool-loop==5`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `13` (revision `12` suspended) |
+| Immutable profile revision | `14` (revision `13` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
 | Endpoint | `https://generativelanguage.googleapis.com/v1/interactions` |
 | Continuation | stateful in production; stateless exact-history codec tested |
-| Tool calls | one sequential function call per model step; consumed call ids are retained in private codec state |
+| Tool calls | all calls retained in codec/journal; execution remains sequential, so a multi-call response is denied and paired in full |
+| Private codec | `google-gemini-interactions@3`, schema `3`; no silent migration |
 | Reasoning levels | `high`; deployed default `high` |
 | Synthetic live probe output budget | 2,048 tokens per request, including thinking tokens |
 | Thought handling | summaries disabled; signatures kept provider-private |
@@ -48,9 +49,9 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
-| Certified execution TCB | manifest v2 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v3 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
-| Function call id/name/count | exact catalog reconciliation, pairing, and parallel-call rejection tests | not certified |
+| Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
@@ -59,12 +60,12 @@ Primary references:
 | Usage and price estimate | token usage fixtures, integer micro-USD estimator, and active-request reservation reconciliation with missing-usage fallback | not certified |
 | Failure propagation | terminal codec reasons survive the shared loop and `runtime.turn.failed`; quota, resource exhaustion, and rate limiting remain distinct redaction-safe categories | not certified |
 | Shared tool loop | Google codec through the deterministic hosted-loop E2E | not certified |
-| Cancel/recovery/confirmation | shared hosted runtime contract suite | not certified |
+| Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only two sequential real-filesystem-list calls plus final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run at bootstrap |
+| Live capability probe | operator-only two sequential real-filesystem-list calls plus final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r10 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
@@ -86,9 +87,10 @@ The executable signing and publication workflow is defined in
 - Unknown data classification is denied before transport.
 - Function results with a different call id or function name are rejected
   before transport.
-- A function name not present in the exact request catalog is rejected by the
-  Google codec before it can reach the tool orchestrator.
-- Multiple function calls in one response are rejected for this preview.
+- A function name not present in the exact request catalog is still inserted in
+  the preliminary ledger, then receives an `unknown_tool` denial and result.
+- Multiple function calls are all retained in private codec state and the
+  journal, then each receives `parallel_denied`; none is executed or discarded.
 - A requested reasoning effort outside the immutable certificate tuple, or a
   certificate/binding reasoning-contract mismatch, is rejected before use.
 - Provider terminal statuses keep their registered reason code through the
@@ -98,21 +100,28 @@ The executable signing and publication workflow is defined in
 - Raw provider errors, thought signatures and credentials never enter public
   runtime events.
 
-Revision 13 retains the exact `fake-data preview` warning label but removes fake
+Revision 13 retained the exact `fake-data preview` warning label but removed fake
 classification authority: its policy lists only Core-classified `public`, its
 egress id is `remote-agentic-contained@2`, and central admission remains
-NO-GO. A future policy could consider `workspace_internal_fake` only with the
+NO-GO. It is now historical and suspended. A future policy could consider
+`workspace_internal_fake` only with the
 exact resource-derived classification and an active scoped workspace
 attestation; neither declaration alone can create that class. It also carries
 the revision-12 corrections exposed by a real multi-tool turn:
 conservative per-request price reservations are reconciled with reported usage,
 and Google private continuation state tracks already-consumed call ids so a
 cumulative Core result ledger can send only the currently pending result. The
-r9 fixture contract and retained live probe cover the Phase-1 TCB,
+r9 fixture and retained live-probe contracts described the Phase-1 TCB,
 resource-derived classification, certified schema, effective capability, and
 descriptor-relative filesystem gates in addition to sequential tool calls
-before the final response. Matrix amendment `2026-08-26-r9-tcb2` pins the TCB
-v2 transitive-coverage evidence without changing suite version 9 or selecting
-the retained `live_probe`; the probe has not been run for this candidate. The
+before the final response. The
 shared egress contract also redacts residual host paths found inside untrusted
 tool output while retaining fail-closed denial for every other provenance.
+
+Revision 14 pins adapter 6 and codec/schema 3 for the Phase-2 provider-step
+journal, preliminary proposal ledger, staged-state promotion, complete
+multi-call accounting, reconstructible pairing, effect ordering, and productive
+recovery. Suite 10 and matrix `2026-08-27-r10-p2-tcb3` add the JSON/document
+parity and Google/OpenRouter crash matrices to `fixture_contract` and bind TCB
+manifest v3. The retained `live_probe` was not selected or run, no behavioral
+evidence was created, and this candidate remains suspended and uncertified.

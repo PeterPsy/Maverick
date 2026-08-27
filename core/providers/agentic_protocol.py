@@ -110,7 +110,18 @@ class AgenticModelRequest:
 class AgenticToolCall:
     provider_tool_call_id: str
     provider_tool_name: str
-    arguments: dict[str, object]
+    arguments: dict[str, object] | None
+    call_index: int = 0
+    arguments_raw: bytes | None = None
+
+    @property
+    def ledger_arguments(self) -> dict[str, object] | bytes:
+        """Return the full payload for Core-private persistence only."""
+        if self.arguments is not None:
+            return self.arguments
+        if self.arguments_raw:
+            return self.arguments_raw
+        return b"null"
 
 
 @dataclass(frozen=True)

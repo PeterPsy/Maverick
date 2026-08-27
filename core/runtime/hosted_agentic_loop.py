@@ -16,14 +16,16 @@ import core.providers.agentic_reason_codes as agentic_reason_codes_module
 import core.runtime.hosted_agentic_budget as hosted_agentic_budget_module
 import core.runtime.hosted_agentic_policy as hosted_agentic_policy_module
 import core.runtime.hosted_agentic_request as hosted_agentic_request_module
+import core.runtime.hosted_agentic_recovery as hosted_agentic_recovery_module
 import core.runtime.hosted_agentic_state as hosted_agentic_state_module
 import core.runtime.hosted_agentic_stream as hosted_agentic_stream_module
+import core.runtime.provider_step_journal as provider_step_journal_module
 import core.runtime.hosted_agentic_tool_results as hosted_agentic_tool_results_module
 import core.runtime.hosted_provider_runtime as hosted_provider_runtime_module
 import core.runtime.tool_core_capabilities as tool_core_capabilities_module
 import core.runtime.tool_filesystem_listing as tool_filesystem_listing_module
 import core.runtime.tool_orchestrator as tool_orchestrator_module
-from core.providers.agentic_protocol import AgenticToolResult
+from core.providers.agentic_protocol import AgenticModelEvent, AgenticToolResult
 from core.providers.agentic_adapter import RuntimeProviderEvent, RuntimeTurnContext
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.agentic_feature_flags import (
@@ -46,6 +48,7 @@ from core.runtime.hosted_agentic_models import (
     raise_if_hosted_cancelled,
 )
 from core.runtime.hosted_agentic_request import HostedAgenticRequestBuilder
+from core.runtime.hosted_agentic_recovery import HostedAgenticRecovery
 from core.runtime.hosted_agentic_policy import (
     destination_upstream,
     hosted_egress_policy,
@@ -61,6 +64,7 @@ from core.runtime.hosted_agentic_stream import (
 from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.provider_private_state import ProviderPrivateStateService
+from core.runtime.provider_step_journal import ProviderStepJournal
 from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
@@ -85,6 +89,8 @@ class HostedAgenticLoop:
         credential_resolver: HostedCredentialResolver,
         turn_status_callback: HostedTurnStatusCallback | None = None,
         confirmation_poll_seconds: float = 0.05,
+        provider_step_journal: ProviderStepJournal | None = None,
+        recovery: HostedAgenticRecovery | None = None,
     ) -> None:
         self.provider_runtimes = provider_runtimes
         self.request_builder = request_builder
@@ -97,6 +103,14 @@ class HostedAgenticLoop:
         self.credential_resolver = credential_resolver
         self.turn_status_callback = turn_status_callback
         self.confirmation_poll_seconds = max(0.01, confirmation_poll_seconds)
+        self.provider_step_journal = provider_step_journal or ProviderStepJournal(
+            store=tool_ledger.store
+        )
+        self.recovery = recovery or HostedAgenticRecovery(
+            journal=self.provider_step_journal,
+            tool_ledger=tool_ledger,
+            private_state_service=private_state_service,
+        )
 
     @property
     def artifact_components(self) -> tuple[object, ...]:
@@ -109,6 +123,7 @@ class HostedAgenticLoop:
             hosted_agentic_budget_module,
             hosted_agentic_policy_module,
             hosted_agentic_request_module,
+            hosted_agentic_recovery_module,
             hosted_agentic_state_module,
             hosted_agentic_stream_module,
             hosted_agentic_tool_results_module,
@@ -116,6 +131,7 @@ class HostedAgenticLoop:
             tool_core_capabilities_module,
             tool_filesystem_listing_module,
             tool_orchestrator_module,
+            provider_step_journal_module,
             build_core_runtime_tool_capabilities,
             ConfinedWorkspaceFilesystem.list_entries,
         )
@@ -144,6 +160,16 @@ class HostedAgenticLoop:
         except Exception:
             failure_reason = "hosted_runtime_failed"
         if failure_reason is not None:
+            recovered_reason = self._recover_after_failure(
+                context,
+                trigger=(
+                    "cancellation_uncertain"
+                    if failure_reason == "runtime_cancelled"
+                    else "execution_failure"
+                ),
+            )
+            if recovered_reason is not None:
+                failure_reason = recovered_reason
             yield event("runtime.error", {"reason_code": failure_reason})
             yield event(
                 "provider.execution.completed",
@@ -184,8 +210,44 @@ class HostedAgenticLoop:
         egress_policy = hosted_egress_policy(context, policy)
         destination_upstream_id = destination_upstream(context)
         tool_results: list[AgenticToolResult] = []
+        existing_turn_steps = self.tool_ledger.store.list_provider_step_journals(
+            session_id=context.session.session_id,
+            turn_id=context.correlation_id,
+        )
+        if existing_turn_steps and (
+            existing_turn_steps[-1].commit_status == "committed"
+            and existing_turn_steps[-1].final_output_validated
+        ):
+            raise HostedAgenticLoopError("provider_step_already_committed")
+        start_step = (
+            max(item.step_index for item in existing_turn_steps) + 1
+            if existing_turn_steps
+            else 0
+        )
+        budget.steps = len(existing_turn_steps)
+        pairing_source = self.recovery.pending_pairing(
+            session_id=context.session.session_id
+        )
+        if pairing_source is not None:
+            for invocation in self.recovery.pairing_results(pairing_source):
+                result, is_error = normalized_tool_result(
+                    self.tool_orchestrator_resolver(
+                        context,
+                        self.actor_context_resolver(context),
+                    ),
+                    RuntimeToolInvocationOutcome(invocation),
+                )
+                tool_results.append(
+                    make_agentic_tool_result(
+                        provider_tool_call_id=invocation.provider_tool_call_id,
+                        provider_tool_name=invocation.provider_safe_name,
+                        result=result,
+                        is_error=is_error,
+                        invocation=invocation,
+                    )
+                )
         private_state.fence_turn(context)
-        for step in range(policy.max_steps_per_turn + 1):
+        for step in range(start_step, policy.max_steps_per_turn + 1):
             raise_if_hosted_cancelled(cancellation)
             policy = self.policy_resolver(context)
             budget.tighten(policy)
@@ -214,100 +276,302 @@ class HostedAgenticLoop:
             )
             budget.begin_step(request, provider_runtime.cost_estimator(request))
             private_state.persist_request_identity(context, request)
+            provider_state_snapshot = self.tool_ledger.store.get_provider_state(
+                context.session.session_id
+            )
+            step_journal = self.provider_step_journal.begin_request(
+                session=context.session,
+                binding=context.binding,
+                provider_state=provider_state_snapshot,
+                request_id=request.request_id,
+                turn_id=context.correlation_id,
+                step_index=step,
+                codec=provider_runtime.private_codec,
+                pairing_source_journal_id=(
+                    None if pairing_source is None else pairing_source.journal_id
+                ),
+            )
+            step_journal = self.provider_step_journal.journal_request(step_journal)
             yield event(
                 "provider.request.sent",
                 {"request_id": request.request_id, "step": step + 1},
             )
             response: HostedProviderStep | None = None
-            async for emission in consume_hosted_provider_step(
-                client=provider_runtime.client,
-                request=request,
-                credential=self.credential_resolver(context),
-                budget=budget,
-                cancellation=cancellation,
-                destination_upstream_id=destination_upstream_id,
-                on_private_state=lambda provider_event: private_state.store(
+            observed: dict[str, RuntimeToolInvocationOutcome] = {}
+            staged_envelope = None
+
+            def accepted(provider_event: AgenticModelEvent) -> None:
+                nonlocal step_journal
+                step_journal = self.provider_step_journal.accept(
+                    step_journal,
+                    provider_response_id=provider_event.provider_response_id,
+                    provider_upstream_id=provider_event.upstream_id,
+                )
+
+            def observe(provider_event: AgenticModelEvent) -> dict[str, object]:
+                nonlocal step_journal
+                call = provider_event.tool_call
+                if call is None:
+                    raise HostedAgenticLoopError("provider_response_invalid")
+                outcome = tool_orchestrator.observe_provider_tool(
+                    provider_tool_name=call.provider_tool_name,
+                    provider_tool_call_id=call.provider_tool_call_id,
+                    arguments=call.ledger_arguments,
+                    provider_request_id=request.request_id,
+                    provider_event_ordinal=provider_event.ordinal,
+                    provider_call_index=call.call_index,
+                    authority=authority,
+                    context=actor_context,
+                    turn_id=context.correlation_id,
+                    policy=hosted_tool_policy(authority, budget.policy),
+                )
+                existing = observed.get(call.provider_tool_call_id)
+                if existing is not None and (
+                    existing.invocation.arguments_digest
+                    != outcome.invocation.arguments_digest
+                ):
+                    raise HostedAgenticLoopError("tool_provider_call_replay_mismatch")
+                observed[call.provider_tool_call_id] = outcome
+                step_journal = self.provider_step_journal.add_proposal(
+                    step_journal,
+                    outcome.invocation.proposal_id,
+                )
+                return tool_event_payload(outcome, display_state="proposed")
+
+            def stage(provider_event: AgenticModelEvent) -> None:
+                nonlocal step_journal, staged_envelope
+                if staged_envelope is not None:
+                    raise HostedAgenticLoopError("provider_private_state_invalid")
+                staged_envelope = private_state.store(
                     context,
-                    self.authority_refresher(context),
+                    authority,
                     provider_event,
-                ),
-            ):
-                if emission.event_type is not None and emission.payload is not None:
-                    yield event(emission.event_type, emission.payload)
-                if emission.response is not None:
-                    response = emission.response
+                )
+                step_journal = self.provider_step_journal.stage_provider_state(
+                    step_journal,
+                    staged_envelope,
+                )
+
+            try:
+                async for emission in consume_hosted_provider_step(
+                    client=provider_runtime.client,
+                    request=request,
+                    credential=self.credential_resolver(context),
+                    budget=budget,
+                    cancellation=cancellation,
+                    destination_upstream_id=destination_upstream_id,
+                    on_accepted=accepted,
+                    on_tool_call=observe,
+                    on_private_state=stage,
+                ):
+                    if emission.event_type is not None and emission.payload is not None:
+                        yield event(emission.event_type, emission.payload)
+                    if emission.response is not None:
+                        response = emission.response
+            except Exception as error:
+                current_journal = self.tool_ledger.store.get_provider_step_journal(
+                    step_journal.journal_id
+                )
+                if current_journal.stream_status == "pending":
+                    current_journal = self.provider_step_journal.fail_stream(
+                        current_journal,
+                        reason_code=(
+                            error.reason_code
+                            if isinstance(error, HostedAgenticLoopError)
+                            else "provider_response_invalid"
+                        ),
+                    )
+                if self.provider_step_journal.is_proven_terminal_failure(
+                    current_journal
+                ):
+                    self.provider_step_journal.roll_back_proven_terminal_failure(
+                        current_journal
+                    )
+                raise
             if response is None:
                 raise HostedAgenticLoopError("provider_response_invalid")
+            step_journal = self.tool_ledger.store.get_provider_step_journal(
+                step_journal.journal_id
+            )
+            step_journal = self.provider_step_journal.complete_stream(
+                step_journal,
+                final_output_validated=response.final_text is not None,
+            )
+            if staged_envelope is None:
+                raise HostedAgenticLoopError("provider_private_state_invalid")
             if response.final_text is not None:
+                private_state.promote(
+                    context,
+                    staged_envelope,
+                    expected_revision=step_journal.base_provider_state_revision,
+                )
+                step_journal = self.provider_step_journal.mark_committed(step_journal)
+                if pairing_source is not None:
+                    pairing_source = self.provider_step_journal.mark_pairing_consumed(
+                        self.tool_ledger.store.get_provider_step_journal(
+                            pairing_source.journal_id
+                        )
+                    )
                 yield event("runtime.output.final", {"text": response.final_text})
                 yield event(
                     "provider.execution.completed",
                     {"output_text": response.final_text, "exit_code": 0},
                 )
                 return
-            if response.tool_call is None:
+            if not response.tool_calls:
                 raise HostedAgenticLoopError("provider_response_invalid")
-            budget.add_tool_call()
-            authority = self.authority_refresher(context)
-            actor_context = self.actor_context_resolver(
-                replace(context, effective_authority=authority)
-            )
-            tool_orchestrator = self.tool_orchestrator_resolver(context, actor_context)
-            budget.tighten(self.policy_resolver(context))
+            step_results: list[AgenticToolResult] = []
+            parallel_denied = len(response.tool_calls) > 1
+            post_pairing_failure: str | None = None
             tool_policy = hosted_tool_policy(authority, budget.policy)
-            outcome = tool_orchestrator.invoke_provider_tool(
-                provider_tool_name=response.tool_call.provider_tool_name,
-                provider_tool_call_id=response.tool_call.provider_tool_call_id,
-                arguments=response.tool_call.arguments,
-                authority=authority,
-                context=actor_context,
-                turn_id=context.correlation_id,
-                policy=tool_policy,
-            )
-            yield event(
-                "runtime.tool_call.proposed",
-                tool_event_payload(outcome, display_state="proposed"),
-            )
-            if outcome.awaiting_confirmation:
-                if not feature_enabled(MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION):
-                    raise HostedAgenticLoopError("agentic_tool_confirmation_disabled")
-                yield event("runtime.tool_call.awaiting_confirmation", tool_event_payload(outcome))
-                outcome = await self._await_confirmation(
-                    context=context,
-                    cancellation=cancellation,
-                    budget=budget,
-                    outcome=outcome,
+            for call in response.tool_calls:
+                outcome = observed.get(call.provider_tool_call_id)
+                if outcome is None:
+                    raise HostedAgenticLoopError("provider_pairing_ambiguous")
+                if parallel_denied:
+                    outcome = tool_orchestrator.deny_observed_tool(
+                        outcome.invocation,
+                        resolution_status="parallel_denied",
+                        failure_reason="provider_parallel_tool_calls_forbidden",
+                    )
+                else:
+                    try:
+                        budget.add_tool_call()
+                    except HostedAgenticLoopError as error:
+                        outcome = tool_orchestrator.deny_observed_tool(
+                            outcome.invocation,
+                            resolution_status="budget_denied",
+                            failure_reason=error.reason_code,
+                        )
+                    else:
+                        try:
+                            authority = self.authority_refresher(context)
+                            budget.tighten(self.policy_resolver(context))
+                            actor_context = self.actor_context_resolver(
+                                replace(context, effective_authority=authority)
+                            )
+                            tool_orchestrator = self.tool_orchestrator_resolver(
+                                context,
+                                actor_context,
+                            )
+                            tool_policy = hosted_tool_policy(authority, budget.policy)
+                        except HostedAgenticLoopError as error:
+                            outcome = tool_orchestrator.deny_observed_tool(
+                                outcome.invocation,
+                                resolution_status="revoked",
+                                failure_reason=error.reason_code,
+                            )
+                            post_pairing_failure = error.reason_code
+                        else:
+                            outcome = tool_orchestrator.prepare_observed_tool(
+                                outcome.invocation,
+                                requested_catalog=catalog,
+                                authority=authority,
+                                context=actor_context,
+                                policy=tool_policy,
+                            )
+                if outcome.awaiting_confirmation:
+                    if not feature_enabled(MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION):
+                        outcome = RuntimeToolInvocationOutcome(
+                            self.tool_ledger.cancel_before_effect(
+                                outcome.invocation,
+                                reason_code="agentic_tool_confirmation_disabled",
+                            )
+                        )
+                    else:
+                        yield event(
+                            "runtime.tool_call.awaiting_confirmation",
+                            tool_event_payload(outcome),
+                        )
+                        outcome = await self._await_confirmation(
+                            context=context,
+                            cancellation=cancellation,
+                            budget=budget,
+                            outcome=outcome,
+                        )
+                if outcome.invocation.state in {
+                    "denied",
+                    "failed",
+                    "cancelled",
+                    "expired",
+                    "execution_unknown",
+                } and outcome.invocation.result_private_ref is None:
+                    outcome = RuntimeToolInvocationOutcome(
+                        self.tool_ledger.attach_terminal_result(outcome.invocation)
+                    )
+                if outcome.invocation.disposition_id is not None:
+                    step_journal = self.provider_step_journal.add_disposition(
+                        step_journal,
+                        outcome.invocation.disposition_id,
+                    )
+                if outcome.invocation.state == "authorized":
+                    yield event(
+                        "runtime.tool_call.started",
+                        tool_event_payload(outcome, display_state="executing"),
+                    )
+                    outcome = tool_orchestrator.execute_authorized(
+                        outcome.invocation,
+                        authority=authority,
+                        context=actor_context,
+                        policy=tool_policy,
+                    )
+                if outcome.invocation.result_id is None:
+                    raise HostedAgenticLoopError("tool_result_unavailable")
+                step_journal = self.provider_step_journal.add_result(
+                    step_journal,
+                    outcome.invocation.result_id,
                 )
-            if outcome.invocation.state == "execution_unknown":
-                yield event("runtime.tool_call.execution_unknown", tool_event_payload(outcome))
-                raise HostedAgenticLoopError("tool_execution_unknown")
-            if outcome.invocation.state == "succeeded":
-                yield event(
-                    "runtime.tool_call.started",
-                    tool_event_payload(outcome, display_state="executing"),
+                if outcome.invocation.state == "execution_unknown":
+                    yield event(
+                        "runtime.tool_call.execution_unknown",
+                        tool_event_payload(outcome),
+                    )
+                    raise HostedAgenticLoopError("tool_execution_unknown")
+                result, is_error = normalized_tool_result(tool_orchestrator, outcome)
+                tool_event_type = (
+                    "runtime.tool_call.completed"
+                    if outcome.invocation.state == "succeeded"
+                    else "runtime.tool_call.failed"
                 )
-            result, is_error = normalized_tool_result(tool_orchestrator, outcome)
-            tool_event_type = (
-                "runtime.tool_call.completed"
-                if outcome.invocation.state == "succeeded"
-                else "runtime.tool_call.failed"
-            )
-            yield event(tool_event_type, tool_event_payload(outcome))
-            serialized_size = len(
-                json.dumps(result, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
-            )
-            budget.add_tool_result(serialized_size)
-            budget.tighten(self.policy_resolver(context))
-            egress_policy = hosted_egress_policy(context, budget.policy)
-            tool_results.append(
-                make_agentic_tool_result(
-                    provider_tool_call_id=response.tool_call.provider_tool_call_id,
-                    provider_tool_name=response.tool_call.provider_tool_name,
-                    result=result,
-                    is_error=is_error,
-                    invocation=outcome.invocation,
+                yield event(tool_event_type, tool_event_payload(outcome))
+                serialized_size = len(
+                    json.dumps(
+                        result,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ).encode()
                 )
+                budget.add_tool_result(serialized_size)
+                budget.tighten(self.policy_resolver(context))
+                egress_policy = hosted_egress_policy(context, budget.policy)
+                step_results.append(
+                    make_agentic_tool_result(
+                        provider_tool_call_id=call.provider_tool_call_id,
+                        provider_tool_name=call.provider_tool_name,
+                        result=result,
+                        is_error=is_error,
+                        invocation=outcome.invocation,
+                    )
+                )
+            step_journal = self.provider_step_journal.complete_dispositions(step_journal)
+            step_journal = self.provider_step_journal.mark_pairing_ready(step_journal)
+            private_state.promote(
+                context,
+                staged_envelope,
+                expected_revision=step_journal.base_provider_state_revision,
             )
+            step_journal = self.provider_step_journal.mark_committed(step_journal)
+            if pairing_source is not None:
+                self.provider_step_journal.mark_pairing_consumed(
+                    self.tool_ledger.store.get_provider_step_journal(
+                        pairing_source.journal_id
+                    )
+                )
+            pairing_source = step_journal
+            tool_results = step_results
+            if post_pairing_failure is not None:
+                raise HostedAgenticLoopError(post_pairing_failure)
         raise HostedAgenticLoopError("agent_step_limit_reached")
 
     async def _await_confirmation(
@@ -336,12 +600,11 @@ class HostedAgenticLoop:
                         replace(context, effective_authority=authority)
                     )
                     orchestrator = self.tool_orchestrator_resolver(context, actor_context)
-                    resumed = orchestrator.resume_confirmed(
+                    resumed = orchestrator.authorize_confirmed(
                         invocation_id=invocation_id,
                         grant_id=record.confirmation_grant_id,
                         authority=authority,
                         context=actor_context,
-                        policy=hosted_tool_policy(authority, budget.policy),
                     )
                     self._resume_turn(invocation_id)
                     return resumed
@@ -361,3 +624,20 @@ class HostedAgenticLoop:
     def _resume_turn(self, invocation_id: str) -> None:
         if self.turn_status_callback is not None:
             self.turn_status_callback("active", invocation_id)
+
+    def recover_session(self, context, *, trigger: str):
+        """Synchronous lifecycle hook used by startup, admission and prepare."""
+        runtime = self.provider_runtimes.resolve(context.binding)
+        return self.recovery.recover(
+            session=context.session,
+            binding=context.binding,
+            provider_runtime=runtime,
+            trigger=trigger,
+        )
+
+    def _recover_after_failure(self, context, *, trigger: str) -> str | None:
+        try:
+            result = self.recover_session(context, trigger=trigger)
+        except Exception:
+            return "provider_state_ambiguous"
+        return None if result.recovered else result.reason_code

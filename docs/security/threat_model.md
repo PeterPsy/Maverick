@@ -1,6 +1,6 @@
 # Threat Model
 
-Date: 2026-04-23
+Date: 2026-04-23; agentic journal/recovery amendment 2026-08-27
 
 ## Purpose
 
@@ -195,7 +195,7 @@ execution binding, and live status derive from that same manifest; the
 publisher recomputes it. Drift in runtime API, classifier, input composition,
 ledger/store, lifecycle, codec/transport, or UI governance invalidates remote
 authority before create, continuation, refresh, or dispatch. Legacy remote
-certificates with no valid TCB identity fail closed. Manifest v2 prevents a
+certificates with no valid TCB identity fail closed. Manifest v3 prevents a
 covered module from outsourcing authority or provider content to an unhashed
 local dependency: six code-owned contracts statically walk the relevant import
 closures and package initializers, including
@@ -208,11 +208,23 @@ A browser retry, worker crash, stale resume, duplicated provider call id, or
 malicious actor may try to execute a mutating tool twice or reuse another
 confirmation.
 
-Tool invocations and one-shot grants are revisioned Core records. Grants bind
-actor, session, turn, invocation, tool handle, canonical argument HMAC, policy
-revision, and expiry. The active-to-consumed transition is atomic, `executing`
-is persisted before the boundary, and uncertain mutating/destructive outcomes
-are not replayed. Browser state and model-supplied ids are not authoritative.
+Every decoded provider call first becomes a revisioned preliminary Core record,
+before catalog, schema, policy, budget, or effect handling. The resolved handle
+is nullable; the safe name, call/request identities, ordinal/index, private
+argument locator/HMAC, policy revision, and authority digest remain durable.
+Exact replay deduplicates and divergent reuse of a call id fails closed. Google
+and OpenRouter retain later indexed calls and calls decoded before a subsequent
+terminal stream error. Unsupported parallel responses are fully journaled and
+then denied/paired, so a secondary malicious call cannot disappear from audit
+or execute outside sequential policy.
+
+One-shot grants bind actor, session, turn, invocation, tool handle, canonical
+argument HMAC, policy revision, and expiry. The active-to-consumed transition
+is atomic. Proposal persistence precedes the proposed event; the started event
+precedes the persisted effect boundary; result persistence precedes the
+completed/failed event. `executing` is persisted before the boundary, and
+uncertain mutating/destructive outcomes become `execution_unknown` and are not
+replayed. Browser state and model-supplied ids are not authoritative.
 
 ### Provider-private state disclosure or corruption
 
@@ -226,6 +238,16 @@ codec, and schema. Ordinary APIs, UI, logs, app hooks, exports, and analytics do
 not receive the content. Digest, codec, or version mismatch fails into explicit
 recovery rather than best-effort parsing. Ciphertext stored in a workspace
 runtime partition is not itself a resolution capability.
+
+Streamed provider state is staged under a deterministic private locator and is
+not authoritative continuation state. A revisioned provider-step journal pins
+acceptance, response identity, codec, ordered proposal/disposition/result
+identities, pairing, and commit. Promotion occurs only after final-output proof
+or reconstructible tool pairing. Startup/worker-loss, pre-admission,
+pre-prepare, execution failure, and uncertain cancellation run the same pinned
+recovery. Unprovable state, pairing, or acceptance is quarantined by session
+status CAS with an allowlisted public cause and encrypted Core-private detail;
+queue, continuation, dispatch, and bearer-token paths then deny the session.
 
 ### Orchestrator-authored authority escalation
 
@@ -448,6 +470,8 @@ The near-term goals are:
 - one effective-capability intersection shared by admission, runtime, API, Chat,
   and Settings
 - persistent one-shot tool confirmation and no replay of uncertain side effects
+- complete provider-call accounting, staged-state commit fencing, and
+  lifecycle-invoked idempotent recovery with fail-closed quarantine
 
 ## Non-Goals For The First Public Release
 

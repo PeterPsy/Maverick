@@ -25,7 +25,14 @@ _DIGEST_DOMAIN = b"maverick.runtime.tool-arguments.v1\x00"
 class RuntimeToolPrivatePayloadStore(Protocol):
     """Core-owned opaque storage; references convey no payload authority."""
 
-    def put(self, *, workspace_id: str, session_id: str, payload: bytes) -> str: ...
+    def put(
+        self,
+        *,
+        workspace_id: str,
+        session_id: str,
+        payload: bytes,
+        private_ref: str | None = None,
+    ) -> str: ...
 
     def read(self, *, workspace_id: str, session_id: str, private_ref: str) -> bytes: ...
 
@@ -47,11 +54,27 @@ class InMemoryRuntimeToolPrivatePayloadStore:
         self._records: dict[str, _PrivatePayload] = {}
         self._lock = RLock()
 
-    def put(self, *, workspace_id: str, session_id: str, payload: bytes) -> str:
+    def put(
+        self,
+        *,
+        workspace_id: str,
+        session_id: str,
+        payload: bytes,
+        private_ref: str | None = None,
+    ) -> str:
         if not payload or len(payload) > self._max_payload_bytes:
             raise RuntimeToolError("tool_private_payload_invalid")
-        private_ref = f"tool-private:v1:{uuid4().hex}"
+        private_ref = private_ref or f"tool-private:v1:{uuid4().hex}"
         with self._lock:
+            existing = self._records.get(private_ref)
+            if existing is not None:
+                if existing == _PrivatePayload(
+                    workspace_id,
+                    session_id,
+                    bytes(payload),
+                ):
+                    return private_ref
+                raise RuntimeToolError("tool_private_payload_identity_conflict")
             self._records[private_ref] = _PrivatePayload(workspace_id, session_id, bytes(payload))
         return private_ref
 
@@ -77,7 +100,14 @@ class EncryptedRuntimeToolPrivatePayloadStore:
     def __init__(self, store: EncryptedRuntimePrivatePayloadStore) -> None:
         self._store = store
 
-    def put(self, *, workspace_id: str, session_id: str, payload: bytes) -> str:
+    def put(
+        self,
+        *,
+        workspace_id: str,
+        session_id: str,
+        payload: bytes,
+        private_ref: str | None = None,
+    ) -> str:
         try:
             return self._store.put(
                 context=_tool_context(workspace_id, session_id),
@@ -85,6 +115,9 @@ class EncryptedRuntimeToolPrivatePayloadStore:
                 payload=payload,
                 max_blob_bytes=MAX_TOOL_PRIVATE_PAYLOAD_BYTES,
                 max_session_bytes=16 * MAX_TOOL_PRIVATE_PAYLOAD_BYTES,
+                replace_ref=private_ref,
+                private_ref=private_ref,
+                idempotent_ref=private_ref is not None,
             )
         except RuntimePrivatePayloadError as error:
             raise RuntimeToolError(error.reason_code) from error

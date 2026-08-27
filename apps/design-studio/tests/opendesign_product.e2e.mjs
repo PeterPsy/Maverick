@@ -577,7 +577,6 @@ async function exerciseRealFailureRecovery(page, initialFrame, projectId, networ
   await waitForFailedRuntimeState(page, 'launcher SIGKILL');
   let recovered = await recoverBrowserAfterProcessKill(
     page,
-    frame,
     launch.instanceId,
     projectId,
     networkProof,
@@ -603,7 +602,6 @@ async function exerciseRealFailureRecovery(page, initialFrame, projectId, networ
   await waitForFailedRuntimeState(page, 'daemon SIGKILL');
   recovered = await recoverBrowserAfterProcessKill(
     page,
-    frame,
     launch.instanceId,
     projectId,
     networkProof,
@@ -622,7 +620,6 @@ async function exerciseRealFailureRecovery(page, initialFrame, projectId, networ
 
   const browserPrewarm = await injectLauncherPhaseFailure(
     page,
-    frame,
     launch.instanceId,
     projectId,
     networkProof,
@@ -632,7 +629,6 @@ async function exerciseRealFailureRecovery(page, initialFrame, projectId, networ
   launch = browserPrewarm.launch;
   const readinessCommit = await injectLauncherPhaseFailure(
     page,
-    frame,
     launch.instanceId,
     projectId,
     networkProof,
@@ -662,7 +658,6 @@ async function exerciseRealFailureRecovery(page, initialFrame, projectId, networ
 
 async function injectLauncherPhaseFailure(
   page,
-  previousFrame,
   previousInstanceId,
   projectId,
   networkProof,
@@ -722,7 +717,6 @@ async function injectLauncherPhaseFailure(
   );
   const recovered = await recoverBrowserAfterProcessKill(
     page,
-    previousFrame,
     previousInstanceId,
     projectId,
     networkProof,
@@ -769,7 +763,6 @@ async function waitForFailedRuntimeState(page, label) {
 
 async function recoverBrowserAfterProcessKill(
   page,
-  previousFrame,
   previousInstanceId,
   projectId,
   networkProof,
@@ -788,6 +781,10 @@ async function recoverBrowserAfterProcessKill(
     await delay(125);
   }
   assert(launch, 'Killed OpenDesign process did not rotate to a ready sidecar instance');
+  // The rotated Core instance id is the process identity proof. Playwright may
+  // reuse a Frame object when the parent route remounts the same isolated
+  // origin, so excluding the old JavaScript object would hide the recovered
+  // document rather than distinguish the killed process.
   await page.goto(
     `${platformOrigin}/app/design-studio?od_project_id=${encodeURIComponent(projectId)}`,
     { waitUntil: 'domcontentloaded' },
@@ -797,7 +794,6 @@ async function recoverBrowserAfterProcessKill(
     `/projects/${projectId}`,
     networkProof,
     true,
-    previousFrame,
   );
   const ready = await frameRequest(frame, '/api/maverick-ready');
   const project = await frameRequest(frame, `/api/projects/${encodeURIComponent(projectId)}`);

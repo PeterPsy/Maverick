@@ -1569,7 +1569,24 @@ def _bootstrap_after_authority(
         artifact_id=ARTIFACT_ID,
     )
     store = OpenDesignArtifactStore(namespace)
-    runtime = store.fast_runtime(runtime_digest)
+    runtime_sources = load_runtime_source_catalog()
+    runtime_source = runtime_sources.source_for_digest(runtime_digest)
+    if runtime_source is None:
+        raise ArtifactStoreError(
+            "artifact_authority_unavailable",
+            "artifact_authority",
+            "The platform artifact authority returned an undeclared runtime",
+        )
+    runtime_asset = selected_asset(
+        runtime_source.manifest,
+        require_artifact_digest=True,
+    )
+    runtime = store.fast_runtime(
+        runtime_digest,
+        file_manifest_sha256=str(runtime_asset["file_manifest_sha256"]),
+        opendesign_version=str(runtime_source.manifest["upstream"]["release_version"]),
+        upstream_commit=str(runtime_source.manifest["upstream"]["commit"]),
+    )
     web = store.fast_web_overlay(
         web_digest,
         runtime_artifact_sha256=runtime_digest,

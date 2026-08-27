@@ -7,8 +7,9 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -18,11 +19,75 @@ sys.path.insert(0, str(SERVICE_ROOT))
 from opendesign_artifact_operations import (  # noqa: E402
     ArtifactStoreError,
     _authority_web_submission,
+    _bootstrap_after_authority,
     run_artifact_operation,
 )
 
 
 class OpenDesignArtifactAuthorityTests(unittest.TestCase):
+    def test_post_authority_bootstrap_rechecks_the_declared_runtime_identity(self) -> None:
+        runtime_digest = "b" * 64
+        web_digest = "c" * 64
+        source = SimpleNamespace(
+            manifest={
+                "upstream": {"release_version": "0.16.1", "commit": "upstream"}
+            }
+        )
+        catalog = Mock()
+        catalog.source_for_digest.return_value = source
+        store = Mock()
+        stored_runtime = Mock()
+        stored_web = Mock()
+        store.fast_runtime.return_value = stored_runtime
+        store.fast_web_overlay.return_value = stored_web
+        with (
+            patch(
+                "opendesign_artifact_operations.create_artifact_namespace",
+                return_value=Path("/protected/opendesign"),
+            ),
+            patch(
+                "opendesign_artifact_operations.OpenDesignArtifactStore",
+                return_value=store,
+            ),
+            patch(
+                "opendesign_artifact_operations.load_runtime_source_catalog",
+                return_value=catalog,
+            ),
+            patch(
+                "opendesign_artifact_operations.selected_asset",
+                return_value={"file_manifest_sha256": "d" * 64},
+            ),
+            patch(
+                "opendesign_artifact_operations._bootstrap_fresh_generation",
+                return_value=True,
+            ) as bootstrap,
+        ):
+            result = _bootstrap_after_authority(
+                {
+                    "runtime_artifact_sha256": runtime_digest,
+                    "web_overlay_sha256": web_digest,
+                },
+                repository=Path("/repository"),
+                data_root=Path("/data"),
+            )
+
+        store.fast_runtime.assert_called_once_with(
+            runtime_digest,
+            file_manifest_sha256="d" * 64,
+            opendesign_version="0.16.1",
+            upstream_commit="upstream",
+        )
+        store.fast_web_overlay.assert_called_once_with(
+            web_digest,
+            runtime_artifact_sha256=runtime_digest,
+        )
+        bootstrap.assert_called_once_with(
+            Path("/data"),
+            runtime=stored_runtime,
+            web=stored_web,
+        )
+        self.assertIs(result["data_generation_bootstrapped"], True)
+
     def test_web_submission_handoff_rejects_a_mutable_candidate(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-authority-candidate-") as temp_dir:
             candidate = Path(temp_dir) / "candidate"

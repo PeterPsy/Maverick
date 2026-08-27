@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+import threading
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
-from core.api.runtime_thread_websocket import encode_thread_websocket_frame, runtime_thread_snapshot_frame
+from core.api.runtime_thread_websocket import (
+    encode_thread_websocket_frame,
+    runtime_thread_snapshot_frame,
+    stream_runtime_thread_events,
+)
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.thread_event_bus import RuntimeThreadEventBus
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
@@ -153,6 +161,109 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
         self.assertTrue(all("provider_id" not in thread for thread in frame["threads"]))
         self.assertTrue(all("title_generation_input_hash" not in thread for thread in frame["threads"]))
         self.assertNotIn(long_system_prompt, encoded)
+
+
+class RuntimeThreadWebSocketSchedulingTest(unittest.IsolatedAsyncioTestCase):
+    def make_state(self) -> SimpleNamespace:
+        return SimpleNamespace(runtime_thread_event_bus=RuntimeThreadEventBus())
+
+    def request_context(self) -> SimpleNamespace:
+        return SimpleNamespace(
+            workspace_id="default",
+            user=SimpleNamespace(user_id="user-a"),
+        )
+
+    async def test_snapshot_projection_does_not_block_the_asgi_event_loop(self) -> None:
+        entered = threading.Event()
+        release = threading.Event()
+        fallback_release = threading.Timer(0.5, release.set)
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+        sent: list[dict] = []
+
+        def blocking_snapshot(*_args, **_kwargs) -> dict:
+            entered.set()
+            release.wait(timeout=1)
+            return {
+                "type": "runtime.thread.snapshot",
+                "workspace_id": "default",
+                "threads": [],
+            }
+
+        async def receive() -> dict:
+            return await receive_queue.get()
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        fallback_release.start()
+        try:
+            with (
+                patch("core.api.runtime_thread_websocket.resolve_request_session", return_value=self.request_context()),
+                patch("core.api.runtime_thread_websocket.runtime_thread_snapshot_frame", side_effect=blocking_snapshot),
+            ):
+                stream_task = asyncio.create_task(
+                    stream_runtime_thread_events(
+                        state=self.make_state(),
+                        scope={"type": "websocket", "path": "/ws/runtime/threads", "headers": []},
+                        receive=receive,
+                        send=send,
+                    )
+                )
+                self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+                event_loop_resumed_before_fallback = not release.is_set()
+                release.set()
+                await receive_queue.put({"type": "websocket.disconnect"})
+                await asyncio.wait_for(stream_task, timeout=1)
+        finally:
+            release.set()
+            fallback_release.cancel()
+
+        self.assertTrue(event_loop_resumed_before_fallback)
+        self.assertTrue(any(message.get("type") == "websocket.accept" for message in sent))
+
+    async def test_heartbeat_does_not_cancel_the_pending_client_receive(self) -> None:
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+        heartbeat_sent = asyncio.Event()
+        receive_cancellations = 0
+
+        async def receive() -> dict:
+            nonlocal receive_cancellations
+            try:
+                return await receive_queue.get()
+            except asyncio.CancelledError:
+                receive_cancellations += 1
+                raise
+
+        async def send(message: dict) -> None:
+            if "runtime.thread.heartbeat" in str(message.get("text") or ""):
+                heartbeat_sent.set()
+
+        snapshot = {
+            "type": "runtime.thread.snapshot",
+            "workspace_id": "default",
+            "threads": [],
+        }
+        with (
+            patch("core.api.runtime_thread_websocket.resolve_request_session", return_value=self.request_context()),
+            patch("core.api.runtime_thread_websocket.runtime_thread_snapshot_frame", return_value=snapshot),
+        ):
+            stream_task = asyncio.create_task(
+                stream_runtime_thread_events(
+                    state=self.make_state(),
+                    scope={"type": "websocket", "path": "/ws/runtime/threads", "headers": []},
+                    receive=receive,
+                    send=send,
+                    heartbeat_interval_seconds=0.01,
+                )
+            )
+            await asyncio.wait_for(heartbeat_sent.wait(), timeout=1)
+            cancellations_before_disconnect = receive_cancellations
+            await receive_queue.put({"type": "websocket.disconnect"})
+            await asyncio.wait_for(stream_task, timeout=1)
+
+        self.assertEqual(cancellations_before_disconnect, 0)
 
 
 if __name__ == "__main__":

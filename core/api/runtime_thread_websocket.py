@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from core.api.http import json_default
 from core.api.session_api import resolve_request_session
+from core.api.websocket_tasks import cancel_websocket_tasks
 from core.observability.startup_performance import startup_timer
 from core.runtime.runtime_threads import list_runtime_threads, thread_summary_payload
 from core.shared.entrypoints import EntrypointShutdownController
@@ -151,34 +152,60 @@ async def stream_runtime_thread_events(
     workspace_id = context.workspace_id
     subscription = state.runtime_thread_event_bus.subscribe(workspace_id)
     last_heartbeat_at = datetime.now(tz=UTC)
+    receive_task: asyncio.Task | None = None
+    event_task: asyncio.Task | None = None
+    shutdown_task: asyncio.Task | None = None
     try:
         await send({"type": "websocket.accept", "subprotocol": None, "headers": []})
-        await _send_json(send, runtime_thread_snapshot_frame(state, workspace_id=workspace_id, viewer_user_id=context.user.user_id))
+        snapshot = await asyncio.to_thread(
+            runtime_thread_snapshot_frame,
+            state,
+            workspace_id=workspace_id,
+            viewer_user_id=context.user.user_id,
+        )
+        await _send_json(send, snapshot)
+        shutdown_task = _shutdown_task(shutdown_controller)
         while True:
-            receive_task = asyncio.create_task(receive())
-            event_task = asyncio.create_task(subscription.get())
-            shutdown_task = _shutdown_task(shutdown_controller)
-            timeout = _seconds_until_heartbeat(last_heartbeat_at, heartbeat_interval_seconds)
+            if receive_task is None:
+                receive_task = asyncio.create_task(receive())
+            if event_task is None:
+                event_task = asyncio.create_task(subscription.get())
+            timeout = _seconds_until_heartbeat(
+                last_heartbeat_at,
+                heartbeat_interval_seconds,
+            )
             wait_tasks = {receive_task, event_task}
             if shutdown_task is not None:
                 wait_tasks.add(shutdown_task)
-            done, pending = await asyncio.wait(wait_tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
-            await _cancel_pending(pending)
+            done, _ = await asyncio.wait(
+                wait_tasks,
+                timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
 
             if not done:
                 now = datetime.now(tz=UTC)
                 if (now - last_heartbeat_at).total_seconds() >= heartbeat_interval_seconds:
-                    await _send_json(send, {"type": "runtime.thread.heartbeat", "workspace_id": workspace_id, "at": now})
+                    await _send_json(
+                        send,
+                        {
+                            "type": "runtime.thread.heartbeat",
+                            "workspace_id": workspace_id,
+                            "at": now,
+                        },
+                    )
                     last_heartbeat_at = now
                 continue
             if shutdown_task is not None and shutdown_task in done:
                 return
             if receive_task in done:
                 incoming = receive_task.result()
+                receive_task = None
                 if incoming and incoming.get("type") == "websocket.disconnect":
                     return
             if event_task in done:
                 event = event_task.result()
+                event_task = None
                 await _send_json(
                     send,
                     runtime_thread_changed_frame(
@@ -190,23 +217,23 @@ async def stream_runtime_thread_events(
                 )
             now = datetime.now(tz=UTC)
             if (now - last_heartbeat_at).total_seconds() >= heartbeat_interval_seconds:
-                await _send_json(send, {"type": "runtime.thread.heartbeat", "workspace_id": workspace_id, "at": now})
+                await _send_json(
+                    send,
+                    {
+                        "type": "runtime.thread.heartbeat",
+                        "workspace_id": workspace_id,
+                        "at": now,
+                    },
+                )
                 last_heartbeat_at = now
     finally:
+        await cancel_websocket_tasks(receive_task, event_task, shutdown_task)
         state.runtime_thread_event_bus.unsubscribe(subscription)
 
 
 def _seconds_until_heartbeat(last_heartbeat_at: datetime, heartbeat_interval_seconds: float) -> float:
     elapsed = (datetime.now(tz=UTC) - last_heartbeat_at).total_seconds()
     return max(0.0, heartbeat_interval_seconds - elapsed)
-
-
-async def _cancel_pending(tasks: set[asyncio.Task]) -> None:
-    for task in tasks:
-        task.cancel()
-    for task in tasks:
-        with suppress(asyncio.CancelledError):
-            await task
 
 
 def _shutdown_task(shutdown_controller: EntrypointShutdownController | None) -> asyncio.Task | None:

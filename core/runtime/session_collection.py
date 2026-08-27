@@ -13,7 +13,7 @@ import tempfile
 from threading import local, RLock
 from typing import Any
 
-from core.runtime.paths import runtime_session_root
+from core.runtime.paths import runtime_session_root, workspace_runtime_root
 from core.shared.json_file_collection import (
     _decode_document_value,
     _encode_document_value,
@@ -236,6 +236,12 @@ class RuntimeSessionJsonCollection:
         session_id = str(query.get("session_id") or "").strip()
         if workspace_id and session_id:
             return [self._record_path(workspace_id=workspace_id, session_id=session_id)]
+        if workspace_id:
+            sessions_root = workspace_runtime_root(
+                workspace_id=workspace_id,
+                start_path=self.start_path,
+            ) / "sessions"
+            return sorted(sessions_root.glob(f"*/{self.filename}"))
         if session_id:
             return sorted((self.start_path / "workspaces").glob(f"*/runtime/sessions/{session_id}/{self.filename}"))
         return sorted((self.start_path / "workspaces").glob(f"*/runtime/sessions/*/{self.filename}"))

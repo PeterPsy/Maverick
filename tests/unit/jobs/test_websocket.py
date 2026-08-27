@@ -97,9 +97,15 @@ class JobWebSocketTestCase(AppReferenceApiTestSupport, unittest.IsolatedAsyncioT
         received: asyncio.Queue[dict] = asyncio.Queue()
         await received.put({"type": "websocket.connect"})
         sent: list[dict] = []
+        receive_cancellations = 0
 
         async def receive() -> dict:
-            return await received.get()
+            nonlocal receive_cancellations
+            try:
+                return await received.get()
+            except asyncio.CancelledError:
+                receive_cancellations += 1
+                raise
 
         async def send(message: dict) -> None:
             sent.append(message)
@@ -123,6 +129,7 @@ class JobWebSocketTestCase(AppReferenceApiTestSupport, unittest.IsolatedAsyncioT
 
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         self.assertIn("compute.job.heartbeat", [item["type"] for item in frames])
+        self.assertEqual(receive_cancellations, 0)
 
     def test_replay_is_cursor_aware_workspace_scoped_and_bounded(self) -> None:
         clock = FixedClock()

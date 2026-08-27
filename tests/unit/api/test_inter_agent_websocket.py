@@ -54,9 +54,15 @@ class InterAgentWebSocketTestCase(InterAgentWebSocketApiTestSupport):
             sent: list[dict] = []
             incoming: asyncio.Queue[dict] = asyncio.Queue()
             await incoming.put({"type": "websocket.connect"})
+            receive_cancellations = 0
 
             async def receive() -> dict:
-                return await incoming.get()
+                nonlocal receive_cancellations
+                try:
+                    return await incoming.get()
+                except asyncio.CancelledError:
+                    receive_cancellations += 1
+                    raise
 
             async def send(message: dict) -> None:
                 sent.append(message)
@@ -77,6 +83,7 @@ class InterAgentWebSocketTestCase(InterAgentWebSocketApiTestSupport):
                 )
             )
             await _wait_for_frame(sent, "inter_agent.snapshot")
+            await asyncio.sleep(0.15)
             service.record_event(
                 run,
                 event_type="inter_agent.summary.updated",
@@ -86,12 +93,14 @@ class InterAgentWebSocketTestCase(InterAgentWebSocketApiTestSupport):
                 now=datetime(2026, 6, 18, 10, 4, tzinfo=UTC),
             )
             await _wait_for_frame(sent, "inter_agent.event")
+            cancellations_before_disconnect = receive_cancellations
             await incoming.put({"type": "websocket.disconnect"})
             await task
 
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         live_frames = [frame for frame in frames if frame["type"] == "inter_agent.event"]
         self.assertTrue(any(frame["event"]["payload"].get("summary") == "Live update" for frame in live_frames))
+        self.assertEqual(cancellations_before_disconnect, 0)
 
     async def test_inter_agent_websocket_returns_empty_history_page_for_missing_cursor(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

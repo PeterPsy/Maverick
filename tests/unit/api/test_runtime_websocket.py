@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from core.api.runtime_websocket import (
     initial_runtime_event_page,
     lineage_runtime_event_page,
+    stream_runtime_session_events,
     turn_anchored_runtime_event_page,
 )
+from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.store import RuntimeEventPage
 
 
@@ -139,6 +145,65 @@ class RuntimeWebSocketReplayPagingTestCase(unittest.TestCase):
         self.assertEqual(state.runtime_store.page_calls, [("session-2", None, 2)])
 
 
+class RuntimeWebSocketSchedulingTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_heartbeat_does_not_cancel_the_pending_client_receive(self) -> None:
+        session = _runtime_session()
+        state = SimpleNamespace(
+            provider_registry=object(),
+            provider_store=object(),
+            runtime_event_bus=RuntimeEventBus(),
+            runtime_store=_RuntimeStore([], [session]),
+            usage_store=None,
+        )
+        context = SimpleNamespace(
+            workspace_id="default",
+            user=SimpleNamespace(user_id="user-a"),
+        )
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+        heartbeat_sent = asyncio.Event()
+        receive_cancellations = 0
+
+        async def receive() -> dict:
+            nonlocal receive_cancellations
+            try:
+                return await receive_queue.get()
+            except asyncio.CancelledError:
+                receive_cancellations += 1
+                raise
+
+        async def send(message: dict) -> None:
+            if "runtime.heartbeat" in str(message.get("text") or ""):
+                heartbeat_sent.set()
+
+        with (
+            patch("core.api.runtime_websocket.resolve_request_session", return_value=context),
+            patch("core.api.runtime_websocket.resolve_latest_runtime_session", return_value=session),
+            patch("core.api.runtime_websocket.runtime_session_lineage", return_value=[session]),
+            patch("core.api.runtime_websocket.runtime_session_admission_payload", return_value={}),
+        ):
+            stream_task = asyncio.create_task(
+                stream_runtime_session_events(
+                    state=state,
+                    scope={
+                        "type": "websocket",
+                        "path": f"/ws/runtime/sessions/{session.session_id}",
+                        "headers": [],
+                        "query_string": b"",
+                    },
+                    receive=receive,
+                    send=send,
+                    heartbeat_interval_seconds=0.01,
+                )
+            )
+            await asyncio.wait_for(heartbeat_sent.wait(), timeout=1)
+            cancellations_before_disconnect = receive_cancellations
+            await receive_queue.put({"type": "websocket.disconnect"})
+            await asyncio.wait_for(stream_task, timeout=1)
+
+        self.assertEqual(cancellations_before_disconnect, 0)
+
+
 class _RuntimeStore:
     def __init__(self, events: list[RuntimeEventRecord], sessions: list[object] | None = None) -> None:
         self.events = sorted(events, key=lambda event: (event.created_at, event.event_id))
@@ -173,6 +238,24 @@ def _state_with_events(
     sessions: list[object] | None = None,
 ):
     return type("State", (), {"runtime_store": _RuntimeStore(events, sessions)})()
+
+
+def _runtime_session() -> RuntimeSessionRecord:
+    return RuntimeSessionRecord(
+        session_id="session-1",
+        workspace_id="default",
+        agent_id="chat",
+        status="running",
+        requested_mode=None,
+        effective_mode="sandbox",
+        workspace_root="/workspace",
+        workdir="/workspace",
+        runtime_root="/workspace/runtime/session-1",
+        started_at=BASE_TIME,
+        updated_at=BASE_TIME,
+        ended_at=None,
+        last_progress_at=BASE_TIME,
+    )
 
 
 def _event(

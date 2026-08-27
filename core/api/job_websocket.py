@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
 from datetime import UTC, datetime
 import json
 from typing import Any
 from urllib.parse import parse_qs
 
+from core.api.websocket_tasks import cancel_websocket_tasks
 from core.jobs.events import JobEventBus
 from core.jobs.serialization import record_to_payload
 from core.jobs.service import JobService
@@ -80,6 +80,9 @@ async def stream_job_events(
     subscription = bus.subscribe(workspace_id)
     seen_event_ids: set[str] = set()
     last_heartbeat_at = datetime.now(tz=UTC)
+    receive_task: asyncio.Task | None = None
+    event_task: asyncio.Task | None = None
+    shutdown_task: asyncio.Task | None = None
     try:
         replay, cursor_found, replay_truncated = initial_job_event_replay(
             service,
@@ -100,19 +103,20 @@ async def stream_job_events(
                 "replay_truncated": replay_truncated,
             },
         )
+        shutdown_task = _shutdown_task(shutdown_controller)
         while True:
-            receive_task = asyncio.create_task(receive())
-            event_task = asyncio.create_task(subscription.get())
-            shutdown_task = _shutdown_task(shutdown_controller)
+            if receive_task is None:
+                receive_task = asyncio.create_task(receive())
+            if event_task is None:
+                event_task = asyncio.create_task(subscription.get())
             tasks = {event_task, receive_task}
             if shutdown_task is not None:
                 tasks.add(shutdown_task)
-            done, pending = await asyncio.wait(
+            done, _ = await asyncio.wait(
                 tasks,
                 timeout=_seconds_until_heartbeat(last_heartbeat_at, heartbeat_interval_seconds),
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            await _cancel_pending(pending)
             if not done:
                 now = datetime.now(tz=UTC)
                 await _send_json(
@@ -123,10 +127,14 @@ async def stream_job_events(
                 continue
             if shutdown_task is not None and shutdown_task in done:
                 return
-            if receive_task in done and receive_task.result().get("type") == "websocket.disconnect":
-                return
+            if receive_task in done:
+                incoming = receive_task.result()
+                receive_task = None
+                if incoming.get("type") == "websocket.disconnect":
+                    return
             if event_task in done:
                 event = event_task.result()
+                event_task = None
                 if event.event_id not in seen_event_ids:
                     seen_event_ids.add(event.event_id)
                     await _send_json(
@@ -141,6 +149,7 @@ async def stream_job_events(
                 )
                 last_heartbeat_at = now
     finally:
+        await cancel_websocket_tasks(receive_task, event_task, shutdown_task)
         bus.unsubscribe(subscription)
 
 
@@ -167,14 +176,6 @@ async def _send_json(send, frame: dict[str, Any]) -> None:
 def _seconds_until_heartbeat(last_heartbeat_at: datetime, heartbeat_interval_seconds: float) -> float:
     elapsed = (datetime.now(tz=UTC) - last_heartbeat_at).total_seconds()
     return max(0.0, heartbeat_interval_seconds - elapsed)
-
-
-async def _cancel_pending(tasks: set[asyncio.Task]) -> None:
-    for task in tasks:
-        task.cancel()
-    for task in tasks:
-        with suppress(asyncio.CancelledError):
-            await task
 
 
 def _shutdown_task(controller: EntrypointShutdownController | None) -> asyncio.Task | None:

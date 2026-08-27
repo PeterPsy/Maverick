@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
 from dataclasses import asdict
 from datetime import UTC, datetime
 import json
@@ -12,6 +11,7 @@ from urllib.parse import parse_qs
 
 from core.api.http import json_default
 from core.api.session_api import resolve_request_session
+from core.api.websocket_tasks import cancel_websocket_tasks
 from core.inter_agent.authorization import (
     authorize_inter_agent_run_view,
     authorized_inter_agent_event_visibility,
@@ -232,6 +232,8 @@ async def stream_inter_agent_run_events(
     last_event_id = query.get("last_event_id") or None
     seen_event_ids: set[str] = set()
     last_heartbeat_at = datetime.now(tz=UTC)
+    receive_task: asyncio.Task | None = None
+    shutdown_task: asyncio.Task | None = None
     try:
         await send({"type": "websocket.accept", "subprotocol": None, "headers": []})
         InterAgentService(state.inter_agent_store).expire_pending_approvals(run)
@@ -259,9 +261,10 @@ async def stream_inter_agent_run_events(
             ),
         )
 
+        shutdown_task = _shutdown_task(shutdown_controller)
         while True:
-            receive_task = asyncio.create_task(receive())
-            shutdown_task = _shutdown_task(shutdown_controller)
+            if receive_task is None:
+                receive_task = asyncio.create_task(receive())
             timeout = min(
                 _seconds_until_heartbeat(last_heartbeat_at, heartbeat_interval_seconds),
                 max(0.1, float(poll_interval_seconds)),
@@ -269,14 +272,14 @@ async def stream_inter_agent_run_events(
             wait_tasks = {receive_task}
             if shutdown_task is not None:
                 wait_tasks.add(shutdown_task)
-            done, pending = await asyncio.wait(wait_tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
-            await _cancel_pending(pending)
+            done, _ = await asyncio.wait(wait_tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
 
             if shutdown_task is not None and shutdown_task in done:
                 return
 
             if receive_task in done:
                 incoming = receive_task.result()
+                receive_task = None
                 if incoming and incoming.get("type") == "websocket.disconnect":
                     return
                 if incoming and incoming.get("type") == "websocket.receive":
@@ -329,7 +332,7 @@ async def stream_inter_agent_run_events(
                 await _send_json(send, {"type": "inter_agent.heartbeat", "run_id": run.run_id, "at": now})
                 last_heartbeat_at = now
     finally:
-        return
+        await cancel_websocket_tasks(receive_task, shutdown_task)
 
 
 def _events_after_cursor(
@@ -387,14 +390,6 @@ async def _send_json(send: AsgiSend, frame: dict[str, Any]) -> None:
 def _seconds_until_heartbeat(last_heartbeat_at: datetime, heartbeat_interval_seconds: float) -> float:
     elapsed = (datetime.now(tz=UTC) - last_heartbeat_at).total_seconds()
     return max(0.0, heartbeat_interval_seconds - elapsed)
-
-
-async def _cancel_pending(tasks: set[asyncio.Task]) -> None:
-    for task in tasks:
-        task.cancel()
-    for task in tasks:
-        with suppress(asyncio.CancelledError):
-            await task
 
 
 def _parse_client_frame(frame: dict[str, Any]) -> dict[str, Any] | None:

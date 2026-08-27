@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
 from dataclasses import asdict
 from datetime import UTC, datetime
 import json
@@ -13,6 +12,7 @@ from urllib.parse import parse_qs
 from core.api.http import json_default
 from core.api.platform_state import PlatformState
 from core.api.session_api import resolve_request_session
+from core.api.websocket_tasks import cancel_websocket_tasks
 from core.recovery.continuation_admission import runtime_session_admission_payload
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.continuation_lineage import (
@@ -379,14 +379,6 @@ def _seconds_until_heartbeat(last_heartbeat_at: datetime, heartbeat_interval_sec
     return max(0.0, heartbeat_interval_seconds - elapsed)
 
 
-async def _cancel_pending(tasks: set[asyncio.Task]) -> None:
-    for task in tasks:
-        task.cancel()
-    for task in tasks:
-        with suppress(asyncio.CancelledError):
-            await task
-
-
 async def stream_runtime_session_events(
     *,
     state: PlatformState,
@@ -435,6 +427,9 @@ async def stream_runtime_session_events(
     subscription = state.runtime_event_bus.subscribe(session_id)
     seen_event_ids: set[str] = set()
     last_heartbeat_at = datetime.now(tz=UTC)
+    receive_task: asyncio.Task | None = None
+    event_task: asyncio.Task | None = None
+    shutdown_task: asyncio.Task | None = None
     try:
         await send({"type": "websocket.accept", "subprotocol": None, "headers": []})
         if len(lineage) > 1:
@@ -486,21 +481,36 @@ async def stream_runtime_session_events(
             ),
         )
 
+        shutdown_task = _shutdown_task(shutdown_controller)
         while True:
-            receive_task = asyncio.create_task(receive())
-            event_task = asyncio.create_task(subscription.get())
-            shutdown_task = _shutdown_task(shutdown_controller)
-            timeout = _seconds_until_heartbeat(last_heartbeat_at, heartbeat_interval_seconds)
+            if receive_task is None:
+                receive_task = asyncio.create_task(receive())
+            if event_task is None:
+                event_task = asyncio.create_task(subscription.get())
+            timeout = _seconds_until_heartbeat(
+                last_heartbeat_at,
+                heartbeat_interval_seconds,
+            )
             wait_tasks = {receive_task, event_task}
             if shutdown_task is not None:
                 wait_tasks.add(shutdown_task)
-            done, pending = await asyncio.wait(wait_tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
-            await _cancel_pending(pending)
+            done, _ = await asyncio.wait(
+                wait_tasks,
+                timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
 
             if not done:
                 now = datetime.now(tz=UTC)
                 if (now - last_heartbeat_at).total_seconds() >= heartbeat_interval_seconds:
-                    await _send_json(send, {"type": "runtime.heartbeat", "session_id": session_id, "at": now})
+                    await _send_json(
+                        send,
+                        {
+                            "type": "runtime.heartbeat",
+                            "session_id": session_id,
+                            "at": now,
+                        },
+                    )
                     last_heartbeat_at = now
                 continue
 
@@ -509,6 +519,7 @@ async def stream_runtime_session_events(
 
             if receive_task in done:
                 incoming = receive_task.result()
+                receive_task = None
                 if incoming and incoming.get("type") == "websocket.disconnect":
                     return
                 if incoming and incoming.get("type") == "websocket.receive":
@@ -542,11 +553,19 @@ async def stream_runtime_session_events(
                                 )
                                 await _send_json(
                                     send,
-                                    runtime_history_page_frame(page, turns=runtime_turns_for_events(state, session_id, page.events)),
+                                    runtime_history_page_frame(
+                                        page,
+                                        turns=runtime_turns_for_events(
+                                            state,
+                                            session_id,
+                                            page.events,
+                                        ),
+                                    ),
                                 )
 
             if event_task in done:
                 event = event_task.result()
+                event_task = None
                 if event.event_id in seen_event_ids:
                     continue
                 await _send_json(send, runtime_event_frame(event))
@@ -586,9 +605,17 @@ async def stream_runtime_session_events(
 
             now = datetime.now(tz=UTC)
             if (now - last_heartbeat_at).total_seconds() >= heartbeat_interval_seconds:
-                await _send_json(send, {"type": "runtime.heartbeat", "session_id": session_id, "at": now})
+                await _send_json(
+                    send,
+                    {
+                        "type": "runtime.heartbeat",
+                        "session_id": session_id,
+                        "at": now,
+                    },
+                )
                 last_heartbeat_at = now
     finally:
+        await cancel_websocket_tasks(receive_task, event_task, shutdown_task)
         state.runtime_event_bus.unsubscribe(subscription)
 
 

@@ -55,6 +55,35 @@ class RuntimeExecutionBinding:
     tcb_live_digest: str = ""
 
 
+@dataclass(frozen=True)
+class _LegacySchemaFieldGroup:
+    """Fields introduced together by one persisted-binding schema extension."""
+
+    binding_fields: tuple[str, ...] = ()
+    policy_fields: tuple[str, ...] = ()
+
+
+_LEGACY_SCHEMA_FIELD_GROUPS = (
+    _LegacySchemaFieldGroup(
+        binding_fields=("certified_reasoning_efforts", "default_reasoning_effort"),
+    ),
+    _LegacySchemaFieldGroup(
+        binding_fields=(
+            "tcb_manifest_id",
+            "tcb_manifest_version",
+            "tcb_structure_digest",
+            "tcb_live_digest",
+        ),
+    ),
+    _LegacySchemaFieldGroup(
+        policy_fields=(
+            "profile_policy_ceiling_snapshot",
+            "workspace_policy_ceiling_snapshot",
+        ),
+    ),
+)
+
+
 def build_runtime_execution_binding(
     *,
     session_id: str,
@@ -187,37 +216,16 @@ def fork_runtime_execution_binding(
 def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutionBinding:
     """Hydrate nested policy and routing records from a stored document."""
     payload = dict(document)
-    legacy_compatible_binding_fields = tuple(
-        field_name
-        for field_name in (
-            "certified_reasoning_efforts",
-            "default_reasoning_effort",
-            "tcb_manifest_id",
-            "tcb_manifest_version",
-            "tcb_structure_digest",
-            "tcb_live_digest",
+    legacy_compatible_field_groups = tuple(
+        group
+        for group in _LEGACY_SCHEMA_FIELD_GROUPS
+        if all(
+            _legacy_binding_field_has_fail_closed_default(payload, field_name)
+            for field_name in group.binding_fields
         )
-        if (
-            field_name not in payload
-            or (
-                field_name == "certified_reasoning_efforts"
-                and payload[field_name] in ([], ())
-            )
-            or (
-                field_name == "default_reasoning_effort"
-                and payload[field_name] is None
-            )
-        )
-    )
-    legacy_compatible_policy_fields = tuple(
-        field_name
-        for field_name in (
-            "profile_policy_ceiling_snapshot",
-            "workspace_policy_ceiling_snapshot",
-        )
-        if (
-            "allow_filesystem_list" not in payload[field_name]
-            or payload[field_name]["allow_filesystem_list"] is False
+        and all(
+            _legacy_policy_field_has_fail_closed_default(payload, field_name)
+            for field_name in group.policy_fields
         )
     )
     payload["routing_constraint_snapshot"] = _routing_constraint_from_document(
@@ -243,8 +251,7 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     if not digest_matches:
         digest_matches = _matches_legacy_digest(
             binding,
-            compatible_policy_fields=legacy_compatible_policy_fields,
-            compatible_binding_fields=legacy_compatible_binding_fields,
+            compatible_field_groups=legacy_compatible_field_groups,
         )
     if not digest_matches:
         raise ValueError("Runtime execution binding digest does not match its immutable payload.")
@@ -254,30 +261,47 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
 def _matches_legacy_digest(
     binding: RuntimeExecutionBinding,
     *,
-    compatible_policy_fields: tuple[str, ...],
-    compatible_binding_fields: tuple[str, ...],
+    compatible_field_groups: tuple[_LegacySchemaFieldGroup, ...],
 ) -> bool:
-    """Accept only exact legacy digests after fail-closed defaults were materialized."""
-    for binding_field_count in range(len(compatible_binding_fields) + 1):
-        for binding_field_names in combinations(
-            compatible_binding_fields,
-            binding_field_count,
-        ):
-            for policy_field_count in range(len(compatible_policy_fields) + 1):
-                if binding_field_count == 0 and policy_field_count == 0:
-                    continue
-                for policy_field_names in combinations(
-                    compatible_policy_fields,
-                    policy_field_count,
-                ):
-                    legacy_payload = asdict(binding)
-                    for field_name in binding_field_names:
-                        legacy_payload.pop(field_name, None)
-                    for field_name in policy_field_names:
-                        legacy_payload[field_name].pop("allow_filesystem_list", None)
-                    if binding.binding_digest == canonical_digest(legacy_payload):
-                        return True
+    """Accept exact legacy digests for explicit atomic schema extensions only."""
+    current_payload = asdict(binding)
+    for group_count in range(1, len(compatible_field_groups) + 1):
+        for selected_groups in combinations(compatible_field_groups, group_count):
+            legacy_payload = dict(current_payload)
+            for group in selected_groups:
+                for field_name in group.binding_fields:
+                    legacy_payload.pop(field_name, None)
+                for field_name in group.policy_fields:
+                    legacy_policy = dict(legacy_payload[field_name])
+                    legacy_policy.pop("allow_filesystem_list", None)
+                    legacy_payload[field_name] = legacy_policy
+            if binding.binding_digest == canonical_digest(legacy_payload):
+                return True
     return False
+
+
+def _legacy_binding_field_has_fail_closed_default(
+    payload: dict[str, Any],
+    field_name: str,
+) -> bool:
+    if field_name not in payload:
+        return True
+    if field_name == "certified_reasoning_efforts":
+        return payload[field_name] in ([], ())
+    if field_name == "default_reasoning_effort":
+        return payload[field_name] is None
+    return False
+
+
+def _legacy_policy_field_has_fail_closed_default(
+    payload: dict[str, Any],
+    field_name: str,
+) -> bool:
+    policy = payload[field_name]
+    return (
+        "allow_filesystem_list" not in policy
+        or policy["allow_filesystem_list"] is False
+    )
 
 
 def canonical_digest(value: object) -> str:

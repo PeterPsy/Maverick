@@ -2867,6 +2867,7 @@ class RuntimeDocumentStore:
 
     def _session_with_provider_state(self, session: RuntimeSessionRecord) -> RuntimeSessionRecord:
         """Project mutable continuation state onto the legacy read model only."""
+        self._remember_session_partition(session.session_id, session.workspace_id)
         try:
             provider_state = self.get_provider_state(session.session_id)
         except RuntimeProviderStateError:

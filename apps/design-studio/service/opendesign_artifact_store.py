@@ -656,24 +656,28 @@ class OpenDesignArtifactStore:
                 path.chmod(0o755)
             elif not path.is_dir() or path.is_symlink():
                 raise ArtifactStoreError("artifact_missing", "store_open", "OpenDesign artifact store layout is incomplete")
-        background_lock = self.root / ".locks/background-full-audit.lock"
-        if create and not background_lock.exists():
-            descriptor = os.open(
-                background_lock,
-                os.O_RDONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-                0o444,
+        for name, label in (
+            ("background-full-audit.lock", "OpenDesign background audit lock"),
+            ("workspace-references.lock", "OpenDesign workspace reference lock"),
+        ):
+            lock = self.root / ".locks" / name
+            if create and not lock.exists():
+                descriptor = os.open(
+                    lock,
+                    os.O_RDONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                    0o444,
+                )
+                os.close(descriptor)
+            _protected_file(
+                lock,
+                label=label,
+                owner_uid=_mapped_namespace_id(
+                    int(self.namespace["owner_uid"]), Path("/proc/self/uid_map")
+                ),
+                owner_gid=_mapped_namespace_id(
+                    int(self.namespace["owner_gid"]), Path("/proc/self/gid_map")
+                ),
             )
-            os.close(descriptor)
-        _protected_file(
-            background_lock,
-            label="OpenDesign background audit lock",
-            owner_uid=_mapped_namespace_id(
-                int(self.namespace["owner_uid"]), Path("/proc/self/uid_map")
-            ),
-            owner_gid=_mapped_namespace_id(
-                int(self.namespace["owner_gid"]), Path("/proc/self/gid_map")
-            ),
-        )
 
     def _create_staging_lease(self, kind: str, digest: str) -> _StagingLease:
         with self._staging_registry_lock():

@@ -341,11 +341,15 @@ failed readiness terminates the complete process group and returns a typed,
 redacted failure. Browser-session idle expiry does not replay an old ticket: the
 wrapper requests a fresh launch while reusing the healthy process when live.
 If a low-priority full audit later rejects an active package, the hook removes
-transactional readiness, asks Core to revoke browser authority and stop the
-sidecar, performs exactly one locked repair, and restarts without recursively
-invoking auto-repair. A failed recovery leaves the app stopped and records a
-one-hour persistent backoff instead of hashing and retrying every scheduler
-tick.
+transactional readiness in every Design Studio workspace, asks Core to revoke
+all Design Studio browser authority and atomically stop every live consumer,
+performs exactly one globally locked repair, and restarts only the workspaces
+that were live before revocation. A partial restart is stopped globally again.
+The protected audit marker binds the sorted workspace set and a digest of every
+active/rollback reference; GC uses that same union, so one workspace can never
+quarantine another workspace's generation. A failed recovery leaves all
+consumers stopped and records a one-hour persistent backoff instead of hashing
+and retrying every scheduler tick.
 
 The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
 

@@ -15,7 +15,7 @@ from typing import Any
 
 
 CONFIG_PATH = Path("/etc/maverick/opendesign-artifact-authority.json")
-WORKSPACE_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+WORKSPACE_ID = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])$")
 ALLOWED_OPERATIONS = frozenset({"verify", "repair", "provision", "gc", "publish-web"})
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 

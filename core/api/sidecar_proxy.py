@@ -603,6 +603,34 @@ class HttpSidecarManager:
                 pass
         return len(running_sidecars) + len(startups)
 
+    def stop_app_all_workspaces(self, *, app_id: str) -> tuple[int, tuple[str, ...]]:
+        """Stop one app everywhere and return the workspaces that had live work."""
+        with self._lock:
+            running_keys = [key for key in self._running if key[1] == app_id]
+            starting_keys = [key for key in self._starting if key[1] == app_id]
+            workspace_ids = tuple(
+                sorted({key[0] for key in (*running_keys, *starting_keys)})
+            )
+            running_sidecars = [self._running.pop(key) for key in running_keys]
+            startups = [self._starting[key] for key in starting_keys]
+            for key in (*running_keys, *starting_keys):
+                self._status[key] = {
+                    "state": "stopped",
+                    "phase": "stop_app_all_workspaces",
+                    "updated_at": _utc_timestamp(),
+                    "last_failure": None,
+                }
+            for startup in startups:
+                startup.cancel_event.set()
+        for running in running_sidecars:
+            self._cleanup_sidecar(running)
+        for startup in startups:
+            try:
+                startup.future.result()
+            except Exception:
+                pass
+        return len(running_sidecars) + len(startups), workspace_ids
+
     def startup_status(
         self,
         *,
@@ -678,6 +706,14 @@ def stop_app_sidecars(*, workspace_id: str, app_id: str) -> int:
     if manager is not None:
         return manager.stop_app(workspace_id=workspace_id, app_id=app_id)
     return 0
+
+
+def stop_app_sidecars_all_workspaces(*, app_id: str) -> tuple[int, tuple[str, ...]]:
+    """Stop one app globally without creating a manager as a side effect."""
+    manager = _SIDECAR_MANAGER
+    if manager is not None:
+        return manager.stop_app_all_workspaces(app_id=app_id)
+    return 0, ()
 
 
 def app_sidecar_startup_status(

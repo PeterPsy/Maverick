@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,7 @@ from core.apps.artifact_mounts import (
 )
 from core.api.sidecar_control import request_sidecar_control
 from core.shared.repository import discover_repository_root
+from core.workspaces.paths import validate_workspace_id
 from opendesign_artifact import (
     ArtifactError,
     is_sha256,
@@ -69,6 +71,10 @@ class RequiredArtifacts:
     optional_runtime: tuple[str, ...]
     web_overlays: tuple[str, ...]
     fresh_web_overlay: str
+    required_runtime_artifacts: tuple[str, ...] = ()
+    runtime_web_bindings: tuple[tuple[str, str], ...] = ()
+    workspace_ids: tuple[str, ...] = ()
+    workspace_reference_sha256: str = ""
 
 
 def run_artifact_operation(
@@ -146,29 +152,74 @@ def run_artifact_operation(
         }
     runtime_sources = load_runtime_source_catalog()
     manifest = runtime_sources.by_role["current"].manifest
-    required = _required_artifacts(data_root, manifest=manifest)
-    _validate_required_runtime_sources(required, runtime_sources=runtime_sources)
+    global_operation = operation in {"verify", "repair", "provision", "gc"} and (
+        _authority or _is_artifact_authority(repository)
+    )
+    reference_lock = (
+        _workspace_reference_lock(store, exclusive=operation != "verify")
+        if global_operation
+        else nullcontext()
+    )
+    repair_lock = (
+        _repair_operation_lock(store)
+        if operation in {"repair", "provision"}
+        else nullcontext()
+    )
+    required: RequiredArtifacts | None = None
     try:
-        if operation in {"repair", "provision"}:
-            with _repair_operation_lock(store):
-                result = _repair(
-                    store,
-                    required=required,
-                    runtime_sources=runtime_sources,
-                )
-        elif operation == "verify":
-            result = _verify(store, required=required, max_workers=audit_workers)
-        elif operation == "gc":
-            result = _garbage_collect(store, required=required)
-        else:
-            result = _status(store, required=required)
+        with repair_lock:
+            with reference_lock:
+                if global_operation:
+                    required = _global_required_artifacts(
+                        repository,
+                        requested_workspace_id=workspace_id,
+                        manifest=manifest,
+                    )
+                else:
+                    required = _required_artifacts(data_root, manifest=manifest)
+                _validate_required_runtime_sources(required, runtime_sources=runtime_sources)
+                if operation in {"repair", "provision"}:
+                    result = _repair(
+                        store,
+                        required=required,
+                        runtime_sources=runtime_sources,
+                    )
+                elif operation == "verify":
+                    result = _verify(store, required=required, max_workers=audit_workers)
+                elif operation == "gc":
+                    result = _garbage_collect(store, required=required)
+                else:
+                    result = _status(store, required=required)
+                if required.workspace_reference_sha256:
+                    result = {
+                        **result,
+                        "workspace_ids": list(required.workspace_ids),
+                        "workspace_reference_sha256": required.workspace_reference_sha256,
+                    }
+                if operation in {"provision", "repair", "verify"}:
+                    _record_full_audit_success(
+                        store.root,
+                        operation=operation,
+                        result=result,
+                        store_generation=store.store_generation,
+                    )
+                if operation != "status":
+                    _append_audit(
+                        store.root,
+                        operation=operation,
+                        status="succeeded",
+                        duration_ms=_elapsed_ms(started),
+                        error_code=None,
+                        auto=auto,
+                    )
     except Exception as error:
         if operation != "status":
-            if operation == "verify":
+            if operation in {"provision", "repair", "verify"}:
                 _record_full_audit_failure(
                     store.root,
                     error=error,
                     store_generation=store.store_generation,
+                    required=required,
                 )
             _append_audit(
                 store.root,
@@ -179,22 +230,6 @@ def run_artifact_operation(
                 auto=auto,
             )
         raise
-    if operation in {"provision", "repair", "verify"}:
-        _record_full_audit_success(
-            store.root,
-            operation=operation,
-            result=result,
-            store_generation=store.store_generation,
-        )
-    if operation != "status":
-        _append_audit(
-            store.root,
-            operation=operation,
-            status="succeeded",
-            duration_ms=_elapsed_ms(started),
-            error_code=None,
-            auto=auto,
-        )
     return {
         "schema_version": "1",
         "operation": operation,
@@ -270,12 +305,25 @@ def _record_full_audit_success(
     else:
         runtime_count = len(result.get("retained_runtime_artifacts", []))
         web_count = len(result.get("retained_web_overlays", []))
+    workspace_ids = result.get("workspace_ids")
+    reference_sha256 = result.get("workspace_reference_sha256")
+    if (
+        not isinstance(workspace_ids, list)
+        or not workspace_ids
+        or any(not isinstance(item, str) for item in workspace_ids)
+        or not is_sha256(reference_sha256)
+    ):
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "artifact_audit_coverage",
+            "The global artifact audit did not bind its workspace reference set",
+        )
     path = store_root / "audit/background-full-audit.json"
     _ensure_readable_audit_root(path.parent)
     write_canonical_json(
         path,
         {
-            "schema_version": "2",
+            "schema_version": "3",
             "status": "passed",
             "attempted_at_epoch_ms": observed,
             "verified_at_epoch_ms": observed,
@@ -283,6 +331,8 @@ def _record_full_audit_success(
             "store_generation": store_generation,
             "runtime_count": runtime_count,
             "web_count": web_count,
+            "workspace_ids": workspace_ids,
+            "workspace_reference_sha256": reference_sha256,
             "auto_repair_requested": False,
             "audit_error_code": None,
             "audit_phase": None,
@@ -298,6 +348,7 @@ def _record_full_audit_failure(
     *,
     error: BaseException,
     store_generation: str,
+    required: RequiredArtifacts | None,
     observed_at_epoch_ms: int | None = None,
 ) -> None:
     observed = (
@@ -314,11 +365,17 @@ def _record_full_audit_failure(
         default="artifact_full_verify",
     )
     path = store_root / "audit/background-full-audit.json"
+    workspace_ids = list(required.workspace_ids) if required is not None else []
+    reference_sha256 = (
+        required.workspace_reference_sha256
+        if required is not None and is_sha256(required.workspace_reference_sha256)
+        else None
+    )
     _ensure_readable_audit_root(path.parent)
     write_canonical_json(
         path,
         {
-            "schema_version": "2",
+            "schema_version": "3",
             "status": "failed",
             "attempted_at_epoch_ms": observed,
             "verified_at_epoch_ms": None,
@@ -326,6 +383,8 @@ def _record_full_audit_failure(
             "store_generation": store_generation,
             "runtime_count": 0,
             "web_count": 0,
+            "workspace_ids": workspace_ids,
+            "workspace_reference_sha256": reference_sha256,
             "auto_repair_requested": True,
             "audit_error_code": code,
             "audit_phase": phase,
@@ -372,6 +431,23 @@ def _repair_operation_lock(store: OpenDesignArtifactStore) -> Iterator[None]:
         os.close(descriptor)
 
 
+@contextmanager
+def _workspace_reference_lock(
+    store: OpenDesignArtifactStore,
+    *,
+    exclusive: bool,
+) -> Iterator[None]:
+    """Freeze control commits across a global reference scan and its result."""
+    path = store.root / ".locks/workspace-references.lock"
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
 def _repair(
     store: OpenDesignArtifactStore,
     *,
@@ -397,8 +473,13 @@ def _repair(
     )
     retained_runtime: list[str] = [runtime.artifact_sha256]
     repaired_runtime: list[str] = [runtime.artifact_sha256] if runtime_repaired else []
-    required_runtime = {required.active_runtime, required.rollback_runtime}
-    for digest in _unique((required.active_runtime, required.rollback_runtime, *required.optional_runtime)):
+    required_runtime = {
+        required.current_runtime,
+        required.active_runtime,
+        required.rollback_runtime,
+        *required.required_runtime_artifacts,
+    }
+    for digest in _runtime_references(required):
         if digest == required.current_runtime:
             continue
         retained, repaired = _retain_or_repair_runtime(
@@ -414,14 +495,7 @@ def _repair(
             repaired_runtime.append(digest)
     repaired_web: list[str] = []
     retained_web: list[str] = []
-    runtime_candidates = _unique(
-        (
-            required.active_runtime,
-            required.current_runtime,
-            required.rollback_runtime,
-            *required.optional_runtime,
-        )
-    )
+    runtime_candidates = _runtime_references(required)
     for digest in required.web_overlays:
         web_invalid_identity = _known_invalid_identity(store, kind="web", digest=digest)
         if web_invalid_identity is None:
@@ -461,6 +535,7 @@ def _repair(
         _clear_invalid_marker(store, kind="web", digest=digest)
         repaired_web.append(digest)
         retained_web.append(digest)
+    _validate_runtime_web_bindings(store, required=required)
     return {
         "runtime_artifact_sha256": runtime.artifact_sha256,
         "runtime_repaired": runtime_repaired,
@@ -556,14 +631,7 @@ def _fully_audited_runtime_source(
 
 def _status(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> dict[str, Any]:
     runtime_states: dict[str, str] = {}
-    for digest in _unique(
-        (
-            required.current_runtime,
-            required.active_runtime,
-            required.rollback_runtime,
-            *required.optional_runtime,
-        )
-    ):
+    for digest in _runtime_references(required):
         try:
             store.fast_runtime(digest, file_manifest_sha256=None, opendesign_version="0.16.1", upstream_commit=None)
             runtime_states[digest] = "verified_fast"
@@ -572,14 +640,7 @@ def _status(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> d
     web_states: dict[str, str] = {}
     for digest in required.web_overlays:
         last_error: ArtifactStoreError | None = None
-        for runtime_digest in _unique(
-            (
-                required.active_runtime,
-                required.current_runtime,
-                required.rollback_runtime,
-                *required.optional_runtime,
-            )
-        ):
+        for runtime_digest in _runtime_references(required):
             try:
                 store.fast_web_overlay(digest, runtime_artifact_sha256=runtime_digest)
                 web_states[digest] = "verified_fast"
@@ -593,14 +654,55 @@ def _status(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> d
         active_web_ready = True
     except ArtifactStoreError:
         active_web_ready = False
+    binding_states = _runtime_web_binding_states(store, required=required)
     operational = runtime_states.get(required.active_runtime) == "verified_fast" and active_web_ready
-    retained = all(state == "verified_fast" for state in (*runtime_states.values(), *web_states.values()))
+    retained = all(
+        state == "verified_fast"
+        for state in (
+            *runtime_states.values(),
+            *web_states.values(),
+            *binding_states.values(),
+        )
+    )
     return {
         "operational": operational,
         "retention_complete": retained,
         "runtime": runtime_states,
         "web": web_states,
+        "runtime_web_bindings": binding_states,
     }
+
+
+def _runtime_web_binding_states(
+    store: OpenDesignArtifactStore,
+    *,
+    required: RequiredArtifacts,
+) -> dict[str, str]:
+    states: dict[str, str] = {}
+    for runtime_digest, web_digest in required.runtime_web_bindings:
+        identity = f"{runtime_digest}:{web_digest}"
+        try:
+            store.fast_web_overlay(
+                web_digest,
+                runtime_artifact_sha256=runtime_digest,
+            )
+        except ArtifactStoreError as error:
+            states[identity] = error.code
+        else:
+            states[identity] = "verified_fast"
+    return states
+
+
+def _validate_runtime_web_bindings(
+    store: OpenDesignArtifactStore,
+    *,
+    required: RequiredArtifacts,
+) -> None:
+    for runtime_digest, web_digest in required.runtime_web_bindings:
+        store.fast_web_overlay(
+            web_digest,
+            runtime_artifact_sha256=runtime_digest,
+        )
 
 
 def _verify(
@@ -610,19 +712,18 @@ def _verify(
     max_workers: int | None = None,
 ) -> dict[str, Any]:
     audited_runtime: list[str] = []
-    for digest in _unique(
-        (
-            required.current_runtime,
-            required.active_runtime,
-            required.rollback_runtime,
-            *required.optional_runtime,
-        )
-    ):
+    mandatory_runtime = {
+        required.current_runtime,
+        required.active_runtime,
+        required.rollback_runtime,
+        *required.required_runtime_artifacts,
+    }
+    for digest in _runtime_references(required):
         try:
             store.full_audit("runtime", digest, max_workers=max_workers)
         except ArtifactStoreError:
             _mark_invalid(store, kind="runtime", digest=digest)
-            if digest in {required.current_runtime, required.active_runtime, required.rollback_runtime}:
+            if digest in mandatory_runtime:
                 raise
             continue
         _clear_invalid_marker(store, kind="runtime", digest=digest)
@@ -641,6 +742,7 @@ def _verify(
             raise
         _clear_invalid_marker(store, kind="web", digest=digest)
         audited_web.append(audited.artifact_sha256)
+    _validate_runtime_web_bindings(store, required=required)
     status = _status(store, required=required)
     return {
         "operational": status["operational"],
@@ -732,21 +834,46 @@ def _required_artifacts(data_root: Path, *, manifest: dict[str, Any]) -> Require
     active_web = str(release["active_web_overlay_sha256"])
     optional_runtime: list[str] = []
     web = [str(release["active_web_overlay_sha256"]), str(release["rollback_web_overlay_sha256"])]
+    bindings = [
+        (current, str(release["active_web_overlay_sha256"])),
+        (rollback_runtime, str(release["rollback_web_overlay_sha256"])),
+    ]
     control_path = data_root / "opendesign" / "control.json"
-    if control_path.is_file() and not control_path.is_symlink():
+    if control_path.exists() or control_path.is_symlink():
+        try:
+            control_metadata = control_path.lstat()
+        except OSError as error:
+            raise ArtifactStoreError(
+                "runtime_binding_invalid",
+                "workspace_reference_scan",
+                "A Design Studio workspace control file is unavailable",
+            ) from error
+        if stat.S_ISLNK(control_metadata.st_mode) or not stat.S_ISREG(control_metadata.st_mode):
+            raise ArtifactStoreError(
+                "runtime_binding_invalid",
+                "workspace_reference_scan",
+                "A Design Studio workspace control path is unsafe",
+            )
         control = load_generation_control_metadata(control_path.parent)
         active_runtime = control.active.runtime_artifact_sha256
         active_web = control.active.web_overlay_sha256
-        web.append(control.active.web_overlay_sha256)
-        if control.previous_release is not None:
-            optional_runtime.append(control.previous_release.runtime_artifact_sha256)
-            web.append(control.previous_release.web_overlay_sha256)
-        if control.previous_web is not None:
-            optional_runtime.append(control.previous_web.runtime_artifact_sha256)
-            web.append(control.previous_web.web_overlay_sha256)
-        if control.previous_runtime is not None:
-            optional_runtime.append(control.previous_runtime.runtime_artifact_sha256)
-            web.append(control.previous_runtime.web_overlay_sha256)
+        for selection in (
+            control.active,
+            control.previous_release,
+            control.previous_web,
+            control.previous_runtime,
+        ):
+            if selection is None:
+                continue
+            bindings.append(
+                (
+                    selection.runtime_artifact_sha256,
+                    selection.web_overlay_sha256,
+                )
+            )
+            web.append(selection.web_overlay_sha256)
+            if selection is not control.active:
+                optional_runtime.append(selection.runtime_artifact_sha256)
     return RequiredArtifacts(
         current_runtime=current,
         active_runtime=active_runtime,
@@ -755,7 +882,176 @@ def _required_artifacts(data_root: Path, *, manifest: dict[str, Any]) -> Require
         optional_runtime=tuple(_unique(optional_runtime)),
         web_overlays=tuple(_unique(web)),
         fresh_web_overlay=str(release["active_web_overlay_sha256"]),
+        runtime_web_bindings=tuple(dict.fromkeys(bindings)),
     )
+
+
+def discover_design_studio_workspace_data_roots(
+    repository: Path,
+    *,
+    requested_workspace_id: str,
+) -> dict[str, Path]:
+    """Return every canonical Design Studio data root in one installation."""
+    repository = Path(repository).resolve(strict=True)
+    try:
+        requested = validate_workspace_id(requested_workspace_id)
+    except ValueError as error:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "workspace_reference_scan",
+            "The requested workspace identity is invalid",
+        ) from error
+    workspaces_root = repository / "workspaces"
+    roots: dict[str, Path] = {
+        requested: workspaces_root / requested / "data/design-studio",
+    }
+    if not workspaces_root.exists() and not workspaces_root.is_symlink():
+        return roots
+    try:
+        workspaces_metadata = workspaces_root.lstat()
+    except OSError as error:
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "workspace_reference_scan",
+            "The workspace registry is unavailable",
+        ) from error
+    if stat.S_ISLNK(workspaces_metadata.st_mode) or not stat.S_ISDIR(workspaces_metadata.st_mode):
+        raise ArtifactStoreError(
+            "runtime_binding_invalid",
+            "workspace_reference_scan",
+            "The workspace registry path is unsafe",
+        )
+    for workspace in sorted(workspaces_root.iterdir(), key=lambda item: item.name):
+        try:
+            metadata = workspace.lstat()
+        except OSError as error:
+            raise ArtifactStoreError(
+                "runtime_binding_invalid",
+                "workspace_reference_scan",
+                "A workspace registry entry is unavailable",
+            ) from error
+        if not stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode):
+            continue
+        try:
+            workspace_id = validate_workspace_id(workspace.name)
+        except ValueError as error:
+            raise ArtifactStoreError(
+                "runtime_binding_invalid",
+                "workspace_reference_scan",
+                "The workspace registry contains an invalid directory",
+            ) from error
+        if stat.S_ISLNK(metadata.st_mode):
+            raise ArtifactStoreError(
+                "runtime_binding_invalid",
+                "workspace_reference_scan",
+                "The workspace registry contains a symlink",
+            )
+        data = workspace / "data"
+        app_data = data / "design-studio"
+        if not app_data.exists() and not app_data.is_symlink():
+            continue
+        for path in (data, app_data):
+            path_metadata = path.lstat()
+            if stat.S_ISLNK(path_metadata.st_mode) or not stat.S_ISDIR(path_metadata.st_mode):
+                raise ArtifactStoreError(
+                    "runtime_binding_invalid",
+                    "workspace_reference_scan",
+                    "A Design Studio workspace data root is unsafe",
+                )
+        roots[workspace_id] = app_data
+    return dict(sorted(roots.items()))
+
+
+def _global_required_artifacts(
+    repository: Path,
+    *,
+    requested_workspace_id: str,
+    manifest: dict[str, Any],
+) -> RequiredArtifacts:
+    roots = discover_design_studio_workspace_data_roots(
+        repository,
+        requested_workspace_id=requested_workspace_id,
+    )
+    workspace_requirements = {
+        workspace_id: _required_artifacts(data_root, manifest=manifest)
+        for workspace_id, data_root in roots.items()
+    }
+    requested = workspace_requirements[requested_workspace_id]
+    required_runtime = {
+        requested.current_runtime,
+        requested.rollback_runtime,
+        *(item.active_runtime for item in workspace_requirements.values()),
+        *(
+            digest
+            for item in workspace_requirements.values()
+            for digest in item.optional_runtime
+        ),
+    }
+    web_overlays = {
+        digest
+        for item in workspace_requirements.values()
+        for digest in item.web_overlays
+    }
+    runtime_web_bindings = {
+        binding
+        for item in workspace_requirements.values()
+        for binding in item.runtime_web_bindings
+    }
+    coverage = {
+        "schema_version": "1",
+        "release": {
+            "current_runtime": requested.current_runtime,
+            "rollback_runtime": requested.rollback_runtime,
+            "fresh_web_overlay": requested.fresh_web_overlay,
+        },
+        "workspaces": [
+            {
+                "workspace_id": workspace_id,
+                "active_runtime": item.active_runtime,
+                "active_web": item.active_web,
+                "optional_runtime": sorted(item.optional_runtime),
+                "web_overlays": sorted(item.web_overlays),
+                "runtime_web_bindings": [
+                    list(binding) for binding in sorted(item.runtime_web_bindings)
+                ],
+            }
+            for workspace_id, item in workspace_requirements.items()
+        ],
+    }
+    coverage_sha256 = hashlib.sha256(
+        json.dumps(coverage, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return RequiredArtifacts(
+        current_runtime=requested.current_runtime,
+        active_runtime=requested.active_runtime,
+        rollback_runtime=requested.rollback_runtime,
+        active_web=requested.active_web,
+        optional_runtime=(),
+        web_overlays=tuple(sorted(web_overlays)),
+        fresh_web_overlay=requested.fresh_web_overlay,
+        required_runtime_artifacts=tuple(sorted(required_runtime)),
+        runtime_web_bindings=tuple(sorted(runtime_web_bindings)),
+        workspace_ids=tuple(workspace_requirements),
+        workspace_reference_sha256=coverage_sha256,
+    )
+
+
+def global_artifact_reference_coverage(
+    repository: Path,
+    *,
+    requested_workspace_id: str,
+) -> dict[str, object]:
+    """Return the global reference identity without opening artifact content."""
+    runtime_sources = load_runtime_source_catalog()
+    required = _global_required_artifacts(
+        repository,
+        requested_workspace_id=requested_workspace_id,
+        manifest=runtime_sources.by_role["current"].manifest,
+    )
+    return {
+        "workspace_ids": list(required.workspace_ids),
+        "workspace_reference_sha256": required.workspace_reference_sha256,
+    }
 
 
 def _validate_required_runtime_sources(
@@ -1196,14 +1492,7 @@ def _read_selection() -> dict[str, Any]:
 
 def _garbage_collect(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> dict[str, Any]:
     staging_recovery = store.recover_orphaned_staging()
-    keep_runtime = set(
-        (
-            required.current_runtime,
-            required.active_runtime,
-            required.rollback_runtime,
-            *required.optional_runtime,
-        )
-    )
+    keep_runtime = set(_runtime_references(required))
     keep_web = set(required.web_overlays)
     marked: list[str] = []
     for kind, keep in (("runtime", keep_runtime), ("web", keep_web)):
@@ -1290,6 +1579,18 @@ def _make_owner_writable(root: Path) -> None:
 
 def _unique(values) -> list[str]:
     return list(dict.fromkeys(str(value) for value in values if value))
+
+
+def _runtime_references(required: RequiredArtifacts) -> list[str]:
+    return _unique(
+        (
+            required.current_runtime,
+            required.active_runtime,
+            required.rollback_runtime,
+            *required.required_runtime_artifacts,
+            *required.optional_runtime,
+        )
+    )
 
 
 def _elapsed_ms(started: float) -> float:

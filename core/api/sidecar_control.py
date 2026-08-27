@@ -12,7 +12,11 @@ from threading import Lock, Thread, current_thread
 from typing import Any
 
 from core.api.sidecar_prewarm import prewarm_workspace_app_sidecars
-from core.api.sidecar_proxy import app_sidecar_startup_status, stop_app_sidecars
+from core.api.sidecar_proxy import (
+    app_sidecar_startup_status,
+    stop_app_sidecars,
+    stop_app_sidecars_all_workspaces,
+)
 from core.apps.errors import AppHostingError
 from core.apps.sidecar_restart import restart_workspace_app_sidecars
 from core.apps.surfaces import resolve_workspace_app_surface
@@ -184,6 +188,15 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
             "ready": False,
             "browser_sessions_revoked": True,
             "stopped_service_count": stopped,
+        }
+    if operation == "stop-all-workspaces":
+        state.sidecar_browser_sessions.revoke_app_all_workspaces(app_id=app_id)
+        stopped, affected_workspace_ids = stop_app_sidecars_all_workspaces(app_id=app_id)
+        return {
+            "ready": False,
+            "browser_sessions_revoked": True,
+            "stopped_service_count": stopped,
+            "affected_workspace_ids": list(affected_workspace_ids),
         }
     if operation == "status":
         binding = state.app_store.get_workspace_app_binding(

@@ -51,6 +51,32 @@ class SidecarControlTests(unittest.TestCase):
             },
         )
 
+    def test_global_stop_revokes_and_stops_every_workspace_atomically(self) -> None:
+        browser_sessions = Mock()
+        state = SimpleNamespace(sidecar_browser_sessions=browser_sessions)
+        with patch.object(
+            sidecar_control,
+            "stop_app_sidecars_all_workspaces",
+            return_value=(3, ("alpha", "bravo")),
+        ) as stop:
+            result = sidecar_control._dispatch(
+                {
+                    "schema_version": "1",
+                    "operation": "stop-all-workspaces",
+                    "workspace_id": "alpha",
+                    "app_id": "design-studio",
+                },
+                state=state,
+                shutdown_controller=None,
+            )
+
+        browser_sessions.revoke_app_all_workspaces.assert_called_once_with(
+            app_id="design-studio"
+        )
+        stop.assert_called_once_with(app_id="design-studio")
+        self.assertEqual(result["stopped_service_count"], 3)
+        self.assertEqual(result["affected_workspace_ids"], ["alpha", "bravo"])
+
     def test_status_aggregates_the_live_manager_without_starting_a_sidecar(self) -> None:
         binding = SimpleNamespace(data_root="/data/design-studio")
         app_store = Mock()

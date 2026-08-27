@@ -175,6 +175,10 @@ class SidecarBrowserSessionStore:
     def revoke_app(self, *, workspace_id: str, app_id: str) -> None:
         self._revoke(lambda binding: binding.workspace_id == workspace_id and binding.app_id == app_id)
 
+    def revoke_app_all_workspaces(self, *, app_id: str) -> None:
+        """Revoke every browser ticket/session for one globally hosted app."""
+        self._revoke(lambda binding: binding.app_id == app_id)
+
     def revoke_sidecar(self, *, workspace_id: str, app_id: str, sidecar_id: str) -> None:
         self._revoke(
             lambda binding: binding.workspace_id == workspace_id

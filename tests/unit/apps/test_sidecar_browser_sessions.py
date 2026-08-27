@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from core.apps.sidecar_browser_sessions import (
@@ -84,6 +85,32 @@ class SidecarBrowserSessionStoreTestCase(unittest.TestCase):
             current_value = validated.rotated_value or current_value
         self.now = issued.session.absolute_expires_at + 1
         self.assertIsNone(self.store.validate_and_touch(current_value, host=self.binding.host))
+
+    def test_revoke_app_all_workspaces_preserves_unrelated_apps(self) -> None:
+        other_workspace = replace(
+            self.binding,
+            workspace_id="workspace-b",
+            host="sc-b.sidecars.localhost:8000",
+            origin="http://sc-b.sidecars.localhost:8000",
+        )
+        other_app = replace(
+            self.binding,
+            app_id="other",
+            host="other.sidecars.localhost:8000",
+            origin="http://other.sidecars.localhost:8000",
+        )
+        sessions = []
+        for binding in (self.binding, other_workspace, other_app):
+            ticket = self.store.issue_ticket(binding)
+            session = self.store.consume_ticket(ticket.value, host=binding.host)
+            assert session is not None
+            sessions.append((session.value, binding.host))
+
+        self.store.revoke_app_all_workspaces(app_id="demo")
+
+        self.assertIsNone(self.store.validate(sessions[0][0], host=sessions[0][1]))
+        self.assertIsNone(self.store.validate(sessions[1][0], host=sessions[1][1]))
+        self.assertIsNotNone(self.store.validate(sessions[2][0], host=sessions[2][1]))
 
 
 if __name__ == "__main__":

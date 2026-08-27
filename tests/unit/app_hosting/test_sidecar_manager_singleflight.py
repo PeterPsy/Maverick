@@ -144,6 +144,45 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
         self.assertFalse(self.manager._starting)
         self.assertFalse(self.manager._running)
 
+    def test_stop_app_all_workspaces_stops_only_matching_app_consumers(self) -> None:
+        alpha = _Running("design-alpha")
+        bravo = _Running("design-bravo")
+        unrelated = _Running("other-alpha")
+        self.manager._start_sidecar = Mock(  # type: ignore[method-assign]
+            side_effect=[alpha, bravo, unrelated]
+        )
+        self.assertIs(
+            self._ensure_workspace(
+                workspace_id="alpha", app_id="design-studio", data_root="/data/alpha"
+            ),
+            alpha,
+        )
+        self.assertIs(
+            self._ensure_workspace(
+                workspace_id="bravo", app_id="design-studio", data_root="/data/bravo"
+            ),
+            bravo,
+        )
+        self.assertIs(
+            self._ensure_workspace(
+                workspace_id="alpha", app_id="other", data_root="/data/other"
+            ),
+            unrelated,
+        )
+
+        with patch.object(self.manager, "_cleanup_sidecar") as cleanup:
+            stopped, workspace_ids = self.manager.stop_app_all_workspaces(
+                app_id="design-studio"
+            )
+
+        self.assertEqual(stopped, 2)
+        self.assertEqual(workspace_ids, ("alpha", "bravo"))
+        self.assertCountEqual(
+            [call.args[0] for call in cleanup.call_args_list],
+            [alpha, bravo],
+        )
+        self.assertEqual(tuple(self.manager._running.values()), (unrelated,))
+
     def test_failed_startup_is_removed_and_next_request_can_retry(self) -> None:
         attempts = 0
 
@@ -350,8 +389,15 @@ class HttpSidecarManagerSingleflightTests(unittest.TestCase):
             self.assertFalse(sidecar_proxy._AUTO_REPAIR_BACKOFFS)
 
     def _ensure(self, *, app_id: str, data_root: str):
-        return self.manager.ensure_running(
+        return self._ensure_workspace(
             workspace_id="default",
+            app_id=app_id,
+            data_root=data_root,
+        )
+
+    def _ensure_workspace(self, *, workspace_id: str, app_id: str, data_root: str):
+        return self.manager.ensure_running(
+            workspace_id=workspace_id,
             app_id=app_id,
             source_root=Path("/apps") / app_id,
             data_root=data_root,

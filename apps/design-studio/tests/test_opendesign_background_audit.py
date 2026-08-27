@@ -40,6 +40,8 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
                 result={
                     "retained_runtime_artifacts": ["a" * 64, "b" * 64],
                     "retained_web_overlays": ["c" * 64],
+                    "workspace_ids": ["default", "second"],
+                    "workspace_reference_sha256": "d" * 64,
                 },
                 store_generation="store-generation-test",
                 observed_at_epoch_ms=1_000_000,
@@ -49,12 +51,20 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
             mode = marker.stat().st_mode & 0o777
             with patch.object(background.time, "time", return_value=1_001):
                 due = background._audit_due(marker)
+                changed_reference_due = background._audit_due(
+                    marker,
+                    expected_reference_sha256="e" * 64,
+                )
 
         self.assertFalse(due)
+        self.assertTrue(changed_reference_due)
+        self.assertEqual(payload["schema_version"], "3")
         self.assertEqual(payload["status"], "passed")
         self.assertEqual(payload["runtime_count"], 2)
         self.assertEqual(payload["web_count"], 1)
         self.assertEqual(payload["store_generation"], "store-generation-test")
+        self.assertEqual(payload["workspace_ids"], ["default", "second"])
+        self.assertEqual(payload["workspace_reference_sha256"], "d" * 64)
         self.assertEqual(mode, 0o444)
 
     def test_repair_state_redacts_untyped_exception_values(self) -> None:
@@ -88,6 +98,8 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
 
             def control(_root, *, operation, **_kwargs):
                 events.append(f"control:{operation}")
+                if operation == "stop-all-workspaces":
+                    return {"affected_workspace_ids": ["default"]}
                 if operation == "restart":
                     return {"status": "ready", "readiness": {"ready": True}}
                 return {"ready": False}
@@ -117,7 +129,7 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
             events,
             [
                 "state:repairing",
-                "control:stop",
+                "control:stop-all-workspaces",
                 "artifact:repair",
                 "control:restart",
                 "state:idle",
@@ -125,6 +137,74 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
         )
         self.assertEqual(result["runtime_count"], 2)
         self.assertEqual(result["web_count"], 1)
+
+    def test_global_recovery_stops_and_restarts_every_live_workspace(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="od-global-recovery-") as temporary:
+            root = Path(temporary)
+            roots = {
+                "alpha": root / "alpha/data/design-studio",
+                "bravo": root / "bravo/data/design-studio",
+            }
+            for data_root in roots.values():
+                ready = data_root / "opendesign/maverick-ready.json"
+                ready.parent.mkdir(parents=True)
+                ready.write_text("{}", encoding="utf-8")
+            events: list[str] = []
+
+            def state(data_root, *, state, **_kwargs):
+                workspace = data_root.parents[1].name
+                events.append(f"state:{workspace}:{state}")
+
+            def control(_root, *, operation, workspace_id, **_kwargs):
+                events.append(f"control:{operation}:{workspace_id}")
+                if operation == "stop-all-workspaces":
+                    return {"affected_workspace_ids": ["bravo", "alpha"]}
+                return {"status": "ready", "readiness": {"ready": True}}
+
+            with (
+                patch.object(
+                    background,
+                    "discover_workspace_data_roots",
+                    return_value=dict(roots),
+                ),
+                patch.object(background, "write_repair_state", side_effect=state),
+                patch.object(background, "request_sidecar_control", side_effect=control),
+                patch.object(
+                    background,
+                    "run_artifact_operation",
+                    return_value={
+                        "status": "ready",
+                        "store_generation": "store-1",
+                        "retained_runtime_artifacts": ["a" * 64],
+                        "retained_web_overlays": ["b" * 64],
+                    },
+                ) as repair,
+            ):
+                result = background._recover_failed_audit(
+                    data_root=roots["alpha"],
+                    workspace_id="alpha",
+                )
+
+            self.assertFalse(
+                any(
+                    (data_root / "opendesign/maverick-ready.json").exists()
+                    for data_root in roots.values()
+                )
+            )
+        repair.assert_called_once()
+        self.assertEqual(result["restarted_workspace_ids"], ["alpha", "bravo"])
+        self.assertEqual(
+            events,
+            [
+                "state:alpha:repairing",
+                "control:stop-all-workspaces:alpha",
+                "state:bravo:repairing",
+                "control:restart:alpha",
+                "control:restart:bravo",
+                "state:alpha:idle",
+                "state:bravo:idle",
+            ],
+        )
 
     def test_failed_recovery_is_persisted_and_suppressed_until_backoff(self) -> None:
         class RecoveryFailure(RuntimeError):
@@ -137,6 +217,7 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
                 root,
                 error=RuntimeError("private audit detail"),
                 store_generation="store-generation-test",
+                required=self._global_required(),
                 observed_at_epoch_ms=1_000_000,
             )
             marker = root / "audit/background-full-audit.json"
@@ -177,6 +258,7 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
                 root,
                 error=RuntimeError("audit failure"),
                 store_generation="store-generation-test",
+                required=self._global_required(),
                 observed_at_epoch_ms=2_000_000,
             )
             marker = root / "audit/background-full-audit.json"
@@ -207,6 +289,52 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
         self.assertTrue(payload["auto_repair_requested"])
         self.assertFalse(due)
         self.assertTrue(marker_removed)
+
+    def test_reference_scan_failure_replaces_any_stale_pass_marker(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="od-audit-scan-marker-") as temporary:
+            root = Path(temporary)
+            operations._record_full_audit_success(
+                root,
+                operation="verify",
+                result={
+                    "audited_runtime": ["a" * 64],
+                    "audited_web": ["b" * 64],
+                    "workspace_ids": ["default"],
+                    "workspace_reference_sha256": "c" * 64,
+                },
+                store_generation="store-generation-test",
+                observed_at_epoch_ms=1_000_000,
+            )
+
+            operations._record_full_audit_failure(
+                root,
+                error=RuntimeError("unsafe workspace registry"),
+                store_generation="store-generation-test",
+                required=None,
+                observed_at_epoch_ms=1_001_000,
+            )
+            payload = json.loads(
+                (root / "audit/background-full-audit.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            marker = root / "audit/background-full-audit.json"
+            with patch.object(background.time, "time", return_value=1_002):
+                backed_off = background._audit_due(
+                    marker,
+                    reference_scan_failed=True,
+                )
+            with patch.object(background.time, "time", return_value=5_000):
+                retry_due = background._audit_due(
+                    marker,
+                    reference_scan_failed=True,
+                )
+
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["workspace_ids"], [])
+        self.assertIsNone(payload["workspace_reference_sha256"])
+        self.assertFalse(backed_off)
+        self.assertTrue(retry_due)
 
     def test_stop_failure_leaves_daemon_unready_and_does_not_mutate_store(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-background-stop-fail-") as temporary:
@@ -239,6 +367,61 @@ class OpenDesignBackgroundAuditTests(unittest.TestCase):
         self.assertTrue(marker_removed)
         self.assertEqual(states, ["repairing", "failed"])
         artifact_operation.assert_not_called()
+
+    def test_workspace_scan_failure_happens_only_after_global_stop(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="od-background-scan-fail-") as temporary:
+            data_root = Path(temporary)
+            events: list[str] = []
+
+            def control(_root, *, operation, **_kwargs):
+                events.append(f"control:{operation}")
+                return {"affected_workspace_ids": ["default"]}
+
+            with (
+                patch.object(background, "request_sidecar_control", side_effect=control),
+                patch.object(
+                    background,
+                    "discover_workspace_data_roots",
+                    side_effect=RuntimeError("unsafe registry"),
+                ),
+                patch.object(
+                    background,
+                    "write_repair_state",
+                    side_effect=lambda _root, *, state, **_kwargs: events.append(
+                        f"state:{state}"
+                    ),
+                ),
+                self.assertRaisesRegex(RuntimeError, "unsafe registry"),
+            ):
+                background._recover_failed_audit(
+                    data_root=data_root,
+                    workspace_id="default",
+                )
+
+        self.assertEqual(
+            events,
+            [
+                "state:repairing",
+                "control:stop-all-workspaces",
+                "control:stop-all-workspaces",
+                "state:failed",
+            ],
+        )
+
+    @staticmethod
+    def _global_required():
+        return operations.RequiredArtifacts(
+            current_runtime="a" * 64,
+            active_runtime="a" * 64,
+            rollback_runtime="b" * 64,
+            active_web="c" * 64,
+            optional_runtime=(),
+            web_overlays=("c" * 64,),
+            fresh_web_overlay="c" * 64,
+            required_runtime_artifacts=("a" * 64, "b" * 64),
+            workspace_ids=("default", "second"),
+            workspace_reference_sha256="d" * 64,
+        )
 
     def test_pressure_parser_is_bounded_and_fail_open(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-pressure-") as temporary:

@@ -32,6 +32,22 @@ def run_artifact_operation(*args, **kwargs):
     return operation(*args, **kwargs)
 
 
+def discover_workspace_data_roots(*args, **kwargs):
+    """Load the canonical global registry only on audit/recovery paths."""
+    from opendesign_artifact_operations import (
+        discover_design_studio_workspace_data_roots as discover,
+    )
+
+    return discover(*args, **kwargs)
+
+
+def artifact_reference_coverage(*args, **kwargs):
+    """Load the no-content reference scanner only for the scheduler check."""
+    from opendesign_artifact_operations import global_artifact_reference_coverage
+
+    return global_artifact_reference_coverage(*args, **kwargs)
+
+
 def request_sidecar_control(*args, **kwargs):
     """Load live-manager control only on the failed-audit recovery path."""
     from core.api.sidecar_control import request_sidecar_control as request
@@ -60,7 +76,37 @@ def main() -> None:
         except BlockingIOError:
             emit_json({"ok": True, "audit": {"status": "deduplicated"}})
             return
-        if not _audit_due(marker_path):
+        try:
+            coverage = artifact_reference_coverage(
+                REPOSITORY_ROOT,
+                requested_workspace_id=workspace_id,
+            )
+        except Exception as reference_error:
+            if not _audit_due(marker_path, reference_scan_failed=True):
+                emit_json(
+                    {
+                        "ok": True,
+                        "audit": {
+                            "status": "not_due",
+                            "reason": "reference_scan_backoff",
+                        },
+                    }
+                )
+                return
+            _handle_failed_audit(
+                reference_error,
+                marker_path=marker_path,
+                data_root=data_root,
+                workspace_id=workspace_id,
+                attempted_at_epoch_ms=int(time.time() * 1000),
+            )
+            return
+        if not _audit_due(
+            marker_path,
+            expected_reference_sha256=str(
+                coverage["workspace_reference_sha256"]
+            ),
+        ):
             emit_json({"ok": True, "audit": {"status": "not_due"}})
             return
         _lower_io_and_cpu_priority()
@@ -146,52 +192,94 @@ def _handle_failed_audit(
 
 
 def _recover_failed_audit(*, data_root: Path, workspace_id: str) -> dict[str, object]:
-    """Revoke readiness, stop the invalid daemon, repair once, and restart directly."""
+    """Stop every consumer, repair the global store once, then restore consumers."""
+    workspace_roots = {workspace_id: data_root}
     write_repair_state(data_root, state="repairing")
+    _invalidate_transactional_readiness(data_root)
+    affected_workspace_ids: tuple[str, ...] = ()
     try:
-        _invalidate_transactional_readiness(data_root)
-        request_sidecar_control(
+        # Stop/revoke globally before trusting the workspace registry.  A
+        # malformed or racing registry must never leave another consumer live.
+        stopped = request_sidecar_control(
             REPOSITORY_ROOT,
-            operation="stop",
+            operation="stop-all-workspaces",
             workspace_id=workspace_id,
             app_id="design-studio",
             timeout_seconds=10,
         )
+        affected = stopped.get("affected_workspace_ids")
+        if (
+            not isinstance(affected, list)
+            or any(not isinstance(item, str) for item in affected)
+            or len(set(affected)) != len(affected)
+        ):
+            raise RuntimeError("Global sidecar stop returned an invalid workspace set")
+        affected_workspace_ids = tuple(sorted(affected))
+        discovered = discover_workspace_data_roots(
+            REPOSITORY_ROOT,
+            requested_workspace_id=workspace_id,
+        )
+        discovered[workspace_id] = data_root
+        workspace_roots = dict(sorted(discovered.items()))
+        if any(item not in workspace_roots for item in affected_workspace_ids):
+            raise RuntimeError("A live Design Studio sidecar has no canonical workspace root")
+        for candidate_workspace_id, root in workspace_roots.items():
+            if candidate_workspace_id != workspace_id:
+                write_repair_state(root, state="repairing")
+            _invalidate_transactional_readiness(root)
         repair = run_artifact_operation(
             "repair",
             data_root=data_root,
             workspace_id=workspace_id,
             auto=True,
         )
-        restarted = request_sidecar_control(
-            REPOSITORY_ROOT,
-            operation="restart",
-            workspace_id=workspace_id,
-            app_id="design-studio",
-            timeout_seconds=20,
-        )
-        readiness = restarted.get("readiness")
-        if (
-            repair.get("status") != "ready"
-            or restarted.get("status") != "ready"
-            or not isinstance(readiness, dict)
-            or readiness.get("ready") is not True
-        ):
-            raise RuntimeError("Governed background repair did not pass restart readiness")
+        if repair.get("status") != "ready":
+            raise RuntimeError("Governed global artifact repair did not become ready")
+        for affected_workspace_id in affected_workspace_ids:
+            restarted = request_sidecar_control(
+                REPOSITORY_ROOT,
+                operation="restart",
+                workspace_id=affected_workspace_id,
+                app_id="design-studio",
+                timeout_seconds=20,
+            )
+            readiness = restarted.get("readiness")
+            if (
+                restarted.get("status") != "ready"
+                or not isinstance(readiness, dict)
+                or readiness.get("ready") is not True
+            ):
+                raise RuntimeError(
+                    "Governed background repair did not pass global restart readiness"
+                )
     except Exception as error:
+        try:
+            request_sidecar_control(
+                REPOSITORY_ROOT,
+                operation="stop-all-workspaces",
+                workspace_id=workspace_id,
+                app_id="design-studio",
+                timeout_seconds=10,
+            )
+        except Exception:
+            pass
         code, phase = failure_identity(error)
-        write_repair_state(
-            data_root,
-            state="failed",
-            error_code=code,
-            phase=phase,
-        )
+        for root in workspace_roots.values():
+            _invalidate_transactional_readiness(root)
+            write_repair_state(
+                root,
+                state="failed",
+                error_code=code,
+                phase=phase,
+            )
         raise
-    write_repair_state(data_root, state="idle")
+    for root in workspace_roots.values():
+        write_repair_state(root, state="idle")
     return {
         "store_generation": repair["store_generation"],
         "runtime_count": len(repair.get("retained_runtime_artifacts", [])),
         "web_count": len(repair.get("retained_web_overlays", [])),
+        "restarted_workspace_ids": list(affected_workspace_ids),
     }
 
 
@@ -203,7 +291,12 @@ def _invalidate_transactional_readiness(data_root: Path) -> None:
         pass
 
 
-def _audit_due(path: Path) -> bool:
+def _audit_due(
+    path: Path,
+    *,
+    expected_reference_sha256: str | None = None,
+    reference_scan_failed: bool = False,
+) -> bool:
     if path.is_symlink():
         return True
     try:
@@ -212,8 +305,22 @@ def _audit_due(path: Path) -> bool:
         return True
     if not isinstance(payload, dict):
         return True
+    if payload.get("schema_version") != "3":
+        return True
     now = time.time() * 1000
     next_attempt = payload.get("next_attempt_at_epoch_ms")
+    if reference_scan_failed:
+        return not (
+            payload.get("status") == "failed"
+            and payload.get("workspace_reference_sha256") is None
+            and isinstance(next_attempt, int)
+            and now < next_attempt
+        )
+    if (
+        expected_reference_sha256 is not None
+        and payload.get("workspace_reference_sha256") != expected_reference_sha256
+    ):
+        return True
     if isinstance(next_attempt, int):
         return now >= next_attempt
     observed = payload.get("verified_at_epoch_ms")

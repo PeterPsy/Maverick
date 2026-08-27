@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
+import fcntl
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -144,38 +146,111 @@ def write_generation_control(
 ) -> None:
     root = _validated_root(root)
     normalized = GenerationControl.from_dict(control.to_dict())
-    _validate_references(
-        root,
-        normalized,
-        verified_artifacts=verified_artifacts,
-        verified_overlays=verified_overlays,
-    )
-    if normalized.migration_id is not None:
-        journal = load_migration_journal(
+    with _workspace_reference_write_lock() as artifact_namespace:
+        _validate_references(
             root,
-            normalized.migration_id,
+            normalized,
             verified_artifacts=verified_artifacts,
             verified_overlays=verified_overlays,
         )
-        reconcile_migration_control(normalized, journal)
-    if normalized.web_activation_id is not None:
-        journal = load_web_activation_journal(
-            root,
-            normalized.web_activation_id,
-            verified_artifacts=verified_artifacts,
-            verified_overlays=verified_overlays,
+        if normalized.migration_id is not None:
+            journal = load_migration_journal(
+                root,
+                normalized.migration_id,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
+            reconcile_migration_control(normalized, journal)
+        if normalized.web_activation_id is not None:
+            journal = load_web_activation_journal(
+                root,
+                normalized.web_activation_id,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
+            reconcile_web_activation(normalized, journal)
+        if normalized.runtime_activation_id is not None:
+            journal = load_runtime_activation_journal(
+                root,
+                normalized.runtime_activation_id,
+                verified_artifacts=verified_artifacts,
+                verified_overlays=verified_overlays,
+            )
+            reconcile_runtime_activation(normalized, journal)
+        if artifact_namespace is not None:
+            _validate_live_artifact_references(artifact_namespace, normalized)
+        destination = root / CONTROL_FILE_NAME
+        _atomic_write_json(destination, normalized.to_dict())
+
+
+@contextmanager
+def _workspace_reference_write_lock():
+    """Serialize control commits against installation-global artifact GC."""
+    mounted_namespace = Path("/artifacts/opendesign")
+    configured_store = os.environ.get("MAVERICK_APP_ARTIFACT_STORE_ROOT", "").strip()
+    if mounted_namespace.is_dir() and not mounted_namespace.is_symlink():
+        artifact_namespace = mounted_namespace
+        lock = artifact_namespace / ".locks/workspace-references.lock"
+    elif configured_store:
+        store = Path(configured_store)
+        if not store.is_absolute():
+            raise GenerationControlError("artifact store root must be absolute")
+        artifact_namespace = store / "design-studio/opendesign"
+        lock = artifact_namespace / ".locks/workspace-references.lock"
+    else:
+        # Controlled-copy/unit fixtures have no installation-global store.
+        yield None
+        return
+    try:
+        metadata = lock.lstat()
+    except OSError as error:
+        raise GenerationControlError("workspace reference lock is unavailable") from error
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_mode & 0o222
+    ):
+        raise GenerationControlError("workspace reference lock is unsafe")
+    descriptor = os.open(lock, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield artifact_namespace
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def _validate_live_artifact_references(
+    artifact_namespace: Path,
+    control: GenerationControl,
+) -> None:
+    """Reject a control commit if GC removed any previously verified package."""
+    selections = {
+        selection
+        for selection in (
+            control.active,
+            control.previous_release,
+            control.previous_web,
+            control.previous_runtime,
         )
-        reconcile_web_activation(normalized, journal)
-    if normalized.runtime_activation_id is not None:
-        journal = load_runtime_activation_journal(
-            root,
-            normalized.runtime_activation_id,
-            verified_artifacts=verified_artifacts,
-            verified_overlays=verified_overlays,
-        )
-        reconcile_runtime_activation(normalized, journal)
-    destination = root / CONTROL_FILE_NAME
-    _atomic_write_json(destination, normalized.to_dict())
+        if selection is not None
+    }
+    for selection in selections:
+        for kind, digest in (
+            ("runtime", selection.runtime_artifact_sha256),
+            ("web", selection.web_overlay_sha256),
+        ):
+            package = artifact_namespace / kind / digest
+            try:
+                metadata = package.lstat()
+            except OSError as error:
+                raise GenerationControlError(
+                    f"{kind} artifact disappeared before the control commit"
+                ) from error
+            if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+                raise GenerationControlError(
+                    f"{kind} artifact path is unsafe at the control commit"
+                )
 
 
 def load_migration_journal(

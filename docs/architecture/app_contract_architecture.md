@@ -1073,6 +1073,14 @@ and grants that entrypoint only a bounded JSON operation set. App hooks can read
 the store but cannot provision a namespace, publish content, rewrite a receipt,
 or select executable verifier code. A same-principal store or an authority
 entrypoint inside the repository is invalid rather than a compatibility mode.
+An artifact namespace is installation-global, so every audit and collection
+decision is installation-global too. The authority scans canonical workspace
+data roots, fails closed on symlinked or malformed registry entries, unions all
+active and rollback references, and binds that reference digest plus the
+workspace set into its protected audit marker. GC cannot quarantine anything
+in that union. An integrity failure revokes browser sessions and stops every
+live consumer of the app before repair; only consumers that were live before
+revocation may restart, and a partial restart is revoked globally again.
 
 Every HTTP sidecar declaration includes `process_policy`. The supported
 sandbox contract is deliberately singular: `inherit_host_env: false`,

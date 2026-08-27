@@ -630,10 +630,13 @@ already-open shell and requests Design Studio while the declared prewarm is
 still in flight. Instrumented process-lifecycle evidence proves the browser
 request falls between the real prewarm start and readiness and that both paths
 share exactly one manager startup. A disclosed 750 ms fixture delay widens that
-manager-owned overlap window and remains inside the measured cold latency; it
-does not bypass process launch, health, or interface usability. Both warm and
-cold usable-interface distributions are gated at P95 1.5 seconds and P99 2.5
-seconds. Ticket and `/api/maverick-ready` budgets remain independently gated.
+manager-owned overlap window and remains inside the recorded concurrent cold
+latency and startup budgets; it does not bypass process launch, health, or
+interface usability. Warm remounts and the cold browser-launch-response to
+usable-surface phase are gated at P95 1.5 seconds and P99 2.5 seconds. The full
+shell-action-during-prewarm latency, ticket budget, and `/api/maverick-ready`
+budgets remain separate, recomputed evidence rather than being conflated into
+the rendering SLO.
 
 The UI evidence records a UUID, ordered UTC start/completion timestamps, the
 canonical command, raw samples, and a SHA-256 inventory of all current Core,

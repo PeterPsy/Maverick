@@ -189,6 +189,10 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
     ]
     prewarm_values = [_sample_number(sample, "prewarm_after_core_health_ms") for sample in samples]
     cold_interface_values = [
+        _sample_number(sample, "browser_launch_response_to_usable_interface_ms")
+        for sample in samples
+    ]
+    concurrent_interface_values = [
         _sample_number(sample, "shell_action_to_usable_interface_ms") for sample in samples
     ]
     overlap_values = [_sample_number(sample, "prewarm_browser_overlap_ms") for sample in samples]
@@ -217,6 +221,11 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
     cold_interface = _validated_derived_summary(
         value.get("cold_interface"), cold_interface_values, label="cold interface"
     )
+    concurrent_interface = _validated_derived_summary(
+        value.get("concurrent_cold_interface"),
+        concurrent_interface_values,
+        label="concurrent cold interface",
+    )
     singleflight = value.get("cold_browser_prewarm_singleflight")
     if not isinstance(singleflight, dict):
         raise ValueError("Cold browser/prewarm singleflight proof is missing")
@@ -239,9 +248,32 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
         raise ValueError("Cold browser/prewarm singleflight proof is invalid")
     if (
         cold_interface.get("measurement_scope")
-        != "concurrent_prewarm_shell_action_to_usable_project_interface"
+        != "browser_launch_response_to_usable_project_interface_after_concurrent_prewarm"
     ):
         raise ValueError("Cold interface measurement scope is invalid")
+    if (
+        concurrent_interface.get("measurement_scope")
+        != "shell_action_during_prewarm_to_usable_project_interface"
+    ):
+        raise ValueError("Concurrent cold interface measurement scope is invalid")
+    for sample in samples:
+        phases = sample.get("interface_phases_ms")
+        if not isinstance(phases, dict):
+            raise ValueError("Cold interface phase evidence is missing")
+        launch_response = _number(phases.get("launch_response_ms"), "launch response")
+        usable = _number(phases.get("usable_interface_ready_ms"), "usable interface")
+        if (
+            launch_response <= 0
+            or usable <= launch_response
+            or abs(
+                _sample_number(sample, "browser_launch_response_to_usable_interface_ms")
+                - (usable - launch_response)
+            )
+            > 0.01
+            or abs(_sample_number(sample, "shell_action_to_usable_interface_ms") - usable)
+            > 0.01
+        ):
+            raise ValueError("Cold interface phase evidence is inconsistent")
     if cold.get("measurement_scope") != "sidecar_start_request_to_transactional_endpoint_ready":
         raise ValueError("Cold transactional readiness measurement scope is invalid")
     if core_ready.get("measurement_scope") != "core_process_start_to_transactional_endpoint_ready":

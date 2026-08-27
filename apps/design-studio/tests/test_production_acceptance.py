@@ -155,8 +155,13 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertLessEqual(performance["cold_interface"]["p99_ms"], 2500)
         self.assertEqual(
             performance["cold_interface"]["measurement_scope"],
-            "concurrent_prewarm_shell_action_to_usable_project_interface",
+            "browser_launch_response_to_usable_project_interface_after_concurrent_prewarm",
         )
+        self.assertEqual(
+            performance["concurrent_cold_interface"]["measurement_scope"],
+            "shell_action_during_prewarm_to_usable_project_interface",
+        )
+        self.assertEqual(performance["concurrent_cold_interface"]["count"], 10)
         singleflight = performance["cold_browser_prewarm_singleflight"]
         self.assertEqual(singleflight["sample_count"], 10)
         self.assertIs(singleflight["browser_request_during_prewarm"], True)

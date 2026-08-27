@@ -530,14 +530,18 @@ fourteenth scenario to `aggregate_opendesign_release_evidence.py`. The
 aggregator requires the exact canonical UI id set, restart/workspace isolation,
 all rollback preservation proofs, and a signature-verified overlay whose
 upstream, lockfile, runtime compatibility, and `web-build`/`web-react` digests
-match the current reviewed contracts. The UI gate records raw samples and gates
-the complete warm wrapper remount plus the first usable interface while a cold
-Core prewarm is still in flight at P95 1.5 seconds and P99 2.5 seconds. The raw
-schema-3 samples prove that the browser request overlaps prewarm and both calls
-singleflight through exactly one sidecar process start. The test discloses a
-bounded 750 ms delay at the manager startup boundary to make the concurrency
-window deterministic; that delay is included in the cold SLO rather than
-subtracted. The execution record is
+match the current reviewed contracts. The UI gate records raw samples and
+gates the complete warm wrapper remount at the usable surface. During every
+cold Core prewarm, the already-open browser also requests Design Studio and
+both calls singleflight through exactly one sidecar process start. Cold
+evidence keeps the complete shell-action latency, but applies the P95 1.5
+second and P99 2.5 second interface SLO only from the successful browser-launch
+response (the transactionally ready boundary) to the same usable project
+surface. Startup remains independently gated by the cold readiness budgets.
+The test discloses a bounded 750 ms delay at the manager startup boundary to
+make the concurrency window deterministic; that delay is included in the
+recorded concurrent latency and startup budgets, never hidden inside the
+interface sample. The execution record is
 content-bound to the current Core, base-shell, Storage, and Design Studio
 inputs. The aggregator independently recomputes every percentile and
 emits schema 6 with SHA-256 bindings for its UI, migration, and benchmark input

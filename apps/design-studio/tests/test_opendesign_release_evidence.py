@@ -271,9 +271,14 @@ class ReleaseEvidenceTests(unittest.TestCase):
 
         slow_cold_interface = copy.deepcopy(ui)
         for sample in slow_cold_interface["performance"]["samples"]:
-            sample["shell_action_to_usable_interface_ms"] = 2_600
+            sample["browser_launch_response_to_usable_interface_ms"] = 2_600
+            sample["shell_action_to_usable_interface_ms"] = 3_100
+            sample["interface_phases_ms"]["usable_interface_ready_ms"] = 3_100
         slow_cold_interface["performance"]["cold_interface"].update(
             {"p50_ms": 2_600, "p95_ms": 2_600, "p99_ms": 2_600, "max_ms": 2_600}
+        )
+        slow_cold_interface["performance"]["concurrent_cold_interface"].update(
+            {"p50_ms": 3_100, "p95_ms": 3_100, "p99_ms": 3_100, "max_ms": 3_100}
         )
         with self.assertRaisesRegex(ValueError, "SLOs did not pass"):
             aggregate(slow_cold_interface, **arguments)
@@ -370,12 +375,17 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 "cold_maverick_ready_ms": 1_000 if index < 9 else 2_000,
                 "transactional_ready_after_core_start_ms": 1_200 if index < 9 else 2_200,
                 "prewarm_after_core_health_ms": 1_000 if index < 9 else 2_000,
-                "shell_action_to_usable_interface_ms": 500 if index < 9 else 1_000,
+                "shell_action_to_usable_interface_ms": 1_000 if index < 9 else 1_500,
+                "browser_launch_response_to_usable_interface_ms": 500 if index < 9 else 1_000,
                 "browser_request_during_prewarm": True,
                 "singleflight_sidecar_start_count": 1,
                 "prewarm_browser_overlap_ms": 500,
                 "prewarm_started_before_browser_request_ms": 100,
                 "controlled_singleflight_overlap_delay_ms": 750,
+                "interface_phases_ms": {
+                    "launch_response_ms": 500,
+                    "usable_interface_ready_ms": 1_000 if index < 9 else 1_500,
+                },
                 "resources": {"rss_kib": 100, "process_count": 2},
             }
             for index in range(10)
@@ -411,7 +421,15 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 "p95_ms": 1000,
                 "p99_ms": 1000,
                 "max_ms": 1000,
-                "measurement_scope": "concurrent_prewarm_shell_action_to_usable_project_interface",
+                "measurement_scope": "browser_launch_response_to_usable_project_interface_after_concurrent_prewarm",
+            },
+            "concurrent_cold_interface": {
+                "count": 10,
+                "p50_ms": 1000,
+                "p95_ms": 1500,
+                "p99_ms": 1500,
+                "max_ms": 1500,
+                "measurement_scope": "shell_action_during_prewarm_to_usable_project_interface",
             },
             "cold_browser_prewarm_singleflight": {
                 "sample_count": 10,

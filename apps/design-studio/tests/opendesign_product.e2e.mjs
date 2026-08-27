@@ -340,6 +340,13 @@ try {
     page.off('request', observeRequest);
     page.off('response', observeResponse);
     delete interfacePhases.started_at;
+    const browserLaunchResponseToUsableMs = rounded(
+      interfacePhases.usable_interface_ready_ms - interfacePhases.launch_response_ms,
+    );
+    assert(
+      Number.isFinite(browserLaunchResponseToUsableMs) && browserLaunchResponseToUsableMs > 0,
+      'Cold browser launch response did not precede the usable project interface',
+    );
     const daemonReadyMs = Number(readiness.body?.opendesign?.runtime?.timings_ms?.daemon_ready_ms);
     assert(Number.isFinite(daemonReadyMs) && daemonReadyMs > 0, 'Core restart omitted daemon readiness timing');
     const coldMaverickReadyMs = Number(
@@ -363,6 +370,7 @@ try {
       prewarm_after_core_health_ms: rounded(transactionalReadyAt - coreReadyAt),
       interface_after_core_health_ms: rounded(browserReadyAt - coreReadyAt),
       shell_action_to_usable_interface_ms: rounded(browserReadyAt - interfaceStartedAt),
+      browser_launch_response_to_usable_interface_ms: browserLaunchResponseToUsableMs,
       browser_request_during_prewarm: true,
       singleflight_sidecar_start_count: starts.length,
       prewarm_browser_overlap_ms: prewarmBrowserOverlapMs,
@@ -1542,6 +1550,9 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
   const shellActionToUsableInterface = distribution(
     coreRestarts.map((sample) => sample.shell_action_to_usable_interface_ms),
   );
+  const browserLaunchResponseToUsableInterface = distribution(
+    coreRestarts.map((sample) => sample.browser_launch_response_to_usable_interface_ms),
+  );
   const prewarmBrowserOverlap = distribution(
     coreRestarts.map((sample) => sample.prewarm_browser_overlap_ms),
   );
@@ -1557,6 +1568,7 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     prewarmAfterCoreHealth,
     interfaceAfterCoreHealth,
     shellActionToUsableInterface,
+    browserLaunchResponseToUsableInterface,
     prewarmBrowserOverlap,
     coldInterfacePhases: coreRestarts.map((sample) => sample.interface_phases_ms),
   });
@@ -1580,9 +1592,9 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     `Core restart prewarm SLO failed: ${diagnostic}`,
   );
   assert(
-    shellActionToUsableInterface.count === 10
-      && shellActionToUsableInterface.p95_ms <= 1_500
-      && shellActionToUsableInterface.p99_ms <= 2_500,
+    browserLaunchResponseToUsableInterface.count === 10
+      && browserLaunchResponseToUsableInterface.p95_ms <= 1_500
+      && browserLaunchResponseToUsableInterface.p99_ms <= 2_500,
     `Cold interface SLO failed: ${diagnostic}`,
   );
   assert(
@@ -1616,8 +1628,12 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
       measurement_scope: 'core_health_to_transactional_endpoint_ready',
     },
     cold_interface: {
+      ...browserLaunchResponseToUsableInterface,
+      measurement_scope: 'browser_launch_response_to_usable_project_interface_after_concurrent_prewarm',
+    },
+    concurrent_cold_interface: {
       ...shellActionToUsableInterface,
-      measurement_scope: 'concurrent_prewarm_shell_action_to_usable_project_interface',
+      measurement_scope: 'shell_action_during_prewarm_to_usable_project_interface',
     },
     cold_browser_prewarm_singleflight: {
       sample_count: coreRestarts.length,

@@ -74,6 +74,7 @@ describe("Design Studio usable frame readiness", () => {
 
   it("keeps 401/410/503-style iframe load events in bootstrapping", async () => {
     const frame = await renderThroughBootstrap();
+    const sidecarPostMessage = vi.mocked(frame.contentWindow!.postMessage);
 
     // Cross-origin iframe load events do not expose their HTTP status; these
     // are intentionally identical to loads of 401, 410, and 503 documents.
@@ -87,6 +88,11 @@ describe("Design Studio usable frame readiness", () => {
     expect(firstPaintEvents()).toHaveLength(0);
     expect(container.querySelector(".design-studio-toolbar")).toBeNull();
     expect(container.querySelector(".design-studio-empty")).toBeNull();
+    expect(sidecarPostMessage).toHaveBeenCalledWith({
+      type: "maverick.opendesign.navigate",
+      version: 1,
+      od_project_id: "od_project_1",
+    }, LAUNCH.origin);
   });
 
   it("becomes ready only for the exact usable project surface and records it once", async () => {

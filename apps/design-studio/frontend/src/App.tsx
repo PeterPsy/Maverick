@@ -390,6 +390,21 @@ export function App() {
     setPhase("error");
   }
 
+  function handleFrameLoad() {
+    if (submittedFrameRef.current !== frameRef.current) {
+      return;
+    }
+    // A launch ticket can be issued before the shell delivers its canonical
+    // project parameters (or before a cached target is restored). Messages
+    // sent to the initial about:blank document are lost, so replay the desired
+    // state only after the governed bootstrap document has installed its
+    // bridge. A load event remains transport-only and cannot mark the wrapper
+    // ready; the exact usable-surface signal is still required below.
+    postNavigation();
+    postTheme();
+    postSettings();
+  }
+
   function retry() {
     if (retryPending || diagnostic?.retryable === false) {
       return;
@@ -469,6 +484,7 @@ export function App() {
         referrerPolicy="no-referrer"
         allow="fullscreen"
         allowFullScreen
+        onLoad={handleFrameLoad}
         onError={handleFrameError}
       />
 

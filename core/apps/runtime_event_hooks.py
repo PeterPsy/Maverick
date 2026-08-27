@@ -10,7 +10,11 @@ from uuid import uuid4
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.errors import AppHostingError
-from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
+from core.apps.surfaces import (
+    WorkspaceAppSurfaceCache,
+    enabled_workspace_app_bindings,
+    resolve_workspace_app_surface,
+)
 from core.runtime.service import record_runtime_event
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
@@ -185,7 +189,12 @@ def dispatch_workspace_app_background_hooks(
 ) -> list[dict[str, Any]]:
     """Invoke one generic background hook on enabled workspace apps that declare it."""
     results: list[dict[str, Any]] = []
-    for binding in enabled_workspace_app_bindings(state.app_store, workspace_id=workspace_id):
+    bindings = enabled_workspace_app_bindings(
+        state.app_store,
+        workspace_id=workspace_id,
+    )
+    surface_cache: WorkspaceAppSurfaceCache = {}
+    for binding in bindings:
         if binding.status != "enabled":
             continue
         try:
@@ -193,6 +202,7 @@ def dispatch_workspace_app_background_hooks(
                 state.app_store,
                 binding=binding,
                 start_path=start_path,
+                surface_cache=surface_cache,
             )
         except AppHostingError:
             continue
@@ -210,6 +220,8 @@ def dispatch_workspace_app_background_hooks(
                 action=action,
                 body=body,
                 start_path=start_path,
+                workspace_bindings=bindings,
+                surface_cache=surface_cache,
             )
         except Exception as error:
             results.append({"app_id": binding.app_id, "status": "failed", "detail": str(error)})
@@ -231,6 +243,8 @@ def _dispatch_workspace_app_background_hook(
     action: str,
     body: dict[str, Any] | None,
     start_path: Path | None,
+    workspace_bindings,
+    surface_cache: WorkspaceAppSurfaceCache,
 ) -> dict[str, Any] | None:
     hook_path = parsed.contract.entrypoints.hooks.get(hook_name)
     if not hook_path:
@@ -251,6 +265,8 @@ def _dispatch_workspace_app_background_hook(
             workspace_id=workspace_id,
             app_id=binding.app_id,
             start_path=start_path,
+            workspace_bindings=workspace_bindings,
+            surface_cache=surface_cache,
         ),
         "body": {"action": action, **(body or {})},
     }
@@ -283,6 +299,8 @@ def _app_dependencies_payload(
     workspace_id: str,
     app_id: str,
     start_path: Path | None,
+    workspace_bindings=None,
+    surface_cache: WorkspaceAppSurfaceCache | None = None,
 ) -> dict[str, object]:
     try:
         return resolve_app_dependencies(
@@ -291,6 +309,8 @@ def _app_dependencies_payload(
             consumer_app_id=app_id,
             workspace_store=state.workspace_store,
             start_path=start_path,
+            workspace_bindings=workspace_bindings,
+            surface_cache=surface_cache,
         )
     except Exception:
         return {"workspace_id": workspace_id, "consumer_app_id": app_id, "status": "blocked", "dependencies": []}

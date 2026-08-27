@@ -41,10 +41,22 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
 
         start_cleanup.assert_called_once_with(
             state,
+            initial_delay_seconds=7.5,
             shutdown_controller=shutdown_controller,
         )
         thread_type.return_value.start.assert_called_once_with()
         self.assertIs(thread, thread_type.return_value)
+
+    def test_idle_cleanup_tick_scans_the_session_catalog_once(self) -> None:
+        state = object()
+        with patch(
+            "core.api.prepared_session_cleanup.prepared_session_cleanup_candidates",
+            return_value=[],
+        ) as candidates:
+            result = run_prepared_session_cleanup_tick(state)
+
+        self.assertEqual(result["candidate_count"], 0)
+        candidates.assert_called_once()
 
     def test_repeated_and_concurrent_prepare_requests_create_one_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -125,6 +137,27 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
                 [2.0, 2.0],
             )
             self.assertEqual(start_prewarm.call_count, 2)
+            self.assertEqual(len(self._prepared_chat_sessions(state)), 1)
+
+    def test_implicit_and_explicit_provider_default_reuse_one_prepared_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state, app, cookie = self._platform(temp_dir)
+            with patch(
+                "core.api.runtime_api._prewarm_new_runtime_session",
+                return_value=PENDING_PREWARM,
+            ):
+                _status, implicit_default, _headers = self._prepare(app, cookie)
+                _status, explicit_default, _headers = self._prepare(
+                    app,
+                    cookie,
+                    reasoning_effort="max",
+                )
+
+            self.assertEqual(
+                implicit_default["session_id"],
+                explicit_default["session_id"],
+            )
+            self.assertTrue(explicit_default["prepared_session_reused"])
             self.assertEqual(len(self._prepared_chat_sessions(state)), 1)
 
     def test_discarded_or_aborted_prepare_response_does_not_proliferate_sessions(self) -> None:
@@ -250,6 +283,7 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
         cookie: str,
         *,
         project_id: str | None = None,
+        reasoning_effort: str | None = None,
     ):
         return self._invoke(
             app,
@@ -262,6 +296,7 @@ class PreparedRuntimeSessionPoolTestCase(AppReferenceApiTestSupport, unittest.Te
                 "title": "New chat",
                 "skill_activation_mode": "explicit",
                 "project_id": project_id,
+                "reasoning_effort": reasoning_effort,
             },
             cookie=cookie,
         )

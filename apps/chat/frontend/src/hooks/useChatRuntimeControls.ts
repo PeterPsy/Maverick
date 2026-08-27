@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
+import { Dispatch, SetStateAction, useCallback, useEffect, useRef, useState } from "react";
 import {
   ChatThread,
   ProviderItem,
@@ -60,6 +60,13 @@ export function genericAgenticRuntimeConfig(
     workspace_profile_binding_id: provider.workspace_profile_binding_id,
     reasoning_effort: reasoningEffort || undefined,
   };
+}
+
+export function effectiveNewChatReasoningEffort(
+  selectedReasoningEffort: string,
+  providerDefaultReasoningEffort: string,
+): string {
+  return selectedReasoningEffort || providerDefaultReasoningEffort;
 }
 
 export function clearAgentRuntimeConfigCache(): void {
@@ -132,6 +139,10 @@ export function useChatRuntimeControls({
   const defaultReasoningEffort = activeProvider?.default_reasoning_effort
     || activeProvider?.supported_reasoning_efforts?.[0]?.effort
     || "";
+  const newChatReasoningEffort = effectiveNewChatReasoningEffort(
+    reasoningEffort,
+    defaultReasoningEffort,
+  );
   const pinnedReasoningEffort = activeThread
     ? activeSession?.execution_binding?.reasoning_effort || ""
     : "";
@@ -155,7 +166,7 @@ export function useChatRuntimeControls({
       return;
     }
     pendingReasoningEffortRef.current = selectedReasoningEffort;
-    if (selectedReasoningEffort) setReasoningEffort(selectedReasoningEffort);
+    setReasoningEffort(selectedReasoningEffort);
     setActiveProviderId(providerId);
     const provider = providers.find((item) => item.provider_id === providerId) || null;
     if (providerUsesPlainHostedRuntime(provider) || provider?.provider_role === "runtime_engine") {
@@ -180,13 +191,15 @@ export function useChatRuntimeControls({
     preloadAgentRuntimeConfig(workspaceId, agentCatalogAppId, agentTypeId);
   }
 
-  async function selectedAgentRuntimeConfig(activeApp: ActiveAppContext | null): Promise<AgentRuntimeConfig | null> {
+  const selectedAgentRuntimeConfig = useCallback(async (
+    activeApp: ActiveAppContext | null,
+  ): Promise<AgentRuntimeConfig | null> => {
     const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
     const hostedConfig = hostedProviderRuntimeConfig(selectedProvider);
     if (hostedConfig) {
       return hostedConfig;
     }
-    const genericConfig = genericAgenticRuntimeConfig(selectedProvider, reasoningEffort);
+    const genericConfig = genericAgenticRuntimeConfig(selectedProvider, newChatReasoningEffort);
     if (!selectedAgentTypeId || !agentCatalogAppId || !workspaceId) {
       return genericConfig;
     }
@@ -203,9 +216,16 @@ export function useChatRuntimeControls({
       title: config.title,
       runtime_mode: "agentic",
       workspace_profile_binding_id: selectedProvider?.workspace_profile_binding_id,
-      reasoning_effort: reasoningEffort || undefined,
+      reasoning_effort: newChatReasoningEffort || undefined,
     };
-  }
+  }, [
+    activeProviderId,
+    agentCatalogAppId,
+    newChatReasoningEffort,
+    providers,
+    selectedAgentTypeId,
+    workspaceId,
+  ]);
 
   async function handleStopTurn() {
     if (!activeTurn || !canStopTurn) {

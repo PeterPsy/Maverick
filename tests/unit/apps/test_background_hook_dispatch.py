@@ -34,7 +34,7 @@ class BackgroundHookDispatchTestCase(unittest.TestCase):
         )
         state = SimpleNamespace(app_store=object(), app_event_bus=None)
 
-        def resolve_surface(_store, *, binding, start_path=None):
+        def resolve_surface(_store, *, binding, start_path=None, surface_cache=None):
             if binding.app_id == "video-studio":
                 raise AppLifecycleError("source root is missing")
             return Path("/apps/senses"), parsed

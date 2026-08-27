@@ -1230,7 +1230,11 @@ def _handle_session_collection(
         try:
             session_create_started_at = time.perf_counter()
             if prepare_only:
-                fingerprint = prepared_session_fingerprint(body, agent_id=agent_id)
+                fingerprint = prepared_session_fingerprint(
+                    body,
+                    agent_id=agent_id,
+                    execution_binding=preflight.execution_binding,
+                )
                 prepared_acquisition = acquire_prepared_session(
                     state,
                     workspace_id=context.workspace_id,

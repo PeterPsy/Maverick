@@ -9,11 +9,16 @@ import json
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
-_PREPARED_SESSION_FINGERPRINT_VERSION = 1
+_PREPARED_SESSION_FINGERPRINT_VERSION = 2
 
 
-def prepared_session_fingerprint(body: Mapping[str, object], *, agent_id: str) -> str:
-    """Hash only normalized session-creation configuration, never turn content."""
+def prepared_session_fingerprint(
+    body: Mapping[str, object],
+    *,
+    agent_id: str,
+    execution_binding: object | None = None,
+) -> str:
+    """Hash normalized requested and resolved configuration, never turn content."""
     payload = {
         "version": _PREPARED_SESSION_FINGERPRINT_VERSION,
         "agent_id": _text(agent_id),
@@ -30,12 +35,39 @@ def prepared_session_fingerprint(body: Mapping[str, object], *, agent_id: str) -
         "routing_profile": _text(body.get("routing_profile")) or None,
         "hosted_provider_id": _text(body.get("hosted_provider_id")) or None,
         "hosted_model_id": _text(body.get("hosted_model_id")) or None,
-        "workspace_profile_binding_id": _text(body.get("workspace_profile_binding_id")) or None,
-        "reasoning_effort": _text(body.get("reasoning_effort")) or None,
+        "execution_binding": _resolved_execution_binding(execution_binding),
+        "workspace_profile_binding_id": (
+            _text(getattr(execution_binding, "workspace_binding_id", None))
+            or _text(body.get("workspace_profile_binding_id"))
+            or None
+        ),
+        "reasoning_effort": (
+            _text(getattr(execution_binding, "reasoning_effort", None))
+            or _text(body.get("reasoning_effort"))
+            or None
+        ),
         "title": _text(body.get("title")),
         "agent_label": _text(body.get("agent_label")),
     }
     return _fingerprint(payload)
+
+
+def _resolved_execution_binding(binding: object | None) -> dict[str, object] | None:
+    if binding is None:
+        return None
+    return {
+        "profile_definition_id": _text(getattr(binding, "profile_definition_id", None)),
+        "profile_definition_revision": _text(
+            getattr(binding, "profile_definition_revision", None)
+        ),
+        "workspace_binding_id": _text(getattr(binding, "workspace_binding_id", None)),
+        "workspace_binding_revision": getattr(binding, "workspace_binding_revision", None),
+        "runtime_engine_id": _text(getattr(binding, "runtime_engine_id", None)),
+        "model_provider_id": _text(getattr(binding, "model_provider_id", None)),
+        "model_id": _text(getattr(binding, "model_id", None)),
+        "reasoning_effort": _text(getattr(binding, "reasoning_effort", None)) or None,
+        "execution_mode": _text(getattr(binding, "execution_mode", None)),
+    }
 
 
 def stored_prepared_session_configuration_key(session: RuntimeSessionRecord) -> str:

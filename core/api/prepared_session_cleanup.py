@@ -25,15 +25,22 @@ def start_prepared_session_cleanup_scheduler(
     state,
     *,
     interval_seconds: float | None = None,
+    initial_delay_seconds: float | None = None,
     shutdown_controller=None,
 ) -> Thread:
     """Start one daemon that cleans only bounded hidden prepared-session batches."""
     stop = Event()
     if shutdown_controller is not None:
         shutdown_controller.register_cleanup(stop.set)
+    interval = _cleanup_interval_seconds(interval_seconds)
+    initial_delay = (
+        interval
+        if initial_delay_seconds is None
+        else max(1.0, float(initial_delay_seconds))
+    )
     thread = Thread(
         target=_run_prepared_session_cleanup_scheduler,
-        args=(state, _cleanup_interval_seconds(interval_seconds), stop),
+        args=(state, interval, initial_delay, stop),
         name="maverick-prepared-session-cleanup",
         daemon=True,
     )
@@ -56,14 +63,14 @@ def run_prepared_session_cleanup_tick(
     skipped: list[str] = []
     failures: list[dict[str, str]] = []
     attempted: set[str] = set()
+    candidates = prepared_session_cleanup_candidates(
+        state,
+        now=now,
+        ttl_seconds=ttl_seconds,
+        max_per_owner=max_per_owner,
+    )
 
     while len(attempted) < max_cleanups:
-        candidates = prepared_session_cleanup_candidates(
-            state,
-            now=now,
-            ttl_seconds=ttl_seconds,
-            max_per_owner=max_per_owner,
-        )
         candidate = next(
             (item for item in candidates if item.session_id not in attempted),
             None,
@@ -83,6 +90,7 @@ def run_prepared_session_cleanup_tick(
                     ttl_seconds=ttl_seconds,
                     max_per_owner=max_per_owner,
                 )
+                candidates = fresh_candidates
                 fresh = next(
                     (item for item in fresh_candidates if item.session_id == candidate.session_id),
                     None,
@@ -115,15 +123,15 @@ def run_prepared_session_cleanup_tick(
                 candidate.session_id,
             )
 
+    if attempted:
+        candidates = prepared_session_cleanup_candidates(
+            state,
+            now=now,
+            ttl_seconds=ttl_seconds,
+            max_per_owner=max_per_owner,
+        )
     return {
-        "candidate_count": len(
-            prepared_session_cleanup_candidates(
-                state,
-                now=now,
-                ttl_seconds=ttl_seconds,
-                max_per_owner=max_per_owner,
-            )
-        ),
+        "candidate_count": len(candidates),
         "attempted": len(attempted),
         "cleaned_session_ids": cleaned,
         "skipped_session_ids": skipped,
@@ -132,15 +140,24 @@ def run_prepared_session_cleanup_tick(
     }
 
 
-def _run_prepared_session_cleanup_scheduler(state, interval_seconds: float, stop: Event) -> None:
-    while not stop.wait(interval_seconds):
+def _run_prepared_session_cleanup_scheduler(
+    state,
+    interval_seconds: float,
+    initial_delay_seconds: float,
+    stop: Event,
+) -> None:
+    if stop.wait(initial_delay_seconds):
+        return
+    while True:
         try:
             result = run_prepared_session_cleanup_tick(state)
         except Exception:
             logger.exception("Prepared runtime session cleanup tick failed.")
-            continue
-        if result["cleaned_session_ids"] or result["failures"]:
+            result = None
+        if result and (result["cleaned_session_ids"] or result["failures"]):
             logger.info("Prepared runtime session cleanup tick completed: %s", result)
+        if stop.wait(interval_seconds):
+            return
 
 
 def _cleanup_interval_seconds(interval_seconds: float | None) -> float:

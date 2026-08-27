@@ -12,10 +12,15 @@ from core.apps.models import (
     AppProvidedInterfaceDeclaration,
     AppRequiredInterfaceDeclaration,
     ParsedAppContract,
+    WorkspaceAppBindingRecord,
     WorkspaceAppDependencySelectionRecord,
 )
 from core.apps.store import AppStore
-from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
+from core.apps.surfaces import (
+    WorkspaceAppSurfaceCache,
+    enabled_workspace_app_bindings,
+    resolve_workspace_app_surface,
+)
 from core.authorization.service import can_mount_app_visibility
 from core.identity.models import UserRecord
 
@@ -92,14 +97,24 @@ def list_dependency_provider_candidates(
     platform_role: str | None = None,
     workspace_role: str | None = None,
     start_path: Path | None = None,
+    workspace_bindings: list[WorkspaceAppBindingRecord] | None = None,
+    surface_cache: WorkspaceAppSurfaceCache | None = None,
 ) -> list[DependencyProviderCandidate]:
     """List enabled apps that provide one compatible generic app interface."""
     candidates: list[DependencyProviderCandidate] = []
-    for binding in enabled_workspace_app_bindings(store, workspace_id=workspace_id):
+    bindings = workspace_bindings
+    if bindings is None:
+        bindings = enabled_workspace_app_bindings(store, workspace_id=workspace_id)
+    for binding in bindings:
         if consumer_app_id is not None and binding.app_id == consumer_app_id:
             continue
         try:
-            _source_root, parsed = resolve_workspace_app_surface(store, binding=binding, start_path=start_path)
+            _source_root, parsed = resolve_workspace_app_surface(
+                store,
+                binding=binding,
+                start_path=start_path,
+                surface_cache=surface_cache,
+            )
         except AppHostingError:
             continue
         if workspace_store is not None:
@@ -161,14 +176,33 @@ def resolve_app_dependencies(
     platform_role: str | None = None,
     workspace_role: str | None = None,
     start_path: Path | None = None,
+    workspace_bindings: list[WorkspaceAppBindingRecord] | None = None,
+    surface_cache: WorkspaceAppSurfaceCache | None = None,
 ) -> dict[str, object]:
     """Resolve one consumer app's declared interface requirements in a workspace."""
-    binding = store.get_workspace_app_binding(workspace_id=workspace_id, app_id=consumer_app_id)
+    binding = next(
+        (
+            item
+            for item in workspace_bindings or ()
+            if item.workspace_id == workspace_id and item.app_id == consumer_app_id
+        ),
+        None,
+    )
+    if binding is None:
+        binding = store.get_workspace_app_binding(
+            workspace_id=workspace_id,
+            app_id=consumer_app_id,
+        )
     if binding.status != "enabled":
         raise WorkspaceAppBindingNotFoundError(
             f"Workspace app `{consumer_app_id}` is not enabled in workspace `{workspace_id}`."
         )
-    _source_root, parsed = resolve_workspace_app_surface(store, binding=binding, start_path=start_path)
+    _source_root, parsed = resolve_workspace_app_surface(
+        store,
+        binding=binding,
+        start_path=start_path,
+        surface_cache=surface_cache,
+    )
     selections = {
         selection.alias: selection
         for selection in store.list_workspace_app_dependency_selections(
@@ -189,6 +223,8 @@ def resolve_app_dependencies(
             platform_role=platform_role,
             workspace_role=workspace_role,
             start_path=start_path,
+            workspace_bindings=workspace_bindings,
+            surface_cache=surface_cache,
         )
         candidate_ids = {candidate.app_id for candidate in candidates}
         selection = selections.get(requirement.alias)

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ProviderItem } from "../api/client";
-import { genericAgenticRuntimeConfig } from "./useChatRuntimeControls";
+import {
+  effectiveNewChatReasoningEffort,
+  genericAgenticRuntimeConfig,
+} from "./useChatRuntimeControls";
 
 function agenticProvider(overrides: Partial<ProviderItem> = {}): ProviderItem {
   return {
@@ -16,6 +19,11 @@ function agenticProvider(overrides: Partial<ProviderItem> = {}): ProviderItem {
 }
 
 describe("genericAgenticRuntimeConfig", () => {
+  it("uses the provider default before the controlled reasoning state settles", () => {
+    expect(effectiveNewChatReasoningEffort("", "max")).toBe("max");
+    expect(effectiveNewChatReasoningEffort("high", "max")).toBe("high");
+  });
+
   it("preserves the selected profile binding and reasoning without a catalog agent", () => {
     expect(genericAgenticRuntimeConfig(agenticProvider(), "max")).toMatchObject({
       agent_id: "chat",

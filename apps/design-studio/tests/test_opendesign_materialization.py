@@ -11,7 +11,7 @@ import tarfile
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -128,6 +128,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             patch.object(self.launcher, "_finalize_pending_activations") as finalize,
             patch.object(self.launcher, "_prewarm_browser_surface") as prewarm_browser,
             patch.object(self.launcher, "_write_readiness_marker") as write_marker,
+            patch.object(self.launcher, "inject_test_failure") as inject_failure,
             patch.object(self.launcher, "_wait_for_maverick_readiness") as wait_for_maverick,
             self.assertRaises(self.launcher.LauncherError) as exited,
         ):
@@ -166,6 +167,149 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             daemon,
             env={"OD_PORT": "1234", "OD_API_TOKEN": "token"},
         )
+        self.assertEqual(
+            inject_failure.call_args_list,
+            [
+                call(
+                    self.root / "generation",
+                    startup_id="startup-test",
+                    phase="browser_prewarm",
+                ),
+                call(
+                    self.root / "generation",
+                    startup_id="startup-test",
+                    phase="readiness_commit",
+                ),
+            ],
+        )
+
+    def test_fixture_failure_injection_is_opt_in_private_and_single_use(self) -> None:
+        generation = self.root / "generation"
+        injection = generation / ".maverick-failure-injection"
+        injection.mkdir(parents=True, mode=0o700)
+        nonce = "1" * 32
+        request = injection / "request.json"
+        request.write_text(
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "phase": "readiness_commit",
+                    "action": "sigkill",
+                    "nonce": nonce,
+                }
+            ),
+            encoding="utf-8",
+        )
+        request.chmod(0o600)
+
+        failure_injection = sys.modules["opendesign_failure_injection"]
+        with patch.dict("os.environ", {}, clear=True):
+            failure_injection.inject_test_failure(
+                generation,
+                startup_id="not-enabled",
+                phase="readiness_commit",
+            )
+        self.assertTrue(request.exists())
+
+        with (
+            patch.dict(
+                "os.environ",
+                {failure_injection.FAILURE_INJECTION_ROOT_ENV: str(injection)},
+                clear=True,
+            ),
+            patch.object(failure_injection.os, "kill") as kill,
+            self.assertRaises(failure_injection.FailureInjectionError) as raised,
+        ):
+            failure_injection.inject_test_failure(
+                generation,
+                startup_id="startup-test",
+                phase="readiness_commit",
+            )
+
+        self.assertEqual(raised.exception.code, "activation_incomplete")
+        self.assertEqual(raised.exception.phase, "failure_injection")
+        kill.assert_called_once_with(
+            failure_injection.os.getpid(),
+            failure_injection.signal.SIGKILL,
+        )
+        self.assertFalse(request.exists())
+        self.assertTrue((injection / f"consumed-{nonce}.json").is_file())
+        observed = json.loads(
+            (injection / f"observed-{nonce}.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            observed,
+            {
+                "schema_version": "1",
+                "phase": "readiness_commit",
+                "action": "sigkill",
+                "nonce": nonce,
+                "startup_id": "startup-test",
+            },
+        )
+        self.assertEqual(
+            (injection / f"observed-{nonce}.json").stat().st_mode & 0o777,
+            0o600,
+        )
+
+    def test_fixture_failure_injection_waits_for_the_exact_requested_phase(self) -> None:
+        generation = self.root / "generation"
+        injection = generation / ".maverick-failure-injection"
+        injection.mkdir(parents=True, mode=0o700)
+        request = injection / "request.json"
+        request.write_text(
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "phase": "browser_prewarm",
+                    "action": "sigkill",
+                    "nonce": "2" * 32,
+                }
+            ),
+            encoding="utf-8",
+        )
+        request.chmod(0o600)
+        failure_injection = sys.modules["opendesign_failure_injection"]
+        with (
+            patch.dict(
+                "os.environ",
+                {failure_injection.FAILURE_INJECTION_ROOT_ENV: str(injection)},
+                clear=True,
+            ),
+            patch.object(failure_injection.os, "kill") as kill,
+        ):
+            failure_injection.inject_test_failure(
+                generation,
+                startup_id="startup-test",
+                phase="readiness_commit",
+            )
+
+        kill.assert_not_called()
+        self.assertTrue(request.exists())
+
+    def test_fixture_failure_injection_rejects_a_non_private_control_root(self) -> None:
+        generation = self.root / "generation"
+        injection = generation / ".maverick-failure-injection"
+        injection.mkdir(parents=True, mode=0o700)
+        injection.chmod(0o755)
+        failure_injection = sys.modules["opendesign_failure_injection"]
+
+        with (
+            patch.dict(
+                "os.environ",
+                {failure_injection.FAILURE_INJECTION_ROOT_ENV: str(injection)},
+                clear=True,
+            ),
+            self.assertRaisesRegex(
+                failure_injection.FailureInjectionError,
+                "root is unsafe",
+            ),
+        ):
+            failure_injection.inject_test_failure(
+                generation,
+                startup_id="startup-test",
+                phase="browser_prewarm",
+            )
 
     def test_browser_prewarm_requires_one_bounded_verified_html_response(self) -> None:
         daemon = Mock()

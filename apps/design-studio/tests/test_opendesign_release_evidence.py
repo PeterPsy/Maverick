@@ -22,6 +22,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         ui = {
             "profile": "release",
             "performance": self._performance(),
+            "failure_injection": self._failure_injection(),
             "status": "passed",
             "gate": "design-studio-e2e-release",
             "opendesign": {
@@ -59,7 +60,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
             source_documents=self._documents(),
         )
 
-        self.assertEqual(result["schema_version"], "5")
+        self.assertEqual(result["schema_version"], "6")
         self.assertEqual(result["scenario_count"], 14)
         self.assertTrue(result["rollback_gate_separate"])
         self.assertEqual(result["scenarios"][-1]["id"], "upgrade_rollback")
@@ -100,6 +101,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         ui = {
             "profile": "release",
             "performance": self._performance(),
+            "failure_injection": self._failure_injection(),
             "status": "passed",
             "opendesign": {
                 "runtime_artifact_sha256": "a" * 64,
@@ -157,6 +159,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         ui = {
             "profile": "release",
             "performance": self._performance(),
+            "failure_injection": self._failure_injection(),
             "status": "passed",
             "opendesign": {
                 "runtime_artifact_sha256": "a" * 64,
@@ -198,6 +201,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         ui = {
             "profile": "release",
             "performance": self._performance(),
+            "failure_injection": self._failure_injection(),
             "status": "passed",
             "opendesign": {
                 "runtime_artifact_sha256": "a" * 64,
@@ -253,6 +257,18 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "browser/prewarm singleflight"):
             aggregate(duplicate_start, **arguments)
 
+        simulated_kill = copy.deepcopy(ui)
+        simulated_kill["failure_injection"]["scenarios"][0]["real_process"] = False
+        with self.assertRaisesRegex(ValueError, "process-kill recovery"):
+            aggregate(simulated_kill, **arguments)
+
+        leaked_partial_readiness = copy.deepcopy(ui)
+        leaked_partial_readiness["failure_injection"]["scenarios"][3][
+            "partial_readiness_exposed"
+        ] = True
+        with self.assertRaisesRegex(ValueError, "launch-phase failure"):
+            aggregate(leaked_partial_readiness, **arguments)
+
         slow_cold_interface = copy.deepcopy(ui)
         for sample in slow_cold_interface["performance"]["samples"]:
             sample["shell_action_to_usable_interface_ms"] = 2_600
@@ -291,7 +307,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
-        self.assertEqual(evidence["schema_version"], "5")
+        self.assertEqual(evidence["schema_version"], "6")
         self.assertEqual(evidence["status"], "passed")
         self.assertEqual(evidence["scenario_count"], 14)
         self.assertTrue(evidence["rollback_gate_separate"])
@@ -420,6 +436,47 @@ class ReleaseEvidenceTests(unittest.TestCase):
             },
             "samples": restart_samples,
             "targets_met": True,
+        }
+
+    @staticmethod
+    def _failure_injection() -> dict:
+        common = {
+            "signal": "SIGKILL",
+            "real_process": True,
+            "consumer_failed_closed": True,
+            "instance_rotated": True,
+            "transactional_readiness_recovered": True,
+            "project_preserved": True,
+        }
+        return {
+            "schema_version": "1",
+            "status": "passed",
+            "real_process_signals": True,
+            "scenarios": [
+                {"id": "launcher_sigkill", **common},
+                {"id": "daemon_sigkill", **common},
+                {
+                    "id": "browser_prewarm_sigkill",
+                    **common,
+                    "phase": "browser_prewarm",
+                    "prewarm_failed_closed": True,
+                    "partial_readiness_exposed": False,
+                    "stale_marker_rejected": False,
+                    "startup_nonce_rotated": True,
+                },
+                {
+                    "id": "readiness_commit_sigkill",
+                    **common,
+                    "phase": "readiness_commit",
+                    "prewarm_failed_closed": True,
+                    "partial_readiness_exposed": False,
+                    "stale_marker_rejected": True,
+                    "startup_nonce_rotated": True,
+                },
+            ],
+            "all_consumers_failed_closed": True,
+            "all_recoveries_transactionally_ready": True,
+            "workspace_data_preserved": True,
         }
 
     @staticmethod

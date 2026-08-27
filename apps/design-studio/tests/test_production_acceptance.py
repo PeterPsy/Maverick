@@ -17,6 +17,7 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_acceptance_evidence import (  # noqa: E402
     validate_execution,
+    validate_failure_injection,
     validate_launch_performance,
     validate_migration_execution,
 )
@@ -114,6 +115,8 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
 
         validate_execution(evidence.get("execution"), repository_root=REPOSITORY_ROOT)
         performance = validate_launch_performance(evidence.get("performance"))
+        failure_injection = validate_failure_injection(evidence.get("failure_injection"))
+        self.assertEqual(len(failure_injection["scenarios"]), 4)
         self.assertIs(performance["targets_met"], True)
         self.assertEqual(performance["warm_browser_ticket"]["count"], 30)
         self.assertLessEqual(performance["warm_browser_ticket"]["p95_ms"], 300)
@@ -187,7 +190,8 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         )
 
         release = _read_json(RELEASE_EVIDENCE)
-        self.assertEqual(release["schema_version"], "5")
+        self.assertEqual(release["schema_version"], "6")
+        validate_failure_injection(release.get("failure_injection"))
         self.assertEqual(release["gate"], "design-studio-opendesign-release")
         self.assertEqual(release["scenario_count"], 14)
         self.assertEqual(release["scenarios"][-1]["id"], "upgrade_rollback")

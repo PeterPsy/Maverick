@@ -178,6 +178,7 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertIsNone(sidecar.package_manager)
         self.assertEqual(sidecar.command, ["python3", "opendesign_launcher.py"])
         self.assertNotIn("MAVERICK_OPENDESIGN_ALLOW_FALLBACK", sidecar.env)
+        self.assertNotIn("MAVERICK_OPENDESIGN_FAILURE_INJECTION_ROOT", sidecar.env)
         self.assertNotIn("OD_DATA_DIR", sidecar.env)
         self.assertNotIn("OD_MEDIA_CONFIG_DIR", sidecar.env)
         self.assertEqual(sidecar.env["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"], "1")

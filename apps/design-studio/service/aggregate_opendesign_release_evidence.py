@@ -17,6 +17,7 @@ from opendesign_artifact import read_bundle_manifest, selected_asset, sha256_fil
 from opendesign_artifact_store import OpenDesignArtifactStore
 from opendesign_acceptance_evidence import (
     validate_execution,
+    validate_failure_injection,
     validate_launch_performance,
     validate_migration_execution,
 )
@@ -66,6 +67,7 @@ def aggregate(
     ):
         raise ValueError("release UI evidence must contain the 13 unique canonical passed scenarios")
     performance = _validate_launch_performance(ui.get("performance"))
+    failure_injection = validate_failure_injection(ui.get("failure_injection"))
     source_generation_preserved, forward_generation_preserved = _migration_preservation_proofs(
         migration
     )
@@ -109,7 +111,7 @@ def aggregate(
         raise ValueError("aggregated release scenario inventory is incomplete or duplicated")
     documents = _validate_source_documents(source_documents)
     return {
-        "schema_version": "5",
+        "schema_version": "6",
         "gate": "design-studio-opendesign-release",
         "status": "passed",
         "opendesign": opendesign,
@@ -120,6 +122,7 @@ def aggregate(
         "rollback_gate_separate": True,
         "change_to_live_benchmark": benchmark_summary,
         "launch_performance": performance,
+        "failure_injection": failure_injection,
         "scenarios": aggregated,
         "sources": {
             "ui": {**documents["ui"], "gate": ui.get("gate")},

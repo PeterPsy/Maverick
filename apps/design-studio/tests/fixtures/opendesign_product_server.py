@@ -29,6 +29,7 @@ from core.api.platform_state import bootstrap_platform_state  # noqa: E402
 from core.api.sidecar_control import start_sidecar_control_server  # noqa: E402
 from core.api.sidecar_prewarm import start_declared_sidecar_prewarms  # noqa: E402
 from core.api.sidecar_proxy import HttpSidecarManager  # noqa: E402
+from core.api import sidecar_proxy  # noqa: E402
 from core.apps.artifact_mounts import platform_artifact_store_root  # noqa: E402
 from core.apps.dependencies import save_app_dependency_selection  # noqa: E402
 from core.apps.service import install_store_app, register_app_source_from_contract  # noqa: E402
@@ -62,6 +63,7 @@ def _instrument_design_studio_startup(root: Path, *, delay_ms: int) -> None:
     event_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     event_path.unlink(missing_ok=True)
     original = HttpSidecarManager._start_sidecar
+    original_spawn = sidecar_proxy._spawn_sidecar_process
 
     def record(event: str, **fields: object) -> None:
         payload = {
@@ -99,7 +101,25 @@ def _instrument_design_studio_startup(root: Path, *, delay_ms: int) -> None:
         record("ready", **identity, instance_id=running.instance_id)
         return running
 
+    def instrumented_spawn(command, **options):
+        process = original_spawn(command, **options)
+        environment = options.get("env")
+        if (
+            isinstance(environment, dict)
+            and environment.get("MAVERICK_APP_ID") == "design-studio"
+            and environment.get("MAVERICK_SIDECAR_ID") == "opendesign"
+        ):
+            record(
+                "spawn",
+                workspace_id=str(environment.get("MAVERICK_WORKSPACE_ID") or ""),
+                app_id="design-studio",
+                supervisor_pid=process.pid,
+                controlled_overlap_delay_ms=delay_ms,
+            )
+        return process
+
     HttpSidecarManager._start_sidecar = instrumented_start
+    sidecar_proxy._spawn_sidecar_process = instrumented_spawn
 
 
 def _prepare_root(root: Path) -> None:
@@ -110,8 +130,34 @@ def _prepare_root(root: Path) -> None:
         agents.write_text("# Synthetic WP10 product fixture\n", encoding="utf-8")
     for app_id in APP_IDS:
         target = root / "apps" / app_id
-        if not target.exists():
+        if app_id == "design-studio" and not target.exists():
+            _copy_instrumented_design_studio_source(target)
+        elif not target.exists():
             target.symlink_to(REPO_ROOT / "apps" / app_id, target_is_directory=True)
+
+
+def _copy_instrumented_design_studio_source(target: Path) -> None:
+    """Opt the isolated release fixture into launcher phase fault injection."""
+    shutil.copytree(
+        APP_ROOT,
+        target,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "node_modules"),
+    )
+    contract_path = target / "app_contract.json"
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    sidecars = contract.get("services", {}).get("http_sidecars", [])
+    if not isinstance(sidecars, list) or len(sidecars) != 1:
+        raise RuntimeError("Synthetic Design Studio sidecar contract drifted.")
+    environment = sidecars[0].get("env") if isinstance(sidecars[0], dict) else None
+    if not isinstance(environment, dict):
+        raise RuntimeError("Synthetic Design Studio sidecar environment drifted.")
+    environment["MAVERICK_OPENDESIGN_FAILURE_INJECTION_ROOT"] = (
+        "${app.data_dir}/opendesign/.maverick-failure-injection"
+    )
+    contract_path.write_text(
+        json.dumps(contract, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _build_runtime_fixture(root: Path) -> Path:

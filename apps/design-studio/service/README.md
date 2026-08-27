@@ -150,6 +150,13 @@ grace. Provision and repair run this recovery before materialization, garbage
 collection runs it directly, and staging quarantine is purged only after the
 release retention interval. A real `SIGKILL` test proves lease handoff and
 resume, while an injected `ENOSPC` proves typed failure and immediate cleanup.
+The release browser fixture additionally sends real `SIGKILL` to the live
+launcher and daemon processes, then opts an isolated copy of the app contract
+into one-shot kills immediately before browser prewarm and immediately after
+the readiness-marker commit. Each case must expose no partial readiness,
+rotate the sidecar instance/startup nonce, preserve project data, and recover
+through the normal Core prewarm transaction. The deployed app contract does
+not export the fixture-only injection root.
 
 Web overlays have their own archive and manifest-v2 file/mode inventory, compatible runtime
 digests, upstream/version pin, lockfile and toolchain digests, CycloneDX SBOM,
@@ -526,7 +533,7 @@ window deterministic; that delay is included in the cold SLO rather than
 subtracted. The execution record is
 content-bound to the current Core, base-shell, Storage, and Design Studio
 inputs. The aggregator independently recomputes every percentile and
-emits schema 5 with SHA-256 bindings for its UI, migration, and benchmark input
+emits schema 6 with SHA-256 bindings for its UI, migration, and benchmark input
 documents. The records contain no prompt, cookie, bearer, provider payload,
 environment, host path, or secret value.
 `opendesign_production_acceptance_0_16_1.json` maps every global acceptance

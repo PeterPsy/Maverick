@@ -3,7 +3,7 @@
 /** Run the WP10 production-path browser acceptance against the pinned OCI bundle. */
 
 import { spawn } from 'node:child_process';
-import { createServer } from 'node:net';
+import { createConnection, createServer } from 'node:net';
 import { lstat, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -43,6 +43,15 @@ const sidecarStartupEvents = path.join(
   installationRoot,
   'tmp',
   'design-studio-sidecar-starts.jsonl',
+);
+const sidecarControlSocket = path.join(installationRoot, 'tmp', 'maverick-sidecar-control.sock');
+const defaultGenerationRoot = path.join(
+  installationRoot,
+  'workspaces',
+  'default',
+  'data',
+  'design-studio',
+  'opendesign',
 );
 const coldStartupOverlapDelayMs = 750;
 const port = await freePort();
@@ -241,6 +250,15 @@ try {
     }));
   }
 
+  const failureRecovery = await exerciseRealFailureRecovery(
+    page,
+    sidecar,
+    projectA.projectId,
+    networkProof,
+  );
+  sidecar = failureRecovery.frame;
+  const failureInjectionEvidence = failureRecovery.evidence;
+
   const warmTickets = await benchmarkWarmTickets(page, 30);
   const warmOpenings = await benchmarkWarmOpenings(page, networkProof, 30);
   const coreRestarts = [];
@@ -414,6 +432,7 @@ try {
     successful,
     profile,
     performanceEvidence,
+    failureInjectionEvidence,
     execution: await productExecutionEvidence(),
   });
   if (evidenceOutputPath) {
@@ -543,6 +562,404 @@ async function waitForInstrumentedStartup(pid, expectedEvent) {
     await delay(25);
   }
   throw new Error(`Instrumented Design Studio startup did not record ${expectedEvent}`);
+}
+
+
+async function exerciseRealFailureRecovery(page, initialFrame, projectId, networkProof) {
+  let frame = initialFrame;
+  let launch = await currentBrowserLaunch(page);
+  const launcherSpawn = await latestDefaultSidecarSpawn(server.pid);
+  const launcherProcesses = await waitForSidecarProcesses(
+    Number(launcherSpawn.supervisor_pid),
+    { requireDaemon: false },
+  );
+  await sigkillProcess(launcherProcesses.launcherPid);
+  await waitForFailedRuntimeState(page, 'launcher SIGKILL');
+  let recovered = await recoverBrowserAfterProcessKill(
+    page,
+    frame,
+    launch.instanceId,
+    projectId,
+    networkProof,
+  );
+  frame = recovered.frame;
+  launch = recovered.launch;
+  const launcherKill = {
+    id: 'launcher_sigkill',
+    signal: 'SIGKILL',
+    real_process: true,
+    consumer_failed_closed: true,
+    instance_rotated: true,
+    transactional_readiness_recovered: true,
+    project_preserved: true,
+  };
+
+  const daemonSpawn = await latestDefaultSidecarSpawn(server.pid);
+  const daemonProcesses = await waitForSidecarProcesses(
+    Number(daemonSpawn.supervisor_pid),
+    { requireDaemon: true },
+  );
+  await sigkillProcess(daemonProcesses.daemonPid);
+  await waitForFailedRuntimeState(page, 'daemon SIGKILL');
+  recovered = await recoverBrowserAfterProcessKill(
+    page,
+    frame,
+    launch.instanceId,
+    projectId,
+    networkProof,
+  );
+  frame = recovered.frame;
+  launch = recovered.launch;
+  const daemonKill = {
+    id: 'daemon_sigkill',
+    signal: 'SIGKILL',
+    real_process: true,
+    consumer_failed_closed: true,
+    instance_rotated: true,
+    transactional_readiness_recovered: true,
+    project_preserved: true,
+  };
+
+  const browserPrewarm = await injectLauncherPhaseFailure(
+    page,
+    frame,
+    launch.instanceId,
+    projectId,
+    networkProof,
+    'browser_prewarm',
+  );
+  frame = browserPrewarm.frame;
+  launch = browserPrewarm.launch;
+  const readinessCommit = await injectLauncherPhaseFailure(
+    page,
+    frame,
+    launch.instanceId,
+    projectId,
+    networkProof,
+    'readiness_commit',
+  );
+  frame = readinessCommit.frame;
+
+  return {
+    frame,
+    evidence: {
+      schema_version: '1',
+      status: 'passed',
+      real_process_signals: true,
+      scenarios: [
+        launcherKill,
+        daemonKill,
+        browserPrewarm.evidence,
+        readinessCommit.evidence,
+      ],
+      all_consumers_failed_closed: true,
+      all_recoveries_transactionally_ready: true,
+      workspace_data_preserved: true,
+    },
+  };
+}
+
+
+async function injectLauncherPhaseFailure(
+  page,
+  previousFrame,
+  previousInstanceId,
+  projectId,
+  networkProof,
+  phase,
+) {
+  const stopped = await sidecarControl('stop');
+  assert(stopped.ok === true && stopped.result?.ready === false, `${phase} stop did not fail closed`);
+  const injection = await writeFailureInjection(phase);
+  const failedPrewarm = await sidecarControl('prewarm', 30_000);
+  assert(failedPrewarm.ok === false, `${phase} failure injection did not fail prewarm`);
+  const observed = await waitForJson(injection.observedPath);
+  assert(
+    observed.schema_version === '1'
+      && observed.phase === phase
+      && observed.action === 'sigkill'
+      && observed.nonce === injection.nonce
+      && typeof observed.startup_id === 'string'
+      && observed.startup_id.length > 0,
+    `${phase} failure injection phase proof is invalid`,
+  );
+  await waitForFailedRuntimeState(page, `${phase} SIGKILL`);
+  const markerBeforeRetry = await readJsonIfPresent(
+    path.join(defaultGenerationRoot, 'maverick-ready.json'),
+  );
+  if (phase === 'browser_prewarm') {
+    assert(markerBeforeRetry === null, 'Browser prewarm failure exposed a readiness marker');
+  } else {
+    assert(
+      markerBeforeRetry?.startup_nonce === observed.startup_id,
+      'Readiness-commit failure did not leave the injected stale marker to reject',
+    );
+  }
+
+  const retried = await sidecarControl('prewarm', 30_000);
+  assert(
+    retried.ok === true && retried.result?.ready === true,
+    `${phase} did not recover through governed prewarm`,
+  );
+  const markerAfterRetry = await waitForJson(
+    path.join(defaultGenerationRoot, 'maverick-ready.json'),
+  );
+  assert(
+    typeof markerAfterRetry.startup_nonce === 'string'
+      && markerAfterRetry.startup_nonce.length > 0
+      && markerAfterRetry.startup_nonce !== observed.startup_id,
+    `${phase} recovery reused the killed startup nonce`,
+  );
+  const launcherAfterRetry = await waitForJson(
+    path.join(defaultGenerationRoot, 'launcher-status.json'),
+  );
+  assert(
+    launcherAfterRetry.startup_id === markerAfterRetry.startup_nonce
+      && launcherAfterRetry.phase === 'browser_ready'
+      && launcherAfterRetry.health?.browser_ready === true
+      && launcherAfterRetry.health?.activation_committed === true,
+    `${phase} recovery did not commit a new transactional generation`,
+  );
+  const recovered = await recoverBrowserAfterProcessKill(
+    page,
+    previousFrame,
+    previousInstanceId,
+    projectId,
+    networkProof,
+  );
+  return {
+    ...recovered,
+    evidence: {
+      id: `${phase}_sigkill`,
+      phase,
+      signal: 'SIGKILL',
+      real_process: true,
+      consumer_failed_closed: true,
+      prewarm_failed_closed: true,
+      partial_readiness_exposed: false,
+      stale_marker_rejected: phase === 'readiness_commit',
+      startup_nonce_rotated: true,
+      instance_rotated: true,
+      transactional_readiness_recovered: true,
+      project_preserved: true,
+    },
+  };
+}
+
+
+async function waitForFailedRuntimeState(page, label) {
+  let lastState = null;
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    lastState = await platformRequest(page, '/api/apps/design-studio/backend', {
+      method: 'POST',
+      body: { action: 'status', arguments: {} },
+    }).catch(() => null);
+    const runtime = lastState?.body?.opendesign?.runtime;
+    if (
+      lastState?.status === 200
+        && runtime
+        && runtime.operational !== true
+        && runtime.health?.browser_ready !== true
+    ) return runtime;
+    await delay(25);
+  }
+  throw new Error(`${label} exposed operational readiness: ${JSON.stringify(lastState?.body || null)}`);
+}
+
+
+async function recoverBrowserAfterProcessKill(
+  page,
+  previousFrame,
+  previousInstanceId,
+  projectId,
+  networkProof,
+) {
+  let launch = null;
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    const candidate = await platformRequest(page, '/api/app-sidecars/browser-launch', {
+      method: 'POST',
+      body: { app_id: 'design-studio', sidecar_id: 'opendesign', path: '/index.html' },
+    }).catch(() => null);
+    const instanceId = String(candidate?.body?.sidecar_instance_id || '');
+    if (candidate?.status === 200 && instanceId && instanceId !== previousInstanceId) {
+      launch = { instanceId };
+      break;
+    }
+    await delay(125);
+  }
+  assert(launch, 'Killed OpenDesign process did not rotate to a ready sidecar instance');
+  await page.goto(
+    `${platformOrigin}/app/design-studio?od_project_id=${encodeURIComponent(projectId)}`,
+    { waitUntil: 'domcontentloaded' },
+  );
+  const frame = await waitForSidecarFrame(
+    page,
+    `/projects/${projectId}`,
+    networkProof,
+    true,
+    previousFrame,
+  );
+  const ready = await frameRequest(frame, '/api/maverick-ready');
+  const project = await frameRequest(frame, `/api/projects/${encodeURIComponent(projectId)}`);
+  assert(
+    ready.status === 200
+      && ready.body?.ready === true
+      && project.status === 200,
+    'Process recovery lost transactional readiness or workspace data',
+  );
+  return { frame, launch };
+}
+
+
+async function currentBrowserLaunch(page) {
+  const response = await platformRequest(page, '/api/app-sidecars/browser-launch', {
+    method: 'POST',
+    body: { app_id: 'design-studio', sidecar_id: 'opendesign', path: '/index.html' },
+  });
+  const instanceId = String(response.body?.sidecar_instance_id || '');
+  assert(response.status === 200 && instanceId, 'Current sidecar launch identity is unavailable');
+  return { instanceId };
+}
+
+
+async function latestDefaultSidecarSpawn(corePid) {
+  await waitForInstrumentedStartup(corePid, 'spawn');
+  const events = await instrumentedStartupEvents(corePid);
+  const spawnEvent = events.filter(
+    (event) => event.event === 'spawn'
+      && event.workspace_id === 'default'
+      && Number.isInteger(Number(event.supervisor_pid)),
+  ).at(-1);
+  assert(spawnEvent, 'Instrumented sidecar spawn identity is unavailable');
+  return spawnEvent;
+}
+
+
+async function instrumentedStartupEvents(corePid) {
+  let text = '';
+  try { text = await readFile(sidecarStartupEvents, 'utf8'); } catch {}
+  try {
+    return text.split('\n').filter(Boolean).map((line) => JSON.parse(line)).filter(
+      (event) => Number(event?.pid) === Number(corePid),
+    );
+  } catch {
+    return [];
+  }
+}
+
+
+async function waitForSidecarProcesses(supervisorPid, { requireDaemon }) {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const processes = await descendantProcesses(supervisorPid);
+    const launcher = processes.find(({ arguments: argv }) => (
+      argv.length >= 2
+        && /(?:^|\/)python3(?:\.\d+)?$/.test(argv[0])
+        && argv[1].endsWith('opendesign_launcher.py')
+    ));
+    const daemon = launcher
+      ? processes.find((candidate) => candidate.parentPid === launcher.pid && candidate.arguments.length > 0)
+      : null;
+    if (launcher && (!requireDaemon || daemon)) {
+      return { launcherPid: launcher.pid, daemonPid: daemon?.pid || 0 };
+    }
+    await delay(10);
+  }
+  throw new Error('Real OpenDesign launcher/daemon process roles were not observable');
+}
+
+
+async function descendantProcesses(rootPid) {
+  const pending = [{ pid: Number(rootPid), parentPid: 0 }];
+  const observed = new Set();
+  const processes = [];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || !Number.isInteger(current.pid) || current.pid < 1 || observed.has(current.pid)) continue;
+    observed.add(current.pid);
+    const [children, command] = await Promise.all([
+      readFile(`/proc/${current.pid}/task/${current.pid}/children`, 'utf8').catch(() => ''),
+      readFile(`/proc/${current.pid}/cmdline`).catch(() => Buffer.alloc(0)),
+    ]);
+    const argumentsList = command.toString('utf8').split('\0').filter(Boolean);
+    processes.push({ pid: current.pid, parentPid: current.parentPid, arguments: argumentsList });
+    pending.push(
+      ...children.trim().split(/\s+/).filter(Boolean).map(
+        (value) => ({ pid: Number(value), parentPid: current.pid }),
+      ),
+    );
+  }
+  return processes;
+}
+
+
+async function sigkillProcess(pid) {
+  assert(Number.isInteger(pid) && pid > 1, 'Refusing to signal an invalid process identity');
+  process.kill(pid, 'SIGKILL');
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const alive = await lstat(`/proc/${pid}`).then(() => true).catch(() => false);
+    if (!alive) return;
+    await delay(10);
+  }
+  throw new Error('SIGKILL target did not exit');
+}
+
+
+async function sidecarControl(operation, timeoutMs = 15_000) {
+  const request = `${JSON.stringify({
+    schema_version: '1',
+    operation,
+    workspace_id: 'default',
+    app_id: 'design-studio',
+  })}\n`;
+  return new Promise((resolve, reject) => {
+    const socket = createConnection(sidecarControlSocket);
+    let response = '';
+    const timer = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`Sidecar control ${operation} timed out`));
+    }, timeoutMs);
+    socket.setEncoding('utf8');
+    socket.once('connect', () => socket.end(request));
+    socket.on('data', (chunk) => { response = `${response}${chunk}`; });
+    socket.once('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    socket.once('end', () => {
+      clearTimeout(timer);
+      try { resolve(JSON.parse(response)); } catch (error) { reject(error); }
+    });
+  });
+}
+
+
+async function writeFailureInjection(phase) {
+  const root = path.join(defaultGenerationRoot, '.maverick-failure-injection');
+  const requestPath = path.join(root, 'request.json');
+  const nonce = crypto.randomUUID().replaceAll('-', '');
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  await rm(requestPath, { force: true });
+  await writeFile(
+    requestPath,
+    `${JSON.stringify({ schema_version: '1', phase, action: 'sigkill', nonce })}\n`,
+    { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+  );
+  return { nonce, observedPath: path.join(root, `observed-${nonce}.json`) };
+}
+
+
+async function waitForJson(filePath) {
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    const value = await readJsonIfPresent(filePath);
+    if (value) return value;
+    await delay(10);
+  }
+  throw new Error('Expected bounded failure-injection evidence was not persisted');
+}
+
+
+async function readJsonIfPresent(filePath) {
+  try { return JSON.parse(await readFile(filePath, 'utf8')); } catch { return null; }
 }
 
 
@@ -1319,7 +1736,7 @@ async function runMigrationSmoke({ evidencePath, parentRunId }) {
 }
 
 
-function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful, profile, performanceEvidence, execution }) {
+function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful, profile, performanceEvidence, failureInjectionEvidence, execution }) {
   const scenarios = [
     ['login_open', 'Login and open Design Studio', correlationA, { isolated_origin: true, ready_endpoint: true }],
     ['create_project_ui', 'Create and open a project from the Maverick sidebar', correlationA, {
@@ -1349,6 +1766,7 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
     profile,
     scenarios,
     performanceEvidence,
+    failureInjectionEvidence,
     execution,
     canonicalEntity: {
       od_project_id: projectA.projectId,
@@ -1383,7 +1801,7 @@ function scenario(id, name, proof, correlation = null) {
 }
 
 
-function buildProfileEvidence({ profile, scenarios, canonicalEntity, performanceEvidence = null, execution }) {
+function buildProfileEvidence({ profile, scenarios, canonicalEntity, performanceEvidence = null, failureInjectionEvidence = null, execution }) {
   return {
     schema_version: '2',
     gate: `design-studio-e2e-${profile}`,
@@ -1412,6 +1830,7 @@ function buildProfileEvidence({ profile, scenarios, canonicalEntity, performance
     scenarios,
     execution,
     ...(performanceEvidence ? { performance: performanceEvidence } : {}),
+    ...(failureInjectionEvidence ? { failure_injection: failureInjectionEvidence } : {}),
     redaction: {
       full_prompt_recorded: false,
       credential_value_recorded: false,

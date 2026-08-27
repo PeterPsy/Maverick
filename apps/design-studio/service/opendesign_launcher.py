@@ -21,6 +21,7 @@ from opendesign_artifact import (
 )
 from opendesign_artifact_store import ArtifactStoreError
 from opendesign_artifact_store import OpenDesignArtifactStore
+from opendesign_failure_injection import FailureInjectionError, inject_test_failure
 from opendesign_runtime import RuntimeBinding, resolve_protected_runtime_binding, verified_overlay_from_store
 from opendesign_oci_stage import OciStageError, runtime_command
 from opendesign_runtime_activation import finalize_runtime_activation_after_verified_sidecar_start
@@ -433,10 +434,20 @@ def _run_daemon(
         timings["activation_commit_ms"] = _elapsed_ms(phase_started)
         _emit_timing("activation_commit_ms", timings["activation_commit_ms"], startup_id)
         phase_started = time.monotonic()
+        inject_test_failure(
+            generation_root,
+            startup_id=startup_id,
+            phase="browser_prewarm",
+        )
         _prewarm_browser_surface(daemon, env=env)
         timings["browser_prewarm_ms"] = _elapsed_ms(phase_started)
         _emit_timing("browser_prewarm_ms", timings["browser_prewarm_ms"], startup_id)
         _write_readiness_marker(generation_root, binding=binding, startup_nonce=startup_id)
+        inject_test_failure(
+            generation_root,
+            startup_id=startup_id,
+            phase="readiness_commit",
+        )
         _wait_for_maverick_readiness(daemon, env=env)
         _update_health_status(
             generation_root,
@@ -875,6 +886,8 @@ def _failure_identity(error: BaseException) -> tuple[str, str]:
     if isinstance(error, ArtifactStoreError):
         return error.code, error.phase
     if isinstance(error, LauncherError):
+        return error.code, error.phase
+    if isinstance(error, FailureInjectionError):
         return error.code, error.phase
     if isinstance(error, ArtifactError):
         return "runtime_binding_invalid", "artifact_fast_verify"

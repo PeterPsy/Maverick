@@ -277,6 +277,61 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
     return dict(value)
 
 
+def validate_failure_injection(value: object) -> dict[str, Any]:
+    """Require real process kills at every transactional recovery boundary."""
+    if (
+        not isinstance(value, dict)
+        or value.get("schema_version") != "1"
+        or value.get("status") != "passed"
+        or value.get("real_process_signals") is not True
+        or value.get("all_consumers_failed_closed") is not True
+        or value.get("all_recoveries_transactionally_ready") is not True
+        or value.get("workspace_data_preserved") is not True
+    ):
+        raise ValueError("Release failure-injection evidence is missing or invalid")
+    scenarios = value.get("scenarios")
+    expected_ids = (
+        "launcher_sigkill",
+        "daemon_sigkill",
+        "browser_prewarm_sigkill",
+        "readiness_commit_sigkill",
+    )
+    if (
+        not isinstance(scenarios, list)
+        or len(scenarios) != len(expected_ids)
+        or tuple(
+            item.get("id") if isinstance(item, dict) else None for item in scenarios
+        )
+        != expected_ids
+    ):
+        raise ValueError("Release failure-injection scenario inventory is invalid")
+    required = (
+        "real_process",
+        "consumer_failed_closed",
+        "instance_rotated",
+        "transactional_readiness_recovered",
+        "project_preserved",
+    )
+    if any(
+        item.get("signal") != "SIGKILL"
+        or any(item.get(field) is not True for field in required)
+        for item in scenarios
+        if isinstance(item, dict)
+    ):
+        raise ValueError("Release process-kill recovery proof is invalid")
+    for index, phase in ((2, "browser_prewarm"), (3, "readiness_commit")):
+        item = scenarios[index]
+        if (
+            item.get("phase") != phase
+            or item.get("prewarm_failed_closed") is not True
+            or item.get("partial_readiness_exposed") is not False
+            or item.get("startup_nonce_rotated") is not True
+            or item.get("stale_marker_rejected") is not (phase == "readiness_commit")
+        ):
+            raise ValueError("Release launch-phase failure proof is invalid")
+    return dict(value)
+
+
 def _source_paths(root: Path) -> list[str]:
     output = subprocess.run(
         ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *SOURCE_ROOTS],

@@ -506,6 +506,14 @@ digests without a source-cache hit, activates through readiness and the scoped
 browser-remount event, restores the exact initial selection, and records phase
 timings. The canonical ceiling is 180 seconds.
 
+The release profile also owns four real process-failure proofs: `SIGKILL` of
+the live launcher, `SIGKILL` of its daemon child, a kill at browser prewarm,
+and a kill after readiness-marker commit. The last two are enabled only in the
+release fixture's isolated app-contract copy. Evidence is accepted only when
+every old instance fails closed, every retry rotates instance and startup
+nonce, the stale readiness marker is rejected, and the persisted project is
+readable after recovery.
+
 ### Verification and release-certification policy
 
 Design Studio verification is risk-tiered. The complete production acceptance

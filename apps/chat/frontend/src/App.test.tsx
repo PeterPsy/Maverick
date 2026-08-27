@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +41,7 @@ import type {
   RuntimeTurn,
 } from "./api/client";
 import { clearAgentRuntimeConfigCache } from "./hooks/useChatRuntimeControls";
+import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
 
 vi.mock("./hooks/useRuntimeEvents", () => ({
   useRuntimeEvents: vi.fn(),
@@ -229,13 +230,14 @@ function thread(threadId: string, runtimeSessionId: string, overrides: Partial<C
   };
 }
 
-function runtimeSession(sessionId: string): RuntimeSession {
+function runtimeSession(sessionId: string, overrides: Partial<RuntimeSession> = {}): RuntimeSession {
   return {
     session_id: sessionId,
     workspace_id: "default",
     agent_id: "chat",
     status: "running",
     effective_mode: "sandbox",
+    ...overrides,
   };
 }
 
@@ -308,6 +310,7 @@ function effectiveCodexCapabilities(): NonNullable<ProviderItem["agentic_effecti
 beforeEach(() => {
   window.localStorage.clear();
   clearAgentRuntimeConfigCache();
+  vi.mocked(useRuntimeEvents).mockImplementation(() => undefined);
   vi.mocked(listProviders).mockResolvedValue({
     workspace_id: "default",
     active_provider: {
@@ -474,6 +477,13 @@ async function addTextAttachment(element: HTMLElement, filename = "notes.txt") {
 
 async function addImageAttachment(element: HTMLElement, filename = "photo.png") {
   await addAttachment(element, filename, "image/png");
+}
+
+function changeInputValue(input: HTMLInputElement, value: string) {
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  valueSetter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function deferred<T>() {
@@ -831,6 +841,13 @@ describe("App thread navigation", () => {
   });
 
   it("keeps local Codex reference search and attachments usable during backend rollout skew", async () => {
+    vi.mocked(useRuntimeEvents).mockImplementation(({ onRuntimeSnapshot, runtimeSessionId }) => {
+      useEffect(() => {
+        if (runtimeSessionId) {
+          onRuntimeSnapshot?.();
+        }
+      }, [onRuntimeSnapshot, runtimeSessionId]);
+    });
     vi.mocked(listProviders).mockResolvedValue({
       workspace_id: "default",
       active_provider: {
@@ -853,6 +870,28 @@ describe("App thread navigation", () => {
       summary: "Deployment checklist",
     };
     vi.mocked(searchAppReferences).mockResolvedValue([reference]);
+    const createdThread = thread("thread-rollout-skew", "session-rollout-skew", {
+      provider_id: "codex",
+      runtime_mode: "agentic",
+    });
+    vi.mocked(createRuntimeSessionWithTurn).mockResolvedValue({
+      session: runtimeSession("session-rollout-skew", {
+        provider_id: "codex",
+        runtime_mode: "agentic",
+        execution_binding: {
+          workspace_binding_id: "workspace-agentic-default",
+          runtime_engine_id: "codex",
+          adapter_id: "codex-app-server",
+          model_provider_id: "codex",
+          provider_protocol: "codex-app-server-stdio",
+          model_id: "gpt-5.6-sol",
+          binding_digest: "exact-codex-binding",
+        },
+      }),
+      thread: createdThread,
+      turn: runtimeTurn("turn-rollout-skew", "session-rollout-skew", "completed"),
+      events: [],
+    });
     const element = await renderApp({
       navigationScope: "floating-window",
       newChatRequestId: "request-rollout-skew",
@@ -863,34 +902,55 @@ describe("App thread navigation", () => {
     await waitForAssertion(() => {
       expect(element.textContent).toContain("How can I help today?");
     });
+    await typeComposerMessage(element, "start the chat");
+    await clickSend(element);
+    await waitForAssertion(() => {
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalled();
+    });
+
+    const pickerButton = element.querySelector('[aria-label="Apps and references"]');
+    expect(pickerButton).toBeInstanceOf(HTMLButtonElement);
+    await waitForAssertion(() => {
+      expect((pickerButton as HTMLButtonElement).disabled).toBe(false);
+    });
     await act(async () => {
-      (element.querySelector('[aria-label="Apps and references"]') as HTMLButtonElement | null)?.click();
+      (pickerButton as HTMLButtonElement).click();
+    });
+    const searchInput = element.querySelector('[aria-label="Search apps and references"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+    await act(async () => {
+      changeInputValue(searchInput as HTMLInputElement, "release");
       await new Promise((resolve) => setTimeout(resolve, 225));
     });
     await waitForAssertion(() => {
-      expect(searchAppReferences).toHaveBeenCalled();
+      expect(searchAppReferences).toHaveBeenCalledWith(
+        "release",
+        expect.any(AbortSignal),
+        expect.any(Object),
+      );
       expect(element.textContent).toContain("Release notes");
     });
 
     await act(async () => {
-      const searchInput = element.querySelector('[aria-label="Search apps and references"]');
       searchInput?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
     });
-    await addTextAttachment(element);
-    await typeComposerMessage(element, "review the attached notes");
+    await addTextAttachment(element, "continued.txt");
+    await typeComposerMessage(element, "review the attachment after starting");
     await clickSend(element);
 
     await waitForAssertion(() => {
-      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          attachments: [
-            expect.objectContaining({
-              fileId: "file-default.txt",
-              relativePath: "storage/uploads/default.txt",
-            }),
-          ],
-          inputText: "review the attached notes",
-        }),
+      expect(sendRuntimeTurn).toHaveBeenCalledWith(
+        "session-rollout-skew",
+        "review the attachment after starting",
+        expect.any(String),
+        [
+          expect.objectContaining({
+            fileId: "file-default.txt",
+            relativePath: "storage/uploads/default.txt",
+          }),
+        ],
+        [],
+        expect.any(Object),
       );
     });
   });

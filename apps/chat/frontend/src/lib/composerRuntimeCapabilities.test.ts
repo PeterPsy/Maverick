@@ -51,7 +51,9 @@ describe("composerRuntimeCapabilities", () => {
     for (const context of [
       { activeSession: null, activeThread: null },
       {
-        activeSession: session(),
+        activeSession: session({
+          execution_binding: exactCodexBinding(),
+        }),
         activeThread: thread({ provider_id: "codex", runtime_mode: "agentic" }),
       },
     ]) {
@@ -84,14 +86,14 @@ describe("composerRuntimeCapabilities", () => {
     });
   });
 
-  it("does not apply the Codex rollout fallback to bound or contained sessions", () => {
-    const boundSession = {
+  it("does not apply the Codex rollout fallback to ambiguous or contained sessions", () => {
+    const ambiguousBoundSession = {
       activeSession: session({
         execution_binding: {
-          workspace_binding_id: "binding-codex",
+          workspace_binding_id: "binding-ambiguous",
           runtime_engine_id: "codex",
           model_id: "remote-model",
-          binding_digest: "bound-codex",
+          binding_digest: "ambiguous-codex",
         },
       }),
       activeThread: thread({ provider_id: "codex" }),
@@ -103,10 +105,14 @@ describe("composerRuntimeCapabilities", () => {
       selectedProvider: provider({
         status: "contained",
         agentic_containment_status: "NO-GO",
+        agentic_effective_capabilities: effectiveCapabilities({
+          attachment_modalities: ["file"],
+          app_references: true,
+        }),
       }),
     };
 
-    for (const context of [boundSession, containedSession]) {
+    for (const context of [ambiguousBoundSession, containedSession]) {
       expect(composerRuntimeCapabilities(context)).toEqual({
         allowedAttachmentInputModalities: [],
         appReferencesAllowed: false,
@@ -178,6 +184,18 @@ describe("composerRuntimeCapabilities", () => {
     }
   });
 });
+
+function exactCodexBinding(): NonNullable<RuntimeSession["execution_binding"]> {
+  return {
+    workspace_binding_id: "workspace-agentic-default",
+    runtime_engine_id: "codex",
+    adapter_id: "codex-app-server",
+    model_provider_id: "codex",
+    provider_protocol: "codex-app-server-stdio",
+    model_id: "gpt-5.6-sol",
+    binding_digest: "exact-codex-binding",
+  };
+}
 
 function effectiveCapabilities(
   capabilities: { attachment_modalities: string[]; app_references: boolean },

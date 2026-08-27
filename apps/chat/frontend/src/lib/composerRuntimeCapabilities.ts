@@ -29,7 +29,16 @@ export function composerRuntimeCapabilities({
     };
   }
 
-  const effective = selectedProvider.agentic_effective_capabilities;
+  if (isContainedAgenticComposer(activeSession, selectedProvider)) {
+    return {
+      allowedAttachmentInputModalities: [],
+      appReferencesAllowed: false,
+    };
+  }
+
+  const effective = (
+    activeThread ? activeSession?.agentic_governance?.effective_capabilities : null
+  ) ?? selectedProvider.agentic_effective_capabilities;
   if (effective) {
     const active = effective.status === "active";
     return {
@@ -65,13 +74,37 @@ function isUnprojectedLocalCodexComposer({
   activeThread: ChatThread | null;
   selectedProvider: ProviderItem;
 }): boolean {
-  return selectedProvider.provider_id === "codex"
+  return hasExactLocalCodexSessionIdentity(activeSession, activeThread)
+    && selectedProvider.provider_id === "codex"
     && selectedProvider.status === "active"
     && selectedProvider.agentic_containment_status !== "NO-GO"
     && activeSession?.agentic_containment?.status !== "NO-GO"
     && !selectedProvider.workspace_profile_binding_id
-    && !activeSession?.execution_binding?.workspace_binding_id
     && runtimeEngineId({ activeSession, activeThread, selectedProvider }) === "codex";
+}
+
+function hasExactLocalCodexSessionIdentity(
+  activeSession: RuntimeSession | null,
+  activeThread: ChatThread | null,
+): boolean {
+  const binding = activeSession?.execution_binding;
+  if (!binding) {
+    return !activeThread || activeSession?.provider_id === "codex";
+  }
+  return binding.runtime_engine_id === "codex"
+    && binding.adapter_id === "codex-app-server"
+    && binding.model_provider_id === "codex"
+    && binding.provider_protocol === "codex-app-server-stdio";
+}
+
+function isContainedAgenticComposer(
+  activeSession: RuntimeSession | null,
+  selectedProvider: ProviderItem,
+): boolean {
+  return selectedProvider.status === "contained"
+    || selectedProvider.agentic_containment_status === "NO-GO"
+    || activeSession?.agentic_containment?.status === "NO-GO"
+    || activeSession?.agentic_governance?.containment.status === "NO-GO";
 }
 
 function isPlainHostedComposer({

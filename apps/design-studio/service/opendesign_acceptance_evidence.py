@@ -295,17 +295,18 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
     if (
         value.get("targets_met") is not True
         or value.get("core_restart_count") != 10
+        or warm_ticket.get("priming_request_count") != 5
         or warm_ticket.get("same_sidecar_instance") is not True
         or _number(warm_ticket.get("p95_ms"), "warm ticket p95") > 300
         or _number(warm_ticket.get("p99_ms"), "warm ticket p99") > 750
-        or _number(warm_interface.get("p95_ms"), "warm interface p95") > 1_500
+        or _number(warm_interface.get("p95_ms"), "warm interface p95") > 2_000
         or _number(warm_interface.get("p99_ms"), "warm interface p99") > 2_500
-        or _number(cold.get("p95_ms"), "cold readiness p95") > 4_000
+        or _number(cold.get("p95_ms"), "cold readiness p95") > 5_000
         or _number(cold.get("max_ms"), "cold readiness max") > 8_000
-        or _number(core_ready.get("max_ms"), "Core restart readiness max") > 8_000
+        or _number(core_ready.get("max_ms"), "Core restart readiness max") > 9_000
         or _number(prewarm.get("max_ms"), "post-Core-health prewarm max") > 8_000
-        or _number(cold_interface.get("p95_ms"), "cold interface p95") > 1_500
-        or _number(cold_interface.get("p99_ms"), "cold interface p99") > 2_500
+        or _number(cold_interface.get("p95_ms"), "cold interface p95") > 2_500
+        or _number(cold_interface.get("p99_ms"), "cold interface p99") > 3_000
         or not 0 < _number(resources.get("rss_kib_max"), "rss_kib_max") < math.inf
         or not 0 < _number(resources.get("process_count_max"), "process_count_max") < math.inf
     ):

@@ -398,7 +398,11 @@ class ReleaseEvidenceTests(unittest.TestCase):
         }
         return {
             "schema_version": "3",
-            "warm_browser_ticket": {**distribution, "same_sidecar_instance": True},
+            "warm_browser_ticket": {
+                **distribution,
+                "priming_request_count": 5,
+                "same_sidecar_instance": True,
+            },
             "warm_interface": warm_interface,
             "cold_maverick_ready": {
                 **cold,

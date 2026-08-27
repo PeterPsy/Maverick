@@ -285,6 +285,11 @@ try {
       if (pathname === '/api/app-sidecars/browser-launch' && interfacePhases.launch_request_ms === undefined) {
         interfacePhases.launch_request_ms = rounded(performance.now() - interfaceStartedAt);
         interfacePhases.launch_request_epoch_ms = Date.now();
+        try {
+          interfacePhases.launch_target_path = String(request.postDataJSON()?.path || '');
+        } catch {
+          interfacePhases.launch_target_path = '';
+        }
       }
       if (pathname === '/.well-known/maverick-sidecar-bootstrap' && interfacePhases.bootstrap_request_ms === undefined) {
         interfacePhases.bootstrap_request_ms = rounded(performance.now() - interfaceStartedAt);
@@ -331,6 +336,10 @@ try {
         && prewarmStartedAtEpochMs <= browserRequestEpochMs
         && browserRequestEpochMs < sidecarReadyAtEpochMs,
       'Browser launch request did not overlap the real core-start prewarm',
+    );
+    assert(
+      interfacePhases.launch_target_path === `/projects/${projectA.projectId}`,
+      'Cold browser ticket was not bound directly to the canonical project route',
     );
     assert(
       controlledOverlapDelayMs === coldStartupOverlapDelayMs,

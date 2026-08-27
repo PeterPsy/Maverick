@@ -260,10 +260,14 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
         phases = sample.get("interface_phases_ms")
         if not isinstance(phases, dict):
             raise ValueError("Cold interface phase evidence is missing")
+        launch_target = phases.get("launch_target_path")
         launch_response = _number(phases.get("launch_response_ms"), "launch response")
         usable = _number(phases.get("usable_interface_ready_ms"), "usable interface")
         if (
-            launch_response <= 0
+            not isinstance(launch_target, str)
+            or re.fullmatch(r"/projects/[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}", launch_target)
+            is None
+            or launch_response <= 0
             or usable <= launch_response
             or abs(
                 _sample_number(sample, "browser_launch_response_to_usable_interface_ms")

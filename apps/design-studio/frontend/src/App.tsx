@@ -254,7 +254,7 @@ export function App() {
       stopStartupStatusPollRef.current = stopStatusPoll;
     }, STARTUP_STATUS_POLL_DELAY_MS);
 
-    const requestedNavigation = navigationRef.current;
+    let requestedNavigation = navigationRef.current;
     let failureReported = false;
 
     function applyTarget(target: OpenDesignLaunchTarget, { authoritative }: { authoritative: boolean }) {
@@ -307,62 +307,70 @@ export function App() {
       setLoadingVisible(false);
     }
 
-    void requestOpenDesignLaunch(
-      appId,
-      requestedNavigation,
-      window.location.origin,
-      abortController.signal,
-    )
-      .then(async (launch) => {
-        if (canceled) {
-          return;
-        }
-        const requestedTarget: OpenDesignLaunchTarget | null = requestedNavigation.od_project_id
-          ? {
-              target: "project",
-              od_project_id: requestedNavigation.od_project_id,
-              project: { id: requestedNavigation.od_project_id },
-            }
-          : null;
-        const cachedTarget = requestedTarget
-          || readCachedLaunchTarget(sessionStorage, appId, launch.origin);
-        if (cachedTarget) {
-          applyTarget(cachedTarget, { authoritative: false });
-          writeCachedLaunchTarget(sessionStorage, appId, launch.origin, cachedTarget);
-        }
-        const instanceChanged = Boolean(
-          sidecarInstanceRef.current
+    void (async () => {
+      // Base Shell delivers canonical app parameters on the iframe load/ready
+      // handshake. Yield one paint before binding the one-shot ticket so a
+      // project deep link bootstraps its final route instead of loading Home
+      // and performing a second full navigation.
+      await nextAnimationFrame();
+      if (canceled) {
+        return;
+      }
+      requestedNavigation = navigationRef.current;
+      const launch = await requestOpenDesignLaunch(
+        appId,
+        requestedNavigation,
+        window.location.origin,
+        abortController.signal,
+      );
+      if (canceled) {
+        return;
+      }
+      const requestedTarget: OpenDesignLaunchTarget | null = requestedNavigation.od_project_id
+        ? {
+            target: "project",
+            od_project_id: requestedNavigation.od_project_id,
+            project: { id: requestedNavigation.od_project_id },
+          }
+        : null;
+      const cachedTarget = requestedTarget
+        || readCachedLaunchTarget(sessionStorage, appId, launch.origin);
+      if (cachedTarget) {
+        applyTarget(cachedTarget, { authoritative: false });
+        writeCachedLaunchTarget(sessionStorage, appId, launch.origin, cachedTarget);
+      }
+      const instanceChanged = Boolean(
+        sidecarInstanceRef.current
           && sidecarInstanceRef.current !== launch.sidecar_instance_id,
-        );
-        sidecarInstanceRef.current = launch.sidecar_instance_id;
-        if (instanceChanged) {
-          setFrameRevision((value) => value + 1);
-          await nextAnimationFrame();
-        }
-        const frame = frameRef.current;
-        if (canceled || !frame) {
-          return;
-        }
-        sidecarOriginRef.current = launch.origin;
-        setPhase("bootstrapping");
-        setStartupLabel("Attivazione transazionale dell’interfaccia");
-        submittedFrameRef.current = frame;
-        submitBootstrapForm(frame, launch);
-        if (!cachedTarget) {
-          void callDesignStudioBackend<OpenDesignLaunchTarget>(
-            "resolve_launch_target",
-            {},
-            appId,
-            { signal: abortController.signal },
-          )
-            .then((target) => {
-              applyTarget(target, { authoritative: true });
-              writeCachedLaunchTarget(sessionStorage, appId, launch.origin, target);
-            })
-            .catch((error: unknown) => reportStartupError(error, "launch_target_failed", "launch_target_resolution"));
-        }
-      })
-      .catch((error: unknown) => reportStartupError(error, "browser_ticket_failed", "browser_ticket_issue"));
+      );
+      sidecarInstanceRef.current = launch.sidecar_instance_id;
+      if (instanceChanged) {
+        setFrameRevision((value) => value + 1);
+        await nextAnimationFrame();
+      }
+      const frame = frameRef.current;
+      if (canceled || !frame) {
+        return;
+      }
+      sidecarOriginRef.current = launch.origin;
+      setPhase("bootstrapping");
+      setStartupLabel("Attivazione transazionale dell’interfaccia");
+      submittedFrameRef.current = frame;
+      submitBootstrapForm(frame, launch);
+      if (!cachedTarget) {
+        void callDesignStudioBackend<OpenDesignLaunchTarget>(
+          "resolve_launch_target",
+          {},
+          appId,
+          { signal: abortController.signal },
+        )
+          .then((target) => {
+            applyTarget(target, { authoritative: true });
+            writeCachedLaunchTarget(sessionStorage, appId, launch.origin, target);
+          })
+          .catch((error: unknown) => reportStartupError(error, "launch_target_failed", "launch_target_resolution"));
+      }
+    })().catch((error: unknown) => reportStartupError(error, "browser_ticket_failed", "browser_ticket_issue"));
 
     return () => {
       canceled = true;

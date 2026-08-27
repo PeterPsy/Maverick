@@ -58,6 +58,11 @@ describe("Design Studio usable frame readiness", () => {
     });
     mocks.startPoll.mockClear();
     vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => undefined);
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      queueMicrotask(() => callback(0));
+      return 1;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
     parentPostMessage = vi.spyOn(window, "postMessage").mockImplementation(() => undefined);
     consoleInfo = vi.spyOn(console, "info").mockImplementation(() => undefined);
     container = document.createElement("div");
@@ -161,6 +166,40 @@ describe("Design Studio usable frame readiness", () => {
     await dispatchUsable(frameWindow, LAUNCH.origin, { surface: "empty" });
     expect(hostPhase()).toBe("ready");
     expect(container.querySelector(".design-studio-empty button")).not.toBeNull();
+  });
+
+  it("binds the one-shot ticket after canonical shell navigation arrives", async () => {
+    window.history.replaceState({}, "", "/apps/design-studio");
+    let releaseHandshake: FrameRequestCallback | null = null;
+    vi.mocked(window.requestAnimationFrame).mockImplementationOnce((callback) => {
+      releaseHandshake = callback;
+      return 2;
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    expect(releaseHandshake).not.toBeNull();
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: {
+          type: "maverick.app.navigate",
+          app_id: "design-studio",
+          params: { od_project_id: "od_shell_project" },
+        },
+        origin: window.location.origin,
+        source: window.parent,
+      }));
+      releaseHandshake?.(0);
+      await Promise.resolve();
+    });
+
+    expect(mocks.requestLaunch).toHaveBeenCalledWith(
+      "design-studio",
+      { od_project_id: "od_shell_project", od_run_id: "" },
+      window.location.origin,
+      expect.any(AbortSignal),
+    );
   });
 
   async function renderThroughBootstrap(): Promise<HTMLIFrameElement> {

@@ -383,6 +383,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 "prewarm_started_before_browser_request_ms": 100,
                 "controlled_singleflight_overlap_delay_ms": 750,
                 "interface_phases_ms": {
+                    "launch_target_path": "/projects/od_project_1",
                     "launch_response_ms": 500,
                     "usable_interface_ready_ms": 1_000 if index < 9 else 1_500,
                 },

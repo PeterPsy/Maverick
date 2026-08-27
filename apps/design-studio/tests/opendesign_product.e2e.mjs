@@ -306,7 +306,7 @@ try {
     };
     page.on('request', observeRequest);
     page.on('response', observeResponse);
-    await openDesignStudioFromShell(page);
+    await openDesignStudioFromShell(page, projectA.projectId);
     interfacePhases.shell_route_ms = rounded(performance.now() - interfaceStartedAt);
     sidecar = await waitForUsableOpenDesignInterface(
       page,
@@ -1173,7 +1173,26 @@ async function waitForShellWidgetFrame(page, title) {
 }
 
 
-async function openDesignStudioFromShell(page) {
+async function openDesignStudioFromShell(page, projectId = '') {
+  if (projectId) {
+    const storage = await waitForShellWidgetFrame(page, 'Storage viewport');
+    await storage.evaluate((odProjectId) => {
+      window.parent.postMessage(
+        {
+          type: 'maverick.app.open-app',
+          app_id: 'design-studio',
+          params: { od_project_id: odProjectId },
+        },
+        window.location.origin,
+      );
+    }, projectId);
+    await page.waitForURL(
+      (url) => url.pathname === '/app/design-studio'
+        && url.searchParams.get('od_project_id') === projectId,
+      { timeout: 10_000 },
+    );
+    return;
+  }
   const shortcut = page.getByRole('button', { name: /^Design Studio(?:\.|$)/ }).first();
   if (await shortcut.isVisible().catch(() => false)) {
     await shortcut.click();

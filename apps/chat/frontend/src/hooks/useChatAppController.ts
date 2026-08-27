@@ -19,7 +19,7 @@ import {
 } from "../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
 import { type ActiveAppContext, loadWidgetActiveAppContext } from "../lib/activeAppContext";
-import { providerUsesPlainHostedRuntime } from "../lib/providerRuntimeOptions";
+import { composerRuntimeCapabilities } from "../lib/composerRuntimeCapabilities";
 import { openAppParamsInShell } from "../lib/shellNavigation";
 import { delegatedChatSourceAppId } from "../lib/sourceAppPresentation";
 import { postActiveThreadChanged } from "./chatActiveThreadNotifications";
@@ -240,20 +240,12 @@ export function useChatAppController({
   );
   const composerActiveProviderId = selectedProvider?.provider_id || activeProviderId;
   const composerProviders = useMemo(() => providersForComposer(providers, selectedProvider), [providers, selectedProvider]);
-  const allowedAttachmentInputModalities = useMemo(() => {
-    const isHostedSession = activeThread
-      ? activeSession?.runtime_mode === "plain_hosted_chat"
-      : providerUsesPlainHostedRuntime(selectedProvider);
-    if (isHostedSession) {
-      return selectedProvider?.input_modalities || [];
-    }
-    if (selectedProvider?.provider_role === "runtime_engine") {
-      const effectiveModalities = selectedProvider.agentic_effective_capabilities
-        ?.capabilities.attachment_modalities;
-      return effectiveModalities || [];
-    }
-    return null;
-  }, [activeSession?.runtime_mode, activeThread, selectedProvider]);
+  const composerCapabilities = useMemo(() => composerRuntimeCapabilities({
+    activeSession,
+    activeThread,
+    selectedProvider,
+  }), [activeSession, activeThread, selectedProvider]);
+  const allowedAttachmentInputModalities = composerCapabilities.allowedAttachmentInputModalities;
   const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments({ allowedInputModalities: allowedAttachmentInputModalities });
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -301,8 +293,7 @@ export function useChatAppController({
     selectedProvider,
     sourceAppId,
   ]);
-  const appReferencesAllowed = selectedProvider?.provider_role === "runtime_engine"
-    && selectedProvider.agentic_effective_capabilities?.capabilities.app_references === true;
+  const appReferencesAllowed = composerCapabilities.appReferencesAllowed;
   const interAgentRefreshScope = `${activeThread?.runtime_session_id || ""}:${activeInterAgentGraphRunId || ""}`;
   interAgentRefreshScopeRef.current = interAgentRefreshScope;
   const runtimeCanStopTurn = isActiveRuntimeTurnBusyForThread(activeTurn, activeThread);

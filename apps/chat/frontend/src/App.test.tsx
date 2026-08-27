@@ -27,10 +27,19 @@ import {
   prewarmSpeechWorker,
   previewAgentPrompt,
   recordRuntimeTurnClientMetrics,
+  searchAppReferences,
   sendRuntimeTurn,
   uploadWorkspaceFile,
 } from "./api/client";
-import type { AgentTypeSummary, AppDependenciesPayload, ChatThread, ProviderItem, RuntimeSession, RuntimeTurn } from "./api/client";
+import type {
+  AgentTypeSummary,
+  AppDependenciesPayload,
+  AppReference,
+  ChatThread,
+  ProviderItem,
+  RuntimeSession,
+  RuntimeTurn,
+} from "./api/client";
 import { clearAgentRuntimeConfigCache } from "./hooks/useChatRuntimeControls";
 
 vi.mock("./hooks/useRuntimeEvents", () => ({
@@ -109,6 +118,7 @@ vi.mock("./api/client", () => ({
   prewarmSpeechWorker: vi.fn(),
   previewAgentPrompt: vi.fn(),
   recordRuntimeTurnClientMetrics: vi.fn(),
+  searchAppReferences: vi.fn(),
   closeInterAgentRun: vi.fn(),
   selectProvider: vi.fn(),
   resolveInterAgentApproval: vi.fn(),
@@ -372,6 +382,7 @@ beforeEach(() => {
     turn_id: "turn-prepared",
     metric_count: 1,
   });
+  vi.mocked(searchAppReferences).mockResolvedValue([]);
   vi.mocked(sendRuntimeTurn).mockResolvedValue({
     session: runtimeSession("session-prepared"),
     thread: thread("session-prepared", "session-prepared"),
@@ -817,6 +828,71 @@ describe("App thread navigation", () => {
       }),
       window.location.origin,
     );
+  });
+
+  it("keeps local Codex reference search and attachments usable during backend rollout skew", async () => {
+    vi.mocked(listProviders).mockResolvedValue({
+      workspace_id: "default",
+      active_provider: {
+        provider_id: "codex",
+        label: "Codex",
+        description: "Local agentic runtime",
+        kind: "runtime_backend",
+        provider_role: "runtime_engine",
+        status: "active",
+        default_model_family: "gpt-5.6-sol",
+      },
+      items: [],
+    });
+    const reference: AppReference = {
+      type: "entity",
+      app_id: "storage",
+      entity_type: "file",
+      entity_id: "file-notes",
+      label: "Release notes",
+      summary: "Deployment checklist",
+    };
+    vi.mocked(searchAppReferences).mockResolvedValue([reference]);
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-rollout-skew",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await act(async () => {
+      (element.querySelector('[aria-label="Apps and references"]') as HTMLButtonElement | null)?.click();
+      await new Promise((resolve) => setTimeout(resolve, 225));
+    });
+    await waitForAssertion(() => {
+      expect(searchAppReferences).toHaveBeenCalled();
+      expect(element.textContent).toContain("Release notes");
+    });
+
+    await act(async () => {
+      const searchInput = element.querySelector('[aria-label="Search apps and references"]');
+      searchInput?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    });
+    await addTextAttachment(element);
+    await typeComposerMessage(element, "review the attached notes");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [
+            expect.objectContaining({
+              fileId: "file-default.txt",
+              relativePath: "storage/uploads/default.txt",
+            }),
+          ],
+          inputText: "review the attached notes",
+        }),
+      );
+    });
   });
 
   it("submits first-turn app references without waiting for pending reference preparation", async () => {

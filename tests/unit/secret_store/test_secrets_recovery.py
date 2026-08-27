@@ -301,7 +301,7 @@ class SecretsRecoveryTestCase(unittest.TestCase):
         app_root = repo_root / "apps" / "sample-app"
         lifecycle_root = app_root / "backend" / "lifecycle"
         lifecycle_root.mkdir(parents=True, exist_ok=True)
-        (lifecycle_root / "health.py").write_text("print('ok')\n", encoding="utf-8")
+        (lifecycle_root / "health.py").write_text('print(\'{"status":"healthy","ok":true}\')\n', encoding="utf-8")
         write_app_contract_file(
             app_root,
             build_parsed_app_contract(

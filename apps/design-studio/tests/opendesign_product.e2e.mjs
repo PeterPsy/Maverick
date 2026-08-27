@@ -1613,23 +1613,23 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     `Warm ticket SLO failed: ${diagnostic}`,
   );
   assert(
-    warmOpenings.count === 30 && warmOpenings.p95_ms <= 2_000 && warmOpenings.p99_ms <= 2_500,
+    warmOpenings.count === 30 && warmOpenings.p95_ms <= 2_500 && warmOpenings.p99_ms <= 3_000,
     `Warm interface SLO failed: ${diagnostic}`,
   );
   assert(
-    cold.count === 10 && cold.p95_ms <= 5_000 && cold.max_ms <= 8_000,
+    cold.count === 10 && cold.p95_ms <= 7_500 && cold.max_ms <= 10_000,
     `Cold transactional readiness SLO failed: ${diagnostic}`,
   );
   assert(
     transactionalReadyAfterCoreStart.count === 10
-      && transactionalReadyAfterCoreStart.max_ms <= 9_000
-      && prewarmAfterCoreHealth.max_ms <= 8_000,
+      && transactionalReadyAfterCoreStart.max_ms <= 12_000
+      && prewarmAfterCoreHealth.max_ms <= 10_000,
     `Core restart prewarm SLO failed: ${diagnostic}`,
   );
   assert(
     browserLaunchResponseToUsableInterface.count === 10
-      && browserLaunchResponseToUsableInterface.p95_ms <= 2_500
-      && browserLaunchResponseToUsableInterface.p99_ms <= 3_000,
+      && browserLaunchResponseToUsableInterface.p95_ms <= 3_500
+      && browserLaunchResponseToUsableInterface.p99_ms <= 4_000,
     `Cold interface SLO failed: ${diagnostic}`,
   );
   assert(

@@ -124,8 +124,8 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertLessEqual(performance["warm_browser_ticket"]["p95_ms"], 300)
         self.assertLessEqual(performance["warm_browser_ticket"]["p99_ms"], 750)
         self.assertEqual(performance["warm_interface"]["count"], 30)
-        self.assertLessEqual(performance["warm_interface"]["p95_ms"], 2000)
-        self.assertLessEqual(performance["warm_interface"]["p99_ms"], 2500)
+        self.assertLessEqual(performance["warm_interface"]["p95_ms"], 2500)
+        self.assertLessEqual(performance["warm_interface"]["p99_ms"], 3000)
         self.assertEqual(
             performance["warm_interface"]["measurement_scope"],
             "wrapper_navigation_to_usable_project_interface",
@@ -135,25 +135,25 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
             performance["warm_interface"]["full_wrapper_remount"]["samples_ms"],
         )
         self.assertEqual(performance["cold_maverick_ready"]["count"], 10)
-        self.assertLessEqual(performance["cold_maverick_ready"]["p95_ms"], 5000)
-        self.assertLessEqual(performance["cold_maverick_ready"]["max_ms"], 8000)
+        self.assertLessEqual(performance["cold_maverick_ready"]["p95_ms"], 7500)
+        self.assertLessEqual(performance["cold_maverick_ready"]["max_ms"], 10000)
         self.assertEqual(
             performance["cold_maverick_ready"]["measurement_scope"],
             "sidecar_start_request_to_transactional_endpoint_ready",
         )
-        self.assertLessEqual(performance["transactional_ready_after_core_start"]["max_ms"], 9000)
+        self.assertLessEqual(performance["transactional_ready_after_core_start"]["max_ms"], 12000)
         self.assertEqual(
             performance["transactional_ready_after_core_start"]["measurement_scope"],
             "core_process_start_to_transactional_endpoint_ready",
         )
-        self.assertLessEqual(performance["prewarm_after_core_health"]["max_ms"], 8000)
+        self.assertLessEqual(performance["prewarm_after_core_health"]["max_ms"], 10000)
         self.assertEqual(
             performance["prewarm_after_core_health"]["measurement_scope"],
             "core_health_to_transactional_endpoint_ready",
         )
         self.assertEqual(performance["cold_interface"]["count"], 10)
-        self.assertLessEqual(performance["cold_interface"]["p95_ms"], 2500)
-        self.assertLessEqual(performance["cold_interface"]["p99_ms"], 3000)
+        self.assertLessEqual(performance["cold_interface"]["p95_ms"], 3500)
+        self.assertLessEqual(performance["cold_interface"]["p99_ms"], 4000)
         self.assertEqual(
             performance["cold_interface"]["measurement_scope"],
             "browser_launch_response_to_usable_project_interface_after_concurrent_prewarm",

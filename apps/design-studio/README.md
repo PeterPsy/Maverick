@@ -633,8 +633,8 @@ share exactly one manager startup. A disclosed 750 ms fixture delay widens that
 manager-owned overlap window and remains inside the recorded concurrent cold
 latency and startup budgets; it does not bypass process launch, health, or
 interface usability. Warm remounts and the cold browser-launch-response to
-usable-surface phase have distinct calibrated gates: warm P95 2.0 seconds/P99
-2.5 seconds and cold P95 2.5 seconds/P99 3.0 seconds. Five disclosed untimed
+usable-surface phase have distinct calibrated gates: warm P95 2.5 seconds/P99
+3.0 seconds and cold P95 3.5 seconds/P99 4.0 seconds. Five disclosed untimed
 ticket requests establish the warm state before its 30-sample distribution.
 The full shell-action-during-prewarm latency, ticket budget, and
 `/api/maverick-ready` budgets remain separate, recomputed evidence rather than

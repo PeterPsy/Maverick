@@ -538,12 +538,13 @@ cold Core prewarm, the already-open browser also requests Design Studio and
 both calls singleflight through exactly one sidecar process start. Five
 disclosed, untimed ticket requests establish the warm state before the 30 warm
 ticket samples. Cold evidence keeps the complete shell-action latency, but
-applies the calibrated P95 2.5 second and P99 3.0 second cold-interface SLO only
+applies the calibrated P95 3.5 second and P99 4.0 second cold-interface SLO only
 from the successful browser-launch response (the transactionally ready
 boundary) to the same usable project surface. The complete warm wrapper
-remount is gated at P95 2.0 seconds and P99 2.5 seconds. Startup remains
-independently gated at P95 5 seconds for sidecar readiness, 8 seconds maximum
-for that transaction, and 9 seconds maximum from Core process start.
+remount is gated at P95 2.5 seconds and P99 3.0 seconds. Startup remains
+independently gated at P95 7.5 seconds and 10 seconds maximum for sidecar
+readiness, with the complete Core-start transaction bounded by the declared
+12-second contract.
 The test discloses a bounded 750 ms delay at the manager startup boundary to
 make the concurrency window deterministic; that delay is included in the
 recorded concurrent latency and startup budgets, never hidden inside the

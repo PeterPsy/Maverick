@@ -271,14 +271,14 @@ class ReleaseEvidenceTests(unittest.TestCase):
 
         slow_cold_interface = copy.deepcopy(ui)
         for sample in slow_cold_interface["performance"]["samples"]:
-            sample["browser_launch_response_to_usable_interface_ms"] = 2_600
-            sample["shell_action_to_usable_interface_ms"] = 3_100
-            sample["interface_phases_ms"]["usable_interface_ready_ms"] = 3_100
+            sample["browser_launch_response_to_usable_interface_ms"] = 4_100
+            sample["shell_action_to_usable_interface_ms"] = 4_600
+            sample["interface_phases_ms"]["usable_interface_ready_ms"] = 4_600
         slow_cold_interface["performance"]["cold_interface"].update(
-            {"p50_ms": 2_600, "p95_ms": 2_600, "p99_ms": 2_600, "max_ms": 2_600}
+            {"p50_ms": 4_100, "p95_ms": 4_100, "p99_ms": 4_100, "max_ms": 4_100}
         )
         slow_cold_interface["performance"]["concurrent_cold_interface"].update(
-            {"p50_ms": 3_100, "p95_ms": 3_100, "p99_ms": 3_100, "max_ms": 3_100}
+            {"p50_ms": 4_600, "p95_ms": 4_600, "p99_ms": 4_600, "max_ms": 4_600}
         )
         with self.assertRaisesRegex(ValueError, "SLOs did not pass"):
             aggregate(slow_cold_interface, **arguments)

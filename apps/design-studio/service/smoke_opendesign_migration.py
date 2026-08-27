@@ -7,6 +7,7 @@ import argparse
 from datetime import UTC, datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -74,6 +75,14 @@ def main() -> None:
     )
     target_bundle = materialized_bundle_from_store(stored_runtime)
     target_overlay = verified_overlay_from_store(stored_overlay)
+
+    # This subprocess migrates marked temporary controlled copies, not live
+    # workspace generations. Resolve and audit the real target packages first,
+    # then detach only these synthetic controls from the installation-global
+    # GC reference registry. The migration runtime below keeps using the
+    # explicit, already-verified STORE_ROOT paths; production launchers retain
+    # MAVERICK_APP_ARTIFACT_STORE_ROOT and therefore the global commit lock.
+    os.environ.pop("MAVERICK_APP_ARTIFACT_STORE_ROOT", None)
 
     with TemporaryDirectory(prefix="maverick-od-migration-smoke-") as temporary:
         app_data = Path(temporary) / "design-studio"

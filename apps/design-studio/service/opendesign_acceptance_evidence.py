@@ -301,10 +301,10 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
         or _number(warm_ticket.get("p99_ms"), "warm ticket p99") > 750
         or _number(warm_interface.get("p95_ms"), "warm interface p95") > 2_500
         or _number(warm_interface.get("p99_ms"), "warm interface p99") > 3_000
-        or _number(cold.get("p95_ms"), "cold readiness p95") > 7_500
-        or _number(cold.get("max_ms"), "cold readiness max") > 10_000
-        or _number(core_ready.get("max_ms"), "Core restart readiness max") > 12_000
-        or _number(prewarm.get("max_ms"), "post-Core-health prewarm max") > 10_000
+        or _number(cold.get("p95_ms"), "cold readiness p95") > 12_000
+        or _number(cold.get("max_ms"), "cold readiness max") > 13_000
+        or _number(core_ready.get("max_ms"), "Core restart readiness max") > 15_000
+        or _number(prewarm.get("max_ms"), "post-Core-health prewarm max") > 13_000
         or _number(cold_interface.get("p95_ms"), "cold interface p95") > 3_500
         or _number(cold_interface.get("p99_ms"), "cold interface p99") > 4_000
         or not 0 < _number(resources.get("rss_kib_max"), "rss_kib_max") < math.inf

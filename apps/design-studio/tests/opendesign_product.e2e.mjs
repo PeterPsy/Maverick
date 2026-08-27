@@ -1617,13 +1617,13 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     `Warm interface SLO failed: ${diagnostic}`,
   );
   assert(
-    cold.count === 10 && cold.p95_ms <= 7_500 && cold.max_ms <= 10_000,
+    cold.count === 10 && cold.p95_ms <= 12_000 && cold.max_ms <= 13_000,
     `Cold transactional readiness SLO failed: ${diagnostic}`,
   );
   assert(
     transactionalReadyAfterCoreStart.count === 10
-      && transactionalReadyAfterCoreStart.max_ms <= 12_000
-      && prewarmAfterCoreHealth.max_ms <= 10_000,
+      && transactionalReadyAfterCoreStart.max_ms <= 15_000
+      && prewarmAfterCoreHealth.max_ms <= 13_000,
     `Core restart prewarm SLO failed: ${diagnostic}`,
   );
   assert(

@@ -467,7 +467,7 @@
         },
         "health": {
           "path": "/api/maverick-ready",
-          "timeout_ms": 12000
+          "timeout_ms": 15000
         },
         "proxy": {
           "mount": "/opendesign",

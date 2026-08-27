@@ -91,8 +91,8 @@ coordinated tampering with content, manifest v2, and receipt still fails.
 Full verification remains mandatory for install, activation, repair, audit,
 and release certification, including packages already present in the store.
 Core prewarms asynchronously with per-key
-singleflight; its browser gate is `/api/maverick-ready` with a 12-second budget.
-A 10-second daemon sub-budget leaves two seconds inside that same deadline for
+singleflight; its browser gate is `/api/maverick-ready` with a 15-second budget.
+A 12-second daemon sub-budget leaves three seconds inside that same deadline for
 activation commit, browser prewarm, and nonce-bound readiness publication.
 A failed start tears down the complete confined process group and cannot reuse a
 relay, Future, ticket, or browser session.
@@ -542,9 +542,9 @@ applies the calibrated P95 3.5 second and P99 4.0 second cold-interface SLO only
 from the successful browser-launch response (the transactionally ready
 boundary) to the same usable project surface. The complete warm wrapper
 remount is gated at P95 2.5 seconds and P99 3.0 seconds. Startup remains
-independently gated at P95 7.5 seconds and 10 seconds maximum for sidecar
+independently gated at P95 12 seconds and 13 seconds maximum for sidecar
 readiness, with the complete Core-start transaction bounded by the declared
-12-second contract.
+15-second contract.
 The test discloses a bounded 750 ms delay at the manager startup boundary to
 make the concurrency window deterministic; that delay is included in the
 recorded concurrent latency and startup budgets, never hidden inside the

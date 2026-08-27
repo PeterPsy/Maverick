@@ -1609,20 +1609,70 @@ def _opendesign_runtime_status(
     workspace_id: str = "default",
     app_id: str = "design-studio",
 ) -> dict[str, Any]:
+    from opendesign_artifact_health import (
+        artifact_health as normalize_artifact_health,
+        artifact_matches_active,
+    )
+
+    artifact_status = _opendesign_fast_artifact_status(
+        data_root,
+        workspace_id=workspace_id,
+    )
+    artifact_health = normalize_artifact_health(artifact_status)
     status_path = Path(data_root) / "opendesign" / "launcher-status.json"
+    repair = _opendesign_repair_state(status_path.with_name("repair-state.json"))
     if status_path.is_symlink() or not status_path.is_file():
-        return {"operational": False, "bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
+        return {
+            "operational": False,
+            "bundle_configured": False,
+            "mode": "not-started",
+            "detail": "",
+            "health": _opendesign_inactive_health(
+                artifact_health,
+                repair_state=str(repair["state"]),
+            ),
+            "artifact_status": artifact_status,
+            "active": {},
+        }
     try:
         payload = json.loads(status_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"operational": False, "bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
+        return {
+            "operational": False,
+            "bundle_configured": False,
+            "mode": "invalid-status",
+            "detail": "",
+            "health": _opendesign_inactive_health(
+                artifact_health,
+                repair_state=str(repair["state"]),
+            ),
+            "artifact_status": artifact_status,
+            "active": {},
+        }
     active = payload.get("active")
     bundle = payload.get("bundle")
     web_overlay = payload.get("web_overlay")
     health = payload.get("health")
-    repair = _opendesign_repair_state(status_path.with_name("repair-state.json"))
+    artifact_binding_matches = artifact_matches_active(
+        artifact_status,
+        active,
+    )
+    artifact_status = {
+        **artifact_status,
+        "launcher_binding_matches": artifact_binding_matches,
+    }
+    if not artifact_binding_matches:
+        artifact_health = {
+            "artifact_available": False,
+            "artifact_verified": False,
+            "artifact_protected": False,
+        }
     if isinstance(health, dict):
-        health = {**health, "repair_state": repair["state"]}
+        health = {
+            **health,
+            **artifact_health,
+            "repair_state": repair["state"],
+        }
     updated_at = payload.get("updated_at_epoch_ms")
     observed_seconds = (
         float(updated_at) / 1000
@@ -1662,8 +1712,34 @@ def _opendesign_runtime_status(
         }
     )
     if not valid:
-        return {"operational": False, "bundle_configured": False, "mode": "invalid-status", "detail": "", "active": {}}
+        return {
+            "operational": False,
+            "bundle_configured": False,
+            "mode": "invalid-status",
+            "detail": "",
+            "health": _opendesign_inactive_health(
+                artifact_health,
+                repair_state=str(repair["state"]),
+            ),
+            "artifact_status": artifact_status,
+            "active": {},
+        }
     last_failure = payload.get("last_failure") if isinstance(payload.get("last_failure"), dict) else None
+    if artifact_status.get("operational") is not True or not artifact_binding_matches:
+        code = (
+            str(artifact_status.get("active_error_code") or "artifact_missing")
+            if artifact_status.get("operational") is not True
+            else "runtime_binding_invalid"
+        )
+        last_failure = {
+            "code": code,
+            "phase": (
+                str(artifact_status.get("active_error_phase") or "artifact_status")
+                if artifact_status.get("operational") is not True
+                else "artifact_status_binding"
+            ),
+            "auto_repairable": code in {"artifact_missing", "artifact_integrity_mismatch"},
+        }
     if repair["state"] == "failed":
         last_failure = {
             "code": repair.get("error_code") or "artifact_repair_failed",
@@ -1710,6 +1786,7 @@ def _opendesign_runtime_status(
         "phase": str(payload.get("phase") or "unknown"),
         "health": health,
         "timings_ms": payload.get("timings_ms") if isinstance(payload.get("timings_ms"), dict) else {},
+        "artifact_status": artifact_status,
         "sidecar_manager": manager,
         "last_failure": last_failure,
         "active": {
@@ -1718,6 +1795,35 @@ def _opendesign_runtime_status(
             "od_version": active["od_version"],
             "data_generation": str(active.get("data_generation") or ""),
         },
+    }
+
+
+def _opendesign_fast_artifact_status(
+    data_root: str,
+    *,
+    workspace_id: str,
+) -> dict[str, Any]:
+    """Run the receipt-fast store check on every public runtime-state read."""
+    from opendesign_artifact_health import read_fast_artifact_status
+
+    return read_fast_artifact_status(
+        Path(data_root),
+        workspace_id=workspace_id,
+    )
+
+def _opendesign_inactive_health(
+    artifact_health: dict[str, bool],
+    *,
+    repair_state: str,
+) -> dict[str, Any]:
+    return {
+        "adapter_configured": True,
+        **artifact_health,
+        "repair_state": repair_state,
+        "sidecar_process_running": False,
+        "daemon_ready": False,
+        "activation_committed": False,
+        "browser_ready": False,
     }
 
 

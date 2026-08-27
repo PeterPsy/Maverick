@@ -337,7 +337,12 @@ relay capability.
 
 OpenDesign authenticates the small manifest-v2 file against its protected
 receipt before every process start; closure hashing remains outside the launch
-critical path. Core prewarms the declared sidecar asynchronously after
+critical path. Every backend `state` read and lifecycle health hook repeats that
+receipt-fast check, so a missing receipt or invalid store protection revokes
+`operational` immediately even if launcher heartbeat and live-manager state are
+still ready. Availability, receipt/identity verification, and store protection
+are reported as separate health layers rather than one copied boolean. Core
+prewarms the declared sidecar asynchronously after
 bootstrap, install, activation, and repair, with
 per-key singleflight so one slow app cannot convoy unrelated sidecars. The
 sidecar health gate uses only `/api/maverick-ready` with a 12-second budget;

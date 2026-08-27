@@ -7,9 +7,17 @@ import json
 import sys
 import time
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+APP_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP_ROOT / "backend"))
+sys.path.insert(0, str(APP_ROOT / "service"))
 
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
+from opendesign_artifact_health import (
+    artifact_health as normalize_artifact_health,
+    artifact_matches_active,
+    read_fast_artifact_status,
+    unavailable_artifact_health,
+)
 from store import ensure_state
 
 
@@ -19,38 +27,43 @@ def main() -> None:
     if not _declares_protected_store():
         _emit_health({"ok": True, "operational": True, "schema_version": state.get("schema_version")})
         return
-    service_root = Path(__file__).resolve().parents[1] / "service"
-    sys.path.insert(0, str(service_root))
-    try:
-        from opendesign_artifact_operations import run_artifact_operation
-
-        artifact = run_artifact_operation("status", data_root=Path(payload.data_root))
-    except Exception as error:
-        _emit_health(
-            {
-                "ok": False,
-                "operational": False,
-                "schema_version": state.get("schema_version"),
-                "health": _health_layers(artifact_ready=False),
-                "error": getattr(error, "code", "artifact_missing"),
-                "phase": getattr(error, "phase", "artifact_status"),
-            }
-        )
-        return
+    artifact = read_fast_artifact_status(
+        Path(payload.data_root),
+        workspace_id=str(payload.workspace_id or "default"),
+    )
+    artifact_health = normalize_artifact_health(artifact)
+    artifact_ready = artifact.get("operational") is True and all(artifact_health.values())
     if payload.raw.get("hook_name") == "install":
-        artifact_ready = artifact.get("operational") is True
         _emit_health(
             {
                 "ok": artifact_ready,
                 "schema_version": state.get("schema_version"),
                 "activation_gate": "artifact_ready",
-                "health": _health_layers(artifact_ready=artifact_ready),
+                "health": _health_layers(artifact_health=artifact_health),
             }
         )
         return
     launcher = _launcher_status(Path(payload.data_root) / "opendesign" / "launcher-status.json")
     launcher_health = launcher.get("health") if isinstance(launcher.get("health"), dict) else {}
     last_failure = launcher.get("last_failure") if isinstance(launcher.get("last_failure"), dict) else None
+    artifact_error_code = str(artifact.get("active_error_code") or "artifact_missing")
+    artifact_error_phase = str(artifact.get("active_error_phase") or "artifact_status")
+    if (
+        artifact_ready
+        and isinstance(launcher.get("active"), dict)
+        and not artifact_matches_active(artifact, launcher.get("active"))
+    ):
+        artifact_health = unavailable_artifact_health()
+        artifact_ready = False
+        artifact_error_code = "runtime_binding_invalid"
+        artifact_error_phase = "artifact_status_binding"
+    if not artifact_ready:
+        last_failure = {
+            "code": artifact_error_code,
+            "phase": artifact_error_phase,
+            "auto_repairable": artifact_error_code
+            in {"artifact_missing", "artifact_integrity_mismatch"},
+        }
     manager = _live_sidecar_status(
         workspace_id=str(payload.workspace_id or "default"),
         app_id=str(payload.app_id or "design-studio"),
@@ -75,9 +88,8 @@ def main() -> None:
             "observed_at_epoch_ms": repair.get("observed_at_epoch_ms"),
             "auto_repairable": False,
         }
-    artifact_ready = artifact.get("operational") is True
     health = _health_layers(
-        artifact_ready=artifact_ready,
+        artifact_health=artifact_health,
         launcher_health=launcher_health,
         manager_status=manager,
         repair_state=repair_state,
@@ -156,7 +168,7 @@ def _repair_status(path: Path) -> dict:
 
 def _health_layers(
     *,
-    artifact_ready: bool,
+    artifact_health: dict[str, bool],
     launcher_health: dict | None = None,
     manager_status: dict | None = None,
     repair_state: str = "idle",
@@ -165,9 +177,9 @@ def _health_layers(
     manager_ready = (manager_status or {}).get("state") == "ready"
     return {
         "adapter_configured": True,
-        "artifact_available": artifact_ready,
-        "artifact_verified": artifact_ready,
-        "artifact_protected": artifact_ready,
+        "artifact_available": artifact_health.get("artifact_available") is True,
+        "artifact_verified": artifact_health.get("artifact_verified") is True,
+        "artifact_protected": artifact_health.get("artifact_protected") is True,
         "repair_state": repair_state,
         "sidecar_process_running": manager_ready and runtime.get("sidecar_process_running") is True,
         "daemon_ready": manager_ready and runtime.get("daemon_ready") is True,

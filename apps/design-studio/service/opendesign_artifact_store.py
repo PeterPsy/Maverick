@@ -295,6 +295,26 @@ class OpenDesignArtifactStore:
             upstream_commit=upstream_commit,
         )
 
+    def fast_runtime_health(
+        self,
+        artifact_sha256: str,
+        *,
+        file_manifest_sha256: str | None,
+        opendesign_version: str,
+        upstream_commit: str | None,
+    ) -> dict[str, object]:
+        """Return distinct fast-path availability, identity, and protection layers."""
+        return self._fast_health(
+            "runtime",
+            artifact_sha256,
+            verify=lambda: self.fast_runtime(
+                artifact_sha256,
+                file_manifest_sha256=file_manifest_sha256,
+                opendesign_version=opendesign_version,
+                upstream_commit=upstream_commit,
+            ),
+        )
+
     def fast_web_overlay(self, digest: str, *, runtime_artifact_sha256: str) -> StoredArtifact:
         result = self._fast("web", digest)
         compatible = result.receipt.get("compatible_runtime_artifact_sha256")
@@ -305,6 +325,114 @@ class OpenDesignArtifactStore:
                 "OpenDesign runtime and web overlay are incompatible",
             )
         return result
+
+    def fast_web_overlay_health(
+        self,
+        digest: str,
+        *,
+        runtime_artifact_sha256: str,
+    ) -> dict[str, object]:
+        """Return distinct fast-path layers for one runtime-bound web overlay."""
+        return self._fast_health(
+            "web",
+            digest,
+            verify=lambda: self.fast_web_overlay(
+                digest,
+                runtime_artifact_sha256=runtime_artifact_sha256,
+            ),
+        )
+
+    def _fast_health(
+        self,
+        kind: str,
+        digest: str,
+        *,
+        verify: Callable[[], StoredArtifact],
+    ) -> dict[str, object]:
+        _validate_kind_digest(kind, digest)
+        available = self._artifact_nodes_available(kind, digest)
+        try:
+            self._verify_fast_protection(kind, digest)
+        except ArtifactStoreError:
+            protected = False
+        else:
+            protected = True
+        try:
+            verify()
+        except ArtifactStoreError as error:
+            if error.code == "artifact_missing":
+                available = False
+                protected = False
+            elif error.code == "artifact_permissions_invalid":
+                protected = False
+            return {
+                "available": available,
+                "verified": False,
+                "protected": protected,
+                "state": error.code,
+                "phase": error.phase,
+            }
+        return {
+            "available": True,
+            "verified": True,
+            "protected": True,
+            "state": "verified_fast",
+            "phase": "artifact_fast_verify",
+        }
+
+    def _artifact_nodes_available(self, kind: str, digest: str) -> bool:
+        package = self.root / kind / digest
+        for path in (
+            package,
+            package / "content",
+            package / "receipt.json",
+            package / "manifest-v2.json",
+        ):
+            try:
+                path.lstat()
+            except OSError:
+                return False
+        return True
+
+    def _verify_fast_protection(self, kind: str, digest: str) -> None:
+        owner_uid = _mapped_namespace_id(
+            int(self.namespace["owner_uid"]),
+            Path("/proc/self/uid_map"),
+        )
+        owner_gid = _mapped_namespace_id(
+            int(self.namespace["owner_gid"]),
+            Path("/proc/self/gid_map"),
+        )
+        package = _real_directory(
+            self.root / kind / digest,
+            label="OpenDesign store package",
+            owner_uid=owner_uid,
+            owner_gid=owner_gid,
+        )
+        _real_directory(
+            package / "content",
+            label="OpenDesign store content",
+            owner_uid=owner_uid,
+            owner_gid=owner_gid,
+        )
+        _protected_file(
+            package / "receipt.json",
+            label="OpenDesign store receipt",
+            owner_uid=owner_uid,
+            owner_gid=owner_gid,
+        )
+        _protected_file(
+            package / "manifest-v2.json",
+            label="OpenDesign store manifest v2",
+            owner_uid=owner_uid,
+            owner_gid=owner_gid,
+        )
+        if self.require_read_only_mount and not _path_is_read_only_mount(self.root):
+            raise ArtifactStoreError(
+                "artifact_permissions_invalid",
+                "artifact_fast_verify",
+                "OpenDesign artifact namespace is not mounted read-only",
+            )
 
     def full_audit(
         self,

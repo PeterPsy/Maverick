@@ -135,7 +135,12 @@ sets and atomically publishes them into the platform artifact namespace outside
 the source tree. An invalid digest generation is moved to retained quarantine
 and replaced from staging; it is never overwritten or repaired file-by-file.
 The launcher uses the receipt fast path for the exact active
-runtime/overlay/version/data selection.
+runtime/overlay/version/data selection. Public backend state and lifecycle
+health execute the same bounded fast path on every read and override stale
+launcher claims. The result keeps artifact availability, authenticated
+identity, and platform protection as separate booleans, so missing metadata,
+identity drift, and invalid permissions remain distinguishable while all fail
+closed for `operational`.
 
 `.staging/` is governed by per-stage lease files in `.staging-leases/`, with an
 `flock` held until the atomic rename finishes. Recovery never reaps a live

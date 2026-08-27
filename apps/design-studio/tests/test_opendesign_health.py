@@ -42,12 +42,12 @@ class OpenDesignTruthfulHealthTests(unittest.TestCase):
         }
 
         missing = health_hook._health_layers(
-            artifact_ready=True,
+            artifact_health=_artifact_health(),
             launcher_health=launcher,
             manager_status={"state": "not_started", "phase": "idle"},
         )
         ready = health_hook._health_layers(
-            artifact_ready=True,
+            artifact_health=_artifact_health(),
             launcher_health=launcher,
             manager_status={"state": "ready", "phase": "health_recheck"},
         )
@@ -67,13 +67,28 @@ class OpenDesignTruthfulHealthTests(unittest.TestCase):
         payload = {
             "ok": True,
             "activation_gate": "artifact_ready",
-            "health": health_hook._health_layers(artifact_ready=True),
+            "health": health_hook._health_layers(artifact_health=_artifact_health()),
         }
 
         health_hook._emit_health(payload)
 
         self.assertNotIn("operational", payload)
         self.assertFalse(payload["health"]["browser_ready"])
+
+    def test_artifact_health_layers_are_not_collapsed_to_one_boolean(self) -> None:
+        integrity = health_hook._health_layers(
+            artifact_health=_artifact_health(verified=False),
+        )
+        permissions = health_hook._health_layers(
+            artifact_health=_artifact_health(verified=False, protected=False),
+        )
+
+        self.assertTrue(integrity["artifact_available"])
+        self.assertFalse(integrity["artifact_verified"])
+        self.assertTrue(integrity["artifact_protected"])
+        self.assertTrue(permissions["artifact_available"])
+        self.assertFalse(permissions["artifact_verified"])
+        self.assertFalse(permissions["artifact_protected"])
 
     def test_stale_launcher_heartbeat_cannot_report_browser_ready(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-health-") as temporary:
@@ -144,6 +159,10 @@ class OpenDesignTruthfulHealthTests(unittest.TestCase):
                 backend_service,
                 "_opendesign_sidecar_manager_status",
                 return_value={"state": "ready", "phase": "health_ready"},
+            ), patch.object(
+                backend_service,
+                "_opendesign_fast_artifact_status",
+                return_value=_artifact_status(),
             ):
                 self.assertTrue(backend_service._opendesign_runtime_status(str(data_root))["operational"])
 
@@ -163,6 +182,10 @@ class OpenDesignTruthfulHealthTests(unittest.TestCase):
                 backend_service,
                 "_opendesign_sidecar_manager_status",
                 return_value={"state": "ready", "phase": "health_ready"},
+            ), patch.object(
+                backend_service,
+                "_opendesign_fast_artifact_status",
+                return_value=_artifact_status(),
             ):
                 self.assertFalse(backend_service._opendesign_runtime_status(str(data_root))["operational"])
 
@@ -171,11 +194,113 @@ class OpenDesignTruthfulHealthTests(unittest.TestCase):
                 backend_service,
                 "_opendesign_sidecar_manager_status",
                 return_value={"state": "starting", "phase": "daemon_ready"},
+            ), patch.object(
+                backend_service,
+                "_opendesign_fast_artifact_status",
+                return_value=_artifact_status(),
             ):
                 starting = backend_service._opendesign_runtime_status(str(data_root))
             self.assertFalse(starting["operational"])
             self.assertFalse(starting["health"]["browser_ready"])
             self.assertEqual(starting["sidecar_manager"]["phase"], "daemon_ready")
+
+            with patch.object(
+                backend_service,
+                "_opendesign_sidecar_manager_status",
+                return_value={"state": "ready", "phase": "health_ready"},
+            ), patch.object(
+                backend_service,
+                "_opendesign_fast_artifact_status",
+                return_value=_artifact_status(
+                    available=True,
+                    verified=False,
+                    protected=True,
+                    error_code="artifact_integrity_mismatch",
+                ),
+            ):
+                corrupted = backend_service._opendesign_runtime_status(str(data_root))
+            self.assertFalse(corrupted["operational"])
+            self.assertTrue(corrupted["health"]["artifact_available"])
+            self.assertFalse(corrupted["health"]["artifact_verified"])
+            self.assertTrue(corrupted["health"]["artifact_protected"])
+            self.assertEqual(corrupted["last_failure"]["code"], "artifact_integrity_mismatch")
+
+            with patch.object(
+                backend_service,
+                "_opendesign_sidecar_manager_status",
+                return_value={"state": "ready", "phase": "health_ready"},
+            ), patch.object(
+                backend_service,
+                "_opendesign_fast_artifact_status",
+                return_value=_artifact_status(runtime_digest="c" * 64),
+            ):
+                mismatched = backend_service._opendesign_runtime_status(str(data_root))
+            self.assertFalse(mismatched["operational"])
+            self.assertFalse(mismatched["artifact_status"]["launcher_binding_matches"])
+            self.assertEqual(mismatched["last_failure"]["code"], "runtime_binding_invalid")
+
+    def test_runtime_state_runs_fast_integrity_even_without_a_launcher_status(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="od-runtime-fast-state-") as temporary:
+            status = _artifact_status(
+                available=True,
+                verified=False,
+                protected=False,
+                error_code="artifact_permissions_invalid",
+            )
+            with patch.object(
+                backend_service,
+                "_opendesign_fast_artifact_status",
+                return_value=status,
+            ) as fast_check:
+                observed = backend_service._opendesign_runtime_status(
+                    temporary,
+                    workspace_id="workspace-fast",
+                )
+
+        fast_check.assert_called_once_with(temporary, workspace_id="workspace-fast")
+        self.assertFalse(observed["operational"])
+        self.assertTrue(observed["health"]["artifact_available"])
+        self.assertFalse(observed["health"]["artifact_verified"])
+        self.assertFalse(observed["health"]["artifact_protected"])
+        self.assertEqual(observed["artifact_status"], status)
+
+
+def _artifact_health(
+    *,
+    available: bool = True,
+    verified: bool = True,
+    protected: bool = True,
+) -> dict[str, bool]:
+    return {
+        "artifact_available": available,
+        "artifact_verified": verified,
+        "artifact_protected": protected,
+    }
+
+
+def _artifact_status(
+    *,
+    available: bool = True,
+    verified: bool = True,
+    protected: bool = True,
+    error_code: str | None = None,
+    runtime_digest: str = "a" * 64,
+    web_digest: str = "b" * 64,
+) -> dict:
+    return {
+        "operational": available and verified and protected,
+        "health": _artifact_health(
+            available=available,
+            verified=verified,
+            protected=protected,
+        ),
+        "active_error_code": error_code,
+        "active_error_phase": "artifact_fast_verify" if error_code else None,
+        "active": {
+            "runtime_artifact_sha256": runtime_digest,
+            "web_overlay_sha256": web_digest,
+        },
+    }
 
 
 if __name__ == "__main__":

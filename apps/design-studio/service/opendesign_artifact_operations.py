@@ -630,32 +630,57 @@ def _fully_audited_runtime_source(
 
 
 def _status(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> dict[str, Any]:
+    runtime_health: dict[str, dict[str, object]] = {}
     runtime_states: dict[str, str] = {}
     for digest in _runtime_references(required):
-        try:
-            store.fast_runtime(digest, file_manifest_sha256=None, opendesign_version="0.16.1", upstream_commit=None)
-            runtime_states[digest] = "verified_fast"
-        except ArtifactStoreError as error:
-            runtime_states[digest] = error.code
+        observed = store.fast_runtime_health(
+            digest,
+            file_manifest_sha256=None,
+            opendesign_version="0.16.1",
+            upstream_commit=None,
+        )
+        runtime_health[digest] = observed
+        runtime_states[digest] = str(observed["state"])
     web_states: dict[str, str] = {}
     for digest in required.web_overlays:
-        last_error: ArtifactStoreError | None = None
+        last_state = "artifact_missing"
         for runtime_digest in _runtime_references(required):
-            try:
-                store.fast_web_overlay(digest, runtime_artifact_sha256=runtime_digest)
+            observed = store.fast_web_overlay_health(
+                digest,
+                runtime_artifact_sha256=runtime_digest,
+            )
+            last_state = str(observed["state"])
+            if observed["verified"] is True:
                 web_states[digest] = "verified_fast"
                 break
-            except ArtifactStoreError as error:
-                last_error = error
         else:
-            web_states[digest] = last_error.code if last_error is not None else "artifact_missing"
-    try:
-        store.fast_web_overlay(required.active_web, runtime_artifact_sha256=required.active_runtime)
-        active_web_ready = True
-    except ArtifactStoreError:
-        active_web_ready = False
+            web_states[digest] = last_state
+    active_runtime = runtime_health[required.active_runtime]
+    active_web = store.fast_web_overlay_health(
+        required.active_web,
+        runtime_artifact_sha256=required.active_runtime,
+    )
+    active_health = {
+        "artifact_available": (
+            active_runtime["available"] is True and active_web["available"] is True
+        ),
+        "artifact_verified": (
+            active_runtime["verified"] is True and active_web["verified"] is True
+        ),
+        "artifact_protected": (
+            active_runtime["protected"] is True and active_web["protected"] is True
+        ),
+    }
+    active_failure = next(
+        (
+            observed
+            for observed in (active_runtime, active_web)
+            if observed["state"] != "verified_fast"
+        ),
+        None,
+    )
     binding_states = _runtime_web_binding_states(store, required=required)
-    operational = runtime_states.get(required.active_runtime) == "verified_fast" and active_web_ready
+    operational = all(active_health.values())
     retained = all(
         state == "verified_fast"
         for state in (
@@ -670,6 +695,19 @@ def _status(store: OpenDesignArtifactStore, *, required: RequiredArtifacts) -> d
         "runtime": runtime_states,
         "web": web_states,
         "runtime_web_bindings": binding_states,
+        "health": active_health,
+        "active": {
+            "runtime_artifact_sha256": required.active_runtime,
+            "web_overlay_sha256": required.active_web,
+            "runtime": active_runtime,
+            "web": active_web,
+        },
+        "active_error_code": (
+            str(active_failure["state"]) if active_failure is not None else None
+        ),
+        "active_error_phase": (
+            str(active_failure["phase"]) if active_failure is not None else None
+        ),
     }
 
 

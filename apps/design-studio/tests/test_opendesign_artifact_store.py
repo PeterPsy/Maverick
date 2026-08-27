@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -44,6 +44,7 @@ from opendesign_artifact_operations import (  # noqa: E402
     _mark_invalid,
     _purge_expired_quarantine,
     _required_artifacts,
+    _status,
 )
 
 
@@ -174,6 +175,124 @@ class OpenDesignArtifactStoreTests(unittest.TestCase):
             self.store.full_audit("runtime", self.archive_digest)
         self.assertEqual(raised.exception.code, "artifact_integrity_mismatch")
         self.assertGreaterEqual(raised.exception.differences, 1)
+
+    def test_fast_health_separates_availability_verification_and_protection(self) -> None:
+        published = self._publish_runtime()
+        expected = {
+            "available": True,
+            "verified": True,
+            "protected": True,
+            "state": "verified_fast",
+            "phase": "artifact_fast_verify",
+        }
+        self.assertEqual(
+            self.store.fast_runtime_health(
+                self.archive_digest,
+                file_manifest_sha256=self.source_manifest_digest,
+                opendesign_version="0.16.1",
+                upstream_commit=UPSTREAM_COMMIT,
+            ),
+            expected,
+        )
+
+        receipt = published.package_path / "receipt.json"
+        receipt.chmod(0o644)
+        permissions = self.store.fast_runtime_health(
+            self.archive_digest,
+            file_manifest_sha256=self.source_manifest_digest,
+            opendesign_version="0.16.1",
+            upstream_commit=UPSTREAM_COMMIT,
+        )
+        self.assertTrue(permissions["available"])
+        self.assertFalse(permissions["verified"])
+        self.assertFalse(permissions["protected"])
+        self.assertEqual(permissions["state"], "artifact_permissions_invalid")
+
+        receipt.chmod(0o444)
+        self._make_package_writable(published.package_path)
+        receipt.unlink()
+        missing = self.store.fast_runtime_health(
+            self.archive_digest,
+            file_manifest_sha256=self.source_manifest_digest,
+            opendesign_version="0.16.1",
+            upstream_commit=UPSTREAM_COMMIT,
+        )
+        self.assertFalse(missing["available"])
+        self.assertFalse(missing["verified"])
+        self.assertFalse(missing["protected"])
+        self.assertEqual(missing["state"], "artifact_missing")
+
+    def test_fast_health_keeps_protection_distinct_from_identity_verification(self) -> None:
+        published = self._publish_runtime()
+        self._make_package_writable(published.package_path)
+        manifest_path = published.package_path / "manifest-v2.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["total_size_bytes"] += 1
+        write_canonical_json(manifest_path, manifest)
+        _protect_package(
+            published.package_path,
+            owner_uid=os.geteuid(),
+            owner_gid=os.getegid(),
+        )
+
+        observed = self.store.fast_runtime_health(
+            self.archive_digest,
+            file_manifest_sha256=self.source_manifest_digest,
+            opendesign_version="0.16.1",
+            upstream_commit=UPSTREAM_COMMIT,
+        )
+
+        self.assertTrue(observed["available"])
+        self.assertFalse(observed["verified"])
+        self.assertTrue(observed["protected"])
+        self.assertEqual(observed["state"], "artifact_integrity_mismatch")
+
+    def test_status_exports_the_active_artifact_health_layers(self) -> None:
+        active_runtime = "a" * 64
+        rollback_runtime = "c" * 64
+        active_web = "b" * 64
+        store = Mock()
+        store.fast_runtime_health.side_effect = lambda digest, **_kwargs: {
+            "available": True,
+            "verified": digest != active_runtime,
+            "protected": True,
+            "state": (
+                "verified_fast" if digest != active_runtime else "artifact_integrity_mismatch"
+            ),
+            "phase": "artifact_fast_verify",
+        }
+        store.fast_web_overlay_health.return_value = {
+            "available": True,
+            "verified": True,
+            "protected": True,
+            "state": "verified_fast",
+            "phase": "artifact_fast_verify",
+        }
+        required = RequiredArtifacts(
+            current_runtime=active_runtime,
+            active_runtime=active_runtime,
+            rollback_runtime=rollback_runtime,
+            active_web=active_web,
+            optional_runtime=(),
+            web_overlays=(active_web,),
+            fresh_web_overlay=active_web,
+            runtime_web_bindings=((active_runtime, active_web),),
+        )
+
+        observed = _status(store, required=required)
+
+        self.assertFalse(observed["operational"])
+        self.assertEqual(
+            observed["health"],
+            {
+                "artifact_available": True,
+                "artifact_verified": False,
+                "artifact_protected": True,
+            },
+        )
+        self.assertEqual(observed["active_error_code"], "artifact_integrity_mismatch")
+        self.assertEqual(observed["active"]["runtime_artifact_sha256"], active_runtime)
+        self.assertEqual(observed["active"]["web_overlay_sha256"], active_web)
 
     def test_receipt_authenticates_manifest_v2_on_fast_and_full_paths(self) -> None:
         published = self._publish_runtime()

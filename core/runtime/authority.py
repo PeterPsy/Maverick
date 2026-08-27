@@ -102,6 +102,7 @@ def resolve_effective_runtime_authority(
     actor_policy_allowed: bool = True,
     actor_policy_revision: str = "runtime-actor:unknown",
     now: datetime | None = None,
+    adapter_artifact_digest: str | None = None,
 ) -> EffectiveRuntimeAuthority:
     """Intersect certified capability with every pinned and live restriction."""
     timestamp = now or datetime.now(tz=UTC)
@@ -111,6 +112,7 @@ def resolve_effective_runtime_authority(
         adapter=adapter,
         observed_upstream_id=observed_upstream_id,
         now=timestamp,
+        adapter_artifact_digest=adapter_artifact_digest,
     )
     if health_status not in {"healthy", "degraded"}:
         raise CapabilityCertificateError("runtime_health_unavailable")

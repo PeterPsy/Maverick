@@ -22,6 +22,7 @@ def certificate_profile_status(
     definition: AgenticProfileDefinition,
     adapter: object,
     now: datetime | None = None,
+    adapter_artifact_digest: str | None = None,
 ) -> str:
     """Derive active/blocked state without trusting an editable certified flag."""
     if status is None:
@@ -48,7 +49,12 @@ def certificate_profile_status(
         or definition.adapter_version_constraint != f"=={adapter_version}"
     ):
         return "adapter_version_mismatch"
-    if certificate.adapter_artifact_digest != runtime_adapter_artifact_digest(adapter):
+    live_adapter_digest = (
+        adapter_artifact_digest
+        if adapter_artifact_digest is not None
+        else runtime_adapter_artifact_digest(adapter)
+    )
+    if certificate.adapter_artifact_digest != live_adapter_digest:
         return "adapter_artifact_mismatch"
     if not is_exact_codex_identity(
         runtime_engine_id=certificate.runtime_engine_id,

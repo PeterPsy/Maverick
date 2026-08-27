@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter, RuntimeHealthContext
-from core.providers.service import effective_provider_registry
 from core.providers.agentic_workspace_policy import actor_selection_allowed
+from core.providers.service import effective_provider_registry
+from core.providers.store import ProviderStore
 from core.runtime.authority import (
     EffectiveRuntimeAuthority,
     effective_authority_audit_payload,
@@ -59,6 +60,8 @@ def resolve_runtime_authority_snapshot(
     adapter: AgenticRuntimeEngineAdapter,
     turn_id: str,
     currently_authorized_tool_handles: tuple[str, ...] | None = None,
+    provider_store: ProviderStore | None = None,
+    adapter_artifact_digest: str | None = None,
 ) -> EffectiveRuntimeAuthority:
     """Compute the same live snapshot used by admission, dispatch, and refresh."""
     binding = session.execution_binding
@@ -70,12 +73,14 @@ def resolve_runtime_authority_snapshot(
         currently_authorized_tool_handles = (
             tuple(handle_resolver(binding)) if callable(handle_resolver) else ()
         )
+    active_provider_store = provider_store or state.provider_store
     actor_allowed, actor_revision = live_runtime_actor_policy(
         state,
         session=session,
+        provider_store=active_provider_store,
     )
     return resolve_effective_runtime_authority(
-        state.provider_store,
+        active_provider_store,
         binding=binding,
         adapter=adapter,
         turn_id=turn_id,
@@ -85,6 +90,7 @@ def resolve_runtime_authority_snapshot(
         health_revision=f"runtime-health:{canonical_digest(health)}",
         actor_policy_allowed=actor_allowed,
         actor_policy_revision=actor_revision,
+        adapter_artifact_digest=adapter_artifact_digest,
     )
 
 
@@ -92,12 +98,14 @@ def live_runtime_actor_policy(
     state: PlatformState,
     *,
     session: RuntimeSessionRecord,
+    provider_store: ProviderStore | None = None,
 ) -> tuple[bool, str]:
     """Re-evaluate the mutable actor policy for every authority refresh."""
     binding = session.execution_binding
     if binding is None:
         return True, "runtime-actor:not-agentic"
-    workspace_binding = state.provider_store.get_workspace_agentic_profile_binding(
+    active_provider_store = provider_store or state.provider_store
+    workspace_binding = active_provider_store.get_workspace_agentic_profile_binding(
         binding.workspace_binding_id
     )
     try:

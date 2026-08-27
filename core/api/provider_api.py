@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 
 from core.api.http import StartResponse, json_response, query_params
@@ -26,6 +26,7 @@ from core.providers.agentic_workspace_admin import (
 )
 from core.providers.agentic_workspace_policy import human_actor_selection_allowed
 from core.providers.certificate_projection import certificate_profile_status
+from core.providers.certificate_service import runtime_adapter_artifact_digest
 from core.providers.payloads import (
     hosted_provider_selection_payload,
     provider_model_option_payload,
@@ -38,6 +39,8 @@ from core.providers.payloads import (
 )
 from core.providers.provider_authorization import check_provider_credential_authorization
 from core.providers.provider_credentials import resolve_provider_binding
+from core.providers.provider_registry import ProviderRegistry
+from core.providers.read_snapshot import ProviderReadSnapshot
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.service import (
     activate_hosted_model_provider,
@@ -66,6 +69,37 @@ from core.runtime.routing import resolve_runtime_execution_mode
 from core.runtime.public_status import public_runtime_recovery_reason_code
 from core.usage.quota import record_provider_quota_snapshots
 from core.workspaces.data_governance import attestation_safe_projection
+
+
+@dataclass
+class RuntimeSessionGovernanceProjectionContext:
+    """Coherent request-local inputs for projecting a runtime session catalog."""
+
+    provider_store: ProviderReadSnapshot
+    registry: ProviderRegistry
+    _adapter_artifact_digests: dict[int, str] = field(default_factory=dict)
+
+    def adapter_artifact_digest(self, adapter: object) -> str:
+        cache_key = id(adapter)
+        digest = self._adapter_artifact_digests.get(cache_key)
+        if digest is None:
+            digest = runtime_adapter_artifact_digest(adapter)
+            self._adapter_artifact_digests[cache_key] = digest
+        return digest
+
+
+def runtime_session_governance_projection_context(
+    state: PlatformState,
+) -> RuntimeSessionGovernanceProjectionContext:
+    """Capture one provider registry and read snapshot for a bulk projection."""
+    registry = effective_provider_registry(
+        state.provider_store,
+        registry=getattr(state, "provider_registry", None),
+    )
+    return RuntimeSessionGovernanceProjectionContext(
+        provider_store=ProviderReadSnapshot(state.provider_store),
+        registry=registry,
+    )
 
 
 def provider_model_settings_payload(definition: ProviderDefinition, selection: ProviderSelection | None) -> dict[str, object]:
@@ -1020,20 +1054,49 @@ def runtime_session_agentic_governance_payload(
     state: PlatformState,
     *,
     session: RuntimeSessionRecord,
+    projection_context: RuntimeSessionGovernanceProjectionContext | None = None,
 ) -> dict[str, object] | None:
     """Project exact pinned governance without exposing credential authority."""
     binding = session.execution_binding
     if binding is None:
         return None
+    provider_store = (
+        projection_context.provider_store
+        if projection_context is not None
+        else state.provider_store
+    )
+    registry = None if projection_context is None else projection_context.registry
+    adapters: dict[str, tuple[object, str]] = {}
+
+    def adapter_snapshot(runtime_engine_id: str) -> tuple[object, str]:
+        nonlocal registry
+        cached = adapters.get(runtime_engine_id)
+        if cached is not None:
+            return cached
+        if registry is None:
+            registry = effective_provider_registry(
+                state.provider_store,
+                registry=getattr(state, "provider_registry", None),
+            )
+        adapter = registry.get_agentic_runtime_adapter(runtime_engine_id)
+        artifact_digest = (
+            projection_context.adapter_artifact_digest(adapter)
+            if projection_context is not None
+            else runtime_adapter_artifact_digest(adapter)
+        )
+        resolved = (adapter, artifact_digest)
+        adapters[runtime_engine_id] = resolved
+        return resolved
+
     containment_reason = remote_agentic_containment_reason(binding)
     definition = None
     rollout_status = None
     try:
-        definition = state.provider_store.get_agentic_profile_definition(
+        definition = provider_store.get_agentic_profile_definition(
             binding.profile_definition_id,
             binding.profile_definition_revision,
         )
-        definition_status = state.provider_store.get_agentic_profile_definition_status(
+        definition_status = provider_store.get_agentic_profile_definition_status(
             definition.definition_id,
             definition.revision,
         )
@@ -1047,10 +1110,10 @@ def runtime_session_agentic_governance_payload(
     certificate_expires_at = None
     certificate = None
     try:
-        certificate = state.provider_store.get_capability_certificate(
+        certificate = provider_store.get_capability_certificate(
             binding.capability_certificate_id
         )
-        certificate_status = state.provider_store.get_capability_certificate_status(
+        certificate_status = provider_store.get_capability_certificate_status(
             certificate.certificate_id
         )
         certificate_payload = capability_certificate_payload(
@@ -1065,17 +1128,15 @@ def runtime_session_agentic_governance_payload(
             certificate_effective_status = "binding_mismatch"
         elif definition is not None and certificate_effective_status == "active":
             try:
-                registry = effective_provider_registry(
-                    state.provider_store,
-                    registry=getattr(state, "provider_registry", None),
+                adapter, artifact_digest = adapter_snapshot(
+                    definition.runtime_engine_id
                 )
                 certificate_effective_status = certificate_profile_status(
                     certificate,
                     certificate_status,
                     definition=definition,
-                    adapter=registry.get_agentic_runtime_adapter(
-                        definition.runtime_engine_id
-                    ),
+                    adapter=adapter,
+                    adapter_artifact_digest=artifact_digest,
                 )
             except ProviderError:
                 certificate_effective_status = "adapter_unavailable"
@@ -1091,15 +1152,14 @@ def runtime_session_agentic_governance_payload(
         )
     else:
         try:
-            registry = effective_provider_registry(
-                state.provider_store,
-                registry=getattr(state, "provider_registry", None),
-            )
+            adapter, artifact_digest = adapter_snapshot(binding.runtime_engine_id)
             authority = resolve_runtime_authority_snapshot(
                 state,
                 session=session,
-                adapter=registry.get_agentic_runtime_adapter(binding.runtime_engine_id),
+                adapter=adapter,
                 turn_id=f"capability-projection:{session.session_id}",
+                provider_store=provider_store,
+                adapter_artifact_digest=artifact_digest,
             )
             effective_capabilities = effective_runtime_capability_payload(authority)
         except (AuthorizationError, ProviderError, ValueError) as error:

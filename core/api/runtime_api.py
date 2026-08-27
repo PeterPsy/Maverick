@@ -18,7 +18,9 @@ from core.api.app_reference_payloads import (
 from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
 from core.api.provider_api import (
+    RuntimeSessionGovernanceProjectionContext,
     runtime_session_agentic_governance_payload,
+    runtime_session_governance_projection_context,
     workspace_provider_status,
 )
 from core.api.runtime_cleanup import cleanup_runtime_session
@@ -181,6 +183,7 @@ def _session_payload(
     provider_id: str | None = None,
     prewarm: RuntimeSessionPrewarmResult | None = None,
     admission: dict[str, object] | None = None,
+    governance_projection_context: RuntimeSessionGovernanceProjectionContext | None = None,
 ) -> dict[str, object]:
     payload = asdict(session)
     payload.pop("prepared_session_fingerprint", None)
@@ -224,6 +227,7 @@ def _session_payload(
                 runtime_session_agentic_governance_payload(
                     state,
                     session=session,
+                    projection_context=governance_projection_context,
                 )
             )
     if prewarm is not None:
@@ -421,11 +425,17 @@ def _list_session_payloads(state: PlatformState, *, workspace_id: str, start_pat
         _reconciled_session(state, session, start_path=start_path)
         for session in current_sessions.values()
     ]
+    governance_projection_context = (
+        runtime_session_governance_projection_context(state)
+        if any(session.execution_binding is not None for session in reconciled)
+        else None
+    )
     return [
         _session_payload(
             session,
             state=state,
             provider_id=_resolved_provider_id(state, session),
+            governance_projection_context=governance_projection_context,
         )
         for session in reconciled
         if runtime_session_allows_user_thread(session)

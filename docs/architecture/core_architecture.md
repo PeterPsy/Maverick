@@ -1600,6 +1600,13 @@ Filesystem-backed snapshot projection must not run on the ASGI event-loop thread
 
 The HTTP event and thread endpoints remain command, diagnostics, and operator surfaces. Product chat rendering must not bootstrap transcripts or thread lists by replaying runtime data over HTTP.
 
+Bulk runtime-session diagnostics must project provider governance from one
+request-scoped registry and read-through provider snapshot. Repeated sessions
+may reuse parsed definition, certificate, evidence, binding, and adapter
+artifact inputs only within that request; each session still receives its own
+live authority projection, and no mutable governance result may survive into a
+later request.
+
 Apps that want realtime agent updates should connect to the WebSocket surface directly.
 
 They should not implement app-specific WebSocket routes for core runtime events.

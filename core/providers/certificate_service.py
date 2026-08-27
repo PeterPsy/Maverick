@@ -258,6 +258,7 @@ def validate_certificate_for_binding(
     adapter: object,
     observed_upstream_id: str | None = None,
     now: datetime | None = None,
+    adapter_artifact_digest: str | None = None,
 ) -> CapabilityCertificate:
     """Fail closed unless live certification exactly matches the pinned combination."""
     try:
@@ -315,7 +316,12 @@ def validate_certificate_for_binding(
     adapter_version = str(getattr(adapter, "adapter_version", ""))
     if adapter_id != binding.adapter_id or adapter_version != binding.adapter_version:
         raise CapabilityCertificateError("adapter_version_mismatch")
-    if runtime_adapter_artifact_digest(adapter) != binding.adapter_artifact_digest:
+    live_adapter_digest = (
+        adapter_artifact_digest
+        if adapter_artifact_digest is not None
+        else runtime_adapter_artifact_digest(adapter)
+    )
+    if live_adapter_digest != binding.adapter_artifact_digest:
         raise CapabilityCertificateError("adapter_artifact_mismatch")
     return certificate
 

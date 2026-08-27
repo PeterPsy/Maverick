@@ -12,6 +12,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 
 
 APP_ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +28,7 @@ from core.api.background_hooks import start_background_hook_scheduler  # noqa: E
 from core.api.platform_state import bootstrap_platform_state  # noqa: E402
 from core.api.sidecar_control import start_sidecar_control_server  # noqa: E402
 from core.api.sidecar_prewarm import start_declared_sidecar_prewarms  # noqa: E402
+from core.api.sidecar_proxy import HttpSidecarManager  # noqa: E402
 from core.apps.artifact_mounts import platform_artifact_store_root  # noqa: E402
 from core.apps.dependencies import save_app_dependency_selection  # noqa: E402
 from core.apps.service import install_store_app, register_app_source_from_contract  # noqa: E402
@@ -48,7 +50,56 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--web-overlay-sha256", required=True)
+    parser.add_argument("--startup-delay-ms", type=int, default=0)
     return parser.parse_args()
+
+
+def _instrument_design_studio_startup(root: Path, *, delay_ms: int) -> None:
+    """Record and widen the real prewarm/browser singleflight overlap window."""
+    if delay_ms < 0 or delay_ms > 5_000:
+        raise RuntimeError("Synthetic sidecar startup delay is out of bounds.")
+    event_path = root / "tmp/design-studio-sidecar-starts.jsonl"
+    event_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    event_path.unlink(missing_ok=True)
+    original = HttpSidecarManager._start_sidecar
+
+    def record(event: str, **fields: object) -> None:
+        payload = {
+            "event": event,
+            "pid": os.getpid(),
+            "observed_at_epoch_ms": time.time_ns() / 1_000_000,
+            **fields,
+        }
+        encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode(
+            "utf-8"
+        )
+        descriptor = os.open(event_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(descriptor, encoded)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def instrumented_start(manager, *args, **kwargs):
+        if kwargs.get("app_id") != "design-studio":
+            return original(manager, *args, **kwargs)
+        identity = {
+            "workspace_id": str(kwargs.get("workspace_id") or ""),
+            "app_id": "design-studio",
+            "controlled_overlap_delay_ms": delay_ms,
+        }
+        record("start", **identity)
+        if delay_ms:
+            time.sleep(delay_ms / 1_000)
+        try:
+            running = original(manager, *args, **kwargs)
+        except BaseException as error:
+            record("failed", **identity, error_class=type(error).__name__)
+            raise
+        record("ready", **identity, instance_id=running.instance_id)
+        return running
+
+    HttpSidecarManager._start_sidecar = instrumented_start
 
 
 def _prepare_root(root: Path) -> None:
@@ -258,6 +309,7 @@ def main() -> None:
     )
     if not (root / SETUP_MARKER).is_file():
         _initial_setup(state, root, arguments.web_overlay_sha256)
+    _instrument_design_studio_startup(root, delay_ms=arguments.startup_delay_ms)
     shutdown_controller = EntrypointShutdownController()
     prewarm_threads = start_declared_sidecar_prewarms(
         state,

@@ -34,7 +34,7 @@ export function App() {
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef(0);
   const startupFailureRef = useRef<SidecarDiagnostic | null>(null);
-  const transactionalReadyRef = useRef(false);
+  const usableReadyRef = useRef(false);
   const stopStartupStatusPollRef = useRef<() => void>(() => undefined);
   const navigationRef = useRef<OpenDesignNavigation>(initialNavigation());
   const settingsRequestRef = useRef(initialSettingsRequest());
@@ -153,8 +153,15 @@ export function App() {
       if (!isTrustedSidecarMessage(event, sidecarOriginRef.current, frameWindow) || !isRecord(event.data)) {
         return;
       }
-      if (event.data.type === "maverick.opendesign.ready" && event.data.version === 1) {
-        if (transactionalReadyRef.current) {
+      if (event.data.type === "maverick.opendesign.usable" && event.data.version === 1) {
+        const expectedProjectId = navigationRef.current.od_project_id;
+        const usableSurfaceMatches = expectedProjectId
+          ? event.data.surface === "project" && event.data.od_project_id === expectedProjectId
+          : event.data.surface === "empty" && !event.data.od_project_id;
+        if (!usableSurfaceMatches) {
+          return;
+        }
+        if (usableReadyRef.current) {
           return;
         }
         stopStartupStatusPollRef.current();
@@ -165,12 +172,12 @@ export function App() {
           setLoadingVisible(false);
           return;
         }
-        transactionalReadyRef.current = true;
+        usableReadyRef.current = true;
         setDiagnostic(null);
         setPhase("ready");
         setLoadingVisible(false);
         retryCountRef.current = 0;
-        recordFirstPaint(launchStartedRef.current, "maverick.opendesign.ready", appId);
+        recordFirstPaint(launchStartedRef.current, "maverick.opendesign.usable", appId);
         launchStartedRef.current = 0;
         postNavigation();
         postTheme();
@@ -212,7 +219,7 @@ export function App() {
     stopStartupStatusPollRef.current = () => undefined;
     submittedFrameRef.current = null;
     startupFailureRef.current = null;
-    transactionalReadyRef.current = false;
+    usableReadyRef.current = false;
     sidecarOriginRef.current = "";
     deliveredSettingsRequestRef.current = "";
     settingsDeliveryAttemptsRef.current = 0;
@@ -222,13 +229,13 @@ export function App() {
     setStartupLabel("Avvio runtime verificato");
     launchStartedRef.current = performance.now();
     loadingTimer = window.setTimeout(() => {
-      if (canceled || transactionalReadyRef.current) {
+      if (canceled || usableReadyRef.current) {
         return;
       }
       setLoadingVisible(true);
     }, LOADING_STATE_DELAY_MS);
     statusPollTimer = window.setTimeout(() => {
-      if (canceled || transactionalReadyRef.current) {
+      if (canceled || usableReadyRef.current) {
         return;
       }
       stopStatusPoll = startNonOverlappingPoll({

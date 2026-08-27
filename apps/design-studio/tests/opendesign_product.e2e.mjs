@@ -39,6 +39,12 @@ const evidenceOutputPath = evidenceOutput
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'moe-'));
 const keepTemporary = process.env.MAVERICK_KEEP_E2E_TEMP === '1';
 const installationRoot = path.join(temporaryRoot, 'i');
+const sidecarStartupEvents = path.join(
+  installationRoot,
+  'tmp',
+  'design-studio-sidecar-starts.jsonl',
+);
+const coldStartupOverlapDelayMs = 750;
 const port = await freePort();
 const platformOrigin = `http://maverick.localhost:${port}`;
 process.env.PLAYWRIGHT_BROWSERS_PATH ||= process.env.MAVERICK_PLAYWRIGHT_BROWSERS_PATH
@@ -249,14 +255,18 @@ try {
     const stoppedAt = performance.now();
     server = await startServer();
     const coreReadyAt = server.wp10CoreReadyAt;
-    const readiness = await waitForTransactionalReadiness(page);
-    const transactionalReadyAt = performance.now();
+    await waitForInstrumentedStartup(server.pid, 'start');
+    const readinessPromise = waitForTransactionalReadiness(page).then((readiness) => ({
+      readiness,
+      observedAt: performance.now(),
+    }));
     const interfaceStartedAt = performance.now();
     const interfacePhases = { started_at: interfaceStartedAt };
     const observeRequest = (request) => {
       const pathname = new URL(request.url()).pathname;
       if (pathname === '/api/app-sidecars/browser-launch' && interfacePhases.launch_request_ms === undefined) {
         interfacePhases.launch_request_ms = rounded(performance.now() - interfaceStartedAt);
+        interfacePhases.launch_request_epoch_ms = Date.now();
       }
       if (pathname === '/.well-known/maverick-sidecar-bootstrap' && interfacePhases.bootstrap_request_ms === undefined) {
         interfacePhases.bootstrap_request_ms = rounded(performance.now() - interfaceStartedAt);
@@ -275,7 +285,7 @@ try {
     page.on('response', observeResponse);
     await openDesignStudioFromShell(page);
     interfacePhases.shell_route_ms = rounded(performance.now() - interfaceStartedAt);
-    sidecar = await waitForTransactionalOpenDesignInterface(
+    sidecar = await waitForUsableOpenDesignInterface(
       page,
       networkProof,
       previousSidecar,
@@ -286,7 +296,29 @@ try {
     interfacePhases.same_origin_as_initial = new URL(sidecar.url()).origin === originA;
     interfacePhases.browser_navigation = browserNavigation.metrics;
     await settleOpenDesignInterface(page, sidecar);
-    const browserReadyAt = interfaceStartedAt + interfacePhases.transactional_bridge_ready_ms;
+    const browserReadyAt = interfaceStartedAt + interfacePhases.usable_interface_ready_ms;
+    const readinessObservation = await readinessPromise;
+    const readiness = readinessObservation.readiness;
+    const transactionalReadyAt = readinessObservation.observedAt;
+    const startupLifecycle = await waitForInstrumentedStartup(server.pid, 'ready');
+    const starts = startupLifecycle.filter((event) => event.event === 'start');
+    const readyEvents = startupLifecycle.filter((event) => event.event === 'ready');
+    assert(starts.length === 1 && readyEvents.length === 1, 'Cold browser/prewarm path did not singleflight one process start');
+    const browserRequestEpochMs = Number(interfacePhases.launch_request_epoch_ms);
+    const prewarmStartedAtEpochMs = Number(starts[0].observed_at_epoch_ms);
+    const sidecarReadyAtEpochMs = Number(readyEvents[0].observed_at_epoch_ms);
+    const controlledOverlapDelayMs = Number(starts[0].controlled_overlap_delay_ms);
+    assert(
+      Number.isFinite(browserRequestEpochMs)
+        && prewarmStartedAtEpochMs <= browserRequestEpochMs
+        && browserRequestEpochMs < sidecarReadyAtEpochMs,
+      'Browser launch request did not overlap the real core-start prewarm',
+    );
+    assert(
+      controlledOverlapDelayMs === coldStartupOverlapDelayMs,
+      'Cold singleflight instrumentation did not preserve its governed overlap window',
+    );
+    const prewarmBrowserOverlapMs = rounded(sidecarReadyAtEpochMs - browserRequestEpochMs);
     page.off('request', observeRequest);
     page.off('response', observeResponse);
     delete interfacePhases.started_at;
@@ -312,7 +344,14 @@ try {
       core_boot_ms: rounded(coreReadyAt - server.wp10StartedAt),
       prewarm_after_core_health_ms: rounded(transactionalReadyAt - coreReadyAt),
       interface_after_core_health_ms: rounded(browserReadyAt - coreReadyAt),
-      interface_after_transactional_ready_ms: rounded(browserReadyAt - interfaceStartedAt),
+      shell_action_to_usable_interface_ms: rounded(browserReadyAt - interfaceStartedAt),
+      browser_request_during_prewarm: true,
+      singleflight_sidecar_start_count: starts.length,
+      prewarm_browser_overlap_ms: prewarmBrowserOverlapMs,
+      prewarm_started_before_browser_request_ms: rounded(
+        browserRequestEpochMs - prewarmStartedAtEpochMs,
+      ),
+      controlled_singleflight_overlap_delay_ms: controlledOverlapDelayMs,
       interface_phases_ms: interfacePhases,
       resources,
     });
@@ -442,6 +481,7 @@ async function startServer() {
     '--root', installationRoot,
     '--port', String(port),
     '--web-overlay-sha256', overlayContract.web_overlay_sha256,
+    '--startup-delay-ms', String(coldStartupOverlapDelayMs),
   ], {
     cwd: repoRoot,
     detached: true,
@@ -481,6 +521,28 @@ async function stopServer(child) {
   if (!exited) {
     try { process.kill(-child.pid, 'SIGKILL'); } catch {}
   }
+}
+
+
+async function waitForInstrumentedStartup(pid, expectedEvent) {
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    let text = '';
+    try {
+      text = await readFile(sidecarStartupEvents, 'utf8');
+    } catch {}
+    let events = [];
+    try {
+      events = text.split('\n').filter(Boolean).map((line) => JSON.parse(line)).filter(
+        (event) => Number(event?.pid) === Number(pid),
+      );
+    } catch {
+      await delay(25);
+      continue;
+    }
+    if (events.some((event) => event.event === expectedEvent)) return events;
+    await delay(25);
+  }
+  throw new Error(`Instrumented Design Studio startup did not record ${expectedEvent}`);
 }
 
 
@@ -698,7 +760,7 @@ async function openDesignStudioFromShell(page) {
 }
 
 
-async function waitForTransactionalOpenDesignInterface(
+async function waitForUsableOpenDesignInterface(
   page,
   networkProof,
   excludedFrame = null,
@@ -715,7 +777,7 @@ async function waitForTransactionalOpenDesignInterface(
     state: 'visible',
     timeout: 10_000,
   });
-  mark('transactional_bridge_ready_ms');
+  mark('usable_interface_ready_ms');
   const ready = await waitForFrameTransactionalEndpoint(sidecar);
   assert(
     ready.status === 200 && ready.body?.ok === true && ready.body?.ready === true,
@@ -959,13 +1021,13 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
     await wrapper.goto(wrapperUrl, { waitUntil: 'domcontentloaded' });
     const wrapperReadyAt = performance.now();
     const milestones = { started_at: startedAt };
-    const frame = await waitForTransactionalOpenDesignInterface(
+    const frame = await waitForUsableOpenDesignInterface(
       page,
       networkProof,
       previousSidecar,
       milestones,
     );
-    const finishedAt = startedAt + milestones.transactional_bridge_ready_ms;
+    const finishedAt = startedAt + milestones.usable_interface_ready_ms;
     durations.push(rounded(finishedAt - startedAt));
     wrapperDurations.push(rounded(wrapperReadyAt - startedAt));
     frameDurations.push(rounded(finishedAt - wrapperReadyAt));
@@ -979,7 +1041,7 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
   const interfaceDistribution = measuredDistribution(durations);
   return {
     ...interfaceDistribution,
-    measurement_scope: 'wrapper_navigation_to_transactional_ui_ready',
+    measurement_scope: 'wrapper_navigation_to_usable_project_interface',
     full_wrapper_remount: measuredDistribution(durations),
     wrapper_dom_content_loaded: measuredDistribution(wrapperDurations),
     sidecar_frame_ready: measuredDistribution(frameDurations),
@@ -993,7 +1055,7 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
 async function settleOpenDesignInterface(page, sidecar) {
   const wrapper = await waitForShellWidgetFrame(page, 'Design Studio viewport');
   await Promise.any([
-    sidecar.locator('[data-testid="maverick-project-view"]').waitFor({
+    sidecar.locator('[data-testid="file-workspace"] button:not([disabled])').first().waitFor({
       state: 'visible',
       timeout: 10_000,
     }),
@@ -1002,7 +1064,7 @@ async function settleOpenDesignInterface(page, sidecar) {
       timeout: 10_000,
     }),
   ]).catch(() => {
-    throw new Error('OpenDesign did not settle after transactional interface readiness');
+    throw new Error('OpenDesign did not expose an interactive control after usability readiness');
   });
 }
 
@@ -1064,8 +1126,11 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
   const interfaceAfterCoreHealth = distribution(
     coreRestarts.map((sample) => sample.interface_after_core_health_ms),
   );
-  const interfaceAfterTransactionalReady = distribution(
-    coreRestarts.map((sample) => sample.interface_after_transactional_ready_ms),
+  const shellActionToUsableInterface = distribution(
+    coreRestarts.map((sample) => sample.shell_action_to_usable_interface_ms),
+  );
+  const prewarmBrowserOverlap = distribution(
+    coreRestarts.map((sample) => sample.prewarm_browser_overlap_ms),
   );
   const diagnostic = JSON.stringify({
     warmTickets,
@@ -1078,7 +1143,8 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     coreBoot,
     prewarmAfterCoreHealth,
     interfaceAfterCoreHealth,
-    interfaceAfterTransactionalReady,
+    shellActionToUsableInterface,
+    prewarmBrowserOverlap,
     coldInterfacePhases: coreRestarts.map((sample) => sample.interface_phases_ms),
   });
   process.stderr.write(`OpenDesign performance diagnostic: ${diagnostic}\n`);
@@ -1101,14 +1167,24 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
     `Core restart prewarm SLO failed: ${diagnostic}`,
   );
   assert(
-    interfaceAfterTransactionalReady.count === 10
-      && interfaceAfterTransactionalReady.p95_ms <= 1_500
-      && interfaceAfterTransactionalReady.p99_ms <= 2_500,
+    shellActionToUsableInterface.count === 10
+      && shellActionToUsableInterface.p95_ms <= 1_500
+      && shellActionToUsableInterface.p99_ms <= 2_500,
     `Cold interface SLO failed: ${diagnostic}`,
+  );
+  assert(
+    coreRestarts.every(
+      (sample) => sample.browser_request_during_prewarm === true
+        && sample.singleflight_sidecar_start_count === 1
+        && sample.prewarm_browser_overlap_ms > 0
+        && sample.prewarm_started_before_browser_request_ms >= 0
+        && sample.controlled_singleflight_overlap_delay_ms === coldStartupOverlapDelayMs,
+    ),
+    `Cold browser/prewarm singleflight proof failed: ${diagnostic}`,
   );
   const resourceSamples = coreRestarts.map((sample) => sample.resources);
   return {
-    schema_version: '2',
+    schema_version: '3',
     warm_browser_ticket: warmTickets,
     warm_interface: warmOpenings,
     cold_maverick_ready: {
@@ -1127,8 +1203,17 @@ function validatePerformanceEvidence({ warmTickets, warmOpenings, coreRestarts }
       measurement_scope: 'core_health_to_transactional_endpoint_ready',
     },
     cold_interface: {
-      ...interfaceAfterTransactionalReady,
-      measurement_scope: 'prewarmed_shell_action_to_transactional_ui_ready',
+      ...shellActionToUsableInterface,
+      measurement_scope: 'concurrent_prewarm_shell_action_to_usable_project_interface',
+    },
+    cold_browser_prewarm_singleflight: {
+      sample_count: coreRestarts.length,
+      browser_request_during_prewarm: true,
+      max_sidecar_starts_per_restart: Math.max(
+        ...coreRestarts.map((sample) => sample.singleflight_sidecar_start_count),
+      ),
+      controlled_overlap_delay_ms: coldStartupOverlapDelayMs,
+      overlap: prewarmBrowserOverlap,
     },
     core_restart_count: coreRestarts.length,
     resources: {

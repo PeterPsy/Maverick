@@ -123,7 +123,7 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertLessEqual(performance["warm_interface"]["p99_ms"], 2500)
         self.assertEqual(
             performance["warm_interface"]["measurement_scope"],
-            "wrapper_navigation_to_transactional_ui_ready",
+            "wrapper_navigation_to_usable_project_interface",
         )
         self.assertEqual(
             performance["warm_interface"]["samples_ms"],
@@ -149,6 +149,16 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertEqual(performance["cold_interface"]["count"], 10)
         self.assertLessEqual(performance["cold_interface"]["p95_ms"], 1500)
         self.assertLessEqual(performance["cold_interface"]["p99_ms"], 2500)
+        self.assertEqual(
+            performance["cold_interface"]["measurement_scope"],
+            "concurrent_prewarm_shell_action_to_usable_project_interface",
+        )
+        singleflight = performance["cold_browser_prewarm_singleflight"]
+        self.assertEqual(singleflight["sample_count"], 10)
+        self.assertIs(singleflight["browser_request_during_prewarm"], True)
+        self.assertEqual(singleflight["max_sidecar_starts_per_restart"], 1)
+        self.assertEqual(singleflight["controlled_overlap_delay_ms"], 750)
+        self.assertGreater(singleflight["overlap"]["p50_ms"], 0)
         self.assertEqual(performance["core_restart_count"], 10)
         self.assertEqual(len(performance["samples"]), 10)
         self.assertGreater(performance["resources"]["rss_kib_max"], 0)

@@ -1,12 +1,12 @@
 diff --git a/apps/web/app/layout.tsx b/apps/web/app/layout.tsx
-index cc7a5f3af..c1ac9687d 100644
+index cc7a5f3af..df5366357 100644
 --- a/apps/web/app/layout.tsx
 +++ b/apps/web/app/layout.tsx
 @@ -28,6 +28,8 @@ export const viewport: Viewport = {
   */
  const themeInitScript = `(function(){try{var c=JSON.parse(localStorage.getItem('open-design:config')||'{}');var t=c.theme;if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);var a=typeof c.accentColor==='string'&&/^#[0-9a-fA-F]{6}$/.test(c.accentColor.trim())?c.accentColor.trim().toLowerCase():'#c96442';var s=document.documentElement.style;s.setProperty('--accent',a);s.setProperty('--accent-strong','color-mix(in srgb, '+a+' 86%, var(--text-strong))');s.setProperty('--accent-soft','color-mix(in srgb, '+a+' 22%, var(--bg-panel))');s.setProperty('--accent-tint','color-mix(in srgb, '+a+' 12%, var(--bg-panel))');s.setProperty('--accent-hover','color-mix(in srgb, '+a+' 90%, var(--text-strong))');}catch(e){}})();`;
  
-+const maverickHostBridgeScript = `(()=>{const root=document.documentElement;root.dataset.maverickHosted="true";let lastProject="";const valid=id=>/^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/.test(id||"");const project=()=>{const match=/^\\/projects\\/([^/?#]+)/.exec(location.pathname);if(!match)return"";try{return decodeURIComponent(match[1])}catch{return""}};const notify=()=>{const id=project();if(id===lastProject)return;lastProject=id;if(valid(id))parent.postMessage({type:"maverick.opendesign.navigation-changed",version:1,od_project_id:id},"*")};const applyTheme=theme=>{if(theme!=="dark"&&theme!=="light")return;root.dataset.maverickTheme=theme;root.dataset.theme=theme;root.style.colorScheme=theme};const navigate=id=>{if(!valid(id))return;const next=\`/projects/\${encodeURIComponent(id)}\`;if(location.pathname!==next){location.assign(next);return}notify()};addEventListener("message",event=>{if(event.source!==parent||!event.data||typeof event.data!=="object"||event.data.version!==1)return;if(event.data.type==="maverick.opendesign.navigate"&&event.data.od_project_id)navigate(event.data.od_project_id);if(event.data.type==="maverick.opendesign.theme")applyTheme(event.data.theme)});for(const method of ["pushState","replaceState"]){const original=history[method];history[method]=function(...args){const result=original.apply(this,args);queueMicrotask(notify);return result}}addEventListener("popstate",notify);const ready=()=>{notify();parent.postMessage({type:"maverick.opendesign.ready",version:1},"*")};document.readyState==="loading"?addEventListener("DOMContentLoaded",ready,{once:true}):ready()})();`;
++const maverickHostBridgeScript = `(()=>{const root=document.documentElement;root.dataset.maverickHosted="true";let lastProject="";const valid=id=>/^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/.test(id||"");const project=()=>{const match=/^\\/projects\\/([^/?#]+)/.exec(location.pathname);if(!match)return"";try{return decodeURIComponent(match[1])}catch{return""}};const notify=()=>{const id=project();if(id===lastProject)return;lastProject=id;if(valid(id))parent.postMessage({type:"maverick.opendesign.navigation-changed",version:1,od_project_id:id},"*")};const applyTheme=theme=>{if(theme!=="dark"&&theme!=="light")return;root.dataset.maverickTheme=theme;root.dataset.theme=theme;root.style.colorScheme=theme};const navigate=id=>{if(!valid(id))return;const next=\`/projects/\${encodeURIComponent(id)}\`;if(location.pathname!==next){location.assign(next);return}notify()};addEventListener("message",event=>{if(event.source!==parent||!event.data||typeof event.data!=="object"||event.data.version!==1)return;if(event.data.type==="maverick.opendesign.navigate"&&event.data.od_project_id)navigate(event.data.od_project_id);if(event.data.type==="maverick.opendesign.theme")applyTheme(event.data.theme)});for(const method of ["pushState","replaceState"]){const original=history[method];history[method]=function(...args){const result=original.apply(this,args);queueMicrotask(notify);return result}}addEventListener("popstate",notify);document.readyState==="loading"?addEventListener("DOMContentLoaded",notify,{once:true}):queueMicrotask(notify)})();`;
 +
  export default function RootLayout({ children }: { children: ReactNode }) {
    return (
@@ -21,7 +21,7 @@ index cc7a5f3af..c1ac9687d 100644
        <body suppressHydrationWarning>
          <I18nProvider>
 diff --git a/apps/web/src/App.tsx b/apps/web/src/App.tsx
-index 9f30f2077..877e6e847 100644
+index 9f30f2077..8db9f4258 100644
 --- a/apps/web/src/App.tsx
 +++ b/apps/web/src/App.tsx
 @@ -33,6 +33,7 @@ import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
@@ -63,11 +63,55 @@ index 9f30f2077..877e6e847 100644
    ProjectMetadata,
    ProjectTemplate,
    ProviderModelOption,
-@@ -161,6 +170,91 @@ const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
+@@ -161,6 +170,139 @@ const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
  const AMR_AGENT_ID = 'amr';
  const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
  const AGENT_FOCUS_REFRESH_THROTTLE_MS = 10_000;
 +const MAVERICK_EMPTY_TABS: OpenTabsState = { tabs: [], active: DESIGN_FILES_TAB };
++
++/** Report usability only after React committed the real surface and two frames elapsed. */
++function MaverickUsableSignal({
++  surface,
++  projectId = '',
++}: {
++  surface: 'empty' | 'project';
++  projectId?: string;
++}) {
++  useEffect(() => {
++    let animationFrame = 0;
++    let consecutivePaints = 0;
++    const waitForUsablePaint = () => {
++      animationFrame = requestAnimationFrame(() => {
++        const control = surface === 'project'
++          ? document.querySelector<HTMLElement>(
++            '[data-testid="file-workspace"] button:not(:disabled), [data-testid="file-workspace"] [role="tab"]',
++          )
++          : document.body;
++        if (!control || control.getClientRects().length === 0) {
++          consecutivePaints = 0;
++          waitForUsablePaint();
++          return;
++        }
++        consecutivePaints += 1;
++        if (consecutivePaints < 2) {
++          waitForUsablePaint();
++          return;
++        }
++        window.parent.postMessage({
++          type: 'maverick.opendesign.usable',
++          version: 1,
++          surface,
++          ...(projectId ? { od_project_id: projectId } : {}),
++        }, '*');
++      });
++    };
++    waitForUsablePaint();
++    return () => {
++      cancelAnimationFrame(animationFrame);
++    };
++  }, [projectId, surface]);
++  return null;
++}
 +
 +/** Maverick owns project navigation and chat; Open Design owns the real canvas. */
 +function MaverickProjectView({
@@ -98,10 +142,13 @@ index 9f30f2077..877e6e847 100644
 +    setLoading(true);
 +    Promise.all([refreshWorkspace(), loadTabs(project.id)])
 +      .then(([, nextTabs]) => {
-+        if (!cancelled) setTabsState(withoutNativeChatTabs(nextTabs));
++        if (!cancelled) {
++          setTabsState(withoutNativeChatTabs(nextTabs));
++          setLoading(false);
++        }
 +      })
-+      .finally(() => {
-+        if (!cancelled) setLoading(false);
++      .catch((error: unknown) => {
++        if (!cancelled) console.error('[MaverickProjectView] workspace load failed', error);
 +      });
 +    return () => {
 +      cancelled = true;
@@ -141,6 +188,7 @@ index 9f30f2077..877e6e847 100644
 +        preferredPreviewFile={currentProject.metadata?.entryFile ?? null}
 +        autoPreviewDesignArtifacts={currentProject.metadata?.importedFrom === 'folder'}
 +      />
++      <MaverickUsableSignal surface="project" projectId={project.id} />
 +    </div>
 +  );
 +}
@@ -155,7 +203,7 @@ index 9f30f2077..877e6e847 100644
  
  export function shouldSyncMediaProvidersOnSave(
    mediaProviders: AppConfig['mediaProviders'],
-@@ -390,6 +484,10 @@ function AppInner() {
+@@ -390,6 +532,10 @@ function AppInner() {
    const { t } = useI18n();
    const iframeKeepAlivePool = useIframeKeepAlivePool();
    const clientType = useMemo(() => detectClientType(), []);
@@ -166,7 +214,7 @@ index 9f30f2077..877e6e847 100644
    useModalWindowDragGuard();
    useEffect(() => {
      const onFirstPartyExternalLink = (event: MouseEvent) => openFirstPartyExternalLinkFromClick(
-@@ -2233,6 +2331,28 @@ function AppInner() {
+@@ -2233,6 +2379,28 @@ function AppInner() {
      setSettingsOpen(true);
    }, []);
  
@@ -195,7 +243,7 @@ index 9f30f2077..877e6e847 100644
    // Entry point from the failed-run AMR nudge: open Settings on the execution
    // section and flag the AMR agent card for a one-shot scroll-into-view +
    // highlight (and a sign-in coachmark when not yet authorized).
-@@ -2457,7 +2577,13 @@ function AppInner() {
+@@ -2457,7 +2625,13 @@ function AppInner() {
        />
      );
    } else if (activeProject) {
@@ -210,16 +258,18 @@ index 9f30f2077..877e6e847 100644
        <ProjectView
          key={activeProject.id}
          project={activeProject}
-@@ -2497,7 +2623,7 @@ function AppInner() {
+@@ -2497,7 +2671,9 @@ function AppInner() {
        />
      );
    } else {
 -    appMain = (
-+    appMain = maverickHosted ? null : (
++    appMain = maverickHosted ? (
++      <MaverickUsableSignal surface="empty" />
++    ) : (
        <EntryView
          skills={enabledSkills}
          designTemplates={enabledDesignTemplates}
-@@ -2594,16 +2720,18 @@ function AppInner() {
+@@ -2594,16 +2770,18 @@ function AppInner() {
          className={`workspace-shell workspace-shell--${clientType}`}
          data-client-type={clientType}
        >
@@ -244,7 +294,7 @@ index 9f30f2077..877e6e847 100644
          <PetOverlay
            pet={config.pet?.enabled ? config.pet : undefined}
            taskCenter={petTaskCenter}
-@@ -2663,6 +2791,12 @@ function AppInner() {
+@@ -2663,6 +2841,12 @@ function AppInner() {
                setConfig(next);
              }
              setSettingsOpen(false);
@@ -329,4 +379,3 @@ index 685f2defe..6f0b2c7c4 100644
 +  min-height: 0;
 +  height: 100%;
 +}
-

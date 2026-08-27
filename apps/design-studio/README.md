@@ -248,8 +248,12 @@ An iframe `load` event is transport-only and never marks the product ready: an
 HTTP 401, 410, or 503 document produces the same browser event. The wrapper
 keeps its governed startup phase and status polling until the exact iframe
 window, on the exact sidecar origin, posts version 1 of
-`maverick.opendesign.ready`. Only that message exposes ready controls, stops
-polling, and records `first_paint_ms`; duplicate or stale messages are ignored.
+`maverick.opendesign.usable` for the exact requested project (or the governed
+empty surface). The static layout bridge cannot emit this signal: React sends
+it only after project files, live artifacts, and tabs settle, the real canvas
+commits, and two animation frames elapse. Only that message exposes ready
+controls, stops polling, and records a conservative `first_paint_ms`; duplicate,
+stale-project, legacy `ready`, and wrong-surface messages are ignored.
 
 After the `303`, the OpenDesign UI and all of its API requests stay same-origin
 on the opaque sidecar host. The wrapper exposes accessible loading/degraded/
@@ -587,14 +591,18 @@ selected signed overlay and matches its upstream commit, lockfile digest,
 runtime compatibility, and both web patch digests to the current bundle,
 supply-chain inventory, and `patches/series.json`.
 
-Release performance is recomputed from the raw samples in schema 2 evidence.
+Release performance is recomputed from the raw samples in schema 3 evidence.
 Warm interface time covers the complete wrapper navigation through the trusted
-`maverick.opendesign.ready` bridge boundary; it no longer
+`maverick.opendesign.usable` project-surface boundary; it no longer
 excludes wrapper DOM loading. After each real Core restart, Chromium keeps an
-already-open shell, waits for the declared prewarm, and measures the first user
-action through that same transactional UI-ready boundary. Both warm and cold
-interface distributions are gated at P95 1.5 seconds and P99 2.5 seconds.
-Ticket and `/api/maverick-ready` budgets remain independently gated.
+already-open shell and requests Design Studio while the declared prewarm is
+still in flight. Instrumented process-lifecycle evidence proves the browser
+request falls between the real prewarm start and readiness and that both paths
+share exactly one manager startup. A disclosed 750 ms fixture delay widens that
+manager-owned overlap window and remains inside the measured cold latency; it
+does not bypass process launch, health, or interface usability. Both warm and
+cold usable-interface distributions are gated at P95 1.5 seconds and P99 2.5
+seconds. Ticket and `/api/maverick-ready` budgets remain independently gated.
 
 The UI evidence records a UUID, ordered UTC start/completion timestamps, the
 canonical command, raw samples, and a SHA-256 inventory of all current Core,

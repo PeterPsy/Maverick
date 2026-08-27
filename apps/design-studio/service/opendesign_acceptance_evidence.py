@@ -164,14 +164,14 @@ def validate_migration_execution(
 
 def validate_launch_performance(value: object) -> dict[str, Any]:
     """Recompute every release SLO from raw samples instead of trusting passed flags."""
-    if not isinstance(value, dict) or value.get("schema_version") != "2":
+    if not isinstance(value, dict) or value.get("schema_version") != "3":
         raise ValueError("Release launch performance evidence is missing or invalid")
     warm_ticket = _validated_sampled_summary(value.get("warm_browser_ticket"), count=30, label="warm ticket")
     warm_interface = _validated_sampled_summary(value.get("warm_interface"), count=30, label="warm interface")
     full_remount = _validated_sampled_summary(
         warm_interface.get("full_wrapper_remount"), count=30, label="full wrapper remount"
     )
-    if warm_interface.get("measurement_scope") != "wrapper_navigation_to_transactional_ui_ready":
+    if warm_interface.get("measurement_scope") != "wrapper_navigation_to_usable_project_interface":
         raise ValueError("Warm interface measurement scope is invalid")
     if any(
         abs(_number(warm_interface[field], field) - _number(full_remount[field], field)) > 0.001
@@ -189,8 +189,18 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
     ]
     prewarm_values = [_sample_number(sample, "prewarm_after_core_health_ms") for sample in samples]
     cold_interface_values = [
-        _sample_number(sample, "interface_after_transactional_ready_ms") for sample in samples
+        _sample_number(sample, "shell_action_to_usable_interface_ms") for sample in samples
     ]
+    overlap_values = [_sample_number(sample, "prewarm_browser_overlap_ms") for sample in samples]
+    for sample in samples:
+        if (
+            not isinstance(sample, dict)
+            or sample.get("browser_request_during_prewarm") is not True
+            or sample.get("singleflight_sidecar_start_count") != 1
+            or _sample_number(sample, "prewarm_started_before_browser_request_ms") < 0
+            or _sample_number(sample, "controlled_singleflight_overlap_delay_ms") <= 0
+        ):
+            raise ValueError("Cold browser/prewarm singleflight sample is invalid")
     cold = _validated_derived_summary(
         value.get("cold_maverick_ready"), cold_values, label="cold transactional readiness"
     )
@@ -207,7 +217,30 @@ def validate_launch_performance(value: object) -> dict[str, Any]:
     cold_interface = _validated_derived_summary(
         value.get("cold_interface"), cold_interface_values, label="cold interface"
     )
-    if cold_interface.get("measurement_scope") != "prewarmed_shell_action_to_transactional_ui_ready":
+    singleflight = value.get("cold_browser_prewarm_singleflight")
+    if not isinstance(singleflight, dict):
+        raise ValueError("Cold browser/prewarm singleflight proof is missing")
+    _validated_derived_summary(
+        singleflight.get("overlap"),
+        overlap_values,
+        label="cold browser/prewarm overlap",
+    )
+    if (
+        singleflight.get("sample_count") != 10
+        or singleflight.get("browser_request_during_prewarm") is not True
+        or singleflight.get("max_sidecar_starts_per_restart") != 1
+        or any(
+            _sample_number(sample, "controlled_singleflight_overlap_delay_ms")
+            != _number(singleflight.get("controlled_overlap_delay_ms"), "controlled overlap delay")
+            for sample in samples
+        )
+        or any(item <= 0 for item in overlap_values)
+    ):
+        raise ValueError("Cold browser/prewarm singleflight proof is invalid")
+    if (
+        cold_interface.get("measurement_scope")
+        != "concurrent_prewarm_shell_action_to_usable_project_interface"
+    ):
         raise ValueError("Cold interface measurement scope is invalid")
     if cold.get("measurement_scope") != "sidecar_start_request_to_transactional_endpoint_ready":
         raise ValueError("Cold transactional readiness measurement scope is invalid")

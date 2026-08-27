@@ -75,6 +75,17 @@ class OpenDesignSupplyChainTests(unittest.TestCase):
                 with self.assertRaisesRegex(self.supply.SupplyChainError, "certification orchestration"):
                     self.supply.validate_manifest(tampered)
 
+    def test_host_usability_signal_is_owned_by_the_painted_react_surface(self) -> None:
+        patch = (SERVICE_ROOT / "patches/0003-maverick-web-react.patch").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("maverick.opendesign.ready", patch)
+        self.assertIn("maverick.opendesign.usable", patch)
+        self.assertIn('data-testid="file-workspace"', patch)
+        self.assertIn("getClientRects().length", patch)
+        self.assertIn("consecutivePaints < 2", patch)
+
     def test_certification_record_digest_is_fail_closed(self) -> None:
         tampered = copy.deepcopy(self.manifest)
         tampered["certification"]["record_sha256"] = "0" * 64

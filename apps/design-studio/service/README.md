@@ -215,10 +215,14 @@ renders a second project list. A scalar `od_project_id` selects the real
 versioned, origin/source-bound navigation message. Reload obtains a new
 one-shot ticket instead of replaying an old session bootstrap.
 Iframe `load` is deliberately not a readiness signal because browser error
-documents load successfully too. The host transitions to ready and emits first
-paint telemetry only after version 1 of `maverick.opendesign.ready` arrives
-from the exact launched origin and iframe window; a component test covers
-401/410/503-style loads, wrong origin/source/version, and duplicate messages.
+documents load successfully too. The host transitions to ready and emits
+conservative first-paint telemetry only after version 1 of
+`maverick.opendesign.usable` arrives from the exact launched origin and iframe
+window for the requested project (or the governed empty surface). OpenDesign
+emits that signal only after its data loads, the real interactive workspace is
+committed, and a visible control survives two animation frames. A component
+test covers 401/410/503-style loads, wrong origin/source/project/surface,
+legacy or duplicate messages, and the governed empty state.
 
 The OpenDesign contract uses a 16 GiB virtual-address ceiling. This is a bound
 on address space, not a claim of physical allocation: Node/V8 and WebAssembly
@@ -508,10 +512,15 @@ aggregator requires the exact canonical UI id set, restart/workspace isolation,
 all rollback preservation proofs, and a signature-verified overlay whose
 upstream, lockfile, runtime compatibility, and `web-build`/`web-react` digests
 match the current reviewed contracts. The UI gate records raw samples and gates
-the complete warm wrapper remount plus the first usable interface after cold
-Core prewarm at P95 1.5 seconds and P99 2.5 seconds. Its schema-2 execution
-record is content-bound to the current Core, base-shell, Storage, and Design
-Studio inputs. The aggregator independently recomputes every percentile and
+the complete warm wrapper remount plus the first usable interface while a cold
+Core prewarm is still in flight at P95 1.5 seconds and P99 2.5 seconds. The raw
+schema-3 samples prove that the browser request overlaps prewarm and both calls
+singleflight through exactly one sidecar process start. The test discloses a
+bounded 750 ms delay at the manager startup boundary to make the concurrency
+window deterministic; that delay is included in the cold SLO rather than
+subtracted. The execution record is
+content-bound to the current Core, base-shell, Storage, and Design Studio
+inputs. The aggregator independently recomputes every percentile and
 emits schema 5 with SHA-256 bindings for its UI, migration, and benchmark input
 documents. The records contain no prompt, cookie, bearer, provider payload,
 environment, host path, or secret value.

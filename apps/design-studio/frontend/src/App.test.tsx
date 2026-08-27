@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import { writeCachedLaunchTarget } from "./api";
 import type { SidecarLaunch } from "./types";
 
 
@@ -40,7 +41,7 @@ const LAUNCH: SidecarLaunch = {
   sidecar_instance_id: "instance_12345678",
 };
 
-describe("Design Studio transactional frame readiness", () => {
+describe("Design Studio usable frame readiness", () => {
   let container: HTMLDivElement;
   let root: Root;
   let parentPostMessage: ReturnType<typeof vi.spyOn>;
@@ -88,34 +89,72 @@ describe("Design Studio transactional frame readiness", () => {
     expect(container.querySelector(".design-studio-empty")).toBeNull();
   });
 
-  it("becomes ready only for the exact frame message and records it once", async () => {
+  it("becomes ready only for the exact usable project surface and records it once", async () => {
     vi.useFakeTimers();
     vi.spyOn(performance, "now").mockReturnValueOnce(1).mockReturnValue(12);
     const frame = await renderThroughBootstrap();
     const frameWindow = frame.contentWindow;
     expect(frameWindow).not.toBeNull();
 
-    await dispatchReady(frameWindow, "https://untrusted.example", 1);
-    await dispatchReady(window, LAUNCH.origin, 1);
-    await dispatchReady(frameWindow, LAUNCH.origin, 2);
+    await dispatchUsable(frameWindow, "https://untrusted.example", {
+      surface: "project",
+      od_project_id: "od_project_1",
+    });
+    await dispatchUsable(window, LAUNCH.origin, {
+      surface: "project",
+      od_project_id: "od_project_1",
+    });
+    await dispatchUsable(frameWindow, LAUNCH.origin, {
+      surface: "project",
+      od_project_id: "wrong_project",
+    });
+    await dispatchLegacyReady(frameWindow, LAUNCH.origin);
     expect(hostPhase(), container.innerHTML).toBe("bootstrapping");
     expect(firstPaintEvents()).toHaveLength(0);
 
-    await dispatchReady(frameWindow, LAUNCH.origin, 1);
+    await dispatchUsable(frameWindow, LAUNCH.origin, {
+      surface: "project",
+      od_project_id: "od_project_1",
+    });
     expect(hostPhase()).toBe("ready");
     expect(container.querySelector(".design-studio-toolbar")).not.toBeNull();
     expect(firstPaintEvents()).toHaveLength(1);
     expect(firstPaintEvents()[0]?.[1]).toMatchObject({
       metric: "first_paint_ms",
-      source: "maverick.opendesign.ready",
+      source: "maverick.opendesign.usable",
     });
 
-    await dispatchReady(frameWindow, LAUNCH.origin, 1);
+    await dispatchUsable(frameWindow, LAUNCH.origin, {
+      surface: "project",
+      od_project_id: "od_project_1",
+    });
     expect(firstPaintEvents()).toHaveLength(1);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_500);
     });
     expect(mocks.startPoll).not.toHaveBeenCalled();
+  });
+
+  it("requires the empty usable surface when no project was requested", async () => {
+    window.history.replaceState({}, "", "/apps/design-studio");
+    writeCachedLaunchTarget(sessionStorage, "design-studio", LAUNCH.origin, {
+      target: "empty",
+      od_project_id: "",
+      project: null,
+    });
+    const frame = await renderThroughBootstrap();
+    const frameWindow = frame.contentWindow;
+    expect(frameWindow).not.toBeNull();
+
+    await dispatchUsable(frameWindow, LAUNCH.origin, {
+      surface: "project",
+      od_project_id: "od_project_1",
+    });
+    expect(hostPhase()).toBe("bootstrapping");
+
+    await dispatchUsable(frameWindow, LAUNCH.origin, { surface: "empty" });
+    expect(hostPhase()).toBe("ready");
+    expect(container.querySelector(".design-studio-empty button")).not.toBeNull();
   });
 
   async function renderThroughBootstrap(): Promise<HTMLIFrameElement> {
@@ -136,14 +175,27 @@ describe("Design Studio transactional frame readiness", () => {
     return frame as HTMLIFrameElement;
   }
 
-  async function dispatchReady(
+  async function dispatchUsable(
     source: MessageEventSource | null,
     origin: string,
-    version: number,
+    surface: { surface: "empty" | "project"; od_project_id?: string },
   ): Promise<void> {
     await act(async () => {
       window.dispatchEvent(new MessageEvent("message", {
-        data: { type: "maverick.opendesign.ready", version },
+        data: { type: "maverick.opendesign.usable", version: 1, ...surface },
+        origin,
+        source,
+      }));
+    });
+  }
+
+  async function dispatchLegacyReady(
+    source: MessageEventSource | null,
+    origin: string,
+  ): Promise<void> {
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: { type: "maverick.opendesign.ready", version: 1 },
         origin,
         source,
       }));

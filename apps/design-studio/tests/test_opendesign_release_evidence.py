@@ -239,9 +239,23 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not match|excludes"):
             aggregate(excluded_wrapper, **arguments)
 
+        prewarm_completed_first = copy.deepcopy(ui)
+        prewarm_completed_first["performance"]["samples"][0][
+            "browser_request_during_prewarm"
+        ] = False
+        with self.assertRaisesRegex(ValueError, "browser/prewarm singleflight"):
+            aggregate(prewarm_completed_first, **arguments)
+
+        duplicate_start = copy.deepcopy(ui)
+        duplicate_start["performance"]["samples"][0][
+            "singleflight_sidecar_start_count"
+        ] = 2
+        with self.assertRaisesRegex(ValueError, "browser/prewarm singleflight"):
+            aggregate(duplicate_start, **arguments)
+
         slow_cold_interface = copy.deepcopy(ui)
         for sample in slow_cold_interface["performance"]["samples"]:
-            sample["interface_after_transactional_ready_ms"] = 2_600
+            sample["shell_action_to_usable_interface_ms"] = 2_600
         slow_cold_interface["performance"]["cold_interface"].update(
             {"p50_ms": 2_600, "p95_ms": 2_600, "p99_ms": 2_600, "max_ms": 2_600}
         )
@@ -338,28 +352,63 @@ class ReleaseEvidenceTests(unittest.TestCase):
             {
                 "iteration": index + 1,
                 "cold_maverick_ready_ms": 1_000 if index < 9 else 2_000,
-                "interface_after_transactional_ready_ms": 500 if index < 9 else 1_000,
+                "transactional_ready_after_core_start_ms": 1_200 if index < 9 else 2_200,
+                "prewarm_after_core_health_ms": 1_000 if index < 9 else 2_000,
+                "shell_action_to_usable_interface_ms": 500 if index < 9 else 1_000,
+                "browser_request_during_prewarm": True,
+                "singleflight_sidecar_start_count": 1,
+                "prewarm_browser_overlap_ms": 500,
+                "prewarm_started_before_browser_request_ms": 100,
+                "controlled_singleflight_overlap_delay_ms": 750,
                 "resources": {"rss_kib": 100, "process_count": 2},
             }
             for index in range(10)
         ]
         warm_interface = {
             **distribution,
-            "measurement_scope": "wrapper_navigation_to_transactional_ui_ready",
+            "measurement_scope": "wrapper_navigation_to_usable_project_interface",
             "full_wrapper_remount": dict(distribution),
         }
         return {
-            "schema_version": "2",
+            "schema_version": "3",
             "warm_browser_ticket": {**distribution, "same_sidecar_instance": True},
             "warm_interface": warm_interface,
-            "cold_maverick_ready": cold,
+            "cold_maverick_ready": {
+                **cold,
+                "measurement_scope": "sidecar_start_request_to_transactional_endpoint_ready",
+            },
+            "transactional_ready_after_core_start": {
+                "count": 10,
+                "p50_ms": 1_200,
+                "p95_ms": 2_200,
+                "p99_ms": 2_200,
+                "max_ms": 2_200,
+                "measurement_scope": "core_process_start_to_transactional_endpoint_ready",
+            },
+            "prewarm_after_core_health": {
+                **cold,
+                "measurement_scope": "core_health_to_transactional_endpoint_ready",
+            },
             "cold_interface": {
                 "count": 10,
                 "p50_ms": 500,
                 "p95_ms": 1000,
                 "p99_ms": 1000,
                 "max_ms": 1000,
-                "measurement_scope": "prewarmed_shell_action_to_transactional_ui_ready",
+                "measurement_scope": "concurrent_prewarm_shell_action_to_usable_project_interface",
+            },
+            "cold_browser_prewarm_singleflight": {
+                "sample_count": 10,
+                "browser_request_during_prewarm": True,
+                "max_sidecar_starts_per_restart": 1,
+                "controlled_overlap_delay_ms": 750,
+                "overlap": {
+                    "count": 10,
+                    "p50_ms": 500,
+                    "p95_ms": 500,
+                    "p99_ms": 500,
+                    "max_ms": 500,
+                },
             },
             "daemon_internal_ready": cold,
             "core_restart_count": 10,

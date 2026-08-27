@@ -458,6 +458,9 @@ must provide explicit repository-relative `changed_files`, or immutable
 propagated to `scripts/test_suite.py --changed-path`. A Git archive of the
 selected commit is materialized and only explicit frozen path bytes are
 overlaid, so every source build and test runs outside the shared checkout.
+Independent Git refs and an independent index preserve source attestation in
+that checkout; Git object alternates reuse content-addressed reads without
+sharing the publishing checkout's mutable refs or index.
 Installed Node dependencies are copied; signed runtime/web registries are
 materialized as independent real trees visible inside the sidecar sandbox,
 using copy-on-write reflinks when supported and copies otherwise. Only the pinned

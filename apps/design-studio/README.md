@@ -482,7 +482,10 @@ explicit repository-relative `changed_files`, or immutable `base_sha` plus the
 current `head_sha`. It snapshots and propagates that set to every changed-suite
 gate, then materializes a committed checkout with only those declared path
 bytes overlaid. Builds and tests run from that checkout, so unrelated
-shared-worktree changes cannot enter the run. Signed immutable runtime/web
+shared-worktree changes cannot enter the run. The checkout owns its Git index
+and refs while reusing only content-addressed object reads from the publishing
+repository, so source attestation observes the frozen overlay without sharing
+mutable Git control state. Signed immutable runtime/web
 registries are materialized as independent real trees, using copy-on-write
 reflinks when supported and copies otherwise. The snapshot includes only the
 pinned current runtime and release overlay, while installed Node dependencies

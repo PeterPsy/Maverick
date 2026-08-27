@@ -535,6 +535,13 @@ class DevApplyClassifierTests(unittest.TestCase):
             subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
             subprocess.run(["git", "add", "."], cwd=root, check=True)
             subprocess.run(["git", "commit", "-qm", "base"], cwd=root, check=True)
+            original_head = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=True,
+            ).stdout.strip()
             target.write_text("value = 'declared'\n", encoding="utf-8")
             unrelated.write_text("value = 'concurrent'\n", encoding="utf-8")
             untracked = root / "core/providers/concurrent.py"
@@ -554,6 +561,47 @@ class DevApplyClassifierTests(unittest.TestCase):
                     "value = 'committed'\n",
                 )
                 self.assertFalse((snapshot / "core/providers/concurrent.py").exists())
+                snapshot_git = snapshot / ".git"
+                self.assertTrue(snapshot_git.is_dir())
+                self.assertFalse(snapshot_git.is_symlink())
+                snapshot_head = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=snapshot,
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                ).stdout.strip()
+                snapshot_root = subprocess.run(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    cwd=snapshot,
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                ).stdout.strip()
+                snapshot_status = subprocess.run(
+                    ["git", "status", "--porcelain=v1"],
+                    cwd=snapshot,
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                ).stdout.splitlines()
+                self.assertEqual(snapshot_head, original_head)
+                self.assertEqual(Path(snapshot_root), snapshot)
+                self.assertEqual(
+                    snapshot_status,
+                    [" M apps/design-studio/backend/service.py"],
+                )
+                subprocess.run(
+                    ["git", "update-ref", "refs/heads/snapshot-proof", snapshot_head],
+                    cwd=snapshot,
+                    check=True,
+                )
+                original_proof = subprocess.run(
+                    ["git", "show-ref", "--verify", "--quiet", "refs/heads/snapshot-proof"],
+                    cwd=root,
+                    check=False,
+                )
+                self.assertNotEqual(original_proof.returncode, 0)
 
     def test_immutable_operational_tree_uses_independent_real_snapshot_paths(self) -> None:
         with tempfile.TemporaryDirectory(prefix="od-operational-tree-") as temporary:

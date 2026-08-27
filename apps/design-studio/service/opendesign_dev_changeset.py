@@ -106,6 +106,11 @@ def materialize_changeset(repo_root: Path, changeset: ChangeSet):
         observed = snapshot_paths(snapshot_root, changeset.changed_files)
         if observed != changeset.path_sha256:
             raise DevApplyError("materialized changeset bytes do not match the frozen snapshot", report={})
+        _initialize_isolated_git_metadata(
+            repo_root,
+            snapshot_root,
+            revision=revision,
+        )
         _materialize_operational_inputs(repo_root, snapshot_root)
         yield snapshot_root
 
@@ -223,6 +228,60 @@ def _materialize_operational_inputs(repo_root: Path, snapshot_root: Path) -> Non
         copied = _directory_content_sha256(snapshot_node_modules)
         if before != after or copied != before:
             raise DevApplyError("Node dependency inputs changed during snapshot materialization", report={})
+
+
+def _initialize_isolated_git_metadata(
+    repo_root: Path,
+    snapshot_root: Path,
+    *,
+    revision: str,
+) -> None:
+    """Give the snapshot independent refs/index while reusing immutable Git objects."""
+    resolved_revision = resolve_commit(repo_root, revision)
+    objects = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-path", "objects"],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    object_root = Path(objects.stdout.strip()) if objects.returncode == 0 else Path()
+    if (
+        not object_root.is_absolute()
+        or not object_root.is_dir()
+        or object_root.is_symlink()
+        or "\n" in str(object_root)
+        or "\r" in str(object_root)
+    ):
+        raise DevApplyError("repository Git object store is unavailable", report={})
+    commands = (
+        ("init", "--quiet"),
+        ("update-ref", "refs/heads/maverick-snapshot", resolved_revision),
+        ("symbolic-ref", "HEAD", "refs/heads/maverick-snapshot"),
+        ("read-tree", resolved_revision),
+    )
+    try:
+        subprocess.run(
+            ["git", *commands[0]],
+            cwd=snapshot_root,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        alternates = snapshot_root / ".git/objects/info/alternates"
+        alternates.parent.mkdir(parents=True, exist_ok=True)
+        alternates.write_text(f"{object_root}\n", encoding="utf-8")
+        for command in commands[1:]:
+            subprocess.run(
+                ["git", *command],
+                cwd=snapshot_root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise DevApplyError("could not initialize isolated snapshot Git metadata", report={}) from error
+
 
 def materialize_immutable_tree(source: Path, destination: Path) -> None:
     """Materialize operational inputs as independent real paths, using COW when possible."""

@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-import signal
 import stat
-import subprocess
 from typing import Any
 
 from official_opendesign_release import (
@@ -35,6 +33,7 @@ from model_access_server import (
     MODEL_ACCESS_BASE_URL,
     ModelAccessHttpBridge,
 )
+from official_process_supervisor import official_api_ready, supervise_official_process
 
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -96,31 +95,39 @@ def main() -> None:
         api_token=api_token,
         model_profile_path=model_profile_path,
     )
-    _write_host_status(
-        data_dir.parent,
-        {
-            "schema_version": "1",
-            "state": "starting",
-            "mode": "official-native",
-            "image": release.image,
-            "version": release.version,
-            "manifest_digest": release.manifest_digest,
-            "rootfs_snapshot_sha256": installation.rootfs_snapshot_sha256,
-            "customizations": [],
-            "model_bridge": model_status,
-            "delegation_bridge": delegation_status,
-            "direct_delegation_bridge": "disabled",
-        },
-    )
+    host_status = {
+        "schema_version": "1",
+        "mode": "official-native",
+        "image": release.image,
+        "version": release.version,
+        "manifest_digest": release.manifest_digest,
+        "rootfs_snapshot_sha256": installation.rootfs_snapshot_sha256,
+        "customizations": [],
+        "model_bridge": model_status,
+        "delegation_bridge": delegation_status,
+        "direct_delegation_bridge": "disabled",
+    }
+    _write_host_status(data_dir.parent, {**host_status, "state": "starting"})
+
+    def state_changed(state: str, exit_code: int | None) -> None:
+        payload = {**host_status, "state": state}
+        if exit_code is not None:
+            payload["process_exit_code"] = exit_code
+        _write_host_status(data_dir.parent, payload)
+
     try:
         os.chdir(cwd)
-        if model_bridge is None:
-            os.execve(command[0], command, environment)
-        _supervise_official_process(
+        supervise_official_process(
             command,
             environment=environment,
             cwd=cwd,
             model_bridge=model_bridge,
+            ready_probe=lambda: official_api_ready(
+                host=host,
+                port=port,
+                api_token=api_token,
+            ),
+            state_changed=state_changed,
         )
     except OSError as error:
         raise SystemExit(f"Official OpenDesign process could not start: {error}") from error
@@ -270,39 +277,6 @@ def _configure_model_access(
         "api": api_status,
         "cli": cli_status,
     }, profile_path
-
-
-def _supervise_official_process(
-    command: list[str],
-    *,
-    environment: dict[str, str],
-    cwd: Path,
-    model_bridge: ModelAccessHttpBridge,
-) -> None:
-    process = subprocess.Popen(command, cwd=cwd, env=environment)
-    previous: dict[signal.Signals, Any] = {}
-
-    def forward(signum, _frame) -> None:
-        if process.poll() is None:
-            process.send_signal(signum)
-
-    try:
-        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
-            previous[signum] = signal.getsignal(signum)
-            signal.signal(signum, forward)
-        exit_code = process.wait()
-    finally:
-        model_bridge.stop()
-        for signum, handler in previous.items():
-            signal.signal(signum, handler)
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
-    raise SystemExit(exit_code)
 
 
 def _require_official_runtime_files(rootfs: Path) -> None:

@@ -18,6 +18,10 @@ authenticated Unix relay and isolated browser origin. The launcher resolves
 the workspace's digest-protected release selection and directly invokes that
 rootfs's unchanged loader, Tini, Node binary, and upstream daemon entrypoint.
 It never patches, overlays, injects, or intercepts OpenDesign routes.
+`official_process_supervisor.py` remains outside the product process: it
+forwards lifecycle signals, checks the upstream `/api/ready` endpoint, and
+keeps the redaction-safe host diagnostic synchronized even when both optional
+bridges are disabled.
 
 ## Official release updates
 

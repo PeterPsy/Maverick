@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import signal
 import sys
 import tempfile
 import unittest
@@ -126,6 +127,61 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertNotIn("MAVERICK_RUNTIME_API_TOKEN", env)
         self.assertNotIn("MAVERICK_API_BASE", env)
         self.assertFalse(any("memory" in value.lower() or "persona" in value.lower() for value in env.values()))
+
+    def test_external_supervisor_marks_the_unchanged_official_process_ready(self) -> None:
+        from official_process_supervisor import supervise_official_process
+
+        class Process:
+            def __init__(self) -> None:
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def wait(self, timeout=None):
+                self.returncode = 0
+                return self.returncode
+
+            def send_signal(self, _signum):
+                raise AssertionError("no signal expected")
+
+            def terminate(self):
+                raise AssertionError("ready process should already be reaped")
+
+            def kill(self):
+                raise AssertionError("ready process should already be reaped")
+
+        class Bridge:
+            stopped = False
+
+            def stop(self):
+                self.stopped = True
+
+        process = Process()
+        bridge = Bridge()
+        states: list[tuple[str, int | None]] = []
+        command = ["/official/ld.so", "/official/tini", "--", "/official/node"]
+        environment = {"OD_DATA_DIR": "/data/opendesign-native"}
+        cwd = Path("/official/app")
+        with (
+            patch("official_process_supervisor.subprocess.Popen", return_value=process) as launch,
+            patch("official_process_supervisor.signal.getsignal", return_value=signal.SIG_DFL),
+            patch("official_process_supervisor.signal.signal"),
+            self.assertRaises(SystemExit) as exited,
+        ):
+            supervise_official_process(
+                command,
+                environment=environment,
+                cwd=cwd,
+                model_bridge=bridge,
+                ready_probe=lambda: True,
+                state_changed=lambda state, code: states.append((state, code)),
+            )
+
+        self.assertEqual(exited.exception.code, 0)
+        launch.assert_called_once_with(command, cwd=cwd, env=environment)
+        self.assertEqual(states, [("ready", None), ("stopped", 0)])
+        self.assertTrue(bridge.stopped)
 
     def test_frontend_is_only_a_launch_and_lifecycle_surface(self) -> None:
         source = (APP_ROOT / "frontend/src/App.tsx").read_text(encoding="utf-8")

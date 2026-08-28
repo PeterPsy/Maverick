@@ -23,6 +23,7 @@ export const TRANSIENT_APP_COMMAND_PARAMS = new Set([
   "new_skill_request_id",
   "open_settings_request_id",
   "open_tools_request_id",
+  "settings_section",
   "preview_context",
   "preview_context_request_id",
 ]);

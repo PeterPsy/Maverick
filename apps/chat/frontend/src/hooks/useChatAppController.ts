@@ -20,7 +20,7 @@ import {
 import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
 import { type ActiveAppContext, loadWidgetActiveAppContext } from "../lib/activeAppContext";
 import { composerRuntimeCapabilities } from "../lib/composerRuntimeCapabilities";
-import { openAppParamsInShell } from "../lib/shellNavigation";
+import { openAppParamsInShell, openContextAppParamsInShell } from "../lib/shellNavigation";
 import { delegatedChatSourceAppId } from "../lib/sourceAppPresentation";
 import { postActiveThreadChanged } from "./chatActiveThreadNotifications";
 import { useChatComposerContext } from "./useChatComposerContext";
@@ -639,6 +639,69 @@ export function useChatAppController({
       || (typeof activeAppContext?.params?.od_project_id === "string" ? activeAppContext.params.od_project_id : "")
       || (typeof activeAppContext?.params?.project_id === "string" ? activeAppContext.params.project_id : "")
     : "";
+  const updateSourceAppProjectContext = useCallback((projectId: string) => {
+    const normalizedProjectId = projectId.trim();
+    if (!sourceAppId || !normalizedProjectId) {
+      return;
+    }
+    setActiveAppContext((current) => {
+      if (!current || current.app_id !== sourceAppId) {
+        return current;
+      }
+      if (current.params?.od_project_id === normalizedProjectId) {
+        return current;
+      }
+      return {
+        ...current,
+        params: {
+          ...(current.params || {}),
+          od_project_id: normalizedProjectId,
+        },
+      };
+    });
+  }, [sourceAppId]);
+  const handleResolveSourceAppProject = useCallback((projectId: string) => {
+    updateSourceAppProjectContext(projectId);
+  }, [updateSourceAppProjectContext]);
+  const handleSelectSourceAppProject = useCallback((projectId: string) => {
+    const normalizedProjectId = projectId.trim();
+    if (!sourceAppId || !normalizedProjectId) {
+      return;
+    }
+    updateSourceAppProjectContext(normalizedProjectId);
+    openContextAppParamsInShell(
+      sourceAppId,
+      { od_project_id: normalizedProjectId },
+      { navigationScope },
+    );
+  }, [navigationScope, sourceAppId, updateSourceAppProjectContext]);
+  const handleOpenSourceAppSettings = useCallback((section?: "designSystems") => {
+    if (!sourceAppId) {
+      return;
+    }
+    openContextAppParamsInShell(
+      sourceAppId,
+      {
+        ...(sourceAppProjectId ? { od_project_id: sourceAppProjectId } : {}),
+        open_settings_request_id: crypto.randomUUID(),
+        ...(section ? { settings_section: section } : {}),
+      },
+      { navigationScope },
+    );
+  }, [navigationScope, sourceAppId, sourceAppProjectId]);
+  const handleOpenSourceAppTools = useCallback(() => {
+    if (!sourceAppId) {
+      return;
+    }
+    openContextAppParamsInShell(
+      sourceAppId,
+      {
+        ...(sourceAppProjectId ? { od_project_id: sourceAppProjectId } : {}),
+        open_tools_request_id: crypto.randomUUID(),
+      },
+      { navigationScope },
+    );
+  }, [navigationScope, sourceAppId, sourceAppProjectId]);
   const runtimeAdmissionError = runtimeAdmissionBlockMessage(activeSession);
 
   const presentation = useChatControllerPresentation({
@@ -671,8 +734,12 @@ export function useChatAppController({
     handleReferenceRemove,
     handleSearchReferences,
     handleOpenInterAgentGraph,
+    handleOpenSourceAppSettings,
+    handleOpenSourceAppTools,
+    handleResolveSourceAppProject,
     handleResolveInterAgentApproval,
     handleSelectAgent: runtimeControls.handleSelectAgent,
+    handleSelectSourceAppProject,
     handleSelectProvider: runtimeControls.handleSelectProvider,
     handleReasoningEffortChange: runtimeControls.setReasoningEffort,
     handleSend,
@@ -702,6 +769,7 @@ export function useChatAppController({
     sourceAppChatMode,
     sourceAppId,
     sourceAppProjectId,
+    sourceAppProjectSelectionLocked: Boolean(activeThread && sourceAppId),
     setSourceAppChatMode,
     setMultiAgentMode,
     setComposer,

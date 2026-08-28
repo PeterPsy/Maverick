@@ -161,7 +161,9 @@ async function renderComposer({
   onCapturePageArea,
   mentionItems = [],
   onReferenceAdd = () => undefined,
+  onOpenSourceAppSettings = () => undefined,
   onSearchReferences = async () => [],
+  onSelectSourceAppProject = () => undefined,
   onSelectMultiAgentMode = () => undefined,
   onSelectAgent = () => undefined,
   executionMode = null,
@@ -169,6 +171,7 @@ async function renderComposer({
   multiAgentMode = "off",
   onSubmit = () => undefined,
   sourceAppId = "",
+  sourceAppProjectId = "",
   transcriptionChunkedDictationSupported = false,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
@@ -181,7 +184,9 @@ async function renderComposer({
   onAddAttachments?: (files: File[]) => void;
   onCapturePageArea?: () => void;
   onReferenceAdd?: (reference: AppReference) => void;
+  onOpenSourceAppSettings?: (section?: "designSystems") => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
+  onSelectSourceAppProject?: (projectId: string) => void;
   onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
   onSelectAgent?: (agentTypeId: string) => void;
   executionMode?: ExecutionMode | null;
@@ -189,6 +194,7 @@ async function renderComposer({
   multiAgentMode?: MultiAgentComposerMode;
   onSubmit?: () => void;
   sourceAppId?: string;
+  sourceAppProjectId?: string;
   transcriptionChunkedDictationSupported?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
@@ -223,8 +229,10 @@ async function renderComposer({
           setValue(nextValue);
         }}
         onReferenceAdd={onReferenceAdd}
+        onOpenSourceAppSettings={onOpenSourceAppSettings}
         onSearchReferences={onSearchReferences}
         onSelectMultiAgentMode={onSelectMultiAgentMode}
+        onSelectSourceAppProject={onSelectSourceAppProject}
         onSelectAgent={onSelectAgent}
         onSelectProvider={() => undefined}
         onRemoveAttachment={() => undefined}
@@ -236,7 +244,7 @@ async function renderComposer({
         selectedAgentTypeId=""
         sourceAppChatMode="design"
         sourceAppId={sourceAppId}
-        sourceAppProjectId=""
+        sourceAppProjectId={sourceAppProjectId}
         onSelectSourceAppChatMode={() => undefined}
         transcriptionChunkedDictationSupported={transcriptionChunkedDictationSupported}
         transcriptionProviderAppId={transcriptionProviderAppId}
@@ -280,22 +288,36 @@ describe("delegated source app tools", () => {
   it("renders source tools for Design Studio", async () => {
     const { element } = await renderComposer({ sourceAppId: "design-studio" });
 
-    expect(element.querySelector('[aria-label="OpenDesign options"]')).toBeTruthy();
+    const sourceButton = element.querySelector('[aria-label="Design Studio"]');
+    const utilityPanel = element.querySelector('[aria-label="Composer utility controls"]');
+    expect(sourceButton).toBeTruthy();
+    expect(sourceButton?.textContent).toContain("design_services");
+    expect(sourceButton?.textContent).not.toContain("Design");
+    expect(utilityPanel?.contains(sourceButton)).toBe(false);
   });
 
   it("returns from source app options on Escape", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(
-        JSON.stringify({ label: "OpenDesign", modes: ["design", "plan"] }),
-        {
+      vi.fn(async (_url, init) => {
+        const action = JSON.parse(String(init?.body || "{}"))?.action;
+        const payload = action === "chat.context"
+          ? {
+              od_project_id: "od_project_1",
+              project: { id: "od_project_1", name: "Campaign", design_system_id: null },
+              projects: [{ id: "od_project_1", name: "Campaign", design_system_id: null }],
+              design_systems: [],
+              selection_source: "automatic",
+            }
+          : { label: "OpenDesign", modes: ["design", "plan"] };
+        return new Response(JSON.stringify(payload), {
           headers: { "Content-Type": "application/json" },
           status: 200,
-        },
-      )),
+        });
+      }),
     );
     const { element } = await renderComposer({ sourceAppId: "design-studio" });
-    const sourceButton = element.querySelector('button[aria-label="OpenDesign options"]');
+    const sourceButton = element.querySelector('button[aria-label="Design Studio"]');
     expect(sourceButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
@@ -310,6 +332,64 @@ describe("delegated source app tools", () => {
 
     expect(element.querySelector(".chatapp-source-tools__menu")).toBeNull();
     expect(document.activeElement).toBe(sourceButton);
+  });
+
+  it("offers the synced project, design system and native settings surfaces", async () => {
+    const onOpenSourceAppSettings = vi.fn();
+    const onSelectSourceAppProject = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (_url, init) => {
+      const action = JSON.parse(String(init?.body || "{}"))?.action;
+      const payload = action === "chat.capabilities"
+        ? {
+            label: "OpenDesign",
+            modes: ["chat", "plan", "design"],
+            supports_design_systems: true,
+            supports_project_selection: true,
+          }
+        : {
+            od_project_id: "od_project_1",
+            project: { id: "od_project_1", name: "Campaign", design_system_id: "user:brand" },
+            projects: [
+              { id: "od_project_1", name: "Campaign", design_system_id: "user:brand" },
+              { id: "od_project_2", name: "Landing", design_system_id: null },
+            ],
+            design_systems: [{ id: "user:brand", title: "Brand system", status: "published" }],
+            selection_source: "workspace",
+          };
+      return new Response(JSON.stringify(payload), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      });
+    }));
+    const { element } = await renderComposer({
+      onOpenSourceAppSettings,
+      onSelectSourceAppProject,
+      sourceAppId: "design-studio",
+      sourceAppProjectId: "od_project_1",
+    });
+
+    await act(async () => {
+      (element.querySelector('[aria-label="Design Studio"]') as HTMLButtonElement).click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const projectSelect = element.querySelector('[aria-label="Design Studio project"]') as HTMLSelectElement;
+    const designSystemSelect = element.querySelector('[aria-label="Design system"]') as HTMLSelectElement;
+    expect(projectSelect.value).toBe("od_project_1");
+    expect(designSystemSelect.value).toBe("user:brand");
+    expect(element.textContent).toContain("Brand system");
+
+    await act(async () => {
+      projectSelect.value = "od_project_2";
+      projectSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(onSelectSourceAppProject).toHaveBeenCalledWith("od_project_2");
+
+    await act(async () => {
+      (element.querySelector(".chatapp-source-tools__item") as HTMLButtonElement).click();
+    });
+    expect(onOpenSourceAppSettings).toHaveBeenCalledWith("designSystems");
   });
 });
 

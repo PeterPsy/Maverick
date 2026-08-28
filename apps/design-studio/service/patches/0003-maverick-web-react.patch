@@ -26,7 +26,7 @@ index cc7a5f3..08e698e 100644
          </I18nProvider>
        </body>
 diff --git a/apps/web/src/App.tsx b/apps/web/src/App.tsx
-index 9f30f20..37001c2 100644
+index 9f30f20..f45ba29 100644
 --- a/apps/web/src/App.tsx
 +++ b/apps/web/src/App.tsx
 @@ -390,6 +390,10 @@ function AppInner() {
@@ -51,14 +51,19 @@ index 9f30f20..37001c2 100644
    const [amrArtifactUpgradeHomeMockConfig] = useState<AmrArtifactUpgradeHomeOffer | null>(
      () => process.env.NODE_ENV === 'development' && typeof window !== 'undefined'
        ? amrArtifactUpgradeHomeMockOffer(window.location.search)
-@@ -2233,6 +2241,45 @@ function AppInner() {
+@@ -2233,6 +2241,50 @@ function AppInner() {
      setSettingsOpen(true);
    }, []);
  
 +  useEffect(() => {
 +    if (!maverickHosted) return undefined;
 +    function handleMaverickCommand(event: MessageEvent) {
-+      const data = event.data as { request_id?: unknown; type?: unknown; version?: unknown } | null;
++      const data = event.data as {
++        request_id?: unknown;
++        section?: unknown;
++        type?: unknown;
++        version?: unknown;
++      } | null;
 +      if (
 +        event.source !== window.parent
 +        || !data
@@ -67,7 +72,7 @@ index 9f30f20..37001c2 100644
 +        return;
 +      }
 +      if (data.type === 'maverick.opendesign.open-settings') {
-+        openSettings();
++        openSettings(data.section === 'designSystems' ? 'designSystems' : 'execution');
 +        window.parent.postMessage({
 +          type: 'maverick.opendesign.settings-opened',
 +          version: 1,
@@ -97,7 +102,7 @@ index 9f30f20..37001c2 100644
    // Entry point from the failed-run AMR nudge: open Settings on the execution
    // section and flag the AMR agent card for a one-shot scroll-into-view +
    // highlight (and a sign-in coachmark when not yet authorized).
-@@ -2460,6 +2507,12 @@ function AppInner() {
+@@ -2460,6 +2512,12 @@ function AppInner() {
      appMain = (
        <ProjectView
          key={activeProject.id}
@@ -110,7 +115,7 @@ index 9f30f20..37001c2 100644
          project={activeProject}
          routeFileName={route.kind === 'project' ? route.fileName : null}
          routeConversationId={route.kind === 'project' ? route.conversationId : null}
-@@ -2497,7 +2550,7 @@ function AppInner() {
+@@ -2497,7 +2555,7 @@ function AppInner() {
        />
      );
    } else {
@@ -119,7 +124,7 @@ index 9f30f20..37001c2 100644
        <EntryView
          skills={enabledSkills}
          designTemplates={enabledDesignTemplates}
-@@ -2594,16 +2647,18 @@ function AppInner() {
+@@ -2594,16 +2652,18 @@ function AppInner() {
          className={`workspace-shell workspace-shell--${clientType}`}
          data-client-type={clientType}
        >
@@ -144,7 +149,7 @@ index 9f30f20..37001c2 100644
          <PetOverlay
            pet={config.pet?.enabled ? config.pet : undefined}
            taskCenter={petTaskCenter}
-@@ -2663,6 +2718,12 @@ function AppInner() {
+@@ -2663,6 +2723,12 @@ function AppInner() {
                setConfig(next);
              }
              setSettingsOpen(false);

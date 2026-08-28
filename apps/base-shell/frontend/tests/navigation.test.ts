@@ -109,6 +109,7 @@ describe("base-shell navigation", () => {
       "open_tools_request_id",
       "preview_context",
       "preview_context_request_id",
+      "settings_section",
     ]);
   });
 
@@ -133,6 +134,17 @@ describe("base-shell navigation", () => {
     )).toEqual({
       od_project_id: "od_project_2",
       open_settings_request_id: "settings-1",
+    });
+    expect(resolveAppOpenParams(
+      "design-studio",
+      current,
+      "design-studio",
+      { open_settings_request_id: "settings-design-1", settings_section: "designSystems" },
+    )).toEqual({
+      od_project_id: "od_project_1",
+      od_run_id: "od_run_1",
+      open_settings_request_id: "settings-design-1",
+      settings_section: "designSystems",
     });
     expect(resolveAppOpenParams("design-studio", current, "design-studio", {})).toEqual({});
     expect(resolveAppOpenParams(

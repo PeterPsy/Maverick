@@ -59,8 +59,12 @@ type UseChatControllerPresentationParams = {
   handleReferenceRemove: (reference: AppReference) => void;
   handleSearchReferences: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
   handleOpenInterAgentGraph: (runId: string) => void;
+  handleOpenSourceAppSettings: (section?: "designSystems") => void;
+  handleOpenSourceAppTools: () => void;
+  handleResolveSourceAppProject: (projectId: string) => void;
   handleResolveInterAgentApproval: (approvalId: string, approved: boolean) => Promise<void>;
   handleSelectAgent: (agentTypeId: string) => void;
+  handleSelectSourceAppProject: (projectId: string) => void;
   handleSelectProvider: (providerId: string) => void;
   handleReasoningEffortChange: (effort: string) => void;
   handleSend: () => void;
@@ -90,6 +94,7 @@ type UseChatControllerPresentationParams = {
   sourceAppChatMode: SourceAppChatMode;
   sourceAppId: string;
   sourceAppProjectId: string;
+  sourceAppProjectSelectionLocked: boolean;
   setSourceAppChatMode: (mode: SourceAppChatMode) => void;
   setMultiAgentMode: (mode: MultiAgentComposerMode) => void;
   setComposer: (value: string) => void;
@@ -137,8 +142,12 @@ export function useChatControllerPresentation({
   handleReferenceRemove,
   handleSearchReferences,
   handleOpenInterAgentGraph,
+  handleOpenSourceAppSettings,
+  handleOpenSourceAppTools,
+  handleResolveSourceAppProject,
   handleResolveInterAgentApproval,
   handleSelectAgent,
+  handleSelectSourceAppProject,
   handleSelectProvider,
   handleReasoningEffortChange,
   handleSend,
@@ -168,6 +177,7 @@ export function useChatControllerPresentation({
   sourceAppChatMode,
   sourceAppId,
   sourceAppProjectId,
+  sourceAppProjectSelectionLocked,
   setSourceAppChatMode,
   setMultiAgentMode,
   setComposer,
@@ -250,10 +260,14 @@ export function useChatControllerPresentation({
       onReferenceAdd: handleReferenceAdd,
       onReferenceRemove: handleReferenceRemove,
       onRemoveAttachment: removeAttachment,
+      onOpenSourceAppSettings: handleOpenSourceAppSettings,
+      onOpenSourceAppTools: handleOpenSourceAppTools,
+      onResolveSourceAppProject: handleResolveSourceAppProject,
       onSearchReferences: handleSearchReferences,
       onSelectMultiAgentMode: setMultiAgentMode,
       onSelectAgent: handleSelectAgent,
       onSelectProvider: handleSelectProvider,
+      onSelectSourceAppProject: handleSelectSourceAppProject,
       onReasoningEffortChange: handleReasoningEffortChange,
       onStopTurn: handleStopTurn,
       onSubmit: handleSend,
@@ -266,6 +280,7 @@ export function useChatControllerPresentation({
       sourceAppChatMode,
       sourceAppId,
       sourceAppProjectId,
+      sourceAppProjectSelectionLocked,
       onSelectSourceAppChatMode: setSourceAppChatMode,
       transcriptionChunkedDictationSupported,
       transcriptionContentTypes,

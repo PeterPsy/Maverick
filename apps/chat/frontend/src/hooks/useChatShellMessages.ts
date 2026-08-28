@@ -74,7 +74,13 @@ export function useChatShellMessages({
         return;
       }
       if (payload.type === "maverick.widget.context-changed") {
-        if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
+        // Unlike app-navigation messages, widget context keeps the scope under
+        // context.content.payload. Read it there so a dock receives its live
+        // Design Studio project without leaking context between chat surfaces.
+        if (!shellMessageMatchesNavigationScope(
+          { navigation_scope: widgetContextNavigationScope(payload.context) },
+          navigationScope,
+        )) {
           return;
         }
         setActiveAppContext(activeAppContextFromWidgetContext(payload.context || {}));
@@ -121,4 +127,17 @@ export function useChatShellMessages({
     speechProviderAppId,
     transcriptionProviderAppId,
   ]);
+}
+
+function widgetContextNavigationScope(context: Record<string, unknown> | undefined): string | undefined {
+  const content = context?.content;
+  if (!content || typeof content !== "object") {
+    return undefined;
+  }
+  const payload = (content as { payload?: unknown }).payload;
+  if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+  const scope = (payload as { navigation_scope?: unknown }).navigation_scope;
+  return typeof scope === "string" ? scope : undefined;
 }

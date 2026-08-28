@@ -45,6 +45,7 @@ export type OpenDesignThemeMessage = {
 export type OpenDesignOpenSettingsMessage = {
   type: "maverick.opendesign.open-settings";
   version: 1;
+  section?: "designSystems";
 };
 
 export type OpenDesignOpenToolsMessage = {

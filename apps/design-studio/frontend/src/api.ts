@@ -215,8 +215,12 @@ export function themeMessage(theme: "dark" | "light"): OpenDesignThemeMessage {
   return { type: "maverick.opendesign.theme", version: 1, theme };
 }
 
-export function openSettingsMessage(): OpenDesignOpenSettingsMessage {
-  return { type: "maverick.opendesign.open-settings", version: 1 };
+export function openSettingsMessage(section?: "designSystems"): OpenDesignOpenSettingsMessage {
+  return {
+    type: "maverick.opendesign.open-settings",
+    version: 1,
+    ...(section ? { section } : {}),
+  };
 }
 
 export function openToolsMessage(requestId: string): OpenDesignOpenToolsMessage {

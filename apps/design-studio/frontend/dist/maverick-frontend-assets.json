@@ -1,5 +1,5 @@
 {
-  "build_id": "d91cad7d5b3e273d1f4a08b5ddfece231472dbb9d736e264f6e1bfc13cd5f8d4",
+  "build_id": "8d85ddecbe36d05cc117a046eacc63e821d8d4cd655c836b8d3da405933fc02d",
   "entrypoints": [
     "index.html",
     "widgets/design-studio-sidebar/index.html",
@@ -8,14 +8,14 @@
   "immutable": [],
   "revalidated": [
     {
+      "path": "assets/app-ByAoWjTb.js",
+      "sha256": "08bd0a5974b7af077fe2eb2f2dc90090ca53fdd12ad9a00218b83d74ef60aa08",
+      "size_bytes": 16121
+    },
+    {
       "path": "assets/app-BzQy-rfG.js",
       "sha256": "d07c808e5d9ec1f9851cfba4250a326a9b2e6fdc038891ab7af78b7b98a39c48",
       "size_bytes": 3546
-    },
-    {
-      "path": "assets/app-CrUA3ULv.js",
-      "sha256": "8033cb59a68d76eaf49e7830f4922908ba0058265cf9c25e3c85afd64c860ceb",
-      "size_bytes": 15864
     },
     {
       "path": "assets/app-DKGXUxTG.js",
@@ -49,7 +49,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "b9f5d1b3a25df378f605657e757ac51f2b7a2230b189f14bd8ef7ab8a0548b64",
+      "sha256": "2c54a3adb38ad4873babe3a6bc8759fb8db43b23d1c16f7240b90962961d549a",
       "size_bytes": 627
     },
     {

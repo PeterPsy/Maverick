@@ -15,7 +15,32 @@ export type SourceAppChatCapabilities = {
   label?: string;
   modes?: SourceAppChatMode[];
   source_app_id?: string;
+  supports_design_systems?: boolean;
+  supports_project_selection?: boolean;
   supports_skill_invocations?: boolean;
+};
+
+export type SourceAppChatProject = {
+  id: string;
+  name: string;
+  design_system_id?: string | null;
+};
+
+export type SourceAppDesignSystem = {
+  id: string;
+  title: string;
+  source?: string;
+  status?: string;
+  is_editable?: boolean;
+};
+
+export type SourceAppChatContext = {
+  source_app_id?: string;
+  od_project_id: string;
+  project: SourceAppChatProject | null;
+  projects: SourceAppChatProject[];
+  selection_source?: "automatic" | "empty" | "workspace";
+  design_systems: SourceAppDesignSystem[];
 };
 
 type RuntimeRequestResult = {
@@ -95,6 +120,70 @@ export function getSourceAppChatCapabilities(
     signal: options.signal,
     body: JSON.stringify({ action: "chat.capabilities" }),
   });
+}
+
+export function getSourceAppChatContext(
+  sourceAppId: string,
+  projectId = "",
+  options: { signal?: AbortSignal } = {},
+): Promise<SourceAppChatContext> {
+  return requestJson<SourceAppChatContext>(`/api/apps/${encodeURIComponent(sourceAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: options.signal,
+    body: JSON.stringify({
+      action: "chat.context",
+      arguments: projectId ? { project_id: projectId } : {},
+    }),
+  });
+}
+
+export async function resolveSourceAppChatProject(
+  sourceAppId: string,
+  projectId = "",
+  options: { signal?: AbortSignal } = {},
+): Promise<string> {
+  const payload = await requestJson<{ od_project_id?: string }>(
+    `/api/apps/${encodeURIComponent(sourceAppId)}/backend`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: options.signal,
+      body: JSON.stringify({
+        action: "chat.resolve_project",
+        arguments: projectId ? { project_id: projectId } : {},
+      }),
+    },
+  );
+  return typeof payload.od_project_id === "string" ? payload.od_project_id : "";
+}
+
+export function setSourceAppChatDesignSystem({
+  designSystemId,
+  projectId,
+  signal,
+  sourceAppId,
+}: {
+  designSystemId: string | null;
+  projectId: string;
+  signal?: AbortSignal;
+  sourceAppId: string;
+}): Promise<{ od_project_id: string; project: SourceAppChatProject }> {
+  return requestJson<{ od_project_id: string; project: SourceAppChatProject }>(
+    `/api/apps/${encodeURIComponent(sourceAppId)}/backend`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({
+        action: "chat.set_design_system",
+        arguments: {
+          design_system_id: designSystemId,
+          project_id: projectId,
+        },
+      }),
+    },
+  );
 }
 
 export async function cancelSourceAppTurn({

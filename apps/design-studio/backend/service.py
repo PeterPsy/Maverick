@@ -1079,7 +1079,155 @@ def chat_capabilities(payload: dict[str, Any]) -> dict[str, Any]:
         "source_app_id": str(payload.get("app_id") or "design-studio"),
         "label": "OpenDesign",
         "modes": ["chat", "plan", "design"],
+        "supports_design_systems": True,
+        "supports_project_selection": True,
         "supports_skill_invocations": True,
+    }
+
+
+def chat_resolve_project(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the preferred project, or OpenDesign's latest when none is supplied."""
+    projects = list_opendesign_projects(payload)["projects"]
+    return _chat_resolve_project_from_projects(projects, arguments)
+
+
+def chat_context(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Return the project and design-system controls needed by Maverick Chat."""
+    projects = list_opendesign_projects(payload)["projects"]
+    resolved = _chat_resolve_project_from_projects(projects, arguments)
+    response = _opendesign_request(payload, "/api/design-systems")
+    design_systems = response.get("designSystems")
+    if not isinstance(design_systems, list) or any(not isinstance(item, dict) for item in design_systems):
+        raise DesignStudioError(
+            "opendesign_response_invalid",
+            "OpenDesign returned an invalid design-system catalog.",
+            status_code=502,
+        )
+    return {
+        "source_app_id": str(payload.get("app_id") or "design-studio"),
+        "od_project_id": resolved["od_project_id"],
+        "project": resolved["project"],
+        "projects": [_chat_project_summary(project) for project in projects],
+        "selection_source": resolved["selection_source"],
+        "design_systems": [_chat_design_system_summary(item) for item in design_systems],
+    }
+
+
+def chat_set_design_system(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Apply one published OpenDesign design system to the selected project."""
+    try:
+        project_id = validated_identifier(
+            arguments.get("od_project_id") or arguments.get("project_id"),
+            label="OpenDesign project id",
+        )
+    except RuntimeBridgeError as error:
+        raise DesignStudioError("project_id_invalid", str(error)) from error
+    projects = list_opendesign_projects(payload)["projects"]
+    if not any(str(project.get("id") or "") == project_id for project in projects):
+        raise DesignStudioError("project_not_found", "The OpenDesign project was not found.", status_code=404)
+
+    raw_design_system_id = arguments.get("design_system_id")
+    design_system_id = str(raw_design_system_id or "").strip()
+    if design_system_id and not APP_CONFIG_ID_PATTERN.fullmatch(design_system_id):
+        raise DesignStudioError("design_system_id_invalid", "The OpenDesign design-system id is invalid.")
+    if design_system_id:
+        response = _opendesign_request(payload, "/api/design-systems")
+        catalog = response.get("designSystems")
+        if not isinstance(catalog, list) or any(not isinstance(item, dict) for item in catalog):
+            raise DesignStudioError(
+                "opendesign_response_invalid",
+                "OpenDesign returned an invalid design-system catalog.",
+                status_code=502,
+            )
+        selected_system = next((item for item in catalog if str(item.get("id") or "") == design_system_id), None)
+        if selected_system is None:
+            raise DesignStudioError("design_system_not_found", "The OpenDesign design system was not found.", status_code=404)
+        if str(selected_system.get("status") or "").lower() != "published":
+            raise DesignStudioError(
+                "design_system_not_published",
+                "Only published OpenDesign design systems can be applied to projects.",
+                status_code=409,
+            )
+    response = _opendesign_patch(
+        payload,
+        f"/api/projects/{project_id}",
+        {"designSystemId": design_system_id or None},
+    )
+    project = response.get("project") if isinstance(response.get("project"), dict) else response
+    if not isinstance(project, dict) or str(project.get("id") or "") != project_id:
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid project.", status_code=502)
+    return {
+        "od_project_id": project_id,
+        "project": _chat_project_summary(project),
+    }
+
+
+def _chat_resolve_project_from_projects(
+    projects: list[dict[str, Any]],
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    preferred_id = str(arguments.get("od_project_id") or arguments.get("project_id") or "").strip()
+    if preferred_id:
+        try:
+            preferred_id = validated_identifier(preferred_id, label="OpenDesign project id")
+        except RuntimeBridgeError as error:
+            raise DesignStudioError("project_id_invalid", str(error)) from error
+        selected = next((project for project in projects if str(project.get("id") or "") == preferred_id), None)
+        if selected is None:
+            raise DesignStudioError("project_not_found", "The OpenDesign project was not found.", status_code=404)
+        selection_source = "workspace"
+    elif projects:
+        selected = max(
+            projects,
+            key=lambda project: (_project_created_at(project), str(project.get("id") or "")),
+        )
+        selection_source = "automatic"
+    else:
+        selected = None
+        selection_source = "empty"
+    return {
+        "od_project_id": str(selected.get("id") or "") if selected else "",
+        "project": _chat_project_summary(selected) if selected else None,
+        "selection_source": selection_source,
+    }
+
+
+def _chat_project_summary(project: dict[str, Any]) -> dict[str, Any]:
+    project_id = str(project.get("id") or "").strip()
+    try:
+        project_id = validated_identifier(project_id, label="OpenDesign project id")
+    except RuntimeBridgeError as error:
+        raise DesignStudioError(
+            "opendesign_response_invalid",
+            "OpenDesign returned a project without a valid identifier.",
+            status_code=502,
+        ) from error
+    design_system_id = project.get("designSystemId")
+    return {
+        "id": project_id,
+        "name": str(project.get("name") or project_id).strip()[:160] or project_id,
+        "design_system_id": (
+            str(design_system_id).strip()
+            if isinstance(design_system_id, str) and design_system_id.strip()
+            else None
+        ),
+    }
+
+
+def _chat_design_system_summary(item: dict[str, Any]) -> dict[str, Any]:
+    design_system_id = str(item.get("id") or "").strip()
+    if not APP_CONFIG_ID_PATTERN.fullmatch(design_system_id):
+        raise DesignStudioError(
+            "opendesign_response_invalid",
+            "OpenDesign returned a design system without a valid identifier.",
+            status_code=502,
+        )
+    return {
+        "id": design_system_id,
+        "title": str(item.get("title") or item.get("label") or design_system_id).strip()[:160] or design_system_id,
+        "source": str(item.get("source") or "").strip().lower(),
+        "status": str(item.get("status") or "").strip().lower(),
+        "is_editable": item.get("isEditable") is True,
     }
 
 
@@ -1524,6 +1672,12 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return clear_custom_view(payload)
     if action == "chat.capabilities":
         return chat_capabilities(payload)
+    if action == "chat.resolve_project":
+        return chat_resolve_project(payload, arguments)
+    if action == "chat.context":
+        return chat_context(payload, arguments)
+    if action == "chat.set_design_system":
+        return chat_set_design_system(payload, arguments)
     if action == "chat.list_conversations":
         return chat_list_conversations(payload, arguments)
     if action == "chat.create_conversation":
@@ -1884,6 +2038,14 @@ def _opendesign_json_request(payload: dict[str, Any], path: str) -> Any:
 
 def _opendesign_post(payload: dict[str, Any], path: str, body: dict[str, Any]) -> dict[str, Any]:
     response = _opendesign_response(payload, "POST", path, json_body=body)
+    decoded = _decode_opendesign_json(response)
+    if not isinstance(decoded, dict):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid response.", status_code=502)
+    return decoded
+
+
+def _opendesign_patch(payload: dict[str, Any], path: str, body: dict[str, Any]) -> dict[str, Any]:
+    response = _opendesign_response(payload, "PATCH", path, json_body=body)
     decoded = _decode_opendesign_json(response)
     if not isinstance(decoded, dict):
         raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid response.", status_code=502)

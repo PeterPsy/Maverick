@@ -62,9 +62,101 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
         capabilities = service.chat_capabilities(payload)
         self.assertEqual(capabilities["source_app_id"], "mounted-design-studio")
         self.assertEqual(capabilities["modes"], ["chat", "plan", "design"])
+        self.assertTrue(capabilities["supports_design_systems"])
+        self.assertTrue(capabilities["supports_project_selection"])
         self.assertTrue(capabilities["supports_skill_invocations"])
         self.assertNotIn("supported", capabilities)
         self.assertNotIn("unavailable", capabilities)
+
+    def test_chat_context_resolves_workspace_project_and_design_system_catalog(self) -> None:
+        payload = self._payload(Path("/tmp/design-studio-chat-context-test"))
+        projects = [
+            {
+                "id": "od_project_1",
+                "name": "Campaign",
+                "designSystemId": "user:brand",
+                "createdAt": "2026-08-01T00:00:00Z",
+            },
+            {
+                "id": "od_project_2",
+                "name": "Latest",
+                "designSystemId": None,
+                "createdAt": "2026-08-02T00:00:00Z",
+            },
+        ]
+        with patch.object(service, "list_opendesign_projects", return_value={"projects": projects}), patch.object(
+            service,
+            "_opendesign_request",
+            return_value={
+                "designSystems": [
+                    {
+                        "id": "user:brand",
+                        "title": "Brand system",
+                        "source": "user",
+                        "status": "published",
+                        "isEditable": True,
+                    }
+                ]
+            },
+        ):
+            context = service.chat_context(payload, {"project_id": "od_project_1"})
+            fallback = service.chat_resolve_project(payload, {})
+
+        self.assertEqual(context["od_project_id"], "od_project_1")
+        self.assertEqual(context["selection_source"], "workspace")
+        self.assertEqual(context["project"]["design_system_id"], "user:brand")
+        self.assertEqual(context["design_systems"][0]["title"], "Brand system")
+        self.assertTrue(context["design_systems"][0]["is_editable"])
+        self.assertEqual(fallback["od_project_id"], "od_project_2")
+        self.assertEqual(fallback["selection_source"], "automatic")
+
+    def test_chat_can_apply_a_published_design_system_to_the_selected_project(self) -> None:
+        payload = self._payload(Path("/tmp/design-studio-chat-design-system-test"))
+        projects = [{"id": "od_project_1", "name": "Campaign", "designSystemId": None}]
+        with patch.object(service, "list_opendesign_projects", return_value={"projects": projects}), patch.object(
+            service,
+            "_opendesign_request",
+            return_value={"designSystems": [{"id": "user:brand", "title": "Brand", "status": "published"}]},
+        ), patch.object(
+            service,
+            "_opendesign_patch",
+            return_value={
+                "project": {
+                    "id": "od_project_1",
+                    "name": "Campaign",
+                    "designSystemId": "user:brand",
+                }
+            },
+        ) as patch_project:
+            result = service.chat_set_design_system(
+                payload,
+                {"project_id": "od_project_1", "design_system_id": "user:brand"},
+            )
+
+        patch_project.assert_called_once_with(
+            payload,
+            "/api/projects/od_project_1",
+            {"designSystemId": "user:brand"},
+        )
+        self.assertEqual(result["project"]["design_system_id"], "user:brand")
+
+    def test_chat_rejects_an_unpublished_design_system(self) -> None:
+        payload = self._payload(Path("/tmp/design-studio-chat-draft-system-test"))
+        projects = [{"id": "od_project_1", "name": "Campaign", "designSystemId": None}]
+        with patch.object(service, "list_opendesign_projects", return_value={"projects": projects}), patch.object(
+            service,
+            "_opendesign_request",
+            return_value={"designSystems": [{"id": "user:draft", "title": "Draft", "status": "draft"}]},
+        ), patch.object(service, "_opendesign_patch") as patch_project:
+            with self.assertRaises(service.DesignStudioError) as raised:
+                service.chat_set_design_system(
+                    payload,
+                    {"project_id": "od_project_1", "design_system_id": "user:draft"},
+                )
+
+        self.assertEqual(raised.exception.error, "design_system_not_published")
+        self.assertEqual(raised.exception.status_code, 409)
+        patch_project.assert_not_called()
 
     def test_active_generation_verification_is_reused_within_one_backend_payload(self) -> None:
         with TemporaryDirectory() as temp_dir:

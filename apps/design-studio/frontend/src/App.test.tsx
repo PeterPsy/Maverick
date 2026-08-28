@@ -138,6 +138,28 @@ describe("Design Studio transactional frame readiness", () => {
     });
     expect(sidecarPostMessage).toHaveBeenCalledTimes(1);
 
+    sidecarPostMessage.mockClear();
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: {
+          type: "maverick.app.navigate",
+          app_id: "design-studio",
+          params: {
+            od_project_id: "od_project_1",
+            open_settings_request_id: "settings-request-1",
+            settings_section: "designSystems",
+          },
+        },
+        origin: window.location.origin,
+        source: window.parent,
+      }));
+    });
+    expect(sidecarPostMessage).toHaveBeenCalledWith({
+      type: "maverick.opendesign.open-settings",
+      version: 1,
+      section: "designSystems",
+    }, LAUNCH.origin);
+
     await dispatchReady(frameWindow, LAUNCH.origin, 1);
     expect(firstPaintEvents()).toHaveLength(1);
     await act(async () => {

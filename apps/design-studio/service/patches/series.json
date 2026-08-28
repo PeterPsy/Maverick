@@ -50,8 +50,8 @@
     {
       "component": "web-react",
       "path": "0003-maverick-web-react.patch",
-      "sha256": "bcca54d6666f42b88a9af1b740eb236f13060a183fe6c15136f501e9246e0e78",
-      "reason": "Keep OpenDesign navigation and project catalog delegated to Maverick, route the hosted Strumenti command to a real native sketch editor, suppress unsupported local-editor handoff routes and the duplicate native assistant, preserve the hosted workspace grid, localize the embedded UI, and map it to Maverick dark and light palette tokens.",
+      "sha256": "ba25bce6c6934364717399be0923fbc18d8f7a1f636cf5502470a35af49bc7b7",
+      "reason": "Keep OpenDesign navigation and project catalog delegated to Maverick, route the hosted Strumenti command to a real native sketch editor, let Maverick Chat open the native Design Systems settings, suppress unsupported local-editor handoff routes and the duplicate native assistant, preserve the hosted workspace grid, localize the embedded UI, and map it to Maverick dark and light palette tokens.",
       "files": [
         {
           "path": "apps/web/app/layout.tsx",
@@ -61,7 +61,7 @@
         {
           "path": "apps/web/src/App.tsx",
           "pre_sha256": "0eea6ad56d20099dc1427e7d17d4700e0e8c42f89b14a466f665ec1e6841e72f",
-          "post_sha256": "216d38c398e9e1a01a1622aa47c6be267db0aed2e0a5b727a0bf1a274e3e0bc1"
+          "post_sha256": "304e6190c5031e851e01ff6458c10ba8d2871c965412b4bd2007127a51b0492f"
         },
         {
           "path": "apps/web/src/components/FileWorkspace.tsx",

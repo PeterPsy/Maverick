@@ -39,6 +39,7 @@ export function App() {
   const stopStartupStatusPollRef = useRef<() => void>(() => undefined);
   const navigationRef = useRef<OpenDesignNavigation>(initialNavigation());
   const settingsRequestRef = useRef(initialSettingsRequest());
+  const settingsSectionRef = useRef<"designSystems" | undefined>(initialSettingsSection());
   const deliveredSettingsRequestRef = useRef("");
   const settingsDeliveryAttemptsRef = useRef(0);
   const toolsRequestRef = useRef(initialToolsRequest());
@@ -92,7 +93,7 @@ export function App() {
         return;
       }
       settingsDeliveryAttemptsRef.current += 1;
-      frameWindow.postMessage(openSettingsMessage(), origin);
+      frameWindow.postMessage(openSettingsMessage(settingsSectionRef.current), origin);
       window.setTimeout(send, 250);
     }
     send();
@@ -161,6 +162,7 @@ export function App() {
         const settingsRequest = scalarString(params.open_settings_request_id);
         if (settingsRequest && settingsRequest !== settingsRequestRef.current) {
           settingsRequestRef.current = settingsRequest;
+          settingsSectionRef.current = params.settings_section === "designSystems" ? "designSystems" : undefined;
           deliveredSettingsRequestRef.current = "";
           settingsDeliveryAttemptsRef.current = 0;
           postSettings();
@@ -543,6 +545,10 @@ function initialTheme(): "dark" | "light" {
 
 function initialSettingsRequest(search = window.location.search): string {
   return scalarString(new URLSearchParams(search).get("open_settings_request_id"));
+}
+
+function initialSettingsSection(search = window.location.search): "designSystems" | undefined {
+  return new URLSearchParams(search).get("settings_section") === "designSystems" ? "designSystems" : undefined;
 }
 
 function initialToolsRequest(search = window.location.search): string {

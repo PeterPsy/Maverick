@@ -4,6 +4,7 @@ import {
   consumeNewChatRequest,
   normalizeChatRouteParams,
   openAppParamsInShell,
+  openContextAppParamsInShell,
   openAppRouteInShell,
   openChatRootRouteInShell,
   openChatThreadRouteInShell,
@@ -110,6 +111,24 @@ describe("chat shell navigation", () => {
       type: "maverick.app.open-app",
       app_id: "storage",
       params: { workspace_relative_path: "storage/generated/report.md" },
+    });
+  });
+
+  it("uses the widget app-open command from a scoped contextual chat", () => {
+    const parent = messageTarget();
+
+    const posted = openContextAppParamsInShell("design-studio", { od_project_id: "od_project_1" }, {
+      currentWindow: {},
+      navigationScope: "chat-floating-dock",
+      origin: "https://maverick.test",
+      parentWindow: parent.target,
+    });
+
+    expect(posted).toBe(true);
+    expect(parent.messages[0]?.message).toEqual({
+      type: "maverick.widget.open-app",
+      app_id: "design-studio",
+      params: { od_project_id: "od_project_1" },
     });
   });
 

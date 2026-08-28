@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sendSourceAppTurn } from "./sourceAppChat";
+import {
+  getSourceAppChatContext,
+  resolveSourceAppChatProject,
+  sendSourceAppTurn,
+  setSourceAppChatDesignSystem,
+} from "./sourceAppChat";
 
 function okJson(payload: unknown): Response {
   return { ok: true, status: 200, json: async () => payload } as Response;
@@ -76,6 +81,43 @@ describe("source app chat bridge", () => {
       "/api/runtime/turns/turn-design",
       "/api/runtime/threads/session-design",
       "/api/runtime/sessions/session-design/events?limit=500",
+    ]);
+  });
+
+  it("loads and updates the governed Design Studio composer context", async () => {
+    const responses = [
+      {
+        od_project_id: "od_project_1",
+        project: { id: "od_project_1", name: "Campaign", design_system_id: null },
+        projects: [{ id: "od_project_1", name: "Campaign", design_system_id: null }],
+        design_systems: [{ id: "user:brand", title: "Brand" }],
+      },
+      { od_project_id: "od_project_1" },
+      {
+        od_project_id: "od_project_1",
+        project: { id: "od_project_1", name: "Campaign", design_system_id: "user:brand" },
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => okJson(responses.shift())));
+
+    const context = await getSourceAppChatContext("design-studio", "od_project_1");
+    const resolvedProjectId = await resolveSourceAppChatProject("design-studio", "od_project_1");
+    const updated = await setSourceAppChatDesignSystem({
+      designSystemId: "user:brand",
+      projectId: "od_project_1",
+      sourceAppId: "design-studio",
+    });
+
+    expect(context.design_systems[0]?.title).toBe("Brand");
+    expect(resolvedProjectId).toBe("od_project_1");
+    expect(updated.project.design_system_id).toBe("user:brand");
+    expect(vi.mocked(fetch).mock.calls.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+      { action: "chat.context", arguments: { project_id: "od_project_1" } },
+      { action: "chat.resolve_project", arguments: { project_id: "od_project_1" } },
+      {
+        action: "chat.set_design_system",
+        arguments: { design_system_id: "user:brand", project_id: "od_project_1" },
+      },
     ]);
   });
 });

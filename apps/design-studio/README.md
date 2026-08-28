@@ -256,7 +256,8 @@ native `ProjectView`, fixes the hosted shell to give its body the full available
 height, and initializes the isolated editor in Italian. The shell sidebar
 remains the only project catalog; its `Strumenti` command focuses the latest
 native sketch or creates the first sketch so Excalidraw's drawing toolbar is
-actually usable, while the settings command opens the native `SettingsDialog`.
+actually usable, while typed settings commands open either the native
+`SettingsDialog` execution section or its Design Systems section.
 The duplicate OpenDesign assistant stays unmounted in favor of Maverick Chat,
 and hosted mode omits the local-editor handoff control because its routes are
 intentionally denied. OpenDesign Home and the redundant native workspace tabs
@@ -280,13 +281,21 @@ user/assistant messages, run records and result packages. Legacy correlations
 are migrated by choosing the newest valid session for future turns without
 rewriting or deleting historical runtime threads.
 
-The composer exposes one generic source-app tools button. Only the actionable
-Chat, Plan and Design modes are listed; informational capabilities without an
-end-to-end action are not advertised. Design Studio advertises structured
-skill invocation, forwards Chat's validated `invoked_skill_ids` into its
-generic runtime request, and creates new source-app sessions in `explicit`
-activation mode. Submit, cancel and retry still use the source app owner and
-its persisted runtime-session binding.
+The composer exposes a persistent icon-only Design Studio button immediately
+beside, and outside, Chat's generic Utility menu. Its governed context API
+(`chat.context`, `chat.resolve_project`, and `chat.set_design_system`) follows
+the project currently open in the workspace, resolves the latest canonical
+project only when no project context exists, lists canonical projects and
+Design Systems, and applies only published systems. Existing conversations
+stay bound to their original project. The same panel exposes Chat, Plan and
+Design modes plus typed commands for native Design System settings, workspace
+sketch tools, and the remaining OpenDesign settings. Maverick retains its own
+visual composer and supplies attachments, references, skills, agents/models,
+submission, cancellation, and retry while Design Studio remains the owner of
+the OpenDesign conversation and run protocol. Design Studio advertises
+structured skill invocation, forwards Chat's validated `invoked_skill_ids`
+into its generic runtime request, and creates new source-app sessions in
+`explicit` activation mode.
 
 ## SDK Flow
 

@@ -1,14 +1,14 @@
 {
   "schema": "maverick.frontend-assets.v1",
-  "build_id": "abb21c3221760157b88ff3cb58002da1ed559c80ea413709e5543158baf79a84",
+  "build_id": "0ad38e469e125bc7b532a8a94c0ec26ba936755d7188cb4c9439abc179c40bd9",
   "entrypoints": [
     "index.html",
     "offline.html"
   ],
   "immutable": [
     {
-      "path": "assets/LoginPaperBackground-B9O4M2vf.js",
-      "sha256": "dc0874be0acff3c42f3f2916f5c4e1ae2be892423c772290daf50908c22d7f41",
+      "path": "assets/LoginPaperBackground-Gan7Efsw.js",
+      "sha256": "32ada5c9b4e045f3ec28626407dc8b734fcdd24c03cc2bf6f61e73a0c419b7d1",
       "size_bytes": 25087
     },
     {
@@ -17,9 +17,9 @@
       "size_bytes": 76237
     },
     {
-      "path": "assets/index-h7NTBgHE.js",
-      "sha256": "d5dd344135c72d2a885a5ddb25d77831073b1be20cc6a7927bda7240c9c1e884",
-      "size_bytes": 291050
+      "path": "assets/index-DasiIg8x.js",
+      "sha256": "3e01930f3cdcd45a71e5384f423ac4772f180a02d56bf1976dfc548508a284a1",
+      "size_bytes": 291069
     }
   ],
   "revalidated": [
@@ -35,7 +35,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "3eb15785b2fe9704a3620bceba50e57a8610128adec051c4d197c7b861b7f1e0",
+      "sha256": "71c53a13fe97c46f4a6cae7311c630b28863441b2ea25f0eaa3c85d51a554069",
       "size_bytes": 1977
     },
     {
@@ -95,7 +95,7 @@
     },
     {
       "path": "sw.js",
-      "sha256": "26cb18027b07fb72574701e3aa4aafbf0dcdc734e2d202d767aa4bc82f3f974e",
+      "sha256": "ddba2461cb13985fd10e302d5bdf9ccab6c9de1001b5905e5524a5094f6bf55f",
       "size_bytes": 14085
     }
   ],
@@ -103,7 +103,7 @@
     {
       "url": "/",
       "path": "index.html",
-      "sha256": "3eb15785b2fe9704a3620bceba50e57a8610128adec051c4d197c7b861b7f1e0",
+      "sha256": "71c53a13fe97c46f4a6cae7311c630b28863441b2ea25f0eaa3c85d51a554069",
       "size_bytes": 1977
     },
     {
@@ -119,15 +119,15 @@
       "size_bytes": 76237
     },
     {
-      "url": "/apps/base-shell/assets/index-h7NTBgHE.js",
-      "path": "assets/index-h7NTBgHE.js",
-      "sha256": "d5dd344135c72d2a885a5ddb25d77831073b1be20cc6a7927bda7240c9c1e884",
-      "size_bytes": 291050
+      "url": "/apps/base-shell/assets/index-DasiIg8x.js",
+      "path": "assets/index-DasiIg8x.js",
+      "sha256": "3e01930f3cdcd45a71e5384f423ac4772f180a02d56bf1976dfc548508a284a1",
+      "size_bytes": 291069
     },
     {
-      "url": "/apps/base-shell/assets/LoginPaperBackground-B9O4M2vf.js",
-      "path": "assets/LoginPaperBackground-B9O4M2vf.js",
-      "sha256": "dc0874be0acff3c42f3f2916f5c4e1ae2be892423c772290daf50908c22d7f41",
+      "url": "/apps/base-shell/assets/LoginPaperBackground-Gan7Efsw.js",
+      "path": "assets/LoginPaperBackground-Gan7Efsw.js",
+      "sha256": "32ada5c9b4e045f3ec28626407dc8b734fcdd24c03cc2bf6f61e73a0c419b7d1",
       "size_bytes": 25087
     },
     {

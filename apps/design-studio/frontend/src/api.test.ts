@@ -36,6 +36,11 @@ describe("currentDesignStudioAppId", () => {
 
   it("uses the typed native settings command", () => {
     expect(openSettingsMessage()).toEqual({ type: "maverick.opendesign.open-settings", version: 1 });
+    expect(openSettingsMessage("designSystems")).toEqual({
+      type: "maverick.opendesign.open-settings",
+      version: 1,
+      section: "designSystems",
+    });
   });
 
   it("uses a correlated typed command for the native tools panel", () => {

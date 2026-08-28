@@ -18,6 +18,7 @@ import {
   prepareRuntimeSessionAppReferences,
   prewarmRuntimeSession,
   recordRuntimeTurnClientMetrics,
+  resolveSourceAppChatProject,
   sendInterAgentDirective,
   sendRuntimeTurn,
   sendSourceAppTurn,
@@ -1200,9 +1201,12 @@ export function useMessageSubmission({
       const clientMetrics: RuntimeTurnClientMetrics = { ...(message.clientSubmissionMetrics || {}) };
       const sourceAppId = sourceAppOwner(thread, target.activeAppContext);
       if (sourceAppId) {
-        const projectId = sourceAppProjectId(thread, target.activeAppContext);
+        let projectId = sourceAppProjectId(thread, target.activeAppContext);
         if (!projectId) {
-          throw new Error("Open a source-app project before starting this chat.");
+          projectId = await resolveSourceAppChatProject(sourceAppId, "", { signal: abortController.signal });
+        }
+        if (!projectId) {
+          throw new Error("Create or select a Design Studio project before starting this chat.");
         }
         response = await submitWithPostMetric(clientMetrics, () =>
           sendSourceAppTurn({

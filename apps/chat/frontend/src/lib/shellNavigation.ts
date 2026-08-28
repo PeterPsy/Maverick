@@ -51,6 +51,40 @@ export function openAppParamsInShell(appId: string, params: ShellRouteParams = {
   return postAppRouteToShell(normalizedAppId, params, options);
 }
 
+/**
+ * Open an app from either the full Chat app or a shell-owned Chat widget.
+ * Scoped floating surfaces use the widget command because their navigation
+ * scope belongs to Chat rather than to the destination app.
+ */
+export function openContextAppParamsInShell(
+  appId: string,
+  params: ShellRouteParams = {},
+  options: ShellRouteOptions = {},
+): boolean {
+  const normalizedAppId = appId.trim();
+  if (!normalizedAppId) {
+    return false;
+  }
+  if (!options.navigationScope) {
+    return postAppRouteToShell(normalizedAppId, params, options);
+  }
+  const currentWindow = options.currentWindow ?? (typeof window === "undefined" ? null : window);
+  const parentWindow = options.parentWindow ?? (typeof window === "undefined" ? null : window.parent);
+  if (!parentWindow || parentWindow === currentWindow) {
+    return false;
+  }
+  const origin = options.origin ?? (typeof window === "undefined" ? "*" : window.location.origin);
+  parentWindow.postMessage(
+    {
+      type: "maverick.widget.open-app",
+      app_id: normalizedAppId,
+      params,
+    },
+    origin,
+  );
+  return true;
+}
+
 export function openStoragePathInShell(workspaceRelativePath: string, options: ShellRouteOptions = {}): boolean {
   const normalizedPath = workspaceRelativePath.trim();
   if (!normalizedPath) {

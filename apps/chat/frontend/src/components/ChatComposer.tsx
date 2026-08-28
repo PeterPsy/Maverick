@@ -43,7 +43,11 @@ export type ChatComposerProps = {
   onChange: (value: string) => void;
   onReferenceAdd?: (reference: AppReference) => void;
   onReferenceRemove?: (reference: AppReference) => void;
+  onOpenSourceAppSettings?: (section?: "designSystems") => void;
+  onOpenSourceAppTools?: () => void;
+  onResolveSourceAppProject?: (projectId: string) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
+  onSelectSourceAppProject?: (projectId: string) => void;
   onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
   onSelectSourceAppChatMode?: (mode: SourceAppChatMode) => void;
   onSelectAgent: (agentTypeId: string) => void;
@@ -61,6 +65,7 @@ export type ChatComposerProps = {
   sourceAppChatMode?: SourceAppChatMode;
   sourceAppId?: string;
   sourceAppProjectId?: string;
+  sourceAppProjectSelectionLocked?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
   transcriptionChunkedDictationSupported?: boolean;
@@ -92,7 +97,11 @@ export function ChatComposer({
   onChange,
   onReferenceAdd,
   onReferenceRemove,
+  onOpenSourceAppSettings,
+  onOpenSourceAppTools,
+  onResolveSourceAppProject,
   onSearchReferences,
+  onSelectSourceAppProject,
   onSelectMultiAgentMode,
   onSelectSourceAppChatMode,
   onSelectAgent,
@@ -110,6 +119,7 @@ export function ChatComposer({
   sourceAppChatMode = "design",
   sourceAppId = "",
   sourceAppProjectId = "",
+  sourceAppProjectSelectionLocked = false,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
   transcriptionChunkedDictationSupported = false,
@@ -269,6 +279,20 @@ export function ChatComposer({
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">
                 <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
+                {delegatedChatSourceAppId(sourceAppId) && onSelectSourceAppChatMode ? (
+                  <SourceAppChatTools
+                    disabled={disabled || isSending}
+                    mode={sourceAppChatMode}
+                    onOpenSettings={onOpenSourceAppSettings}
+                    onOpenTools={onOpenSourceAppTools}
+                    onProjectResolved={onResolveSourceAppProject}
+                    onSelectMode={onSelectSourceAppChatMode}
+                    onSelectProject={onSelectSourceAppProject}
+                    projectId={sourceAppProjectId}
+                    projectSelectionLocked={sourceAppProjectSelectionLocked}
+                    sourceAppId={sourceAppId}
+                  />
+                ) : null}
                 <ComposerUtilities>
                   {onCapturePageArea ? (
                     <button
@@ -283,15 +307,6 @@ export function ChatComposer({
                         crop_free
                       </span>
                     </button>
-                  ) : null}
-                  {delegatedChatSourceAppId(sourceAppId) && onSelectSourceAppChatMode ? (
-                    <SourceAppChatTools
-                      disabled={disabled || isSending}
-                      mode={sourceAppChatMode}
-                      onSelectMode={onSelectSourceAppChatMode}
-                      projectId={sourceAppProjectId}
-                      sourceAppId={sourceAppId}
-                    />
                   ) : null}
                   <button
                     aria-expanded={isAppMentionPickerOpen}

@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from opendesign_artifact import (
+from official_oci_validation import (
     reject_duplicate_pairs,
     validate_oci_distribution,
 )

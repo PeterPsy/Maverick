@@ -11,10 +11,17 @@ import subprocess
 from typing import Any
 
 from official_opendesign_release import (
+    OfficialRelease,
     OfficialReleaseError,
     load_official_release,
     verify_official_installation,
 )
+from official_bridge_contracts import (
+    bundled_delegation_contract,
+    read_delegation_contract,
+    write_bridge_contracts,
+)
+from official_release_selection import ensure_release_selection
 from native_cutover_quiescence import reject_if_native_host_quiesced
 from native_cutover_state import NativeDataCutoverError
 from model_access_client import ModelAccessClient, ModelAccessClientError, ModelAccessConfiguration
@@ -55,22 +62,33 @@ def main() -> None:
         reject_if_native_host_quiesced(data_dir.parent)
     except NativeDataCutoverError as error:
         raise OfficialReleaseError(str(error)) from error
-    release = load_official_release()
+    bundled_release = load_official_release()
+    selection = ensure_release_selection(data_dir.parent, bundled_release)
+    release = selection.release
     installation_path = store_root / "official" / release.digest_key
     installation = verify_official_installation(installation_path, expected_release=release)
+    delegation_status = read_delegation_contract(data_dir.parent, release)
+    if (
+        delegation_status.get("state") == "degraded"
+        and release.manifest_digest == bundled_release.manifest_digest
+    ):
+        write_bridge_contracts(
+            data_dir.parent,
+            release,
+            delegation=bundled_delegation_contract(),
+        )
+        delegation_status = read_delegation_contract(data_dir.parent, release)
     model_bridge, model_status, model_profile_path = _configure_model_access(data_dir)
     _write_bridge_capabilities(
         data_dir.parent,
         {
             "schema_version": "1",
             "model_access": model_status,
-            "delegation": {
-                "state": "disabled",
-                "reason": "not_configured",
-            },
+            "delegation": delegation_status,
         },
     )
     command, environment, cwd = build_native_launch(
+        release=release,
         rootfs=installation.rootfs,
         data_dir=data_dir,
         host=host,
@@ -90,7 +108,8 @@ def main() -> None:
             "rootfs_snapshot_sha256": installation.rootfs_snapshot_sha256,
             "customizations": [],
             "model_bridge": model_status,
-            "delegation_bridge": os.environ.get("MAVERICK_OPENDESIGN_DELEGATION_BRIDGE", "disabled"),
+            "delegation_bridge": delegation_status,
+            "direct_delegation_bridge": "disabled",
         },
     )
     try:
@@ -109,6 +128,7 @@ def main() -> None:
 
 def build_native_launch(
     *,
+    release: OfficialRelease | None = None,
     rootfs: Path,
     data_dir: Path,
     host: str,
@@ -122,7 +142,7 @@ def build_native_launch(
     isolation, the Unix relay, and the read-only official OCI execution root.
     Only the upstream data volume is writable.
     """
-    release = load_official_release()
+    selected = release or load_official_release()
     root = _required_directory(rootfs, label="official OpenDesign rootfs")
     data = _required_directory(data_dir, create=True, label="OpenDesign data directory")
     if host not in LOOPBACK_HOSTS:
@@ -134,7 +154,7 @@ def build_native_launch(
     _require_official_runtime_files(root)
     environment = {
         "DO_NOT_TRACK": "1",
-        "HOME": "/app/.od/sandbox/agent-home",
+        "HOME": str(data / "sandbox/agent-home"),
         "LANG": "C.UTF-8",
         "LC_ALL": "C.UTF-8",
         "MAVERICK_OPENDESIGN_DELEGATION_BRIDGE": os.environ.get(
@@ -151,7 +171,17 @@ def build_native_launch(
         "OD_PORT": str(port),
         "OD_REQUIRE_API_TOKEN_ON_LOOPBACK": "1",
         "OD_SANDBOX_MODE": "1",
-        "PATH": "/maverick/app/service:/usr/local/bin:/usr/bin:/bin",
+        "PATH": ":".join(
+            (
+                "/maverick/app/service",
+                str(root / "usr/local/sbin"),
+                str(root / "usr/local/bin"),
+                str(root / "usr/sbin"),
+                str(root / "usr/bin"),
+                str(root / "sbin"),
+                str(root / "bin"),
+            )
+        ),
         "TMPDIR": "/tmp",
         "TINI_SUBREAPER": "1",
         "TZ": "UTC",
@@ -176,14 +206,35 @@ def build_native_launch(
                 "OD_CODEX_SANDBOX": "danger-full-access",
             }
         )
-    command = [*release.entrypoint, *release.command]
-    return command, environment, Path(release.working_directory)
+    loader = root / "lib/ld-musl-x86_64.so.1"
+    tini = root / selected.entrypoint[0].removeprefix("/")
+    node = root / "usr/local/bin/node"
+    script = root / selected.working_directory.removeprefix("/") / selected.command[1]
+    command = [
+        str(loader),
+        "--library-path",
+        f"{root / 'lib'}:{root / 'usr/lib'}",
+        str(tini),
+        *selected.entrypoint[1:],
+        str(loader),
+        "--library-path",
+        f"{root / 'lib'}:{root / 'usr/lib'}",
+        str(node),
+        str(script),
+        *selected.command[2:],
+    ]
+    return command, environment, root / selected.working_directory.removeprefix("/")
 
 
 def _configure_model_access(
     data_dir: Path,
 ) -> tuple[ModelAccessHttpBridge | None, dict[str, Any], Path | None]:
     remove_model_access_profiles(data_dir)
+    mode = os.environ.get("MAVERICK_OPENDESIGN_MODEL_BRIDGE", "disabled")
+    if mode == "disabled":
+        return None, {"state": "disabled", "reason": "disabled_by_configuration"}, None
+    if mode not in {"auto", "enabled"}:
+        return None, {"state": "degraded", "reason": "invalid_configuration"}, None
     try:
         configuration = ModelAccessConfiguration.from_environment()
         client = ModelAccessClient(configuration)

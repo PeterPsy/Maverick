@@ -23,14 +23,14 @@ MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 
 
 class OfficialApiClient:
-    """Read-only client for supported public APIs on one disposable process."""
+    """Bounded client for supported public APIs on one disposable process."""
 
     def __init__(self, *, port: int, token: str) -> None:
         self._port = port
         self._token = token
 
     def get_json(self, path: str) -> dict[str, Any]:
-        body = self.get_bytes(path)
+        _status, body = self.request("GET", path)
         try:
             payload = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -40,14 +40,49 @@ class OfficialApiClient:
         return payload
 
     def get_bytes(self, path: str) -> bytes:
+        _status, body = self.request("GET", path)
+        return body
+
+    def send_json(self, method: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Send one JSON request and require one JSON object response."""
+        body = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        _status, response = self.request(
+            method,
+            path,
+            body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            decoded = json.loads(response.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise OfficialReleaseError(f"official API returned invalid JSON for {path}") from error
+        if not isinstance(decoded, dict):
+            raise OfficialReleaseError(f"official API returned a non-object for {path}")
+        return decoded
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, bytes]:
+        """Issue one bounded authenticated request to the disposable daemon."""
+        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}:
+            raise OfficialReleaseError("official API probe method is unsupported")
+        if not path.startswith("/api/") or "\x00" in path:
+            raise OfficialReleaseError("official API probe path is unsafe")
         connection = http.client.HTTPConnection("127.0.0.1", self._port, timeout=10)
         try:
             connection.request(
-                "GET",
+                method,
                 path,
+                body=body,
                 headers={
                     "Authorization": f"Bearer {self._token}",
                     "Connection": "close",
+                    **(headers or {}),
                 },
             )
             response = connection.getresponse()
@@ -60,7 +95,7 @@ class OfficialApiClient:
                 raise OfficialReleaseError(
                     f"official API route {path} exceeded the inventory limit"
                 )
-            return body
+            return response.status, body
         finally:
             connection.close()
 

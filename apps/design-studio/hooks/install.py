@@ -16,6 +16,8 @@ SERVICE_ROOT = APP_ROOT / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
 from official_opendesign_release import install_official_release, load_official_release  # noqa: E402
+from official_bridge_contracts import bundled_delegation_contract, write_bridge_contracts  # noqa: E402
+from official_release_selection import ensure_release_selection  # noqa: E402
 
 
 def main() -> None:
@@ -31,6 +33,12 @@ def main() -> None:
         artifact_id="opendesign",
     )
     installation = install_official_release(namespace / "official" / release.digest_key, release=release)
+    selection = ensure_release_selection(Path(payload.data_root), release)
+    write_bridge_contracts(
+        Path(payload.data_root),
+        selection.release,
+        delegation=bundled_delegation_contract(),
+    )
     emit_json(
         {
             "ok": True,
@@ -43,6 +51,10 @@ def main() -> None:
                 "source_commit": release.source_commit,
                 "rootfs_snapshot_sha256": installation.rootfs_snapshot_sha256,
                 "customizations": [],
+            },
+            "selection": {
+                "descriptor_sha256": selection.descriptor_sha256,
+                "selected_at": selection.selected_at,
             },
         }
     )

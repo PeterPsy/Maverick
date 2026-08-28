@@ -146,6 +146,23 @@ def make_tree_read_only(root: Path) -> None:
     fsync_tree(root)
 
 
+def make_tree_private_writable(root: Path) -> None:
+    """Prepare a restored OpenDesign data copy for its sole native writer."""
+    root = real_directory(root, label="restored OpenDesign data")
+    for path in sorted(root.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+        metadata = path.lstat()
+        if stat.S_ISLNK(metadata.st_mode):
+            raise NativeCutoverFileError("restored OpenDesign data contains a symlink")
+        if stat.S_ISREG(metadata.st_mode):
+            path.chmod(0o600)
+        elif stat.S_ISDIR(metadata.st_mode):
+            path.chmod(0o700)
+        else:
+            raise NativeCutoverFileError("restored OpenDesign data contains a special file")
+    root.chmod(0o700)
+    fsync_tree(root)
+
+
 def make_files_read_only(app_data_root: Path, relative_paths: Iterable[str]) -> list[str]:
     root = real_directory(app_data_root, label="Design Studio data root")
     changed: list[str] = []

@@ -6,10 +6,12 @@ fork, overlay, or replacement editor.
 
 ## Native product boundary
 
-The selected release is `ghcr.io/nexu-io/od:0.16.1`, pinned by manifest digest
+The initial release is `ghcr.io/nexu-io/od:0.16.1`, pinned by manifest digest
 in `service/opendesign_official_release.json`. The install hook verifies and
 materializes the official OCI root filesystem in the platform artifact store.
-Core mounts that root filesystem read-only and starts its official entrypoint.
+Core mounts that store read-only; the thin launcher directly executes the
+selected release's own musl loader, Tini, Node binary, and daemon entrypoint.
+No version-specific root filesystem is baked into the app contract.
 
 OpenDesign owns its UI, routes, projects, conversations, prompts, tools,
 settings, migrations, and update behavior. Its persistent data lives at:
@@ -53,6 +55,36 @@ contains no credential or semantic content.
 Redaction-safe bridge readiness and endpoint metadata are written to
 `data/design-studio/bridge-capabilities.json`. Native operation remains
 available when that file reports a degraded or disabled bridge.
+
+## Official updates
+
+An administrator selects a digest-locked official OCI release descriptor from
+the workspace and applies it with the dedicated CLI surface:
+
+```bash
+maverick app design-studio cli run design-studio-update --action status --json
+maverick app design-studio cli run design-studio-update \
+  --action apply \
+  --release-descriptor storage/uploaded/opendesign-release.json \
+  --confirm true --json
+```
+
+The descriptor must name the official source repository and
+`ghcr.io/nexu-io/od`, contain empty customizations, and lock the index,
+platform manifest, config, every layer, provenance attestation, source commit,
+and supported upstream runtime contract. Maverick installs and snapshots those
+unchanged bytes under their manifest digest. The workspace selection in
+`official-release-selection.json` is itself digest-protected.
+
+Update activation briefly quiesces only the Design Studio sidecar. It creates
+an immutable full data backup, inventories the current release through public
+APIs, runs the candidate's supported upstream migration against a private
+copy, inventories the migrated copy, and exercises the public delegation
+contract on another disposable copy. Only then does it atomically select the
+migrated data and release descriptor and prewarm the candidate. Failure to
+start restores the complete prior data and release selection. A model or
+delegation capability mismatch is recorded as degraded and never rolls back or
+stops native OpenDesign.
 
 ## External delegation bridge
 
@@ -165,6 +197,7 @@ python3 -m unittest \
   apps.design-studio.tests.test_native_data_cutover \
   apps.design-studio.tests.test_native_cutover_quiescence \
   apps.design-studio.tests.test_official_public_inventory \
+  apps.design-studio.tests.test_official_updates \
   tests.unit.app_hosting.test_model_access_broker
 ```
 

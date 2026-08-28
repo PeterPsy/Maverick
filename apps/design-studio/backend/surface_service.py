@@ -47,6 +47,16 @@ class SurfaceService:
         )
         if canonical in {"state", "status"}:
             return self.state()
+        if canonical == "delegate":
+            capability = _delegation_capability(
+                Path(str(getattr(self.payload, "data_root", "") or ""))
+            )
+            if capability.get("state") != "ready":
+                raise DelegationError(
+                    "delegation_unavailable",
+                    "Delegation is unavailable for this official OpenDesign release; native OpenDesign remains usable directly.",
+                    status_code=503,
+                )
         try:
             if canonical == "delegate":
                 return delegation.delegate(arguments)
@@ -87,12 +97,14 @@ class SurfaceService:
     def state(self) -> dict[str, Any]:
         available = False
         project_count: int | None = None
-        try:
-            project_count = len(self.client.list_projects())
-            available = True
-        except (OpenDesignClientError, ValueError):
-            pass
         data_root = Path(str(getattr(self.payload, "data_root", "") or ""))
+        capability = _delegation_capability(data_root)
+        if capability.get("state") == "ready":
+            try:
+                project_count = len(self.client.list_projects())
+                available = True
+            except (OpenDesignClientError, ValueError):
+                pass
         return {
             "mode": "official-native",
             "app_id": self.app_id,
@@ -102,6 +114,7 @@ class SurfaceService:
             "delegation_bridge": {
                 "mode": "external-public-api-client",
                 "available": available,
+                "capability": capability,
                 "native_project_count": project_count,
                 "stores_native_semantic_state": False,
             },
@@ -247,3 +260,17 @@ def _read_json(path: Path) -> dict[str, Any]:
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _delegation_capability(data_root: Path) -> dict[str, str]:
+    payload = _read_json(data_root / "bridge-capabilities.json")
+    candidate = payload.get("delegation")
+    if isinstance(candidate, dict) and candidate.get("state") in {"ready", "degraded", "disabled"}:
+        public = {
+            key: value
+            for key, value in candidate.items()
+            if key in {"state", "contract", "reason"} and isinstance(value, str)
+        }
+        if public.get("state"):
+            return public
+    return {"state": "degraded", "reason": "capability_handshake_unavailable"}

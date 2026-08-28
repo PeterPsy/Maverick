@@ -342,6 +342,24 @@ class NativeDelegationTests(unittest.TestCase):
             self.assertFalse(state["intercepts_native_routes"])
             self.assertEqual(json.loads((root / "native-host-status.json").read_text()), host)
 
+    def test_bridge_incompatibility_blocks_only_new_delegation_not_native_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "bridge-capabilities.json").write_text(json.dumps({
+                "schema_version": "1",
+                "model_access": {"state": "ready"},
+                "delegation": {"state": "degraded", "reason": "public_api_contract_incompatible"},
+            }), encoding="utf-8")
+            service = SurfaceService(payload(root), client=FakeOpenDesign())
+
+            state = service.state()
+            self.assertFalse(state["delegation_bridge"]["available"])
+            self.assertEqual(state["delegation_bridge"]["capability"]["state"], "degraded")
+            self.assertEqual(state["native_data_owner"], "opendesign")
+            with self.assertRaises(DelegationError) as raised:
+                service.dispatch("delegate", {"brief": "Create it", "idempotency_key": "blocked"})
+            self.assertEqual(raised.exception.code, "delegation_unavailable")
+
     def test_public_store_projection_rejects_poisoned_private_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

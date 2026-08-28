@@ -14,13 +14,20 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
 from typing import Any, Callable
 from uuid import uuid4
 
-from opendesign_artifact import ArtifactError, reject_duplicate_pairs, validate_oci_distribution
+from official_oci_validation import (
+    OFFICIAL_REGISTRY,
+    OFFICIAL_REPOSITORY,
+    OfficialOciValidationError,
+    reject_duplicate_pairs,
+    validate_oci_distribution,
+)
 from opendesign_oci_layout import OciLayoutError, apply_layers
 from opendesign_oci_registry import OciRegistryError, PulledRelease, RegistryClient
 
@@ -30,6 +37,9 @@ OFFICIAL_MANIFEST_DIGEST = "sha256:170f56cdeb3a213423af150d4095b7729814eaf0ad26a
 INSTALL_RECEIPT = "official-release.json"
 ROOTFS_SNAPSHOT = "rootfs.snapshot.json"
 ROOTFS_SNAPSHOT_SCHEMA = "1"
+RELEASE_DESCRIPTOR = "release-descriptor.json"
+OFFICIAL_SOURCE_REPOSITORY = "https://github.com/nexu-io/open-design.git"
+VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
 REQUIRED_ROOTFS_PATHS = (
     "app/apps/daemon/dist/cli.js",
     "app/apps/web/out/index.html",
@@ -83,6 +93,27 @@ class OfficialRelease:
             "distribution": self.oci_lock,
         }
 
+    def descriptor(self) -> dict[str, Any]:
+        """Return the canonical user-selected official release lock."""
+        return {
+            "schema_version": "1",
+            "kind": "official_opendesign_oci_release",
+            "version": self.version,
+            "source": {
+                "repository": self.source_repository,
+                "tag": self.source_tag,
+                "commit": self.source_commit,
+            },
+            "oci": self.oci_lock,
+            "runtime": {
+                "entrypoint": list(self.entrypoint),
+                "command": list(self.command),
+                "working_directory": self.working_directory,
+                "data_directory": self.data_directory,
+            },
+            "customizations": [],
+        }
+
 
 @dataclass(frozen=True)
 class OfficialInstallation:
@@ -95,12 +126,32 @@ class OfficialInstallation:
     installed_at: str
 
 
-def load_official_release(path: Path = OFFICIAL_RELEASE_FILE) -> OfficialRelease:
+def load_official_release(
+    path: Path = OFFICIAL_RELEASE_FILE,
+    *,
+    require_bundled_pin: bool | None = None,
+) -> OfficialRelease:
     """Load a strict zero-customization official release descriptor."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_pairs)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         raise OfficialReleaseError("official OpenDesign release descriptor is unreadable") from error
+    return load_official_release_payload(
+        payload,
+        require_bundled_pin=(
+            path.resolve(strict=False) == OFFICIAL_RELEASE_FILE.resolve(strict=False)
+            if require_bundled_pin is None
+            else require_bundled_pin
+        ),
+    )
+
+
+def load_official_release_payload(
+    payload: object,
+    *,
+    require_bundled_pin: bool = False,
+) -> OfficialRelease:
+    """Validate one bundled or user-selected official release lock."""
     expected = {"schema_version", "kind", "version", "source", "oci", "runtime", "customizations"}
     if (
         not isinstance(payload, dict)
@@ -129,7 +180,7 @@ def load_official_release(path: Path = OFFICIAL_RELEASE_FILE) -> OfficialRelease
                 "distribution": oci,
             }
         )
-    except ArtifactError as error:
+    except OfficialOciValidationError as error:
         raise OfficialReleaseError(str(error)) from error
     release = OfficialRelease(
         version=_string(payload, "version"),
@@ -150,7 +201,15 @@ def load_official_release(path: Path = OFFICIAL_RELEASE_FILE) -> OfficialRelease
         customizations=(),
         oci_lock=oci,
     )
-    if release.manifest_digest != OFFICIAL_MANIFEST_DIGEST:
+    if release.source_repository != OFFICIAL_SOURCE_REPOSITORY:
+        raise OfficialReleaseError("OpenDesign source repository is not official")
+    if not VERSION_PATTERN.fullmatch(release.version):
+        raise OfficialReleaseError("official OpenDesign version is invalid")
+    if release.source_tag != f"open-design-v{release.version}":
+        raise OfficialReleaseError("official OpenDesign source tag does not match the version")
+    if release.registry != OFFICIAL_REGISTRY or release.repository != OFFICIAL_REPOSITORY:
+        raise OfficialReleaseError("OpenDesign OCI origin is not official")
+    if require_bundled_pin and release.manifest_digest != OFFICIAL_MANIFEST_DIGEST:
         raise OfficialReleaseError("official OpenDesign 0.16.1 manifest digest changed")
     if release.entrypoint != ("/sbin/tini", "--"):
         raise OfficialReleaseError("official OpenDesign OCI entrypoint changed")
@@ -186,6 +245,7 @@ def install_official_release(
         snapshot = snapshot_rootfs(rootfs)
         snapshot_sha = _canonical_sha256(snapshot)
         _write_json(staging / ROOTFS_SNAPSHOT, snapshot, mode=0o640)
+        _write_json(staging / RELEASE_DESCRIPTOR, selected.descriptor(), mode=0o640)
         receipt = {
             "schema_version": "1",
             "kind": "official_opendesign_installation",
@@ -219,8 +279,8 @@ def verify_official_installation(
     verify_contents: bool = True,
 ) -> OfficialInstallation:
     """Verify external receipt identity and, optionally, every rootfs entry."""
-    release = expected_release or load_official_release()
     root = _real_directory(path, "official installation")
+    release = expected_release or _installed_release(root)
     rootfs = _real_directory(root / "rootfs", "official rootfs")
     try:
         receipt = json.loads(
@@ -427,6 +487,15 @@ def _verify_pulled_identity(pulled: PulledRelease, release: OfficialRelease) -> 
         raise OfficialReleaseError("official OpenDesign OCI version differs from the selected release")
 
 
+def _installed_release(root: Path) -> OfficialRelease:
+    descriptor = root / RELEASE_DESCRIPTOR
+    if descriptor.exists() or descriptor.is_symlink():
+        return load_official_release(descriptor, require_bundled_pin=False)
+    if root.name == OFFICIAL_MANIFEST_DIGEST.removeprefix("sha256:"):
+        return load_official_release()
+    raise OfficialReleaseError("official OpenDesign installation release descriptor is missing")
+
+
 def _verify_required_rootfs(rootfs: Path) -> None:
     for relative in REQUIRED_ROOTFS_PATHS:
         path = rootfs / relative
@@ -534,6 +603,7 @@ __all__ = [
     "install_official_release",
     "launch_disposable_official_release",
     "load_official_release",
+    "load_official_release_payload",
     "snapshot_rootfs",
     "verify_official_installation",
     "verify_rootfs_snapshot",

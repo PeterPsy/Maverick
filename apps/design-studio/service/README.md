@@ -6,17 +6,33 @@ It does not contain an OpenDesign fork or an active custom UI/runtime build.
 
 ## Active runtime
 
-`opendesign_official_release.json` pins the official
+`opendesign_official_release.json` pins the initial official
 `ghcr.io/nexu-io/od:0.16.1` OCI manifest. `official_opendesign_release.py`
 verifies the OCI identity, installs its unmodified layers, records an external
 rootfs snapshot, and verifies every installed byte before activation.
 
 `opendesign_launcher.py` is the thin sidecar entrypoint. Core mounts the
-verified rootfs read-only, mounts only the workspace-scoped
+platform artifact namespace read-only, mounts only the workspace-scoped
 `data/design-studio/opendesign-native/` data volume writable, and provides the
-authenticated Unix relay and isolated browser origin. The launcher invokes the
-official upstream entrypoint and never patches, overlays, injects, or
-intercepts OpenDesign routes.
+authenticated Unix relay and isolated browser origin. The launcher resolves
+the workspace's digest-protected release selection and directly invokes that
+rootfs's unchanged loader, Tini, Node binary, and upstream daemon entrypoint.
+It never patches, overlays, injects, or intercepts OpenDesign routes.
+
+## Official release updates
+
+`official_release_selection.py` owns the workspace-scoped official descriptor
+selection. `native_official_update.py` verifies and installs a user-selected
+official lock, stops only the managed Design Studio writer, creates an
+immutable backup, runs upstream migration and public inventory on copies,
+atomically swaps data and selection, and restores both if native readiness
+fails. `official_update_state.py` persists only release identities, category
+counts/hashes, bridge states, and recovery phase.
+
+`official_bridge_contracts.py` exercises project, conversation, message, file,
+run, cancellation, result, and status APIs on a disposable migrated copy. A
+failure records delegation as degraded. The launcher independently checks the
+Model Access Bridge after startup. Neither outcome gates native readiness.
 
 ## External bridges
 
@@ -75,7 +91,8 @@ python3 -m unittest -v \
   apps/design-studio/tests/test_native_delegation.py \
   apps/design-studio/tests/test_native_data_cutover.py \
   apps/design-studio/tests/test_native_cutover_quiescence.py \
-  apps/design-studio/tests/test_official_public_inventory.py
+  apps/design-studio/tests/test_official_public_inventory.py \
+  apps/design-studio/tests/test_official_updates.py
 ```
 
 The real disposable proof remains:

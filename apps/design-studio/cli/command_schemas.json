@@ -141,6 +141,36 @@
       },
       "required_secrets": [],
       "secret_selectors": []
+    },
+    "design-studio-update": {
+      "description": "Inspect or apply a user-selected, digest-locked official OpenDesign release.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["status", "apply"],
+            "default": "status"
+          },
+          "release_descriptor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "description": "Workspace-relative path to an official OpenDesign OCI release lock."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Must be true to stop native OpenDesign briefly and apply the update."
+          }
+        },
+        "additionalProperties": false
+      },
+      "required_secrets": [],
+      "secret_selectors": [],
+      "effect_class": "mutating",
+      "supports_idempotency": false,
+      "safe_to_retry": false,
+      "timeout_seconds": 1800
     }
   }
 }

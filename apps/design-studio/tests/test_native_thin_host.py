@@ -23,11 +23,10 @@ class NativeThinHostTests(unittest.TestCase):
         passed = {(route["method"], route["path_template"]) for route in policy["pass_through"]}
 
         self.assertEqual(policy["handled_by_core"], [])
+        self.assertIn(("GET", "/{*native_path}"), passed)
+        for method in ("POST", "PUT", "PATCH", "DELETE", "OPTIONS"):
+            self.assertIn((method, "/api/{*native_path}"), passed)
         for route in {
-            ("GET", "/api/app-config"),
-            ("PUT", "/api/app-config"),
-            ("POST", "/api/chat"),
-            ("POST", "/api/provider/models"),
             ("GET", "/api/projects"),
             ("POST", "/api/projects"),
             ("POST", "/api/runs"),
@@ -37,6 +36,7 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertFalse(contract["permissions"]["runtime"]["create_sessions"])
         self.assertFalse(contract["permissions"]["runtime"]["cleanup_sessions"])
         self.assertEqual(sidecar["model_access"], {"api": True, "cli": ["codex"], "required": False})
+        self.assertNotIn("root_filesystem", sidecar)
         self.assertGreaterEqual(sidecar["process_policy"]["limits"]["memory_bytes"], 32 * 1024**3)
         self.assertTrue(contract["permissions"]["providers"]["model_proxy"])
         self.assertFalse(contract["permissions"]["providers"]["deliver_secrets_to_app"])
@@ -71,9 +71,11 @@ class NativeThinHostTests(unittest.TestCase):
             )
 
         rendered = " ".join(command)
-        self.assertEqual(command[0], "/sbin/tini")
-        self.assertIn("/sbin/tini -- node apps/daemon/dist/cli.js --no-open", rendered)
-        self.assertEqual(cwd, Path("/app"))
+        self.assertTrue(command[0].endswith("/lib/ld-musl-x86_64.so.1"))
+        self.assertIn("/sbin/tini --", rendered)
+        self.assertIn("/usr/local/bin/node", rendered)
+        self.assertIn("/app/apps/daemon/dist/cli.js --no-open", rendered)
+        self.assertEqual(cwd, rootfs / "app")
         self.assertEqual(env["OD_DATA_DIR"], str(data))
         self.assertEqual(env["OD_SANDBOX_MODE"], "1")
         self.assertNotIn("NODE_OPTIONS", env)

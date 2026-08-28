@@ -6,6 +6,13 @@
       "sandbox_agent_allowed": true,
       "requires_workspace_context": true,
       "requires_full_access": false
+    },
+    "design-studio-update": {
+      "operator_only": false,
+      "required_platform_role": "admin",
+      "sandbox_agent_allowed": false,
+      "requires_workspace_context": true,
+      "requires_full_access": true
     }
   }
 }

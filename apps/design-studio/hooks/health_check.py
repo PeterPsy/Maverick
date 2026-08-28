@@ -22,11 +22,15 @@ from official_opendesign_release import (  # noqa: E402
     load_official_release,
     verify_official_installation,
 )
+from official_release_selection import ensure_release_selection  # noqa: E402
 
 
 def main() -> None:
     payload = read_entrypoint_payload()
-    release = load_official_release()
+    release = ensure_release_selection(
+        Path(payload.data_root),
+        load_official_release(),
+    ).release
     try:
         data_dir = _real_directory(Path(payload.data_root) / "opendesign-native")
         namespace = create_artifact_namespace(

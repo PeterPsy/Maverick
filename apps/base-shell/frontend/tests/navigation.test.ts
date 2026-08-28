@@ -6,6 +6,7 @@ import {
   newChatRouteParams,
   parseShellAppRoute,
   preferredActiveApp,
+  resolveAppOpenParams,
   shellAppPath,
   shellAppRailApps,
   shellVisibleApps,
@@ -104,9 +105,42 @@ describe("base-shell navigation", () => {
       "new_node_request_id",
       "new_skill",
       "new_skill_request_id",
+      "open_settings_request_id",
+      "open_tools_request_id",
       "preview_context",
       "preview_context_request_id",
     ]);
+  });
+
+  it("preserves source project context for same-app panel commands only", () => {
+    const current = { od_project_id: "od_project_1", od_run_id: "od_run_1", view: "canvas" };
+
+    expect(resolveAppOpenParams(
+      "design-studio",
+      current,
+      "design-studio",
+      { open_tools_request_id: "tools-1" },
+    )).toEqual({
+      od_project_id: "od_project_1",
+      od_run_id: "od_run_1",
+      open_tools_request_id: "tools-1",
+    });
+    expect(resolveAppOpenParams(
+      "design-studio",
+      current,
+      "design-studio",
+      { od_project_id: "od_project_2", open_settings_request_id: "settings-1" },
+    )).toEqual({
+      od_project_id: "od_project_2",
+      open_settings_request_id: "settings-1",
+    });
+    expect(resolveAppOpenParams("design-studio", current, "design-studio", {})).toEqual({});
+    expect(resolveAppOpenParams(
+      "design-studio",
+      current,
+      "settings",
+      { open_settings_request_id: "settings-2" },
+    )).toEqual({ open_settings_request_id: "settings-2" });
   });
 
   it("creates transient new chat navigation params", () => {

@@ -21,10 +21,17 @@ export const TRANSIENT_APP_COMMAND_PARAMS = new Set([
   "new_node_request_id",
   "new_skill",
   "new_skill_request_id",
+  "open_settings_request_id",
+  "open_tools_request_id",
   "preview_context",
   "preview_context_request_id",
 ]);
 const NON_URL_APP_PARAMS = new Set(["app_page", "workspace_id", ...TRANSIENT_APP_COMMAND_PARAMS]);
+const CONTEXTUAL_APP_COMMAND_PARAMS = new Set([
+  "open_settings_request_id",
+  "open_tools_request_id",
+]);
+const PROJECT_CONTEXT_PARAMS = ["od_project_id", "project_id", "od_run_id", "run_id"] as const;
 
 export function shellVisibleApps(apps: AppRegistryItem[]): AppRegistryItem[] {
   return apps.filter(isShellLaunchableApp);
@@ -75,6 +82,34 @@ export function newChatRouteParams(createRequestId: () => string = createNavigat
     new_chat: true,
     new_chat_request_id: createRequestId(),
   };
+}
+
+/**
+ * Keep a source-app project attached when a same-app command opens a panel.
+ * Command-only widget messages must not replace the project context consumed
+ * by the contextual Chat dock; ordinary app launches still replace params.
+ */
+export function resolveAppOpenParams(
+  currentAppId: string | null,
+  currentParams: AppRouteParams,
+  requestedAppId: string,
+  requestedParams: AppRouteParams,
+): AppRouteParams {
+  const isContextualCommand = Object.keys(requestedParams).some((key) => (
+    CONTEXTUAL_APP_COMMAND_PARAMS.has(key)
+  ));
+  if (currentAppId !== requestedAppId || !isContextualCommand) {
+    return { ...requestedParams };
+  }
+  const specifiesProject = requestedParams.od_project_id !== undefined
+    || requestedParams.project_id !== undefined;
+  const contextKeys = specifiesProject ? [] : PROJECT_CONTEXT_PARAMS;
+  const preserved = Object.fromEntries(
+    contextKeys
+      .filter((key) => requestedParams[key] === undefined && currentParams[key] !== undefined)
+      .map((key) => [key, currentParams[key]]),
+  ) as AppRouteParams;
+  return { ...preserved, ...requestedParams };
 }
 
 export function parseShellAppRoute(pathname: string, search = ""): ShellAppRoute {

@@ -24,6 +24,7 @@ import {
   preferredActiveApp,
   pushShellAppRoute,
   replaceShellAppRoute,
+  resolveAppOpenParams,
   SETTINGS_APP_ID,
   shellAppRailApps,
   shellVisibleApps,
@@ -550,8 +551,9 @@ export function AppShell() {
         return;
       }
     }
+    const resolvedParams = resolveAppOpenParams(activeAppId, activeAppParams, appId, params);
     setActiveAppId(appId);
-    setActiveAppParams(params);
+    setActiveAppParams(resolvedParams);
     setIsMobilePinnedAppsOpen(false);
     closeMobileChatPanel();
     if (isSidebarPinned) {
@@ -559,7 +561,7 @@ export function AppShell() {
     } else {
       closeSidebar();
     }
-    pushShellAppRoute(appId, params);
+    pushShellAppRoute(appId, resolvedParams);
   }
 
   function handleSidebarModeChange(nextMode: SidebarMode) {

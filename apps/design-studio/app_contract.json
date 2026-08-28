@@ -2,7 +2,7 @@
   "app_id": "design-studio",
   "contract_version": "1.0",
   "name": "Design Studio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Host an unchanged official OpenDesign installation with optional naked-model and external-delegation bridges.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
@@ -74,8 +74,7 @@
     },
     "runtime": {
       "create_sessions": false,
-      "cleanup_sessions": false,
-      "receive_cleanup_callbacks": false
+      "cleanup_sessions": false
     },
     "host": {
       "telemetry": false
@@ -92,7 +91,11 @@
       "design_studio_delegation_status",
       "design_studio_cancel_delegation",
       "design_studio_delegation_result",
-      "design_studio_state"
+      "design_studio_state",
+      "design_studio_view_filter",
+      "design_studio_set_view_filter",
+      "design_studio_set_custom_view",
+      "design_studio_clear_custom_view"
     ],
     "cli_commands": [
       "design-studio"
@@ -107,9 +110,45 @@
       {
         "resource": "delegation",
         "description": "A bounded external OpenDesign delegation changed state."
+      },
+      {
+        "resource": "view-state",
+        "description": "The display-only native OpenDesign project view selection changed."
       }
     ],
-    "view_surfaces": [],
+    "view_surfaces": [
+      {
+        "view_id": "main",
+        "display_name": "Design Studio",
+        "entity_types": [
+          "design_project"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the display-only native OpenDesign project filter."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Filter projects returned by the supported OpenDesign API."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of native OpenDesign project references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return to the unfiltered native OpenDesign project list."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
     "reference_entities": [
       {
         "entity_type": "design_project",
@@ -207,7 +246,7 @@
           "NEXT_TELEMETRY_DISABLED": "1",
           "MAVERICK_OPENDESIGN_DATA_DIR": "${app.data_dir}/opendesign-native",
           "MAVERICK_OPENDESIGN_STORE_ROOT": "${artifact.opendesign}",
-          "MAVERICK_OPENDESIGN_MODEL_BRIDGE": "disabled",
+          "MAVERICK_OPENDESIGN_MODEL_BRIDGE": "auto",
           "MAVERICK_OPENDESIGN_DELEGATION_BRIDGE": "disabled"
         },
         "artifact_mounts": [
@@ -234,7 +273,7 @@
           "transport": "unix_relay",
           "outbound": [],
           "limits": {
-            "memory_bytes": 17179869184,
+            "memory_bytes": 34359738368,
             "open_files": 1024,
             "request_concurrency": 32
           }
@@ -2075,6 +2114,13 @@
         "root_filesystem": {
           "artifact_id": "opendesign",
           "subpath": "official/170f56cdeb3a213423af150d4095b7729814eaf0ad26a99be7fab2344f0f5cd1/rootfs"
+        },
+        "model_access": {
+          "api": true,
+          "cli": [
+            "codex"
+          ],
+          "required": false
         }
       }
     ]

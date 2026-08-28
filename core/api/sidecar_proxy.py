@@ -52,6 +52,7 @@ from core.authorization.service import can_mount_app_visibility, require_workspa
 from core.identity.models import UserRecord
 from core.shared.entrypoints import EntrypointShutdownController
 from core.shared.repository import discover_repository_root
+from core.model_access.broker import issue_model_access_lease
 from core.workspaces.paths import workspace_paths
 
 
@@ -494,9 +495,33 @@ class HttpSidecarManager:
         )
         _raise_if_startup_cancelled(cancel_event, phase="sandbox_prepare")
         record_phase("sandbox_prepare")
-        stdout_file = _open_sidecar_log(workspace.root, sidecar.logs.stdout if sidecar.logs else None)
-        stderr_file = _open_sidecar_log(workspace.root, sidecar.logs.stderr if sidecar.logs else None)
+        model_access_lease = None
+        if sidecar.model_access is not None:
+            try:
+                model_access_lease = issue_model_access_lease(
+                    repository_root,
+                    workspace_id=workspace_id,
+                    app_id=app_id,
+                    sidecar_id=sidecar.service_id,
+                    data_root=Path(data_root),
+                    api=sidecar.model_access.api,
+                    cli=sidecar.model_access.cli,
+                )
+                if model_access_lease is None and sidecar.model_access.required:
+                    raise AppHostingError("Required model access is unavailable.")
+            except Exception as error:
+                if sidecar.model_access.required:
+                    raise AppHostingError("Required model access is unavailable.") from error
+                logger.exception(
+                    "Optional model access unavailable for app `%s` sidecar `%s`.",
+                    app_id,
+                    sidecar.service_id,
+                )
+        stdout_file = None
+        stderr_file = None
         try:
+            stdout_file = _open_sidecar_log(workspace.root, sidecar.logs.stdout if sidecar.logs else None)
+            stderr_file = _open_sidecar_log(workspace.root, sidecar.logs.stderr if sidecar.logs else None)
             env = _sidecar_env(
                 workspace_id=workspace_id,
                 app_id=app_id,
@@ -508,6 +533,7 @@ class HttpSidecarManager:
                 sidecar=sidecar,
                 start_path=start_path,
                 artifact_mounts=artifact_mounts,
+                model_access_lease=model_access_lease,
             )
             confined_launch = prepare_confined_sidecar_launch(
                 workspace_id=workspace_id,
@@ -519,8 +545,18 @@ class HttpSidecarManager:
                 port=port,
                 env=env,
                 artifact_mounts=artifact_mounts,
+                model_access_directory=(
+                    model_access_lease.socket_directory
+                    if model_access_lease is not None
+                    else None
+                ),
+                model_access_release=(
+                    model_access_lease.release if model_access_lease is not None else None
+                ),
             )
         except Exception:
+            if model_access_lease is not None:
+                model_access_lease.release()
             _close_sidecar_logs(stdout_file, stderr_file)
             raise
         try:
@@ -1720,6 +1756,7 @@ def _sidecar_env(
     sidecar: HttpSidecarSpec,
     start_path: Path,
     artifact_mounts: tuple[ResolvedArtifactMount, ...] = (),
+    model_access_lease=None,
 ) -> dict[str, str]:
     del data_root, source_root, workspace_root, start_path
     env = dict(MINIMAL_SIDECAR_ENV)
@@ -1730,6 +1767,13 @@ def _sidecar_env(
     env["MAVERICK_WORKSPACE_ID"] = workspace_id
     env["MAVERICK_SIDECAR_ID"] = sidecar.service_id
     env["MAVERICK_SIDECAR_PORT"] = str(port)
+    if sidecar.model_access is not None:
+        env["MAVERICK_MODEL_ACCESS_STATE"] = (
+            "available" if model_access_lease is not None else "unavailable"
+        )
+        if model_access_lease is not None:
+            env["MAVERICK_MODEL_ACCESS_SOCKET"] = model_access_lease.sandbox_socket_path
+            env["MAVERICK_MODEL_ACCESS_TOKEN"] = model_access_lease.token
     return env
 
 

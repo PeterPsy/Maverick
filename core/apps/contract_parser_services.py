@@ -21,6 +21,7 @@ from core.apps.models import (
     HttpSidecarBindSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
+    HttpSidecarModelAccessSpec,
     HttpSidecarProxySpec,
     HttpSidecarSpec,
 )
@@ -51,6 +52,7 @@ def parse_services_section(
     *,
     app_id: str,
     supported_workspace_modes: list[str] | None,
+    provider_model_proxy: bool,
 ) -> AppServicesDeclaration:
     """Parse and validate the app-owned service section."""
     _reject_unexpected_fields(payload, {"http_sidecars"}, label="services")
@@ -66,6 +68,7 @@ def parse_services_section(
             _expect_mapping(item, label=f"services.http_sidecars[{index}]"),
             app_id=app_id,
             sandbox_compatible=sandbox_compatible,
+            provider_model_proxy=provider_model_proxy,
             label=f"services.http_sidecars[{index}]",
         )
         if sidecar.service_id in seen_ids:
@@ -81,6 +84,7 @@ def _parse_http_sidecar(
     *,
     app_id: str,
     sandbox_compatible: bool,
+    provider_model_proxy: bool,
     label: str,
 ) -> HttpSidecarSpec:
     _reject_unexpected_fields(
@@ -95,6 +99,7 @@ def _parse_http_sidecar(
             "process_policy",
             "artifact_mounts",
             "root_filesystem",
+            "model_access",
             "prewarm",
             "diagnostics",
             "browser_origin",
@@ -138,6 +143,16 @@ def _parse_http_sidecar(
             label=label,
         )
         if root_filesystem_payload is not None
+        else None
+    )
+    model_access_payload = payload.get("model_access")
+    model_access = (
+        _parse_model_access(
+            _expect_mapping(model_access_payload, label=f"{label}.model_access"),
+            provider_model_proxy=provider_model_proxy,
+            label=label,
+        )
+        if model_access_payload is not None
         else None
     )
     prewarm_payload = payload.get("prewarm")
@@ -196,6 +211,7 @@ def _parse_http_sidecar(
         process_policy=process_policy,
         artifact_mounts=artifact_mounts,
         root_filesystem=root_filesystem,
+        model_access=model_access,
         prewarm=prewarm,
         diagnostics=diagnostics,
         browser_origin=browser_origin,
@@ -205,6 +221,34 @@ def _parse_http_sidecar(
         proxy=proxy,
         logs=logs,
     )
+
+
+def _parse_model_access(
+    payload: dict[str, Any], *, provider_model_proxy: bool, label: str
+) -> HttpSidecarModelAccessSpec:
+    model_label = f"{label}.model_access"
+    _reject_unexpected_fields(payload, {"api", "cli", "required"}, label=model_label)
+    if not provider_model_proxy:
+        raise AppContractValidationError(
+            f"`{model_label}` requires `permissions.providers.model_proxy`."
+        )
+    api = _expect_bool(payload, "api", default=False)
+    cli = _expect_string_list(payload, "cli")
+    if len(set(cli)) != len(cli):
+        raise AppContractValidationError(f"`{model_label}.cli` must not contain duplicates.")
+    for provider_id in cli:
+        if not provider_id or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-" for character in provider_id):
+            raise AppContractValidationError(
+                f"`{model_label}.cli` entries must be lowercase provider ids."
+            )
+    if not api and not cli:
+        raise AppContractValidationError(f"`{model_label}` must request API or CLI access.")
+    required = _expect_bool(payload, "required", default=False)
+    if required:
+        raise AppContractValidationError(
+            f"`{model_label}.required` must be false so model access cannot block the native app."
+        )
+    return HttpSidecarModelAccessSpec(api=api, cli=cli, required=False)
 
 
 def _parse_bind(payload: dict[str, Any], *, sandbox_compatible: bool, label: str) -> HttpSidecarBindSpec:

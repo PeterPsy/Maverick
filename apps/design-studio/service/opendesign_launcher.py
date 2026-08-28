@@ -5,14 +5,26 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import signal
 import stat
-import sys
+import subprocess
 from typing import Any
 
 from official_opendesign_release import (
     OfficialReleaseError,
     load_official_release,
     verify_official_installation,
+)
+from model_access_client import ModelAccessClient, ModelAccessClientError, ModelAccessConfiguration
+from model_access_profiles import (
+    SANDBOX_PROFILE_PATH,
+    remove_model_access_profiles,
+    write_model_access_profiles,
+)
+from model_access_server import (
+    MODEL_ACCESS_API_KEY,
+    MODEL_ACCESS_BASE_URL,
+    ModelAccessHttpBridge,
 )
 
 
@@ -40,12 +52,25 @@ def main() -> None:
     release = load_official_release()
     installation_path = store_root / "official" / release.digest_key
     installation = verify_official_installation(installation_path, expected_release=release)
+    model_bridge, model_status, model_profile_path = _configure_model_access(data_dir)
+    _write_bridge_capabilities(
+        data_dir.parent,
+        {
+            "schema_version": "1",
+            "model_access": model_status,
+            "delegation": {
+                "state": "disabled",
+                "reason": "not_configured",
+            },
+        },
+    )
     command, environment, cwd = build_native_launch(
         rootfs=installation.rootfs,
         data_dir=data_dir,
         host=host,
         port=port,
         api_token=api_token,
+        model_profile_path=model_profile_path,
     )
     _write_host_status(
         data_dir.parent,
@@ -58,13 +83,20 @@ def main() -> None:
             "manifest_digest": release.manifest_digest,
             "rootfs_snapshot_sha256": installation.rootfs_snapshot_sha256,
             "customizations": [],
-            "model_bridge": os.environ.get("MAVERICK_OPENDESIGN_MODEL_BRIDGE", "disabled"),
+            "model_bridge": model_status,
             "delegation_bridge": os.environ.get("MAVERICK_OPENDESIGN_DELEGATION_BRIDGE", "disabled"),
         },
     )
     try:
         os.chdir(cwd)
-        os.execve(command[0], command, environment)
+        if model_bridge is None:
+            os.execve(command[0], command, environment)
+        _supervise_official_process(
+            command,
+            environment=environment,
+            cwd=cwd,
+            model_bridge=model_bridge,
+        )
     except OSError as error:
         raise SystemExit(f"Official OpenDesign process could not start: {error}") from error
 
@@ -76,6 +108,7 @@ def build_native_launch(
     host: str,
     port: int,
     api_token: str,
+    model_profile_path: Path | None = None,
 ) -> tuple[list[str], dict[str, str], Path]:
     """Build the official OCI entrypoint inside Core's artifact-root sandbox.
 
@@ -106,20 +139,113 @@ def build_native_launch(
         ),
         "NEXT_TELEMETRY_DISABLED": "1",
         "NODE_ENV": "production",
-        "NODE_OPTIONS": "--max-old-space-size=192",
         "OD_API_TOKEN": api_token,
         "OD_BIND_HOST": host,
         "OD_DATA_DIR": str(data),
         "OD_PORT": str(port),
         "OD_REQUIRE_API_TOKEN_ON_LOOPBACK": "1",
         "OD_SANDBOX_MODE": "1",
-        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "PATH": "/maverick/app/service:/usr/local/bin:/usr/bin:/bin",
         "TMPDIR": "/tmp",
         "TINI_SUBREAPER": "1",
         "TZ": "UTC",
     }
+    if model_profile_path is not None:
+        environment.update(
+            {
+                "MAVERICK_MODEL_ACCESS_SOCKET": _required_env("MAVERICK_MODEL_ACCESS_SOCKET"),
+                "MAVERICK_MODEL_ACCESS_STATE": "available",
+                "MAVERICK_MODEL_ACCESS_TOKEN": _required_env("MAVERICK_MODEL_ACCESS_TOKEN"),
+                "ALL_PROXY": "",
+                "HTTP_PROXY": "",
+                "HTTPS_PROXY": "",
+                "NO_PROXY": "*",
+                "all_proxy": "",
+                "http_proxy": "",
+                "https_proxy": "",
+                "no_proxy": "*",
+                "OD_ALLOWED_INTERNAL_HOSTS": "127.0.0.1,localhost",
+                "OD_AGENT_PROFILES_CONFIG": model_profile_path.as_posix(),
+                "OD_CODEX_DISABLE_PLUGINS": "1",
+                "OD_CODEX_SANDBOX": "danger-full-access",
+            }
+        )
     command = [*release.entrypoint, *release.command]
     return command, environment, Path(release.working_directory)
+
+
+def _configure_model_access(
+    data_dir: Path,
+) -> tuple[ModelAccessHttpBridge | None, dict[str, Any], Path | None]:
+    remove_model_access_profiles(data_dir)
+    try:
+        configuration = ModelAccessConfiguration.from_environment()
+        client = ModelAccessClient(configuration)
+    except ModelAccessClientError:
+        return None, {"state": "degraded", "reason": "core_broker_unavailable"}, None
+
+    cli_status: dict[str, Any]
+    profile_path: Path | None = None
+    try:
+        _host_profile, profile = write_model_access_profiles(data_dir, client)
+        profile_path = SANDBOX_PROFILE_PATH
+        cli_status = {"state": "ready", **profile}
+    except Exception:
+        remove_model_access_profiles(data_dir)
+        cli_status = {"state": "degraded", "reason": "cli_profile_unavailable"}
+
+    bridge: ModelAccessHttpBridge | None = None
+    try:
+        bridge = ModelAccessHttpBridge(client)
+        bridge.start()
+        api_status: dict[str, Any] = {
+            "state": "ready",
+            "protocol": "openai-compatible",
+            "base_url": MODEL_ACCESS_BASE_URL,
+            "credential_handle": MODEL_ACCESS_API_KEY,
+        }
+    except Exception:
+        api_status = {"state": "degraded", "reason": "api_endpoint_unavailable"}
+    state = "ready" if api_status["state"] == cli_status["state"] == "ready" else "degraded"
+    return bridge, {
+        "state": state,
+        "semantic_enrichment": False,
+        "api": api_status,
+        "cli": cli_status,
+    }, profile_path
+
+
+def _supervise_official_process(
+    command: list[str],
+    *,
+    environment: dict[str, str],
+    cwd: Path,
+    model_bridge: ModelAccessHttpBridge,
+) -> None:
+    process = subprocess.Popen(command, cwd=cwd, env=environment)
+    previous: dict[signal.Signals, Any] = {}
+
+    def forward(signum, _frame) -> None:
+        if process.poll() is None:
+            process.send_signal(signum)
+
+    try:
+        for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            previous[signum] = signal.getsignal(signum)
+            signal.signal(signum, forward)
+        exit_code = process.wait()
+    finally:
+        model_bridge.stop()
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+    raise SystemExit(exit_code)
 
 
 def _require_official_runtime_files(rootfs: Path) -> None:
@@ -178,8 +304,15 @@ def _port(value: str) -> int:
 
 
 def _write_host_status(root: Path, payload: dict[str, Any]) -> None:
-    path = root / HOST_STATUS_FILE
-    temporary = root / f".{HOST_STATUS_FILE}.{os.getpid()}.tmp"
+    _write_private_json(root / HOST_STATUS_FILE, payload)
+
+
+def _write_bridge_capabilities(root: Path, payload: dict[str, Any]) -> None:
+    _write_private_json(root / "bridge-capabilities.json", payload)
+
+
+def _write_private_json(path: Path, payload: dict[str, Any]) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8") + b"\n"
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):

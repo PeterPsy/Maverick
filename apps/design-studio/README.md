@@ -1,615 +1,106 @@
 # Design Studio
 
-Design Studio is a Maverick app for bringing OpenDesign-style UI design workflows into a sandbox-first workspace.
+Design Studio is the Maverick host identity for an unchanged official
+[OpenDesign](https://github.com/nexu-io/open-design) installation. It is not a
+fork, overlay, or replacement editor.
 
-It owns:
+## Native product boundary
 
-- a workspace frontend at `frontend/dist`
-- a JSON backend at `backend/app_backend.py`
-- CLI and MCP surfaces for project state, Storage import, and Storage export
-- lifecycle hooks for app data setup and health checks
-- a governed HTTP sidecar declaration under `services.http_sidecars`
-- app data under `workspaces/<workspace_id>/data/design-studio/`
+The selected release is `ghcr.io/nexu-io/od:0.16.1`, pinned by manifest digest
+in `service/opendesign_official_release.json`. The install hook verifies and
+materializes the official OCI root filesystem in the platform artifact store.
+Core mounts that root filesystem read-only and starts its official entrypoint.
 
-## OpenDesign Integration
-
-The app contract is shaped for upstream `nexu-io/open-design` tag
-`open-design-v0.16.1`, commit
-`276b4d8e970bc143d7ad060181a89a834e3d9caf`.
-
-Design Studio starts `service/opendesign_launcher.py` as the declared sidecar
-command. Control schema v3 selects one indivisible runtime artifact digest,
-web overlay digest, OpenDesign version, and data generation. The runtime digest
-resolves an immutable closure in the platform-owned, content-addressed artifact
-store outside the repository. Core exposes only that namespace through the
-declared read-only capability at `/artifacts/opendesign`; runtime and web
-resolve below `runtime/<sha256>/content` and `web/<sha256>/content`. The data
-generation resolves the only directory exported as `OD_DATA_DIR`. The daemon requires the explicit
-`OD_STATIC_DIR` selected from that verified overlay registry and has no embedded
-web fallback. A successful launch writes both digests to the redaction-safe
-status under
-`data/design-studio/opendesign/launcher-status.json` and records
-`mode: oci-musl-runtime`.
-
-The primary distribution recipe is declared in
-`service/opendesign_bundle.json` and implemented by
-`service/import_opendesign_oci.py`. It imports the official pinned
-`ghcr.io/nexu-io/od:0.16.1` linux/amd64 image directly over bounded HTTPS,
-verifies the complete OCI descriptor chain and SLSA subject, and reconstructs
-the layers without Docker. Runtime derivations apply only daemon/runtime
-patches and stage the image's own musl loader, Node 24 runtime, daemon, and
-required native modules; static web output is deliberately absent. The patch
-series separately identifies `runtime`, `web-build`, and `web-react`
-components, so React/CSS or web-build changes do not invalidate runtime inputs.
-Two clean runtime derivations and, independently, two clean release-overlay
-derivations must be byte-identical.
-Runtime startup never installs dependencies, invokes a package manager, mounts
-host Node, or builds Next.
-
-The complete upstream web and daemon suites are a separate acceptance run via
-`service/certify_opendesign_upstream.py`. They run once each with one worker on
-adequate capacity; the packager never expands them into per-file processes,
-checkpoints, retries, or memory-wait loops.
-
-The generated OS/architecture runtime artifact and its file manifest,
-CycloneDX SBOM, license inventory, NOTICE, signed provenance, signature, and
-public key live under ignored `service/artifacts/`. Their names, sizes, and
-SHA-256 digests are pinned in the committed canonical manifest.
-`materialize_opendesign.py` verifies every asset and provenance signature,
-normalizes manifest-v2 modes, performs a complete content audit, writes a
-protected receipt, fsyncs, and atomically publishes the digest. An invalid
-generation is quarantined and replaced, never edited in place. Normal launch
-binds the protected manifest v2 to its receipt, then validates store generation,
-exact control binding, ownership/modes, and read-only mount; it does not hash the
-closure. Full audits
-run on publication, activation, repair, release certification, and background
-maintenance. Provision, repair, and activation audit already-present packages
-too; a valid fast receipt never waives those lifecycle gates. Active and
-rollback generations are selected explicitly;
-`opendesign_release_selection.json` schema v3 binds both the rollback pair and
-the SHA-256 of `opendesign_runtime_sources.json`. That catalog in turn binds
-the current and rollback runtime digests to distinct, committed manifests and
-verification profiles. A fresh install therefore materializes and fully audits
-both exact runtime sources instead of assuming that the rollback is already in
-the store. Unreferenced entries are never used as a fallback.
-
-Every publication stage owns an external lease file locked for the lifetime of
-the publisher. A governed provision, repair, or garbage-collection pass skips a
-live lease, but atomically moves a lease whose process died (including
-`SIGKILL`) into `quarantine/staging/`. Pre-lease staging from an older release
-gets a five-minute compatibility grace. Staging quarantine follows the same
-configured retention as runtime and overlay quarantine; `ENOSPC` fails with a
-typed error, removes the incomplete stage, and never exposes a partial digest.
-
-Each immutable web overlay carries a file-level manifest, archive digest,
-runtime/upstream compatibility, lockfile and toolchain digests, CycloneDX SBOM,
-licenses, provenance, and signature. Verification uses the separately reviewed
-trust root pinned by `service/opendesign_web_trust.json`; a key delivered only
-inside an overlay cannot authorize it. Materialization rejects traversal,
-symlinks, path escape, incompatible selections, signature failure, or any
-file-level mismatch before an atomic publish.
-
-`service/opendesign_web_builder.py` keeps persistent dependency, invariant
-workspace-output, source/build, and compatible Next caches. Entries carry
-content manifests, use per-key locks, and publish by atomic rename. Dependency
-identity includes the lockfile, package graph, Node, pnpm, and platform; a
-valid entry skips `pnpm install --frozen-lockfile`. Development uses one
-bounded Turbopack derivation and may reuse verified caches. A release disables
-all of them for two clean independent derivations and a byte-for-byte
-comparison.
-
-Fresh checkouts will not include the materialized OCI bundle. Import the pinned
-release assets before declaring the release complete:
-
-```bash
-python3 apps/design-studio/service/import_opendesign_oci.py \
-  --source-repository /path/to/open-design-v0.16.1/.git \
-  --signing-key /secure/path/opendesign-provenance-key.pem
-python3 apps/design-studio/service/materialize_opendesign.py
-python3 apps/design-studio/service/opendesign_web_release.py \
-  --source-repository /path/to/open-design-v0.16.1/.git \
-  --signing-key /secure/path/opendesign-provenance-key.pem
-python3 apps/design-studio/service/bootstrap_opendesign_generation.py \
-  --data-root /path/to/new-empty-design-studio-data/opendesign
-python3 apps/design-studio/service/smoke_opendesign_sidecar.py
-```
-
-The ignored deployment payload has a strict layout. The current signed OCI
-derivation remains directly under `service/artifacts/`; the independently
-retained rollback set is under
-`service/artifacts/runtime/<rollback-runtime-sha256>/`. Web overlay payloads
-remain under `service/artifacts/open-design-web/<overlay-sha256>/`. The
-materializer verifies the catalog-bound manifest, provenance signature and all
-asset digests for each runtime, publishes both into the protected namespace,
-and performs a full post-publication audit of each digest. Missing rollback
-payload is an installation failure, never a request to use a newer store entry.
-
-For the one-time v1 rollout, pass the currently active v1 runtime digest once
-with `--compatible-runtime-artifact-sha256`; the canonical overlay will then be
-valid for both the source and the new `OD_STATIC_DIR` runtime. Later overlays
-default to the runtime digest pinned by the current manifest.
-
-The explicit bootstrap command is only for a new empty data root. It refuses
-legacy or unknown content; existing data must use the controlled migration and
-is never migrated at launcher startup. The launcher fails closed when the
-bundle, control record, or generation is absent or inconsistent. There is no
-runtime compatibility fallback.
-
-The one-time v1-to-v2 rollout publishes the sole new runtime requiring
-`OD_STATIC_DIR` together with the canonical overlay, converts the existing
-control record atomically, and executes a controlled runtime cutover. After
-that cutover, React/CSS changes use only overlay build, materialization, and
-web activation. A web-only activation changes only
-`active.web_overlay_sha256` and `previous_web`; it preserves the declared
-`previous_runtime` rollback and its completed activation receipt. Runtime and
-web rollback receipts may therefore coexist without being treated as two
-pending cutovers. The web path does not clone data, run migrations, change the
-runtime digest, or touch the migration journal. Restart/readiness failure restores the
-previous compatible overlay automatically. A later selected gate failure also
-restores that overlay before `dev apply` reports failure. Every new cutover
-first completes any pending activation recovery. Backend restart dispatches the
-app-owned `backend_recovery` hook, which reports but does not terminalize pending
-readiness. The journal remains pending until the selected sidecar reaches upstream
-`/api/ready`, the launcher atomically commits its nonce-bound activation marker,
-and the patched daemon answers `/api/maverick-ready`; only then does Core
-publish the browser remount and issue a ticket. Until that point another
-cutover fails closed.
-
-The upstream tag and official OCI image were inventoried before implementation.
-The source tree includes web,
-daemon, desktop, deploy, Helm/chart, design-system, skill, and plugin trees; the
-daemon also has native dependencies including `node-pty`, `better-sqlite3`, and
-`blake3-wasm`. The OCI closure loads the two modules needed on allowed routes;
-the official image lacks a loadable linux `node-pty` binary and all terminal/
-PTY routes stay denied. Vendoring
-the full repository directly would mix sandbox-safe surfaces with full-access
-surfaces the Maverick contract must keep blocked.
-
-The production daemon replacement must preserve these boundaries:
-
-- bind only to loopback
-- derive `OD_DATA_DIR` only from the active controlled generation
-- keep `OD_MEDIA_CONFIG_DIR` inside that same active generation
-- receive only the technical `OD_API_TOKEN`
-- run with `OD_SANDBOX_MODE=1`
-- keep provider keys in Maverick/Vault-owned flows
-- keep host folder import, terminal, and pty routes blocked in sandbox mode
-
-## Storage Boundary
-
-Design sources enter through Storage workspace-relative paths:
+OpenDesign owns its UI, routes, projects, conversations, prompts, tools,
+settings, migrations, and update behavior. Its persistent data lives at:
 
 ```text
-storage/uploaded/<file>
-storage/generated/<file>
+workspaces/<workspace_id>/data/design-studio/opendesign-native/
 ```
 
-Exports are written under:
+The Maverick frontend only obtains a one-shot isolated-browser ticket and hosts
+the native page in an iframe. Native HTTP routes pass through unchanged; no
+normal OpenDesign request is handled by Core.
 
-```text
-storage/generated/design-studio/<od-project-id>/<od-run-id>/
-```
+## Optional naked-model bridge
 
-The app never accepts host absolute paths in sandbox mode. Hosted imports are
-issued through the `storage-read` dependency backend request. Core gives the
-result callback a fresh backend-scoped sidecar capability; the callback uploads
-the bounded bytes through `POST /api/projects/{id}/files` and verifies a raw
-read-back SHA-256 before marking the import complete. Design Studio never keeps
-a second copy under app data.
+The sidecar requests the optional `services.http_sidecars[].model_access`
+capability with API access and the installed `codex` CLI provider. Failure of
+this capability never prevents OpenDesign from starting.
 
-Exports require a terminal canonical `od_run_id`. Design Studio reads the real
-OpenDesign file catalog, obtains the project file archive from the governed
-batch archive API, and writes `project-files.zip`, `result-package.json`, and
-`manifest.json` through `storage-write`. The manifest records SHA-256, size,
-media type, the OpenDesign run id, Maverick runtime correlation ids, OCI pin,
-materialized artifact digest, and Storage-import provenance. Storage owns every
-generated file and inventory update.
+Core exposes a private, capability-authenticated Unix socket only inside the
+sidecar. Raw provider credentials remain in Core Secrets and are never written
+to OpenDesign data or injected into the sidecar environment. The launcher
+provides two native integration forms:
 
-`data/design-studio/adapter-state.json` contains only view state and bounded
-import/export job metadata. OpenDesign remains the sole owner of projects,
-conversations, runs, and project files. The migrated `state.json` is a sealed
-legacy archive; `design_*` is accepted only as an input alias resolved through
-`opendesign/legacy-project-map.json`, and canonical responses always return
-`od_project_id` with an optional `legacy_project_id`.
+- an OpenAI-compatible endpoint at `http://127.0.0.1:49491/v1`, using the
+  non-secret local handle `maverick-local`; and
+- an OpenDesign local agent profile named `installed-codex-cli`, based on the
+  upstream `codex` adapter and the technical wrapper `service/maverick-codex`.
 
-## Frontend Boundary
+The API bridge validates the selected configured model, forwards the exact
+OpenDesign-authored JSON body, and streams the provider response. The CLI
+bridge forwards the native adapter's argv, cwd, stdin, stdout, stderr, exit,
+and cancellation semantics to a separately sandboxed Codex process. It does
+not create a Maverick runtime session and does not add Maverick prompts,
+memory, Chat history, personas, skills, tools, planning, or model substitution.
 
-The Maverick frontend is a full-bleed host for the native OpenDesign editor. A
-`shell.sidebar.primary` widget renders the canonical OpenDesign project catalog
-with search, recent ordering, loading/error/empty states, and selected-project
-state; its fixed footer creates a canonical project. The widgets call the
-Design Studio backend and never persist a duplicate catalog. Their layout uses
-the shell-owned `is_mobile_layout` context rather than iframe media queries.
-Before creating a project, the UI allocates a collision-free Italian label
-(`Progetto senza titolo`, then a numeric suffix) from the canonical catalog.
+OpenDesign users configure the standard API endpoint through OpenDesign's own
+provider settings. CLI model metadata is written only to the supported native
+`OD_AGENT_PROFILES_CONFIG` file under OpenDesign's sandbox agent home; it
+contains no credential or semantic content.
 
-The editor host requests a one-shot launch from
-`POST /api/app-sidecars/browser-launch`, validates that the response names a
-different HTTP origin and the exact clean bootstrap endpoint, and submits the
-ticket through a transient form POST targeted at the iframe. The ticket is
-cleared from the form immediately and is never put in a URL, fragment,
-localStorage, log, or persisted React state.
+Redaction-safe bridge readiness and endpoint metadata are written to
+`data/design-studio/bridge-capabilities.json`. Native operation remains
+available when that file reports a degraded or disabled bridge.
 
-An iframe `load` event is transport-only and never marks the product ready: an
-HTTP 401, 410, or 503 document produces the same browser event. The wrapper
-keeps its governed startup phase and status polling until the exact iframe
-window, on the exact sidecar origin, posts version 1 of
-`maverick.opendesign.ready`. Only that message completes readiness, stops
-polling, and records `first_paint_ms`; duplicate or stale messages are ignored.
+## Host-owned surfaces
 
-After the `303`, the OpenDesign UI and all of its API requests stay same-origin
-on the opaque sidecar host. The wrapper exposes accessible loading/degraded/
-error recovery without adding reload/fullscreen controls over the workspace.
-Maverick shell navigation accepts bounded scalar `od_project_id`/`od_run_id`
-values. Project deep links
-bootstrap the real OpenDesign `/projects/<id>` route. Without a deep link, the
-backend chooses the newest `createdAt`; with no projects the wrapper keeps
-OpenDesign Home unmounted and shows only `Nuovo progetto`. Sidebar selections
-and creation update shell-owned app params/history, so the sidebar and floating
-Chat always share the same project context. Same-app panel commands preserve
-that project context without leaking their transient request ids into the URL.
+Maverick keeps only:
 
-The shell theme is forwarded as a sanitized dark/light message. The patched
-OpenDesign export maps its backgrounds, surfaces, borders, text, focus, dialog,
-popover and scrollbar colors to Maverick tokens. The React patch keeps the
-native `ProjectView`, fixes the hosted shell to give its body the full available
-height, and initializes the isolated editor in Italian. The shell sidebar
-remains the only project catalog; its `Strumenti` command focuses the latest
-native sketch or creates the first sketch so Excalidraw's drawing toolbar is
-actually usable, while typed settings commands open either the native
-`SettingsDialog` execution section or its Design Systems section.
-The duplicate OpenDesign assistant stays unmounted in favor of Maverick Chat,
-and hosted mode omits the local-editor handoff control because its routes are
-intentionally denied. OpenDesign Home and the redundant native workspace tabs
-remain unmounted. The wrapper requires both the expected `event.origin` and
-`event.source` for sidecar messages, while the isolated bridge accepts commands
-only from its parent frame.
+- official release verification and process lifecycle;
+- workspace binding, authentication, isolated browser origin, and readiness;
+- the optional technical Model Access Bridge;
+- the external Delegation Bridge and bounded correlation state; and
+- explicit Storage/reference operations where authorized.
 
-## Maverick Chat Integration
-
-OpenDesign conversations appear as ordinary user-visible Maverick runtime
-threads with `source_app_id: design-studio`. Chat adds an OpenDesign badge to
-the sidebar row and active floating header, an OpenDesign filter, and delegates
-submit/cancel/retry to Design Studio instead of bypassing the OpenDesign run
-protocol with a direct runtime turn.
-
-Design Studio stores only the durable correlation in
-`maverick-runtime/conversation-bindings.json`: one OpenDesign project and
-conversation resolve to one canonical Maverick runtime session/thread across
-later turns and restarts. OpenDesign remains canonical for the conversation,
-user/assistant messages, run records and result packages. Legacy correlations
-are migrated by choosing the newest valid session for future turns without
-rewriting or deleting historical runtime threads.
-
-The composer exposes a persistent icon-only Design Studio button immediately
-beside, and outside, Chat's generic Utility menu. Its governed context API
-(`chat.context`, `chat.resolve_project`, and `chat.set_design_system`) follows
-the project currently open in the workspace, resolves the latest canonical
-project only when no project context exists, lists canonical projects and
-Design Systems, and applies only published systems. Existing conversations
-stay bound to their original project. The same panel exposes Chat, Plan and
-Design modes plus typed commands for native Design System settings, workspace
-sketch tools, and the remaining OpenDesign settings. Maverick retains its own
-visual composer and supplies attachments, references, skills, agents/models,
-submission, cancellation, and retry while Design Studio remains the owner of
-the OpenDesign conversation and run protocol. Design Studio advertises
-structured skill invocation, forwards Chat's validated `invoked_skill_ids`
-into its generic runtime request, and creates new source-app sessions in
-`explicit` activation mode.
+The CLI and MCP surfaces must use supported public OpenDesign APIs. They must
+never patch the official package, automate the browser, or read/write the
+OpenDesign database directly.
 
 ## SDK Flow
 
-Design Studio is a first-party source-available platform app under `apps/design-studio`, not a workspace-local SDK-generated app. It still follows the same contract validation and hosted lifecycle expectations:
-
-```bash
-python3 -m unittest apps/design-studio/tests/test_design_studio_app.py
-npm test --if-present --prefix apps/design-studio
-maverick app design-studio frontend build --json
-maverick app design-studio cli list --json
-maverick app design-studio mcp list --json
-```
-
-The app is installed into workspaces through the generic built-in app source registration and workspace binding flow. It must not be registered through app-specific bootstrap shortcuts.
+The app SDK resolves the workspace-scoped Design Studio backend, CLI, MCP, and
+reference surfaces declared by `app_contract.json`. Those surfaces are thin
+external clients of the supported native OpenDesign project, conversation,
+message, run, event, result, and cancellation APIs. They may keep bounded
+delegation correlation and display-only view state, but never a second project
+catalog or transcript. Browser traffic uses the isolated sidecar origin and
+passes directly to the same official OpenDesign daemon.
 
 ## Contract Notes
 
-The contract declares frontend, backend, CLI, MCP, lifecycle hooks, a bundled skill, referenceable `design_project` entities, standard view-state actions, Storage dependencies, and one app-owned HTTP sidecar.
-
-Because Design Studio can create runtime sessions, it also implements the
-trusted platform `runtime.cleanup_sessions` hook declared by
-`permissions.runtime.receive_cleanup_callbacks`. The separate
-`permissions.runtime.cleanup_sessions` permission allows the app to request
-cleanup of sessions it owns. Full runtime cleanup removes only the
-matching app-owned OpenDesign correlation records and conversation bindings;
-ordinary user backend calls cannot invoke that destructive hook.
-
-The sidecar is sandbox-compatible because its mandatory generic
-`process_policy` starts it under bubblewrap with an allowlisted environment,
-read-only app bundle, writable validated app data root, isolated network
-namespace, empty outbound list, resource/request limits, and an authenticated
-Unix relay. Its loopback listener exists only inside that namespace; core never
-publishes or falls back to a host TCP port. `HOME`, provider/runtime secrets,
-cookies, Storage, operator paths, and other workspaces are absent. The generated
-technical token uses the generic `${service.token}` substitution and is not the
-relay capability.
-
-OpenDesign authenticates the small manifest-v2 file against its protected
-receipt before every process start; closure hashing remains outside the launch
-critical path. Core prewarms the declared sidecar asynchronously after
-bootstrap, install, activation, and repair, with
-per-key singleflight so one slow app cannot convoy unrelated sidecars. The
-sidecar health gate uses only `/api/maverick-ready` with a 12-second budget;
-failed readiness terminates the complete process group and returns a typed,
-redacted failure. Browser-session idle expiry does not replay an old ticket: the
-wrapper requests a fresh launch while reusing the healthy process when live.
-If a low-priority full audit later rejects an active package, the hook removes
-transactional readiness, asks Core to revoke browser authority and stop the
-sidecar, performs exactly one locked repair, and restarts without recursively
-invoking auto-repair. A failed recovery leaves the app stopped and records a
-one-hour persistent backoff instead of hashing and retrying every scheduler
-tick.
-
-The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
-
-The sidecar also declares the generic isolated `browser_origin` capability.
-Core, not Design Studio or OpenDesign, derives the opaque workspace/app/
-generation host, issues the short-lived body-only bootstrap ticket, sets the
-separate host-only session cookie, and applies the fixed
-`self_hosted_web_app` CSP profile. Root-relative OpenDesign requests therefore
-remain on the sidecar origin and never fall through to Maverick routes. Neither
-Maverick cookies nor the generated `OD_API_TOKEN` cross the browser/upstream
-boundary.
-
-The browser route policy is generated from the pinned 0.16.1 method/template
-inventory and checked in CI with `service/sync_route_policy.py`. API rules are
-exact and segment-aware; unsafe allows name their method, dynamic parameters
-consume one segment, and prefix/regex/splat escalation is rejected. Only
-GET/HEAD static trees outside `/api` cover `/_next`, assets, artifacts, and
-frames. Known terminal/PTY, host-folder, external-open, deploy, connector/OAuth,
-plugin install/upload, persistent MCP, telemetry, and other inventoried routes
-are blocked explicitly; all other routes are denied by default.
-
-Backend, CLI, MCP, and reference access uses the separate generic
-`entrypoint_access` contract. Each invocation receives an opaque, per-process
-SDK capability for the minimum project catalog, project file upload/read-back,
-and batch archive routes needed by that surface, with a 30-second TTL, request
-budget, explicit request/response limits, and no streaming. Reference access
-remains GET-only. `core.app_sdk.app_sidecar` calls the core-owned Unix broker; Design
-Studio never learns the OpenDesign port, `OD_API_TOKEN`, relay capability, or
-database path. The capability is bound to workspace, local app, service,
-surface, actor, and invocation and is revoked when the entrypoint finishes.
-Reference calls use their own GET-only policy and cannot inherit MCP mutation
-authority. Broker failure has no loopback or filesystem fallback.
-
-An explicit OpenDesign project id is resolved through this SDK path by the
-backend (and therefore the mounted frontend), CLI `get_project`, MCP
-`design_studio_get_project`, and the standard Design Studio reference
-resolve/summarize tools. CLI `create_project` and MCP
-`design_studio_create_project` also create canonical OpenDesign projects.
-Legacy `design_*` ids never become output identities; no OpenDesign data is
-read directly from `app.sqlite` or duplicated in adapter state.
-
-The production confinement suite uses real bubblewrap and validates filesystem,
-environment, network, authenticated relay, concurrency and descendant cleanup:
-
-```bash
-python3 -W error::ResourceWarning -m unittest \
-  tests.integration.app_hosting.test_sidecar_execution \
-  tests.integration.app_hosting.test_sidecar_browser_origin \
-  tests.integration.app_hosting.test_sidecar_entrypoint_broker
-```
-
-Routes declared as `handled_by_core` are routed to the Design Studio backend with the `sidecar_core_handler` surface instead of reaching the OpenDesign sidecar. The implemented sandbox handlers cover:
-
-- `GET /api/media/config`, returning sanitized Maverick-managed provider config without keys
-- `POST /api/import/storage`, importing through the selected `storage-read` dependency backend
-- `POST /api/export/storage`, exporting through the selected `storage-write` dependency backend
-- `POST /api/provider/models`, mapping OpenDesign provider model discovery to the active Maverick workspace provider without forwarding provider routes to the sidecar
-- `GET/POST /api/runs`, run status, SSE events, cancel, and result-package
-  routes through the generic Maverick runtime stream
-
-For run creation, Design Studio first validates the real project and
-conversation through its short-lived `app_sidecar` capability. It then reserves
-an app-owned OpenDesign run correlation and asks core for a source-app-stamped
-runtime session, a durable stream, and a one-shot capability to the active
-project directory. Existing conversation bindings supply the same
-`runtime_session_id` for subsequent turns. Only correlation metadata is stored
-under the active data generation in `maverick-runtime/correlations.json` and
-`maverick-runtime/conversation-bindings.json`; terminal callback event IDs
-are persisted there before acknowledgement so at-least-once callback replays
-return without another OpenDesign request or state mutation. Prompts, provider
-payloads, tokens, and host paths are excluded. Core owns provider selection, budgets,
-interrupt, recovery, and normalized events. Design Studio alone owns the
-OpenDesign SSE schema and writes terminal result packages for success, failure,
-timeout, and cancellation.
-
-Cancellation intent is persisted before core receives the interrupt request.
-Terminal projection is monotonic: a later callback cannot replace an already
-terminal run, and a failure delivered after a recorded cancel request is exposed
-as `canceled` rather than regressing the OpenDesign run to `failed`. This rule is
-applied identically to the direct runtime hook and the translated SSE stream.
-
-The contract declares `permissions.providers.model_proxy: true` with `credential_source: core-vault` and `deliver_secrets_to_app: false`. It does not declare app-scoped provider secret reads. Provider keys stay in Maverick/Vault-owned flows, are not delivered to the browser, Design Studio backend, or OpenDesign sidecar, and are not written into `OD_MEDIA_CONFIG_DIR`. Provider errors are returned in OpenDesign's provider-model response shape (`ok`, `kind`, `latencyMs`, `status`, `detail`) so the bundled UI can handle unavailable provider state without learning raw credentials.
+The contract deliberately denies Maverick runtime-session creation and direct
+secret delivery. Its provider permission authorizes only the scoped Model
+Access Bridge; sidecar route policy remains pass-through. Storage interfaces
+are used only for explicit authorized attachments, exports, and backups, while
+project references and view state are resolved through public OpenDesign APIs.
 
 ## Verification
 
-Useful checks:
+Focused checks:
 
 ```bash
-python3 -m unittest apps/design-studio/tests/test_design_studio_app.py
-python3 -m unittest apps/design-studio/tests/test_opendesign_adapter.py
-python3 -m unittest tests/unit/apps/test_runtime_requests.py
-python3 -m unittest apps.design-studio.tests.test_runtime_bridge
-python3 -m unittest apps/design-studio/tests/test_opendesign_oci_import.py
-python3 -m unittest apps/design-studio/tests/test_opendesign_materialization.py
-python3 -m unittest apps/design-studio/tests/test_opendesign_migration.py
-python3 apps/design-studio/service/sync_route_policy.py
-python3 apps/design-studio/service/smoke_opendesign_runtime.py
-python3 apps/design-studio/service/smoke_opendesign_migration.py
-python3 apps/design-studio/service/smoke_opendesign_sidecar.py
-maverick app design-studio frontend build --json
-maverick app design-studio mcp list --json
-maverick app design-studio cli list --json
-```
-
-The app-owned `dev apply` command requires exactly one isolated changeset:
-explicit repository-relative `changed_files`, or immutable `base_sha` plus the
-current `head_sha`. It snapshots and propagates that set to every changed-suite
-gate, then materializes a committed checkout with only those declared path
-bytes overlaid. Builds and tests run from that checkout, so unrelated
-shared-worktree changes cannot enter the run. Signed immutable runtime/web
-registries are materialized as independent real trees, using copy-on-write
-reflinks when supported and copies otherwise. The snapshot includes only the
-pinned current runtime and release overlay, while installed Node dependencies
-are copied into the isolated checkout before execution. A newly built candidate
-overlay is materialized the same way and signature-verified before the browser
-gate. The E2E process receives an executable Python path and a Playwright browser
-cache resolved from the host account that owns the publishing repository;
-the default web-build cache is likewise resolved there before the temporary
-checkout exists, so it survives cleanup. It emits
-bounded JSON containing actions, durations, digests, cache state, readiness,
-and rollback. Frontend, backend, overlay, runtime, hosting, docs, and
-release-only changes select only their owned gates; documentation does not
-trigger OCI, backend is not run twice, and `changed_suite` is not unconditional.
-Changes to `patches/series.json` are compared semantically with the frozen base:
-`web-build` and `web-react` entry updates remain web-only, while `runtime` or
-unknown series changes select the OCI pipeline.
-
-`dev benchmark` performs the automatic real React-patch-to-live proof. It
-changes patch bytes in an isolated copy, forces new source/build and overlay
-digests without a source-cache hit, activates through readiness and the scoped
-browser-remount event, restores the exact initial selection, and records phase
-timings. The canonical ceiling is 180 seconds.
-
-### Verification and release-certification policy
-
-Design Studio verification is risk-tiered. The complete production acceptance
-is a scheduled release-certification gate, not a per-commit or ordinary merge
-gate:
-
-1. Routine changes run the smallest relevant unit, frontend, and focused
-   integration tests. UI changes normally add `test:e2e:quick`.
-2. Changes that cross app boundaries or touch the hosted wrapper run
-   `test:e2e:affected` and the integration gates selected by the changed paths.
-3. A designated release candidate or a critical-path change runs the complete
-   release profile, migration/rollback, change-to-live benchmark, hosted smoke
-   when a deployed HTTPS installation is in scope, and production acceptance.
-
-Critical-path changes include artifact identity, signature or materialization;
-protected-store and sandbox mounts; repair or crash recovery; sidecar lifecycle
-or concurrency; transactional readiness and browser-ticket security; data
-generation, migration or rollback; release cutover; and the SLO measurement
-path. The reviewer may elevate another change when its concrete risk reaches
-one of those boundaries.
-
-Full release certification requires a quiet, controlled host because it
-restarts Core and sidecars and records performance distributions. It must be
-scheduled as an explicit release operation rather than forcing unrelated agents
-to stop for normal development closure. Lower-tier verification should use
-isolated worktrees and bounded tests wherever possible.
-
-Source-bound evidence becoming stale after a later Core, base-shell, Storage,
-or Design Studio change does not by itself prove a regression and does not
-block a routine commit or merge. It means only that the previous evidence must
-not be described as certification of the newer source revision. A routine
-closure may record that fact as a waiver together with the focused tests and
-live health checks that were actually completed. Waivers are not permitted for
-a designated production release/cutover or for an unmitigated critical-path
-change.
-
-When tier 3 is selected, production-path acceptance runs the official
-materialized OCI daemon, the real Maverick ASGI host and sidecar broker, the
-real Storage app, and headless
-Chromium against two temporary workspaces. The only provider substitute is an
-external statically compiled process that implements the Codex app-server
-protocol; it crosses the normal sandbox/process boundary and writes the test
-artifact into the granted project root. It is not an in-process runtime mock.
-
-The commands below are the tier-3 release-certification workflow. The quick and
-affected profiles may be run independently for the lower tiers.
-
-```bash
-npm run test:e2e:quick --prefix apps/design-studio
-npm run test:e2e:affected --prefix apps/design-studio
-npm run test:e2e:release --prefix apps/design-studio -- \
-  --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
 python3 -m unittest \
-  apps/design-studio/tests/test_opendesign_dev_apply_integration.py
-npm run test:e2e:migration --prefix apps/design-studio \
-  > /owned/evidence/opendesign-migration.json
-python3 apps/design-studio/service/aggregate_opendesign_release_evidence.py \
-  --ui /owned/evidence/opendesign-ui-release.json \
-  --migration /owned/evidence/opendesign-migration.json \
-  --benchmark /owned/evidence/opendesign-change-to-live.json \
-  --output /owned/evidence/opendesign-release.json
-python3 -m unittest apps.design-studio.tests.test_production_acceptance
+  apps.design-studio.tests.test_official_opendesign_release \
+  apps.design-studio.tests.test_native_thin_host \
+  apps.design-studio.tests.test_model_access_bridge \
+  tests.unit.app_hosting.test_model_access_broker
 ```
 
-For a deployed installation, run the separate hosted-origin smoke from the
-repository host. It uses an existing active operator session without logging
-its value, keeps Chromium TLS verification enabled, and verifies the isolated
-HTTPS iframe, secure bootstrap cookie, reload, persisted-project lookup, and
-deep link. Supplying `--storage-input-path` additionally creates a temporary
-OpenDesign project, exercises Storage import, a real runtime run and SSE,
-result packaging, Storage export/read-back, and deletes only that temporary
-project.
+The official-package smoke remains valid with both bridges disabled:
 
 ```bash
-npm run test:e2e:hosted --prefix apps/design-studio -- \
-  --platform-origin https://maverick.example \
-  --auth-sessions-file data/control-plane/json/identity/auth_sessions.json \
-  --project-id <canonical-opendesign-project-id> \
-  --storage-input-path storage/generated/design-studio/hosted-acceptance-input.md \
-  --evidence-output apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json
+python3 apps/design-studio/service/smoke_official_opendesign.py \
+  --installation /path/to/official/<digest>
 ```
-
-The optional evidence file contains only public origins and bounded acceptance
-booleans. It never records the selected platform session, bootstrap cookie,
-browser headers, prompts, provider payloads, or environment values.
-
-`npm run test:e2e` aliases the complete release profile. The quick profile
-covers changed UI behavior, and affected composes integration
-coverage from the diff. The final browser release profile covers thirteen UI
-scenarios: login/open with the
-fixed Maverick sidebar, project creation and navigation through that sidebar,
-absence of the native home project strip and Chat pane, Storage import, runtime
-start, incremental SSE, generated-file preview, idempotent cancel, Storage
-export and manifest read-back, core/sidecar restart with explicit `/api/maverick-ready`
-checks, deep link, workspace A/B isolation, exact route denial, browser
-credential non-disclosure. Real-daemon migration/rollback on marked fixture
-copies is a separate gate, not repeated inside UI cases. The final aggregator
-requires the exact unique set of thirteen canonical UI ids, explicit restart
-and workspace-isolation scenarios, every source/forward preservation proof, and
-the independent rollback result. Before emitting `passed`, it verifies the
-selected signed overlay and matches its upstream commit, lockfile digest,
-runtime compatibility, and both web patch digests to the current bundle,
-supply-chain inventory, and `patches/series.json`.
-
-Release performance is recomputed from the raw samples in schema 2 evidence.
-Warm interface time covers the complete wrapper navigation through the trusted
-`maverick.opendesign.ready` bridge boundary; it no longer
-excludes wrapper DOM loading. After each real Core restart, Chromium keeps an
-already-open shell, waits for the declared prewarm, and measures the first user
-action through that same transactional UI-ready boundary. Both warm and cold
-interface distributions are gated at P95 1.5 seconds and P99 2.5 seconds.
-Ticket and `/api/maverick-ready` budgets remain independently gated.
-
-The UI evidence records a UUID, ordered UTC start/completion timestamps, the
-canonical command, raw samples, and a SHA-256 inventory of all current Core,
-base-shell, Storage, and Design Studio inputs. Production acceptance recomputes
-that inventory and executes every referenced Python gate; a `passed` flag or an
-existing filename is not sufficient. The schema-5 release aggregate also binds
-the exact UI, migration, and benchmark documents by path and SHA-256. Each UI
-scenario carries the full app/runtime correlation join, while the separate
-rollback scenario carries only bounded migration proof.
-The 24 global criteria and stable evidence references are tracked in
-`service/opendesign_production_acceptance_0_16_1.json`.
-
-Current intentional omissions:
-
-- generated OpenDesign assets and dependency closures stay out of source control
-- immutable runtime and web registries stay ignored; only canonical digest contracts and redaction-safe release evidence are committed
-- real workspace migration remains unauthorized; migration tests operate only on marked fixtures and controlled copies
-- the source-build baseline remains a separate fallback certification; the primary OCI artifact is pinned and its real acceptance evidence is committed
-- provider proxying is limited to OpenDesign model discovery through Maverick's active workspace provider; generation/chat provider routes remain unavailable in sandbox mode
-- full-access terminal, Local CLI, and host-folder import are not part of the sandbox MVP

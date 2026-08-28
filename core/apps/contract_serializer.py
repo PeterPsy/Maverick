@@ -226,6 +226,17 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                     ),
                     **(
                         {
+                            "model_access": {
+                                "api": sidecar.model_access.api,
+                                "cli": sidecar.model_access.cli,
+                                "required": sidecar.model_access.required,
+                            }
+                        }
+                        if sidecar.model_access is not None
+                        else {}
+                    ),
+                    **(
+                        {
                             "prewarm": {
                                 "on_core_start": sidecar.prewarm.on_core_start,
                                 "on_install": sidecar.prewarm.on_install,

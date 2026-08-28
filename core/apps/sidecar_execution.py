@@ -11,6 +11,7 @@ import shutil
 import stat
 import sys
 import sysconfig
+from typing import Callable
 
 from core.apps.errors import AppHostingError
 from core.apps.artifact_mounts import ResolvedArtifactMount
@@ -30,6 +31,7 @@ _SANDBOX_APP_ROOT = Path("/app")
 _SANDBOX_ROOTFS_APP_SOURCE_ROOT = Path("/maverick/app")
 _SANDBOX_DATA_ROOT = Path("/data")
 _SANDBOX_RELAY_SOCKET = Path("/relay/r.sock")
+_SANDBOX_MODEL_ACCESS_ROOT = Path("/model-access")
 _RUNTIME_READ_ONLY_DIRS = (Path("/etc/ssl"),)
 
 
@@ -44,6 +46,7 @@ class ConfinedSidecarLaunch:
     relay_capability: str
     secret_fd: int
     passwd_fd: int
+    model_access_release: Callable[[], None] | None = None
 
     @property
     def pass_fds(self) -> tuple[int, ...]:
@@ -62,6 +65,9 @@ class ConfinedSidecarLaunch:
 
     def cleanup(self) -> None:
         self.close_parent_fds()
+        if self.model_access_release is not None:
+            self.model_access_release()
+            self.model_access_release = None
         self.relay_socket.unlink(missing_ok=True)
         try:
             self.relay_directory.rmdir()
@@ -99,6 +105,8 @@ def prepare_confined_sidecar_launch(
     port: int,
     env: dict[str, str],
     artifact_mounts: tuple[ResolvedArtifactMount, ...] = (),
+    model_access_directory: Path | None = None,
+    model_access_release: Callable[[], None] | None = None,
 ) -> ConfinedSidecarLaunch:
     """Build a bubblewrap launch or raise without returning an unsafe fallback."""
     policy = sidecar.process_policy
@@ -130,6 +138,11 @@ def prepare_confined_sidecar_launch(
     source = _require_real_directory(source_root, label="sidecar source root")
     workspace = _require_real_directory(workspace_root, label="workspace root")
     execution_root = _resolve_execution_root(sidecar, artifact_mounts=artifact_mounts)
+    model_access = (
+        _require_model_access_directory(model_access_directory)
+        if model_access_directory is not None
+        else None
+    )
     runtime_mount_arguments, relay_python, target_prefix = _runtime_mount_arguments(
         sidecar,
         artifact_root=execution_root is not None,
@@ -192,6 +205,7 @@ def prepare_confined_sidecar_launch(
                 "/maverick/python",
                 "/maverick/python/lib",
                 "/maverick/python/glibc",
+                "/model-access",
                 "/proc",
                 "/dev",
                 "/tmp",
@@ -213,6 +227,7 @@ def prepare_confined_sidecar_launch(
                 "/data",
                 "/relay",
                 "/maverick",
+                "/model-access",
                 "/proc",
                 "/dev",
                 "/tmp",
@@ -230,6 +245,14 @@ def prepare_confined_sidecar_launch(
                     "--ro-bind",
                     artifact_mount.source.as_posix(),
                     artifact_mount.target.as_posix(),
+                ]
+            )
+        if model_access is not None:
+            command.extend(
+                [
+                    "--ro-bind",
+                    model_access.as_posix(),
+                    _SANDBOX_MODEL_ACCESS_ROOT.as_posix(),
                 ]
             )
         command.extend(
@@ -305,7 +328,25 @@ def prepare_confined_sidecar_launch(
         relay_capability=capability,
         secret_fd=secret_fd,
         passwd_fd=passwd_fd,
+        model_access_release=model_access_release,
     )
+
+
+def _require_model_access_directory(path: Path) -> Path:
+    directory = Path(path).resolve(strict=True)
+    metadata = directory.stat()
+    socket_path = directory / "broker.sock"
+    socket_metadata = socket_path.lstat()
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != os.geteuid()
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+        or not stat.S_ISSOCK(socket_metadata.st_mode)
+        or socket_metadata.st_uid != os.geteuid()
+        or stat.S_IMODE(socket_metadata.st_mode) != 0o600
+    ):
+        raise AppHostingError("The optional model-access socket capability is unsafe.")
+    return directory
 
 
 def relay_preamble(capability: str) -> bytes:

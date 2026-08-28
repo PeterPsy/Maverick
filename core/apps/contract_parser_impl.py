@@ -91,6 +91,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
     if lifecycle.health_check and "health_check" not in entrypoints.hooks and health_contract_payload.get("mode") == "hook":
         raise AppContractValidationError("Health-check lifecycle support requires a `health_check` hook.")
 
+    permissions = parse_permissions_section(_expect_mapping(root.get("permissions", {}), label="permissions"))
     return ParsedAppContract(
         app_id=app_id,
         name=_expect_string(root, "name"),
@@ -106,7 +107,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
                 _expect_mapping(root.get("presentation", {}), label="presentation"),
                 has_frontend_entrypoint=entrypoints.frontend is not None,
             ),
-            permissions=parse_permissions_section(_expect_mapping(root.get("permissions", {}), label="permissions")),
+            permissions=permissions,
             compatibility=compatibility,
             storage=parse_storage_section(_expect_mapping(root.get("storage", {}), label="storage"), app_id=app_id),
             capabilities=parse_capabilities_section(_expect_mapping(root.get("capabilities", {}), label="capabilities")),
@@ -126,6 +127,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
                 _expect_mapping(root.get("services", {}), label="services"),
                 app_id=app_id,
                 supported_workspace_modes=supported_workspace_modes,
+                provider_model_proxy=permissions.providers.model_proxy,
             ),
         ),
     )

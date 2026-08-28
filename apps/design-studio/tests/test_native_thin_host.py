@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,10 @@ class NativeThinHostTests(unittest.TestCase):
             self.assertIn(route, passed)
         self.assertFalse(contract["permissions"]["runtime"]["create_sessions"])
         self.assertFalse(contract["permissions"]["runtime"]["cleanup_sessions"])
+        self.assertEqual(sidecar["model_access"], {"api": True, "cli": ["codex"], "required": False})
+        self.assertGreaterEqual(sidecar["process_policy"]["limits"]["memory_bytes"], 32 * 1024**3)
+        self.assertTrue(contract["permissions"]["providers"]["model_proxy"])
+        self.assertFalse(contract["permissions"]["providers"]["deliver_secrets_to_app"])
         self.assertNotIn("runtime_event", contract["entrypoints"]["hooks"])
         self.assertEqual(contract["widgets"], [])
 
@@ -71,8 +76,54 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertEqual(cwd, Path("/app"))
         self.assertEqual(env["OD_DATA_DIR"], str(data))
         self.assertEqual(env["OD_SANDBOX_MODE"], "1")
+        self.assertNotIn("NODE_OPTIONS", env)
         self.assertNotIn("MAVERICK_RUNTIME_API_TOKEN", env)
         self.assertFalse(any("patch" in part.lower() or "overlay" in part.lower() for part in command))
+
+    def test_launcher_exposes_only_a_technical_model_capability_to_open_design(self) -> None:
+        from opendesign_launcher import build_native_launch
+        from model_access_profiles import SANDBOX_PROFILE_PATH
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            rootfs = root / "rootfs"
+            data = root / "data"
+            for relative in (
+                "app/apps/daemon/dist/cli.js",
+                "app/apps/web/out/index.html",
+                "usr/local/bin/node",
+                "lib/ld-musl-x86_64.so.1",
+                "sbin/tini",
+            ):
+                path = rootfs / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("official", encoding="utf-8")
+            data.mkdir()
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_MODEL_ACCESS_SOCKET": "/model-access/broker.sock",
+                    "MAVERICK_MODEL_ACCESS_TOKEN": "scoped-technical-capability",
+                },
+            ):
+                _command, env, _cwd = build_native_launch(
+                    rootfs=rootfs,
+                    data_dir=data,
+                    host="127.0.0.1",
+                    port=17456,
+                    api_token="technical-token",
+                    model_profile_path=SANDBOX_PROFILE_PATH,
+                )
+
+        self.assertEqual(env["OD_AGENT_PROFILES_CONFIG"], SANDBOX_PROFILE_PATH.as_posix())
+        self.assertEqual(env["OD_ALLOWED_INTERNAL_HOSTS"], "127.0.0.1,localhost")
+        self.assertEqual(env["NO_PROXY"], "*")
+        self.assertEqual(env["OD_CODEX_DISABLE_PLUGINS"], "1")
+        self.assertEqual(env["OD_CODEX_SANDBOX"], "danger-full-access")
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("MAVERICK_RUNTIME_API_TOKEN", env)
+        self.assertNotIn("MAVERICK_API_BASE", env)
+        self.assertFalse(any("memory" in value.lower() or "persona" in value.lower() for value in env.values()))
 
     def test_frontend_is_only_a_launch_and_lifecycle_surface(self) -> None:
         source = (APP_ROOT / "frontend/src/App.tsx").read_text(encoding="utf-8")

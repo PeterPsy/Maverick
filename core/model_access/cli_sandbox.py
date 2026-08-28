@@ -1,0 +1,243 @@
+"""Path validation and outer sandbox construction for native Codex."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import stat
+
+from core.model_access.catalog import resolve_codex_source_home
+from core.model_access.models import ModelAccessScope
+
+
+_SAFE_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$")
+_SAFE_SESSION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{7,127}$")
+_SAFE_CONNECTION_PROBE_CWD = re.compile(r"^/tmp/od-conn-test-[A-Za-z0-9_-]{1,96}$")
+_SAFE_CONFIG = (
+    re.compile(r'^model_reasoning_effort="(?:none|minimal|low|medium|high|xhigh|max)"$'),
+    re.compile(r'^sandbox_mode="(?:workspace-write|danger-full-access)"$'),
+)
+
+
+def validated_codex_argv(
+    argv: tuple[str, ...],
+    *,
+    data_root: Path,
+    sidecar_cwd: str,
+    allow_connection_probe: bool = False,
+) -> tuple[str, ...]:
+    """Allow only the native OpenDesign Codex adapter grammar."""
+    if argv in {("--version",), ("debug", "models"), ("login", "status")}:
+        return argv
+    if not argv or argv[0] != "exec" or len(argv) > 96:
+        raise ValueError("Codex invocation is not an approved native adapter command")
+    output: list[str] = []
+    index = 0
+    while index < len(argv):
+        argument = argv[index]
+        if not argument or "\x00" in argument:
+            raise ValueError("Codex argument is invalid")
+        if argument in {"exec", "resume", "--json", "--skip-git-repo-check", "plugins"}:
+            output.append(argument)
+            index += 1
+            continue
+        if argument in {"--sandbox", "--disable"}:
+            if index + 1 >= len(argv):
+                raise ValueError("Codex option is incomplete")
+            value = argv[index + 1]
+            allowed = {"workspace-write", "danger-full-access"} if argument == "--sandbox" else {"plugins"}
+            if value not in allowed:
+                raise ValueError("Codex option is not approved")
+            output.extend((argument, value))
+            index += 2
+            continue
+        if argument == "--model":
+            if index + 1 >= len(argv) or not _SAFE_MODEL_ID.fullmatch(argv[index + 1]):
+                raise ValueError("Codex model id is invalid")
+            output.extend((argument, argv[index + 1]))
+            index += 2
+            continue
+        if argument == "-c":
+            if index + 1 >= len(argv):
+                raise ValueError("Codex config option is incomplete")
+            value = argv[index + 1]
+            if value != "sandbox_workspace_write.network_access=true" and not any(
+                pattern.fullmatch(value) for pattern in _SAFE_CONFIG
+            ):
+                raise ValueError("Codex config option is not approved")
+            output.extend((argument, value))
+            index += 2
+            continue
+        if argument in {"-C", "--add-dir"}:
+            if index + 1 >= len(argv):
+                raise ValueError("Codex path option is incomplete")
+            raw_path = argv[index + 1]
+            if (
+                argument == "-C"
+                and allow_connection_probe
+                and raw_path == sidecar_cwd
+                and is_opendesign_connection_probe(argv, sidecar_cwd)
+            ):
+                inner = "/workspace"
+            else:
+                _host, inner = map_sidecar_path(data_root, raw_path)
+            output.extend((argument, inner))
+            index += 2
+            continue
+        if index == len(argv) - 1 and _SAFE_SESSION_ID.fullmatch(argument):
+            output.append(argument)
+            index += 1
+            continue
+        raise ValueError("Codex argument is not approved")
+    if "-C" in argv and sidecar_cwd not in argv:
+        raise ValueError("Codex working directory differs from the native adapter cwd")
+    return tuple(output)
+
+
+def is_opendesign_connection_probe(argv: tuple[str, ...], sidecar_cwd: str) -> bool:
+    """Recognize only the official adapter's isolated connection smoke test."""
+    if not _SAFE_CONNECTION_PROBE_CWD.fullmatch(sidecar_cwd):
+        return False
+    if len(argv) < 5 or argv[:3] != ("exec", "--json", "--skip-git-repo-check"):
+        return False
+    if "resume" in argv or "--add-dir" in argv or argv.count("-C") != 1:
+        return False
+    index = argv.index("-C")
+    return index + 1 < len(argv) and argv[index + 1] == sidecar_cwd
+
+
+def map_sidecar_path(data_root: Path, raw: str) -> tuple[Path, str]:
+    """Map a sidecar `/data` path into the dedicated `/workspace` mount."""
+    sidecar_path = PurePosixPath(raw)
+    if not sidecar_path.is_absolute() or sidecar_path.parts[1:2] != ("data",):
+        raise ValueError("CLI path must stay in app data")
+    relative = PurePosixPath(*sidecar_path.parts[2:])
+    if ".." in relative.parts:
+        raise ValueError("CLI path must stay in app data")
+    root = Path(data_root).resolve(strict=True)
+    candidate = root.joinpath(*relative.parts).resolve(strict=True)
+    if candidate != root and root not in candidate.parents:
+        raise ValueError("CLI path escapes app data")
+    return candidate, PurePosixPath("/workspace").joinpath(*relative.parts).as_posix()
+
+
+def prepare_codex_home(repository_root: Path, scope: ModelAccessScope) -> Path:
+    """Create a technical CLI home containing auth only, never runtime state."""
+    target = (
+        repository_root
+        / "tmp"
+        / "model-access"
+        / "state"
+        / scope.workspace_id
+        / scope.app_id
+        / "codex-home"
+    )
+    target.mkdir(parents=True, exist_ok=True, mode=0o700)
+    target.chmod(0o700)
+    source_auth = resolve_codex_source_home() / "auth.json"
+    if not source_auth.is_file():
+        raise FileNotFoundError("Codex authentication is unavailable")
+    _atomic_private_copy(source_auth, target / "auth.json")
+    _atomic_private_write(
+        target / "config.toml",
+        b'[projects."/workspace"]\ntrust_level = "trusted"\n',
+    )
+    return target.resolve(strict=True)
+
+
+def codex_sandbox_command(
+    *, executable: Path, data_root: Path, inner_cwd: str, cli_home: Path, argv: tuple[str, ...]
+) -> list[str]:
+    """Build the outer capability sandbox around the standalone CLI."""
+    bwrap = shutil.which("bwrap")
+    if not bwrap:
+        raise FileNotFoundError("bubblewrap is unavailable")
+    metadata = Path(bwrap).resolve().stat()
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o022:
+        raise PermissionError("bubblewrap is not trusted")
+    command = [
+        str(Path(bwrap).resolve()),
+        "--die-with-parent",
+        "--unshare-user",
+        "--uid",
+        "0",
+        "--gid",
+        "0",
+        "--unshare-pid",
+        "--unshare-ipc",
+        "--unshare-uts",
+        "--tmpfs",
+        "/",
+        "--dir",
+        "/workspace",
+        "--dir",
+        "/codex-home",
+        "--dir",
+        "/home",
+        "--dir",
+        "/home/codex",
+        "--dir",
+        "/etc",
+        "--ro-bind",
+        "/usr",
+        "/usr",
+        "--symlink",
+        "usr/bin",
+        "/bin",
+        "--symlink",
+        "usr/lib",
+        "/lib",
+        "--symlink",
+        "usr/lib64",
+        "/lib64",
+        "--bind",
+        str(Path(data_root).resolve(strict=True)),
+        "/workspace",
+        "--bind",
+        str(cli_home),
+        "/codex-home",
+    ]
+    for path in ("/etc/ssl", "/etc/resolv.conf", "/etc/hosts", "/etc/nsswitch.conf"):
+        if Path(path).exists():
+            command.extend(("--ro-bind", path, path))
+    command.extend(
+        (
+            "--proc",
+            "/proc",
+            "--dev",
+            "/dev",
+            "--tmpfs",
+            "/tmp",
+            "--chdir",
+            inner_cwd,
+            "--",
+            executable.as_posix(),
+            *argv,
+        )
+    )
+    return command
+
+
+def _atomic_private_copy(source: Path, destination: Path) -> None:
+    try:
+        body = source.read_bytes()
+    except OSError as error:
+        raise FileNotFoundError("Codex authentication is unavailable") from error
+    _atomic_private_write(destination, body)
+
+
+def _atomic_private_write(destination: Path, body: bytes) -> None:
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(temporary, flags, 0o600)
+    try:
+        os.write(descriptor, body)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    os.replace(temporary, destination)
+    destination.chmod(0o600)

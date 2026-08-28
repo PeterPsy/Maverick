@@ -26,6 +26,7 @@ from core.api.sidecar_browser import handle_sidecar_browser_origin, is_reserved_
 from core.api.sidecar_prewarm import start_declared_sidecar_prewarms
 from core.api.sidecar_control import start_sidecar_control_server
 from core.api.sidecar_proxy import handle_app_sidecar_proxy_asgi, parse_app_sidecar_proxy_route
+from core.model_access.broker import start_model_access_broker_server
 from core.api.http import HttpRequestError, enforce_same_origin_for_unsafe_request
 from core.shared.entrypoints import EntrypointShutdownController
 
@@ -50,6 +51,10 @@ class PlatformAsgiHost:
             thread_name_prefix="maverick-app-backend",
         )
         if state is None:
+            start_model_access_broker_server(
+                self.state,
+                shutdown_controller=self.shutdown_controller,
+            )
             prewarm_threads = start_declared_sidecar_prewarms(
                 self.state,
                 trigger="core_start",

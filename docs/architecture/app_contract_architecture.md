@@ -956,6 +956,28 @@ id and a canonical relative `subpath`; symlinked or escaping roots fail closed.
 This capability mounts an artifact unchanged and does not permit an app overlay
 or a host-root fallback.
 
+A sidecar with `permissions.providers.model_proxy: true` may additionally
+request an optional private model transport:
+
+```json
+"model_access": {
+  "api": true,
+  "cli": ["codex"],
+  "required": false
+}
+```
+
+`model_access` is sidecar-specific and is rejected without the app-level
+provider permission. `required` must be false: model access is an optional
+bridge and its absence cannot prevent the native sidecar product from
+starting. Core mounts one owner-only Unix socket at a fixed sandbox path and
+injects a short-lived, scope-bound technical capability. API credentials are
+resolved only inside Core. A requested CLI is launched by Core under a second
+filesystem/process boundary. Neither transport creates a Maverick runtime
+session or grants access to Maverick memory, Chat history, prompts, personas,
+skills, or tools. The sidecar may receive the technical socket and capability,
+but never a raw provider credential.
+
 The core owns process lifecycle, technical token injection, app data-root substitution, route-policy enforcement, auth, workspace membership, app visibility, and error translation. The sidecar owns only its app protocol behind the loopback boundary. A frontend must call a sidecar through the generic core route:
 
 ```text
@@ -1205,7 +1227,7 @@ Example shape:
 }
 ```
 
-`permissions.providers` is for core-governed workspace model provider access, not app-owned secret delivery. `model_proxy: true` allows the core to provide redaction-safe provider status and model metadata to a governed app route such as an HTTP sidecar `handled_by_core` provider endpoint. `credential_source: "core-vault"` declares that raw provider credentials remain under Maverick/Vault control. `deliver_secrets_to_app: false` is the sandbox default and means provider keys must not be included in browser payloads, app backend `app_secrets`, sidecar environment, media config files, or sidecar-forwarded requests. Apps that need provider access through a sidecar must route the provider path through `handled_by_core` unless and until a stricter future policy explicitly supports direct provider secret delivery.
+`permissions.providers` is for core-governed workspace model provider access, not app-owned secret delivery. `model_proxy: true` allows redaction-safe provider status/model metadata through a governed `handled_by_core` route or the explicit sidecar `model_access` transport above. `credential_source: "core-vault"` declares that raw provider credentials remain under Maverick/Vault control. `deliver_secrets_to_app: false` is the sandbox default and means provider keys must not be included in browser payloads, app backend `app_secrets`, sidecar environment, media config files, or sidecar-forwarded requests. The model-access socket carries only a scoped technical handle; Core resolves the raw credential at execution time and forwards provider protocol bytes without cognitive enrichment.
 
 ## Lifecycle Declaration
 

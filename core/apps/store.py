@@ -47,6 +47,7 @@ from core.apps.models import (
     HttpSidecarEntrypointSurfaceSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
+    HttpSidecarModelAccessSpec,
     HttpSidecarProcessPolicy,
     HttpSidecarPrewarmSpec,
     HttpSidecarProxySpec,
@@ -433,6 +434,11 @@ def _app_services(payload: Any) -> AppServicesDeclaration:
                         subpath=str(sidecar["root_filesystem"]["subpath"]),
                     )
                     if isinstance(sidecar.get("root_filesystem"), dict)
+                    else None
+                ),
+                model_access=(
+                    HttpSidecarModelAccessSpec(**sidecar["model_access"])
+                    if isinstance(sidecar.get("model_access"), dict)
                     else None
                 ),
                 prewarm=(

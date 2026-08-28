@@ -414,6 +414,15 @@ class HttpSidecarRootFilesystemSpec:
 
 
 @dataclass(frozen=True)
+class HttpSidecarModelAccessSpec:
+    """Request an optional Core-owned naked-model transport for one sidecar."""
+
+    api: bool
+    cli: list[str]
+    required: bool
+
+
+@dataclass(frozen=True)
 class HttpSidecarPrewarmSpec:
     """Declare when Core should start and retain one sidecar."""
 
@@ -443,6 +452,7 @@ class HttpSidecarSpec:
     process_policy: HttpSidecarProcessPolicy
     artifact_mounts: list[HttpSidecarArtifactMountSpec]
     root_filesystem: HttpSidecarRootFilesystemSpec | None
+    model_access: HttpSidecarModelAccessSpec | None
     prewarm: HttpSidecarPrewarmSpec | None
     diagnostics: HttpSidecarDiagnosticsSpec | None
     browser_origin: HttpSidecarBrowserOriginSpec | None

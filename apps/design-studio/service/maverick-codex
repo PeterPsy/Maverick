@@ -1,0 +1,3 @@
+#!/bin/sh
+exec /maverick/python/ld.so --library-path /maverick/python/glibc \
+  /maverick/python/python3 /maverick/app/service/maverick_codex_cli.py "$@"

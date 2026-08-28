@@ -125,6 +125,63 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(loaded.contract.permissions.providers.credential_source, "core-vault")
             self.assertFalse(loaded.contract.permissions.providers.deliver_secrets_to_app)
 
+    def test_model_access_is_explicit_optional_and_round_trips(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = self._write_sidecar_app(Path(temp_dir))
+            payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+            payload["permissions"]["providers"] = {
+                "model_proxy": True,
+                "credential_source": "core-vault",
+                "deliver_secrets_to_app": False,
+            }
+            payload["services"]["http_sidecars"][0]["model_access"] = {
+                "api": True,
+                "cli": ["codex"],
+                "required": False,
+            }
+            (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+            loaded = parse_app_contract_file(app_root)
+            model_access = loaded.contract.services.http_sidecars[0].model_access
+
+            self.assertIsNotNone(model_access)
+            assert model_access is not None
+            self.assertTrue(model_access.api)
+            self.assertEqual(model_access.cli, ["codex"])
+            self.assertFalse(model_access.required)
+            self.assertEqual(app_contract_payload(loaded)["services"]["http_sidecars"][0]["model_access"], payload["services"]["http_sidecars"][0]["model_access"])
+
+            restored = AppDocumentStore(
+                AppCollections(
+                    app_sources=None,  # type: ignore[arg-type]
+                    workspace_local_app_projects=None,  # type: ignore[arg-type]
+                    workspace_app_bindings=None,  # type: ignore[arg-type]
+                    workspace_app_dependency_selections=None,  # type: ignore[arg-type]
+                )
+            )._app_contract(asdict(loaded.contract))
+            self.assertEqual(restored.services.http_sidecars[0].model_access, model_access)
+
+    def test_model_access_requires_model_proxy_and_cannot_block_native_startup(self) -> None:
+        mutations = (
+            ({"api": True, "cli": [], "required": False}, "model_proxy"),
+            ({"api": True, "cli": [], "required": True}, "required.*must be false"),
+            ({"api": False, "cli": [], "required": False}, "request API or CLI"),
+        )
+        for model_access, expected in mutations:
+            with self.subTest(model_access=model_access), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                if model_access.get("required") is True or not model_access.get("api"):
+                    payload["permissions"]["providers"] = {
+                        "model_proxy": True,
+                        "credential_source": "core-vault",
+                        "deliver_secrets_to_app": False,
+                    }
+                payload["services"]["http_sidecars"][0]["model_access"] = model_access
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+                with self.assertRaisesRegex(AppContractValidationError, expected):
+                    parse_app_contract_file(app_root)
+
     def test_parse_contract_rejects_unknown_provider_credential_source(self) -> None:
         with TemporaryDirectory() as temp_dir:
             app_root = self._write_sidecar_app(Path(temp_dir))

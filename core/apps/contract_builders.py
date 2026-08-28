@@ -43,6 +43,7 @@ from core.apps.models import (
     HttpSidecarEntrypointSurfaceSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
+    HttpSidecarModelAccessSpec,
     HttpSidecarProcessPolicy,
     HttpSidecarPrewarmSpec,
     HttpSidecarProxySpec,
@@ -368,6 +369,7 @@ def build_http_sidecar_spec(
     process_policy: HttpSidecarProcessPolicy | None = None,
     artifact_mounts: list[HttpSidecarArtifactMountSpec] | None = None,
     root_filesystem: HttpSidecarRootFilesystemSpec | None = None,
+    model_access: HttpSidecarModelAccessSpec | None = None,
     prewarm: HttpSidecarPrewarmSpec | None = None,
     diagnostics: HttpSidecarDiagnosticsSpec | None = None,
     browser_origin: HttpSidecarBrowserOriginSpec | None = None,
@@ -388,6 +390,7 @@ def build_http_sidecar_spec(
         process_policy=process_policy or build_http_sidecar_process_policy(),
         artifact_mounts=artifact_mounts or [],
         root_filesystem=root_filesystem,
+        model_access=model_access,
         prewarm=prewarm,
         diagnostics=diagnostics,
         browser_origin=browser_origin,
@@ -412,6 +415,13 @@ def build_http_sidecar_root_filesystem(
 ) -> HttpSidecarRootFilesystemSpec:
     """Build one artifact-backed, read-only sidecar execution root."""
     return HttpSidecarRootFilesystemSpec(artifact_id=artifact_id, subpath=subpath)
+
+
+def build_http_sidecar_model_access(
+    *, api: bool = True, cli: list[str] | None = None, required: bool = False
+) -> HttpSidecarModelAccessSpec:
+    """Build one optional, scoped naked-model sidecar capability request."""
+    return HttpSidecarModelAccessSpec(api=api, cli=cli or [], required=required)
 
 
 def build_http_sidecar_prewarm(

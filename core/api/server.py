@@ -13,6 +13,7 @@ from core.api.platform_state import bootstrap_platform_state
 from core.api.rescue_host import RescueHost
 from core.api.sidecar_prewarm import start_declared_sidecar_prewarms
 from core.api.sidecar_control import start_sidecar_control_server
+from core.model_access.broker import start_model_access_broker_server
 from core.shared.entrypoints import EntrypointShutdownController
 
 
@@ -26,6 +27,7 @@ def run_platform_server(*, host: str, port: int) -> None:
     """Run the main platform host."""
     state = bootstrap_platform_state()
     shutdown_controller = EntrypointShutdownController()
+    start_model_access_broker_server(state, shutdown_controller=shutdown_controller)
     prewarm_threads = start_declared_sidecar_prewarms(
         state,
         trigger="core_start",

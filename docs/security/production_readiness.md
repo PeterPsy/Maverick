@@ -92,6 +92,7 @@ fixtures additionally prove separate restart-safe step/tool accounting,
 step/output/cost/deadline reserves, tool-less Google/OpenRouter final payloads,
 complete-terminal-request cost coverage, staged request-specific preflight with
 tool-less fallback, deadline-fenced slow handlers and result persistence,
+persisted execution leases checked atomically by the terminal success CAS,
 request-scoped OpenRouter finalization,
 whitespace rejection, journaled `budget_denied` final calls, and no more than
 one finalization recovery. The operator

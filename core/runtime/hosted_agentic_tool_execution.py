@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from threading import Event
+from uuid import uuid4
 
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
@@ -42,8 +44,11 @@ async def execute_hosted_authorized_tool(
         / 2,
     )
     deadline = budget.tool_execution_deadline(cleanup_seconds=cleanup_seconds)
+    lease_seconds = max(0.0, deadline - budget.monotonic())
     control = RuntimeToolExecutionControl(
         deadline_monotonic=deadline,
+        deadline_utc=datetime.now(tz=UTC) + timedelta(seconds=lease_seconds),
+        execution_lease_id=str(uuid4()),
         cancellation=Event(),
         monotonic=budget.monotonic,
     )
@@ -51,6 +56,7 @@ async def execute_hosted_authorized_tool(
         outcome.invocation,
         authority=authority,
         context=context,
+        control=control,
     )
     if started.invocation.state != "executing":
         return started

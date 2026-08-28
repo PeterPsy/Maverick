@@ -13,6 +13,7 @@ from core.runtime.errors import (
     RuntimeSessionNotFoundError,
     RuntimeStateNotFoundError,
     RuntimeThreadNotFoundError,
+    RuntimeToolExecutionLeaseExpiredError,
     RuntimeTurnNotFoundError,
 )
 from core.runtime.client_message_claims import (
@@ -146,6 +147,15 @@ class DocumentCollection(Protocol):
         ...
 
     def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
+        ...
+
+    def compare_and_set_if_datetime_future(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        *,
+        field: str,
+    ) -> bool:
         ...
 
     def delete_one(self, query: dict[str, Any]) -> Any:
@@ -518,6 +528,15 @@ class RuntimeStore(Protocol):
 
     def update_tool_invocation(
         self, record: ToolInvocationRecord, *, expected_revision: int
+    ) -> ToolInvocationRecord:
+        ...
+
+    def update_tool_invocation_if_execution_lease_active(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        expected_revision: int,
+        execution_lease_id: str,
     ) -> ToolInvocationRecord:
         ...
 
@@ -942,6 +961,78 @@ class RuntimeDocumentStore:
     def update_tool_invocation(
         self, record: ToolInvocationRecord, *, expected_revision: int
     ) -> ToolInvocationRecord:
+        self._validate_tool_invocation_update(
+            record,
+            expected_revision=expected_revision,
+        )
+        applied = self._tool_invocations.compare_and_set(
+            {
+                "invocation_id": record.invocation_id,
+                "workspace_id": record.workspace_id,
+                "session_id": record.session_id,
+                "revision": expected_revision,
+            },
+            {"$set": asdict(record)},
+        )
+        if not applied:
+            raise RuntimeProviderStateError("tool_invocation_revision_conflict")
+        return record
+
+    def update_tool_invocation_if_execution_lease_active(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        expected_revision: int,
+        execution_lease_id: str,
+    ) -> ToolInvocationRecord:
+        """Commit a terminal result only if its persisted execution lease is live."""
+        current = self._validate_tool_invocation_update(
+            record,
+            expected_revision=expected_revision,
+        )
+        if (
+            not execution_lease_id
+            or current.state != "executing"
+            or record.state != "succeeded"
+            or current.execution_lease_id != execution_lease_id
+            or record.execution_lease_id != execution_lease_id
+            or not isinstance(current.execution_lease_expires_at, datetime)
+            or current.execution_lease_expires_at.tzinfo is None
+            or record.execution_lease_expires_at
+            != current.execution_lease_expires_at
+        ):
+            raise RuntimeProviderStateError("tool_invocation_execution_lease_invalid")
+        applied = self._tool_invocations.compare_and_set_if_datetime_future(
+            {
+                "invocation_id": record.invocation_id,
+                "workspace_id": record.workspace_id,
+                "session_id": record.session_id,
+                "revision": expected_revision,
+                "state": "executing",
+                "execution_lease_id": execution_lease_id,
+            },
+            {"$set": asdict(record)},
+            field="execution_lease_expires_at",
+        )
+        if applied:
+            return record
+        latest = self.get_tool_invocation(record.invocation_id)
+        if (
+            latest.revision == expected_revision
+            and latest.state == "executing"
+            and latest.execution_lease_id == execution_lease_id
+        ):
+            raise RuntimeToolExecutionLeaseExpiredError(
+                "tool_invocation_execution_lease_expired"
+            )
+        raise RuntimeProviderStateError("tool_invocation_revision_conflict")
+
+    def _validate_tool_invocation_update(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        expected_revision: int,
+    ) -> ToolInvocationRecord:
         if record.revision != expected_revision + 1:
             raise RuntimeProviderStateError("Tool invocation revision must advance by one.")
         current = self.get_tool_invocation(record.invocation_id)
@@ -952,6 +1043,29 @@ class RuntimeDocumentStore:
         ):
             raise RuntimeProviderStateError(
                 "Tool invocation identity fields are immutable."
+            )
+        lease_changed = (
+            record.execution_lease_id != current.execution_lease_id
+            or record.execution_lease_expires_at
+            != current.execution_lease_expires_at
+        )
+        starts_lease = (
+            current.state == "authorized"
+            and record.state == "executing"
+            and isinstance(record.execution_lease_id, str)
+            and bool(record.execution_lease_id.strip())
+            and isinstance(record.execution_lease_expires_at, datetime)
+            and record.execution_lease_expires_at.tzinfo is not None
+        )
+        clears_lease = (
+            current.state == "executing"
+            and record.state == "authorized"
+            and record.execution_lease_id is None
+            and record.execution_lease_expires_at is None
+        )
+        if lease_changed and not (starts_lease or clears_lease):
+            raise RuntimeProviderStateError(
+                "Tool invocation execution lease fields are immutable."
             )
         permitted = replace(
             current,
@@ -976,23 +1090,14 @@ class RuntimeDocumentStore:
             result_persisted_at=record.result_persisted_at,
             result_id=record.result_id,
             failure_reason=record.failure_reason,
+            execution_lease_id=record.execution_lease_id,
+            execution_lease_expires_at=record.execution_lease_expires_at,
             revision=record.revision,
             updated_at=record.updated_at,
         )
         if permitted != record:
             raise RuntimeProviderStateError("Tool invocation identity fields are immutable.")
-        applied = self._tool_invocations.compare_and_set(
-            {
-                "invocation_id": record.invocation_id,
-                "workspace_id": record.workspace_id,
-                "session_id": record.session_id,
-                "revision": expected_revision,
-            },
-            {"$set": asdict(record)},
-        )
-        if not applied:
-            raise RuntimeProviderStateError("tool_invocation_revision_conflict")
-        return record
+        return current
 
     def initialize_tool_confirmation_grant(self, record: ToolConfirmationGrant) -> ToolConfirmationGrant:
         if record.revision != 0:

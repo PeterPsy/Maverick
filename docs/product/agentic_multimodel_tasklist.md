@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v14 / matrix
-  `2026-08-28-r14-p3-review2-tcb5`
+- [x] Google and OpenRouter suite v15 / matrix
+  `2026-08-28-r15-p3-review3-tcb5`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -263,10 +263,13 @@ completion claim.
   catalog and a final trusted system instruction placed last.
 - [x] Hosted synchronous tool dispatch has a pre-terminal deadline and
   cancellation control. A slow read is CAS-fenced with a deterministic ledger
-  error before any private result write; success checks the deadline again after
-  that write and cannot overwrite the terminal disposition when it returns
-  late. Finalization proceeds with the paired error. Ambiguous non-read effects
-  remain `execution_unknown` and quarantine fail closed.
+  error before any private result write. `executing` persists a unique lease id
+  and UTC expiry; success requires revision, lease, and an unexpired deadline in
+  one collection CAS (Mongo server time or the locked local atomic-replace
+  path). A worker paused after its last cooperative check cannot become
+  authoritative after expiry even when the timeout CAS is delayed.
+  Finalization proceeds with the paired error. Ambiguous non-read effects remain
+  `execution_unknown` and quarantine fail closed.
 - [x] OpenRouter's finalization instruction is appended only to the current wire
   payload. It is absent from the encrypted durable history, so a later
   exploration turn receives tools and no stale closed-catalog instruction.

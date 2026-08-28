@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 
 class FakeCollection:
     """Small document collection double for store adapter tests."""
@@ -33,6 +35,20 @@ class FakeCollection:
         payload = dict(update.get("$set", {}))
         for index, document in enumerate(self.documents):
             if _matches(document, query):
+                self.documents[index] = {**document, **payload}
+                return True
+        return False
+
+    def compare_and_set_if_datetime_future(
+        self,
+        query: dict,
+        update: dict,
+        *,
+        field: str,
+    ) -> bool:
+        payload = dict(update.get("$set", {}))
+        for index, document in enumerate(self.documents):
+            if _matches(document, query) and _datetime_is_future(document.get(field)):
                 self.documents[index] = {**document, **payload}
                 return True
         return False
@@ -71,3 +87,10 @@ def _matches(document: dict, query: dict) -> bool:
         elif actual != expected:
             return False
     return True
+
+
+def _datetime_is_future(value: object) -> bool:
+    if not isinstance(value, datetime):
+        return False
+    now = datetime.now(tz=value.tzinfo) if value.tzinfo is not None else datetime.now()
+    return value > now

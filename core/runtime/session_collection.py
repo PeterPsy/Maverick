@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, UTC
@@ -15,6 +16,7 @@ from typing import Any
 
 from core.runtime.paths import runtime_session_root, workspace_runtime_root
 from core.shared.json_file_collection import (
+    _datetime_is_future,
     _decode_document_value,
     _encode_document_value,
     _find_json_array_close,
@@ -116,6 +118,38 @@ class RuntimeSessionJsonCollection:
     def compare_and_set(self, query: dict[str, Any], update: dict[str, Any]) -> bool:
         """Apply an exact conditional update inside one session partition."""
         return self.update_one(query, update, upsert=False)
+
+    def compare_and_set_if_datetime_future(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        *,
+        field: str,
+    ) -> bool:
+        """Apply one session CAS only while its stored deadline is live."""
+        payload = deepcopy(update.get("$set", {}))
+        workspace_id = str(payload.get("workspace_id") or query.get("workspace_id") or "").strip()
+        session_id = str(payload.get("session_id") or query.get("session_id") or "").strip()
+        if not workspace_id or not session_id:
+            raise ValueError(f"Runtime {self.filename} updates require both workspace_id and session_id.")
+        path = self._record_path(workspace_id=workspace_id, session_id=session_id)
+        with self._lock:
+            with _locked_collection_path(path):
+                documents = self._read_documents(path)
+                for index, document in enumerate(documents):
+                    if _matches(document, query) and _datetime_is_future(document.get(field)):
+                        documents[index] = {**document, **payload}
+                        deadline = document.get(field)
+                        applied = self._write_documents(
+                            path,
+                            documents,
+                            commit_guard=lambda: _datetime_is_future(deadline),
+                        )
+                        if not applied:
+                            return False
+                        self._partition_counts[path] = len(documents)
+                        return True
+        return False
 
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """Insert one session-partitioned record atomically when the query has no match."""
@@ -274,7 +308,13 @@ class RuntimeSessionJsonCollection:
     def _count_documents(self, path: Path) -> int:
         return len(self._read_documents(path))
 
-    def _write_documents(self, path: Path, documents: list[dict[str, Any]]) -> None:
+    def _write_documents(
+        self,
+        path: Path,
+        documents: list[dict[str, Any]],
+        *,
+        commit_guard: Callable[[], bool] | None = None,
+    ) -> bool:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary_path: Path | None = None
         try:
@@ -290,7 +330,10 @@ class RuntimeSessionJsonCollection:
                 handle.write(json.dumps(documents, indent=2, default=_encode_document_value) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+            if commit_guard is not None and not commit_guard():
+                return False
             temporary_path.replace(path)
+            return True
         finally:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()

@@ -85,6 +85,8 @@ class ToolInvocationRecord:
     effect_boundary_at: datetime | None = None
     result_persisted_at: datetime | None = None
     result_id: str | None = None
+    execution_lease_id: str | None = None
+    execution_lease_expires_at: datetime | None = None
 
 
 @dataclass(frozen=True)

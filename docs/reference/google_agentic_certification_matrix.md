@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-28
-Matrix revision: `2026-08-28-r14-p3-review2-tcb5`
+Matrix revision: `2026-08-28-r15-p3-review3-tcb5`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==10`
+Adapter: `maverick-hosted-tool-loop==11`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==10`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `18` (revision `17` suspended) |
+| Immutable profile revision | `19` (revision `18` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -66,13 +66,13 @@ Primary references:
 | Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
 | Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
-| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a complete terminal request at the hosted input ceiling; request-specific staged preflight with tool-less fallback before egress commit; deadline-fenced handler and result persistence; final payload omits tools; exact final instruction; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
+| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a complete terminal request at the hosted input ceiling; request-specific staged preflight with tool-less fallback before egress commit; persisted execution lease whose live deadline is part of the terminal success CAS; final payload omits tools; exact final instruction; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
 | Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only two sequential real-filesystem-list calls plus one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r13 |
+| Live capability probe | operator-only two sequential real-filesystem-list calls plus one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r15 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
@@ -171,4 +171,14 @@ review closure. Timeout publishes the deterministic terminal error by ledger
 CAS before private result I/O, success rechecks its lease after that I/O, and
 the per-attempt allocation covers a complete terminal request at the hosted
 input ceiling. No live or behavioral run has been performed; revision 18
-remains a contained, uncertified preview.
+is suspended and uncertified.
+
+Revision 19 pins adapter 11, suite 15, matrix
+`2026-08-28-r15-p3-review3-tcb5`, and TCB manifest v5 for the third Phase-3
+review closure. The `executing` ledger state persists a unique lease id and UTC
+expiry; terminal success atomically requires the expected revision, the same
+lease, and a future deadline. Local JSON rechecks immediately before atomic
+replacement and Mongo uses server `$$NOW`. Deterministic coverage pauses the
+worker after its final cooperative check while delaying the timeout CAS, and
+proves that expired success cannot become authoritative. No live or behavioral
+run has been performed; revision 19 remains a contained, uncertified preview.

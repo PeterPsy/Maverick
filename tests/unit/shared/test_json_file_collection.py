@@ -7,7 +7,9 @@ import multiprocessing
 import os
 import stat
 import tempfile
+import time
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,6 +23,66 @@ def _write_json_collection_records(path_text: str, start: int, count: int) -> No
 
 
 class JsonFileCollectionTestCase(unittest.TestCase):
+    def test_deadline_cas_checks_persisted_time_under_the_file_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = JsonFileCollection(Path(temp_dir) / "records.json")
+            collection.update_one(
+                {"record_id": "expired"},
+                {
+                    "$set": {
+                        "record_id": "expired",
+                        "expires_at": datetime.now(tz=UTC) - timedelta(seconds=1),
+                        "state": "executing",
+                    }
+                },
+                upsert=True,
+            )
+
+            applied = collection.compare_and_set_if_datetime_future(
+                {"record_id": "expired"},
+                {"$set": {"state": "succeeded"}},
+                field="expires_at",
+            )
+
+            self.assertFalse(applied)
+            self.assertEqual(
+                collection.find_one({"record_id": "expired"})["state"],
+                "executing",
+            )
+
+    def test_deadline_cas_rechecks_immediately_before_atomic_replace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            collection = JsonFileCollection(Path(temp_dir) / "records.json")
+            collection.update_one(
+                {"record_id": "one"},
+                {
+                    "$set": {
+                        "record_id": "one",
+                        "expires_at": datetime.now(tz=UTC) + timedelta(seconds=0.02),
+                        "state": "executing",
+                    }
+                },
+                upsert=True,
+            )
+            original_write = collection._write_documents
+
+            def delayed_write(*args, **kwargs):
+                time.sleep(0.05)
+                return original_write(*args, **kwargs)
+
+            with patch.object(collection, "_write_documents", side_effect=delayed_write):
+                applied = collection.compare_and_set_if_datetime_future(
+                    {"record_id": "one"},
+                    {"$set": {"state": "succeeded"}},
+                    field="expires_at",
+                )
+
+            self.assertFalse(applied)
+            self.assertEqual(
+                collection.find_one({"record_id": "one"})["state"],
+                "executing",
+            )
+
     def test_compare_and_set_updates_only_the_expected_revision(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             collection = JsonFileCollection(Path(temp_dir) / "records.json")

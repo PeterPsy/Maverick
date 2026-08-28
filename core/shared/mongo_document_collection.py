@@ -56,6 +56,23 @@ class MongoDocumentCollection:
         result = self.collection.update_one(deepcopy(query), mongo_update, upsert=False)
         return bool(getattr(result, "matched_count", 0))
 
+    def compare_and_set_if_datetime_future(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        *,
+        field: str,
+    ) -> bool:
+        """Use Mongo server time to make deadline validation part of the CAS."""
+        if not field or field.startswith("$") or "$expr" in query:
+            raise ValueError("Mongo deadline CAS requires one plain field name.")
+        deadline_query = {
+            **deepcopy(query),
+            field: {"$type": "date"},
+            "$expr": {"$gt": [f"${field}", "$$NOW"]},
+        }
+        return self.compare_and_set(deadline_query, update)
+
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """Atomically insert one document when no record matches the identity query."""
         payload = {**deepcopy(query), **deepcopy(document)}

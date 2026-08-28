@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from threading import Event, Thread
 import time
 import unittest
 from unittest.mock import patch
@@ -10,6 +11,7 @@ from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.hosted_agentic_models import HostedFinalizationPolicy
 from core.runtime.hosted_agentic_request import hosted_request_control_digest
+from core.runtime.tool_orchestrator import RuntimeToolExecutionControl
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
@@ -376,6 +378,83 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         )
         self.assertFalse(
             any(event.event_type == "runtime.error" for event in events)
+        )
+
+    def test_success_cas_cannot_win_after_its_last_deadline_check(self) -> None:
+        self.harness.policy = replace(
+            self.harness.policy,
+            max_wall_time_seconds=0.2,
+        )
+        client = DeterministicFakeAgenticClient(
+            tool_name=self.harness.read_tool_name
+        )
+        adapter = self.harness.adapter(
+            client,
+            finalization_policy=HostedFinalizationPolicy(
+                exploration_max_output_tokens=128,
+                finalization_max_output_tokens=128,
+                finalization_cost_reserve_microusd_per_attempt=0,
+                finalization_time_reserve_seconds_per_attempt=0.05,
+                max_recovery_attempts=0,
+            ),
+        )
+        post_check = Event()
+        timeout_started = Event()
+        resume_worker = Event()
+        release_errors: list[str] = []
+        check_count = 0
+        original_check = RuntimeToolExecutionControl.check
+        original_failure = self.harness.orchestrator._persist_execution_failure
+
+        def gated_check(control):
+            nonlocal check_count
+            original_check(control)
+            check_count += 1
+            if check_count == 5:
+                post_check.set()
+                if not resume_worker.wait(1):
+                    raise AssertionError("worker_resume_timeout")
+
+        def delayed_timeout_fence(*args, **kwargs):
+            timeout_started.set()
+            time.sleep(0.15)
+            return original_failure(*args, **kwargs)
+
+        def release_after_timeout_started() -> None:
+            if not post_check.wait(1):
+                release_errors.append("post_check_timeout")
+                resume_worker.set()
+                return
+            if not timeout_started.wait(1):
+                release_errors.append("timeout_fence_not_started")
+            resume_worker.set()
+
+        release = Thread(target=release_after_timeout_started)
+        release.start()
+        try:
+            with patch.object(
+                RuntimeToolExecutionControl,
+                "check",
+                new=gated_check,
+            ), patch.object(
+                self.harness.orchestrator,
+                "_persist_execution_failure",
+                side_effect=delayed_timeout_fence,
+            ):
+                self.execute(client, adapter=adapter)
+        finally:
+            resume_worker.set()
+            release.join(timeout=1)
+
+        self.assertEqual(release_errors, [])
+        self.assertEqual(check_count, 5)
+        invocation = self.harness.store.list_tool_invocations(
+            session_id="session-hosted"
+        )[0]
+        self.assertEqual(invocation.state, "failed")
+        self.assertEqual(
+            invocation.failure_reason,
+            "agent_finalization_time_reserve_reached",
         )
 
 

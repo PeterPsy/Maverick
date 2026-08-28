@@ -46,6 +46,24 @@ class WorkspaceRuntimeJsonCollection:
             raise ValueError(f"Runtime {self.filename} compare-and-set requires workspace_id.")
         return JsonFileCollection(self._record_path(workspace_id)).compare_and_set(query, update)
 
+    def compare_and_set_if_datetime_future(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        *,
+        field: str,
+    ) -> bool:
+        """Apply a workspace CAS only while its persisted deadline is live."""
+        payload = deepcopy(update.get("$set", {}))
+        workspace_id = str(payload.get("workspace_id") or query.get("workspace_id") or "").strip()
+        if not workspace_id:
+            raise ValueError(f"Runtime {self.filename} compare-and-set requires workspace_id.")
+        return JsonFileCollection(self._record_path(workspace_id)).compare_and_set_if_datetime_future(
+            query,
+            update,
+            field=field,
+        )
+
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """Insert one workspace-scoped record atomically when no existing record matches."""
         payload = {**deepcopy(query), **deepcopy(document)}

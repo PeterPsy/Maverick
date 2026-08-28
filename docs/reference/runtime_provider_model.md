@@ -587,9 +587,13 @@ candidate instead; no exploration egress decision or request journal is left
 behind. Synchronous tool dispatch runs behind a deadline fence before the
 protected terminal window. A timeout CAS-persists a deterministic failed read
 result in the invocation ledger without waiting for private result storage;
-success rechecks the lease after its private write, so a late worker cannot
-become authoritative and the paired final request can proceed. A non-read
-effect remains `execution_unknown` and fails closed.
+the `executing` record contains a unique lease id and UTC expiry, and success
+atomically requires the expected revision, the same lease, and a deadline still
+in the future. JSON evaluates this under its collection lock and rechecks just
+before atomic replacement; Mongo evaluates it with server `$$NOW`. A worker
+paused after its last cooperative check therefore cannot become authoritative
+after expiry, and the paired final request can proceed. A non-read effect
+remains `execution_unknown` and fails closed.
 
 Google and OpenRouter preserve every call, including later OpenRouter indices
 and calls decoded before a terminal stream error. Parallel execution remains

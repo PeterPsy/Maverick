@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 import json
 from threading import Event
 import time
@@ -60,6 +61,8 @@ class RuntimeToolExecutionControl:
     """Cooperative cancellation and a hard commit deadline for one tool effect."""
 
     deadline_monotonic: float
+    deadline_utc: datetime
+    execution_lease_id: str
     cancellation: Event
     monotonic: Callable[[], float] = time.monotonic
     cancellation_reason: str = "runtime_cancelled"
@@ -271,6 +274,7 @@ class RuntimeToolOrchestrator:
             record,
             authority=authority,
             context=context,
+            control=control,
         )
         return self.execute_started(
             started.invocation,
@@ -286,6 +290,7 @@ class RuntimeToolOrchestrator:
         *,
         authority: EffectiveRuntimeAuthority,
         context: RuntimeToolActorContext,
+        control: RuntimeToolExecutionControl | None = None,
     ) -> RuntimeToolInvocationOutcome:
         """Fence the effect boundary before dispatching synchronous tool code."""
         if record.state != "authorized":
@@ -296,7 +301,18 @@ class RuntimeToolOrchestrator:
             authority=authority,
             context=context,
         ).by_handle(record.resolved_tool_handle)
-        return RuntimeToolInvocationOutcome(self.ledger.transition(record, "executing"))
+        return RuntimeToolInvocationOutcome(
+            self.ledger.transition(
+                record,
+                "executing",
+                execution_lease_id=(
+                    control.execution_lease_id if control is not None else None
+                ),
+                execution_lease_expires_at=(
+                    control.deadline_utc if control is not None else None
+                ),
+            )
+        )
 
     def execute_started(
         self,
@@ -574,6 +590,9 @@ class RuntimeToolOrchestrator:
                 result_private_ref=private_ref,
                 result_summary=result_summary,
                 result_classification=result_classification,
+                require_active_execution_lease_id=(
+                    control.execution_lease_id if control is not None else None
+                ),
             )
         except RuntimeToolRevisionError:
             self.ledger.private_payload_store.delete(

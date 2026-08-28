@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime
 from threading import RLock
 from typing import Any
 
@@ -49,6 +50,22 @@ class InMemoryCollection:
                     return True
         return False
 
+    def compare_and_set_if_datetime_future(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        *,
+        field: str,
+    ) -> bool:
+        """Apply one conditional update only while a stored deadline is live."""
+        payload = deepcopy(update.get("$set", {}))
+        with self._lock:
+            for index, document in enumerate(self._documents):
+                if _matches(document, query) and _datetime_is_future(document.get(field)):
+                    self._documents[index] = {**document, **payload}
+                    return True
+        return False
+
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         payload = {**deepcopy(query), **deepcopy(document)}
         with self._lock:
@@ -87,3 +104,10 @@ def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
         elif actual != expected:
             return False
     return True
+
+
+def _datetime_is_future(value: Any) -> bool:
+    if not isinstance(value, datetime):
+        return False
+    now = datetime.now(tz=value.tzinfo) if value.tzinfo is not None else datetime.now()
+    return value > now

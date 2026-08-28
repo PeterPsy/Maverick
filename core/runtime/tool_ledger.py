@@ -9,6 +9,7 @@ import hmac
 from uuid import NAMESPACE_URL, uuid5
 
 from core.egress.classification import CanonicalSourceClassification
+from core.runtime.errors import RuntimeToolExecutionLeaseExpiredError
 from core.runtime.store import RuntimeStore
 from core.runtime.tool_confirmation_ledger import (
     DEFAULT_CONFIRMATION_TTL_SECONDS,
@@ -297,6 +298,9 @@ class RuntimeToolLedger:
         result_classification: CanonicalSourceClassification | None = None,
         resolution_status: ToolResolutionStatus | None = None,
         deterministic_error_result: bool = False,
+        execution_lease_id: str | None = None,
+        execution_lease_expires_at: datetime | None = None,
+        require_active_execution_lease_id: str | None = None,
         now: datetime | None = None,
     ) -> ToolInvocationRecord:
         if state not in _TRANSITIONS[record.state]:
@@ -307,6 +311,33 @@ class RuntimeToolLedger:
             or result_private_ref is not None
         ):
             raise RuntimeToolError("tool_result_invalid")
+        if state == "executing" and not (
+            (execution_lease_id is None and execution_lease_expires_at is None)
+            or (
+                isinstance(execution_lease_id, str)
+                and bool(execution_lease_id.strip())
+                and isinstance(execution_lease_expires_at, datetime)
+                and execution_lease_expires_at.tzinfo is not None
+            )
+        ):
+            raise RuntimeToolError("tool_execution_lease_invalid")
+        if state != "executing" and (
+            execution_lease_id is not None
+            or execution_lease_expires_at is not None
+        ):
+            raise RuntimeToolError("tool_execution_lease_invalid")
+        if require_active_execution_lease_id is not None:
+            if (
+                not isinstance(require_active_execution_lease_id, str)
+                or not require_active_execution_lease_id.strip()
+                or state != "succeeded"
+                or record.state != "executing"
+                or record.execution_lease_id
+                != require_active_execution_lease_id
+                or not isinstance(record.execution_lease_expires_at, datetime)
+                or record.execution_lease_expires_at.tzinfo is None
+            ):
+                raise RuntimeToolError("tool_execution_lease_invalid")
         timestamp = now or datetime.now(tz=UTC)
         effective_resolution = resolution_status or _resolution_for_state(
             state,
@@ -337,6 +368,14 @@ class RuntimeToolLedger:
                     f"maverick:tool-result:{record.invocation_id}",
                 )
             )
+        next_execution_lease_id = record.execution_lease_id
+        next_execution_lease_expires_at = record.execution_lease_expires_at
+        if state == "executing":
+            next_execution_lease_id = execution_lease_id
+            next_execution_lease_expires_at = execution_lease_expires_at
+        elif state == "authorized" and record.state == "executing":
+            next_execution_lease_id = None
+            next_execution_lease_expires_at = None
         updated = replace(
             record,
             state=state,
@@ -394,11 +433,23 @@ class RuntimeToolLedger:
                 else record.result_persisted_at
             ),
             result_id=result_id,
+            execution_lease_id=next_execution_lease_id,
+            execution_lease_expires_at=next_execution_lease_expires_at,
             revision=record.revision + 1,
             updated_at=timestamp,
         )
         try:
+            if require_active_execution_lease_id is not None:
+                return self.store.update_tool_invocation_if_execution_lease_active(
+                    updated,
+                    expected_revision=record.revision,
+                    execution_lease_id=require_active_execution_lease_id,
+                )
             return self.store.update_tool_invocation(updated, expected_revision=record.revision)
+        except RuntimeToolExecutionLeaseExpiredError as error:
+            raise RuntimeToolError(
+                "agent_finalization_time_reserve_reached"
+            ) from error
         except Exception as error:
             raise RuntimeToolRevisionError("tool_invocation_revision_conflict") from error
 

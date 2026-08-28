@@ -79,6 +79,34 @@ class MongoDocumentCollectionTestCase(unittest.TestCase):
         )
         self.assertEqual(collection.find_one({"record_id": "one"})["revision"], 1)
 
+    def test_deadline_cas_uses_server_time_in_the_update_predicate(self) -> None:
+        fake = FakeMongoCollection()
+        collection = MongoDocumentCollection(fake)
+
+        with patch.object(
+            fake,
+            "update_one",
+            return_value=FakeUpdateResult(None, matched_count=1),
+        ) as update_one:
+            applied = collection.compare_and_set_if_datetime_future(
+                {"record_id": "one", "revision": 3},
+                {"$set": {"revision": 4, "state": "succeeded"}},
+                field="execution_lease_expires_at",
+            )
+
+        self.assertTrue(applied)
+        query = update_one.call_args.args[0]
+        self.assertEqual(query["record_id"], "one")
+        self.assertEqual(query["revision"], 3)
+        self.assertEqual(
+            query["execution_lease_expires_at"],
+            {"$type": "date"},
+        )
+        self.assertEqual(
+            query["$expr"],
+            {"$gt": ["$execution_lease_expires_at", "$$NOW"]},
+        )
+
     def test_insert_one_if_absent_is_idempotent(self) -> None:
         collection = MongoDocumentCollection(FakeMongoCollection())
 

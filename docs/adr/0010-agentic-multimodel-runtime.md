@@ -18,8 +18,9 @@ step/output/cost/deadline reserves, final requests are tool-less, and an
 unexpected finalization call has exactly one denied-and-paired recovery.
 The 2026-08-28 review amendments make terminal egress request-transactional,
 cover complete terminal projections in the cost reserve, deadline-fence both
-synchronous tool execution and slow result persistence, and keep OpenRouter
-finalization instructions request-scoped.
+synchronous tool execution and slow result persistence, make the terminal
+success CAS conditional on a persisted live execution lease, and keep
+OpenRouter finalization instructions request-scoped.
 Remote agentic execution nevertheless remains **NO-GO**:
 the availability flag is false and no remote profile, binding, certificate,
 behavioral evidence, canary, or production gate is enabled. Codex agentic and
@@ -258,7 +259,7 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v14 manifests contain both
+publication. Google and OpenRouter suite-v15 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
@@ -457,7 +458,12 @@ missing/modified instruction, or incoherent phase before transport.
 Synchronous tool surfaces execute behind a pre-terminal deadline and
 cancellation fence. Timeout CAS-publishes a deterministic failed read result
 directly in the invocation ledger before any optional private-payload I/O; a
-slow success write is rechecked after that I/O and cannot overwrite the fence.
+unique lease id and UTC expiry are persisted with `executing`, and `succeeded`
+requires revision, lease, and unexpired-deadline predicates in the same
+collection CAS. JSON evaluates the deadline while holding the collection lock
+and rechecks it immediately before atomic replacement; Mongo evaluates it with
+server `$$NOW`. A worker paused after its last cooperative check therefore
+cannot commit success after expiry even if the timeout CAS is delayed.
 Non-read effects that cross the boundary remain `execution_unknown` rather than
 being paired as safe completion.
 
@@ -513,9 +519,9 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 18
-and OpenRouter revision 17, both bound to
-`maverick-hosted-tool-loop==10`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 19
+and OpenRouter revision 18, both bound to
+`maverick-hosted-tool-loop==11`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
@@ -541,7 +547,7 @@ normative so both adapters implement the same semantics.
 | Execution binding / session lifecycle | `runtime/sessions/<session_id>/session.json` | binding embedded in a single immutable aggregate insert; `unprepared -> prepared` publication uses a one-way CAS, while lifecycle status transitions are serialized by `session_lifecycle_handoff` and are not provider-record CAS |
 | Provider state | `runtime/sessions/<session_id>/provider_state.json` | `session_id`, insert-if-absent then revision/generation CAS |
 | Continuation handoff | `runtime/continuation_handoffs.json` | one workspace-scoped record per predecessor session; immutable compatibility evidence plus monotonic phase/revision CAS |
-| Tool invocation | `runtime/sessions/<session_id>/tool_invocations.json` | `invocation_id`, revision CAS |
+| Tool invocation | `runtime/sessions/<session_id>/tool_invocations.json` | `invocation_id`, revision CAS; hosted `executing` records persist a lease id and UTC expiry, and success also requires that live lease in the atomic CAS |
 | Confirmation grant | `runtime/sessions/<session_id>/tool_confirmation_grants.json` | `grant_id`, revision CAS and atomic active-to-consumed transition |
 | Private blob metadata/content | `runtime/sessions/<session_id>/private/` behind the Core private-state service | Core-issued random locator, encrypted, create-if-absent, bounded |
 | Egress decision | `runtime/sessions/<session_id>/egress_decisions.json` plus redaction-safe audit projection | `decision_id`, append/insert-only |
@@ -552,14 +558,17 @@ not a capability; adapters and apps receive no locator-resolution surface.
 
 ## Atomicity, CAS, and fencing
 
-The common document collection contract will add an atomic compare-and-set
-operation that returns whether an exact identity-and-revision query matched.
+The common document collection contract provides atomic compare-and-set
+operations that report whether an exact identity-and-revision query matched,
+including a deadline-aware variant for hosted tool-result commits.
 
 - JSON performs the match and rewrite while holding its existing process file
-  lock and in-process lock.
-- MongoDB uses one conditional update and checks `matched_count`; unique indexes
-  enforce immutable identities and insert-if-absent races.
-- In-memory collections use the same match/update semantics under `RLock`.
+  lock and in-process lock; deadline CAS rechecks immediately before atomic
+  file replacement.
+- MongoDB uses one conditional update, server `$$NOW`, and `matched_count`;
+  unique indexes enforce immutable identities and insert-if-absent races.
+- In-memory collections evaluate the same match/deadline/update semantics under
+  `RLock`.
 
 Store services never emulate CAS with an unlocked read followed by write.
 Revision starts at zero. Successful mutable writes increment by exactly one.

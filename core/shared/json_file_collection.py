@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime
 import fcntl
@@ -70,6 +71,28 @@ class JsonFileCollection:
                         return True
         return False
 
+    def compare_and_set_if_datetime_future(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+        *,
+        field: str,
+    ) -> bool:
+        """Apply one CAS only while its persisted deadline is still future."""
+        payload = deepcopy(update.get("$set", {}))
+        with self._lock:
+            with self._process_lock(exclusive=True):
+                documents = self._read_documents()
+                for index, document in enumerate(documents):
+                    if _matches(document, query) and _datetime_is_future(document.get(field)):
+                        documents[index] = {**document, **payload}
+                        deadline = document.get(field)
+                        return self._write_documents(
+                            documents,
+                            commit_guard=lambda: _datetime_is_future(deadline),
+                        )
+        return False
+
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """Insert one document only when no existing document matches the query."""
         payload = {**deepcopy(query), **deepcopy(document)}
@@ -130,7 +153,12 @@ class JsonFileCollection:
             raise ValueError(f"JSON collection `{self.path}` must contain only JSON objects.")
         return payload
 
-    def _write_documents(self, documents: list[dict[str, Any]]) -> None:
+    def _write_documents(
+        self,
+        documents: list[dict[str, Any]],
+        *,
+        commit_guard: Callable[[], bool] | None = None,
+    ) -> bool:
         _ensure_collection_directory(self.path.parent)
         temporary_path: Path | None = None
         try:
@@ -147,8 +175,11 @@ class JsonFileCollection:
                 handle.flush()
                 os.fsync(handle.fileno())
             _apply_collection_file_mode(temporary_path)
+            if commit_guard is not None and not commit_guard():
+                return False
             temporary_path.replace(self.path)
             _apply_collection_file_mode(self.path)
+            return True
         finally:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
@@ -188,6 +219,13 @@ def _matches_value(actual: Any, expected: Any) -> bool:
         candidates = expected["$in"]
         return isinstance(candidates, (list, tuple, set, frozenset)) and actual in candidates
     return actual == expected
+
+
+def _datetime_is_future(value: Any) -> bool:
+    if not isinstance(value, datetime):
+        return False
+    now = datetime.now(tz=value.tzinfo) if value.tzinfo is not None else datetime.now()
+    return value > now
 
 
 def _query_is_contained(query: dict[str, Any], payload: dict[str, Any]) -> bool:

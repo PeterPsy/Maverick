@@ -60,6 +60,10 @@ class RuntimeProviderStateError(RuntimeDomainError):
     """Raised when provider state is missing, stale, or invalid."""
 
 
+class RuntimeToolExecutionLeaseExpiredError(RuntimeProviderStateError):
+    """Raised when a tool result tries to commit after its execution lease."""
+
+
 class RuntimeProfileUpgradeRequiredError(RuntimeDomainError):
     """Raised before admission when a pinned session cannot execute safely."""
 

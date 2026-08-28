@@ -70,10 +70,14 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_state.test_runtime_api_token_recovery",
     "tests.unit.runtime_state.test_structured_runtime_failures",
     "tests.unit.recovery.test_continuation_fork",
+    "tests.unit.shared.test_in_memory_collection",
+    "tests.unit.shared.test_json_file_collection",
+    "tests.unit.shared.test_mongo_document_collection",
     "tests.unit.runtime_tools.test_confined_filesystem",
     "tests.unit.runtime_tools.test_tool_filesystem_listing",
     "tests.unit.runtime_tools.test_tool_orchestrator",
     "tests.unit.runtime_tools.test_tool_preliminary_ledger",
+    "tests.unit.runtime_tools.test_tool_store",
     "tests.unit.runtime_tools.test_tool_catalog_security",
     "tests.unit.workspace.test_data_governance",
 )
@@ -89,10 +93,10 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="14",
+        suite_version="15",
         provider_id=provider_id,
         matrix_path=matrix_path,
-        matrix_revision="2026-08-28-r14-p3-review2-tcb5",
+        matrix_revision="2026-08-28-r15-p3-review3-tcb5",
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

@@ -3,6 +3,7 @@ import type { SettingsPanelState } from './settingsPanel';
 import {
   defaultUsageHistoryFilters,
   mergeUsageHistoryFilters,
+  usageHistoryTimeRange,
   type UsageHistoryFilters,
 } from './usageHistoryFilters';
 
@@ -22,8 +23,7 @@ export function createProviderUsageController(context: {
     context.state.providerUsageItems = [];
     context.state.providerUsageError = '';
     context.state.isLoadingProviderUsage = false;
-    context.state.hourlyUsage = null;
-    context.state.dailyUsage = null;
+    context.state.usageHistory = null;
     context.state.usageHistoryFilters = defaultUsageHistoryFilters();
     context.state.usageHistoryError = '';
     context.state.isLoadingUsageHistory = false;
@@ -81,30 +81,21 @@ export function createProviderUsageController(context: {
   async function loadUsageHistory(workspaceId: string, clearExisting = false) {
     const requestId = ++historyRequestId;
     const filters = context.state.usageHistoryFilters;
+    const timeRange = usageHistoryTimeRange(filters.timeRange);
     const queryFilters = { providerId: filters.providerId, modelId: filters.modelId };
     context.state.isLoadingUsageHistory = true;
     context.state.usageHistoryError = '';
     if (clearExisting) {
-      context.state.hourlyUsage = null;
-      context.state.dailyUsage = null;
+      context.state.usageHistory = null;
     }
     context.render();
     try {
-      const [hourlyResult, dailyResult] = await Promise.allSettled([
-        getUsageTimeseries('hour', filters.hourlyPeriods, queryFilters),
-        getUsageTimeseries('day', filters.dailyPeriods, queryFilters),
-      ]);
-      if (!isCurrentWorkspace(workspaceId) || requestId !== historyRequestId) {
-        return;
+      const result = await getUsageTimeseries(timeRange.resolution, timeRange.periods, queryFilters);
+      if (isCurrentWorkspace(workspaceId) && requestId === historyRequestId) {
+        context.state.usageHistory = result;
       }
-      if (hourlyResult.status === 'fulfilled') {
-        context.state.hourlyUsage = hourlyResult.value;
-      }
-      if (dailyResult.status === 'fulfilled') {
-        context.state.dailyUsage = dailyResult.value;
-      }
-      if (hourlyResult.status === 'rejected' || dailyResult.status === 'rejected') {
-        const failure = hourlyResult.status === 'rejected' ? hourlyResult.reason : dailyResult.status === 'rejected' ? dailyResult.reason : null;
+    } catch (failure) {
+      if (isCurrentWorkspace(workspaceId) && requestId === historyRequestId) {
         context.state.usageHistoryError = failure instanceof Error ? failure.message : 'Token usage history unavailable';
       }
     } finally {
@@ -124,8 +115,7 @@ export function createProviderUsageController(context: {
     context.state.usageHistoryFilters = next;
     const queryChanged = previous.providerId !== next.providerId
       || previous.modelId !== next.modelId
-      || previous.hourlyPeriods !== next.hourlyPeriods
-      || previous.dailyPeriods !== next.dailyPeriods;
+      || previous.timeRange !== next.timeRange;
     const workspaceId = context.getSettings()?.workspace.workspace_id || '';
     if (!queryChanged || !workspaceId) {
       context.render();
@@ -150,6 +140,5 @@ function sameFilters(left: UsageHistoryFilters, right: UsageHistoryFilters): boo
   return left.metric === right.metric
     && left.providerId === right.providerId
     && left.modelId === right.modelId
-    && left.hourlyPeriods === right.hourlyPeriods
-    && left.dailyPeriods === right.dailyPeriods;
+    && left.timeRange === right.timeRange;
 }

@@ -975,15 +975,14 @@ button.settings-adapter-card {
   margin: 0;
 }
 
-.settings-usage-history-grid {
+.settings-usage-filter-controls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .settings-usage-filter-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1002,6 +1001,53 @@ button.settings-adapter-card {
 .settings-usage-filter select {
   min-height: 2.2rem;
   font-size: 0.72rem;
+}
+
+.settings-usage-time-range {
+  display: grid;
+  gap: 5px;
+  min-inline-size: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.settings-usage-time-range legend {
+  color: var(--maverick-text-muted);
+  padding: 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.settings-usage-time-range-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-usage-time-range-options button {
+  flex: 1 1 5.5rem;
+  min-height: 2.2rem;
+  border: 1px solid var(--maverick-border-strong);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+}
+
+.settings-usage-time-range-options button:hover:not(:disabled) {
+  background: var(--maverick-surface-hover);
+  color: var(--maverick-text);
+}
+
+.settings-usage-time-range-options button.is-selected {
+  border-color: var(--maverick-accent);
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
+}
+
+.settings-usage-time-range-options button:focus-visible {
+  outline: 3px solid var(--maverick-accent-soft);
+  outline-offset: 1px;
 }
 
 .settings-usage-history-panel {
@@ -1125,16 +1171,6 @@ button.settings-adapter-card {
   color: var(--maverick-text);
   font-size: 0.74rem;
   text-overflow: ellipsis;
-}
-
-@media (max-width: 860px) {
-  .settings-usage-filter-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .settings-usage-history-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 @media (max-width: 560px) {

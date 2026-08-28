@@ -18,7 +18,11 @@ import {
   selectedProviderDraft
 } from './providerModelOptions';
 import { bouncyToggleHtml } from './bouncyToggle';
-import { defaultUsageHistoryFilters, type UsageHistoryFilters } from './usageHistoryFilters';
+import {
+  defaultUsageHistoryFilters,
+  usageHistoryTimeRange,
+  type UsageHistoryFilters,
+} from './usageHistoryFilters';
 
 const ACTIVE_RUNTIME_STATUSES = new Set(['created', 'running', 'stopping', 'recovery_required']);
 
@@ -59,8 +63,7 @@ export type SettingsPanelState = {
   providerError: string;
   providerUsageError: string;
   providerUsageItems: ProviderSubscriptionUsage[];
-  hourlyUsage: UsageTimeSeriesPayload | null;
-  dailyUsage: UsageTimeSeriesPayload | null;
+  usageHistory: UsageTimeSeriesPayload | null;
   usageHistoryFilters: UsageHistoryFilters;
   usageHistoryError: string;
   speechAudioModelId: string;
@@ -107,8 +110,7 @@ export function createSettingsPanelState(): SettingsPanelState {
     providerError: '',
     providerUsageError: '',
     providerUsageItems: [],
-    hourlyUsage: null,
-    dailyUsage: null,
+    usageHistory: null,
     usageHistoryFilters: defaultUsageHistoryFilters(),
     usageHistoryError: '',
     speechAudioModelId: '',
@@ -313,6 +315,8 @@ function userSettingsCardHtml(settings: PlatformSettings) {
 
 function usageHistoryCardHtml(state: SettingsPanelState) {
   const refreshIcon = state.isLoadingUsageHistory ? 'sync' : 'refresh';
+  const timeRange = usageHistoryTimeRange(state.usageHistoryFilters.timeRange);
+  const chartTitle = timeRange.resolution === 'hour' ? 'Hourly consumption' : 'Daily consumption';
   return `<section class="settings-card settings-platform settings-usage-history-card" aria-labelledby="settings-usage-history-title">
     <div class="settings-heading settings-platform-heading settings-usage-history-heading">
       <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">monitoring</span>
@@ -325,25 +329,16 @@ function usageHistoryCardHtml(state: SettingsPanelState) {
         Refresh
       </button>
     </div>
-    <p class="settings-card-copy">Hourly and daily usage across root and delegated runtime sessions. Charts default to non-cached tokens; use the filters to inspect processed totals, cache, providers, models, and time ranges.</p>
+    <p class="settings-card-copy">Usage across root and delegated runtime sessions. The chart defaults to non-cached tokens; use the filters to inspect processed totals, cache, providers, models, and time ranges.</p>
     ${state.usageHistoryError ? `<p class="settings-inline-error" role="alert">${escapeHtml(state.usageHistoryError)}</p>` : ''}
     <div class="settings-usage-history-filters" data-usage-history-filters aria-label="Token history filters"></div>
-    <div class="settings-usage-history-grid">
-      <article class="settings-usage-history-panel">
-        <div>
-          <p class="settings-kicker">Last ${state.usageHistoryFilters.hourlyPeriods} hours</p>
-          <h3>Hourly consumption</h3>
-        </div>
-        <div data-usage-history-chart="hour" aria-live="polite"></div>
-      </article>
-      <article class="settings-usage-history-panel">
-        <div>
-          <p class="settings-kicker">Last ${state.usageHistoryFilters.dailyPeriods} days</p>
-          <h3>Daily consumption</h3>
-        </div>
-        <div data-usage-history-chart="day" aria-live="polite"></div>
-      </article>
-    </div>
+    <article class="settings-usage-history-panel">
+      <div>
+        <p class="settings-kicker">Last ${escapeHtml(timeRange.label)}</p>
+        <h3>${chartTitle}</h3>
+      </div>
+      <div data-usage-history-chart aria-live="polite"></div>
+    </article>
   </section>`;
 }
 

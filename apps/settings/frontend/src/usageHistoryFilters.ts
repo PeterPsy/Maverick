@@ -9,12 +9,32 @@ export type UsageHistoryMetric =
   | 'reasoning_output_tokens'
   | 'cache_write_input_tokens';
 
+export type UsageHistoryResolution = 'hour' | 'day';
+
+export const USAGE_HISTORY_TIME_RANGES = [
+  { value: '6h', label: '6 hours', resolution: 'hour', periods: 6 },
+  { value: '12h', label: '12 hours', resolution: 'hour', periods: 12 },
+  { value: '24h', label: '24 hours', resolution: 'hour', periods: 24 },
+  { value: '3d', label: '3 days', resolution: 'hour', periods: 72 },
+  { value: '7d', label: '7 days', resolution: 'day', periods: 7 },
+  { value: '30d', label: '30 days', resolution: 'day', periods: 30 },
+  { value: '90d', label: '90 days', resolution: 'day', periods: 90 },
+  { value: '180d', label: '180 days', resolution: 'day', periods: 180 },
+  { value: '1y', label: '1 year', resolution: 'day', periods: 365 },
+] as const satisfies ReadonlyArray<{
+  value: string;
+  label: string;
+  resolution: UsageHistoryResolution;
+  periods: number;
+}>;
+
+export type UsageHistoryTimeRange = (typeof USAGE_HISTORY_TIME_RANGES)[number]['value'];
+
 export type UsageHistoryFilters = {
   metric: UsageHistoryMetric;
   providerId: string;
   modelId: string;
-  hourlyPeriods: number;
-  dailyPeriods: number;
+  timeRange: UsageHistoryTimeRange;
 };
 
 export const USAGE_HISTORY_METRICS: ReadonlyArray<{ value: UsageHistoryMetric; label: string }> = [
@@ -27,16 +47,12 @@ export const USAGE_HISTORY_METRICS: ReadonlyArray<{ value: UsageHistoryMetric; l
   { value: 'cache_write_input_tokens', label: 'Cache write' },
 ];
 
-export const HOURLY_PERIOD_OPTIONS = [6, 12, 24, 72, 168] as const;
-export const DAILY_PERIOD_OPTIONS = [7, 30, 90, 180, 365] as const;
-
 export function defaultUsageHistoryFilters(): UsageHistoryFilters {
   return {
     metric: 'non_cached_tokens',
     providerId: '',
     modelId: '',
-    hourlyPeriods: 24,
-    dailyPeriods: 30,
+    timeRange: '24h',
   };
 }
 
@@ -47,13 +63,20 @@ export function mergeUsageHistoryFilters(
   const metric = USAGE_HISTORY_METRICS.some((option) => option.value === patch.metric)
     ? patch.metric as UsageHistoryMetric
     : current.metric;
+  const timeRange = USAGE_HISTORY_TIME_RANGES.some((option) => option.value === patch.timeRange)
+    ? patch.timeRange as UsageHistoryTimeRange
+    : current.timeRange;
   return {
     metric,
     providerId: textOrCurrent(patch.providerId, current.providerId),
     modelId: textOrCurrent(patch.modelId, current.modelId),
-    hourlyPeriods: allowedPeriod(patch.hourlyPeriods, HOURLY_PERIOD_OPTIONS, current.hourlyPeriods),
-    dailyPeriods: allowedPeriod(patch.dailyPeriods, DAILY_PERIOD_OPTIONS, current.dailyPeriods),
+    timeRange,
   };
+}
+
+export function usageHistoryTimeRange(value: string): (typeof USAGE_HISTORY_TIME_RANGES)[number] {
+  return USAGE_HISTORY_TIME_RANGES.find((option) => option.value === value)
+    || USAGE_HISTORY_TIME_RANGES[2];
 }
 
 export function usageMetricValue(tokens: UsageTokenTotals, metric: UsageHistoryMetric): number {
@@ -111,12 +134,4 @@ function finite(value: number): number {
 
 function textOrCurrent(value: string | undefined, current: string): string {
   return typeof value === 'string' ? value.trim() : current;
-}
-
-function allowedPeriod(
-  value: number | undefined,
-  options: readonly number[],
-  fallback: number,
-): number {
-  return typeof value === 'number' && options.includes(value) ? value : fallback;
 }

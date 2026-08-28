@@ -9,8 +9,7 @@ export function unmountUsageVisualizations() {
 }
 
 export function mountUsageVisualizations(options: {
-  hourly: UsageTimeSeriesPayload | null;
-  daily: UsageTimeSeriesPayload | null;
+  history: UsageTimeSeriesPayload | null;
   filters: UsageHistoryFilters;
   isLoading: boolean;
   onFiltersChange: (patch: Partial<UsageHistoryFilters>) => void;

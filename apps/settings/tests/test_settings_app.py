@@ -255,8 +255,7 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("Package limits", settings_source)
         self.assertIn("Refresh limits", settings_source)
         self.assertIn("Token usage history", settings_source)
-        self.assertIn('data-usage-history-chart="hour"', settings_source)
-        self.assertIn('data-usage-history-chart="day"', settings_source)
+        self.assertEqual(settings_source.count("data-usage-history-chart"), 1)
         self.assertIn("settings-speech-model-settings-card", settings_source)
         self.assertIn("settings-runtime-settings-card", settings_source)
         self.assertIn("configureActiveProvider", api_source)
@@ -576,6 +575,8 @@ state.providerUsageItems = [{
 }];
 const html = settingsPanelHtml(settings, state);
 
+assert.equal((html.match(/data-usage-history-chart/g) || []).length, 1);
+assert.ok(html.includes('Last 24 hours'));
 assert.ok(html.includes('settings-user-settings-card'));
 assert.ok(html.includes('settings-hosted-text-model-settings-card'));
 assert.ok(html.includes('settings-agentic-model-settings-card'));
@@ -1090,7 +1091,7 @@ function makeController() {
         self.assertIn('@import "tailwindcss"', styles_source)
         self.assertEqual(components["aliases"]["ui"], "@/components/ui")
 
-    def test_platform_settings_renders_hourly_and_daily_token_charts(self) -> None:
+    def test_platform_settings_renders_one_token_chart_with_time_range_buttons(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         chart_source = (app_root / "frontend" / "src" / "components" / "usageHistoryCharts.tsx").read_text(encoding="utf-8")
         visualizations_source = (app_root / "frontend" / "src" / "components" / "usageVisualizations.ts").read_text(encoding="utf-8")
@@ -1103,12 +1104,18 @@ function makeController() {
         self.assertIn("UsageHistoryChart", chart_source)
         self.assertIn("UsageHistoryFilterControls", chart_source)
         self.assertIn('role="img"', chart_source)
-        self.assertIn("filters.hourlyPeriods", controller_source)
-        self.assertIn("filters.dailyPeriods", controller_source)
+        self.assertIn('aria-pressed={selected}', chart_source)
+        self.assertIn("USAGE_HISTORY_TIME_RANGES.map", chart_source)
+        self.assertIn("usageHistoryTimeRange(filters.timeRange)", controller_source)
+        self.assertNotIn("Promise.allSettled", controller_source)
         self.assertIn("metric: 'non_cached_tokens'", filters_source)
+        self.assertIn("timeRange: '24h'", filters_source)
+        self.assertNotIn("hourlyPeriods", filters_source)
+        self.assertNotIn("dailyPeriods", filters_source)
         self.assertIn("provider_id", api_source)
         self.assertIn("model_id", api_source)
         self.assertIn("data-usage-history-filters", panel_source)
+        self.assertEqual(panel_source.count("data-usage-history-chart"), 1)
         self.assertIn("mountUsageVisualizations", main_source)
         self.assertIn("mountUsageHistoryCharts", visualizations_source)
 

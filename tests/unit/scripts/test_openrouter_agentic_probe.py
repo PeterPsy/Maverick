@@ -16,6 +16,7 @@ from core.providers.agentic_protocol import (
     AgenticProviderPrivateState,
     AgenticToolCall,
     AgenticUsage,
+    HOSTED_FINALIZATION_INSTRUCTION,
 )
 from scripts import run_openrouter_agentic_probe as probe
 
@@ -134,6 +135,26 @@ class OpenRouterAgenticProbeTest(unittest.TestCase):
                     "certification-probe:"
                 )
             )
+        final_requests = [
+            request
+            for request in client.requests
+            if request.request_phase == "finalization"
+        ]
+        self.assertEqual(
+            len(final_requests),
+            len(probe.CERTIFIED_REASONING_EFFORTS),
+        )
+        self.assertTrue(all(not request.tool_definitions for request in final_requests))
+        self.assertTrue(
+            all(
+                any(
+                    block.provenance == "finalization_instruction"
+                    and block.content.decode() == HOSTED_FINALIZATION_INSTRUCTION
+                    for block in request.content_blocks
+                )
+                for request in final_requests
+            )
+        )
 
 
 if __name__ == "__main__":

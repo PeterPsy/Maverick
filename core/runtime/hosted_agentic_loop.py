@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 import asyncio
 from dataclasses import replace
+from datetime import UTC, datetime
 import json
 from threading import Event
 from typing import Callable
@@ -15,6 +16,9 @@ import core.egress.agentic_policy as agentic_egress_policy_module
 import core.egress.agentic_transforms as agentic_egress_transforms_module
 import core.providers.agentic_reason_codes as agentic_reason_codes_module
 import core.runtime.hosted_agentic_budget as hosted_agentic_budget_module
+import core.runtime.hosted_agentic_budget_models as hosted_agentic_budget_models_module
+import core.runtime.hosted_agentic_budget_recovery as hosted_agentic_budget_recovery_module
+import core.runtime.hosted_agentic_finalization_budget as hosted_agentic_finalization_budget_module
 import core.runtime.hosted_agentic_policy as hosted_agentic_policy_module
 import core.runtime.hosted_agentic_request as hosted_agentic_request_module
 import core.runtime.hosted_agentic_recovery as hosted_agentic_recovery_module
@@ -54,6 +58,7 @@ from core.runtime.hosted_agentic_models import (
 )
 from core.runtime.hosted_agentic_request import (
     HostedAgenticRequestBuilder,
+    hosted_request_control_digest,
     hosted_request_lineage_digest,
 )
 from core.runtime.hosted_agentic_recovery import HostedAgenticRecovery
@@ -77,6 +82,7 @@ from core.runtime.provider_step_models import ProviderStepJournalRecord
 from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
+from core.runtime.tool_catalog import RuntimeToolCatalog
 from core.runtime.tool_orchestrator import RuntimeToolInvocationOutcome
 from core.runtime.tool_ledger import RuntimeToolLedger
 
@@ -130,6 +136,9 @@ class HostedAgenticLoop:
             agentic_egress_transforms_module,
             agentic_reason_codes_module,
             hosted_agentic_budget_module,
+            hosted_agentic_budget_models_module,
+            hosted_agentic_budget_recovery_module,
+            hosted_agentic_finalization_budget_module,
             hosted_agentic_policy_module,
             hosted_agentic_request_module,
             hosted_agentic_recovery_module,
@@ -215,7 +224,6 @@ class HostedAgenticLoop:
             service=self.private_state_service,
             codec=provider_runtime.private_codec,
         )
-        budget = HostedAgenticBudget(policy)
         egress_policy = hosted_egress_policy(context, policy)
         destination_upstream_id = destination_upstream(context)
         tool_results: list[AgenticToolResult] = []
@@ -273,12 +281,17 @@ class HostedAgenticLoop:
             elif committed_final.final_completion_status != "delivered":
                 raise HostedAgenticLoopError("provider_state_ambiguous")
             return
+        budget = HostedAgenticBudget(
+            policy,
+            provider_runtime.finalization_policy,
+            elapsed_seconds=_turn_budget_elapsed(existing_turn_steps),
+        )
+        budget.restore(existing_turn_steps)
         start_step = (
             max(item.step_index for item in existing_turn_steps) + 1
             if existing_turn_steps
             else 0
         )
-        budget.steps = len(existing_turn_steps)
         pairing_source = self.recovery.pending_pairing(
             session_id=context.session.session_id,
             turn_id=context.correlation_id,
@@ -302,21 +315,34 @@ class HostedAgenticLoop:
                     )
                 )
         private_state.fence_turn(context)
-        for step in range(start_step, policy.max_steps_per_turn + 1):
+        step = start_step
+        while True:
             raise_if_hosted_cancelled(cancellation)
             policy = self.policy_resolver(context)
             budget.tighten(policy)
             egress_policy = hosted_egress_policy(context, budget.policy)
             authority = self.authority_refresher(context)
             effective_context = replace(context, effective_authority=authority)
-            actor_context = self.actor_context_resolver(
-                effective_context
+            phase = budget.select_phase(
+                pairing_source=pairing_source,
+                existing_records=existing_turn_steps,
             )
+            step_plan = budget.plan_step(phase)
+            credential = self.credential_resolver(context)
+            if provider_runtime.credential_required and credential is None:
+                raise HostedAgenticLoopError(
+                    "provider_credential_authorization_missing"
+                )
+            actor_context = self.actor_context_resolver(effective_context)
             provider_private_state = private_state.read(context, authority)
             tool_orchestrator = self.tool_orchestrator_resolver(context, actor_context)
-            catalog = tool_orchestrator.materialize(
-                authority=authority,
-                context=actor_context,
+            catalog = (
+                tool_orchestrator.materialize(
+                    authority=authority,
+                    context=actor_context,
+                )
+                if phase == "exploration"
+                else RuntimeToolCatalog(())
             )
             request = self.request_builder.build(
                 context=effective_context,
@@ -327,17 +353,23 @@ class HostedAgenticLoop:
                 provider_private_state=provider_private_state,
                 egress_policy=egress_policy,
                 destination_upstream_id=destination_upstream_id,
-                max_output_tokens=max(1, budget.policy.max_output_tokens - budget.output_tokens),
+                max_output_tokens=step_plan.max_output_tokens,
+                request_phase=phase,
                 pairing_source=pairing_source,
             )
             request_lineage_digest = hosted_request_lineage_digest(request)
+            request_control_digest = hosted_request_control_digest(request)
             self._validate_request_pairing(
                 request,
                 pairing_source=pairing_source,
                 turn_id=context.correlation_id,
                 request_lineage_digest=request_lineage_digest,
             )
-            budget.begin_step(request, provider_runtime.cost_estimator(request))
+            reservation = budget.begin_step(
+                request,
+                provider_runtime.cost_estimator(request),
+                phase=phase,
+            )
             private_state.persist_request_identity(context, request)
             provider_state_snapshot = self.tool_ledger.store.get_provider_state(
                 context.session.session_id
@@ -354,11 +386,23 @@ class HostedAgenticLoop:
                     None if pairing_source is None else pairing_source.journal_id
                 ),
                 request_lineage_digest=request_lineage_digest,
+                request_control_digest=request_control_digest,
+                request_phase=phase,
+                request_max_output_tokens=request.max_output_tokens,
+                budget_estimated_input_tokens=reservation.estimated_input_tokens,
+                budget_estimated_cost_microusd=(
+                    reservation.estimated_cost_microusd
+                ),
             )
             step_journal = self.provider_step_journal.journal_request(step_journal)
             yield event(
                 "provider.request.sent",
-                {"request_id": request.request_id, "step": step + 1},
+                {
+                    "request_id": request.request_id,
+                    "step": step + 1,
+                    "phase": phase,
+                    "budget": reservation.snapshot.public_payload(),
+                },
             )
             response: HostedProviderStep | None = None
             observed: dict[str, RuntimeToolInvocationOutcome] = {}
@@ -396,10 +440,33 @@ class HostedAgenticLoop:
                 ):
                     raise HostedAgenticLoopError("tool_provider_call_replay_mismatch")
                 observed[call.provider_tool_call_id] = outcome
+                charge_tool_budget = False
+                budget_error: HostedAgenticLoopError | None = None
+                if phase == "exploration":
+                    try:
+                        budget.check_tool_call()
+                    except HostedAgenticLoopError as error:
+                        budget_error = error
+                    else:
+                        charge_tool_budget = True
+                previous_observed = step_journal.observed_call_count
+                previous_charges = step_journal.budget_tool_call_charges
                 step_journal = self.provider_step_journal.add_proposal(
                     step_journal,
                     outcome.invocation.proposal_id,
+                    charge_tool_budget=charge_tool_budget,
                 )
+                proposal_added = step_journal.observed_call_count > previous_observed
+                if (
+                    proposal_added
+                    and step_journal.budget_tool_call_charges > previous_charges
+                ):
+                    budget.add_tool_call()
+                if (
+                    budget_error is not None
+                    and budget_error.reason_code != "agent_tool_call_limit_reached"
+                ):
+                    raise budget_error
                 return tool_event_payload(outcome, display_state="proposed")
 
             def stage(provider_event: AgenticModelEvent) -> None:
@@ -416,17 +483,30 @@ class HostedAgenticLoop:
                     staged_envelope,
                 )
 
+            def record_usage(provider_event: AgenticModelEvent) -> None:
+                nonlocal step_journal
+                usage = provider_event.usage
+                if usage is None:
+                    raise HostedAgenticLoopError("provider_response_invalid")
+                step_journal = self.provider_step_journal.record_usage(
+                    step_journal,
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    cost_microusd=usage.estimated_cost_microusd,
+                )
+
             try:
                 async for emission in consume_hosted_provider_step(
                     client=provider_runtime.client,
                     request=request,
-                    credential=self.credential_resolver(context),
+                    credential=credential,
                     budget=budget,
                     cancellation=cancellation,
                     destination_upstream_id=destination_upstream_id,
                     on_accepted=accepted,
                     on_tool_call=observe,
                     on_private_state=stage,
+                    on_usage=record_usage,
                 ):
                     if emission.event_type is not None and emission.payload is not None:
                         yield event(emission.event_type, emission.payload)
@@ -460,6 +540,17 @@ class HostedAgenticLoop:
             if staged_envelope is None:
                 raise HostedAgenticLoopError("provider_private_state_invalid")
             if response.final_text is not None:
+                if not response.final_text.strip():
+                    step_journal = (
+                        self.provider_step_journal.reject_invalid_final_output(
+                            step_journal,
+                            reason_code="agent_final_output_empty",
+                        )
+                    )
+                    self.provider_step_journal.roll_back_proven_terminal_failure(
+                        step_journal
+                    )
+                    raise HostedAgenticLoopError("agent_final_output_empty")
                 output_id = str(
                     uuid5(
                         NAMESPACE_URL,
@@ -530,6 +621,7 @@ class HostedAgenticLoop:
                         step_journal.journal_id
                     )
                 )
+                budget.complete_step()
                 return
             step_journal = self.provider_step_journal.complete_stream(
                 step_journal,
@@ -541,11 +633,23 @@ class HostedAgenticLoop:
             parallel_denied = len(response.tool_calls) > 1
             post_pairing_failure: str | None = None
             tool_policy = hosted_tool_policy(authority, budget.policy)
-            for call in response.tool_calls:
+            for call_index, call in enumerate(response.tool_calls):
                 outcome = observed.get(call.provider_tool_call_id)
                 if outcome is None:
                     raise HostedAgenticLoopError("provider_pairing_ambiguous")
-                if parallel_denied:
+                if phase != "exploration":
+                    outcome = tool_orchestrator.deny_observed_tool(
+                        outcome.invocation,
+                        resolution_status="budget_denied",
+                        failure_reason="agent_finalization_tool_call_forbidden",
+                    )
+                elif call_index >= step_journal.budget_tool_call_charges:
+                    outcome = tool_orchestrator.deny_observed_tool(
+                        outcome.invocation,
+                        resolution_status="budget_denied",
+                        failure_reason="agent_tool_call_limit_reached",
+                    )
+                elif parallel_denied:
                     outcome = tool_orchestrator.deny_observed_tool(
                         outcome.invocation,
                         resolution_status="parallel_denied",
@@ -553,40 +657,36 @@ class HostedAgenticLoop:
                     )
                 else:
                     try:
-                        budget.add_tool_call()
+                        authority = self.authority_refresher(context)
+                        budget.tighten(self.policy_resolver(context))
+                        budget.require_finalization_reserve()
+                        actor_context = self.actor_context_resolver(
+                            replace(context, effective_authority=authority)
+                        )
+                        tool_orchestrator = self.tool_orchestrator_resolver(
+                            context,
+                            actor_context,
+                        )
+                        tool_policy = hosted_tool_policy(authority, budget.policy)
                     except HostedAgenticLoopError as error:
                         outcome = tool_orchestrator.deny_observed_tool(
                             outcome.invocation,
-                            resolution_status="budget_denied",
+                            resolution_status=(
+                                "budget_denied"
+                                if error.reason_code.startswith("agent_")
+                                else "revoked"
+                            ),
                             failure_reason=error.reason_code,
                         )
+                        post_pairing_failure = error.reason_code
                     else:
-                        try:
-                            authority = self.authority_refresher(context)
-                            budget.tighten(self.policy_resolver(context))
-                            actor_context = self.actor_context_resolver(
-                                replace(context, effective_authority=authority)
-                            )
-                            tool_orchestrator = self.tool_orchestrator_resolver(
-                                context,
-                                actor_context,
-                            )
-                            tool_policy = hosted_tool_policy(authority, budget.policy)
-                        except HostedAgenticLoopError as error:
-                            outcome = tool_orchestrator.deny_observed_tool(
-                                outcome.invocation,
-                                resolution_status="revoked",
-                                failure_reason=error.reason_code,
-                            )
-                            post_pairing_failure = error.reason_code
-                        else:
-                            outcome = tool_orchestrator.prepare_observed_tool(
-                                outcome.invocation,
-                                requested_catalog=catalog,
-                                authority=authority,
-                                context=actor_context,
-                                policy=tool_policy,
-                            )
+                        outcome = tool_orchestrator.prepare_observed_tool(
+                            outcome.invocation,
+                            requested_catalog=catalog,
+                            authority=authority,
+                            context=actor_context,
+                            policy=tool_policy,
+                        )
                 if outcome.awaiting_confirmation:
                     if not feature_enabled(MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION):
                         outcome = RuntimeToolInvocationOutcome(
@@ -659,6 +759,12 @@ class HostedAgenticLoop:
                         sort_keys=True,
                     ).encode()
                 )
+                step_journal = self.provider_step_journal.record_tool_result_bytes(
+                    step_journal,
+                    total_bytes=(
+                        step_journal.budget_tool_result_bytes + serialized_size
+                    ),
+                )
                 budget.add_tool_result(serialized_size)
                 budget.tighten(self.policy_resolver(context))
                 egress_policy = hosted_egress_policy(context, budget.policy)
@@ -687,9 +793,15 @@ class HostedAgenticLoop:
                 )
             pairing_source = step_journal
             tool_results = step_results
+            existing_turn_steps.append(step_journal)
+            budget.complete_step()
             if post_pairing_failure is not None:
                 raise HostedAgenticLoopError(post_pairing_failure)
-        raise HostedAgenticLoopError("agent_step_limit_reached")
+            if phase == "finalization_recovery":
+                raise HostedAgenticLoopError(
+                    "agent_finalization_recovery_exhausted"
+                )
+            step += 1
 
     async def _await_confirmation(
         self,
@@ -832,3 +944,12 @@ class HostedAgenticLoop:
             or state.turn_generation != pairing_source.turn_id
         ):
             raise HostedAgenticLoopError("provider_pairing_ambiguous")
+
+
+def _turn_budget_elapsed(records: list[ProviderStepJournalRecord]) -> float:
+    if not records:
+        return 0.0
+    created_at = min(item.created_at for item in records)
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    return max(0.0, (datetime.now(tz=UTC) - created_at).total_seconds())

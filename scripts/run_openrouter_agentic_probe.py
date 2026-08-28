@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 from core.providers.agentic_filesystem_probe import AgenticFilesystemListProbe
 from core.providers.agentic_protocol import (
     AgenticModelRequest, AgenticRequestContentBlock, AgenticToolDefinition,
-    EphemeralCredential,
+    EphemeralCredential, HOSTED_FINALIZATION_INSTRUCTION,
 )
 from core.providers.openrouter_agentic_catalog import preflight_openrouter_agentic_catalog
 from core.providers.openrouter_agentic_client import OpenRouterAgenticClient
@@ -116,13 +116,18 @@ async def _main() -> int:
                     tool_definition=filesystem_probe.definition,
                     private_state=private,
                     tool_results=tuple(tool_results),
+                    finalize=True,
                 ),
                 credential=credential,
             )]
             request_count += 1
             events.extend(final)
             if (
-                not any(event.event_type == "text_final" for event in final)
+                not any(
+                    event.event_type == "text_final"
+                    and bool((event.text or "").strip())
+                    for event in final
+                )
                 or not any(event.event_type == "completed" for event in final)
                 or any(event.event_type == "error" for event in final)
             ):
@@ -138,24 +143,42 @@ def _request(
     private_state=None,
     tool_results=(),
     max_output_tokens: int = 128,
+    finalize: bool = False,
 ) -> AgenticModelRequest:
     pairing = private_state is not None and bool(tool_results)
     return AgenticModelRequest(
         schema_version="1", request_id=request_id,
         correlation_id=request_id.rsplit(":", 1)[0],
         model_id=OPENROUTER_AGENTIC_MODEL_ID, reasoning_effort=reasoning_effort,
-        content_blocks=(AgenticRequestContentBlock(
-            content_block_id="synthetic-user", role="user", data_class="public",
-            provenance="user_input", trust_level="trusted_platform",
-            content_type="text/plain",
-            content=(
-                f"Call {tool_definition.name} exactly three times total, one call per "
-                "response, with path '.', max_depth 1, and max_results 10. After each "
-                "of the first two results, call it once again. After the third result, "
-                "answer OK. Synthetic data only."
-            ).encode("utf-8"),
-        ),),
-        tool_definitions=(tool_definition,), tool_results=tool_results,
+        content_blocks=(
+            AgenticRequestContentBlock(
+                content_block_id="synthetic-user", role="user", data_class="public",
+                provenance="user_input", trust_level="trusted_platform",
+                content_type="text/plain",
+                content=(
+                    f"Call {tool_definition.name} exactly three times total, one call per "
+                    "response, with path '.', max_depth 1, and max_results 10. After each "
+                    "of the first two results, call it once again. After the third result, "
+                    "answer OK. Synthetic data only."
+                ).encode("utf-8"),
+            ),
+            *(
+                (
+                    AgenticRequestContentBlock(
+                        content_block_id="synthetic-finalization",
+                        role="system",
+                        data_class="public",
+                        provenance="finalization_instruction",
+                        trust_level="trusted_platform",
+                        content_type="text/plain",
+                        content=HOSTED_FINALIZATION_INSTRUCTION.encode("utf-8"),
+                    ),
+                )
+                if finalize
+                else ()
+            ),
+        ),
+        tool_definitions=() if finalize else (tool_definition,), tool_results=tool_results,
         provider_private_state=private_state,
         routing_constraint=openrouter_agentic_routing_constraint(),
         max_output_tokens=max_output_tokens,
@@ -170,6 +193,7 @@ def _request(
         pairing_source_request_id=(
             private_state.provider_request_id if pairing else None
         ),
+        request_phase="finalization" if finalize else "exploration",
     )
 
 

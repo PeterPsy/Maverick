@@ -51,6 +51,8 @@ from core.runtime.hosted_agentic_models import (
 from core.runtime.hosted_agentic_request import HostedAgenticRequestBuilder
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
 from core.runtime.hosted_provider_runtime import (
+    GOOGLE_HOSTED_FINALIZATION_POLICY,
+    OPENROUTER_HOSTED_FINALIZATION_POLICY,
     HostedProviderRuntime,
     HostedProviderRuntimeRegistry,
 )
@@ -65,7 +67,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "7"
+HOSTED_AGENTIC_ADAPTER_VERSION = "8"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -153,6 +155,7 @@ def classify_hosted_content_fail_closed(
     trust = {
         "provider_state": "trusted_platform",
         "platform_instruction": "trusted_platform",
+        "finalization_instruction": "trusted_platform",
         "tool_result": "untrusted_tool_output",
     }.get(provenance, "trusted_actor")
     return HostedContentClassification("unclassified", trust)
@@ -173,6 +176,7 @@ def _provider_runtimes() -> HostedProviderRuntimeRegistry:
                 content_type=GOOGLE_INTERACTIONS_CONTENT_TYPE,
             ),
             cost_estimator=google_36_flash_request_ceiling_microusd,
+            finalization_policy=GOOGLE_HOSTED_FINALIZATION_POLICY,
             private_state_inspector=lambda content: inspect_google_interaction_state(
                 content,
                 mode="stateful",
@@ -192,6 +196,7 @@ def _provider_runtimes() -> HostedProviderRuntimeRegistry:
                 content_type=OPENROUTER_AGENTIC_CONTENT_TYPE,
             ),
             cost_estimator=openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+            finalization_policy=OPENROUTER_HOSTED_FINALIZATION_POLICY,
             private_state_inspector=inspect_openrouter_chat_state,
         )
     )

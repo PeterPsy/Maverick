@@ -20,10 +20,12 @@ from core.egress.classification import (
 from core.providers.agentic_protocol import (
     AgenticModelRequest,
     AgenticProviderPrivateState,
+    AgenticRequestPhase,
     AgenticRequestContentBlock,
     AgenticSourceMetadata,
     AgenticToolDefinition,
     AgenticToolResult,
+    HOSTED_FINALIZATION_INSTRUCTION,
 )
 from core.providers.certified_execution_tcb import is_certified_tcb_component
 from core.providers.errors import CapabilityCertificateError
@@ -52,7 +54,7 @@ HOSTED_TOOL_USE_INSTRUCTION = (
 
 
 def hosted_request_lineage_digest(request: AgenticModelRequest) -> str:
-    """Hash the exact ordered non-tool input that a continuation may not replace."""
+    """Hash immutable turn input while excluding Core-owned phase controls."""
     payload = [
         {
             "role": block.role,
@@ -63,7 +65,45 @@ def hosted_request_lineage_digest(request: AgenticModelRequest) -> str:
             "content_sha256": hashlib.sha256(block.content).hexdigest(),
         }
         for block in request.content_blocks
+        if block.provenance != "finalization_instruction"
     ]
+    return hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def hosted_request_control_digest(request: AgenticModelRequest) -> str:
+    """Hash phase controls separately from immutable same-turn source lineage."""
+    payload = {
+        "request_phase": request.request_phase,
+        "max_output_tokens": request.max_output_tokens,
+        "tools": tuple(
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "input_schema": tool.input_schema,
+            }
+            for tool in request.tool_definitions
+        ),
+        "finalization_blocks": tuple(
+            {
+                "role": block.role,
+                "data_class": block.data_class,
+                "provenance": block.provenance,
+                "trust_level": block.trust_level,
+                "content_type": block.content_type,
+                "content_sha256": hashlib.sha256(block.content).hexdigest(),
+            }
+            for block in request.content_blocks
+            if block.provenance == "finalization_instruction"
+        ),
+    }
     return hashlib.sha256(
         json.dumps(
             payload,
@@ -104,9 +144,18 @@ class HostedAgenticRequestBuilder:
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
         max_output_tokens: int,
+        request_phase: AgenticRequestPhase = "exploration",
         pairing_source: ProviderStepJournalRecord | None = None,
     ) -> AgenticModelRequest:
         binding = context.binding
+        if request_phase not in {
+            "exploration",
+            "finalization",
+            "finalization_recovery",
+        }:
+            raise HostedAgenticLoopError("agent_finalization_phase_invalid")
+        if request_phase != "exploration" and catalog.descriptors:
+            raise HostedAgenticLoopError("agent_finalization_catalog_not_empty")
         self._validate_context_capabilities(context)
         self._validate_catalog_before_egress(catalog)
         request_id = str(
@@ -222,6 +271,28 @@ class HostedAgenticRequestBuilder:
                     destination_upstream_id=destination_upstream_id,
                 )
             )
+        if request_phase != "exploration":
+            content_blocks.append(
+                self._content_block(
+                    context=context,
+                    request_id=request_id,
+                    index=len(content_blocks),
+                    role="system",
+                    provenance="finalization_instruction",
+                    content=HOSTED_FINALIZATION_INSTRUCTION,
+                    content_type="text/plain",
+                    egress_policy=egress_policy,
+                    destination_upstream_id=destination_upstream_id,
+                    classification=HostedContentClassification(
+                        "public",
+                        "trusted_platform",
+                        source_ref="core:hosted-finalization-instruction",
+                        source_revision="1",
+                        resource_identity="core:hosted-finalization-instruction:1",
+                        classification_revision=1,
+                    ),
+                )
+            )
         tools = tuple(
             self._tool_definition(
                 context=context,
@@ -282,6 +353,7 @@ class HostedAgenticRequestBuilder:
             pairing_source_request_id=(
                 None if pairing_source is None else pairing_source.request_id
             ),
+            request_phase=request_phase,
         )
 
     def _content_block(

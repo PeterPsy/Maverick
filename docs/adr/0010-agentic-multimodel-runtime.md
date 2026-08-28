@@ -11,7 +11,12 @@ certified schemas/TCB, fd-relative confinement, and one effective-capability
 snapshot now exist. The Phase-2 journal/recovery amendment was implemented on
 2026-08-27: every provider call is durably accounted, provider state is staged
 until reconstructible pairing and commit, and recovery is connected to the
-productive lifecycle. Remote agentic execution nevertheless remains **NO-GO**:
+productive lifecycle.
+The Phase-3 finalization amendment was implemented on 2026-08-27: provider-step
+and tool-call budgets are separate and restart-safe, two terminal attempts keep
+step/output/cost/deadline reserves, final requests are tool-less, and an
+unexpected finalization call has exactly one denied-and-paired recovery.
+Remote agentic execution nevertheless remains **NO-GO**:
 the availability flag is false and no remote profile, binding, certificate,
 behavioral evidence, canary, or production gate is enabled. Codex agentic and
 plain hosted text are not contained or reclassified as hosted remote.
@@ -126,7 +131,7 @@ all authority-changing Core and UI surfaces and is the sole source for suite,
 artifact, signing/publication, execution-binding, and live-status digests. The
 publisher recomputes the digest; drift or missing legacy identity makes a
 remote certificate ineligible before create, continuation, refresh, or
-dispatch. Manifest version 4 also declares six maintained dependency contracts
+dispatch. Manifest version 5 also declares six maintained dependency contracts
 for runtime admission, provider-input composition, classification/egress, tool
 execution, provider-state/lifecycle, and served governance. Core statically
 walks each declared local import closure, including package initializers, the
@@ -249,7 +254,7 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v11 manifests contain both
+publication. Google and OpenRouter suite-v12 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
@@ -372,7 +377,9 @@ and response ids, acceptance, pinned engine/adapter/provider/protocol/API and
 codec identity, base provider-state revision/digest, staged private reference,
 ordered proposal/disposition/result ids, pairing source/status, immutable
 request-input lineage digest, private final-output outbox identity and delivery
-status, commit status, timestamps, and revision. JSON and document stores use the same
+status, immutable request phase/control digest/output/input/cost reservation,
+tool-budget charges, paired-result byte count, provider usage, commit status,
+timestamps, and revision. JSON and document stores use the same
 insert-if-absent and compare-and-set transitions. Tool ledger, private blob,
 provider state, and journal remain distinct stores: ordered WAL repair is
 explicit and no cross-collection transaction is simulated.
@@ -414,6 +421,41 @@ acknowledgements. A crash after commit replays the same output without another
 provider request; an unprovable identity quarantines rather than regenerates.
 The journal and unauthorized APIs never contain the final text.
 
+### 7B. Finalization capacity is reserved rather than hoped for
+
+Hosted turns account provider requests separately from provider tool
+proposals. The adapter pins an exploration output ceiling and a terminal
+per-attempt output, micro-USD, and deadline reserve. Core protects one normal
+finalization request and at most one recovery request. A live policy can only
+tighten the turn; it may not consume already protected steps, output, cost, or
+time. Journal schema v3 makes request reservations, usage replacement, tool
+charges, and paired-result bytes reconstructible after restart. Missing usage
+keeps the conservative reservation. An in-budget proposal and its tool charge
+share one journal CAS; provider usage is durable before its public usage event. A
+terminal request whose certified cost ceiling exceeds its per-attempt
+allocation is rejected before transport.
+
+Before catalog materialization or per-block export, Core rechecks effective
+admission and credential availability. Exploration stops when its tool budget
+is empty or another resource reaches the terminal reserve. The next normalized
+request has phase `finalization`, an empty catalog, and an exact trusted Core
+instruction placed after all other content. Google omits `tools`; OpenRouter
+sends `tools: []` and `tool_choice: none`. Both codecs reject a non-empty final
+catalog, missing/modified instruction, or incoherent phase before transport.
+
+An empty or whitespace-only provider final is an explicit invalid outcome, not
+a successful turn: its staged state is rolled back to the previous commit and
+the public failure is structured. If the provider calls a tool despite the
+closed catalog, Core first journals the proposal, persists a `budget_denied`
+result, commits its pairing, and sends one tool-less
+`finalization_recovery`. A second call is likewise denied but no additional
+provider request is permitted; the unconsumed pairing is quarantined as
+`recovery_required`. Thus every healthy terminal path contains non-whitespace
+output, while every unhealthy path contains a visible failure and either a
+continuable last commit or explicit quarantine.
+Finalization phase chains are validated per original turn, so a completed turn
+cannot prevent the next turn from beginning ordinary exploration.
+
 ### 8. Remote-provider egress is decided per content block
 
 Every system/developer instruction, user block, skill fragment, attachment,
@@ -453,9 +495,9 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 15
-and OpenRouter revision 14, both bound to
-`maverick-hosted-tool-loop==7`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 16
+and OpenRouter revision 15, both bound to
+`maverick-hosted-tool-loop==8`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
@@ -666,7 +708,11 @@ The accepted order is:
     enabling a remote profile;
 12. close the Phase-2 provider-step journal, preliminary ledger, staged-state
     pairing, effect ordering, and productive recovery gates without executing
-    a provider probe or enabling a remote profile.
+    a provider probe or enabling a remote profile;
+13. close the Phase-3 step/tool budget separation and terminal
+    step/output/cost/deadline reserve, tool-less provider payload, empty-output
+    rejection, and one-recovery gates without executing a live probe or
+    enabling a remote profile.
 
 Every phase has focused tests and a checkpoint commit. A later phase cannot
 weaken an earlier boundary.
@@ -695,7 +741,8 @@ remote profile beyond the contained preview.
 - Control-plane and runtime stores gain real CAS semantics shared by JSON,
   MongoDB, and tests.
 - Remote agentic execution remains NO-GO while local Codex and plain hosted
-  text retain their existing behavior. Phases 1 and 2 supply the server-owned
-  attestation/certified boundary and deterministic recovery, but reopening still
+  text retain their existing behavior. Phases 1 through 3 supply the
+  server-owned attestation/certified boundary, deterministic recovery, and
+  governed finalization, but reopening still
   requires complete live/behavioral certification, onboarding, leakage review,
   canary, and release gates—not a browser declaration or a flag alone.

@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="4",
+    manifest_version="5",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -312,7 +312,7 @@ def compute_certified_tcb_digest(root: Path) -> str:
     if not files:
         raise CapabilityCertificateError("certificate_tcb_artifact_empty")
     digest = hashlib.sha256()
-    digest.update(b"maverick.certified-execution-tcb.v4\x00")
+    digest.update(b"maverick.certified-execution-tcb.v5\x00")
     digest.update(CERTIFIED_EXECUTION_TCB.structure_digest.encode("ascii"))
     digest.update(b"\x00")
     for relative_path in sorted(files):

@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v4 also
+status, workspace binding, and upstream constraint. TCB manifest v5 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -512,8 +512,9 @@ workspace-internal, or unclassified content. Browser fields, labels, flags,
 egress-policy ids, `workspace_internal_fake`, and legacy
 `declared_remote_data_class` are non-authoritative.
 
-Every prompt, orchestration block, skill, attachment, app reference, tool
-schema/result, and private-state source retains distinct canonical provenance,
+Every platform/finalization instruction, prompt, orchestration block, skill,
+attachment, app reference, tool schema/result, and private-state source retains
+distinct canonical provenance,
 trust, and data class. Filesystem and tool-result sources inherit the exact
 resource identity, revision, digest, and matching classification record. A
 missing/incoherent match becomes `unclassified`, and the restrictive source
@@ -554,16 +555,35 @@ input lineage digest and current private-state generation. The JSON
 the same semantics and no cross-collection transaction is claimed. The loop
 performs no blind retry after acceptance.
 
-Each model step, tool call, tool-result byte, input/output token, estimated
-micro-USD cost, and wall-clock interval is checked against a policy that may
-tighten but never loosen during the turn. Decoded streamed output also has a
-conservative byte ceiling, so a provider cannot bypass the limit by delaying
-usage events. Google and OpenRouter preserve every call, including later
-OpenRouter indices and calls decoded before a terminal stream error. Parallel
-execution remains disabled, so every call in a multi-call response is first
-journaled and then denied and paired; no call is discarded. Result content stays
-in encrypted tool storage and is re-evaluated against the current egress policy
-when included in every subsequent request.
+Provider-step and provider tool-call budgets are distinct. Journal schema v3
+persists the request phase, max-output/input/cost reservation, separate
+request-control digest, tool-call charges, paired-result byte count, and the
+sole provider usage report. Restart therefore restores consumed steps, tool
+proposals, result bytes, input/output and micro-USD accounting; missing usage
+keeps the conservative request reservation. The controller exposes remaining
+provider steps, tool calls, output tokens, cost, wall time, and whether the
+terminal reserve is intact. Proposal and accepted tool-budget charge share one
+journal CAS, and usage is journaled before its public usage event. Live policy may
+tighten but never loosen it.
+
+Each hosted adapter pins one normal finalization attempt and at most one
+recovery, including per-attempt output, cost, and deadline capacity. Google and
+OpenRouter currently use 2,048 output tokens and 20 seconds per attempt, with
+25,000 and 2,000 micro-USD respectively. Exploration stops before consuming
+those protected resources. A final request whose conservative cost estimate is
+larger than its per-attempt allocation is rejected before transport. Decoded
+streamed output also has a conservative byte ceiling, so a provider cannot
+bypass the request limit by delaying usage events. Before request
+construction/export, Core rechecks effective eligibility and required
+credentials.
+
+Google and OpenRouter preserve every call, including later OpenRouter indices
+and calls decoded before a terminal stream error. Parallel execution remains
+disabled, so every call in a multi-call response is first journaled. Calls
+inside the remaining tool budget are charged and `parallel_denied`; overflow is
+`budget_denied`. No call is discarded. Result content stays in encrypted tool
+storage and is re-evaluated against the current egress policy when included in
+every subsequent request.
 
 Confirmation waiting is represented by the persisted invocation and
 `waiting_for_tool_confirmation` turn state. Approval consumes the exact one-shot
@@ -591,6 +611,18 @@ after a crash without another provider request; missing or conflicting identity
 enters quarantine. Public provider events are bounded JSON and recursively
 reject private-state field names.
 
+When the tool budget reaches zero—or another protected resource reaches its
+reserve—the next request has phase `finalization`, no Core tools, and one exact
+trusted finalization instruction placed last. Google omits the `tools` member;
+OpenRouter sends `tools: []` with `tool_choice: none`. Both codecs reject a
+phase/catalog/instruction mismatch before transport. Empty or whitespace final
+text is durably rejected and its staged state rolled back, never committed as a
+healthy output. A tool proposed despite the closed catalog is still journaled,
+gets a paired `budget_denied` result, and permits exactly one tool-less
+`finalization_recovery`. Another proposal is denied without a fourth request
+and its ready pairing is quarantined. Every terminal failure produces a
+structured runtime error and non-zero completion rather than a silent turn.
+
 The deterministic fake provider certification covers multi-request streaming,
 official read and confirmed mutating tools, restart deduplication,
 provider-private round-trip, egress records, budgets, cancellation transport
@@ -598,7 +630,9 @@ closure, terminal outages without blind retry, mid-step certificate revocation,
 policy drift, explicit private-state quota/integrity failures, prompt-injection
 containment, child-agent binding isolation, JSON/document-store parity,
 Google/OpenRouter multi-call accounting, journal fault injection, event/effect
-ordering, and productive lifecycle recovery.
+ordering, productive lifecycle recovery, durable budget restoration, tool-less
+provider payloads, whitespace rejection, and the one-recovery finalization
+controller.
 The terminal-gap matrix additionally covers cross-turn Google/OpenRouter
 pairing rejection, step/cost/cancellation/revocation containment, diagnostic
 and CAS/projection faults, final-commit crashes, and repeated restart with one

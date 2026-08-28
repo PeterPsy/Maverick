@@ -13,6 +13,38 @@ _PUBLIC_MESSAGES = {
     "adapter_version_mismatch": "The certified runtime adapter version is unavailable.",
     "agent_step_limit_reached": "The runtime reached its step limit before completing the request.",
     "agent_tool_call_limit_reached": "The runtime reached its tool-call limit before completing the request.",
+    "agent_cost_estimate_unavailable": (
+        "The runtime could not prove that the provider request fits the configured cost budget."
+    ),
+    "agent_cost_limit_reached": "The runtime reached its configured cost limit.",
+    "agent_final_output_empty": (
+        "The model completed the request without a usable final answer."
+    ),
+    "agent_finalization_recovery_exhausted": (
+        "The model requested another tool after the single governed finalization recovery."
+    ),
+    "agent_finalization_catalog_not_empty": (
+        "The runtime refused a finalization request whose tool catalog was not closed."
+    ),
+    "agent_finalization_phase_invalid": (
+        "The runtime refused an invalid hosted finalization phase."
+    ),
+    "agent_finalization_reserve_unavailable": (
+        "The runtime could not preserve the resources required for a governed final answer."
+    ),
+    "agent_finalization_reserve_violation": (
+        "The provider request exceeded its reserved finalization allocation."
+    ),
+    "agent_finalization_time_reserve_reached": (
+        "The runtime stopped the request to preserve its finalization deadline."
+    ),
+    "agent_finalization_tool_call_forbidden": (
+        "The model requested a tool after the governed tool catalog was closed."
+    ),
+    "agent_input_token_limit_reached": "The runtime reached its input-token limit.",
+    "agent_output_token_limit_reached": "The runtime reached its output-token limit.",
+    "agent_time_limit_reached": "The runtime reached its wall-time limit.",
+    "agent_tool_result_limit_reached": "The runtime reached its tool-result limit.",
     "agentic_app_references_not_effective": (
         "The selected runtime profile is not certified for app references."
     ),

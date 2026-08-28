@@ -6,16 +6,17 @@ Scope: trusted CI or operator-controlled certification worker
 
 Production status: **not approved; no complete two-step certificate evidence recorded**
 
-P2 repository closure executes only the explicitly selected deterministic
+P3 repository closure executes only the explicitly selected deterministic
 `fixture_contract` steps for Google and OpenRouter. It does not execute
 `live_probe`, produce behavioral evidence, sign/publish a remote certificate,
 or make any provider HTTP/SSE request.
 
-Suite 11 adds fixture-only assertions for same-turn/cross-turn pairing lineage,
-terminal limit/cancellation/revocation containment, diagnostic and CAS/projection
-faults, and final-output commit/restart idempotence. Those fixtures are
-conformance checks only: `live_probe_selected=false` remains mandatory for this
-repository closure and cannot yield certificate evidence.
+Suite 12 retains the P2 crash/pairing/outbox matrix and adds fixture-only
+assertions for durable step/tool/output/cost/time reservation, tool-less Google
+and OpenRouter payloads, the exact finalization instruction, empty-output
+rollback, journaled unexpected-call denial, and exactly one recovery. Those
+fixtures are conformance checks only: `live_probe_selected=false` remains
+mandatory for this repository closure and cannot yield certificate evidence.
 
 This procedure is the only supported path from an executed provider suite to a
 Google or OpenRouter capability certificate. Bootstrap publishes candidate
@@ -30,7 +31,7 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v11 matrix revision `2026-08-27-r11-p2-tcb4` declared by the
+- the dated suite-v12 matrix revision `2026-08-27-r12-p3-tcb5` declared by the
   provider certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -65,7 +66,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 11 \
+  --suite-version 12 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -74,8 +75,8 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `11`, matrix revision `2026-08-27-r11-p2-tcb4`, and the OpenRouter
-manifest. The Google suite uses version `11` and the same matrix revision. The
+version `12`, matrix revision `2026-08-27-r12-p3-tcb5`, and the OpenRouter
+manifest. The Google suite uses version `12` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.
@@ -86,10 +87,14 @@ isolated synthetic directory, and return its marker-bearing result to the
 provider at every certified reasoning effort. The OpenRouter probe requires
 three sequential tool rounds plus a final response at every effort. The Google
 probe requires two sequential tool rounds plus a final response at its single
-certified effort, for exactly three provider requests. Requests are paced (one
-second by default) so the probe itself does not justify diagnosing a quota
-incident. A Google failure must preserve the redaction-safe distinction among
-`quota_exceeded`, `resource_exhausted`, and `rate_limit_exceeded`; do not infer a
+certified effort, for exactly three provider requests. For both providers the
+last request must carry the exact Core finalization instruction and an empty
+tool catalog: OpenRouter sends `tools: []` with `tool_choice: none`, while
+Google omits `tools`. A whitespace-only final fails the probe. Requests are
+paced (one second by default) so the probe itself does not justify diagnosing a
+quota incident. A Google failure must preserve the redaction-safe distinction
+among `quota_exceeded`, `resource_exhausted`, and `rate_limit_exceeded`; do not
+infer a
 project-quota cause from the broader family alone.
 
 Before its first completion request, the OpenRouter probe must fetch both the
@@ -157,7 +162,7 @@ capability projection, Chat/Settings governance, and provider codec/transport/
 live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
-separate local identity. Manifest v4 makes the transitive inventory executable:
+separate local identity. Manifest v5 makes the transitive inventory executable:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package
 initializers and the exact `core/inter_agent/generalist_context.py` closure.

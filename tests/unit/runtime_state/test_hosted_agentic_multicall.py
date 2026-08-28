@@ -4,7 +4,10 @@ import json
 import unittest
 
 from core.providers.agentic_protocol import EphemeralCredential
-from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
+from core.providers.google_interactions_client import (
+    GoogleInteractionsAgenticClient,
+    google_36_flash_request_ceiling_microusd,
+)
 from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_CODEC_ID,
     GOOGLE_INTERACTIONS_CODEC_VERSION,
@@ -12,7 +15,10 @@ from core.providers.google_interactions_models import (
     GOOGLE_INTERACTIONS_SCHEMA_VERSION,
 )
 from core.providers.google_interactions_state import inspect_google_interaction_state
-from core.providers.openrouter_agentic_client import OpenRouterAgenticClient
+from core.providers.openrouter_agentic_client import (
+    OpenRouterAgenticClient,
+    openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+)
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_CODEC_ID,
     OPENROUTER_AGENTIC_CODEC_VERSION,
@@ -40,6 +46,56 @@ class _ScriptedTransport:
 
 
 class HostedAgenticMultiCallTest(unittest.TestCase):
+    def test_parallel_overflow_consumes_remaining_tool_budget_and_closes_catalog(self) -> None:
+        harness = HostedAgenticHarness(
+            self,
+            max_tool_calls=1,
+            model_provider_id="google-ai-studio",
+            model_id="gemini-3.6-flash",
+            provider_protocol="google-interactions",
+            provider_api_version="v1",
+        )
+        transport = _ScriptedTransport(
+            [
+                _google_parallel_stream(harness.read_tool_name),
+                _google_text_stream("google-budget-final", "google complete"),
+            ]
+        )
+        adapter = harness.adapter(
+            GoogleInteractionsAgenticClient(transport=transport),
+            credential=EphemeralCredential("fixture-google-key"),
+            private_codec=HostedProviderPrivateCodec(
+                GOOGLE_INTERACTIONS_CODEC_ID,
+                GOOGLE_INTERACTIONS_CODEC_VERSION,
+                GOOGLE_INTERACTIONS_SCHEMA_VERSION,
+                GOOGLE_INTERACTIONS_CONTENT_TYPE,
+            ),
+            private_state_inspector=lambda content: inspect_google_interaction_state(
+                content,
+                mode="stateful",
+            ),
+            cost_estimator=google_36_flash_request_ceiling_microusd,
+        )
+
+        result, _events = _execute(harness, adapter)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(
+            [
+                item.resolution_status
+                for item in harness.store.list_tool_invocations(
+                    session_id="session-hosted"
+                )
+            ],
+            ["parallel_denied", "budget_denied"],
+        )
+        journals = harness.store.list_provider_step_journals(
+            session_id="session-hosted"
+        )
+        self.assertEqual(journals[0].budget_tool_call_charges, 1)
+        self.assertEqual(journals[1].request_phase, "finalization")
+        self.assertNotIn("tools", transport.payloads[1])
+
     def test_google_parallel_calls_are_both_ledgered_denied_and_paired(self) -> None:
         harness = HostedAgenticHarness(
             self,
@@ -67,6 +123,7 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
                 content,
                 mode="stateful",
             ),
+            cost_estimator=google_36_flash_request_ceiling_microusd,
         )
 
         result, events = _execute(harness, adapter)
@@ -103,6 +160,7 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
                 OPENROUTER_AGENTIC_CONTENT_TYPE,
             ),
             private_state_inspector=inspect_openrouter_chat_state,
+            cost_estimator=openrouter_deepinfra_v4_flash_request_ceiling_microusd,
         )
 
         result, events = _execute(harness, adapter)
@@ -151,6 +209,7 @@ class HostedAgenticMultiCallTest(unittest.TestCase):
         )
         self.assertEqual(len(journals), 2)
         self.assertEqual(journals[0].observed_call_count, 2)
+        self.assertEqual(journals[0].budget_tool_call_charges, 2)
         self.assertEqual(journals[0].pairing_status, "consumed")
         self.assertTrue(all(item.commit_status == "committed" for item in journals))
 

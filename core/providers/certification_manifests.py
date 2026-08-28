@@ -53,6 +53,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_state.test_hosted_agentic_budget",
     "tests.unit.runtime_state.test_hosted_agentic_egress",
     "tests.unit.runtime_state.test_hosted_agentic_final_output_recovery",
+    "tests.unit.runtime_state.test_hosted_agentic_finalization",
     "tests.unit.runtime_state.test_hosted_agentic_authority_audit",
     "tests.unit.runtime_state.test_hosted_agentic_loop",
     "tests.unit.runtime_state.test_hosted_agentic_journal_loop",
@@ -88,10 +89,10 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="11",
+        suite_version="12",
         provider_id=provider_id,
         matrix_path=matrix_path,
-        matrix_revision="2026-08-27-r11-p2-tcb4",
+        matrix_revision="2026-08-27-r12-p3-tcb5",
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,
@@ -117,6 +118,7 @@ GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = _suite(
     matrix_path="docs/reference/google_agentic_certification_matrix.md",
     fixture_tests=(
         "tests.unit.providers.test_google_interactions_codec",
+        "tests.unit.providers.test_google_interactions_finalization_codec",
         "tests.unit.providers.test_google_interactions_pairing_codec",
         "tests.unit.providers.test_google_interactions_journal_codec",
         "tests.unit.providers.test_google_interactions_hosted_loop",
@@ -134,6 +136,7 @@ OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST = _suite(
     matrix_path="docs/reference/openrouter_agentic_certification_matrix.md",
     fixture_tests=(
         "tests.unit.providers.test_openrouter_agentic_codec",
+        "tests.unit.providers.test_openrouter_agentic_finalization_codec",
         "tests.unit.providers.test_openrouter_agentic_pairing_codec",
         "tests.unit.providers.test_openrouter_agentic_journal_codec",
         "tests.unit.providers.test_openrouter_input_composition",

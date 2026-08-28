@@ -2980,6 +2980,11 @@ def _provider_step_identity(record: ProviderStepJournalRecord) -> tuple[object, 
         record.base_provider_state_digest,
         record.pairing_source_journal_id,
         record.request_lineage_digest,
+        record.request_control_digest,
+        record.request_phase,
+        record.request_max_output_tokens,
+        record.budget_estimated_input_tokens,
+        record.budget_estimated_cost_microusd,
         record.created_at,
     )
 

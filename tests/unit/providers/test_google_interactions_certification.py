@@ -7,7 +7,10 @@ import os
 import unittest
 from unittest import mock
 
-from core.providers.agentic_protocol import EphemeralCredential
+from core.providers.agentic_protocol import (
+    EphemeralCredential,
+    HOSTED_FINALIZATION_INSTRUCTION,
+)
 from core.providers.google_interactions_client import GoogleInteractionsAgenticClient
 from core.providers.google_interactions_probe import (
     CERTIFICATION_PROBE_MAX_OUTPUT_TOKENS,
@@ -150,6 +153,12 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
         self.assertEqual(
             transport.payloads[2]["input"][0]["call_id"],
             "call-high-2",
+        )
+        final_payload = transport.payloads[2]
+        self.assertNotIn("tools", final_payload)
+        self.assertIn(
+            HOSTED_FINALIZATION_INSTRUCTION,
+            final_payload["system_instruction"],
         )
         self.assertEqual(len(result.result_summary_digest), 64)
         self.assertNotIn("OK", repr(result))

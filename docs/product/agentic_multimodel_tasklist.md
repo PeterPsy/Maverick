@@ -2,8 +2,8 @@
 
 Status date: 2026-08-27
 
-Target: Phase 2 provider-step journal, preliminary ledger, pairing, and
-productive recovery implemented; remote agentic release remains **NO-GO**.
+Target: Phase 3 hosted budget reservation and governed finalization implemented;
+remote agentic release remains **NO-GO**.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
 2.1 (2026-08-16), the definitive parity plan in workspace Storage, and ADR
@@ -85,7 +85,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v4 records six maintained transitive dependency contracts. The
+- [x] Manifest v5 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -96,8 +96,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v11 / matrix
-  `2026-08-27-r11-p2-tcb4`
+- [x] Google and OpenRouter suite v12 / matrix
+  `2026-08-27-r12-p3-tcb5`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -160,8 +160,9 @@ completion claim.
 
 - [x] Google and OpenRouter retain every indexed call, including OpenRouter
   indices above zero and calls decoded before a later terminal stream error.
-  Because parallel execution remains unsupported, all calls are journaled and
-  then denied together; none is silently discarded or executed.
+  Because parallel execution remains unsupported, all calls are journaled;
+  calls inside the remaining tool budget receive `parallel_denied` and overflow
+  receives `budget_denied`. None is silently discarded or executed.
 - [x] Provider response state is encrypted as staged state and never read as
   authoritative continuation state. Promotion occurs only after a validated
   final output or complete proposal → disposition → result/denial → pairing
@@ -221,9 +222,66 @@ completion claim.
 - [x] Quarantines blocked by diagnostic or first-CAS failure: `0`.
 - [x] Provider retries or duplicate final events after durable final commit: `0`.
 
+## Phase 3 — budget reservation and governed finalization
+
+### Separate durable budgets and protected resources
+
+- [x] Provider requests and provider tool proposals consume distinct counters.
+  Every exploration proposal consumes at most one durable tool-budget charge;
+  parallel overflow is journaled and denied without creating another provider
+  step. An accepted charge shares the proposal's journal CAS. Restart
+  reconstructs provider steps, tool charges, paired-result bytes, reported
+  input/output/cost, and conservative missing-usage reservations from
+  provider-step journal schema v3.
+- [x] Each hosted adapter pins a finalization policy. Google reserves two
+  2,048-token / 25,000-micro-USD / 20-second attempts; OpenRouter reserves two
+  2,048-token / 2,000-micro-USD / 20-second attempts. The second attempt is the
+  sole permitted recovery. The live profile ceiling must retain the current
+  final attempt plus any future recovery before dispatch.
+- [x] The controller exposes remaining provider steps, tool calls, output
+  tokens, micro-USD cost, wall time, and `finalization_reserved`. Request max
+  output, estimated input/cost, phase, tool charges, usage, and a separate
+  immutable request-control digest are durable. Missing finite cost authority,
+  a terminal request above its per-attempt certified cost ceiling, deadline
+  exhaustion, or live-policy narrowing fails visibly instead of consuming the
+  reserve.
+
+### Toolless closure and terminal behavior
+
+- [x] Eligibility and credential availability are checked before catalog
+  materialization, request construction, egress decisions, or provider
+  transport. When tool calls are exhausted—or another protected resource
+  reaches its reserve—the next request is `finalization` with an empty Core
+  catalog and a final trusted system instruction placed last.
+- [x] OpenRouter serializes `tools: []` and `tool_choice: none`; Google omits
+  `tools`. Both codecs require the exact Core finalization instruction and
+  reject phase/catalog mismatches before transport. The operator live probes
+  now use the same tool-less final request, but no live probe was run here.
+- [x] Empty or whitespace-only `text_final` is never committed or emitted as a
+  healthy final output. It is durably marked invalid, the staged provider state
+  is rolled back to the last commit, and `agent_final_output_empty` is visible.
+- [x] A tool proposed during finalization is first written to the preliminary
+  ledger, then receives a persisted `budget_denied` result and one paired
+  `finalization_recovery` request with the catalog still empty. A second tool
+  proposal is denied, no fourth request is sent, and the remaining pairing is
+  quarantined as `recovery_required` with a structured terminal failure.
+- [x] Every failure path emits `runtime.error` plus non-zero provider
+  completion; a successful path requires a non-whitespace final output. No
+  terminal path silently drops a proposal or leaves an ordinary running
+  session with an unconsumed provider pairing.
+
+### P3 exit gate
+
+- [x] Empty/whitespace healthy final outputs: `0`.
+- [x] Requests carrying tools after tool-budget exhaustion: `0`.
+- [x] Silent terminal turns: `0`.
+- [x] Finalization step/output/cost/time reserve violations: `0` in the
+  deterministic P3 matrix.
+- [x] Finalization recovery attempts beyond one: `0`.
+- [x] Codex profile/artifact revision changed by P3: `0`.
+
 ## Later parity and release gates — still open
 
-- [ ] Phase 3 finalization reserve.
 - [ ] Phase 4 complete semantic envelope, AGENTS materialization, and new tool
   contracts.
 - [ ] Run each complete provider manifest on an exact clean deployable commit:
@@ -235,9 +293,12 @@ completion claim.
   `docs/security/production_readiness.md` under a separate security review.
 
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false. No remote binding,
-profile, or certificate is enabled by P2; no Google/OpenRouter session, provider
-HTTP/SSE request, live probe, real-store migration/apply/restart, canary,
-production release, or push is part of this closure.
+profile, or certificate is enabled by P3; no Google/OpenRouter session, provider
+HTTP/SSE request, live probe, real-store containment/migration apply, canary,
+production release, or push is part of this closure. A backend restart after
+the verified commit is an operational code/schema reload only and does not
+alter those control-plane states. Exact Codex stays on profile revision 12 and
+its existing artifact digest.
 
 ## Evidence and acceptance links
 

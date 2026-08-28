@@ -52,6 +52,7 @@ async def consume_hosted_provider_step(
     on_accepted: Callable[[AgenticModelEvent], None] | None = None,
     on_tool_call: Callable[[AgenticModelEvent], dict[str, object]] | None = None,
     on_private_state: Callable[[AgenticModelEvent], None] | None = None,
+    on_usage: Callable[[AgenticModelEvent], None] | None = None,
 ):
     """Yield safe runtime emissions and one terminal normalized step."""
     accepted = False
@@ -59,6 +60,7 @@ async def consume_hosted_provider_step(
     final_text: str | None = None
     output_parts: list[str] = []
     tool_calls: list[AgenticToolCall] = []
+    usage_seen = False
     last_ordinal = 0
     try:
         stream = client.create_response(request, credential=credential)
@@ -118,9 +120,14 @@ async def consume_hosted_provider_step(
                     proposed_payload,
                 )
             elif provider_event.event_type == "usage":
+                if usage_seen:
+                    raise HostedAgenticLoopError("provider_response_invalid")
                 if provider_event.usage is None:
                     raise HostedAgenticLoopError("provider_response_invalid")
+                if on_usage is not None:
+                    on_usage(provider_event)
                 budget.add_usage(provider_event.usage)
+                usage_seen = True
                 yield HostedProviderStepEmission(
                     "provider.usage",
                     {

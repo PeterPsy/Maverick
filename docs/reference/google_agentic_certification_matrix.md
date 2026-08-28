@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-27
-Matrix revision: `2026-08-27-r11-p2-tcb4`
+Matrix revision: `2026-08-27-r12-p3-tcb5`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==7`
+Adapter: `maverick-hosted-tool-loop==8`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==7`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `15` (revision `14` suspended) |
+| Immutable profile revision | `16` (revision `15` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -22,6 +22,8 @@ Adapter: `maverick-hosted-tool-loop==7`
 | Private codec | `google-gemini-interactions@3`, schema `3`; no silent migration |
 | Reasoning levels | `high`; deployed default `high` |
 | Synthetic live probe output budget | 2,048 tokens per request, including thinking tokens |
+| Finalization reserve | one 2,048-token / 25,000-micro-USD / 20-second final request plus one equal recovery |
+| Final request | exact Core finalization instruction; `tools` omitted |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
 | Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
@@ -49,7 +51,7 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
-| Certified execution TCB | manifest v4 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v5 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -63,12 +65,13 @@ Primary references:
 | Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
 | Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
+| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve; final payload omits tools; exact final instruction; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
 | Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only two sequential real-filesystem-list calls plus final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r11 |
+| Live capability probe | operator-only two sequential real-filesystem-list calls plus one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r12 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
@@ -93,7 +96,14 @@ The executable signing and publication workflow is defined in
 - A function name not present in the exact request catalog is still inserted in
   the preliminary ledger, then receives an `unknown_tool` denial and result.
 - Multiple function calls are all retained in private codec state and the
-  journal, then each receives `parallel_denied`; none is executed or discarded.
+  journal. Calls within the remaining tool budget receive `parallel_denied`;
+  overflow receives `budget_denied`. None is executed or discarded.
+- A final request with any tool definition, a missing/modified finalization
+  instruction, or an incoherent phase is rejected before transport. Google
+  finalization omits the `tools` member.
+- Empty/whitespace final text is rolled back with
+  `agent_final_output_empty`. A finalization tool call is journaled and
+  `budget_denied`; only one paired tool-less recovery is allowed.
 - A requested reasoning effort outside the immutable certificate tuple, or a
   certificate/binding reasoning-contract mismatch, is rejected before use.
 - Provider terminal statuses keep their registered reason code through the
@@ -134,4 +144,13 @@ Revision 15 pins adapter 7, suite 11, matrix
 same-turn pairing ownership and input lineage, containment-first quarantine,
 and private final-output outbox delivery across commit/restart crashes. The
 retained `live_probe` was not selected or run, no behavioral evidence was
-created, and this candidate remains suspended and uncertified.
+created, and this revision is now suspended and uncertified.
+
+Revision 16 pins adapter 8, suite 12, matrix
+`2026-08-27-r12-p3-tcb5`, and TCB manifest v5 for the Phase-3 finalization
+closure: restart-safe provider/tool budgets, protected final/recovery
+step-output-cost-deadline capacity, an exact tool-less Google final payload,
+whitespace rejection, journaled denial of unexpected final calls, and at most
+one paired recovery. The retained `live_probe` was updated to exercise the
+tool-less final request but was not selected or run. No behavioral evidence or
+certificate was created; revision 16 remains a contained, uncertified preview.

@@ -33,6 +33,7 @@ from core.runtime.hosted_agentic_engine import (
 from core.runtime.hosted_agentic_loop import HostedAgenticLoop
 from core.runtime.hosted_agentic_models import (
     HostedContentClassification,
+    HostedFinalizationPolicy,
     HostedProviderPrivateCodec,
 )
 from core.runtime.hosted_agentic_request import HostedAgenticRequestBuilder
@@ -277,6 +278,8 @@ class HostedAgenticHarness:
         cost_estimator=None,
         authority_refresher=None,
         private_state_inspector=None,
+        finalization_policy: HostedFinalizationPolicy | None = None,
+        credential_required: bool = False,
     ) -> HostedAgenticEngineAdapter:
         runtimes = HostedProviderRuntimeRegistry()
         runtimes.register(
@@ -293,6 +296,15 @@ class HostedAgenticHarness:
                     content_type="application/vnd.maverick.fake-private",
                 ),
                 cost_estimator=cost_estimator or (lambda _request: 0),
+                finalization_policy=finalization_policy
+                or HostedFinalizationPolicy(
+                    exploration_max_output_tokens=128,
+                    finalization_max_output_tokens=128,
+                    finalization_cost_reserve_microusd_per_attempt=0,
+                    finalization_time_reserve_seconds_per_attempt=0.25,
+                    max_recovery_attempts=1,
+                ),
+                credential_required=credential_required,
                 private_state_inspector=private_state_inspector,
             )
         )

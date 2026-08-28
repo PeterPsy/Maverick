@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from core.providers.agentic_protocol import AgenticModelRequest, AgenticToolResult
+from core.providers.agentic_protocol import (
+    AgenticModelRequest,
+    AgenticToolResult,
+    HOSTED_FINALIZATION_INSTRUCTION,
+)
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_ENDPOINT_ID,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
@@ -17,6 +21,7 @@ def openrouter_chat_payload(
 ) -> tuple[dict[str, object], tuple[dict[str, object], ...]]:
     """Return the exact certified payload and messages newly added this step."""
     _validate_routing(request)
+    _validate_request_phase(request)
     new_messages = _new_messages(request, state)
     messages = [*state.history, *new_messages]
     if not messages:
@@ -96,6 +101,11 @@ def _new_messages(
                     "content": _decode_utf8(result.content, pairing=True),
                 }
             )
+        finalization_instruction = _finalization_instruction(request)
+        if finalization_instruction is not None:
+            messages.append(
+                {"role": "system", "content": finalization_instruction}
+            )
         return tuple(messages)
     if any(
         value is not None
@@ -115,6 +125,8 @@ def _new_messages(
     )
     system_values: list[str] = []
     for block in request.content_blocks:
+        if block.provenance == "finalization_instruction":
+            continue
         if block.role not in {"system", "user"} or not _textual_content_type(
             block.content_type
         ):
@@ -133,7 +145,47 @@ def _new_messages(
             values.insert(0, system_message)
     if not any(item["role"] == "user" for item in values):
         raise OpenRouterAgenticProtocolError("provider_request_invalid")
+    finalization_instruction = _finalization_instruction(request)
+    if finalization_instruction is not None:
+        values.append({"role": "system", "content": finalization_instruction})
     return tuple(values)
+
+
+def _validate_request_phase(request: AgenticModelRequest) -> None:
+    finalization_blocks = tuple(
+        block
+        for block in request.content_blocks
+        if block.provenance == "finalization_instruction"
+    )
+    if request.request_phase == "exploration":
+        if finalization_blocks:
+            raise OpenRouterAgenticProtocolError("provider_request_invalid")
+        return
+    if (
+        request.request_phase not in {"finalization", "finalization_recovery"}
+        or request.tool_definitions
+        or len(finalization_blocks) != 1
+        or not request.content_blocks
+        or request.content_blocks[-1] != finalization_blocks[0]
+        or finalization_blocks[0].role != "system"
+        or finalization_blocks[0].data_class != "public"
+        or finalization_blocks[0].trust_level != "trusted_platform"
+        or finalization_blocks[0].content_type != "text/plain"
+        or finalization_blocks[0].content
+        != HOSTED_FINALIZATION_INSTRUCTION.encode("utf-8")
+    ):
+        raise OpenRouterAgenticProtocolError("provider_request_invalid")
+
+
+def _finalization_instruction(request: AgenticModelRequest) -> str | None:
+    if request.request_phase == "exploration":
+        return None
+    block = next(
+        item
+        for item in request.content_blocks
+        if item.provenance == "finalization_instruction"
+    )
+    return _decode_utf8(block.content)
 
 
 def _validate_pairing_lineage(request: AgenticModelRequest) -> None:

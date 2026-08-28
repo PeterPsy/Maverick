@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+import json
 from types import SimpleNamespace
 import unittest
 
 from core.providers.agentic_adapter import RuntimeRecoveryContext
-from core.runtime.hosted_agentic_models import (
-    HostedAgenticLoopError,
-)
+from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.hosted_agentic_state import HostedAgenticStateBridge
 from core.runtime.tool_orchestrator import RuntimeToolConfirmationPolicy
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
@@ -20,6 +19,41 @@ class _StartupSentinel(RuntimeError):
 
 
 class HostedAgenticRecoveryTest(unittest.TestCase):
+    def test_finalization_phase_chain_is_scoped_to_each_turn(self) -> None:
+        harness = HostedAgenticHarness(self)
+        adapter = harness.adapter(DeterministicFakeAgenticClient())
+        base = self._begin(harness, adapter, "request-phase-base")
+        final_turn = replace(
+            base,
+            journal_id="journal-final-turn",
+            request_id="request-final-turn",
+            turn_id="turn-final",
+            request_phase="finalization",
+        )
+        next_turn = replace(
+            base,
+            journal_id="journal-next-turn",
+            request_id="request-next-turn",
+            turn_id="turn-next",
+            request_phase="exploration",
+        )
+        recovery = adapter.loop.recovery
+        runtime = adapter.loop.provider_runtimes.resolve(harness.binding)
+        recovery._validate_chain(
+            (final_turn, next_turn),
+            binding=harness.binding,
+            provider_runtime=runtime,
+        )
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "provider_finalization_phase_chain_invalid",
+        ):
+            recovery._validate_chain(
+                (final_turn, replace(next_turn, turn_id="turn-final")),
+                binding=harness.binding,
+                provider_runtime=runtime,
+            )
+
     def test_transport_before_acceptance_rolls_back_but_after_acceptance_quarantines(self) -> None:
         safe = HostedAgenticHarness(self)
         safe_adapter = safe.adapter(DeterministicFakeAgenticClient())
@@ -122,6 +156,12 @@ class HostedAgenticRecoveryTest(unittest.TestCase):
                         record,
                         outcome.invocation.result_id,
                     )
+                    record = _record_result_budget(
+                        harness,
+                        adapter.loop.provider_step_journal,
+                        record,
+                        outcome.invocation,
+                    )
                     record = adapter.loop.provider_step_journal.mark_pairing_ready(record)
                 if crash_point == "pre_commit":
                     harness.private_state_service.promote_staged_state(
@@ -159,6 +199,8 @@ class HostedAgenticRecoveryTest(unittest.TestCase):
                 self.assertTrue(replay.recovered)
                 self.assertEqual(terminal.commit_status, "committed")
                 self.assertEqual(terminal.pairing_status, "ready")
+                self.assertEqual(terminal.budget_tool_call_charges, 1)
+                self.assertGreater(terminal.budget_tool_result_bytes, 0)
                 self.assertEqual(
                     harness.store.get_provider_step_journal(record.journal_id).revision,
                     revision,
@@ -296,6 +338,12 @@ class HostedAgenticRecoveryTest(unittest.TestCase):
         record = journal.add_disposition(record, result.invocation.disposition_id)
         record = journal.complete_dispositions(record)
         record = journal.add_result(record, result.invocation.result_id)
+        record = _record_result_budget(
+            harness,
+            journal,
+            record,
+            result.invocation,
+        )
         journal.mark_pairing_ready(record)
         harness.private_state_service.promote_staged_state(
             session_id="session-hosted",
@@ -365,6 +413,11 @@ class HostedAgenticRecoveryTest(unittest.TestCase):
                 ).private_codec,
                 pairing_source_journal_id=None,
                 request_lineage_digest="1" * 64,
+                request_control_digest="2" * 64,
+                request_phase="exploration",
+                request_max_output_tokens=128,
+                budget_estimated_input_tokens=32,
+                budget_estimated_cost_microusd=0,
             )
         )
 
@@ -411,7 +464,11 @@ class HostedAgenticRecoveryTest(unittest.TestCase):
             turn_id="turn-hosted",
             policy=_no_confirmation_policy(),
         )
-        record = journal.add_proposal(record, outcome.invocation.proposal_id)
+        record = journal.add_proposal(
+            record,
+            outcome.invocation.proposal_id,
+            charge_tool_budget=True,
+        )
         record = journal.complete_stream(record, final_output_validated=False)
         return record, outcome, envelope
 
@@ -423,6 +480,19 @@ def _no_confirmation_policy() -> RuntimeToolConfirmationPolicy:
         require_confirmation_for_destructive=False,
         max_tool_result_bytes=4096,
     )
+
+
+def _record_result_budget(harness, journal, record, invocation):
+    payload = harness.orchestrator.ledger.load_result(invocation)
+    size_bytes = len(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    )
+    return journal.record_tool_result_bytes(record, total_bytes=size_bytes)
 
 
 if __name__ == "__main__":

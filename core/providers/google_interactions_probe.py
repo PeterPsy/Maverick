@@ -18,6 +18,7 @@ from core.providers.agentic_protocol import (
     AgenticRequestContentBlock,
     AgenticToolDefinition,
     EphemeralCredential,
+    HOSTED_FINALIZATION_INSTRUCTION,
 )
 from core.providers.google_agentic_profile import (
     GOOGLE_CERTIFIED_REASONING_EFFORTS,
@@ -157,6 +158,7 @@ async def probe_google_interactions(
                         tool_definition=filesystem_probe.definition,
                         private_state=private,
                         tool_results=tuple(tool_results),
+                        finalize=True,
                     ),
                     credential=credential,
                 )
@@ -174,7 +176,11 @@ async def probe_google_interactions(
             completed = any(
                 event.event_type == "completed" for event in final_response
             )
-            final = any(event.event_type == "text_final" for event in final_response)
+            final = any(
+                event.event_type == "text_final"
+                and bool((event.text or "").strip())
+                for event in final_response
+            )
             if error or not (completed and final):
                 return _result(
                     test_run_id, events, error or "probe_final_response_missing", request_count,
@@ -192,6 +198,7 @@ def _probe_request(
     tool_definition: AgenticToolDefinition,
     private_state=None,
     tool_results=(),
+    finalize: bool = False,
 ) -> AgenticModelRequest:
     pairing = private_state is not None and bool(tool_results)
     return AgenticModelRequest(
@@ -216,8 +223,23 @@ def _probe_request(
                     "This isolated directory contains synthetic data only."
                 ).encode("utf-8"),
             ),
+            *(
+                (
+                    AgenticRequestContentBlock(
+                        content_block_id=f"{request_id}:finalization",
+                        role="system",
+                        data_class="public",
+                        provenance="finalization_instruction",
+                        trust_level="trusted_platform",
+                        content_type="text/plain",
+                        content=HOSTED_FINALIZATION_INSTRUCTION.encode("utf-8"),
+                    ),
+                )
+                if finalize
+                else ()
+            ),
         ),
-        tool_definitions=(tool_definition,),
+        tool_definitions=() if finalize else (tool_definition,),
         tool_results=tool_results,
         provider_private_state=private_state,
         routing_constraint=google_interactions_routing_constraint(),
@@ -236,6 +258,7 @@ def _probe_request(
         pairing_source_request_id=(
             private_state.provider_request_id if pairing else None
         ),
+        request_phase="finalization" if finalize else "exploration",
     )
 
 

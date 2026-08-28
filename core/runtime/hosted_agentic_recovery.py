@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from uuid import NAMESPACE_URL, uuid5
 
 from core.runtime.hosted_agentic_models import (
@@ -393,7 +394,11 @@ class HostedAgenticRecovery:
             binding=binding,
             provider_runtime=provider_runtime,
         )
-        record = self._repair_orphan_proposals(record, inspection=inspection)
+        record = self._repair_orphan_proposals(
+            record,
+            inspection=inspection,
+            binding=binding,
+        )
         if record.observed_call_count == 0:
             if record.final_output_status == "pending":
                 codec = provider_runtime.private_codec
@@ -500,6 +505,7 @@ class HostedAgenticRecovery:
         record: ProviderStepJournalRecord,
         *,
         inspection: HostedProviderStateInspection | None,
+        binding,
     ) -> ProviderStepJournalRecord:
         """Complete the WAL half of a proposal insert interrupted between stores."""
         if inspection is not None and inspection.pending_tool_calls:
@@ -550,8 +556,30 @@ class HostedAgenticRecovery:
                 "provider_journal_proposal_order_conflict",
                 record,
             )
+        prior_charges = sum(
+            item.budget_tool_call_charges
+            for item in self.journal.store.list_provider_step_journals(
+                session_id=record.session_id,
+                turn_id=record.turn_id,
+            )
+            if item.step_index < record.step_index
+        )
+        tool_call_ceiling = min(
+            binding.profile_policy_ceiling_snapshot.max_tool_calls_per_turn,
+            binding.workspace_policy_ceiling_snapshot.max_tool_calls_per_turn,
+        )
         for candidate in candidates[len(record.proposal_ids) :]:
-            record = self.journal.add_proposal(record, candidate.proposal_id)
+            charge_tool_budget = (
+                record.request_phase == "exploration"
+                and record.budget_tool_call_charges == record.observed_call_count
+                and prior_charges + record.budget_tool_call_charges
+                < tool_call_ceiling
+            )
+            record = self.journal.add_proposal(
+                record,
+                candidate.proposal_id,
+                charge_tool_budget=charge_tool_budget,
+            )
         return record
 
     def _recover_tool_results(
@@ -559,9 +587,50 @@ class HostedAgenticRecovery:
         record: ProviderStepJournalRecord,
     ) -> tuple[ProviderStepJournalRecord, int]:
         execution_unknown = 0
-        for proposal_id in record.proposal_ids:
+        total_result_bytes = 0
+        for call_index, proposal_id in enumerate(record.proposal_ids):
             invocation = self.tool_ledger.store.get_tool_invocation(proposal_id)
-            if invocation.state == "executing":
+            forced_denial: tuple[str, str] | None = None
+            if record.request_phase != "exploration":
+                forced_denial = (
+                    "budget_denied",
+                    "agent_finalization_tool_call_forbidden",
+                )
+            elif call_index >= record.budget_tool_call_charges:
+                forced_denial = (
+                    "budget_denied",
+                    "agent_tool_call_limit_reached",
+                )
+            elif record.observed_call_count > 1:
+                forced_denial = (
+                    "parallel_denied",
+                    "provider_parallel_tool_calls_forbidden",
+                )
+            if forced_denial is not None:
+                resolution_status, failure_reason = forced_denial
+                if invocation.state == "denied":
+                    if (
+                        invocation.resolution_status != resolution_status
+                        or invocation.failure_reason != failure_reason
+                    ):
+                        raise _RecoveryAmbiguous(
+                            "provider_pairing_ambiguous",
+                            "provider_budget_disposition_mismatch",
+                            record,
+                        )
+                elif invocation.state in {"proposed", "validating", "validated"}:
+                    invocation = self.tool_ledger.deny(
+                        invocation,
+                        resolution_status=resolution_status,
+                        failure_reason=failure_reason,
+                    )
+                else:
+                    raise _RecoveryAmbiguous(
+                        "provider_pairing_ambiguous",
+                        "provider_budget_disposition_missing_before_effect",
+                        record,
+                    )
+            elif invocation.state == "executing":
                 invocation = self.tool_ledger.recover_executing(
                     invocation,
                     safe_to_retry=False,
@@ -601,6 +670,19 @@ class HostedAgenticRecovery:
                     record,
                 )
             record = self.journal.add_result(record, invocation.result_id)
+            result = self.tool_ledger.load_result(invocation)
+            total_result_bytes += len(
+                json.dumps(
+                    result,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode()
+            )
+        record = self.journal.record_tool_result_bytes(
+            record,
+            total_bytes=total_result_bytes,
+        )
         record = self.journal.complete_dispositions(record)
         record = self.journal.mark_pairing_ready(record)
         return record, execution_unknown
@@ -708,6 +790,61 @@ class HostedAgenticRecovery:
                 "provider_recovery_binding_or_codec_mismatch",
                 records[-1],
             )
+        valid_phases = {
+            "exploration",
+            "finalization",
+            "finalization_recovery",
+        }
+        records_by_turn: dict[str, list[ProviderStepJournalRecord]] = {}
+        for item in records:
+            records_by_turn.setdefault(item.turn_id, []).append(item)
+        for turn_records in records_by_turn.values():
+            ordered = sorted(turn_records, key=lambda item: item.step_index)
+            phases = tuple(item.request_phase for item in ordered)
+            first_finalization = next(
+                (
+                    index
+                    for index, phase in enumerate(phases)
+                    if phase != "exploration"
+                ),
+                len(phases),
+            )
+            recovery_index = next(
+                (
+                    index
+                    for index, phase in enumerate(phases)
+                    if phase == "finalization_recovery"
+                ),
+                None,
+            )
+            normal_finalizations = [
+                item for item in ordered if item.request_phase == "finalization"
+            ]
+            phase_chain_invalid = (
+                any(phase not in valid_phases for phase in phases)
+                or phases.count("finalization_recovery") > 1
+                or "exploration" in phases[first_finalization:]
+                or (
+                    recovery_index is not None
+                    and recovery_index != len(phases) - 1
+                )
+                or any(
+                    item.request_phase == "finalization_recovery"
+                    and item.pairing_source_journal_id is None
+                    for item in ordered
+                )
+                or any(
+                    item.acceptance_status == "accepted"
+                    or item.commit_status != "rolled_back"
+                    for item in normal_finalizations[:-1]
+                )
+            )
+            if phase_chain_invalid:
+                raise _RecoveryAmbiguous(
+                    "provider_state_ambiguous",
+                    "provider_finalization_phase_chain_invalid",
+                    ordered[-1],
+                )
         by_id = {item.journal_id: item for item in records}
         if len(by_id) != len(records):
             raise _RecoveryAmbiguous(
@@ -736,6 +873,17 @@ class HostedAgenticRecovery:
                 or not item.request_lineage_digest
                 or len(item.request_lineage_digest) != 64
                 or source.request_lineage_digest != item.request_lineage_digest
+                or (
+                    item.request_phase == "finalization_recovery"
+                    and source.request_phase != "finalization"
+                )
+                or (
+                    source.request_phase in {
+                        "finalization",
+                        "finalization_recovery",
+                    }
+                    and item.request_phase != "finalization_recovery"
+                )
             ):
                 raise _RecoveryAmbiguous(
                     "provider_pairing_ambiguous",

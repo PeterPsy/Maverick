@@ -84,7 +84,7 @@ class HostedAgenticJournalLoopTest(unittest.TestCase):
         self.assertLess(started, boundary)
         self.assertLess(boundary, completed)
 
-    def test_tool_budget_stops_repeating_provider_before_duplicate_side_effect(self) -> None:
+    def test_tool_budget_allows_only_one_finalization_recovery(self) -> None:
         harness = HostedAgenticHarness(self, max_tool_calls=1)
         client = DeterministicFakeAgenticClient(
             tool_name=harness.read_tool_name,
@@ -96,14 +96,17 @@ class HostedAgenticJournalLoopTest(unittest.TestCase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertEqual(harness.cli_calls, 1)
-        self.assertEqual(len(client.requests), 4)
+        self.assertEqual(len(client.requests), 3)
         errors = [event.payload for event in events if event.event_type == "runtime.error"]
-        self.assertEqual(errors, [{"reason_code": "agent_step_limit_reached"}])
+        self.assertEqual(
+            errors,
+            [{"reason_code": "agent_finalization_recovery_exhausted"}],
+        )
         records = harness.store.list_tool_invocations(session_id="session-hosted")
-        self.assertEqual(len(records), 4)
+        self.assertEqual(len(records), 3)
         self.assertEqual(
             [record.resolution_status for record in records],
-            ["succeeded", "budget_denied", "budget_denied", "budget_denied"],
+            ["succeeded", "budget_denied", "budget_denied"],
         )
 
     def test_restart_replay_reuses_persisted_tool_result_without_duplicate_execution(self) -> None:

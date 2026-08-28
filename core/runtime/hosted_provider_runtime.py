@@ -8,10 +8,27 @@ from core.providers.agentic_protocol import AgenticModelProviderClient
 from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     HostedCostEstimator,
+    HostedFinalizationPolicy,
     HostedProviderPrivateCodec,
     HostedProviderStateInspector,
 )
 from core.runtime.remote_agentic_admission import require_remote_agentic_dispatch
+
+
+GOOGLE_HOSTED_FINALIZATION_POLICY = HostedFinalizationPolicy(
+    exploration_max_output_tokens=2_048,
+    finalization_max_output_tokens=2_048,
+    finalization_cost_reserve_microusd_per_attempt=25_000,
+    finalization_time_reserve_seconds_per_attempt=20.0,
+    max_recovery_attempts=1,
+)
+OPENROUTER_HOSTED_FINALIZATION_POLICY = HostedFinalizationPolicy(
+    exploration_max_output_tokens=2_048,
+    finalization_max_output_tokens=2_048,
+    finalization_cost_reserve_microusd_per_attempt=2_000,
+    finalization_time_reserve_seconds_per_attempt=20.0,
+    max_recovery_attempts=1,
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +41,8 @@ class HostedProviderRuntime:
     client: AgenticModelProviderClient
     private_codec: HostedProviderPrivateCodec
     cost_estimator: HostedCostEstimator
+    finalization_policy: HostedFinalizationPolicy
+    credential_required: bool = True
     private_state_inspector: HostedProviderStateInspector | None = None
 
 

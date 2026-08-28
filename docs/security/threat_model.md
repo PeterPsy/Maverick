@@ -195,7 +195,7 @@ execution binding, and live status derive from that same manifest; the
 publisher recomputes it. Drift in runtime API, classifier, input composition,
 ledger/store, lifecycle, codec/transport, or UI governance invalidates remote
 authority before create, continuation, refresh, or dispatch. Legacy remote
-certificates with no valid TCB identity fail closed. Manifest v4 prevents a
+certificates with no valid TCB identity fail closed. Manifest v5 prevents a
 covered module from outsourcing authority or provider content to an unhashed
 local dependency: six code-owned contracts statically walk the relevant import
 closures and package initializers, including
@@ -215,8 +215,9 @@ argument locator/HMAC, policy revision, and authority digest remain durable.
 Exact replay deduplicates and divergent reuse of a call id fails closed. Google
 and OpenRouter retain later indexed calls and calls decoded before a subsequent
 terminal stream error. Unsupported parallel responses are fully journaled and
-then denied/paired, so a secondary malicious call cannot disappear from audit
-or execute outside sequential policy.
+then denied/paired; calls beyond the remaining tool budget receive an explicit
+`budget_denied` disposition. A secondary malicious call cannot disappear from
+audit or execute outside sequential policy.
 
 One-shot grants bind actor, session, turn, invocation, tool handle, canonical
 argument HMAC, policy revision, and expiry. The active-to-consumed transition
@@ -225,6 +226,30 @@ precedes the persisted effect boundary; result persistence precedes the
 completed/failed event. `executing` is persisted before the boundary, and
 uncertain mutating/destructive outcomes become `execution_unknown` and are not
 replayed. Browser state and model-supplied ids are not authoritative.
+
+### Budget exhaustion or silent terminal turn
+
+A provider may consume every exploration step, output token, cost unit, or
+deadline; continue calling tools after Core closes the catalog; or return an
+empty final so that a turn appears healthy without a usable answer.
+
+Hosted adapters pin terminal resources for one final request and at most one
+recovery. Provider requests and tool proposals use separate durable counters;
+journal schema v3 restores request reservations, usage, tool charges, and
+result bytes after restart. Proposal and accepted charge share one CAS; a
+terminal request above its certified per-attempt cost allocation fails before
+transport. Live policy only narrows. Required credentials and effective
+eligibility are checked before request construction/export. Once a reserve
+boundary is reached, Core sends an empty tool catalog with an exact trusted
+final instruction. Google omits `tools`; OpenRouter sends `tools: []` with
+`tool_choice: none`. Codec drift fails before transport.
+
+Whitespace is durably rejected and staged state rolls back. An unexpected
+finalization call remains a preliminary ledger proposal, receives a persisted
+`budget_denied` result, and can trigger only one tool-less paired recovery. A
+second call is denied without another request and leaves the session in
+`recovery_required`. Every terminal failure is a structured runtime error with
+non-zero completion; no unconsumed call is hidden on a running session.
 
 ### Provider-private state disclosure or corruption
 

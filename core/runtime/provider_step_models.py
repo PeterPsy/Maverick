@@ -36,6 +36,11 @@ ProviderFinalOutputStatus = Literal[
     "ready",
     "delivered",
 ]
+ProviderRequestPhase = Literal[
+    "exploration",
+    "finalization",
+    "finalization_recovery",
+]
 
 
 @dataclass(frozen=True)
@@ -63,6 +68,11 @@ class ProviderStepJournalRecord:
     base_provider_state_digest: str | None
     pairing_source_journal_id: str | None
     request_lineage_digest: str | None
+    request_control_digest: str | None
+    request_phase: ProviderRequestPhase
+    request_max_output_tokens: int
+    budget_estimated_input_tokens: int
+    budget_estimated_cost_microusd: int | None
     request_status: ProviderRequestStatus
     acceptance_status: ProviderAcceptanceStatus
     stream_status: ProviderStreamStatus
@@ -79,7 +89,14 @@ class ProviderStepJournalRecord:
     disposition_ids: tuple[str, ...]
     result_ids: tuple[str, ...]
     observed_call_count: int
+    budget_tool_call_charges: int
+    budget_tool_result_bytes: int
+    usage_report_count: int
+    usage_input_tokens: int
+    usage_output_tokens: int
+    usage_cost_microusd: int | None
     final_output_validated: bool
+    invalid_final_output: bool
     final_output_status: ProviderFinalOutputStatus
     final_completion_status: ProviderFinalOutputStatus
     final_output_id: str | None
@@ -128,6 +145,11 @@ def provider_step_journal_from_document(
     payload.setdefault("base_provider_state_digest", None)
     payload.setdefault("pairing_source_journal_id", None)
     payload.setdefault("request_lineage_digest", None)
+    payload.setdefault("request_control_digest", None)
+    payload.setdefault("request_phase", "exploration")
+    payload.setdefault("request_max_output_tokens", 0)
+    payload.setdefault("budget_estimated_input_tokens", 0)
+    payload.setdefault("budget_estimated_cost_microusd", None)
     payload.setdefault("provider_response_id", None)
     payload.setdefault("provider_upstream_id", None)
     payload.setdefault("final_output_status", "pending")
@@ -136,6 +158,13 @@ def provider_step_journal_from_document(
     payload.setdefault("final_output_private_ref", None)
     payload.setdefault("final_output_sha256", None)
     payload.setdefault("final_output_size_bytes", None)
+    payload.setdefault("budget_tool_call_charges", 0)
+    payload.setdefault("budget_tool_result_bytes", 0)
+    payload.setdefault("usage_report_count", 0)
+    payload.setdefault("usage_input_tokens", 0)
+    payload.setdefault("usage_output_tokens", 0)
+    payload.setdefault("usage_cost_microusd", None)
+    payload.setdefault("invalid_final_output", False)
     payload.setdefault("recovery_reason_code", None)
     payload.setdefault("recovery_detail_private_ref", None)
     payload.setdefault("stream_failure_reason_code", None)

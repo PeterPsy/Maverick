@@ -13,7 +13,7 @@ from core.runtime.provider_step_models import ProviderStepJournalRecord
 from core.runtime.store import RuntimeStore
 
 
-PROVIDER_STEP_JOURNAL_SCHEMA_VERSION = "2"
+PROVIDER_STEP_JOURNAL_SCHEMA_VERSION = "3"
 ProviderStepFaultHook = Callable[[str, ProviderStepJournalRecord], None]
 PROVEN_PROVIDER_TERMINAL_FAILURES = frozenset(
     {
@@ -48,6 +48,11 @@ class ProviderStepJournal:
         codec,
         pairing_source_journal_id: str | None,
         request_lineage_digest: str | None = None,
+        request_control_digest: str,
+        request_phase: str,
+        request_max_output_tokens: int,
+        budget_estimated_input_tokens: int,
+        budget_estimated_cost_microusd: int | None,
         now: datetime | None = None,
     ) -> ProviderStepJournalRecord:
         """Persist REQUEST_READY before any transport operation can begin."""
@@ -103,6 +108,15 @@ class ProviderStepJournal:
                 != source_envelope.opaque_state_ref
                 or current_envelope.provider_request_id != source.request_id
                 or current_envelope.turn_generation != source.turn_id
+                or (
+                    request_phase == "finalization_recovery"
+                    and source.request_phase != "finalization"
+                )
+                or (
+                    source.request_phase
+                    in {"finalization", "finalization_recovery"}
+                    and request_phase != "finalization_recovery"
+                )
             ):
                 raise RuntimeProviderStateError("provider_pairing_source_invalid")
         base_envelope = provider_state.provider_private_envelope
@@ -130,6 +144,11 @@ class ProviderStepJournal:
             ),
             pairing_source_journal_id=pairing_source_journal_id,
             request_lineage_digest=request_lineage_digest,
+            request_control_digest=request_control_digest,
+            request_phase=request_phase,
+            request_max_output_tokens=request_max_output_tokens,
+            budget_estimated_input_tokens=budget_estimated_input_tokens,
+            budget_estimated_cost_microusd=budget_estimated_cost_microusd,
             request_status="ready",
             acceptance_status="pending",
             stream_status="pending",
@@ -146,7 +165,14 @@ class ProviderStepJournal:
             disposition_ids=(),
             result_ids=(),
             observed_call_count=0,
+            budget_tool_call_charges=0,
+            budget_tool_result_bytes=0,
+            usage_report_count=0,
+            usage_input_tokens=0,
+            usage_output_tokens=0,
+            usage_cost_microusd=None,
             final_output_validated=False,
+            invalid_final_output=False,
             final_output_status="pending",
             final_completion_status="pending",
             final_output_id=None,
@@ -162,6 +188,29 @@ class ProviderStepJournal:
         )
         if not record.turn_id:
             raise ValueError("Provider-step journal requires a turn identity.")
+        if request_phase not in {
+            "exploration",
+            "finalization",
+            "finalization_recovery",
+        }:
+            raise ValueError("Provider-step journal request phase is invalid.")
+        if (
+            not isinstance(request_control_digest, str)
+            or len(request_control_digest) != 64
+        ):
+            raise ValueError("Provider-step journal control digest is invalid.")
+        for value in (request_max_output_tokens, budget_estimated_input_tokens):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ValueError("Provider-step journal budget reservation is invalid.")
+        if (
+            budget_estimated_cost_microusd is not None
+            and (
+                not isinstance(budget_estimated_cost_microusd, int)
+                or isinstance(budget_estimated_cost_microusd, bool)
+                or budget_estimated_cost_microusd < 0
+            )
+        ):
+            raise ValueError("Provider-step journal cost reservation is invalid.")
         persisted = self.store.initialize_provider_step_journal(record)
         self._fault("request_ready", persisted)
         return persisted
@@ -251,16 +300,134 @@ class ProviderStepJournal:
         record: ProviderStepJournalRecord,
         proposal_id: str,
         *,
+        charge_tool_budget: bool = False,
         now: datetime | None = None,
     ) -> ProviderStepJournalRecord:
         if proposal_id in record.proposal_ids:
             return record
+        if charge_tool_budget and (
+            record.request_phase != "exploration"
+            or record.budget_tool_call_charges != record.observed_call_count
+        ):
+            raise RuntimeProviderStateError("provider_tool_budget_charge_invalid")
         return self._update(
             record,
             "proposal_persisted",
             proposal_ids=(*record.proposal_ids, proposal_id),
             observed_call_count=record.observed_call_count + 1,
+            budget_tool_call_charges=(
+                record.budget_tool_call_charges + 1
+                if charge_tool_budget
+                else record.budget_tool_call_charges
+            ),
             now=now,
+        )
+
+    def record_usage(
+        self,
+        record: ProviderStepJournalRecord,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        cost_microusd: int | None,
+        now: datetime | None = None,
+    ) -> ProviderStepJournalRecord:
+        """Persist the sole provider usage fact used to restore turn budgets."""
+        if any(
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value < 0
+            for value in (input_tokens, output_tokens)
+        ) or (
+            cost_microusd is not None
+            and (
+                not isinstance(cost_microusd, int)
+                or isinstance(cost_microusd, bool)
+                or cost_microusd < 0
+            )
+        ):
+            raise RuntimeProviderStateError("provider_usage_transition_invalid")
+        identity = (input_tokens, output_tokens, cost_microusd)
+        persisted = (
+            record.usage_input_tokens,
+            record.usage_output_tokens,
+            record.usage_cost_microusd,
+        )
+        if record.usage_report_count == 1:
+            if persisted != identity:
+                raise RuntimeProviderStateError("provider_usage_identity_conflict")
+            return record
+        if (
+            record.usage_report_count != 0
+            or record.acceptance_status != "accepted"
+            or record.commit_status != "pending"
+        ):
+            raise RuntimeProviderStateError("provider_usage_transition_invalid")
+        return self._update(
+            record,
+            "provider_usage_recorded",
+            usage_report_count=1,
+            usage_input_tokens=input_tokens,
+            usage_output_tokens=output_tokens,
+            usage_cost_microusd=cost_microusd,
+            now=now,
+        )
+
+    def record_tool_result_bytes(
+        self,
+        record: ProviderStepJournalRecord,
+        *,
+        total_bytes: int,
+        now: datetime | None = None,
+    ) -> ProviderStepJournalRecord:
+        """Persist cumulative paired-result bytes for restart-safe accounting."""
+        if not isinstance(total_bytes, int) or isinstance(total_bytes, bool):
+            raise RuntimeProviderStateError("provider_tool_result_budget_invalid")
+        if total_bytes == record.budget_tool_result_bytes:
+            return record
+        if (
+            total_bytes < record.budget_tool_result_bytes
+            or not record.result_ids
+            or record.commit_status != "pending"
+        ):
+            raise RuntimeProviderStateError("provider_tool_result_budget_invalid")
+        return self._update(
+            record,
+            "tool_result_budget_recorded",
+            budget_tool_result_bytes=total_bytes,
+            now=now,
+        )
+
+    def reject_invalid_final_output(
+        self,
+        record: ProviderStepJournalRecord,
+        *,
+        reason_code: str,
+        now: datetime | None = None,
+    ) -> ProviderStepJournalRecord:
+        """Prove a completed, call-free response was not a usable final answer."""
+        if record.invalid_final_output:
+            if record.stream_failure_reason_code != reason_code:
+                raise RuntimeProviderStateError("provider_stream_terminal_conflict")
+            return record
+        if (
+            record.acceptance_status != "accepted"
+            or record.stream_status != "pending"
+            or record.commit_status != "pending"
+            or record.staged_provider_state is None
+            or record.observed_call_count != 0
+            or record.final_output_status != "pending"
+        ):
+            raise RuntimeProviderStateError("provider_invalid_final_transition_invalid")
+        timestamp = now or datetime.now(tz=UTC)
+        return self._update(
+            record,
+            "invalid_final_output_rejected",
+            stream_status="failed",
+            stream_failure_reason_code=reason_code,
+            invalid_final_output=True,
+            stream_failed_at=timestamp,
+            now=timestamp,
         )
 
     def complete_stream(
@@ -494,6 +661,7 @@ class ProviderStepJournal:
             or record.step_status != "staged"
             or record.disposition_status != "complete"
             or len(record.result_ids) != len(record.proposal_ids)
+            or record.budget_tool_result_bytes < 1
         ):
             raise RuntimeProviderStateError("provider_pairing_not_reconstructible")
         timestamp = now or datetime.now(tz=UTC)
@@ -577,7 +745,7 @@ class ProviderStepJournal:
 
     @staticmethod
     def is_proven_terminal_failure(record: ProviderStepJournalRecord) -> bool:
-        return (
+        provider_terminal = (
             record.acceptance_status == "accepted"
             and record.stream_status == "failed"
             and record.stream_failure_reason_code
@@ -586,6 +754,16 @@ class ProviderStepJournal:
             and record.observed_call_count == 0
             and not record.proposal_ids
         )
+        invalid_final = (
+            record.acceptance_status == "accepted"
+            and record.stream_status == "failed"
+            and record.invalid_final_output
+            and record.stream_failure_reason_code == "agent_final_output_empty"
+            and record.staged_provider_state is not None
+            and record.observed_call_count == 0
+            and not record.proposal_ids
+        )
+        return provider_terminal or invalid_final
 
     def require_recovery(
         self,

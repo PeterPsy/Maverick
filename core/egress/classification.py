@@ -27,6 +27,7 @@ KNOWN_DATA_CLASSES: tuple[RuntimeDataClass, ...] = (
 )
 KNOWN_PROVENANCE: tuple[EgressProvenance, ...] = (
     "platform_instruction",
+    "finalization_instruction",
     "prompt",
     "user_input",
     "orchestration_context",

@@ -17,7 +17,7 @@ runbook begins. This runbook never manufactures or repairs a certificate.
 
 ## Phase-0 containment record and rollback procedure
 
-Material P0 containment completed before this P2 repository closure. Preserve
+Material P0 containment completed before this P3 repository closure. Preserve
 the following redaction-safe evidence together: source revision
 `69d9e10fea641f805c1c52801b7fd60a027b02f9`, plan digest
 `02484a30f9ea7254c5deebd69e5af4416a22d8aecc006d81b7b5d6aad9c4578d`,
@@ -31,7 +31,7 @@ This closes material containment only; it is not release, certification,
 preview/canary, migration, or production evidence.
 
 Do not run a live Google/OpenRouter probe, certification live step, provider
-HTTP request, or another containment apply while reviewing P2. The following
+HTTP request, or another containment apply while reviewing P3. The following
 commands remain the control-plane-first rollback procedure for a future
 incident. Obtain a new redaction-safe real-store plan through the operator-only
 Core CLI:
@@ -99,6 +99,12 @@ operation.
   in full; no call is discarded or executed. Mutating and destructive work
   requires persisted confirmation. Ambiguous side effects become
   `execution_unknown` and are not replayed automatically.
+- Provider-step and tool-call budgets are distinct and restart-safe. One final
+  request plus at most one recovery retain full output/cost/deadline reserves.
+  Once tools close, Google omits `tools` and OpenRouter sends `tools: []` with
+  `tool_choice: none`; both carry the exact Core finalization instruction.
+  Whitespace is not success, and an unexpected final call is journaled and
+  `budget_denied` before the single recovery.
 - Provider-private bytes and tool payloads remain encrypted Core state. Never
   copy them into tickets, logs, prompts, analytics, or ordinary exports.
 - Workspace attestation is a separate actor-attributed, scoped, revocable CAS
@@ -110,14 +116,14 @@ operation.
   shared by admission, request/catalog construction, API, Chat, and Settings.
 - Remote certificates bind the canonical code-owned execution TCB. Any drift or
   missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch. Manifest v4 statically audits six maintained
+  authority refresh, or dispatch. Manifest v5 statically audits six maintained
   import closures, including package initializers and the
   `core/inter_agent/generalist_context.py` content-composition path; a reached
   local dependency outside the artifact set makes identity calculation fail.
 
 ## Future pre-activation gate (suspended pending certification and release review)
 
-This section is retained as future work and must not be executed as part of P2.
+This section is retained as future work and must not be executed as part of P3.
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false; feature flags alone
 cannot reopen remote agentic admission.
 
@@ -163,7 +169,7 @@ use only the Core commands
 `fake-data-scope-reviewed` confirmation), and
 `core.providers.agentic.attestation.revoke` (expected revision plus reason).
 Every mutation records the authenticated actor and an append-only redaction-safe
-audit fact. Do not issue an attestation merely to exercise P2 or to bypass the
+audit fact. Do not issue an attestation merely to exercise P3 or to bypass the
 false availability gate.
 
 While containment is active, `POST /api/providers/agentic/workspace-bindings` may disable a
@@ -225,6 +231,8 @@ For each affected step, inspect only redaction-safe journal metadata:
 - ordered proposal/disposition/result counts and pairing/commit status;
 - request-lineage digest plus final-outbox identity/digest/size/delivery status,
   never its text or private locator;
+- request phase/control digest, max-output/input/cost reservation, durable tool
+  charges/result-byte total, and bounded provider usage counters;
 - public recovery reason and timestamps.
 
 Do not resolve or copy staged provider bytes, tool arguments/results, or the
@@ -243,6 +251,11 @@ terminal turn must either finish certified same-turn recovery or quarantine the
 pairing. A committed final-output outbox is drained with its stable event ids;
 do not call the provider again, and quarantine if its identity or private
 payload cannot be verified.
+
+For `finalization` and `finalization_recovery`, verify that the recorded request
+control has no tools and that only one recovery exists. Never manufacture a
+third terminal attempt or manually pair a finalization call outside the normal
+denial-result saga.
 
 Do not manually clear `recovery_required`. Queue, continuation, prepare,
 dispatch, and token paths deliberately reject the session. Settings and Chat
@@ -296,6 +309,8 @@ reuse its certificate identity.
 A new hosted provider is incomplete until it has an exact protocol codec and
 bounded transport; state and tool-pairing semantics; request-time credential
 delivery; private-state codec; per-block egress classification; cost estimator;
+adapter-pinned finalization output/cost/deadline reserves and certified
+empty-tool wire behavior;
 strict model/API/endpoint/upstream routing; deterministic malformed-stream,
 outage, cancellation, replay, leakage, prompt-injection, quota, corruption,
 revocation, drift, and child-agent tests; a dated certification matrix; an

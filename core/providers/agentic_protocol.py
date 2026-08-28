@@ -10,6 +10,17 @@ from core.providers.agentic_models import RoutingConstraint, RuntimeDataClass
 
 
 AgenticMessageRole = Literal["system", "developer", "user", "assistant"]
+AgenticRequestPhase = Literal[
+    "exploration",
+    "finalization",
+    "finalization_recovery",
+]
+HOSTED_FINALIZATION_INSTRUCTION = (
+    "The tool catalog is closed for this request. Do not call, propose, or invent any "
+    "function. Produce the final answer now using only the information already available. "
+    "If the request cannot be completed from that information, explain the limitation "
+    "directly instead of requesting another tool."
+)
 AgenticModelEventType = Literal[
     "accepted",
     "text_delta",
@@ -107,6 +118,7 @@ class AgenticModelRequest:
     pairing_source_journal_id: str | None = None
     pairing_source_turn_id: str | None = None
     pairing_source_request_id: str | None = None
+    request_phase: AgenticRequestPhase = "exploration"
 
 
 @dataclass(frozen=True)

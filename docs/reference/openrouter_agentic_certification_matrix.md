@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-27
-Matrix revision: `2026-08-27-r11-p2-tcb4`
+Matrix revision: `2026-08-27-r12-p3-tcb5`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==7`
+Adapter: `maverick-hosted-tool-loop==8`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==7`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `14` (revision `13` suspended) |
+| Immutable profile revision | `15` (revision `14` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -26,6 +26,8 @@ Adapter: `maverick-hosted-tool-loop==7`
 | Mixed response handling | provisional text plus one tool call is retained privately and continued |
 | Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
+| Finalization reserve | one 2,048-token / 2,000-micro-USD / 20-second final request plus one equal recovery |
+| Final request | exact Core finalization instruction; `tools: []`; `tool_choice: none` |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
 | Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
 | Certificate lifetime after a successful signed run | 30 days |
@@ -80,7 +82,7 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
-| Certified execution TCB | manifest v4 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v5 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -97,13 +99,14 @@ Primary references:
 | Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
 | Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
+| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve; `tools: []` plus `tool_choice: none`; exact final instruction after paired results; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
 | Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
 | Outage after acceptance | terminal normalized failure with no blind retry | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus final response at every certificate-bound reasoning effort | manifest step available; not run for r11 |
+| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r12 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the candidate profile and never manufactures a
@@ -163,7 +166,17 @@ Revision 14 pins adapter 7, suite 11, matrix
 same-turn pairing ownership and input lineage, containment-first quarantine,
 and private final-output outbox delivery across commit/restart crashes. The
 retained `live_probe` was not selected or run, no behavioral evidence was
-created, and this candidate remains suspended and uncertified.
+created, and this revision is now suspended and uncertified.
+
+Revision 15 pins adapter 8, suite 12, matrix
+`2026-08-27-r12-p3-tcb5`, and TCB manifest v5 for the Phase-3 finalization
+closure: restart-safe provider/tool budgets, protected final/recovery
+step-output-cost-deadline capacity, exact `tools: []` plus
+`tool_choice: none`, whitespace rejection, journaled denial of unexpected final
+calls, and at most one paired recovery. The retained `live_probe` was updated
+to exercise the tool-less final request but was not selected or run. No
+behavioral evidence or certificate was created; revision 15 remains a
+contained, uncertified preview.
 
 ## Fail-closed conditions
 
@@ -179,8 +192,13 @@ created, and this candidate remains suspended and uncertified.
 - Unknown data classification is denied before transport.
 - Function results with a different id or name are rejected before transport.
 - Every contiguous indexed tool call is persisted. Duplicate ids, missing
-  indices, or conflicting fragments fail closed; a multi-call response receives
-  complete `parallel_denied` dispositions and no call executes.
+  indices, or conflicting fragments fail closed. A multi-call response is
+  completely dispositioned: calls inside the remaining budget receive
+  `parallel_denied`, overflow receives `budget_denied`, and no call executes.
+- Finalization must carry no tool definitions, the exact Core instruction, an
+  empty `tools` array, and `tool_choice: none`; any mismatch fails before
+  transport. Empty/whitespace output is rolled back, and only one paired
+  recovery follows an unexpected journaled finalization call.
 - A requested reasoning effort outside the immutable certificate tuple, or a
   certificate/binding reasoning-contract mismatch, is rejected before use.
 - A single tool call preceded by text is accepted; that text remains

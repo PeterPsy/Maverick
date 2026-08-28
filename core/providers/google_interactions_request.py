@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import json
 
-from core.providers.agentic_protocol import AgenticModelRequest, AgenticToolResult
+from core.providers.agentic_protocol import (
+    AgenticModelRequest,
+    AgenticToolResult,
+    HOSTED_FINALIZATION_INSTRUCTION,
+)
 from core.providers.google_interactions_models import (
     GoogleInteractionState,
     GoogleInteractionsProtocolError,
@@ -16,6 +20,7 @@ def google_interaction_payload(
     state: GoogleInteractionState,
 ) -> tuple[dict[str, object], tuple[dict[str, object], ...]]:
     """Return the exact wire payload and new input steps used for history."""
+    _validate_request_phase(request)
     new_input = _new_input_steps(request, state)
     interaction_input = [*state.history, *new_input] if state.mode == "stateless" else list(new_input)
     if not interaction_input:
@@ -23,15 +28,6 @@ def google_interaction_payload(
     payload: dict[str, object] = {
         "model": request.model_id,
         "input": interaction_input,
-        "tools": [
-            {
-                "type": "function",
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.input_schema,
-            }
-            for tool in request.tool_definitions
-        ],
         "stream": True,
         "store": state.mode == "stateful",
         "generation_config": {
@@ -40,12 +36,48 @@ def google_interaction_payload(
             **_thinking_level(request.reasoning_effort),
         },
     }
+    if request.tool_definitions:
+        payload["tools"] = [
+            {
+                "type": "function",
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.input_schema,
+            }
+            for tool in request.tool_definitions
+        ]
     system_instruction = _system_instruction(request)
     if system_instruction:
         payload["system_instruction"] = system_instruction
     if state.mode == "stateful" and state.previous_interaction_id:
         payload["previous_interaction_id"] = state.previous_interaction_id
     return payload, new_input
+
+
+def _validate_request_phase(request: AgenticModelRequest) -> None:
+    finalization_blocks = tuple(
+        block
+        for block in request.content_blocks
+        if block.provenance == "finalization_instruction"
+    )
+    if request.request_phase == "exploration":
+        if finalization_blocks:
+            raise GoogleInteractionsProtocolError("provider_request_invalid")
+        return
+    if (
+        request.request_phase not in {"finalization", "finalization_recovery"}
+        or request.tool_definitions
+        or len(finalization_blocks) != 1
+        or not request.content_blocks
+        or request.content_blocks[-1] != finalization_blocks[0]
+        or finalization_blocks[0].role != "system"
+        or finalization_blocks[0].data_class != "public"
+        or finalization_blocks[0].trust_level != "trusted_platform"
+        or finalization_blocks[0].content_type != "text/plain"
+        or finalization_blocks[0].content
+        != HOSTED_FINALIZATION_INSTRUCTION.encode("utf-8")
+    ):
+        raise GoogleInteractionsProtocolError("provider_request_invalid")
 
 
 def _new_input_steps(

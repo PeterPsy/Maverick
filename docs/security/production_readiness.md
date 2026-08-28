@@ -43,8 +43,8 @@ agentic model providers. It does not close any launch blocker. Until a separate
 production security gate is approved, remote agentic profiles must remain
 disabled by default, explicitly marked preview, and blocked by the independent
 server-owned availability/admission boundary. P0 material containment is
-recorded in the agentic tasklist; P1 implements the security boundary and P2
-implements journaled recovery, but
+recorded in the agentic tasklist; P1 implements the security boundary, P2
+implements journaled recovery, and P3 implements governed finalization, but
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false and no remote binding,
 profile, or certificate is enabled. Current profile policy lists only
 Core-classified public content. The fake class is not a declaration shortcut:
@@ -62,10 +62,10 @@ publication, execution binding, and live status recompute/compare the same
 digest; drift or a legacy missing identity fails closed. Effective authority is
 one intersection of certificate, profile, workspace, actor, live catalog,
 feature flags, and provider health and is reused by admission, dispatch, API,
-Chat, and Settings. This closes the P1/P2 repository implementation slices; it does
+Chat, and Settings. This closes the P1/P2/P3 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v4 additionally makes the known transitive boundary executable through
+Manifest v5 additionally makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
@@ -87,11 +87,15 @@ outages, mid-step revocation, egress drift, prompt-injection containment,
 explicit private-state quota/integrity failures, child-agent binding isolation,
 productive lifecycle recovery, cross-turn pairing denial, terminal-limit
 containment, containment-first fault injection, and private final-output outbox
-replay with one provider request and one terminal event identity. The operator
+replay with one provider request and one terminal event identity. Phase-3
+fixtures additionally prove separate restart-safe step/tool accounting,
+step/output/cost/deadline reserves, tool-less Google/OpenRouter final payloads,
+whitespace rejection, journaled `budget_denied` final calls, and no more than
+one finalization recovery. The operator
 runbook documents canary,
 observation, incident
 recovery, and control-plane-first rollback. These controls do not close the
-production gate: Phase 3+ finalization/semantic work, provider-specific
+production gate: Phase 4+ semantic/tool-contract work, provider-specific
 live and behavioral evidence, onboarding, leakage review, canary, production
 key management, and the platform blockers above remain open.
 

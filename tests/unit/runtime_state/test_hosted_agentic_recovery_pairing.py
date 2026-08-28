@@ -143,6 +143,11 @@ class HostedAgenticRecoveryPairingTest(unittest.TestCase):
             codec=codec,
             pairing_source_journal_id=source.journal_id,
             request_lineage_digest=source.request_lineage_digest,
+            request_control_digest="3" * 64,
+            request_phase="exploration",
+            request_max_output_tokens=128,
+            budget_estimated_input_tokens=32,
+            budget_estimated_cost_microusd=0,
         )
         child = journal.journal_request(child)
         child = journal.accept(
@@ -259,7 +264,11 @@ class HostedAgenticRecoveryPairingTest(unittest.TestCase):
             turn_id="turn-hosted",
             policy=_no_confirmation_policy(),
         )
-        record = journal.add_proposal(record, outcome.invocation.proposal_id)
+        record = journal.add_proposal(
+            record,
+            outcome.invocation.proposal_id,
+            charge_tool_budget=True,
+        )
         record = journal.complete_stream(record, final_output_validated=False)
         self.assertIsNone(record.staged_provider_state)
 

@@ -138,9 +138,24 @@ class HostedContextLoopTest(unittest.TestCase):
         thread = Thread(target=run)
         thread.start()
         deadline = time.monotonic() + 3
-        while not client.requests and time.monotonic() < deadline:
+        accepted_journal = None
+        while time.monotonic() < deadline:
+            journals = harness.store.list_provider_step_journals(
+                session_id="session-hosted"
+            )
+            accepted_journal = next(
+                (
+                    item
+                    for item in journals
+                    if item.acceptance_status == "accepted"
+                ),
+                None,
+            )
+            if accepted_journal is not None:
+                break
             time.sleep(0.01)
         self.assertTrue(client.requests)
+        self.assertIsNotNone(accepted_journal)
         cancelled = asyncio.run(
             adapter.cancel(
                 RuntimeCancelContext(

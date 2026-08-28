@@ -13,7 +13,7 @@ from core.runtime.provider_step_models import ProviderStepJournalRecord
 from core.runtime.store import RuntimeStore
 
 
-PROVIDER_STEP_JOURNAL_SCHEMA_VERSION = "3"
+PROVIDER_STEP_JOURNAL_SCHEMA_VERSION = "4"
 ProviderStepFaultHook = Callable[[str, ProviderStepJournalRecord], None]
 PROVEN_PROVIDER_TERMINAL_FAILURES = frozenset(
     {
@@ -49,6 +49,10 @@ class ProviderStepJournal:
         pairing_source_journal_id: str | None,
         request_lineage_digest: str | None = None,
         request_control_digest: str,
+        semantic_source_snapshot_digest: str | None = None,
+        provider_egress_projection_digest: str | None = None,
+        semantic_projection_compiler_id: str | None = None,
+        semantic_projection_compiler_revision: str | None = None,
         request_phase: str,
         request_max_output_tokens: int,
         budget_estimated_input_tokens: int,
@@ -145,6 +149,12 @@ class ProviderStepJournal:
             pairing_source_journal_id=pairing_source_journal_id,
             request_lineage_digest=request_lineage_digest,
             request_control_digest=request_control_digest,
+            semantic_source_snapshot_digest=semantic_source_snapshot_digest,
+            provider_egress_projection_digest=provider_egress_projection_digest,
+            semantic_projection_compiler_id=semantic_projection_compiler_id,
+            semantic_projection_compiler_revision=(
+                semantic_projection_compiler_revision
+            ),
             request_phase=request_phase,
             request_max_output_tokens=request_max_output_tokens,
             budget_estimated_input_tokens=budget_estimated_input_tokens,
@@ -199,6 +209,24 @@ class ProviderStepJournal:
             or len(request_control_digest) != 64
         ):
             raise ValueError("Provider-step journal control digest is invalid.")
+        for digest in (
+            semantic_source_snapshot_digest,
+            provider_egress_projection_digest,
+        ):
+            if digest is not None and (
+                not isinstance(digest, str)
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+            ):
+                raise ValueError("Provider-step journal semantic digest is invalid.")
+        compiler_values = (
+            semantic_projection_compiler_id,
+            semantic_projection_compiler_revision,
+        )
+        if any(compiler_values) and not all(
+            isinstance(value, str) and value.strip() for value in compiler_values
+        ):
+            raise ValueError("Provider-step journal semantic compiler identity is invalid.")
         for value in (request_max_output_tokens, budget_estimated_input_tokens):
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise ValueError("Provider-step journal budget reservation is invalid.")

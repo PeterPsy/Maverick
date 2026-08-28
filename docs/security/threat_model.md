@@ -195,7 +195,7 @@ execution binding, and live status derive from that same manifest; the
 publisher recomputes it. Drift in runtime API, classifier, input composition,
 ledger/store, lifecycle, codec/transport, or UI governance invalidates remote
 authority before create, continuation, refresh, or dispatch. Legacy remote
-certificates with no valid TCB identity fail closed. Manifest v5 prevents a
+certificates with no valid TCB identity fail closed. Manifest v6 prevents a
 covered module from outsourcing authority or provider content to an unhashed
 local dependency: six code-owned contracts statically walk the relevant import
 closures and package initializers, including

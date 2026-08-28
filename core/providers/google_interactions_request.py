@@ -103,7 +103,7 @@ def _new_input_steps(
         raise GoogleInteractionsProtocolError("provider_tool_result_pairing_invalid")
     content = []
     for block in request.content_blocks:
-        if block.role == "system":
+        if block.role in {"system", "developer"}:
             continue
         if block.role != "user" or not _textual_content_type(block.content_type):
             raise GoogleInteractionsProtocolError("provider_request_invalid")
@@ -169,7 +169,7 @@ def _tool_results_by_id(
 def _system_instruction(request: AgenticModelRequest) -> str:
     values = []
     for block in request.content_blocks:
-        if block.role != "system":
+        if block.role not in {"system", "developer"}:
             continue
         if not _textual_content_type(block.content_type):
             raise GoogleInteractionsProtocolError("provider_request_invalid")

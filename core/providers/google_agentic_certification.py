@@ -28,8 +28,8 @@ from core.runtime.execution_binding import canonical_digest
 
 
 GOOGLE_CERTIFICATION_SUITE_ID = "maverick-google-interactions-agentic-contract"
-GOOGLE_CERTIFICATION_SUITE_VERSION = "15"
-GOOGLE_CERTIFICATION_MATRIX_REVISION = "2026-08-28-r15-p3-review3-tcb5"
+GOOGLE_CERTIFICATION_SUITE_VERSION = "16"
+GOOGLE_CERTIFICATION_MATRIX_REVISION = "2026-08-28-r16-p4a-semantic-envelope-tcb6"
 GOOGLE_CERTIFICATION_VALIDITY_DAYS = 45
 
 

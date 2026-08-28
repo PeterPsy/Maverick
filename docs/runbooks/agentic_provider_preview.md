@@ -116,7 +116,7 @@ operation.
   shared by admission, request/catalog construction, API, Chat, and Settings.
 - Remote certificates bind the canonical code-owned execution TCB. Any drift or
   missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch. Manifest v5 statically audits six maintained
+  authority refresh, or dispatch. Manifest v6 statically audits six maintained
   import closures, including package initializers and the
   `core/inter_agent/generalist_context.py` content-composition path; a reached
   local dependency outside the artifact set makes identity calculation fail.

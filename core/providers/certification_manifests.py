@@ -67,6 +67,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_state.test_provider_step_journal",
     "tests.unit.runtime_state.test_public_runtime_status",
     "tests.unit.runtime_state.test_remote_agentic_admission",
+    "tests.unit.runtime_state.test_semantic_envelope",
     "tests.unit.runtime_state.test_runtime_api_token_recovery",
     "tests.unit.runtime_state.test_structured_runtime_failures",
     "tests.unit.recovery.test_continuation_fork",
@@ -93,10 +94,10 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="15",
+        suite_version="16",
         provider_id=provider_id,
         matrix_path=matrix_path,
-        matrix_revision="2026-08-28-r15-p3-review3-tcb5",
+        matrix_revision="2026-08-28-r16-p4a-semantic-envelope-tcb6",
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

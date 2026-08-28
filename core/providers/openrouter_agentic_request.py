@@ -125,12 +125,12 @@ def _new_messages(
     for block in request.content_blocks:
         if block.provenance == "finalization_instruction":
             continue
-        if block.role not in {"system", "user"} or not _textual_content_type(
+        if block.role not in {"system", "developer", "user"} or not _textual_content_type(
             block.content_type
         ):
             raise OpenRouterAgenticProtocolError("provider_request_invalid")
         content = _decode_utf8(block.content)
-        if block.role == "system":
+        if block.role in {"system", "developer"}:
             system_values.append(content)
             continue
         values.append({"role": "user", "content": content})

@@ -69,6 +69,10 @@ class ProviderStepJournalRecord:
     pairing_source_journal_id: str | None
     request_lineage_digest: str | None
     request_control_digest: str | None
+    semantic_source_snapshot_digest: str | None
+    provider_egress_projection_digest: str | None
+    semantic_projection_compiler_id: str | None
+    semantic_projection_compiler_revision: str | None
     request_phase: ProviderRequestPhase
     request_max_output_tokens: int
     budget_estimated_input_tokens: int
@@ -146,6 +150,10 @@ def provider_step_journal_from_document(
     payload.setdefault("pairing_source_journal_id", None)
     payload.setdefault("request_lineage_digest", None)
     payload.setdefault("request_control_digest", None)
+    payload.setdefault("semantic_source_snapshot_digest", None)
+    payload.setdefault("provider_egress_projection_digest", None)
+    payload.setdefault("semantic_projection_compiler_id", None)
+    payload.setdefault("semantic_projection_compiler_revision", None)
     payload.setdefault("request_phase", "exploration")
     payload.setdefault("request_max_output_tokens", 0)
     payload.setdefault("budget_estimated_input_tokens", 0)

@@ -2,8 +2,8 @@
 
 Status date: 2026-08-28
 
-Target: Phase 3 hosted budget reservation, governed finalization, and review
-closure implemented;
+Target: Phase 4A semantic envelope and materialization implemented; Phase 4B-D
+full-workspace parity remains open;
 remote agentic release remains **NO-GO**.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v5 records six maintained transitive dependency contracts. The
+- [x] Manifest v6 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v15 / matrix
-  `2026-08-28-r15-p3-review3-tcb5`
+- [x] Google and OpenRouter suite v16 / matrix
+  `2026-08-28-r16-p4a-semantic-envelope-tcb6`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -300,10 +300,36 @@ completion claim.
 - [x] Finalization recovery attempts beyond one: `0`.
 - [x] Codex profile/artifact revision changed by P3: `0`.
 
+## Phase 4A — semantic envelope and materialization
+
+- [x] Core compiles every hosted request from semantic-envelope schema v1 and
+  keeps platform, runtime/capability, workspace, agent, user, governed context,
+  attachment, app reference, skill, tool schema/result, finalization, and
+  provider-state blocks distinct.
+- [x] Complete bounded `AGENTS.md` chains are resolved root-to-workdir for every
+  provider step. Complete invoked `SKILL.md` files use the same descriptor-
+  confined, identity/revision-fenced chunk reads; symlink, escape, mutation,
+  invalid UTF-8, oversize, and missing-source cases fail closed.
+- [x] Canonical source-snapshot and destination-projection digests are separate.
+  The latter binds compiler id/revision, provider protocol, phase, roles,
+  transformations, tool/result identities, egress decisions, and exported
+  content digests.
+- [x] Provider-step journal schema v4 persists both digests and compiler
+  identity. The semantic compiler runs on continuation/finalization/recovery
+  steps, so instructions and skills are re-injected rather than trusted to
+  provider history after resume or future compaction.
+- [x] Unknown mandatory provenance and incomplete projection fail before
+  provider dispatch. Deterministic tests cover stable/changed digests, nested
+  instruction scope, full skill content, separated inputs, and journal evidence.
+- [x] Hosted adapter 12, Google profile revision 20, OpenRouter profile revision
+  19, suite 16, matrix `2026-08-28-r16-p4a-semantic-envelope-tcb6`, and TCB
+  manifest v6 are immutable contained candidates. No live probe, certificate,
+  remote activation, or Codex profile/artifact change is part of P4A.
+
 ## Later parity and release gates — still open
 
-- [ ] Phase 4 complete semantic envelope, AGENTS materialization, and new tool
-  contracts.
+- [ ] Phase 4B-D complete the full-workspace tool contract, context/interaction
+  management, and exact provider compatibility closure.
 - [ ] Run each complete provider manifest on an exact clean deployable commit:
   deterministic fixture, operator-only synthetic live probe, behavioral
   validation, signing, verification, and immutable certificate publication.

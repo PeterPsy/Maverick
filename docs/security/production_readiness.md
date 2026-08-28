@@ -65,11 +65,16 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1/P2/P3 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v5 additionally makes the known transitive boundary executable through
+Manifest v6 additionally makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
+
+Hosted adapter 12 additionally places all provider-bound context in semantic-
+envelope schema v1, materializes scoped instructions through the confined
+filesystem, and journals distinct source/projection evidence. This is a
+repository safety invariant, not certification or remote-release approval.
 
 The runtime now also separates actor-attributed CAS workspace attestation,
 exact resource classification, and per-block fail-closed egress decisions.

@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v5 also
+status, workspace binding, and upstream constraint. TCB manifest v6 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -118,6 +118,17 @@ app references, CLI/MCP/shell requests, and filesystem write intent against
 that snapshot before claims, prepared locks, sessions, turns, queues, or
 provider work are persisted. Unsupported context yields one public allowlisted
 reason code; it is never ignored or merely omitted from the provider request.
+
+Hosted provider input is first compiled as Core semantic-envelope schema v1.
+Platform, runtime, capability, workspace `AGENTS.md`, agent, user,
+governed-context, attachment, app-reference, complete invoked-skill, tool, and
+provider-state sources remain separate typed blocks. Complete instruction files
+are read through the confined filesystem with identity/revision fencing and the
+applicable root-to-workdir instruction chain is recomputed for every provider
+step. The source snapshot digest is distinct from the versioned provider
+projection digest; both and the compiler identity are journaled without source
+content. A mandatory block that cannot be classified, materialized, or
+projected aborts before provider transport.
 
 The single deterministic manifest in
 `core/providers/certified_execution_tcb.py` owns every component that can alter

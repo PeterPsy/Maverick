@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-28
-Matrix revision: `2026-08-28-r15-p3-review3-tcb5`
+Matrix revision: `2026-08-28-r16-p4a-semantic-envelope-tcb6`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==11`
+Adapter: `maverick-hosted-tool-loop==12`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==11`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `18` (revision `17` suspended) |
+| Immutable profile revision | `19` (revision `18` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -83,7 +83,8 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
-| Certified execution TCB | manifest v5 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@1`; per-block role/provenance/source digest, complete scoped `AGENTS.md`/skill materialization, exact provider projection digest, and journal evidence | not certified |
+| Certified execution TCB | manifest v6 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -205,6 +206,16 @@ replacement and Mongo uses server `$$NOW`. Deterministic coverage pauses the
 worker after its final cooperative check while delaying the timeout CAS, and
 proves that expired success cannot become authoritative. No live or behavioral
 run has been performed; revision 18 remains a contained, uncertified preview.
+
+Revision 19 pins adapter 12, suite 16, matrix
+`2026-08-28-r16-p4a-semantic-envelope-tcb6`, and TCB manifest v6 for Phase 4A.
+Every request is compiled from a Core-owned semantic envelope v1 with distinct
+platform, runtime, workspace, agent, user, governed-context, attachment, app,
+skill, tool, and provider-state blocks. Complete bounded `AGENTS.md` and
+`SKILL.md` materialization is descriptor-confined and version-fenced; source
+snapshot and exact egress projection evidence are persisted in provider-step
+journal schema v4. No live or behavioral run has been performed; revision 19
+remains a contained, uncertified preview.
 
 ## Fail-closed conditions
 

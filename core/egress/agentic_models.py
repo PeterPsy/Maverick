@@ -11,10 +11,16 @@ from core.providers.agentic_models import RuntimeDataClass
 
 EgressProvenance = Literal[
     "platform_instruction",
+    "runtime_context",
+    "runtime_capabilities",
+    "workspace_instruction",
+    "agent_instruction",
+    "skill_fragment",
     "finalization_instruction",
     "prompt",
     "user_input",
     "orchestration_context",
+    "governed_context",
     "skill",
     "attachment",
     "app_reference",

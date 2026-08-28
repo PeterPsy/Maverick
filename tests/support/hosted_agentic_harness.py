@@ -99,11 +99,11 @@ class HostedAgenticHarness:
         dispatch_guard.start()
         test_case.addCleanup(dispatch_guard.stop)
         self.root = make_temp_repo_root(test_case)
+        workspace_root = self.root / "workspaces" / "default"
+        workspace_root.mkdir(parents=True, exist_ok=True)
         self.filesystem_list = filesystem_list
         self.filesystem_marker = "hosted-loop-filesystem-marker.txt"
         if filesystem_list:
-            workspace_root = self.root / "workspaces" / "default"
-            workspace_root.mkdir(parents=True, exist_ok=True)
             (workspace_root / self.filesystem_marker).write_text(
                 "synthetic hosted-loop marker",
                 encoding="utf-8",

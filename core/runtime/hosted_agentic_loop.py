@@ -26,11 +26,16 @@ import core.runtime.hosted_agentic_state as hosted_agentic_state_module
 import core.runtime.hosted_agentic_stream as hosted_agentic_stream_module
 import core.runtime.hosted_agentic_tool_execution as hosted_agentic_tool_execution_module
 import core.runtime.provider_step_journal as provider_step_journal_module
+import core.runtime.semantic_context_blocks as semantic_context_blocks_module
+import core.runtime.semantic_envelope as semantic_envelope_module
+import core.runtime.semantic_envelope_models as semantic_envelope_models_module
+import core.runtime.semantic_tool_blocks as semantic_tool_blocks_module
 import core.runtime.hosted_agentic_tool_results as hosted_agentic_tool_results_module
 import core.runtime.hosted_provider_runtime as hosted_provider_runtime_module
 import core.runtime.tool_core_capabilities as tool_core_capabilities_module
 import core.runtime.tool_filesystem_listing as tool_filesystem_listing_module
 import core.runtime.tool_orchestrator as tool_orchestrator_module
+import core.runtime.workspace_instructions as workspace_instructions_module
 from core.providers.agentic_protocol import (
     AgenticModelEvent,
     AgenticModelRequest,
@@ -155,6 +160,11 @@ class HostedAgenticLoop:
             tool_filesystem_listing_module,
             tool_orchestrator_module,
             provider_step_journal_module,
+            semantic_context_blocks_module,
+            semantic_envelope_module,
+            semantic_envelope_models_module,
+            semantic_tool_blocks_module,
+            workspace_instructions_module,
             build_core_runtime_tool_capabilities,
             ConfinedWorkspaceFilesystem.list_entries,
         )
@@ -406,6 +416,18 @@ class HostedAgenticLoop:
                 ),
                 request_lineage_digest=request_lineage_digest,
                 request_control_digest=request_control_digest,
+                semantic_source_snapshot_digest=(
+                    request.semantic_source_snapshot_digest or None
+                ),
+                provider_egress_projection_digest=(
+                    request.provider_egress_projection_digest or None
+                ),
+                semantic_projection_compiler_id=(
+                    request.semantic_projection_compiler_id or None
+                ),
+                semantic_projection_compiler_revision=(
+                    request.semantic_projection_compiler_revision or None
+                ),
                 request_phase=phase,
                 request_max_output_tokens=request.max_output_tokens,
                 budget_estimated_input_tokens=reservation.estimated_input_tokens,
@@ -420,6 +442,16 @@ class HostedAgenticLoop:
                     "request_id": request.request_id,
                     "step": step + 1,
                     "phase": phase,
+                    "semantic_source_snapshot_digest": (
+                        request.semantic_source_snapshot_digest
+                    ),
+                    "provider_egress_projection_digest": (
+                        request.provider_egress_projection_digest
+                    ),
+                    "semantic_projection_compiler": {
+                        "id": request.semantic_projection_compiler_id,
+                        "revision": request.semantic_projection_compiler_revision,
+                    },
                     "budget": reservation.snapshot.public_payload(),
                 },
             )

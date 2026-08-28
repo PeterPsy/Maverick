@@ -131,6 +131,20 @@ class HostedAgenticEgressTest(unittest.TestCase):
 
     def test_prompt_skill_attachment_and_app_reference_keep_distinct_provenance(self) -> None:
         harness = HostedAgenticHarness(self)
+        skill_root = (
+            harness.root
+            / "workspaces"
+            / "default"
+            / "data"
+            / "skills"
+            / "skills"
+            / "fixture-skill"
+        )
+        skill_root.mkdir(parents=True)
+        (skill_root / "SKILL.md").write_text(
+            "# Fixture skill\n\nUse the complete synthetic procedure.\n",
+            encoding="utf-8",
+        )
         effective_authority = replace(
             harness.authority,
             allowed_capabilities=replace(
@@ -174,7 +188,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
                     local_skill_id="fixture-skill",
                     name="Fixture skill",
                     description="Synthetic only.",
-                    source_root="skills/fixture-skill",
+                    source_root=str(skill_root),
                     owner_kind="workspace",
                     owner_id="default",
                     workspace_id="default",
@@ -198,12 +212,26 @@ class HostedAgenticEgressTest(unittest.TestCase):
         provenance = tuple(block.provenance for block in request.content_blocks)
         self.assertEqual(
             provenance,
-            ("platform_instruction", "prompt", "attachment", "app_reference", "skill"),
+            (
+                "platform_instruction",
+                "runtime_context",
+                "runtime_capabilities",
+                "user_input",
+                "attachment",
+                "app_reference",
+                "skill_fragment",
+            ),
         )
         self.assertEqual(
             tuple(item.provenance for item in request.source_metadata),
             provenance,
         )
+        skill = next(
+            block for block in request.content_blocks if block.provenance == "skill_fragment"
+        )
+        self.assertIn("complete synthetic procedure", skill.content.decode("utf-8"))
+        self.assertEqual(len(request.semantic_source_snapshot_digest), 64)
+        self.assertEqual(len(request.provider_egress_projection_digest), 64)
 
     def test_catalog_rejection_blocks_before_egress_instead_of_being_silent(self) -> None:
         harness = HostedAgenticHarness(self)

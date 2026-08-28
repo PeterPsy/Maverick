@@ -45,6 +45,12 @@ class AgenticSourceMetadata:
     source_revision: str = ""
     resource_identity: str = ""
     classification_revision: int | None = None
+    semantic_block_id: str = ""
+    semantic_block_schema_version: str = ""
+    semantic_source_digest: str = ""
+    egress_decision_id: str = ""
+    transformation: str | None = None
+    exported_digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -119,6 +125,11 @@ class AgenticModelRequest:
     pairing_source_turn_id: str | None = None
     pairing_source_request_id: str | None = None
     request_phase: AgenticRequestPhase = "exploration"
+    semantic_envelope_schema_version: str = ""
+    semantic_source_snapshot_digest: str = ""
+    semantic_projection_compiler_id: str = ""
+    semantic_projection_compiler_revision: str = ""
+    provider_egress_projection_digest: str = ""
 
 
 @dataclass(frozen=True)

@@ -277,7 +277,13 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         )
         self.assertEqual(
             {decision.provenance for decision in decisions},
-            {"platform_instruction", "user_input", "finalization_instruction"},
+            {
+                "platform_instruction",
+                "runtime_context",
+                "runtime_capabilities",
+                "user_input",
+                "finalization_instruction",
+            },
         )
         self.assertFalse(
             any(event.event_type == "runtime.error" for event in events)

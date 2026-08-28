@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-28
-Matrix revision: `2026-08-28-r15-p3-review3-tcb5`
+Matrix revision: `2026-08-28-r16-p4a-semantic-envelope-tcb6`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==11`
+Adapter: `maverick-hosted-tool-loop==12`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==11`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `19` (revision `18` suspended) |
+| Immutable profile revision | `20` (revision `19` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -52,7 +52,8 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
-| Certified execution TCB | manifest v5 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@1`; per-block role/provenance/source digest, complete scoped `AGENTS.md`/skill materialization, exact provider projection digest, and journal evidence | not certified |
+| Certified execution TCB | manifest v6 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
@@ -182,3 +183,13 @@ replacement and Mongo uses server `$$NOW`. Deterministic coverage pauses the
 worker after its final cooperative check while delaying the timeout CAS, and
 proves that expired success cannot become authoritative. No live or behavioral
 run has been performed; revision 19 remains a contained, uncertified preview.
+
+Revision 20 pins adapter 12, suite 16, matrix
+`2026-08-28-r16-p4a-semantic-envelope-tcb6`, and TCB manifest v6 for Phase 4A.
+Every request is compiled from a Core-owned semantic envelope v1 with distinct
+platform, runtime, workspace, agent, user, governed-context, attachment, app,
+skill, tool, and provider-state blocks. Complete bounded `AGENTS.md` and
+`SKILL.md` materialization is descriptor-confined and version-fenced; source
+snapshot and exact egress projection evidence are persisted in provider-step
+journal schema v4. No live or behavioral run has been performed; revision 20
+remains a contained, uncertified preview.

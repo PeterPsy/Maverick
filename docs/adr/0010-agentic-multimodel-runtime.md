@@ -259,7 +259,7 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v15 manifests contain both
+publication. Google and OpenRouter suite-v16 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
@@ -433,7 +433,7 @@ proposals. The adapter pins an exploration output ceiling and a terminal
 per-attempt output, micro-USD, and deadline reserve. Core protects one normal
 finalization request and at most one recovery request. A live policy can only
 tighten the turn; it may not consume already protected steps, output, cost, or
-time. Journal schema v3 makes request reservations, usage replacement, tool
+time. Journal schema v4 makes request reservations, usage replacement, tool
 charges, and paired-result bytes reconstructible after restart. Missing usage
 keeps the conservative reservation. An in-budget proposal and its tool charge
 share one journal CAS; provider usage is durable before its public usage event. A
@@ -480,6 +480,34 @@ continuable last commit or explicit quarantine.
 Finalization phase chains are validated per original turn, so a completed turn
 cannot prevent the next turn from beginning ordinary exploration.
 
+### 7C. Provider input is compiled from a versioned semantic envelope
+
+Core materializes every hosted request into semantic-envelope schema v1 before
+egress or provider rendering. Blocks retain their distinct role, provenance,
+content type, classification, source identity/revision, and SHA-256 source
+digest. The envelope always includes the platform instruction, pinned runtime
+identity, effective capability projection, applicable root-to-workdir
+`AGENTS.md` chain, agent instruction, user/governed inputs, invoked skill
+instructions, tool schemas/results, and applicable provider-private state.
+Attachment, app-reference, and orchestration inputs are never flattened into an
+unattributed prompt.
+
+`AGENTS.md` and `SKILL.md` reads are descriptor-confined, bounded, complete,
+UTF-8 validated, and fenced to one resource identity/revision across chunks.
+The chain is recomputed on every provider step, so continuation, recovery, and
+post-compaction requests re-inject the current applicable instructions instead
+of trusting an opaque provider history. A missing, escaped, mutated, oversized,
+or otherwise non-projectable mandatory source fails before provider dispatch.
+
+The immutable source snapshot has its own digest. The versioned hosted
+projection compiler records a second digest over the exact destination
+protocol, phase, roles, tool/result identities, transformations, egress
+decisions, and exported-content digests. Both digests and compiler identity are
+persisted in provider-step journal schema v4 and emitted only as redaction-safe
+request evidence. Provider wire codecs remain deterministic TCB components;
+changing their rendering changes the hosted adapter artifact and requires a
+new immutable profile revision.
+
 ### 8. Remote-provider egress is decided per content block
 
 Every system/developer instruction, user block, skill fragment, attachment,
@@ -519,9 +547,9 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 19
-and OpenRouter revision 18, both bound to
-`maverick-hosted-tool-loop==11`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 20
+and OpenRouter revision 19, both bound to
+`maverick-hosted-tool-loop==12`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.

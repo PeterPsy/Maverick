@@ -48,7 +48,10 @@ from core.runtime.hosted_agentic_models import (
     HostedContentClassifier,
     HostedProviderPrivateCodec,
 )
-from core.runtime.hosted_agentic_request import HostedAgenticRequestBuilder
+from core.runtime.hosted_agentic_request import (
+    HOSTED_TOOL_USE_INSTRUCTION,
+    HostedAgenticRequestBuilder,
+)
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
 from core.runtime.hosted_provider_runtime import (
     GOOGLE_HOSTED_FINALIZATION_POLICY,
@@ -57,6 +60,7 @@ from core.runtime.hosted_provider_runtime import (
     HostedProviderRuntimeRegistry,
 )
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
+from core.runtime.semantic_envelope import HostedSemanticEnvelopeCompiler
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolCatalogBuilder
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
@@ -67,7 +71,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "11"
+HOSTED_AGENTIC_ADAPTER_VERSION = "12"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -115,12 +119,35 @@ def build_hosted_agentic_engine_adapter(
         except CapabilityCertificateError as error:
             raise HostedAgenticLoopError(error.reason_code) from error
 
+    content_classifier = classifier or classify_hosted_content_fail_closed
+
+    def classify_resource(observation, provenance):
+        return resource_classification_for_observation(
+            state.workspace_store.get_resource_classification(
+                workspace_id=observation.workspace_id,
+                resource_kind=observation.resource_kind,
+                resource_ref=observation.resource_ref,
+            ),
+            workspace_id=observation.workspace_id,
+            resource_kind=observation.resource_kind,
+            resource_ref=observation.resource_ref,
+            resource_identity=observation.resource_identity,
+            resource_revision=observation.resource_revision,
+            resource_digest=observation.resource_digest,
+            provenance=provenance,
+        )
+
     loop = HostedAgenticLoop(
         provider_runtimes=provider_runtimes,
         request_builder=HostedAgenticRequestBuilder(
             egress_evaluator=state.agentic_egress_evaluator,
-            classifier=classifier or classify_hosted_content_fail_closed,
+            classifier=content_classifier,
             attestation_resolver=state.workspace_store.get_data_attestation,
+            semantic_compiler=HostedSemanticEnvelopeCompiler(
+                classifier=content_classifier,
+                platform_instruction=HOSTED_TOOL_USE_INSTRUCTION,
+                resource_classification_resolver=classify_resource,
+            ),
         ),
         tool_orchestrator_resolver=lambda context, _actor: _tool_orchestrator(
             context,

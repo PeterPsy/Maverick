@@ -64,7 +64,7 @@ def runtime_provider_input_sources(
     sources: list[RuntimeProviderInputSource] = [
         RuntimeProviderInputSource(
             source_id="turn-prompt",
-            provenance="prompt",
+            provenance="user_input",
             content_type="text/plain",
             content=input_text,
         )
@@ -74,7 +74,7 @@ def runtime_provider_input_sources(
         sources.append(
             RuntimeProviderInputSource(
                 source_id="generalist-orchestration",
-                provenance="orchestration_context",
+                provenance="governed_context",
                 content_type="application/json",
                 content=orchestration,
             )

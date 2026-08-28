@@ -666,6 +666,18 @@ catalog and encrypted invocation ledger. Provider-private protocol bytes remain
 behind the matching codec service and public events are bounded, normalized,
 and private-field-free.
 
+Before egress, that loop compiles a Core-owned semantic-envelope schema. Its
+ordered blocks preserve platform, runtime/capability, workspace, agent, user,
+governed-context, attachment, app-reference, skill, tool, result, and
+provider-state provenance instead of flattening them into one prompt. The
+runtime resolves the complete root-to-workdir `AGENTS.md` chain and complete
+invoked `SKILL.md` documents through descriptor-confined, version-fenced reads
+on every provider step, including continuation and recovery. A canonical source
+snapshot digest and a distinct compiler/version-bound destination projection
+digest are persisted in the provider-step journal. Provider codecs may render
+roles differently only through their certified deterministic projection; they
+may not omit a mandatory block or infer authority from instructions.
+
 Each hosted request reserves its conservative provider price ceiling before
 transport. When that request reports priced usage, Core replaces only the
 active reservation with the reported cost before considering the next step;

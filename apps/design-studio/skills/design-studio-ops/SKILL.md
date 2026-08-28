@@ -1,131 +1,70 @@
 ---
 name: design-studio-ops
-description: Use the Design Studio app to inspect design projects, import Storage files, export design artifacts, and verify the governed OpenDesign sidecar.
+description: Delegate an explicit design brief to the native OpenDesign chat, follow or cancel its native run, and open the exact conversation.
 ---
 
 # Design Studio Ops
 
-Use Design Studio through its official Maverick app surfaces.
+Design Studio is the official OpenDesign product hosted directly by Maverick.
+Its projects, conversations, files, messages, runs, and artifacts remain native
+OpenDesign state.
 
-Common operations:
+## Delegate one brief
 
-- Inspect app state with MCP tool `design_studio_state` or CLI command `design-studio --action state`.
-- Create a canonical OpenDesign project through the mounted frontend, backend
-  action/CLI `create_project`, or MCP `design_studio_create_project`.
-- Import only workspace Storage files using `workspace_relative_path` values under `storage/uploaded/` or `storage/generated/`; hosted imports are read through the `storage-read` dependency backend.
-- Export a terminal run with both `project_id` and canonical `run_id`. The
-  Storage package is written to
-  `storage/generated/design-studio/<od-project-id>/<od-run-id>/` and contains
-  `project-files.zip`, `result-package.json`, and a SHA-256 provenance manifest.
-- Verify the OpenDesign sidecar through the app state `sidecar.ready_url` or `sidecar.version_url`.
-- Resolve an OpenDesign project id with MCP tool `design_studio_get_project` or
-  CLI action `get_project`; these entrypoints use the short-lived core
-  `app_sidecar` broker and never read OpenDesign SQLite/files directly.
-- Search, resolve, or summarize `design_project` references through the
-  declared Design Studio reference tools. Reference capability routes are
-  GET-only and cannot be used to mutate OpenDesign.
-- Use `POST /api/provider/models` only through the mounted Design Studio sidecar route when checking OpenDesign model discovery; it is handled by Maverick core/app code and must report `sidecar_reached: false`.
-- OpenDesign run creation, status, SSE, cancel, and result packages use the
-  app-owned bridge on the isolated origin. Do not call a provider route or
-  construct a Maverick runtime session directly as a substitute.
-- Treat the returned OpenDesign `runId` as canonical. Design Studio keeps the
-  workspace-scoped mapping to Maverick `runtime_session_id`, `turn_id`, and
-  `stream_id`; those runtime identifiers are correlation metadata, not a
-  second project or run domain.
-- Treat `data/design-studio/adapter-state.json` only as view and job metadata.
-  Never use it as a project catalog. OpenDesign owns projects and files.
-- Accept `design_*` only as a migrated input alias. Resolve it through the
-  governed app surface; canonical output is `od_project_id`, optionally with
-  `legacy_project_id` for traceability. Never edit the sealed `state.json`.
-- Treat `service/opendesign_launcher.py` as the sidecar entrypoint. It resolves
-  only the runtime artifact, web overlay, version, and data generation named
-  together by the validated `control.json`; it never builds, migrates, or
-  selects a "latest" directory.
-- Treat the pinned `ghcr.io/nexu-io/od:0.16.1` OCI image as the primary
-  distribution. `service/import_opendesign_oci.py` performs two verified
-  derivations without Docker or a local Next build; the launcher uses only the
-  materialized image loader and Node runtime.
-- Treat the workspace frontend as a full-bleed host for the isolated
-  OpenDesign origin, not as a second project UI. Browser launch must use core's
-  one-shot form POST contract. Never use the legacy path-mounted `proxy_url`,
-  put a ticket/token in a URL or browser storage, access the iframe DOM, or
-  mirror project state in React. Deep links use bounded scalar
-  `od_project_id`/`od_run_id` values and versioned messages with exact
-  origin/source checks.
+1. Discover the declared Design Studio MCP tools.
+2. Call `design_studio_delegate` with:
+   - `brief`: the complete brief the user authorized. It becomes one ordinary
+     visible message headed `Brief delegated by Maverick`.
+   - `idempotency_key`: a stable caller-generated key. Reuse the same key and
+     the same arguments for every retry of this one delegation.
+   - optional `project_id` and `conversation_id` to continue an existing native
+     conversation, or optional `project_name`/`new_conversation` when selecting
+     a new target.
+   - optional `agent_id`, `model`, and `reasoning`; OpenDesign owns their native
+     selection and run behavior.
+3. Keep the returned `delegation_id`. Poll
+   `design_studio_delegation_status`, retrieve display-safe result references
+   with `design_studio_delegation_result`, or stop the native run with
+   `design_studio_cancel_delegation`.
+4. Open the returned `deep_link`. It targets the exact native OpenDesign
+   project and conversation, where the user can inspect and continue the same
+   chat after the delegating Maverick agent disconnects.
 
-Sandbox policy:
+Retries do not append the visible brief or start the native run twice. A run
+continues in OpenDesign when the invoking agent disconnects.
 
-- Do not use host absolute paths as design sources.
-- Do not copy Storage imports into app data or write Storage exports directly;
-  use the declared `storage-read`/`storage-write` dependency backends.
-- Do not request `/api/import/folder`, terminal, or pty routes in sandbox mode.
-- Provider credentials must remain in Maverick/Vault-owned flows. Do not put provider keys in browser payloads, sidecar requests, backend app secrets, or OpenDesign media config.
-- Design Studio declares provider model proxy access only; it must not receive raw provider keys and must not expose provider generation/chat routes directly to OpenDesign.
-- Do not guess a sidecar port, reuse a broker descriptor after the entrypoint
-  ends, or fall back to `data/design-studio/opendesign/app.sqlite`. Capability
-  expiry or denial is a hard failure.
-- Use `bootstrap_opendesign_generation.py` only for a new empty data root. It
-  refuses legacy or unknown content. Existing data migration requires an
-  explicitly marked fixture/controlled copy and is never implied by startup.
-- `smoke_opendesign_migration.py` is the authorized real-daemon migration and
-  rollback proof because it creates temporary marked copies. It is not an
-  authorization to migrate the current workspace data root.
-- Keep full source-build certification separate from OCI import. Do not resume a
-  per-file checkpoint or create shards/retries when the host lacks capacity.
+## Authorized attachments
 
-Incremental development:
+An attachment is accepted only when it is supplied explicitly as:
 
-- Invoke app CLI command `dev` with `operation=apply`. Exactly one immutable
-  changeset form is required: explicit repository-relative `changed_files`, or
-  `base_sha` plus `head_sha`. Never omit it or infer the shared working tree.
-- Run `dev apply` before committing when using explicit paths. For committed
-  work, use a full commit range whose `head_sha` is the current `HEAD`.
-- The command snapshots explicit path bytes and propagates the same paths to
-  `scripts/test_suite.py`; concurrent staged, unstaged, and untracked files are
-  outside the run.
-- React/CSS overlay work runs frontend gates, a bounded Turbopack development
-  build, quick E2E, activation, readiness, and browser remount. Backend work
-  runs the backend suite plus affected E2E. Only runtime/supply-chain work
-  elevates to OCI gates; documentation does not trigger an OCI rebuild.
-- Dependency, invariant workspace-output, compatible Next, and source/build
-  caches are content-manifest verified, locked per key, and published by atomic
-  rename. A release disables all build caches for both clean derivations.
-- Run `dev` with `operation=benchmark` for the automated React-patch-to-live
-  proof. It changes real patch bytes in an isolated copy, requires new
-  source/build and overlay digests with no source-cache hit, activates through
-  readiness/remount, restores the exact initial selection, and emits phase
-  timings.
-
-The exact upstream release, commit, patch set, artifact digest, and file
-manifest come only from `service/opendesign_bundle.json`. Materialized runtime
-and overlay generations live in the platform-owned content-addressed artifact
-store outside the repository and enter the sandbox only through the declared
-read-only `/artifacts/opendesign` capability. Normal launch validates its
-protected receipt and exact control binding without full hashing; use governed
-`artifact verify --full` or `artifact repair` for full audit/rematerialization.
-The runtime fails closed without a verified generation and matching active data
-generation; there is no compatibility fallback.
-
-Release verification uses `service/smoke_opendesign_runtime.py` for the real
-imported daemon and `service/smoke_opendesign_sidecar.py` for launcher/core
-proxy behavior. The redaction-safe evidence record is
-`service/opendesign_oci_acceptance_0_16_1.json`.
-
-`npm run test:e2e` is the full release profile. `test:e2e:quick` and
-`test:e2e:affected` are development profiles only. Final product acceptance
-uses the official OCI daemon, Chromium, Maverick core,
-the isolated sidecar broker, Storage, and two temporary workspaces:
-
-```bash
-npm run test:e2e --prefix apps/design-studio -- \
-  --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
-python3 -m unittest apps.design-studio.tests.test_production_acceptance
+```json
+{
+  "name": "reference.png",
+  "media_type": "image/png",
+  "content_base64": "...",
+  "authorized": true
+}
 ```
 
-Do not replace this gate with an in-process runtime mock. The suite's external
-compiled app-server fixture must still cross the normal runtime sandbox and
-process protocol. Product evidence contains thirteen browser scenarios plus
-the independent migration/rollback scenario;
-`service/opendesign_production_acceptance_0_16_1.json` maps the 24 global
-criteria to stable evidence. Both records must remain free of prompts, cookies,
-bearers, provider payloads, environment values, host paths, and secrets.
+Obtain bytes through the authorized workspace app surface that owns them (for
+example Storage), not through a host path. At most eight attachments and 10 MiB
+decoded total are accepted. Attachment bodies enter the selected native
+OpenDesign project but are never persisted in Maverick's delegation metadata.
+
+## Hard boundaries
+
+- Send only the explicit brief and explicitly authorized attachments. Do not
+  inject Maverick memory, hidden instructions, chat history, tools, prompts, or
+  runtime context.
+- Do not create a Maverick runtime session for an OpenDesign run. OpenDesign
+  launches and manages its own naked agents and model requests.
+- Do not call provider credentials or model endpoints directly. OpenDesign uses
+  the governed naked model profiles exposed by Maverick core; credentials stay
+  in core.
+- Do not read or modify OpenDesign SQLite, project directories, conversations,
+  or artifact bodies from Maverick code. Use only supported public OpenDesign
+  APIs through the invocation-scoped `app_sidecar` capability.
+- Do not guess a sidecar port, use loopback as a fallback, automate the browser,
+  patch the official bundle, or intercept native routes.
+- If delegation APIs are unavailable, report only delegation as unavailable.
+  The directly hosted OpenDesign product must remain usable.

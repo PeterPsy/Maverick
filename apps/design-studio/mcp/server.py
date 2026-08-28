@@ -1,4 +1,4 @@
-"""MCP entrypoint for Design Studio."""
+"""MCP entrypoint for external delegation into native OpenDesign."""
 
 from __future__ import annotations
 
@@ -8,39 +8,51 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
-from service import DesignStudioError, dispatch
+from delegation_errors import DelegationError
+from surface_service import SurfaceService, app_events_for_action
 
 
 TOOL_ACTIONS = {
+    "design_studio_delegate": "delegate",
+    "design_studio_delegation_status": "delegation_status",
+    "design_studio_cancel_delegation": "cancel_delegation",
+    "design_studio_delegation_result": "delegation_result",
     "design_studio_state": "state",
-    "design_studio_create_project": "create_project",
-    "design_studio_get_project": "get_project",
-    "design_studio_import_from_storage": "import_from_storage",
-    "design_studio_export_to_storage": "export_to_storage",
     "design_studio_view_filter": "view_filter",
     "design_studio_set_view_filter": "set_view_filter",
     "design_studio_set_custom_view": "set_custom_view",
     "design_studio_clear_custom_view": "clear_custom_view",
-    "design_studio_reference_manifest": "reference_manifest",
-    "design_studio_reference_search": "reference_search",
-    "design_studio_reference_resolve": "reference_resolve",
-    "design_studio_reference_summarize": "reference_summarize",
 }
 
 
 def main() -> None:
     payload = read_entrypoint_payload()
-    tool_name = str(payload.raw.get("tool_name") or "design_studio_state")
+    tool_name = str(payload.raw.get("tool_name") or "")
     action = TOOL_ACTIONS.get(tool_name)
     if action is None:
-        emit_json({"ok": False, "error": "unsupported_tool", "detail": f"Unsupported Design Studio tool `{tool_name}`."})
+        emit_json({
+            "status_code": 400,
+            "ok": False,
+            "error": "unsupported_tool",
+            "detail": f"Unsupported Design Studio tool `{tool_name}`.",
+        })
         return
     try:
-        result = dispatch(action, payload.raw, dict(payload.arguments))
-    except DesignStudioError as error:
-        emit_json({"ok": False, "error": error.error, "detail": error.detail})
+        result = SurfaceService(payload).dispatch(action, dict(payload.arguments))
+    except DelegationError as error:
+        emit_json({
+            "status_code": error.status_code,
+            "ok": False,
+            "error": error.code,
+            "detail": error.detail,
+        })
         return
-    emit_json({"ok": True, **result})
+    emit_json({
+        "status_code": 200,
+        "ok": True,
+        **result,
+        "app_events": app_events_for_action(action),
+    })
 
 
 if __name__ == "__main__":

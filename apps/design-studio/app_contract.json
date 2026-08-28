@@ -2,7 +2,7 @@
   "app_id": "design-studio",
   "contract_version": "1.0",
   "name": "Design Studio",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Host an unchanged official OpenDesign installation with optional naked-model and external-delegation bridges.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
@@ -343,10 +343,6 @@
                 },
                 {
                   "method": "GET",
-                  "path_template": "/api/runs/{id}/events"
-                },
-                {
-                  "method": "GET",
                   "path_template": "/api/runs/{id}/result-package"
                 },
                 {
@@ -400,10 +396,6 @@
                 },
                 {
                   "method": "GET",
-                  "path_template": "/api/runs/{id}/events"
-                },
-                {
-                  "method": "GET",
                   "path_template": "/api/runs/{id}/result-package"
                 },
                 {
@@ -454,10 +446,6 @@
                 {
                   "method": "GET",
                   "path_template": "/api/runs/{id}"
-                },
-                {
-                  "method": "GET",
-                  "path_template": "/api/runs/{id}/events"
                 },
                 {
                   "method": "GET",

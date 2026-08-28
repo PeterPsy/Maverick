@@ -1,11 +1,11 @@
 {
   "commands": {
-    "dev": {
+    "design-studio": {
       "operator_only": false,
       "required_platform_role": null,
-      "sandbox_agent_allowed": false,
+      "sandbox_agent_allowed": true,
       "requires_workspace_context": true,
-      "requires_full_access": true
+      "requires_full_access": false
     }
   }
 }

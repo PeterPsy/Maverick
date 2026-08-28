@@ -1,4 +1,4 @@
-"""CLI entrypoint for Design Studio."""
+"""CLI entrypoint for native Design Studio delegation and inspection."""
 
 from __future__ import annotations
 
@@ -8,118 +8,30 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
-from service import DesignStudioError, dispatch
+from delegation_errors import DelegationError
+from surface_service import SurfaceService, app_events_for_action
 
 
 def main() -> None:
     payload = read_entrypoint_payload()
-    command_id = str(payload.raw.get("command_id") or "design-studio")
     arguments = dict(payload.arguments)
-    action = str(arguments.pop("action", "") or _action_from_command(command_id))
-    if action in {
-        "artifact_status",
-        "artifact_verify",
-        "artifact_repair",
-        "artifact_gc",
-        "sidecar_prewarm",
-        "sidecar_diagnostics",
-    }:
-        service_root = Path(__file__).resolve().parents[1] / "service"
-        sys.path.insert(0, str(service_root))
-        from opendesign_artifact_operations import run_artifact_operation
-
-        operation = {
-            "artifact_status": "status",
-            "artifact_verify": "verify",
-            "artifact_repair": "repair",
-            "artifact_gc": "gc",
-            "sidecar_prewarm": "prewarm",
-            "sidecar_diagnostics": "diagnostics",
-        }[action]
-        try:
-            result = run_artifact_operation(
-                operation,
-                data_root=Path(payload.data_root),
-                workspace_id=str(payload.workspace_id or "default"),
-            )
-        except Exception as error:
-            emit_json(
-                {
-                    "status_code": 503,
-                    "ok": False,
-                    "error": getattr(error, "code", "artifact_operation_failed"),
-                    "phase": getattr(error, "phase", operation),
-                    "auto_repairable": getattr(error, "code", "") in {"artifact_missing", "artifact_integrity_mismatch"},
-                }
-            )
-            return
-        emit_json({"status_code": 200, "ok": True, **result})
-        return
-    if action == "dev":
-        service_root = Path(__file__).resolve().parents[1] / "service"
-        sys.path.insert(0, str(service_root))
-        from opendesign_dev_apply import DevApplyError, apply_incremental
-
-        operation = str(arguments.pop("operation", "apply"))
-        if operation == "benchmark":
-            from benchmark_opendesign_change_to_live import (
-                ChangeToLiveBenchmarkError,
-                run_change_to_live_benchmark,
-            )
-
-            try:
-                emit_json(
-                    {
-                        "status_code": 200,
-                        "ok": True,
-                        **run_change_to_live_benchmark(payload.raw, arguments),
-                    }
-                )
-            except (ChangeToLiveBenchmarkError, DevApplyError) as error:
-                emit_json(
-                    {
-                        "status_code": 500,
-                        "ok": False,
-                        "error": "change_to_live_benchmark_failed",
-                        "detail": str(error),
-                    }
-                )
-            return
-        if operation != "apply":
-            emit_json(
-                {
-                    "status_code": 400,
-                    "ok": False,
-                    "error": "dev_operation_invalid",
-                    "detail": "Only dev apply and dev benchmark are supported.",
-                }
-            )
-            return
-        try:
-            emit_json({"status_code": 200, "ok": True, **apply_incremental(payload.raw, arguments)})
-        except DevApplyError as error:
-            emit_json(
-                {
-                    "status_code": 500,
-                    "ok": False,
-                    "error": "dev_apply_failed",
-                    "detail": str(error),
-                    "report": error.report,
-                }
-            )
-        return
+    action = str(arguments.pop("action", "") or "state")
     try:
-        result = dispatch(action, payload.raw, arguments)
-    except DesignStudioError as error:
-        emit_json({"status_code": 400, "ok": False, "error": error.error, "detail": error.detail})
+        result = SurfaceService(payload).dispatch(action, arguments)
+    except DelegationError as error:
+        emit_json({
+            "status_code": error.status_code,
+            "ok": False,
+            "error": error.code,
+            "detail": error.detail,
+        })
         return
-    emit_json({"status_code": 200, "ok": True, **result})
-
-
-def _action_from_command(command_id: str) -> str:
-    if command_id == "design-studio":
-        return "state"
-    return command_id.rsplit(".", 1)[-1] or "state"
+    emit_json({
+        "status_code": 200,
+        "ok": True,
+        **result,
+        "app_events": app_events_for_action(action),
+    })
 
 
 if __name__ == "__main__":

@@ -122,8 +122,8 @@ try {
           project_created: true,
           sidebar_navigation: true,
           native_home_projects_hidden: true,
-          native_tools_collapsed: true,
-          native_tools_opened: true,
+          native_assistant_hidden: true,
+          sketch_tools_opened: true,
         }),
       ],
       canonicalEntity: { od_project_id: projectA.projectId, od_run_id: '' },
@@ -627,7 +627,7 @@ async function createProjectFromUi(page, frame) {
   }
   assert(projectId, 'Maverick sidebar did not return or expose the new OpenDesign project id');
   const sidebar = await waitForShellWidgetFrame(page, 'App sidebar content');
-  const projectButton = sidebar.getByRole('button').filter({ hasText: 'Untitled design' }).first();
+  const projectButton = sidebar.getByRole('button').filter({ hasText: 'Progetto senza titolo' }).first();
   await projectButton.waitFor({ state: 'visible', timeout: 60_000 });
   const projectPath = `/projects/${projectId}`;
   try {
@@ -665,11 +665,14 @@ async function createProjectFromUi(page, frame) {
   const toolsPane = frame.locator('.split-chat-slot');
   assert(
     await toolsPane.count() === 1 && !await toolsPane.isVisible(),
-    'OpenDesign native tools pane was not initially collapsed',
+    'OpenDesign native assistant was not delegated to Maverick Chat',
   );
   const footer = await waitForShellWidgetFrame(page, 'App sidebar footer');
   await footer.getByRole('button', { name: 'Strumenti', exact: true }).click();
-  await toolsPane.waitFor({ state: 'visible', timeout: 60_000 });
+  const sketchEditor = frame.locator('[data-testid="sketch-excalidraw-editor"]');
+  await sketchEditor.waitFor({ state: 'visible', timeout: 60_000 });
+  await sketchEditor.locator('[data-testid="toolbar-selection"]').waitFor({ state: 'visible', timeout: 60_000 });
+  assert(!await toolsPane.isVisible(), 'Strumenti opened the assistant instead of the drawing toolbar');
   await footer.getByRole('button', { name: 'Impostazioni', exact: true }).click();
   await frame.locator('.modal-settings').waitFor({ state: 'visible', timeout: 60_000 });
   await frame.locator('.settings-close').click();
@@ -1256,8 +1259,8 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
       project_created: true,
       sidebar_navigation: true,
       native_home_projects_hidden: true,
-      native_tools_collapsed: true,
-      native_tools_opened: true,
+      native_assistant_hidden: true,
+      sketch_tools_opened: true,
     }],
     ['storage_import', 'Import one Storage file with read-back', correlationA, { imported: true }],
     ['runtime_start', 'Start one Maverick-owned run', correlationA, { submitted: true }],

@@ -21,7 +21,12 @@ from opendesign_artifact import (
 )
 from opendesign_artifact_store import ArtifactStoreError
 from opendesign_artifact_store import OpenDesignArtifactStore
-from opendesign_runtime import RuntimeBinding, resolve_protected_runtime_binding, verified_overlay_from_store
+from opendesign_runtime import (
+    RuntimeBinding,
+    activation_inventory_selections,
+    resolve_protected_runtime_binding,
+    verified_overlay_from_store,
+)
 from opendesign_oci_stage import OciStageError, runtime_command
 from opendesign_runtime_activation import finalize_runtime_activation_after_verified_sidecar_start
 from opendesign_web_activation import finalize_web_activation_after_verified_sidecar_start
@@ -695,11 +700,7 @@ def _finalize_pending_activations(
     if binding.control.web_activation_id is None and binding.control.runtime_activation_id is None:
         return
     store = OpenDesignArtifactStore(web_registry_root.parent, require_read_only_mount=True)
-    selections = [binding.active]
-    if binding.control.previous_web is not None:
-        selections.append(binding.control.previous_web)
-    if binding.control.previous_runtime is not None:
-        selections.append(binding.control.previous_runtime)
+    selections = activation_inventory_selections(binding.control, generation_root)
     overlays: dict[str, VerifiedWebOverlay] = {}
     for selection in selections:
         if selection.web_overlay_sha256 in overlays:
@@ -709,16 +710,22 @@ def _finalize_pending_activations(
             runtime_artifact_sha256=selection.runtime_artifact_sha256,
         )
         overlays[selection.web_overlay_sha256] = verified_overlay_from_store(stored)
-    artifacts = {binding.active.runtime_artifact_sha256: binding.bundle.opendesign_version}
-    if binding.control.previous_runtime is not None:
-        previous = binding.control.previous_runtime
+    artifacts: dict[str, str] = {}
+    for selection in selections:
+        if selection.runtime_artifact_sha256 in artifacts:
+            continue
+        if selection.runtime_artifact_sha256 == binding.active.runtime_artifact_sha256:
+            artifacts[selection.runtime_artifact_sha256] = binding.bundle.opendesign_version
+            continue
         stored_runtime = store.fast_runtime(
-            previous.runtime_artifact_sha256,
+            selection.runtime_artifact_sha256,
             file_manifest_sha256=None,
-            opendesign_version=previous.od_version,
+            opendesign_version=selection.od_version,
             upstream_commit=None,
         )
-        artifacts[previous.runtime_artifact_sha256] = str(stored_runtime.receipt["opendesign_version"])
+        artifacts[selection.runtime_artifact_sha256] = str(
+            stored_runtime.receipt["opendesign_version"]
+        )
     if binding.control.runtime_activation_id is not None:
         finalize_runtime_activation_after_verified_sidecar_start(
             generation_root,

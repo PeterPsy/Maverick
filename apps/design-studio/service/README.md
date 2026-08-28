@@ -276,7 +276,10 @@ selection. `previous_runtime` retains the exact declared runtime rollback and
 runtime/version/data tuple. A completed runtime receipt and a later web receipt
 may coexist: the web cutover preserves the runtime rollback, while journal
 reconciliation permits only the overlay component of the active runtime tuple
-to advance. Web activation never clones or migrates data and never changes the
+to advance. Restart and activation inventories include both source and target
+selections from every retained migration, web, and runtime journal, so later
+web cutovers cannot make a completed runtime receipt unverifiable. Web
+activation never clones or migrates data and never changes the
 runtime selection or the migration journal. It atomically
 updates the overlay selection, restarts through the generic
 `app.<id>.sidecars.restart` capability, waits for declared readiness, and rolls

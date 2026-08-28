@@ -14,7 +14,10 @@ from opendesign_artifact_audit import (
 from opendesign_generation_control import (
     load_generation_control,
     load_generation_control_metadata,
+    load_migration_journal_metadata,
+    load_runtime_activation_journal_metadata,
     load_runtime_generation_control,
+    load_web_activation_journal_metadata,
     resolve_generation_data_dir,
 )
 from opendesign_generation_model import (
@@ -71,14 +74,7 @@ def protected_activation_inventory(
 ) -> tuple[GenerationControl, dict[str, str], dict[str, VerifiedWebOverlay]]:
     """Full-audit every exact store generation needed by activation/recovery."""
     preliminary = load_generation_control_metadata(generation_root)
-    selections = [preliminary.active]
-    for selection in (
-        preliminary.previous_release,
-        preliminary.previous_web,
-        preliminary.previous_runtime,
-    ):
-        if selection is not None:
-            selections.append(selection)
+    selections = activation_inventory_selections(preliminary, generation_root)
     artifacts: dict[str, str] = {}
     overlays: dict[str, VerifiedWebOverlay] = {}
     for selection in selections:
@@ -106,6 +102,37 @@ def protected_activation_inventory(
         verified_overlays=overlays,
     )
     return control, artifacts, overlays
+
+
+def activation_inventory_selections(
+    control: GenerationControl,
+    generation_root: Path,
+) -> tuple[LaunchSelection, ...]:
+    """Return every control or retained-journal selection needed for recovery."""
+    selections = [control.active]
+    for selection in (
+        control.previous_release,
+        control.previous_web,
+        control.previous_runtime,
+    ):
+        if selection is not None:
+            selections.append(selection)
+    if control.migration_id is not None:
+        journal = load_migration_journal_metadata(generation_root, control.migration_id)
+        selections.extend((journal.source, journal.target))
+    if control.web_activation_id is not None:
+        journal = load_web_activation_journal_metadata(
+            generation_root,
+            control.web_activation_id,
+        )
+        selections.extend((journal.source, journal.target))
+    if control.runtime_activation_id is not None:
+        journal = load_runtime_activation_journal_metadata(
+            generation_root,
+            control.runtime_activation_id,
+        )
+        selections.extend((journal.source, journal.target))
+    return tuple(selections)
 
 
 def resolve_protected_runtime_binding(

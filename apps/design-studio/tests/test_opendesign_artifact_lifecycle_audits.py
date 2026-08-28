@@ -24,6 +24,7 @@ from opendesign_artifact_store import (  # noqa: E402
     StoredArtifact,
 )
 from opendesign_generation_model import GenerationControl, LaunchSelection  # noqa: E402
+import opendesign_launcher  # noqa: E402
 from opendesign_migration_oci_runtime import OciMigrationRuntime  # noqa: E402
 from opendesign_release_activation import activate_protected_release  # noqa: E402
 from opendesign_runtime import protected_activation_inventory  # noqa: E402
@@ -33,6 +34,7 @@ RUNTIME_ACTIVE = "a" * 64
 RUNTIME_ROLLBACK = "b" * 64
 WEB_ACTIVE = "c" * 64
 WEB_ROLLBACK = "d" * 64
+WEB_RUNTIME_TARGET = "2" * 64
 
 
 def _runtime(digest: str) -> StoredArtifact:
@@ -203,6 +205,126 @@ class OpenDesignArtifactLifecycleAuditTests(unittest.TestCase):
                 ("web", WEB_ROLLBACK),
             },
         )
+
+    def test_protected_activation_inventory_includes_retained_runtime_journal_target(self) -> None:
+        active = LaunchSelection(RUNTIME_ACTIVE, WEB_ACTIVE, "0.16.1", "gen_active")
+        rollback = LaunchSelection(RUNTIME_ROLLBACK, WEB_ROLLBACK, "0.16.1", "gen_active")
+        runtime_target = LaunchSelection(
+            RUNTIME_ACTIVE,
+            WEB_RUNTIME_TARGET,
+            "0.16.1",
+            "gen_active",
+        )
+        control = GenerationControl(
+            active,
+            None,
+            None,
+            None,
+            None,
+            "2026-08-26T00:00:00Z",
+            previous_runtime=rollback,
+            runtime_activation_id="runtime_release_retained",
+        )
+        journal = SimpleNamespace(source=rollback, target=runtime_target)
+        store = Mock(spec=OpenDesignArtifactStore)
+        store.fast_runtime.side_effect = lambda digest, **_kwargs: _runtime(digest)
+        store.fast_web_overlay.side_effect = (
+            lambda digest, *, runtime_artifact_sha256: _web(digest, runtime_artifact_sha256)
+        )
+
+        with (
+            patch("opendesign_runtime.load_generation_control_metadata", return_value=control),
+            patch(
+                "opendesign_runtime.load_runtime_activation_journal_metadata",
+                return_value=journal,
+            ) as load_journal,
+            patch("opendesign_runtime.load_generation_control", return_value=control),
+        ):
+            observed, artifacts, overlays = protected_activation_inventory(
+                store=store,
+                generation_root=Path("/data/opendesign"),
+            )
+
+        self.assertEqual(observed, control)
+        load_journal.assert_called_once_with(
+            Path("/data/opendesign"),
+            "runtime_release_retained",
+        )
+        self.assertEqual(set(artifacts), {RUNTIME_ACTIVE, RUNTIME_ROLLBACK})
+        self.assertEqual(
+            set(overlays),
+            {WEB_ACTIVE, WEB_ROLLBACK, WEB_RUNTIME_TARGET},
+        )
+        audited = {(item.args[0], item.args[1]) for item in store.full_audit.call_args_list}
+        self.assertEqual(
+            audited,
+            {
+                ("runtime", RUNTIME_ACTIVE),
+                ("runtime", RUNTIME_ROLLBACK),
+                ("web", WEB_ACTIVE),
+                ("web", WEB_ROLLBACK),
+                ("web", WEB_RUNTIME_TARGET),
+            },
+        )
+
+    def test_launcher_finalization_verifies_retained_journal_selections(self) -> None:
+        active = LaunchSelection(RUNTIME_ACTIVE, WEB_ACTIVE, "0.16.1", "gen_active")
+        rollback = LaunchSelection(RUNTIME_ROLLBACK, WEB_ROLLBACK, "0.16.1", "gen_active")
+        runtime_target = LaunchSelection(
+            RUNTIME_ACTIVE,
+            WEB_RUNTIME_TARGET,
+            "0.16.1",
+            "gen_active",
+        )
+        control = SimpleNamespace(
+            web_activation_id="web_release_current",
+            runtime_activation_id="runtime_release_retained",
+        )
+        binding = SimpleNamespace(
+            active=active,
+            bundle=SimpleNamespace(opendesign_version="0.16.1"),
+            control=control,
+        )
+        store = Mock(spec=OpenDesignArtifactStore)
+        store.fast_runtime.side_effect = lambda digest, **_kwargs: _runtime(digest)
+        store.fast_web_overlay.side_effect = (
+            lambda digest, *, runtime_artifact_sha256: _web(digest, runtime_artifact_sha256)
+        )
+        readiness = {"ready": True, "service_count": 1}
+
+        with (
+            patch("opendesign_launcher.OpenDesignArtifactStore", return_value=store),
+            patch(
+                "opendesign_launcher.activation_inventory_selections",
+                return_value=(active, rollback, runtime_target),
+            ) as inventory,
+            patch(
+                "opendesign_launcher.finalize_runtime_activation_after_verified_sidecar_start"
+            ) as finalize_runtime,
+            patch(
+                "opendesign_launcher.finalize_web_activation_after_verified_sidecar_start"
+            ) as finalize_web,
+        ):
+            opendesign_launcher._finalize_pending_activations(
+                Path("/data/opendesign"),
+                binding=binding,
+                web_registry_root=Path("/store/web"),
+                readiness=readiness,
+            )
+
+        inventory.assert_called_once_with(control, Path("/data/opendesign"))
+        runtime_kwargs = finalize_runtime.call_args.kwargs
+        web_kwargs = finalize_web.call_args.kwargs
+        self.assertEqual(
+            set(runtime_kwargs["verified_artifacts"]),
+            {RUNTIME_ACTIVE, RUNTIME_ROLLBACK},
+        )
+        self.assertEqual(
+            set(runtime_kwargs["verified_overlays"]),
+            {WEB_ACTIVE, WEB_ROLLBACK, WEB_RUNTIME_TARGET},
+        )
+        self.assertEqual(web_kwargs["verified_artifacts"], runtime_kwargs["verified_artifacts"])
+        self.assertEqual(web_kwargs["verified_overlays"], runtime_kwargs["verified_overlays"])
 
     def test_provision_and_repair_audit_fast_valid_reused_packages(self) -> None:
         required = RequiredArtifacts(

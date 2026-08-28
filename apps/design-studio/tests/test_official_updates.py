@@ -15,7 +15,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 SERVICE_ROOT = APP_ROOT / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from native_official_update import perform_official_update  # noqa: E402
+from native_official_update import OfficialUpdateError, perform_official_update  # noqa: E402
 from official_opendesign_release import (  # noqa: E402
     OfficialReleaseError,
     load_official_release,
@@ -204,6 +204,26 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertEqual(result["update"]["phase"], "rolled_back")
         self.assertTrue(result["update"]["native_ready"])
         self.assertEqual(calls, ["stop", "prewarm", "stop", "prewarm"])
+        self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
+        self.assertFalse((self.native / "upstream-migration").exists())
+        self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
+
+    def test_failed_previous_startup_stays_quiesced_for_operator_recovery(self) -> None:
+        calls: list[str] = []
+
+        def control(operation: str, _workspace_id: str) -> dict:
+            calls.append(operation)
+            return {"ready": False}
+
+        with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
+            self._run(control)
+
+        self.assertEqual(calls, ["stop", "prewarm", "stop", "prewarm"])
+        marker = json.loads((self.data_root / "official-update.json").read_text())
+        self.assertEqual(marker["phase"], "recovery_required")
+        self.assertFalse(marker["native_ready"])
+        self.assertFalse(marker["rolled_back"])
+        self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
         self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
         self.assertFalse((self.native / "upstream-migration").exists())
         self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")

@@ -168,8 +168,11 @@ def perform_official_update(
                 workspace_id=workspace_id,
                 control=control,
             )
-            if recovered is not None:
-                return {"update_applied": False, "update": recovered, "error": "candidate_startup_failed"}
+            return {
+                "update_applied": False,
+                "update": recovered,
+                "error": "candidate_startup_failed",
+            }
         _resume_previous_writer(
             root,
             identifier=identifier,
@@ -235,7 +238,7 @@ def _rollback_activated_update(
     identifier: str,
     workspace_id: str,
     control: Callable[[str, str], dict[str, Any]],
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
     try:
         quiesce_native_host(root, cutover_id=identifier)
         control("stop", workspace_id)
@@ -270,7 +273,9 @@ def _rollback_activated_update(
         shutil.rmtree(work, ignore_errors=True)
         if not ready:
             quiesce_native_host(root, cutover_id=identifier)
-            return None
+            raise OfficialUpdateError(
+                "official OpenDesign update recovery requires operator intervention"
+            )
         return state
     except Exception as recovery_error:
         with suppress(Exception):

@@ -1,12 +1,10 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import type { AgentTypeSummary, AppReference, ChatUsageSummary, ProviderItem } from "../api/client";
 import type { MultiAgentComposerMode } from "../api/client";
-import type { SourceAppChatMode } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { isGroupChatComposerModeEnabled } from "../lib/interAgentFeatures";
 import type { MentionItem } from "../lib/mentions";
-import { delegatedChatSourceAppId } from "../lib/sourceAppPresentation";
 import { useComposerEditor } from "../hooks/useComposerEditor";
 import { useMentionPicker } from "../hooks/useMentionPicker";
 import { AgentSelector } from "./AgentSelector";
@@ -18,7 +16,6 @@ import { ComposerRuntimeBadges } from "./ComposerRuntimeBadges";
 import { ComposerUtilities } from "./ComposerUtilities";
 import { MentionPanel } from "./MentionPanel";
 import { QueuedMessageNotice } from "./QueuedMessageNotice";
-import { SourceAppChatTools } from "./SourceAppChatTools";
 
 export type ExecutionMode = "sandbox" | "full-access";
 
@@ -43,13 +40,8 @@ export type ChatComposerProps = {
   onChange: (value: string) => void;
   onReferenceAdd?: (reference: AppReference) => void;
   onReferenceRemove?: (reference: AppReference) => void;
-  onOpenSourceAppSettings?: (section?: "designSystems") => void;
-  onOpenSourceAppTools?: () => void;
-  onResolveSourceAppProject?: (projectId: string) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
-  onSelectSourceAppProject?: (projectId: string) => void;
   onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
-  onSelectSourceAppChatMode?: (mode: SourceAppChatMode) => void;
   onSelectAgent: (agentTypeId: string) => void;
   onSelectProvider: (providerId: string, reasoningEffort?: string) => void;
   onReasoningEffortChange?: (effort: string) => void;
@@ -62,10 +54,6 @@ export type ChatComposerProps = {
   queuedCount: number;
   queuedPreview: string | null;
   selectedAgentTypeId: string;
-  sourceAppChatMode?: SourceAppChatMode;
-  sourceAppId?: string;
-  sourceAppProjectId?: string;
-  sourceAppProjectSelectionLocked?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
   transcriptionChunkedDictationSupported?: boolean;
@@ -97,13 +85,8 @@ export function ChatComposer({
   onChange,
   onReferenceAdd,
   onReferenceRemove,
-  onOpenSourceAppSettings,
-  onOpenSourceAppTools,
-  onResolveSourceAppProject,
   onSearchReferences,
-  onSelectSourceAppProject,
   onSelectMultiAgentMode,
-  onSelectSourceAppChatMode,
   onSelectAgent,
   onSelectProvider,
   onReasoningEffortChange = () => undefined,
@@ -116,10 +99,6 @@ export function ChatComposer({
   queuedCount,
   queuedPreview,
   selectedAgentTypeId,
-  sourceAppChatMode = "design",
-  sourceAppId = "",
-  sourceAppProjectId = "",
-  sourceAppProjectSelectionLocked = false,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
   transcriptionChunkedDictationSupported = false,
@@ -279,20 +258,6 @@ export function ChatComposer({
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">
                 <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
-                {delegatedChatSourceAppId(sourceAppId) && onSelectSourceAppChatMode ? (
-                  <SourceAppChatTools
-                    disabled={disabled || isSending}
-                    mode={sourceAppChatMode}
-                    onOpenSettings={onOpenSourceAppSettings}
-                    onOpenTools={onOpenSourceAppTools}
-                    onProjectResolved={onResolveSourceAppProject}
-                    onSelectMode={onSelectSourceAppChatMode}
-                    onSelectProject={onSelectSourceAppProject}
-                    projectId={sourceAppProjectId}
-                    projectSelectionLocked={sourceAppProjectSelectionLocked}
-                    sourceAppId={sourceAppId}
-                  />
-                ) : null}
                 <ComposerUtilities>
                   {onCapturePageArea ? (
                     <button

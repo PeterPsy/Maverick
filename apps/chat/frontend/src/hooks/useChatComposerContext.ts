@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppReference, getSourceAppChatCapabilities, listApps, listSkills } from "../api/client";
+import { AppReference, listApps, listSkills } from "../api/client";
 import type { ProviderItem } from "../api/client";
 import {
   ActiveAppContext,
@@ -23,7 +23,6 @@ type UseChatComposerContextParams = {
     activationMode?: string;
     allowedSkillIds?: string[];
     provider: ProviderItem | null;
-    sourceAppId?: string;
   };
   setComposer: Dispatch<SetStateAction<string>>;
   setComposerError: Dispatch<SetStateAction<string | null>>;
@@ -44,7 +43,6 @@ export function useChatComposerContext({
 }: UseChatComposerContextParams) {
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
   const [selectedReferences, setSelectedReferences] = useState<AppReference[]>([]);
-  const [sourceAppSupportsSkillInvocations, setSourceAppSupportsSkillInvocations] = useState(false);
   const consumedExternalFileDrops = useRef<Set<string>>(new Set());
   const consumedExternalMentionDrops = useRef<Set<string>>(new Set());
   const composerMentionItems = useMemo(() => {
@@ -53,8 +51,6 @@ export function useChatComposerContext({
       allowedSkillIds: skillMentionContext.allowedSkillIds,
       availableSkillIds: mentionItems.filter((item) => item.kind === "skill").map((item) => item.id),
       provider: skillMentionContext.provider,
-      sourceAppId: skillMentionContext.sourceAppId,
-      sourceAppSupportsSkillInvocations,
     }));
     const governedItems = mentionItems.filter((item) => (
       (item.kind !== "skill" || visibleSkillIds.has(item.id))
@@ -64,7 +60,7 @@ export function useChatComposerContext({
       governedItems,
       appReferencesAllowed ? selectedReferences : [],
     );
-  }, [appReferencesAllowed, mentionItems, selectedReferences, skillMentionContext, sourceAppSupportsSkillInvocations]);
+  }, [appReferencesAllowed, mentionItems, selectedReferences, skillMentionContext]);
 
   useEffect(() => {
     if (!appReferencesAllowed) {
@@ -75,25 +71,6 @@ export function useChatComposerContext({
   useEffect(() => {
     void loadMentionItems();
   }, []);
-
-  useEffect(() => {
-    const sourceAppId = skillMentionContext.sourceAppId || "";
-    setSourceAppSupportsSkillInvocations(false);
-    if (!sourceAppId) {
-      return;
-    }
-    const abortController = new AbortController();
-    void getSourceAppChatCapabilities(sourceAppId, { signal: abortController.signal })
-      .then((capabilities) => {
-        setSourceAppSupportsSkillInvocations(capabilities.supports_skill_invocations === true);
-      })
-      .catch(() => {
-        if (!abortController.signal.aborted) {
-          setSourceAppSupportsSkillInvocations(false);
-        }
-      });
-    return () => abortController.abort();
-  }, [skillMentionContext.sourceAppId]);
 
   useEffect(() => {
     if (!externalMentionDrop || consumedExternalMentionDrops.current.has(externalMentionDrop.requestId)) {

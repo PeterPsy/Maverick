@@ -8,9 +8,13 @@ export function isOpenDesignSourceApp(sourceAppId: string | null | undefined): b
   return sourceAppId === "design-studio" || Boolean(sourceAppId?.endsWith("-design-studio"));
 }
 
-export function delegatedChatSourceAppId(sourceAppId: string | null | undefined): string {
-  const normalized = String(sourceAppId || "").trim();
-  return isOpenDesignSourceApp(normalized) ? normalized : "";
+export const HISTORICAL_OPENDESIGN_THREAD_READ_ONLY =
+  "This historical Design Studio chat is read-only. Continue in Design Studio or delegate a new brief through its agent tools.";
+
+export function historicalSourceAppReadOnlyReason(sourceAppId: string | null | undefined): string | null {
+  return isOpenDesignSourceApp(String(sourceAppId || "").trim())
+    ? HISTORICAL_OPENDESIGN_THREAD_READ_ONLY
+    : null;
 }
 
 export function sourceAppPresentation(sourceAppId: string | null | undefined): SourceAppPresentation | null {

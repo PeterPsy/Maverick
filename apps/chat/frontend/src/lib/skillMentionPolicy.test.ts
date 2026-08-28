@@ -97,16 +97,4 @@ describe("skill mention policy", () => {
       provider: provider(),
     })).toEqual([]);
   });
-
-  it("fails closed until a source app advertises structured skill invocation", () => {
-    const base = {
-      activationMode: "explicit" as const,
-      availableSkillIds: ["storage-ops"],
-      provider: provider(),
-      sourceAppId: "design-studio",
-    };
-
-    expect(skillIdsVisibleInComposer(base)).toEqual([]);
-    expect(skillIdsVisibleInComposer({ ...base, sourceAppSupportsSkillInvocations: true })).toEqual(["storage-ops"]);
-  });
 });

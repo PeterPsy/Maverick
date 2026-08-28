@@ -15,13 +15,11 @@ import {
   type RuntimeEvent,
   type RuntimeSession,
   type RuntimeTurn,
-  type SourceAppChatMode,
 } from "../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
 import { type ActiveAppContext, loadWidgetActiveAppContext } from "../lib/activeAppContext";
 import { composerRuntimeCapabilities } from "../lib/composerRuntimeCapabilities";
-import { openAppParamsInShell, openContextAppParamsInShell } from "../lib/shellNavigation";
-import { delegatedChatSourceAppId } from "../lib/sourceAppPresentation";
+import { openAppParamsInShell } from "../lib/shellNavigation";
 import { postActiveThreadChanged } from "./chatActiveThreadNotifications";
 import { useChatComposerContext } from "./useChatComposerContext";
 import { useChatControllerPresentation } from "./useChatControllerPresentation";
@@ -261,7 +259,6 @@ export function useChatAppController({
   const [composerError, setComposerError] = useState<string | null>(null);
   const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
   const [multiAgentMode, setMultiAgentMode] = useState<MultiAgentComposerMode>("off");
-  const [sourceAppChatMode, setSourceAppChatMode] = useState<SourceAppChatMode>("design");
   const [interAgentRuns, setInterAgentRuns] = useState<InterAgentRunDetail[]>([]);
   const [interAgentEventsByRunId, setInterAgentEventsByRunId] = useState<Record<string, InterAgentEventRecord[]>>({});
   const [interAgentApprovalsByRunId, setInterAgentApprovalsByRunId] = useState<Record<string, InterAgentApprovalRecord[]>>({});
@@ -276,7 +273,6 @@ export function useChatAppController({
   const interAgentRefreshScopeRef = useRef("");
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
   const activeConversationKey = conversationKeyFor(activeThread, draftChat);
-  const sourceAppId = delegatedChatSourceAppId(activeThread?.source_app_id || activeAppContext?.app_id);
   const selectedAgent = agentOptions.find((agent) => agent.id === selectedAgentTypeId) || null;
   const skillMentionContext = useMemo(() => ({
     activationMode: activeThread
@@ -284,14 +280,12 @@ export function useChatAppController({
       : selectedAgent?.skill_activation_mode || (selectedAgent ? "implicit" : "explicit"),
     allowedSkillIds: activeThread ? activeSession?.skill_ids : selectedAgent?.skill_ids || [],
     provider: selectedProvider,
-    sourceAppId,
   }), [
     activeSession?.skill_activation_mode,
     activeSession?.skill_ids,
     activeThread,
     selectedAgent,
     selectedProvider,
-    sourceAppId,
   ]);
   const appReferencesAllowed = composerCapabilities.appReferencesAllowed;
   const interAgentRefreshScope = `${activeThread?.runtime_session_id || ""}:${activeInterAgentGraphRunId || ""}`;
@@ -505,7 +499,6 @@ export function useChatAppController({
     notifyActiveThreadChanged,
     onInterAgentRunChanged: upsertInterAgentRunDetail,
     selectedAgentRuntimeConfig: runtimeControls.selectedAgentRuntimeConfig,
-    sourceAppChatMode,
     setActiveSession,
     setActiveThread,
     setActiveTurn,
@@ -634,74 +627,6 @@ export function useChatAppController({
     queuedMessages,
   });
 
-  const sourceAppProjectId = sourceAppId
-    ? activeThread?.project_id
-      || (typeof activeAppContext?.params?.od_project_id === "string" ? activeAppContext.params.od_project_id : "")
-      || (typeof activeAppContext?.params?.project_id === "string" ? activeAppContext.params.project_id : "")
-    : "";
-  const updateSourceAppProjectContext = useCallback((projectId: string) => {
-    const normalizedProjectId = projectId.trim();
-    if (!sourceAppId || !normalizedProjectId) {
-      return;
-    }
-    setActiveAppContext((current) => {
-      if (!current || current.app_id !== sourceAppId) {
-        return current;
-      }
-      if (current.params?.od_project_id === normalizedProjectId) {
-        return current;
-      }
-      return {
-        ...current,
-        params: {
-          ...(current.params || {}),
-          od_project_id: normalizedProjectId,
-        },
-      };
-    });
-  }, [sourceAppId]);
-  const handleResolveSourceAppProject = useCallback((projectId: string) => {
-    updateSourceAppProjectContext(projectId);
-  }, [updateSourceAppProjectContext]);
-  const handleSelectSourceAppProject = useCallback((projectId: string) => {
-    const normalizedProjectId = projectId.trim();
-    if (!sourceAppId || !normalizedProjectId) {
-      return;
-    }
-    updateSourceAppProjectContext(normalizedProjectId);
-    openContextAppParamsInShell(
-      sourceAppId,
-      { od_project_id: normalizedProjectId },
-      { navigationScope },
-    );
-  }, [navigationScope, sourceAppId, updateSourceAppProjectContext]);
-  const handleOpenSourceAppSettings = useCallback((section?: "designSystems") => {
-    if (!sourceAppId) {
-      return;
-    }
-    openContextAppParamsInShell(
-      sourceAppId,
-      {
-        ...(sourceAppProjectId ? { od_project_id: sourceAppProjectId } : {}),
-        open_settings_request_id: crypto.randomUUID(),
-        ...(section ? { settings_section: section } : {}),
-      },
-      { navigationScope },
-    );
-  }, [navigationScope, sourceAppId, sourceAppProjectId]);
-  const handleOpenSourceAppTools = useCallback(() => {
-    if (!sourceAppId) {
-      return;
-    }
-    openContextAppParamsInShell(
-      sourceAppId,
-      {
-        ...(sourceAppProjectId ? { od_project_id: sourceAppProjectId } : {}),
-        open_tools_request_id: crypto.randomUUID(),
-      },
-      { navigationScope },
-    );
-  }, [navigationScope, sourceAppId, sourceAppProjectId]);
   const runtimeAdmissionError = runtimeAdmissionBlockMessage(activeSession);
 
   const presentation = useChatControllerPresentation({
@@ -734,12 +659,8 @@ export function useChatAppController({
     handleReferenceRemove,
     handleSearchReferences,
     handleOpenInterAgentGraph,
-    handleOpenSourceAppSettings,
-    handleOpenSourceAppTools,
-    handleResolveSourceAppProject,
     handleResolveInterAgentApproval,
     handleSelectAgent: runtimeControls.handleSelectAgent,
-    handleSelectSourceAppProject,
     handleSelectProvider: runtimeControls.handleSelectProvider,
     handleReasoningEffortChange: runtimeControls.setReasoningEffort,
     handleSend,
@@ -766,11 +687,6 @@ export function useChatAppController({
     queuedMessages,
     removeAttachment,
     selectedAgentTypeId,
-    sourceAppChatMode,
-    sourceAppId,
-    sourceAppProjectId,
-    sourceAppProjectSelectionLocked: Boolean(activeThread && sourceAppId),
-    setSourceAppChatMode,
     setMultiAgentMode,
     setComposer,
     speechMaxTextChars,

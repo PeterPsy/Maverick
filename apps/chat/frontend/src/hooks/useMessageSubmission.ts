@@ -8,8 +8,6 @@ import {
   RuntimeSession,
   RuntimeTurn,
   RuntimeTurnSubmitResponse,
-  SourceAppChatMode,
-  cancelSourceAppTurn,
   createInterAgentOrchestration,
   createRuntimeSession,
   createRuntimeSessionWithTurn,
@@ -18,10 +16,8 @@ import {
   prepareRuntimeSessionAppReferences,
   prewarmRuntimeSession,
   recordRuntimeTurnClientMetrics,
-  resolveSourceAppChatProject,
   sendInterAgentDirective,
   sendRuntimeTurn,
-  sendSourceAppTurn,
 } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
 import type { RuntimeSessionOptions, RuntimeTurnClientMetrics } from "../api/client";
@@ -29,7 +25,10 @@ import { hasInvalidAttachments } from "../lib/attachments";
 import { ActiveAppContext, mergeAppReferences } from "../lib/activeAppContext";
 import { appReferencesFromText, skillIdsFromText } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
-import { delegatedChatSourceAppId } from "../lib/sourceAppPresentation";
+import {
+  HISTORICAL_OPENDESIGN_THREAD_READ_ONLY,
+  historicalSourceAppReadOnlyReason,
+} from "../lib/sourceAppPresentation";
 import {
   PendingMessage,
   QueuedMessage,
@@ -86,7 +85,6 @@ type UseMessageSubmissionParams = {
   notifyActiveThreadChanged: (activeThreadId: string) => void;
   onInterAgentRunChanged?: (detail: InterAgentRunDetail) => void;
   selectedAgentRuntimeConfig: (activeApp: ActiveAppContext | null) => Promise<AgentRuntimeConfig | null>;
-  sourceAppChatMode: SourceAppChatMode;
   setActiveSession: Dispatch<SetStateAction<RuntimeSession | null>>;
   setActiveThread: Dispatch<SetStateAction<ChatThread | null>>;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
@@ -351,7 +349,6 @@ export function useMessageSubmission({
   notifyActiveThreadChanged,
   onInterAgentRunChanged,
   selectedAgentRuntimeConfig,
-  sourceAppChatMode,
   setActiveSession,
   setActiveThread,
   setActiveTurn,
@@ -411,7 +408,7 @@ export function useMessageSubmission({
   }, [activeAppContext, activeConversationKey, activeInterAgentRun, activeThread, activeTurn, draftChat, threads]);
 
   useEffect(() => {
-    if (!canPreloadRuntime || sourceAppOwner(activeThread, activeAppContext)) {
+    if (!canPreloadRuntime) {
       return;
     }
     const abortController = new AbortController();
@@ -1159,11 +1156,7 @@ export function useMessageSubmission({
       return true;
     }
     try {
-      const sourceAppId = sourceAppOwner(activeThreadRef.current, null);
-      const runtimeSessionId = activeThreadRef.current?.runtime_session_id || "";
-      const response = sourceAppId && runtimeSessionId
-        ? await cancelSourceAppTurn({ runtimeSessionId, sourceAppId, turnId })
-        : await interruptRuntimeTurn(turnId);
+      const response = await interruptRuntimeTurn(turnId);
       inFlightSubmission?.abortController.abort();
       if (isConversationStillActive(conversationKey)) {
         activeTurnRef.current = response.turn;
@@ -1192,6 +1185,18 @@ export function useMessageSubmission({
     const conversationKey = target.conversationKey;
     const targetThread = target.thread;
     const targetDraftChat = target.draftChat;
+    const historicalReadOnlyReason = historicalSourceAppReadOnlyReason(targetThread?.source_app_id);
+    if (historicalReadOnlyReason) {
+      abortController.abort();
+      removePendingMessage(conversationKey, message.clientMessageId);
+      setSubmittedTurnForConversation(conversationKey, null);
+      delete inFlightSubmissionsRef.current[conversationKey];
+      setConversationSending(conversationKey, false);
+      if (isConversationStillActive(conversationKey)) {
+        setComposerError(historicalReadOnlyReason);
+      }
+      return;
+    }
     try {
       throwIfAborted(abortController.signal);
       let thread = targetThread;
@@ -1199,30 +1204,7 @@ export function useMessageSubmission({
       let systemPrompt = targetDraftChat?.systemPrompt || "";
       let response: RuntimeTurnSubmitResponse | null = null;
       const clientMetrics: RuntimeTurnClientMetrics = { ...(message.clientSubmissionMetrics || {}) };
-      const sourceAppId = sourceAppOwner(thread, target.activeAppContext);
-      if (sourceAppId) {
-        let projectId = sourceAppProjectId(thread, target.activeAppContext);
-        if (!projectId) {
-          projectId = await resolveSourceAppChatProject(sourceAppId, "", { signal: abortController.signal });
-        }
-        if (!projectId) {
-          throw new Error("Create or select a Design Studio project before starting this chat.");
-        }
-        response = await submitWithPostMetric(clientMetrics, () =>
-          sendSourceAppTurn({
-            appReferences: message.appReferences,
-            attachments: message.attachments,
-            clientMessageId: message.clientMessageId,
-            inputText: message.content,
-            invokedSkillIds: message.invokedSkillIds,
-            mode: sourceAppChatMode,
-            projectId,
-            runtimeSessionId: thread?.runtime_session_id || undefined,
-            signal: abortController.signal,
-            sourceAppId,
-          }),
-        );
-      } else if (!thread) {
+      if (!thread) {
         const runtimeOptions = await buildRuntimeSessionOptions(target, abortController.signal);
         agentRuntimeConfig = runtimeOptions.agentRuntimeConfig;
         systemPrompt = runtimeOptions.systemPrompt;
@@ -1521,6 +1503,10 @@ export function useMessageSubmission({
     if (!target) {
       return;
     }
+    if (historicalSourceAppReadOnlyReason(target.thread?.source_app_id)) {
+      setComposerError(HISTORICAL_OPENDESIGN_THREAD_READ_ONLY);
+      return;
+    }
     const clientMessageId = crypto.randomUUID();
     const clientSubmissionStartedAt = new Date().toISOString();
     const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
@@ -1702,20 +1688,6 @@ function interAgentSteeredMessageText(message: QueuedMessage): string {
     .filter(Boolean);
   const attachmentContext = attachmentLabels.length ? `Attachments: ${attachmentLabels.join(", ")}` : "";
   return [message.content.trim(), attachmentContext].filter(Boolean).join("\n").slice(0, 6000) || "Additional user input.";
-}
-
-function sourceAppOwner(thread: ChatThread | null, activeAppContext: ActiveAppContext | null): string {
-  const sourceAppId = thread?.source_app_id || (!thread ? activeAppContext?.app_id || "" : "");
-  return delegatedChatSourceAppId(sourceAppId);
-}
-
-function sourceAppProjectId(thread: ChatThread | null, activeAppContext: ActiveAppContext | null): string {
-  if (thread?.project_id) {
-    return thread.project_id;
-  }
-  const params = activeAppContext?.params || {};
-  const projectId = params.od_project_id || params.project_id;
-  return typeof projectId === "string" ? projectId : "";
 }
 
 function expectedRuntimeTurnId(activeTurn: RuntimeTurn | null, thread: ChatThread | null): string | undefined {

@@ -6,15 +6,11 @@ export function skillIdsVisibleInComposer({
   allowedSkillIds,
   availableSkillIds,
   provider,
-  sourceAppId = "",
-  sourceAppSupportsSkillInvocations = false,
 }: {
   activationMode?: string;
   allowedSkillIds?: string[];
   availableSkillIds: string[];
   provider: ProviderItem | null;
-  sourceAppId?: string;
-  sourceAppSupportsSkillInvocations?: boolean;
 }): string[] {
   if (
     activationMode !== "explicit"
@@ -25,7 +21,6 @@ export function skillIdsVisibleInComposer({
         ? provider.agentic_effective_capabilities?.capabilities.skill_catalog !== true
         : provider.capabilities?.supports_skills !== true
     )
-    || (sourceAppId && !sourceAppSupportsSkillInvocations)
   ) {
     return [];
   }

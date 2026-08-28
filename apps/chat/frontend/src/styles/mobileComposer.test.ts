@@ -152,9 +152,6 @@ describe("mobile chat composer layout", () => {
       ".chatapp-composer-utilities__menu:has(.chatapp-provider-menu)",
     );
     expect(responsiveStyles).toContain(
-      ".chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu)",
-    );
-    expect(responsiveStyles).toContain(
       ".chatapp-composer-utilities__menu .chatapp-multi-agent-menu",
     );
     expect(responsiveStyles).toContain("inset: auto;");

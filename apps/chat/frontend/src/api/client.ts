@@ -6,4 +6,3 @@ export * from "./interAgent";
 export * from "./speech";
 export * from "./widgets";
 export * from "./chatProjects";
-export * from "./sourceAppChat";

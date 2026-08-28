@@ -12,7 +12,6 @@ import type {
   ProviderItem,
   RuntimeEvent,
   RuntimeTurn,
-  SourceAppChatMode,
 } from "../api/client";
 import type { ChatSurfaceProps } from "../components/ChatSurface";
 import type { ExecutionMode } from "../components/ChatComposer";
@@ -20,6 +19,7 @@ import type { ComposerAttachment } from "../lib/attachments";
 import type { MentionItem } from "../lib/mentions";
 import type { PendingMessage, QueuedMessage } from "../lib/messageState";
 import { runtimeActivityLabel } from "../lib/runtimeActivity";
+import { historicalSourceAppReadOnlyReason } from "../lib/sourceAppPresentation";
 import { eventsToMessages } from "../lib/transcript";
 import { useChatRootDropHandlers } from "./useChatRootDropHandlers";
 import { useDockedComposerHeight } from "./useDockedComposerHeight";
@@ -59,12 +59,8 @@ type UseChatControllerPresentationParams = {
   handleReferenceRemove: (reference: AppReference) => void;
   handleSearchReferences: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
   handleOpenInterAgentGraph: (runId: string) => void;
-  handleOpenSourceAppSettings: (section?: "designSystems") => void;
-  handleOpenSourceAppTools: () => void;
-  handleResolveSourceAppProject: (projectId: string) => void;
   handleResolveInterAgentApproval: (approvalId: string, approved: boolean) => Promise<void>;
   handleSelectAgent: (agentTypeId: string) => void;
-  handleSelectSourceAppProject: (projectId: string) => void;
   handleSelectProvider: (providerId: string) => void;
   handleReasoningEffortChange: (effort: string) => void;
   handleSend: () => void;
@@ -91,11 +87,6 @@ type UseChatControllerPresentationParams = {
   onLoadOlderHistory: () => void;
   onRevealOlderMessages: () => void;
   selectedAgentTypeId: string;
-  sourceAppChatMode: SourceAppChatMode;
-  sourceAppId: string;
-  sourceAppProjectId: string;
-  sourceAppProjectSelectionLocked: boolean;
-  setSourceAppChatMode: (mode: SourceAppChatMode) => void;
   setMultiAgentMode: (mode: MultiAgentComposerMode) => void;
   setComposer: (value: string) => void;
   speechMaxTextChars: number;
@@ -142,12 +133,8 @@ export function useChatControllerPresentation({
   handleReferenceRemove,
   handleSearchReferences,
   handleOpenInterAgentGraph,
-  handleOpenSourceAppSettings,
-  handleOpenSourceAppTools,
-  handleResolveSourceAppProject,
   handleResolveInterAgentApproval,
   handleSelectAgent,
-  handleSelectSourceAppProject,
   handleSelectProvider,
   handleReasoningEffortChange,
   handleSend,
@@ -174,11 +161,6 @@ export function useChatControllerPresentation({
   onLoadOlderHistory,
   onRevealOlderMessages,
   selectedAgentTypeId,
-  sourceAppChatMode,
-  sourceAppId,
-  sourceAppProjectId,
-  sourceAppProjectSelectionLocked,
-  setSourceAppChatMode,
   setMultiAgentMode,
   setComposer,
   speechMaxTextChars,
@@ -195,6 +177,8 @@ export function useChatControllerPresentation({
   visibleMessageLimit,
 }: UseChatControllerPresentationParams) {
   const { hasHiddenMessages, messages } = useVisibleChatMessages(events, pendingUserMessages, failedUserMessages, visibleMessageLimit);
+  const historicalReadOnlyReason = historicalSourceAppReadOnlyReason(activeThread?.source_app_id);
+  const effectiveComposerError = historicalReadOnlyReason || composerError;
   const composerSelectedAgentTypeId = activeThread
     ? activeThread.source_app_id && activeThread.source_app_id !== "chat"
       ? activeThread.agent_type_id
@@ -213,7 +197,7 @@ export function useChatControllerPresentation({
   const isThreadLoading = !composerReady || isHistoryLoading || isTranscriptHistoryPending;
   const { chatMainStyle, dockedComposerHeight, dockedComposerRef } = useDockedComposerHeight({
     attachmentCount: attachments.length,
-    composerError,
+    composerError: effectiveComposerError,
     isComposerDockVisible: !activeInterAgentGraphRunId,
     isEmptyChatView,
     queuedMessageCount: queuedMessages.length,
@@ -235,7 +219,7 @@ export function useChatControllerPresentation({
     return interAgentComposerBudgetLabel(multiAgentMode);
   }, [multiAgentMode]);
   const { handleChatRootDragOver, handleChatRootDrop } = useChatRootDropHandlers({
-    disabled: isThreadLoading || runtimeAdmissionBlocked,
+    disabled: isThreadLoading || runtimeAdmissionBlocked || Boolean(historicalReadOnlyReason),
     handleAddAttachments,
   });
   const surfaceProps: ChatSurfaceProps = {
@@ -246,8 +230,8 @@ export function useChatControllerPresentation({
       agents: agentOptions,
       attachments,
       canStopTurn,
-      disabled: isThreadLoading || runtimeAdmissionBlocked,
-      error: composerError,
+      disabled: isThreadLoading || runtimeAdmissionBlocked || Boolean(historicalReadOnlyReason),
+      error: effectiveComposerError,
       executionMode,
       isSending,
       mentionItems: composerMentionItems,
@@ -260,14 +244,10 @@ export function useChatControllerPresentation({
       onReferenceAdd: handleReferenceAdd,
       onReferenceRemove: handleReferenceRemove,
       onRemoveAttachment: removeAttachment,
-      onOpenSourceAppSettings: handleOpenSourceAppSettings,
-      onOpenSourceAppTools: handleOpenSourceAppTools,
-      onResolveSourceAppProject: handleResolveSourceAppProject,
       onSearchReferences: handleSearchReferences,
       onSelectMultiAgentMode: setMultiAgentMode,
       onSelectAgent: handleSelectAgent,
       onSelectProvider: handleSelectProvider,
-      onSelectSourceAppProject: handleSelectSourceAppProject,
       onReasoningEffortChange: handleReasoningEffortChange,
       onStopTurn: handleStopTurn,
       onSubmit: handleSend,
@@ -277,11 +257,6 @@ export function useChatControllerPresentation({
       queuedCount: queuedMessages.length,
       queuedPreview: queuedMessages[0]?.content || null,
       selectedAgentTypeId: composerSelectedAgentTypeId,
-      sourceAppChatMode,
-      sourceAppId,
-      sourceAppProjectId,
-      sourceAppProjectSelectionLocked,
-      onSelectSourceAppChatMode: setSourceAppChatMode,
       transcriptionChunkedDictationSupported,
       transcriptionContentTypes,
       transcriptionMaxAudioBytes,

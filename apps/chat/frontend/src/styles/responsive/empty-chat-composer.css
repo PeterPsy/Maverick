@@ -202,19 +202,12 @@
     min-height: 2.1rem;
   }
 
-  .chatapp-composer-utilities__menu .chatapp-source-tools__button {
-    width: auto;
-    min-width: 4.8rem;
-    padding: 0 0.58rem;
-  }
-
   .chatapp-composer-utilities__menu .chatapp-multi-agent-control__button {
     width: auto;
     min-width: 4.4rem;
     padding: 0 0.58rem;
   }
 
-  .chatapp-composer-utilities__menu .chatapp-source-tools__label,
   .chatapp-composer-utilities__menu .chatapp-multi-agent-control__label {
     position: static;
     width: auto;
@@ -245,7 +238,6 @@
     display: none;
   }
 
-  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu),
   .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu),
   .chatapp-composer-utilities__menu:has(.chatapp-agent-menu),
   .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) {
@@ -256,7 +248,6 @@
     overflow: hidden;
   }
 
-  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu) .chatapp-composer-utilities__tools,
   .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu) .chatapp-composer-utilities__tools,
   .chatapp-composer-utilities__menu:has(.chatapp-agent-menu) .chatapp-composer-utilities__tools,
   .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-composer-utilities__tools {
@@ -264,8 +255,6 @@
     width: 100%;
   }
 
-  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu)
-    .chatapp-composer-utilities__tools > :not(.chatapp-source-tools),
   .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu)
     .chatapp-composer-utilities__tools > :not(.chatapp-multi-agent-control),
   .chatapp-composer-utilities__menu:has(.chatapp-agent-menu)
@@ -275,7 +264,6 @@
     display: none;
   }
 
-  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu) .chatapp-source-tools,
   .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu) .chatapp-multi-agent-control,
   .chatapp-composer-utilities__menu:has(.chatapp-agent-menu) .chatapp-agent-selector,
   .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-provider-selector {
@@ -294,14 +282,12 @@
     display: none;
   }
 
-  .chatapp-composer-utilities__menu:has(.chatapp-source-tools__menu) .chatapp-source-tools__button,
   .chatapp-composer-utilities__menu:has(.chatapp-multi-agent-menu) .chatapp-multi-agent-control__button,
   .chatapp-composer-utilities__menu:has(.chatapp-agent-menu) .chatapp-agent-selector__trigger,
   .chatapp-composer-utilities__menu:has(.chatapp-provider-menu) .chatapp-provider-selector__trigger {
     display: none;
   }
 
-  .chatapp-composer-utilities__menu .chatapp-source-tools__menu,
   .chatapp-composer-utilities__menu .chatapp-multi-agent-menu,
   .chatapp-composer-utilities__menu .chatapp-agent-menu,
   .chatapp-composer-utilities__menu .chatapp-provider-menu {

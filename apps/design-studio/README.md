@@ -86,6 +86,47 @@ Maverick keeps only:
 - the external Delegation Bridge and bounded correlation state; and
 - display-safe project references and explicit authorized delegation inputs.
 
+## One-time native data cutover
+
+Existing workspaces created by the retired customized runtime are moved once
+from the active legacy generation into `opendesign-native/`. The operator
+command `service/cutover_native_opendesign.py` is deliberately unavailable
+while Maverick Core or an OpenDesign writer is running.
+
+`prepare` creates an immutable backup of the canonical OpenDesign directory,
+the previous native directory, and the explicit legacy correlation/config
+files. It restores two disposable copies, runs the unchanged same-version
+official package with both bridges disabled, and compares redaction-safe
+hashes for projects, conversations, ordered messages, Design Systems, project
+files, artifacts, settings, and run references using only public APIs. It then
+atomically selects the certified copy, removes only Maverick runtime metadata,
+and makes the retired generation and writer state read-only.
+
+Activation is explicit and ordered:
+
+```bash
+systemctl stop maverick-core.service
+python3 apps/design-studio/service/cutover_native_opendesign.py prepare \
+  --data-root /path/to/workspace/data/design-studio \
+  --installation /path/to/artifacts/opendesign/official/<digest> \
+  --confirm-writers-stopped
+python3 apps/design-studio/service/cutover_native_opendesign.py activate \
+  --data-root /path/to/workspace/data/design-studio \
+  --cutover-id <reported-cutover-id> \
+  --confirm-writers-stopped
+systemctl start maverick-core.service
+# Verify native readiness and the public inventory, then:
+python3 apps/design-studio/service/cutover_native_opendesign.py finalize \
+  --data-root /path/to/workspace/data/design-studio \
+  --cutover-id <reported-cutover-id> --ready
+```
+
+`activate` closes rollback to the legacy writer before Core starts. A failed
+native readiness check records `activation_failed` but never re-enables the
+legacy writer. Backups and certification records contain recovery bytes or
+category hashes as appropriate; the live Maverick marker contains no project,
+transcript, file, artifact, or settings bodies.
+
 The CLI and MCP surfaces must use supported public OpenDesign APIs. They must
 never patch the official package, automate the browser, or read/write the
 OpenDesign database directly.
@@ -119,6 +160,8 @@ python3 -m unittest \
   apps.design-studio.tests.test_native_thin_host \
   apps.design-studio.tests.test_model_access_bridge \
   apps.design-studio.tests.test_native_delegation \
+  apps.design-studio.tests.test_native_data_cutover \
+  apps.design-studio.tests.test_official_public_inventory \
   tests.unit.app_hosting.test_model_access_broker
 ```
 

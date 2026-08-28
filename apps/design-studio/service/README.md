@@ -1,513 +1,83 @@
-# Design Studio OpenDesign Sidecar
+# Design Studio OpenDesign Service
 
-Design Studio starts `opendesign_launcher.py` as the declared Maverick sidecar.
-The launcher requires the platform-owned artifact capability mounted read-only
-at:
+This directory owns the external hosting and bridge code for the unchanged
+official OpenDesign installation exposed as Maverick `app_id: design-studio`.
+It does not contain an OpenDesign fork or an active custom UI/runtime build.
 
-```text
-/artifacts/opendesign/runtime/<artifact-sha256>/content
-/artifacts/opendesign/web/<web-sha256>/content
-```
+## Active runtime
 
-The host namespace is content-addressed, protected, and outside the repository;
-it is never inferred from an app path or environment escape hatch. Control
-schema v3 selects both digests plus the OpenDesign version and data
-generation. The daemon requires `OD_STATIC_DIR` and
-`OD_STATIC_REGISTRY_ROOT`; both resolve to real, non-symlinked paths contained
-in the verified overlay registry. There is no fallback to web files embedded in
-the runtime closure.
+`opendesign_official_release.json` pins the official
+`ghcr.io/nexu-io/od:0.16.1` OCI manifest. `official_opendesign_release.py`
+verifies the OCI identity, installs its unmodified layers, records an external
+rootfs snapshot, and verifies every installed byte before activation.
 
-The primary distribution is the upstream image
-`ghcr.io/nexu-io/od:0.16.1`, pinned to OCI index
-`sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1`
-and linux/amd64 manifest
-`sha256:170f56cdeb3a213423af150d4095b7729814eaf0ad26a99be7fab2344f0f5cd1`.
-The image labels and SLSA attestation bind it to upstream commit
-`276b4d8e970bc143d7ad060181a89a834e3d9caf` and release `0.16.1`.
+`opendesign_launcher.py` is the thin sidecar entrypoint. Core mounts the
+verified rootfs read-only, mounts only the workspace-scoped
+`data/design-studio/opendesign-native/` data volume writable, and provides the
+authenticated Unix relay and isolated browser origin. The launcher invokes the
+official upstream entrypoint and never patches, overlays, injects, or
+intercepts OpenDesign routes.
 
-Import the immutable OCI runtime and rebuild the reviewed React web overlay from
-the exact pinned source, then materialize it:
+## External bridges
 
-```bash
-python3 apps/design-studio/service/import_opendesign_oci.py \
-  --source-repository /path/to/open-design-v0.16.1/.git \
-  --signing-key /secure/path/opendesign-provenance-key.pem
-python3 apps/design-studio/service/materialize_opendesign.py
-```
+The Model Access Bridge consists of `model_access_client.py`,
+`model_access_server.py`, `model_access_profiles.py`, and the
+`maverick-codex` technical wrapper. It exposes configured API and CLI models
+through protocols supported by OpenDesign without a Maverick runtime session,
+prompt, memory, persona, skill, tool catalog, or semantic rewrite.
 
-`opendesign_runtime_sources.json` is the release-bound source catalog. Its raw
-SHA-256 is pinned by schema-v3 `opendesign_release_selection.json`; each entry
-then pins one role, runtime digest, committed manifest digest, payload location,
-and verifier profile. The current signed set is read from `artifacts/`, while
-the retained transactional rollback is read from
-`artifacts/runtime/<rollback-runtime-sha256>/`. The materializer refuses a
-missing source and publishes plus fully audits both roles, so a clean platform
-store does not depend on an out-of-band pre-existing rollback package. Repair
-uses the same exact source binding and never substitutes another generation.
+Delegation lives outside this service directory under `../backend/`. It calls
+only supported native project, conversation, message, file, run, result, and
+cancellation APIs and persists only bounded correlation metadata. Direct
+native OpenDesign remains usable if either bridge is unavailable.
 
-Import is fail-closed for agent runs. It requires a live
-`MAVERICK_RUNTIME_SESSION_ID` in its process ancestry. Each command runs in a
-new process group; loss of the runtime attachment or termination stops the whole
-group. Heavy phases refuse to begin below 4 GiB available memory and stop below
-2.4 GiB. The registry
-client accepts only the two pinned HTTPS hosts, validates every descriptor,
-layer size and digest, requires the exact OCI config labels and SLSA subject,
-and streams layers through owned temporary files. Layer extraction rejects path
-escape, unsafe links and special files and implements OCI whiteouts without
-following filesystem links.
+## One-time data cutover
 
-`opendesign_bundle.json` is the single distribution contract. Runtime,
-web-build, and web-react patches are declared as separate components. Two
-independent pulls reconstruct and inventory the root filesystem, apply the one
-exact preimage-bound compiled boundary patch, export the exact upstream Git pin,
-apply only the reviewed runtime patches, and stage the image's own musl loader,
-Node runtime, daemon, and native dependency closure without static web output.
-They generate the archive, file manifest, SBOM, licenses, NOTICE and signed
-provenance. Every
-output must match byte-for-byte before publication. The launcher invokes only
-that imported loader and Node binary; the app contract deliberately declares no
-package manager and core therefore does not mount a host Node runtime.
+`cutover_native_opendesign.py` drives the operator-controlled transition from
+the retired customized generation to `opendesign-native/`:
 
-Publication performs the complete manifest-v2 audit, including contents,
-modes, directories, symlinks, and absence of extra files, then writes a
-protected receipt and atomically renames the generation into place. Normal
-launch hashes only the manifest-v2 metadata file to bind it to that receipt,
-then checks store identity, owner/modes, read-only mount, and exact
-runtime/overlay/data binding without scanning or hashing the closure.
-Full verification remains mandatory for install, activation, repair, audit,
-and release certification, including packages already present in the store.
-Core prewarms asynchronously with per-key
-singleflight; its browser gate is `/api/maverick-ready` with a 12-second budget.
-A failed start tears down the complete confined process group and cannot reuse a
-relay, Future, ticket, or browser session.
-The background audit is fail-closed: a mismatch first invalidates the readiness
-marker and stops the Core-owned sidecar, then performs one cross-process-locked
-repair and a direct governed restart. Failure state and the next allowed audit
-time are persisted, so the 15-second scheduler tick cannot create a repair loop.
+1. require Core and every OpenDesign writer to be stopped;
+2. verify the unchanged same-version official installation;
+3. create a byte-verified immutable backup of canonical and legacy state;
+4. run official migrations on disposable restored copies with both bridges
+   disabled;
+5. inventory projects, conversations, ordered messages, Design Systems, files,
+   artifacts, settings, and run references only through supported HTTP APIs;
+6. require identical redaction-safe category hashes;
+7. atomically select the migrated native directory and freeze retired writer
+   state; and
+8. close legacy rollback before Core starts, then record native readiness.
 
-The complete daemon/source runtime build remains under `fallback_build` only as
-a separately reviewed fallback. The primary artifact requires the verified OCI
-daemon/runtime, while its independently signed web overlay is rebuilt from the
-same pinned source. Runtime startup never contains a source tree, package
-manager, static web copy, or build step.
+The implementation is split by responsibility:
 
-The complete source-suite baseline is not part of OCI import and does not gate
-the pinned image verification. It remains a separate fallback-build acceptance
-on adequate capacity:
+- `native_cutover_files.py`: safe copies, hashes, fsync, and read-only state;
+- `native_cutover_state.py`: strict legacy paths, lock, and activation marker;
+- `native_data_cutover.py`: backup/certification/atomic selection orchestration;
+- `official_inventory_process.py`: disposable unchanged process and bounded
+  public HTTP client;
+- `official_inventory_values.py`: stable redaction-safe API normalization; and
+- `official_public_inventory.py`: canonical public-surface inventory.
+
+Neither cutover nor normal hosting imports a private OpenDesign database
+driver. The immutable recovery backup necessarily retains canonical bytes;
+Maverick's live cutover marker and certification summary retain only technical
+identity, counts, and SHA-256 evidence.
+
+## Focused verification
 
 ```bash
-python3 apps/design-studio/service/certify_opendesign_upstream.py \
-  --source /path/to/exact-unpatched-open-design-v0.16.1 \
-  --output-dir /owned/output/opendesign-upstream-acceptance
+python3 -m unittest -v \
+  apps/design-studio/tests/test_official_opendesign_release.py \
+  apps/design-studio/tests/test_native_thin_host.py \
+  apps/design-studio/tests/test_model_access_bridge.py \
+  apps/design-studio/tests/test_native_delegation.py \
+  apps/design-studio/tests/test_native_data_cutover.py \
+  apps/design-studio/tests/test_official_public_inventory.py
 ```
 
-That command performs one frozen install and exactly two complete suite
-processes—web, then daemon—with one worker, no shard, exclusion, or retry. Its
-record is `opendesign_upstream_baseline_0_16_1.json`. A capacity stop is an
-infrastructure blocker to move to a suitable builder, not a reason to resume a
-per-file prefix or construct a retry framework.
-
-The generated artifact and its external file manifest, CycloneDX SBOM, license
-inventory, NOTICE, signed provenance, signature, and public key stay under
-ignored `service/artifacts/`. The committed manifest pins every digest and the
-artifact size. The catalog-bound rollback manifest pins the equivalent retained
-set independently. `materialize_opendesign.py` verifies both complete signed
-sets and atomically publishes them into the platform artifact namespace outside
-the source tree. An invalid digest generation is moved to retained quarantine
-and replaced from staging; it is never overwritten or repaired file-by-file.
-The launcher uses the receipt fast path for the exact active
-runtime/overlay/version/data selection.
-
-`.staging/` is governed by per-stage lease files in `.staging-leases/`, with an
-`flock` held until the atomic rename finishes. Recovery never reaps a live
-publisher. After process death it moves the orphan directory atomically to
-`quarantine/staging/`; legacy unleased stages receive a bounded five-minute
-grace. Provision and repair run this recovery before materialization, garbage
-collection runs it directly, and staging quarantine is purged only after the
-release retention interval. A real `SIGKILL` test proves lease handoff and
-resume, while an injected `ENOSPC` proves typed failure and immediate cleanup.
-
-Web overlays have their own archive and manifest-v2 file/mode inventory, compatible runtime
-digests, upstream/version pin, lockfile and toolchain digests, CycloneDX SBOM,
-license inventory, provenance, and signature. Publication and full audit verify them fail-closed against
-`opendesign_web_trust.json`, whose public-key
-digest is reviewed outside the overlay. An artifact-supplied key alone is never
-trusted. Traversal, symlinks, path escape, compatibility mismatch, signature
-failure, or a changed file prevents materialization and execution.
-
-Repository-wide Python bytecode checks operate only on repository-owned source.
-The runtime/overlay capability is mounted read-only and is not a Python source
-tree, so app commands and recursive repository chmod/compile operations cannot
-mutate it.
-
-A release verification must run:
+The real disposable proof remains:
 
 ```bash
-python3 apps/design-studio/service/smoke_opendesign_runtime.py
-python3 apps/design-studio/service/smoke_opendesign_sidecar.py
+python3 apps/design-studio/service/smoke_official_opendesign.py \
+  --installation /path/to/opendesign/official/<manifest-digest>
 ```
-
-The committed `opendesign_oci_acceptance_0_16_1.json` records the real double
-import, rootfs inventory, materialization, native loads, bearer boundary,
-SQLite integrity and daemon/static smoke. Upstream's root package still reports
-`0.15.1`; release identity is therefore taken from the pinned image labels,
-attestation and `apps/packaged/package.json` version `0.16.1`. The official
-image contains `node-pty` without a loadable linux binary. Terminal and PTY
-routes remain denied, while required `better-sqlite3` and `blake3-wasm` load
-from the imported closure.
-
-That smoke fails when the bundle is absent, its digest/file manifest differs,
-required outputs are missing, host-only OpenDesign trees are present, or the
-Maverick proxy cannot reach the real sidecar. The declared runtime always fails
-closed; there is no source-tree, build-on-startup, or loopback compatibility
-fallback.
-
-## Confined process boundary
-
-The app contract opts into the mandatory generic sidecar `process_policy`.
-Core starts the launcher under bubblewrap with a fixed allowlisted environment,
-the app source mounted read-only at `/app`, the resolved Design Studio data root
-at `/data`, a read-only minimal runtime closure, an isolated network namespace,
-and no outbound targets. `HOME`, operator/provider runtime homes, provider keys,
-Maverick runtime tokens, bootstrap secrets, cookies, Storage, and other
-workspaces are not mounted or inherited.
-
-OpenDesign's TCP listener is internal to that network namespace. Core health and
-proxy traffic use an authenticated mode-`0600` Unix relay; there is no host TCP
-listener or loopback fallback. The contract bounds address space, open files,
-and concurrent proxy requests. Shutdown and failed startup terminate the whole
-bubblewrap process group, including descendants, and remove the relay directory.
-`OD_API_TOKEN` is generated as `${service.token}` and remains distinct from the
-relay capability; neither value is returned to the browser.
-
-The declared generic `browser_origin` profile gives the web app its own opaque
-host and a Maverick-brokered, host-only session. Bootstrap is a one-shot form
-POST; the ticket is absent from URLs, redirects, cookies, audit payloads, and
-sidecar requests. Core strips platform cookies, sidecar cookies, unsafe
-redirects, and technical authorization headers, applies no-store/no-referrer
-headers plus the contract CSP, and refuses to fall through to platform routes.
-
-`frontend/src/App.tsx` consumes that production browser-origin contract as a
-minimal full-bleed host. It uses a transient form POST to the exact bootstrap
-URL returned by core, then clears the ticket input. It never uses the legacy
-path-mounted `proxy_url`, constructs an OpenDesign API URL, stores a token, or
-renders a second project list. A scalar `od_project_id` selects the real
-`/projects/<id>` router path at bootstrap; `od_run_id` is forwarded only in the
-versioned, origin/source-bound navigation message. Reload obtains a new
-one-shot ticket instead of replaying an old session bootstrap.
-Iframe `load` is deliberately not a readiness signal because browser error
-documents load successfully too. The host transitions to ready and emits first
-paint telemetry only after version 1 of `maverick.opendesign.ready` arrives
-from the exact launched origin and iframe window; a component test covers
-401/410/503-style loads, wrong origin/source/version, and duplicate messages.
-
-The OpenDesign contract uses a 16 GiB virtual-address ceiling. This is a bound
-on address space, not a claim of physical allocation: Node/V8 and WebAssembly
-reserve multi-gigabyte virtual regions at startup, and the real curated daemon
-smoke proves that a smaller 4 GiB ceiling fails closed before readiness.
-
-Production-boundary proof:
-
-```bash
-python3 -W error::ResourceWarning -m unittest \
-  tests.integration.app_hosting.test_sidecar_execution \
-  tests.integration.app_hosting.test_sidecar_browser_origin
-```
-
-## Pinned 0.16.1 inventories
-
-`inventory_opendesign.py` reads a clean checkout of the exact
-`open-design-v0.16.1` tag at commit
-`276b4d8e970bc143d7ad060181a89a834e3d9caf`. It resolves Express route
-registrations into `opendesign_routes_0_16_1.json` and records the tracked
-source tree, package manifests, declared licenses, lockfile digest, and native
-dependencies in `opendesign_supply_chain_0_16_1.json`.
-
-Regenerate both files from an exact checkout:
-
-```bash
-python3 apps/design-studio/service/inventory_opendesign.py \
-  --source /path/to/open-design-v0.16.1 \
-  --routes-output apps/design-studio/service/opendesign_routes_0_16_1.json \
-  --supply-chain-output apps/design-studio/service/opendesign_supply_chain_0_16_1.json
-```
-
-The command fails for a dirty checkout, a wrong commit/tag, or an unresolved
-route registration. The route classification is deny-by-default and scoped to
-the browser sidecar origin; app-entrypoint capabilities use a separate
-allowlist. Multi-segment upstream splats are classified blocked because the
-generic policy limits dynamic parameters to one segment. Provider model
-discovery is handled by Maverick rather than forwarded.
-
-After regenerating the inventory, synchronize or verify the reviewed exact
-contract policy with:
-
-```bash
-python3 apps/design-studio/service/sync_route_policy.py --write
-python3 apps/design-studio/service/sync_route_policy.py
-```
-
-The check accounts for every inventoried method/template, omits `USE /api` and
-multi-segment splats so deny-by-default applies, and adds only the approved
-safe static trees, the exact one-segment raw read used for Storage import
-verification, plus Maverick Storage import/export handlers. Nested raw reads
-remain denied; project export uses OpenDesign's exact batch archive route. The artifact
-manifest does not duplicate this route catalog. The staged runtime closure is
-instead bound to its file manifest, SBOM, NOTICE, license inventory, native
-load proof, deterministic build metadata, and signed provenance.
-
-## Versioned data generations
-
-`opendesign_generation_model.py` owns the strict value objects, while
-`opendesign_generation_control.py` owns atomic schema-v2 `control.json`, release
-journal, and independent web-activation journal I/O.
-Together they validate verified artifact digests and real
-`instances/<generation>/data/` directories, reject unknown fields and symlinks,
-and write with same-directory temp, file `fsync`, atomic replace, and directory
-`fsync`. The launcher uses only the exact active four-field selection: its
-runtime digest selects one verified immutable runtime, its overlay digest
-selects the only directory exported as `OD_STATIC_DIR`, and its generation
-selects the only directory exported as `OD_DATA_DIR`. It never selects a bundle,
-overlay, or data directory by name, timestamp, symlink, or fallback.
-
-`previous_release` retains the complete former runtime/version/data/overlay
-selection. `previous_runtime` retains the exact declared runtime rollback and
-`previous_web` retains a compatible former overlay for the current
-runtime/version/data tuple. A completed runtime receipt and a later web receipt
-may coexist: the web cutover preserves the runtime rollback, while journal
-reconciliation permits only the overlay component of the active runtime tuple
-to advance. Restart and activation inventories include both source and target
-selections from every retained migration, web, and runtime journal, so later
-web cutovers cannot make a completed runtime receipt unverifiable. Web
-activation never clones or migrates data and never changes the
-runtime selection or the migration journal. It atomically
-updates the overlay selection, restarts through the generic
-`app.<id>.sidecars.restart` capability, waits for declared readiness, and rolls
-back automatically on failure. `dev apply` also restores the previous overlay
-when any later selected gate fails after a ready cutover.
-If both candidate and rollback restarts fail, the activation journal remains
-`rollback_restart_pending`; recovery retries readiness/restart and only then
-transitions to terminal `rolled_back`. A new activation always completes that
-recovery before preparing another journal. The declared app-owned
-`backend_recovery` hook only reports the pending state because a host restart
-does not prove lazy sidecar readiness. The launcher retains the sidecar process, waits for upstream `/api/ready`,
-commits a nonce-bound marker, and exposes `/api/maverick-ready`; Core uses only
-that transactional endpoint before terminalizing candidate or rollback recovery
-and publishing the browser remount. Until that verified start, the pending
-activation id blocks every new cutover.
-
-`opendesign_web_builder.py` persists dependency, invariant workspace-output,
-source/build, and compatible Next caches. Every cache is file/content-manifest
-verified, locked per key, and published from staging by atomic rename.
-Lockfile, package graph, Node, pnpm, and platform form the dependency key; a
-verified hit skips `pnpm install --frozen-lockfile`. The upstream pin, build
-profile, CPU bound, and web patch digests form compiled keys, including the
-Next/workspace-output key so an upstream upgrade cannot restore stale
-`packages/*/dist`. Development uses
-one bounded Turbopack derivation; release disables all caches for two clean
-independent derivations and compares every byte before signing and publishing.
-
-Controlled migration is split by responsibility: `opendesign_migration.py`
-coordinates freeze, drain, staging, cutover, rollback and recovery;
-`opendesign_migration_files.py` owns bounded copies, locks and cleanup;
-`opendesign_migration_legacy.py` moves legacy projects and imports only through
-the governed runtime API. It refuses any root without the explicit
-fixture/controlled-copy marker. The marker is a filesystem safety boundary, not
-blanket authorization to alter a workspace: a real workspace upgrade still
-requires an explicit operator or user request and exact paths.
-
-`upgrade_opendesign_bundle.py` is the corresponding non-legacy bundle cutover.
-It requires an exact controlled data root, verified registry, migration id and
-new generation id. It snapshots and clones the active data, starts the pinned
-bundle on the clone, verifies readiness, SQLite integrity and project access,
-then journals and atomically switches the bundle/data pair. The source pair is
-retained for rollback, and unresolved prior retention metadata fails closed.
-For a later upgrade, `--replace-retained-previous` is required explicitly and
-is accepted only when the prior journal is already `cutover_committed`; the old
-generation remains untouched while the formerly active pair becomes the new
-rollback target.
-
-Run the G4 filesystem and crash proof with:
-
-```bash
-.venv/bin/python -W error::ResourceWarning -m unittest \
-  apps/design-studio/tests/test_data_generation_proof.py \
-  apps/design-studio/tests/test_opendesign_migration.py -v
-```
-
-WP6 also has a real-daemon proof:
-
-```bash
-python3 apps/design-studio/service/smoke_opendesign_migration.py
-```
-
-It creates only temporary, explicitly marked controlled copies. The first
-scenario migrates a 0.10.1 fixture into a staging generation served by the
-materialized 0.16.1 OCI daemon, creates the canonical project and file through
-OpenDesign APIs, reads the uploaded bytes back, verifies both SQLite databases,
-and proves the retained source tree is unchanged. A second scenario performs a
-real daemon cutover and rollback, reactivates the previous generation, runs
-health/database/project checks and proves the forward generation remains
-untouched. Distinct 0.10.1/0.16.1 bundle+data atomicity and crash points remain
-covered by the fixture injection suite. The redaction-safe result is pinned in
-`opendesign_migration_acceptance_0_16_1.json`; no real workspace migration is
-authorized.
-
-## Maverick runtime bridge
-
-The OpenDesign run collection, status, cancel, event stream, and result-package
-routes are classified `handled_by_core`. The generic host invokes the Design
-Studio backend; it never teaches core an OpenDesign route or event type. The
-backend validates the OpenDesign project and conversation through the governed
-entrypoint broker, persists only run-to-session correlation metadata in the
-active generation, and returns a generic `runtime_session_request` with a
-stable idempotency key.
-
-Core creates the user-visible source-app session, resolves the active project
-directory through a short one-shot app-data capability, and appends a durable,
-provider-neutral stream. Its ASGI response applies backpressure by awaiting
-each translated SSE event, sends keepalives while idle, and resumes from
-`Last-Event-ID`. Cancel, cleanup, and stream reads fail closed unless workspace
-and source-app ownership match. Backend restart closes an interrupted app turn
-without creating an automatic duplicate; the same OpenDesign request remains
-idempotent.
-
-The bridge writes cancel intent before requesting the generic core interrupt.
-Terminal callbacks and SSE translation share one monotonic projection: terminal
-states do not regress, and a failure observed after cancel intent is recorded is
-projected as `canceled`. This keeps the OpenDesign status, terminal SSE event,
-and result package consistent when provider termination and callback delivery
-race.
-
-Run the WP7 proof with:
-
-```bash
-python3 -m unittest \
-  tests.unit.runtime_streams.test_app_streams \
-  tests.unit.api.test_app_runtime_cleanup_requests \
-  tests.integration.app_hosting.test_sidecar_core_routes \
-  tests.integration.recovery.test_backend_restart \
-  apps.design-studio.tests.test_runtime_bridge -v
-```
-
-## Canonical project and Storage adapter
-
-`adapter-state.json` stores only view state plus import/export lifecycle jobs.
-The sealed pre-migration `state.json` is never created, migrated, or opened for
-writing by the adapter. Canonical create/list/get operations use the governed
-OpenDesign API. A `design_*` value is accepted only as an alias found in
-`opendesign/legacy-project-map.json`; output identity remains
-`od_project_id`.
-
-Storage imports are read through the selected dependency, uploaded to the real
-OpenDesign project, and verified by SHA-256 read-back. Terminal run exports use
-the real OpenDesign batch archive and write a run-scoped package through
-Storage. The official OCI smoke performs this flow in a temporary workspace:
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 python3 -B \
-  apps/design-studio/service/smoke_opendesign_sidecar.py
-```
-
-## Incremental development and release acceptance
-
-The app-owned `dev apply` command accepts no implicit worktree diff. Callers
-must provide explicit repository-relative `changed_files`, or immutable
-`base_sha`/current-`head_sha`; path bytes are snapshotted and the exact set is
-propagated to `scripts/test_suite.py --changed-path`. A Git archive of the
-selected commit is materialized and only explicit frozen path bytes are
-overlaid, so every source build and test runs outside the shared checkout.
-Installed Node dependencies are copied; signed runtime/web registries are
-materialized as independent real trees visible inside the sidecar sandbox,
-using copy-on-write reflinks when supported and copies otherwise. Only the pinned
-current runtime and release overlay enter the initial snapshot; a web candidate
-published after snapshot creation is added to that isolated registry and
-signature-verified before E2E. Python is resolved from the publishing repository,
-the default Playwright browser cache from the host account that owns it, and the
-default build cache against that repository before snapshot entry, so both
-caches remain reusable after cleanup.
-Classification compares `patches/series.json` entries against the frozen base:
-web component updates stay on the overlay path, while runtime or malformed
-series changes fail upward to OCI. Classification avoids
-duplicate backend/full-suite runs and does not elevate docs to OCI. The command
-emits JSON actions, durations, selected digests, cache state, readiness, and
-rollback outcome, with an error status code on every failed result.
-
-`dev benchmark` mutates the reviewed React patch in an isolated service copy,
-requires changed patch/source/overlay digests and a real compile, activates the
-candidate through restart/readiness/remount, restores the exact initial
-selection, and records separate timings. Static performance booleans are not
-accepted as release evidence.
-
-Verification follows the risk-tiered policy in `../README.md`. Focused tests and
-the quick or affected browser profiles are the normal development and pre-merge
-gates. The complete benchmark, release browser profile, migration/rollback,
-hosted smoke, and production acceptance are reserved for a designated release
-candidate or a change to artifact trust, protected mounts, recovery, sidecar
-lifecycle, transactional readiness, browser-ticket security, data generation,
-cutover, or the measured SLO path.
-
-The full gate must run as a scheduled release operation on a quiet host; it is
-not a per-commit requirement and must not routinely force unrelated agents to
-stop. Evidence that no longer matches a later source inventory is historical,
-not proof of a failure. Normal development may close with an explicit freshness
-waiver and the focused results actually obtained, but must not claim that the
-older record certifies the newer revision. Release/cutover certification and
-unmitigated critical-path changes do not permit that waiver.
-
-When full release certification is selected, the release path is exercised by
-`tests/opendesign_product.e2e.mjs`. It creates
-a new temporary Maverick installation with two synthetic workspaces, boots the
-materialized official `ghcr.io/nexu-io/od:0.16.1` closure through the declared
-launcher, and drives the isolated UI with real Chromium. Core, the Unix sidecar
-relay, Storage import/export, restart recovery, route policy, and browser
-sessions use their production code paths. A statically compiled
-external Codex app-server protocol fixture supplies deterministic model output
-without entering the OpenDesign or core process and without logging prompts.
-The browser asserts the isolated `/api/maverick-ready` response before onboarding and
-again after the core/sidecar restart, then verifies the persisted project.
-
-Run and validate the committed redaction-safe release records with:
-
-```bash
-npm run test:e2e:quick --prefix apps/design-studio
-npm run test:e2e:affected --prefix apps/design-studio
-npm run test:e2e:release --prefix apps/design-studio -- \
-  --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
-npm run test:e2e:migration --prefix apps/design-studio \
-  > /owned/evidence/opendesign-migration.json
-python3 apps/design-studio/service/aggregate_opendesign_release_evidence.py \
-  --ui /owned/evidence/opendesign-ui-release.json \
-  --migration /owned/evidence/opendesign-migration.json \
-  --benchmark /owned/evidence/opendesign-change-to-live.json \
-  --output /owned/evidence/opendesign-release.json
-python3 -m unittest apps.design-studio.tests.test_production_acceptance
-```
-
-`npm run test:e2e` is an alias for `test:e2e:release`, not the quick profile.
-The release UI record contains thirteen browser scenarios and the complete
-correlation join. The independently run migration/rollback smoke supplies the
-fourteenth scenario to `aggregate_opendesign_release_evidence.py`. The
-aggregator requires the exact canonical UI id set, restart/workspace isolation,
-all rollback preservation proofs, and a signature-verified overlay whose
-upstream, lockfile, runtime compatibility, and `web-build`/`web-react` digests
-match the current reviewed contracts. The UI gate records raw samples and gates
-the complete warm wrapper remount plus the first usable interface after cold
-Core prewarm at P95 1.5 seconds and P99 2.5 seconds. Its schema-2 execution
-record is content-bound to the current Core, base-shell, Storage, and Design
-Studio inputs. The aggregator independently recomputes every percentile and
-emits schema 5 with SHA-256 bindings for its UI, migration, and benchmark input
-documents. The records contain no prompt, cookie, bearer, provider payload,
-environment, host path, or secret value.
-`opendesign_production_acceptance_0_16_1.json` maps every global acceptance
-criterion to a stable test, proof, or canonical document. The production test
-recomputes the UI source attestation and executes every referenced Python test;
-it does not accept `passed` booleans or file presence as execution proof.
-Neither record authorizes migration of an existing workspace data root.
-
-The deployed-origin gate is separate: `opendesign_hosted_acceptance_0_16_1.json`
-is emitted by `tests/opendesign_hosted_smoke.e2e.mjs` against the configured
-public HTTPS platform. It covers live TLS, bootstrap, readiness, reload,
-persisted deep link, Storage import/export, runtime SSE, result packaging, and
-temporary-project deletion without recording either platform or sidecar
-session material.

@@ -1,6 +1,15 @@
 # Design Studio Runtime Bridge
 
-Status: Implemented (G3 + WP7)
+Status: Historical (superseded 2026-08-28)
+
+Superseded by
+[`design_studio_native_opendesign_architecture.md`](design_studio_native_opendesign_architecture.md).
+This document records the retired customized runtime-bridge direction only.
+The translator, patched OpenDesign UI, Maverick-owned runtime sessions, and
+Design Studio-specific global Chat composer described below have been deleted
+and must not be reintroduced.
+
+Former status: Implemented (G3 + WP7)
 
 Date: 2026-08-03
 

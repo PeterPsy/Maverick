@@ -1,6 +1,16 @@
 # Design Studio OpenDesign Launch Selections and Data Generations
 
-Status: Accepted (schema v2 incremental cycle)
+Status: Historical (superseded 2026-08-28)
+
+Superseded by
+[`design_studio_native_opendesign_architecture.md`](design_studio_native_opendesign_architecture.md).
+This document records the retired patched-artifact, web-overlay, and custom
+generation-control model only. The active Design Studio host selects a
+digest-locked unchanged official OpenDesign release and gives its upstream
+migrations sole ownership of `opendesign-native/`; the control-v2 machinery
+described below has been deleted and must not be reintroduced.
+
+Former status: Accepted (schema v2 incremental cycle)
 
 Date: 2026-08-12
 

@@ -1,6 +1,0 @@
-{
-  "algorithm": "Ed25519",
-  "public_key": "trust/opendesign-web-ed25519.pub.pem",
-  "public_key_sha256": "a84705aa000f0ffd1520fead3f07956555c354fe312579982b6e85567dea8ea9",
-  "schema_version": "1"
-}

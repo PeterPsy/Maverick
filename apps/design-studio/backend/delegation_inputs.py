@@ -6,6 +6,7 @@ from base64 import b64decode
 import binascii
 from dataclasses import dataclass
 from hashlib import sha256
+import json
 from pathlib import PurePosixPath
 import re
 from typing import Any
@@ -36,6 +37,7 @@ class AuthorizedAttachment:
 class DelegationRequest:
     delegation_id: str
     digest: str
+    request_fingerprint: str
     brief: str
     project_id: str
     conversation_id: str
@@ -112,18 +114,34 @@ def parse_delegation_request(workspace_id: str, arguments: dict[str, Any]) -> De
         required=False,
         single_line=True,
     ) or f"Delegated design {digest[:8]}"
-    return DelegationRequest(
-        delegation_id=f"dlg_{digest[:32]}",
-        digest=digest,
+    attachments = _attachments(arguments.get("attachments"))
+    agent_id = _selector(arguments.get("agent_id"), "agent_id")
+    model = _selector(arguments.get("model"), "model")
+    reasoning = _selector(arguments.get("reasoning"), "reasoning", maximum=64)
+    fingerprint = _request_fingerprint(
         brief=brief,
         project_id=project_id,
         conversation_id=conversation_id,
         project_name=project_name,
         new_conversation=new_conversation,
-        agent_id=_selector(arguments.get("agent_id"), "agent_id"),
-        model=_selector(arguments.get("model"), "model"),
-        reasoning=_selector(arguments.get("reasoning"), "reasoning", maximum=64),
-        attachments=_attachments(arguments.get("attachments")),
+        agent_id=agent_id,
+        model=model,
+        reasoning=reasoning,
+        attachments=attachments,
+    )
+    return DelegationRequest(
+        delegation_id=f"dlg_{digest[:32]}",
+        digest=digest,
+        request_fingerprint=fingerprint,
+        brief=brief,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        project_name=project_name,
+        new_conversation=new_conversation,
+        agent_id=agent_id,
+        model=model,
+        reasoning=reasoning,
+        attachments=attachments,
     )
 
 
@@ -179,6 +197,48 @@ def _attachments(value: object) -> tuple[AuthorizedAttachment, ...]:
         safe_name = SAFE_FILENAME_PATTERN.sub("-", name).strip(".-") or "attachment"
         attachments.append(AuthorizedAttachment(name, safe_name[:160], media_type, content))
     return tuple(attachments)
+
+
+def _request_fingerprint(
+    *,
+    brief: str,
+    project_id: str,
+    conversation_id: str,
+    project_name: str,
+    new_conversation: bool,
+    agent_id: str,
+    model: str,
+    reasoning: str,
+    attachments: tuple[AuthorizedAttachment, ...],
+) -> str:
+    """Bind an idempotency key to the complete normalized semantic request."""
+    payload = {
+        "schema_version": "1",
+        "brief": brief,
+        "project_id": project_id,
+        "conversation_id": conversation_id,
+        "project_name": project_name,
+        "new_conversation": new_conversation,
+        "agent_id": agent_id,
+        "model": model,
+        "reasoning": reasoning,
+        "attachments": [
+            {
+                "name": attachment.name,
+                "safe_name": attachment.safe_name,
+                "media_type": attachment.media_type,
+                "content_sha256": sha256(attachment.content).hexdigest(),
+            }
+            for attachment in attachments
+        ],
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return sha256(encoded).hexdigest()
 
 
 def _optional_identifier(value: object, label: str) -> str:

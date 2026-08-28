@@ -74,7 +74,7 @@ describe("Design Studio native OpenDesign host", () => {
         data: {
           type: "maverick.app.navigate",
           app_id: "design-studio",
-          params: { od_project_id: "project_2", od_conversation_id: "conversation_2" },
+          params: { app_page: "projects/project_2/conversations/conversation_2" },
         },
       }));
       await Promise.resolve();

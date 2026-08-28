@@ -41,6 +41,7 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertGreaterEqual(sidecar["process_policy"]["limits"]["memory_bytes"], 32 * 1024**3)
         self.assertTrue(contract["permissions"]["providers"]["model_proxy"])
         self.assertFalse(contract["permissions"]["providers"]["deliver_secrets_to_app"])
+        self.assertEqual(contract["entrypoints"]["hooks"]["upgrade"], "hooks/install.py")
         self.assertNotIn("runtime_event", contract["entrypoints"]["hooks"])
         self.assertEqual(contract["widgets"], [])
 
@@ -86,6 +87,7 @@ class NativeThinHostTests(unittest.TestCase):
     def test_launcher_exposes_only_a_technical_model_capability_to_open_design(self) -> None:
         from opendesign_launcher import build_native_launch
         from model_access_profiles import SANDBOX_PROFILE_PATH
+        from opencode_runtime import SANDBOX_BINARY_PATH
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -123,6 +125,9 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertEqual(env["NO_PROXY"], "*")
         self.assertEqual(env["OD_CODEX_DISABLE_PLUGINS"], "1")
         self.assertEqual(env["OD_CODEX_SANDBOX"], "danger-full-access")
+        opencode_wrapper = SERVICE_ROOT / "maverick-opencode"
+        self.assertTrue(opencode_wrapper.stat().st_mode & 0o111)
+        self.assertIn(SANDBOX_BINARY_PATH.as_posix(), opencode_wrapper.read_text())
         self.assertNotIn("OPENAI_API_KEY", env)
         self.assertNotIn("MAVERICK_RUNTIME_API_TOKEN", env)
         self.assertNotIn("MAVERICK_API_BASE", env)

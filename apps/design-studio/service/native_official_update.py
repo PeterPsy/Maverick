@@ -38,7 +38,10 @@ from official_release_selection import (
 from official_update_state import (
     OfficialUpdateError,
     UPDATE_BACKUPS,
+    empty_inventory_categories,
+    incomplete_migration_guard,
     inventory_categories,
+    migration_preservation_guard,
     new_update_id,
     release_identity,
     utc_now,
@@ -87,15 +90,17 @@ def perform_official_update(
     control = sidecar_control or _sidecar_control
     previous_delegation = read_delegation_contract(root, previous.release)
     quiesce_native_host(root, cutover_id=identifier)
-    stopped = False
     activated = False
     backup: Path | None = None
+    marker: dict[str, Any] | None = None
+    baseline_categories = empty_inventory_categories()
+    migrated_categories = empty_inventory_categories()
+    migration_guard = incomplete_migration_guard()
     work = root / f".{identifier}.work"
     try:
         response = control("stop", workspace_id)
         if response.get("ready") is not False:
             raise OfficialUpdateError("Core did not confirm the native OpenDesign writer stop")
-        stopped = True
         backup = _prepare_backup(root, native, previous, identifier)
         work.mkdir(mode=0o700)
         baseline_data = work / "baseline-data"
@@ -108,11 +113,24 @@ def perform_official_update(
             data_dir=baseline_data,
             log_path=backup / "baseline-inventory.log",
         )
+        baseline_categories = inventory_categories(baseline)
         migrated = inventory_runner(
             candidate_installation,
             data_dir=migrated_data,
             log_path=backup / "candidate-migration.log",
         )
+        migrated_categories = inventory_categories(migrated)
+        migration_guard = migration_preservation_guard(baseline, migrated)
+        if migration_guard["state"] != "passed":
+            removed = [
+                category
+                for category, count in migration_guard["lost_identity_counts"].items()
+                if count
+            ]
+            raise OfficialUpdateError(
+                "candidate migration removed protected native identities: "
+                + ", ".join(removed)
+            )
         delegation = _probe_delegation(
             candidate_installation,
             migrated_data=migrated_data,
@@ -126,6 +144,7 @@ def perform_official_update(
             candidate=candidate_installation,
             baseline=baseline,
             migrated=migrated,
+            migration_guard=migration_guard,
             delegation=delegation,
         )
         write_update_state(root, marker)
@@ -173,13 +192,57 @@ def perform_official_update(
                 "update": recovered,
                 "error": "candidate_startup_failed",
             }
-        _resume_previous_writer(
-            root,
-            identifier=identifier,
-            workspace_id=workspace_id,
-            stopped=stopped,
-            control=control,
-        )
+        try:
+            _resume_previous_writer(
+                root,
+                identifier=identifier,
+                workspace_id=workspace_id,
+                control=control,
+            )
+        except Exception as recovery_error:
+            with suppress(Exception):
+                quiesce_native_host(root, cutover_id=identifier)
+            recovery = marker or _recovery_required_marker(
+                identifier,
+                previous=previous,
+                candidate=candidate_installation,
+                baseline_inventory=baseline_categories,
+                migrated_inventory=migrated_categories,
+                migration_guard=migration_guard,
+            )
+            recovery.update(
+                {
+                    "phase": "recovery_required",
+                    "updated_at": utc_now(),
+                    "native_ready": False,
+                    "rolled_back": False,
+                }
+            )
+            try:
+                write_update_state(root, recovery)
+            except Exception as marker_error:
+                raise OfficialUpdateError(
+                    "official OpenDesign update recovery is quiesced but its "
+                    "recovery_required marker could not be recorded"
+                ) from marker_error
+            shutil.rmtree(work, ignore_errors=True)
+            if backup is not None:
+                with suppress(Exception):
+                    _write_backup_evidence(backup, recovery)
+                    make_tree_read_only(backup)
+            raise OfficialUpdateError(
+                "official OpenDesign update recovery requires operator intervention"
+            ) from recovery_error
+        if marker is not None:
+            marker.update(
+                {
+                    "phase": "rolled_back",
+                    "updated_at": utc_now(),
+                    "native_ready": True,
+                    "rolled_back": True,
+                }
+            )
+            write_update_state(root, marker)
         shutil.rmtree(work, ignore_errors=True)
         if backup is not None:
             with suppress(Exception):
@@ -292,6 +355,7 @@ def _marker(
     candidate: OfficialInstallation,
     baseline: dict[str, Any],
     migrated: dict[str, Any],
+    migration_guard: dict[str, Any],
     delegation: dict[str, Any],
 ) -> dict[str, Any]:
     now = utc_now()
@@ -307,11 +371,46 @@ def _marker(
         "candidate_release": release_identity(candidate.release),
         "baseline_inventory": inventory_categories(baseline),
         "migrated_inventory": inventory_categories(migrated),
+        "migration_guard": migration_guard,
         "native_ready": False,
         "rolled_back": False,
         "bridges": {
             "model_access": {"state": "unchecked"},
             "delegation": delegation,
+        },
+        "semantic_content_retained": False,
+        "private_database_read": False,
+    }
+
+
+def _recovery_required_marker(
+    identifier: str,
+    *,
+    previous: OfficialReleaseSelection,
+    candidate: OfficialInstallation,
+    baseline_inventory: dict[str, dict[str, Any]],
+    migrated_inventory: dict[str, dict[str, Any]],
+    migration_guard: dict[str, Any],
+) -> dict[str, Any]:
+    now = utc_now()
+    return {
+        "schema_version": "1",
+        "kind": "design-studio-official-native-update",
+        "update_id": identifier,
+        "phase": "recovery_required",
+        "created_at": now,
+        "updated_at": now,
+        "backup_directory": f"{UPDATE_BACKUPS}/official-update-{identifier}",
+        "previous_release": release_identity(previous.release),
+        "candidate_release": release_identity(candidate.release),
+        "baseline_inventory": baseline_inventory,
+        "migrated_inventory": migrated_inventory,
+        "migration_guard": migration_guard,
+        "native_ready": False,
+        "rolled_back": False,
+        "bridges": {
+            "model_access": {"state": "unchecked"},
+            "delegation": {"state": "unchecked"},
         },
         "semantic_content_retained": False,
         "private_database_read": False,
@@ -334,16 +433,15 @@ def _resume_previous_writer(
     *,
     identifier: str,
     workspace_id: str,
-    stopped: bool,
     control: Callable[[str, str], dict[str, Any]],
 ) -> None:
-    if not stopped:
-        with suppress(Exception):
-            release_native_host(root, cutover_id=identifier)
-        return
-    with suppress(Exception):
-        release_native_host(root, cutover_id=identifier)
-        control("prewarm", workspace_id)
+    release_native_host(root, cutover_id=identifier)
+    readiness = control("prewarm", workspace_id)
+    if readiness.get("ready") is not True:
+        quiesce_native_host(root, cutover_id=identifier)
+        raise OfficialUpdateError(
+            "the previous native OpenDesign writer did not become ready"
+        )
 
 
 def _read_marker_for_recovery(root: Path) -> dict[str, Any]:

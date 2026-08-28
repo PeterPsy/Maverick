@@ -25,12 +25,19 @@ describe("native OpenDesign deep links", () => {
       od_project_id: "project_1",
       od_conversation_id: "conversation_1",
     })).toBe("/projects/project_1/conversations/conversation_1");
+    expect(nativeOpenDesignPath({
+      app_page: "projects/project_2/conversations/conversation_2",
+    })).toBe("/projects/project_2/conversations/conversation_2");
   });
 
   it("rejects path-shaped identifiers instead of interpreting them", () => {
     expect(nativeOpenDesignPath({
       od_project_id: "../project",
       od_conversation_id: "conversation_1",
+    })).toBe("/");
+    expect(nativeOpenDesignPath({
+      app_page: "projects/project_1/conversations/../private",
+      od_project_id: "stale_query_project",
     })).toBe("/");
     expect(currentDesignStudioAppId("/apps/workspace-design-studio")).toBe("workspace-design-studio");
   });

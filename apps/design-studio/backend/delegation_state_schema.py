@@ -7,12 +7,14 @@ import re
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DELEGATION_ID_PATTERN = re.compile(r"^dlg_[a-f0-9]{32}$")
 NATIVE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$")
 TERMINAL_STATUSES = {"succeeded", "failed", "canceled"}
 PERSISTED_STATUSES = {
     "preparing",
+    "submitting",
+    "submission_uncertain",
     "submission_failed",
     "queued",
     "running",
@@ -22,6 +24,8 @@ PERSISTED_STATUSES = {
 }
 RECORD_FIELDS = {
     "delegation_id",
+    "request_fingerprint",
+    "run_submission_started",
     "status",
     "od_project_id",
     "od_conversation_id",
@@ -72,6 +76,14 @@ def clean_record(record: dict[str, Any]) -> dict[str, Any]:
         cleaned["delegation_id"] = delegation_id
     status = str(record.get("status") or "unknown")
     cleaned["status"] = status if status in PERSISTED_STATUSES else "unknown"
+    fingerprint = str(record.get("request_fingerprint") or "")
+    cleaned["request_fingerprint"] = (
+        fingerprint
+        if len(fingerprint) == 64
+        and all(character in "0123456789abcdef" for character in fingerprint)
+        else ""
+    )
+    cleaned["run_submission_started"] = record.get("run_submission_started") is True
     for key in (
         "od_project_id",
         "od_conversation_id",

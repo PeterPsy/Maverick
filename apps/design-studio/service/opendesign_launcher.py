@@ -28,12 +28,12 @@ from model_access_profiles import (
     remove_model_access_profiles,
     write_model_access_profiles,
 )
+from model_access_constants import MODEL_ACCESS_API_KEY, MODEL_ACCESS_BASE_URL
 from model_access_server import (
-    MODEL_ACCESS_API_KEY,
-    MODEL_ACCESS_BASE_URL,
     ModelAccessHttpBridge,
 )
 from official_process_supervisor import official_api_ready, supervise_official_process
+from opencode_runtime import RUNTIME_RELATIVE_PATH, verify_opencode_runtime
 
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -77,7 +77,10 @@ def main() -> None:
             delegation=bundled_delegation_contract(),
         )
         delegation_status = read_delegation_contract(data_dir.parent, release)
-    model_bridge, model_status, model_profile_path = _configure_model_access(data_dir)
+    model_bridge, model_status, model_profile_path = _configure_model_access(
+        data_dir,
+        artifact_root=store_root,
+    )
     _write_bridge_capabilities(
         data_dir.parent,
         {
@@ -235,6 +238,8 @@ def build_native_launch(
 
 def _configure_model_access(
     data_dir: Path,
+    *,
+    artifact_root: Path,
 ) -> tuple[ModelAccessHttpBridge | None, dict[str, Any], Path | None]:
     remove_model_access_profiles(data_dir)
     mode = os.environ.get("MAVERICK_OPENDESIGN_MODEL_BRIDGE", "disabled")
@@ -251,6 +256,7 @@ def _configure_model_access(
     cli_status: dict[str, Any]
     profile_path: Path | None = None
     try:
+        verify_opencode_runtime(artifact_root / RUNTIME_RELATIVE_PATH)
         _host_profile, profile = write_model_access_profiles(data_dir, client)
         profile_path = SANDBOX_PROFILE_PATH
         cli_status = {"state": "ready", **profile}

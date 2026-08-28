@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import UTC, datetime
 import json
 from pathlib import Path
@@ -16,6 +17,16 @@ UPDATE_FILE = "official-update.json"
 UPDATE_BACKUPS = "opendesign-update-backups"
 UPDATE_ID_PATTERN = re.compile(r"^update_[A-Za-z0-9._-]{1,120}$")
 PHASES = {"prepared", "activating", "committed", "rolled_back", "recovery_required"}
+INVENTORY_CATEGORIES = (
+    "projects",
+    "conversations",
+    "ordered_messages",
+    "design_systems",
+    "project_files",
+    "artifacts",
+    "settings",
+    "run_references",
+)
 FIELDS = {
     "schema_version",
     "kind",
@@ -28,6 +39,7 @@ FIELDS = {
     "candidate_release",
     "baseline_inventory",
     "migrated_inventory",
+    "migration_guard",
     "native_ready",
     "rolled_back",
     "bridges",
@@ -95,9 +107,59 @@ def inventory_categories(inventory: dict[str, Any]) -> dict[str, dict[str, Any]]
         ):
             raise OfficialUpdateError("official update inventory category is invalid")
         normalized[name] = {"count": value["count"], "sha256": value["sha256"]}
-    if not normalized:
-        raise OfficialUpdateError("official update inventory is empty")
+    if set(normalized) != set(INVENTORY_CATEGORIES):
+        raise OfficialUpdateError("official update inventory categories are incomplete")
     return normalized
+
+
+def migration_preservation_guard(
+    baseline: dict[str, Any],
+    migrated: dict[str, Any],
+) -> dict[str, Any]:
+    """Prove that every redaction-safe native identity survives migration."""
+    baseline_categories = inventory_categories(baseline)
+    migrated_categories = inventory_categories(migrated)
+    baseline_sets = _identity_sets(baseline, baseline_categories)
+    migrated_sets = _identity_sets(migrated, migrated_categories)
+    lost_counts: dict[str, int] = {}
+    added_counts: dict[str, int] = {}
+    for category in INVENTORY_CATEGORIES:
+        before = Counter(baseline_sets[category])
+        after = Counter(migrated_sets[category])
+        lost_counts[category] = sum((before - after).values())
+        added_counts[category] = sum((after - before).values())
+    return {
+        "state": "failed" if any(lost_counts.values()) else "passed",
+        "protected_categories": list(INVENTORY_CATEGORIES),
+        "baseline_identity_counts": {
+            category: len(baseline_sets[category]) for category in INVENTORY_CATEGORIES
+        },
+        "migrated_identity_counts": {
+            category: len(migrated_sets[category]) for category in INVENTORY_CATEGORIES
+        },
+        "added_identity_counts": added_counts,
+        "lost_identity_counts": lost_counts,
+    }
+
+
+def incomplete_migration_guard() -> dict[str, Any]:
+    counts = {category: 0 for category in INVENTORY_CATEGORIES}
+    return {
+        "state": "not_completed",
+        "protected_categories": list(INVENTORY_CATEGORIES),
+        "baseline_identity_counts": dict(counts),
+        "migrated_identity_counts": dict(counts),
+        "added_identity_counts": dict(counts),
+        "lost_identity_counts": dict(counts),
+    }
+
+
+def empty_inventory_categories() -> dict[str, dict[str, Any]]:
+    empty_digest = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    return {
+        category: {"count": 0, "sha256": empty_digest}
+        for category in INVENTORY_CATEGORIES
+    }
 
 
 def utc_now() -> str:
@@ -134,6 +196,12 @@ def _validate(payload: object) -> None:
             raise OfficialUpdateError("official update release identity is invalid")
     for key in ("baseline_inventory", "migrated_inventory"):
         inventory_categories({"categories": payload.get(key)})
+    _validate_migration_guard(
+        payload.get("migration_guard"),
+        phase=str(payload.get("phase")),
+        baseline_inventory=payload["baseline_inventory"],
+        migrated_inventory=payload["migrated_inventory"],
+    )
     bridges = payload.get("bridges")
     if not isinstance(bridges, dict) or set(bridges) != {"model_access", "delegation"}:
         raise OfficialUpdateError("official update bridge result is invalid")
@@ -148,11 +216,101 @@ def _sha256(value: object) -> bool:
     return len(body) == 64 and all(character in "0123456789abcdef" for character in body)
 
 
+def _identity_sets(
+    inventory: dict[str, Any],
+    categories: dict[str, dict[str, Any]],
+) -> dict[str, list[str]]:
+    raw = inventory.get("identity_sets")
+    if not isinstance(raw, dict) or set(raw) != set(INVENTORY_CATEGORIES):
+        raise OfficialUpdateError("official update identity inventory is missing")
+    normalized: dict[str, list[str]] = {}
+    for category in INVENTORY_CATEGORIES:
+        values = raw.get(category)
+        if (
+            not isinstance(values, list)
+            or len(values) != categories[category]["count"]
+            or any(not isinstance(value, str) or not _sha256(value) for value in values)
+        ):
+            raise OfficialUpdateError("official update identity inventory is invalid")
+        normalized[category] = list(values)
+    return normalized
+
+
+def _validate_migration_guard(
+    value: object,
+    *,
+    phase: str,
+    baseline_inventory: dict[str, Any],
+    migrated_inventory: dict[str, Any],
+) -> None:
+    fields = {
+        "state",
+        "protected_categories",
+        "baseline_identity_counts",
+        "migrated_identity_counts",
+        "added_identity_counts",
+        "lost_identity_counts",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise OfficialUpdateError("official update migration guard is invalid")
+    state = value.get("state")
+    if state not in {"passed", "failed", "not_completed"}:
+        raise OfficialUpdateError("official update migration guard is invalid")
+    if phase != "recovery_required" and state != "passed":
+        raise OfficialUpdateError("official update migration guard did not pass")
+    if value.get("protected_categories") != list(INVENTORY_CATEGORIES):
+        raise OfficialUpdateError("official update migration guard is invalid")
+    for key in (
+        "baseline_identity_counts",
+        "migrated_identity_counts",
+        "added_identity_counts",
+        "lost_identity_counts",
+    ):
+        counts = value.get(key)
+        if (
+            not isinstance(counts, dict)
+            or set(counts) != set(INVENTORY_CATEGORIES)
+            or any(
+                isinstance(count, bool) or not isinstance(count, int) or count < 0
+                for count in counts.values()
+            )
+        ):
+            raise OfficialUpdateError("official update migration guard is invalid")
+    lost = value["lost_identity_counts"]
+    if state == "passed" and any(lost.values()):
+        raise OfficialUpdateError("official update migration guard is invalid")
+    if state == "failed" and not any(lost.values()):
+        raise OfficialUpdateError("official update migration guard is invalid")
+    if state == "not_completed":
+        if any(
+            count
+            for key in fields - {"state", "protected_categories"}
+            for count in value[key].values()
+        ):
+            raise OfficialUpdateError("official update migration guard is invalid")
+        return
+    for category in INVENTORY_CATEGORIES:
+        baseline_count = value["baseline_identity_counts"][category]
+        migrated_count = value["migrated_identity_counts"][category]
+        added_count = value["added_identity_counts"][category]
+        lost_count = value["lost_identity_counts"][category]
+        if (
+            baseline_count != baseline_inventory[category]["count"]
+            or migrated_count != migrated_inventory[category]["count"]
+            or baseline_count - lost_count + added_count != migrated_count
+        ):
+            raise OfficialUpdateError("official update migration guard is invalid")
+
+
 __all__ = [
     "OfficialUpdateError",
     "UPDATE_BACKUPS",
     "UPDATE_FILE",
+    "INVENTORY_CATEGORIES",
+    "empty_inventory_categories",
+    "incomplete_migration_guard",
     "inventory_categories",
+    "migration_preservation_guard",
     "new_update_id",
     "read_update_state",
     "release_identity",

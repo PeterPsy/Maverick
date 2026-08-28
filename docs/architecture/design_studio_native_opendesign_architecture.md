@@ -1,19 +1,19 @@
 # Design Studio Native OpenDesign Architecture
 
-Status: Accepted target architecture, not yet implemented
+Status: Implemented and accepted
 
 Date: 2026-08-28
 
 ## Purpose
 
-This document defines the target relationship between Maverick, Design Studio,
+This document defines the active relationship between Maverick, Design Studio,
 OpenDesign, Maverick Chat, and the models installed in Maverick.
 
 The product decision is to use OpenDesign as a complete upstream product inside
 Maverick rather than reproduce, hide, or replace parts of it with Maverick-owned
 UI and runtime behavior.
 
-In the target architecture:
+In the implemented architecture:
 
 - Design Studio hosts a complete upstream OpenDesign installation;
 - the native OpenDesign UI, chat, projects, tools, Design Systems, history, and
@@ -25,21 +25,21 @@ In the target architecture:
   OpenDesign conversation and supply the context it has selected for that task;
 - OpenDesign remains authoritative for the design conversation and its outputs.
 
-This is a target-state document. It does not claim that the current Design
-Studio implementation already behaves this way.
+The checked-in Design Studio implementation follows this architecture. The
+rollout phases below are retained as an implementation and verification record.
 
-## Relationship to the Current Implementation
+## Relationship to the Retired Implementation
 
-The current implementation removes or replaces parts of the native OpenDesign
-experience, uses Maverick Chat as the Design Studio composer, and translates
-OpenDesign runs into Maverick runtime sessions. That implementation is
-documented in:
+The retired implementation removed or replaced parts of the native OpenDesign
+experience, used Maverick Chat as the Design Studio composer, and translated
+OpenDesign runs into Maverick runtime sessions. It is documented historically
+in:
 
 - `docs/architecture/design_studio_runtime_bridge.md`;
-- `apps/design-studio/README.md`.
+- `docs/architecture/design_studio_data_generations.md`; and
+- `docs/adr/0009-design-studio-opendesign-incremental-cycle.md`.
 
-When this target architecture is implemented, it supersedes the following
-current product decisions:
+This implementation superseded the following product decisions:
 
 - Maverick Chat being the only Design Studio composer;
 - the native OpenDesign chat being unmounted;
@@ -48,9 +48,8 @@ current product decisions:
   controls;
 - treating every native OpenDesign user message as a Maverick runtime turn.
 
-Existing hosting, workspace isolation, artifact integrity, and app-data rules
-remain applicable until they are deliberately replaced. Migration must not
-silently reinterpret current implementation details as the final architecture.
+Hosting, workspace isolation, artifact integrity, and app-data rules remain
+applicable. Historical implementation details are not active architecture.
 
 ## Decision Summary
 
@@ -586,10 +585,11 @@ A bridge compatibility problem must degrade only that bridge. It must not
 corrupt OpenDesign data or make native OpenDesign dependent on an older
 Maverick UI patch.
 
-## Migration from the Current Design Studio
+## Implementation Record
 
-Migration should be incremental and reversible until the new direct and
-delegated flows are proven.
+Migration was completed incrementally and remained reversible until the direct
+and delegated flows were proven. The phases below are retained as the rollout
+and verification record.
 
 ### Phase 1: upstream installation proof
 
@@ -643,7 +643,7 @@ delegated flows are proven.
 
 ## Acceptance Criteria
 
-The target architecture is complete only when all of the following are true.
+The implementation remains accepted only while all of the following are true.
 
 ### Native product
 

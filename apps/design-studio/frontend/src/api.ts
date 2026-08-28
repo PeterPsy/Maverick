@@ -27,12 +27,37 @@ export function nativeOpenDesignPath(
     : input instanceof URLSearchParams
       ? Object.fromEntries(input.entries())
       : input;
+  const appPage = nativePathFromAppPage(params.app_page);
+  if (appPage !== undefined) return appPage;
   const projectId = scalar(params.od_project_id ?? params.project_id);
   const conversationId = scalar(params.od_conversation_id ?? params.conversation_id);
   if (projectId && conversationId) {
     return `/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`;
   }
   return projectId ? `/projects/${encodeURIComponent(projectId)}` : "/";
+}
+
+function nativePathFromAppPage(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") return "/";
+  const segments = value.trim().split("/");
+  if (
+    segments.length === 2
+    && segments[0] === "projects"
+    && IDENTIFIER.test(segments[1])
+  ) {
+    return `/projects/${encodeURIComponent(segments[1])}`;
+  }
+  if (
+    segments.length === 4
+    && segments[0] === "projects"
+    && IDENTIFIER.test(segments[1])
+    && segments[2] === "conversations"
+    && IDENTIFIER.test(segments[3])
+  ) {
+    return `/projects/${encodeURIComponent(segments[1])}/conversations/${encodeURIComponent(segments[3])}`;
+  }
+  return "/";
 }
 
 export async function requestOpenDesignLaunch(

@@ -18,6 +18,7 @@ sys.path.insert(0, str(SERVICE_ROOT))
 from official_opendesign_release import install_official_release, load_official_release  # noqa: E402
 from official_bridge_contracts import bundled_delegation_contract, write_bridge_contracts  # noqa: E402
 from official_release_selection import ensure_release_selection  # noqa: E402
+from opencode_runtime import install_opencode_runtime  # noqa: E402
 
 
 def main() -> None:
@@ -33,6 +34,7 @@ def main() -> None:
         artifact_id="opendesign",
     )
     installation = install_official_release(namespace / "official" / release.digest_key, release=release)
+    opencode = install_opencode_runtime(namespace)
     selection = ensure_release_selection(Path(payload.data_root), release)
     write_bridge_contracts(
         Path(payload.data_root),
@@ -55,6 +57,11 @@ def main() -> None:
             "selection": {
                 "descriptor_sha256": selection.descriptor_sha256,
                 "selected_at": selection.selected_at,
+            },
+            "model_runtime": {
+                "name": "opencode",
+                "installed": True,
+                "executable": opencode.name,
             },
         }
     )

@@ -1,8 +1,15 @@
 # ADR 0009: Design Studio OpenDesign Incremental Cycle
 
-Status: Accepted
+Status: Historical (superseded 2026-08-28)
 
 Date: 2026-08-12
+
+Superseded by
+[`design_studio_native_opendesign_architecture.md`](../architecture/design_studio_native_opendesign_architecture.md).
+This ADR records the retired derived-runtime/web-overlay cycle only. The active
+Design Studio launches an unchanged official OpenDesign release and does not
+use the artifact, overlay, patch, generation-control, or browser-scenario gates
+described below.
 
 ## Context
 
@@ -116,6 +123,10 @@ patch/source/overlay digests with no source/build cache hit, activates through
 readiness and the scoped browser-remount event, restores the complete initial
 selection, and records separate mutation, build, activation, and restoration
 timings. The canonical ceiling is 180 seconds.
+
+These gates and their deleted legacy runners are historical. The maintained
+native gates are `npm --prefix apps/design-studio run test:e2e:migration` and
+`npm --prefix apps/design-studio run test:e2e`.
 
 ## Consequences
 

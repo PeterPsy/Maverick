@@ -164,6 +164,7 @@
   "entrypoints": {
     "hooks": {
       "install": "hooks/install.py",
+      "upgrade": "hooks/install.py",
       "migrate": "hooks/migrate.py",
       "health_check": "hooks/health_check.py"
     },
@@ -192,7 +193,7 @@
   },
   "hook_timeouts": {
     "backend_seconds": 60,
-    "install_seconds": 180,
+    "install_seconds": 300,
     "upgrade_seconds": 300,
     "migrate_seconds": 300,
     "export_seconds": 120,

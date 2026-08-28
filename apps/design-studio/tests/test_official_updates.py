@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from pathlib import Path
 import shutil
 from types import SimpleNamespace
@@ -50,8 +51,23 @@ def _candidate_descriptor(path: Path) -> Path:
     return path
 
 
-def _inventory(release, *, changed: bool) -> dict:
+def _inventory(release, *, changed: bool, removed: tuple[str, ...] = ()) -> dict:
     digest = ("d" if changed else "c") * 64
+    categories = {
+        name: {
+            "count": 0 if name in removed else 1,
+            "sha256": digest,
+        }
+        for name in CATEGORIES
+    }
+    identity_sets = {
+        name: (
+            []
+            if name in removed
+            else [sha256(f"{name}:native-identity".encode("utf-8")).hexdigest()]
+        )
+        for name in CATEGORIES
+    }
     return {
         "schema_version": "1",
         "kind": "official-opendesign-public-inventory",
@@ -60,7 +76,8 @@ def _inventory(release, *, changed: bool) -> dict:
             "manifest_digest": release.manifest_digest,
             "rootfs_snapshot_sha256": "e" * 64,
         },
-        "categories": {name: {"count": 1, "sha256": digest} for name in CATEGORIES},
+        "categories": categories,
+        "identity_sets": identity_sets,
         "semantic_content_retained": False,
         "private_database_read": False,
     }
@@ -106,14 +123,18 @@ class OfficialUpdateTests(unittest.TestCase):
             installed_at="2026-08-28T00:00:00Z",
         )
 
-    def _run(self, control, *, probe=None):
+    def _run(self, control, *, probe=None, removed: tuple[str, ...] = ()):
         def inventory(installation, *, data_dir: Path, log_path: Path):
             self.assertTrue((data_dir / "project.txt").is_file())
             log_path.write_text("supported public APIs only", encoding="utf-8")
             changed = installation.release.manifest_digest == self.candidate.manifest_digest
             if changed:
                 (data_dir / "upstream-migration").write_text("0.17.0", encoding="utf-8")
-            return _inventory(installation.release, changed=changed)
+            return _inventory(
+                installation.release,
+                changed=changed,
+                removed=removed if changed else (),
+            )
 
         def install(_destination, *, release):
             self.assertEqual(release.manifest_digest, self.candidate.manifest_digest)
@@ -178,6 +199,7 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertEqual(result["update"]["phase"], "committed")
         self.assertEqual(result["update"]["bridges"]["delegation"]["state"], "degraded")
         self.assertEqual(result["update"]["bridges"]["model_access"]["state"], "degraded")
+        self.assertEqual(result["update"]["migration_guard"]["state"], "passed")
         self.assertEqual(calls, ["stop", "prewarm"])
         self.assertEqual(read_release_selection(self.data_root).release.version, "0.17.0")
         self.assertEqual((self.native / "upstream-migration").read_text(), "0.17.0")
@@ -207,6 +229,39 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
         self.assertFalse((self.native / "upstream-migration").exists())
         self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
+
+    def test_destructive_candidate_migration_is_rejected_before_activation(self) -> None:
+        calls: list[str] = []
+
+        def control(operation: str, _workspace_id: str) -> dict:
+            calls.append(operation)
+            return {"ready": operation == "prewarm"}
+
+        with self.assertRaisesRegex(OfficialUpdateError, "removed protected native identities"):
+            self._run(control, removed=("projects", "conversations", "project_files"))
+
+        self.assertEqual(calls, ["stop", "prewarm"])
+        self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
+        self.assertFalse((self.native / "upstream-migration").exists())
+        self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
+
+    def test_pre_activation_recovery_failure_is_marked_and_stays_quiesced(self) -> None:
+        calls: list[str] = []
+
+        def control(operation: str, _workspace_id: str) -> dict:
+            calls.append(operation)
+            return {"ready": False}
+
+        with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
+            self._run(control, removed=("projects",))
+
+        self.assertEqual(calls, ["stop", "prewarm"])
+        marker = json.loads((self.data_root / "official-update.json").read_text())
+        self.assertEqual(marker["phase"], "recovery_required")
+        self.assertEqual(marker["migration_guard"]["state"], "failed")
+        self.assertFalse(marker["native_ready"])
+        self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
+        self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
 
     def test_failed_previous_startup_stays_quiesced_for_operator_recovery(self) -> None:
         calls: list[str] = []

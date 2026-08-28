@@ -29,9 +29,13 @@ bridges are disabled.
 selection. `native_official_update.py` verifies and installs a user-selected
 official lock, stops only the managed Design Studio writer, creates an
 immutable backup, runs upstream migration and public inventory on copies,
+requires the migrated identity multiset to preserve every baseline item,
 atomically swaps data and selection, and restores both if native readiness
-fails. `official_update_state.py` persists only release identities, category
-counts/hashes, bridge states, and recovery phase.
+fails. If the previous writer cannot be resumed, it remains fail-closed behind
+quiescence with an explicit `recovery_required` marker.
+`official_update_state.py` persists only release identities, category
+counts/hashes, redaction-safe preservation counts, bridge states, and recovery
+phase.
 
 `official_bridge_contracts.py` exercises project, conversation, message, file,
 run, cancellation, result, and status APIs on a disposable migrated copy. A
@@ -42,14 +46,21 @@ Model Access Bridge after startup. Neither outcome gates native readiness.
 
 The Model Access Bridge consists of `model_access_client.py`,
 `model_access_server.py`, `model_access_profiles.py`, and the
-`maverick-codex` technical wrapper. It exposes configured API and CLI models
-through protocols supported by OpenDesign without a Maverick runtime session,
-prompt, memory, persona, skill, tool catalog, or semantic rewrite.
+`maverick-codex` and `maverick-opencode` technical wrappers. The install hook
+verifies a digest-pinned OpenCode runtime; the launcher emits supported native
+Codex and OpenCode agent profiles plus a credential-free OpenCode provider
+configuration. This makes every Core-granted API model visible in the native
+selector without manual provider setup. Both paths operate without a Maverick
+runtime session, prompt, memory, persona, skill, tool catalog, or semantic
+rewrite.
 
 Delegation lives outside this service directory under `../backend/`. It calls
 only supported native project, conversation, message, file, run, result, and
-cancellation APIs and persists only bounded correlation metadata. Direct
-native OpenDesign remains usable if either bridge is unavailable.
+cancellation APIs and persists only bounded correlation metadata. A canonical
+request fingerprint rejects conflicting idempotency-key reuse, a heartbeat
+retains ownership during slow native calls, and a durable pre-POST submission
+fence prevents a second run when the first response is uncertain. Direct native
+OpenDesign remains usable if either bridge is unavailable.
 
 ## One-time data cutover
 
@@ -85,7 +96,18 @@ driver. The immutable recovery backup necessarily retains canonical bytes;
 Maverick's live cutover marker and certification summary retain only technical
 identity, counts, and SHA-256 evidence.
 
-## Focused verification
+## Verification
+
+The maintained release gate runs the complete Design Studio Python suite,
+frontend tests/build, and the unchanged-official-package smoke. Focused,
+affected, migration, and hosted profiles use the same runner:
+
+```bash
+npm --prefix apps/design-studio run test:e2e
+npm --prefix apps/design-studio run test:e2e:migration
+```
+
+Individual focused checks remain available:
 
 ```bash
 python3 -m unittest -v \

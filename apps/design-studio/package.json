@@ -12,11 +12,11 @@
     "pretest": "node ../../scripts/check-node-runtime.mjs",
     "test": "vitest run",
     "test:e2e": "npm run test:e2e:release --",
-    "test:e2e:quick": "node tests/opendesign_product.e2e.mjs --profile quick",
-    "test:e2e:affected": "node tests/opendesign_product.e2e.mjs --profile affected",
-    "test:e2e:release": "node tests/opendesign_product.e2e.mjs --profile release",
-    "test:e2e:migration": "python3 service/smoke_opendesign_migration.py",
-    "test:e2e:hosted": "node tests/opendesign_hosted_smoke.e2e.mjs"
+    "test:e2e:quick": "python3 tests/opendesign_e2e_gate.py --profile quick",
+    "test:e2e:affected": "python3 tests/opendesign_e2e_gate.py --profile affected",
+    "test:e2e:release": "python3 tests/opendesign_e2e_gate.py --profile release",
+    "test:e2e:migration": "python3 tests/opendesign_e2e_gate.py --profile migration",
+    "test:e2e:hosted": "python3 tests/opendesign_e2e_gate.py --profile hosted"
   },
   "dependencies": {
     "react": "^19.2.3",

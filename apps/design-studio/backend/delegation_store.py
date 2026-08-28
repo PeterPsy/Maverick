@@ -125,6 +125,10 @@ class DelegationStore:
         update_json_state(self.data_root, STATE_PATH, mutate, default_state())
         return captured
 
+    def heartbeat(self, delegation_id: str, owner: str) -> dict[str, Any]:
+        """Atomically renew a live operation lease or fail if ownership changed."""
+        return self.patch(delegation_id, {}, owner=owner)
+
     def release(
         self,
         delegation_id: str,

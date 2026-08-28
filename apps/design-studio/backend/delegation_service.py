@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from delegation_errors import DelegationError
 from delegation_inputs import DelegationInputError, parse_delegation_request
+from delegation_lease import DelegationLeaseHeartbeat
 from delegation_native_flow import NativeDelegationFlow
 from delegation_projection import (
     TERMINAL_STATUSES,
@@ -35,6 +36,7 @@ class DelegationService:
         client: Any | None = None,
         store: DelegationStore | None = None,
         clock_ms: Callable[[], int] | None = None,
+        heartbeat_interval_seconds: float | None = None,
     ) -> None:
         self.payload = payload
         self.app_id = str(getattr(payload, "app_id", "") or "design-studio")
@@ -42,6 +44,7 @@ class DelegationService:
         self.store = store or DelegationStore(str(getattr(payload, "data_root", "") or ""))
         self._client = client
         self._clock_ms = clock_ms or (lambda: int(time() * 1000))
+        self._heartbeat_interval_seconds = heartbeat_interval_seconds
 
     @property
     def client(self) -> Any:
@@ -58,10 +61,18 @@ class DelegationService:
             request.delegation_id,
             {
                 "status": "preparing",
+                "request_fingerprint": request.request_fingerprint,
+                "run_submission_started": False,
                 "od_message_id": request.message_id,
                 "od_assistant_message_id": request.assistant_message_id,
             },
         )
+        try:
+            self._assert_request_identity(request.request_fingerprint, claim.record)
+        except DelegationError:
+            if claim.acquired:
+                self._release_without_failure(request.delegation_id, claim.owner)
+            raise
         if not claim.acquired:
             return self._response(claim.record, in_progress=True, replay=True)
         record = claim.record
@@ -72,13 +83,21 @@ class DelegationService:
             if record.get("od_run_id"):
                 self.store.release(request.delegation_id, claim.owner)
                 return {**self.status(request.delegation_id), "idempotent_replay": True}
-            record, replay = NativeDelegationFlow(self.client, self._clock_ms).submit(
-                request,
-                record,
-                store=self.store,
-                owner=claim.owner,
-                app_id=self.app_id,
-            )
+            with DelegationLeaseHeartbeat(
+                self.store,
+                request.delegation_id,
+                claim.owner,
+                interval_seconds=self._heartbeat_interval_seconds,
+            ) as lease:
+                record, replay = NativeDelegationFlow(self.client, self._clock_ms).submit(
+                    request,
+                    record,
+                    store=self.store,
+                    owner=claim.owner,
+                    app_id=self.app_id,
+                    lease_check=lease.check,
+                )
+            record = self.store.release(request.delegation_id, claim.owner)
             return self._response(record, replay=replay)
         except DelegationError:
             self._release_failed(request.delegation_id, claim.owner)
@@ -149,6 +168,13 @@ class DelegationService:
             return self._response(self.store.release(delegation_id, claim.owner))
         run_id = str(record.get("od_run_id") or "")
         if not run_id:
+            if record.get("run_submission_started") is True:
+                self.store.release(delegation_id, claim.owner)
+                raise DelegationError(
+                    "delegation_submission_uncertain",
+                    "The original OpenDesign run must be correlated before it can be canceled.",
+                    status_code=409,
+                )
             return self._response(
                 self.store.release(delegation_id, claim.owner, {"status": "canceled"})
             )
@@ -206,8 +232,24 @@ class DelegationService:
     def _release_failed(self, delegation_id: str, owner: str) -> None:
         with suppress(Exception):
             record = self.store.get(delegation_id) or {}
-            status = "queued" if record.get("od_run_id") else "submission_failed"
+            status = (
+                "queued"
+                if record.get("od_run_id")
+                else "submission_uncertain"
+                if record.get("run_submission_started") is True
+                else "submission_failed"
+            )
             self.store.release(delegation_id, owner, {"status": status})
+
+    @staticmethod
+    def _assert_request_identity(fingerprint: str, record: dict[str, Any]) -> None:
+        if record.get("request_fingerprint") == fingerprint:
+            return
+        raise DelegationError(
+            "idempotency_key_reused",
+            "The idempotency key is already bound to a different delegation request.",
+            status_code=409,
+        )
 
     def _release_without_failure(self, delegation_id: str, owner: str) -> None:
         with suppress(Exception):

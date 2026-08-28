@@ -10,7 +10,7 @@ import unittest
 SERVICE_ROOT = Path(__file__).resolve().parents[1] / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from official_public_inventory import _inventory  # noqa: E402
+from official_public_inventory import _inventory, _inventory_with_identity_sets  # noqa: E402
 
 
 class FakePublicApi:
@@ -134,6 +134,24 @@ class OfficialPublicInventoryTests(unittest.TestCase):
             self.assertNotIn(secret, rendered)
         self.assertTrue(all(path.startswith("/api/") for path in client.paths))
         self.assertFalse(any("sqlite" in path or "database" in path for path in client.paths))
+
+    def test_preservation_identities_are_complete_redaction_safe_hashes(self) -> None:
+        categories, identities = _inventory_with_identity_sets(FakePublicApi())
+
+        self.assertEqual(set(identities), set(categories))
+        for category, values in identities.items():
+            self.assertEqual(len(values), categories[category]["count"])
+            self.assertEqual(values, sorted(values))
+            self.assertTrue(
+                all(
+                    len(value) == 64
+                    and all(character in "0123456789abcdef" for character in value)
+                    for value in values
+                )
+            )
+        rendered = str(identities)
+        for secret in ("Secret project", "Secret transcript", "Secret HTML", "Secret brand"):
+            self.assertNotIn(secret, rendered)
 
 
 if __name__ == "__main__":

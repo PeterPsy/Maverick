@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from model_access_profiles import write_model_access_profiles  # noqa: E402
+from model_access_profiles import API_CONFIG_PATH, write_model_access_profiles  # noqa: E402
 from model_access_server import MODEL_ACCESS_API_KEY, ModelAccessHttpBridge  # noqa: E402
 
 
@@ -84,13 +84,27 @@ class NativeModelAccessAdapterTests(unittest.TestCase):
             target, summary = write_model_access_profiles(Path(temporary), _CatalogClient())
             raw = target.read_text(encoding="utf-8")
             payload = json.loads(raw)
+            api_config = json.loads((Path(temporary) / API_CONFIG_PATH).read_text())
 
-        profile = payload["agents"][0]
+        profiles = {profile["id"]: profile for profile in payload["agents"]}
+        profile = profiles["installed-codex-cli"]
         self.assertEqual(profile["baseAgent"], "codex")
         self.assertEqual(profile["bin"], "maverick-codex")
         self.assertEqual(profile["models"], [{"id": "gpt-test", "label": "Codex Test"}])
         self.assertEqual(profile["defaultModel"], "gpt-test")
+        api_profile = profiles["installed-maverick-api"]
+        self.assertEqual(api_profile["baseAgent"], "opencode")
+        self.assertEqual(api_profile["bin"], "maverick-opencode")
+        self.assertEqual(api_profile["env"]["OPENCODE_DISABLE_PROJECT_CONFIG"], "true")
+        self.assertEqual(
+            api_profile["models"],
+            [{"id": "maverick/model/exact", "label": "Exact API"}],
+        )
+        provider = api_config["provider"]["maverick"]
+        self.assertEqual(provider["options"]["baseURL"], "http://127.0.0.1:49491/v1")
+        self.assertEqual(provider["models"], {"model/exact": {"name": "Exact API"}})
         self.assertEqual(summary["model_count"], 1)
+        self.assertEqual(summary["api_model_count"], 1)
         self.assertNotIn("secret", raw.lower())
         self.assertNotIn("systemprompt", raw.lower())
         self.assertNotIn("memory", raw.lower())

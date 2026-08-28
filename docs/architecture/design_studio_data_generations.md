@@ -263,16 +263,16 @@ New writes use OpenDesign APIs; there is no second writable project catalog.
 
 ## Executable proof
 
+The original proof commands referenced deleted legacy patch/overlay tests and
+the retired migration smoke. The maintained native equivalents are:
+
 ```bash
-python3 -W error::ResourceWarning -m unittest \
-  apps/design-studio/tests/test_data_generation_proof.py \
-  apps/design-studio/tests/test_opendesign_web_overlay.py -v
-python3 apps/design-studio/service/smoke_opendesign_migration.py
+npm --prefix apps/design-studio run test:e2e:migration
+npm --prefix apps/design-studio run test:e2e
 ```
 
-The release product gate separately runs all fourteen browser scenarios in two
-workspaces. Migration/rollback smoke is a separate gate rather than setup for
-each UI test.
+The former fourteen-scenario derived-product gate and its separate legacy
+migration smoke no longer apply to the unchanged official native host.
 
 ## Consequences
 

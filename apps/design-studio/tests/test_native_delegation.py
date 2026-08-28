@@ -8,7 +8,10 @@ from types import SimpleNamespace
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -38,6 +41,7 @@ class FakeOpenDesign:
         self.run_calls: list[dict] = []
         self.lose_next_run_response = False
         self.hide_next_recovery = False
+        self.conceal_lost_run = False
 
     def list_projects(self) -> list[dict]:
         return list(self.projects.values())
@@ -87,7 +91,10 @@ class FakeOpenDesign:
         if self.hide_next_recovery:
             self.hide_next_recovery = False
             raise OpenDesignUnavailable("lost recovery")
-        return list(self.messages.get((project_id, conversation_id), []))
+        messages = list(self.messages.get((project_id, conversation_id), []))
+        if self.conceal_lost_run:
+            return [message for message in messages if not message.get("runId")]
+        return messages
 
     def put_message(
         self,
@@ -277,6 +284,100 @@ class NativeDelegationTests(unittest.TestCase):
             self.assertTrue(retried["idempotent_replay"])
             self.assertEqual(retried["delegation"]["opendesign"]["run_id"], "run_1")
             self.assertEqual(len(client.put_calls), 1)
+            self.assertEqual(len(client.run_calls), 1)
+
+    def test_uncertain_submission_is_fenced_before_retry_can_start_another_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            client = FakeOpenDesign()
+            client.lose_next_run_response = True
+            client.conceal_lost_run = True
+            service = DelegationService(payload(Path(temporary)), client=client)
+            arguments = {"brief": "Build the hero.", "idempotency_key": "fenced-loss"}
+
+            with self.assertRaises(DelegationError):
+                service.delegate(arguments)
+            with self.assertRaises(DelegationError) as retried:
+                service.delegate(arguments)
+
+            self.assertEqual(retried.exception.code, "delegation_submission_uncertain")
+            self.assertEqual(len(client.put_calls), 1)
+            self.assertEqual(len(client.run_calls), 1)
+
+    def test_idempotency_key_is_bound_to_brief_model_and_attachments(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            client = FakeOpenDesign()
+            service = DelegationService(payload(root), client=client)
+            original = {
+                "brief": "First brief.",
+                "idempotency_key": "bound-input",
+                "model": "model/one",
+                "attachments": [{
+                    "name": "source.txt",
+                    "content_base64": b64encode(b"one").decode("ascii"),
+                    "authorized": True,
+                }],
+            }
+            service.delegate(original)
+
+            for changed in (
+                {**original, "brief": "Second brief."},
+                {**original, "model": "model/two"},
+                {
+                    **original,
+                    "attachments": [{
+                        **original["attachments"][0],
+                        "content_base64": b64encode(b"two").decode("ascii"),
+                    }],
+                },
+            ):
+                with self.assertRaises(DelegationError) as raised:
+                    service.delegate(changed)
+                self.assertEqual(raised.exception.code, "idempotency_key_reused")
+            self.assertEqual(len(client.run_calls), 1)
+
+    def test_heartbeat_keeps_a_slow_start_run_lease_exclusive(self) -> None:
+        class BlockingOpenDesign(FakeOpenDesign):
+            def __init__(self) -> None:
+                super().__init__()
+                self.entered = threading.Event()
+                self.resume = threading.Event()
+
+            def start_run(self, body: dict) -> dict:
+                self.entered.set()
+                self.resume.wait(timeout=2)
+                return super().start_run(body)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            client = BlockingOpenDesign()
+            arguments = {"brief": "Slow run.", "idempotency_key": "heartbeat"}
+            service = DelegationService(
+                payload(root),
+                client=client,
+                heartbeat_interval_seconds=0.01,
+            )
+            outcome: list[object] = []
+
+            def submit() -> None:
+                try:
+                    outcome.append(service.delegate(arguments))
+                except Exception as error:  # pragma: no cover - asserted below
+                    outcome.append(error)
+
+            with patch("delegation_store.LEASE_SECONDS", 0.04):
+                thread = threading.Thread(target=submit)
+                thread.start()
+                self.assertTrue(client.entered.wait(timeout=1))
+                time.sleep(0.08)
+                concurrent = DelegationService(payload(root), client=client).delegate(arguments)
+                client.resume.set()
+                thread.join(timeout=2)
+
+            self.assertTrue(concurrent["in_progress"])
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(len(outcome), 1)
+            self.assertIsInstance(outcome[0], dict)
             self.assertEqual(len(client.run_calls), 1)
 
     def test_terminal_status_persists_only_display_safe_result_references(self) -> None:

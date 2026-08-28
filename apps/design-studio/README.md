@@ -33,12 +33,22 @@ this capability never prevents OpenDesign from starting.
 Core exposes a private, capability-authenticated Unix socket only inside the
 sidecar. Raw provider credentials remain in Core Secrets and are never written
 to OpenDesign data or injected into the sidecar environment. The launcher
-provides two native integration forms:
+provides two native integration forms and registers both in the supported
+native OpenDesign profile file:
 
 - an OpenAI-compatible endpoint at `http://127.0.0.1:49491/v1`, using the
   non-secret local handle `maverick-local`; and
-- an OpenDesign local agent profile named `installed-codex-cli`, based on the
-  upstream `codex` adapter and the technical wrapper `service/maverick-codex`.
+- a local agent profile named `installed-codex-cli`, based on the upstream
+  `codex` adapter and the technical wrapper `service/maverick-codex`; and
+- a local agent profile named `installed-maverick-api`, based on the upstream
+  `opencode` adapter. Its generated OpenCode provider configuration exposes
+  every API model granted by Core under the `maverick/` provider namespace.
+
+The install hook also materializes a separately digest-pinned official
+OpenCode technical runtime. `service/maverick-opencode` invokes only that
+verified runtime. Consequently, granted API models appear in OpenDesign's
+native selector on a fresh installation without asking the user to add an API
+provider manually.
 
 The API bridge validates the selected configured model, forwards the exact
 OpenDesign-authored JSON body, and streams the provider response. The CLI
@@ -47,10 +57,10 @@ and cancellation semantics to a separately sandboxed Codex process. It does
 not create a Maverick runtime session and does not add Maverick prompts,
 memory, Chat history, personas, skills, tools, planning, or model substitution.
 
-OpenDesign users configure the standard API endpoint through OpenDesign's own
-provider settings. CLI model metadata is written only to the supported native
-`OD_AGENT_PROFILES_CONFIG` file under OpenDesign's sandbox agent home; it
-contains no credential or semantic content.
+Profile and provider metadata is written only below OpenDesign's sandbox agent
+home. It contains the loopback endpoint and non-secret local handle, but no
+provider credential or semantic content. Users can still configure additional
+providers through OpenDesign's own settings.
 
 Redaction-safe bridge readiness and endpoint metadata are written to
 `data/design-studio/bridge-capabilities.json`. Native operation remains
@@ -80,11 +90,18 @@ Update activation briefly quiesces only the Design Studio sidecar. It creates
 an immutable full data backup, inventories the current release through public
 APIs, runs the candidate's supported upstream migration against a private
 copy, inventories the migrated copy, and exercises the public delegation
-contract on another disposable copy. Only then does it atomically select the
-migrated data and release descriptor and prewarm the candidate. Failure to
-start restores the complete prior data and release selection. A model or
-delegation capability mismatch is recorded as degraded and never rolls back or
-stops native OpenDesign.
+contract on another disposable copy. Activation is permitted only when the
+redaction-safe identity inventory proves that every pre-migration project,
+conversation, ordered message, Design System, file, artifact, setting, and run
+reference survives. Additions are allowed; losses fail before the active data
+or release selection changes. Only then does the updater atomically select the
+migrated data and release descriptor and prewarm the candidate.
+
+Failure to start restores the complete prior data and release selection. If
+that previous writer cannot itself be restarted, the updater keeps Design
+Studio quiesced and records `recovery_required` instead of reporting a safe
+rollback. A model or delegation capability mismatch is recorded as degraded
+and never rolls back or stops native OpenDesign.
 
 ## External delegation bridge
 
@@ -95,11 +112,14 @@ attachments, appends exactly one ordinary visible message headed `Brief
 delegated by Maverick`, and starts one native OpenDesign run. OpenDesign alone
 selects and launches the requested naked agent/model.
 
-The caller supplies a workspace-scoped idempotency key. Deterministic message
-and assistant-message ids plus a short operation lease make concurrent and
-response-loss retries safe: the bridge recovers the canonical `runId` from the
-native assistant message rather than appending or starting again. A disconnected
-caller does not cancel the OpenDesign run.
+The caller supplies a workspace-scoped idempotency key. The bridge binds that
+key to a canonical fingerprint of the brief, target, model, reasoning option,
+and ordered attachment identities; reuse with different inputs is rejected.
+Deterministic message and assistant-message ids plus a continuously renewed
+operation lease make concurrent retries safe. Before the non-idempotent run
+POST, a durable submission fence is written. A response-loss retry recovers
+the canonical `runId` from the native assistant message and never repeats an
+uncertain POST. A disconnected caller does not cancel the OpenDesign run.
 
 Maverick persists only the delegation id/status, canonical native ids, event
 cursor, display-safe result references, exact conversation deep link, and
@@ -199,6 +219,13 @@ python3 -m unittest \
   apps.design-studio.tests.test_official_public_inventory \
   apps.design-studio.tests.test_official_updates \
   tests.unit.app_hosting.test_model_access_broker
+```
+
+Maintained aggregate gates (quick, affected, migration, hosted, and release)
+are exposed through the package scripts. The release gate is the default:
+
+```bash
+npm --prefix apps/design-studio run test:e2e
 ```
 
 The official-package smoke remains valid with both bridges disabled:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from base64 import b64encode
-from contextlib import suppress
 from typing import Any, Callable
 
 from delegation_errors import DelegationError
@@ -33,15 +32,18 @@ class NativeDelegationFlow:
         store: DelegationStore,
         owner: str,
         app_id: str,
+        lease_check: Callable[[], None],
     ) -> tuple[dict[str, Any], bool]:
         _assert_retry_target(request, record)
         targets = OpenDesignTargetResolver(self.client)
+        lease_check()
         project_id, created_conversation_id = targets.resolve_project(request, record)
         record = store.patch(
             request.delegation_id,
             {"od_project_id": project_id},
             owner=owner,
         )
+        lease_check()
         conversation_id = targets.resolve_conversation(
             request,
             record,
@@ -57,19 +59,28 @@ class NativeDelegationFlow:
             },
             owner=owner,
         )
+        lease_check()
         recovered = self._recover_run(request, project_id, conversation_id)
         if recovered["run_id"]:
             return (
-                store.release(
+                store.patch(
                     request.delegation_id,
-                    owner,
                     _recovered_updates(recovered),
+                    owner=owner,
                 ),
                 True,
             )
 
-        attachments = self._upload_attachments(request, project_id)
+        if record.get("run_submission_started") is True:
+            raise DelegationError(
+                "delegation_submission_uncertain",
+                "OpenDesign may have accepted the original run request; no second run will be started.",
+                status_code=409,
+            )
+
+        attachments = self._upload_attachments(request, project_id, lease_check)
         now = self.clock_ms()
+        lease_check()
         saved = self.client.put_message(
             project_id,
             conversation_id,
@@ -84,29 +95,38 @@ class NativeDelegationFlow:
         )
         if str(saved.get("id") or "") != request.message_id or saved.get("role") != "user":
             raise OpenDesignProtocolError("OpenDesign did not persist the delegated user message.")
+        record = store.patch(
+            request.delegation_id,
+            {"run_submission_started": True, "status": "submitting"},
+            owner=owner,
+        )
+        lease_check()
         try:
             started = self.client.start_run(
                 self._run_body(request, project_id, conversation_id, attachments)
             )
         except OpenDesignClientError as original:
-            with suppress(OpenDesignClientError, ValueError):
+            try:
+                lease_check()
                 recovered = self._recover_run(request, project_id, conversation_id)
                 if recovered["run_id"]:
                     return (
-                        store.release(
+                        store.patch(
                             request.delegation_id,
-                            owner,
                             _recovered_updates(recovered),
+                            owner=owner,
                         ),
                         True,
                     )
+            except (OpenDesignClientError, ValueError):
+                pass
             raise original
         run_id = self._validated_started_run(started, request, conversation_id)
         return (
-            store.release(
+            store.patch(
                 request.delegation_id,
-                owner,
                 {"od_run_id": run_id, "status": "queued"},
+                owner=owner,
             ),
             False,
         )
@@ -124,9 +144,11 @@ class NativeDelegationFlow:
         self,
         request: DelegationRequest,
         project_id: str,
+        lease_check: Callable[[], None],
     ) -> list[dict[str, Any]]:
         native: list[dict[str, Any]] = []
         for index, attachment in enumerate(request.attachments):
+            lease_check()
             expected_path = request.attachment_path(index, attachment)
             file_record = self.client.upload_file(
                 project_id,

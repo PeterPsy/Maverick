@@ -14,7 +14,7 @@ import {
   validateSidecarLaunch,
   writeCachedLaunchTarget,
 } from "./api";
-import { BackendRequestError, mobileLayoutFromWidgetMessage, mountedAppId, projectCreatedAt, projectIdFromWidgetMessage } from "./backendApi";
+import { BackendRequestError, mobileLayoutFromWidgetMessage, mountedAppId, nextDefaultProjectName, projectCreatedAt, projectIdFromWidgetMessage } from "./backendApi";
 
 const VALID_LAUNCH = {
   origin: "https://sc-proof.sidecars.example",
@@ -53,6 +53,15 @@ describe("project creation ordering", () => {
     const newer = { created_at: 1_786_310_400, updatedAt: "2026-08-02T00:00:00Z" };
     expect(projectCreatedAt(newer)).toBeGreaterThan(projectCreatedAt(older));
     expect(projectCreatedAt({ updatedAt: "2099-01-01T00:00:00Z" })).toBe(0);
+  });
+
+  it("allocates localized default names without catalog collisions", () => {
+    expect(nextDefaultProjectName([])).toBe("Progetto senza titolo");
+    expect(nextDefaultProjectName([
+      { name: "Progetto senza titolo" },
+      { name: "progetto SENZA titolo 2" },
+      { name: "Un progetto nominato" },
+    ])).toBe("Progetto senza titolo 3");
   });
 });
 

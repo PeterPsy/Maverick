@@ -107,7 +107,7 @@ function DesignStudioSidebar() {
             >
               <PencilRuler aria-hidden="true" className="ds-sidebar__project-icon" size={18} strokeWidth={1.8} />
               <span className="ds-sidebar__project-copy">
-                <strong>{project.name || "Untitled design"}</strong>
+                <strong>{project.name || "Progetto senza titolo"}</strong>
                 <small>{formatUpdatedAt(projectUpdatedAt(project))}</small>
               </span>
             </button>

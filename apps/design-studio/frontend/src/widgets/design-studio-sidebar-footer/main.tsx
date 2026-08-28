@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { LoaderCircle, PanelLeftOpen, Plus, Settings } from "lucide-react";
-import { callDesignStudioBackend, mobileLayoutFromWidgetMessage, mountedAppId, projectIdFromWidgetMessage } from "../../backendApi";
+import { callDesignStudioBackend, mobileLayoutFromWidgetMessage, mountedAppId, nextDefaultProjectName, projectIdFromWidgetMessage } from "../../backendApi";
 import { applyInitialWidgetTheme, listenForWidgetTheme } from "../../widgetTheme";
 import "../../styles/sidebar.css";
 
@@ -51,8 +51,9 @@ function DesignStudioSidebarFooter() {
     setCreating(true);
     setError("");
     try {
+      const catalog = await callDesignStudioBackend<{ projects?: Array<Record<string, unknown>> }>("list_projects");
       const payload = await callDesignStudioBackend<{ od_project_id?: string; project?: { id?: string } }>("create_project", {
-        name: "Untitled design",
+        name: nextDefaultProjectName(catalog.projects || []),
       });
       const projectId = payload.od_project_id || payload.project?.id || "";
       if (!projectId) {

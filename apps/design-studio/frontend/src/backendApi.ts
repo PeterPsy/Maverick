@@ -65,6 +65,26 @@ export function projectCreatedAt(project: Record<string, unknown>): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+export function nextDefaultProjectName(projects: Array<Record<string, unknown>>): string {
+  const base = "Progetto senza titolo";
+  const existing = new Set(
+    projects
+      .map((project) => typeof project.name === "string" ? project.name.trim() : "")
+      .filter(Boolean)
+      .map((name) => name.normalize("NFKC").toLocaleLowerCase("it-IT")),
+  );
+  if (!existing.has(base.toLocaleLowerCase("it-IT"))) {
+    return base;
+  }
+  for (let suffix = 2; suffix <= existing.size + 1; suffix += 1) {
+    const candidate = `${base} ${suffix}`;
+    if (!existing.has(candidate.toLocaleLowerCase("it-IT"))) {
+      return candidate;
+    }
+  }
+  throw new Error("Unable to allocate a default project name.");
+}
+
 export function projectIdFromWidgetMessage(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return "";

@@ -1,17 +1,18 @@
 diff --git a/apps/web/app/layout.tsx b/apps/web/app/layout.tsx
-index cc7a5f3..cc28da3 100644
+index cc7a5f3..08e698e 100644
 --- a/apps/web/app/layout.tsx
 +++ b/apps/web/app/layout.tsx
-@@ -28,6 +28,8 @@ export const viewport: Viewport = {
+@@ -28,16 +28,20 @@ export const viewport: Viewport = {
   */
  const themeInitScript = `(function(){try{var c=JSON.parse(localStorage.getItem('open-design:config')||'{}');var t=c.theme;if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);var a=typeof c.accentColor==='string'&&/^#[0-9a-fA-F]{6}$/.test(c.accentColor.trim())?c.accentColor.trim().toLowerCase():'#c96442';var s=document.documentElement.style;s.setProperty('--accent',a);s.setProperty('--accent-strong','color-mix(in srgb, '+a+' 86%, var(--text-strong))');s.setProperty('--accent-soft','color-mix(in srgb, '+a+' 22%, var(--bg-panel))');s.setProperty('--accent-tint','color-mix(in srgb, '+a+' 12%, var(--bg-panel))');s.setProperty('--accent-hover','color-mix(in srgb, '+a+' 90%, var(--text-strong))');}catch(e){}})();`;
  
-+const maverickHostBridgeScript = `(()=>{const root=document.documentElement;root.dataset.maverickHosted="true";root.dataset.maverickTools="closed";let lastProject="";const valid=id=>/^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/.test(id||"");const project=()=>{const match=/^\\/projects\\/([^/?#]+)/.exec(location.pathname);if(!match)return"";try{return decodeURIComponent(match[1])}catch{return""}};const notify=()=>{const id=project();if(id===lastProject)return;lastProject=id;if(valid(id))parent.postMessage({type:"maverick.opendesign.navigation-changed",version:1,od_project_id:id},"*")};const applyTheme=theme=>{if(theme!=="dark"&&theme!=="light")return;root.dataset.maverickTheme=theme;root.dataset.theme=theme;root.style.colorScheme=theme};const navigate=id=>{if(!valid(id))return;const next=\`/projects/\${encodeURIComponent(id)}\`;if(location.pathname!==next){location.assign(next);return}notify()};addEventListener("message",event=>{if(event.source!==parent||!event.data||typeof event.data!=="object"||event.data.version!==1)return;if(event.data.type==="maverick.opendesign.navigate"&&event.data.od_project_id)navigate(event.data.od_project_id);if(event.data.type==="maverick.opendesign.theme")applyTheme(event.data.theme)});for(const method of ["pushState","replaceState"]){const original=history[method];history[method]=function(...args){const result=original.apply(this,args);queueMicrotask(notify);return result}}addEventListener("popstate",notify);const ready=()=>{notify();parent.postMessage({type:"maverick.opendesign.ready",version:1},"*")};document.readyState==="loading"?addEventListener("DOMContentLoaded",ready,{once:true}):ready()})();`;
++const maverickHostBridgeScript = `(()=>{const root=document.documentElement;root.dataset.maverickHosted="true";let lastProject="";const valid=id=>/^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/.test(id||"");const project=()=>{const match=/^\\/projects\\/([^/?#]+)/.exec(location.pathname);if(!match)return"";try{return decodeURIComponent(match[1])}catch{return""}};const notify=()=>{const id=project();if(id===lastProject)return;lastProject=id;if(valid(id))parent.postMessage({type:"maverick.opendesign.navigation-changed",version:1,od_project_id:id},"*")};const applyTheme=theme=>{if(theme!=="dark"&&theme!=="light")return;root.dataset.maverickTheme=theme;root.dataset.theme=theme;root.style.colorScheme=theme};const navigate=id=>{if(!valid(id))return;const next=\`/projects/\${encodeURIComponent(id)}\`;if(location.pathname!==next){location.assign(next);return}notify()};addEventListener("message",event=>{if(event.source!==parent||!event.data||typeof event.data!=="object"||event.data.version!==1)return;if(event.data.type==="maverick.opendesign.navigate"&&event.data.od_project_id)navigate(event.data.od_project_id);if(event.data.type==="maverick.opendesign.theme")applyTheme(event.data.theme)});for(const method of ["pushState","replaceState"]){const original=history[method];history[method]=function(...args){const result=original.apply(this,args);queueMicrotask(notify);return result}}addEventListener("popstate",notify);const ready=()=>{notify();parent.postMessage({type:"maverick.opendesign.ready",version:1},"*")};document.readyState==="loading"?addEventListener("DOMContentLoaded",ready,{once:true}):ready()})();`;
 +
  export default function RootLayout({ children }: { children: ReactNode }) {
    return (
-     <html lang='en' suppressHydrationWarning>
-@@ -35,6 +37,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
+-    <html lang='en' suppressHydrationWarning>
++    <html lang='it' suppressHydrationWarning>
+       {/* eslint-disable-next-line @next/next/no-sync-scripts */}
        <head>
          {/* biome-ignore lint/security/noDangerouslySetInnerHtml: intentional theme-init inline script to prevent FOUC */}
          <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
@@ -19,9 +20,13 @@ index cc7a5f3..cc28da3 100644
 +        <script dangerouslySetInnerHTML={{ __html: maverickHostBridgeScript }} />
        </head>
        <body suppressHydrationWarning>
-         <I18nProvider>
+-        <I18nProvider>
++        <I18nProvider initial='it'>
+           <AnalyticsProvider>{children}</AnalyticsProvider>
+         </I18nProvider>
+       </body>
 diff --git a/apps/web/src/App.tsx b/apps/web/src/App.tsx
-index 9f30f20..a357e30 100644
+index 9f30f20..37001c2 100644
 --- a/apps/web/src/App.tsx
 +++ b/apps/web/src/App.tsx
 @@ -390,6 +390,10 @@ function AppInner() {
@@ -35,7 +40,18 @@ index 9f30f20..a357e30 100644
    useModalWindowDragGuard();
    useEffect(() => {
      const onFirstPartyExternalLink = (event: MouseEvent) => openFirstPartyExternalLinkFromClick(
-@@ -2233,6 +2237,42 @@ function AppInner() {
+@@ -420,6 +424,10 @@ function AppInner() {
+   latestPersistedConfigRef.current = config;
+   const settingsDraftConfigRef = useRef<AppConfig | null>(null);
+   const [settingsOpen, setSettingsOpen] = useState(false);
++  const [maverickSketchToolsRequest, setMaverickSketchToolsRequest] = useState<{
++    projectId: string;
++    requestId: string;
++  } | null>(null);
+   const [amrArtifactUpgradeHomeMockConfig] = useState<AmrArtifactUpgradeHomeOffer | null>(
+     () => process.env.NODE_ENV === 'development' && typeof window !== 'undefined'
+       ? amrArtifactUpgradeHomeMockOffer(window.location.search)
+@@ -2233,6 +2241,45 @@ function AppInner() {
      setSettingsOpen(true);
    }, []);
  
@@ -63,7 +79,10 @@ index 9f30f20..a357e30 100644
 +          ? data.request_id.trim()
 +          : '';
 +        if (!requestId) return;
-+        document.documentElement.dataset.maverickTools = 'open';
++        setMaverickSketchToolsRequest({
++          projectId: activeProject?.id ?? '',
++          requestId,
++        });
 +        window.parent.postMessage({
 +          type: 'maverick.opendesign.tools-opened',
 +          version: 1,
@@ -73,12 +92,25 @@ index 9f30f20..a357e30 100644
 +    }
 +    window.addEventListener('message', handleMaverickCommand);
 +    return () => window.removeEventListener('message', handleMaverickCommand);
-+  }, [maverickHosted, openSettings]);
++  }, [activeProject?.id, maverickHosted, openSettings]);
 +
    // Entry point from the failed-run AMR nudge: open Settings on the execution
    // section and flag the AMR agent card for a one-shot scroll-into-view +
    // highlight (and a sign-in coachmark when not yet authorized).
-@@ -2497,7 +2537,7 @@ function AppInner() {
+@@ -2460,6 +2507,12 @@ function AppInner() {
+     appMain = (
+       <ProjectView
+         key={activeProject.id}
++        maverickHosted={maverickHosted}
++        openSketchToolsRequestId={
++          maverickSketchToolsRequest?.projectId === activeProject.id
++            ? maverickSketchToolsRequest.requestId
++            : null
++        }
+         project={activeProject}
+         routeFileName={route.kind === 'project' ? route.fileName : null}
+         routeConversationId={route.kind === 'project' ? route.conversationId : null}
+@@ -2497,7 +2550,7 @@ function AppInner() {
        />
      );
    } else {
@@ -87,7 +119,7 @@ index 9f30f20..a357e30 100644
        <EntryView
          skills={enabledSkills}
          designTemplates={enabledDesignTemplates}
-@@ -2594,16 +2634,18 @@ function AppInner() {
+@@ -2594,16 +2647,18 @@ function AppInner() {
          className={`workspace-shell workspace-shell--${clientType}`}
          data-client-type={clientType}
        >
@@ -112,7 +144,7 @@ index 9f30f20..a357e30 100644
          <PetOverlay
            pet={config.pet?.enabled ? config.pet : undefined}
            taskCenter={petTaskCenter}
-@@ -2663,6 +2705,12 @@ function AppInner() {
+@@ -2663,6 +2718,12 @@ function AppInner() {
                setConfig(next);
              }
              setSettingsOpen(false);
@@ -125,8 +157,124 @@ index 9f30f20..a357e30 100644
              settingsDraftConfigRef.current = null;
              setSettingsHighlight(null);
            }}
+diff --git a/apps/web/src/components/FileWorkspace.tsx b/apps/web/src/components/FileWorkspace.tsx
+index b21cc5f..40d74dc 100644
+--- a/apps/web/src/components/FileWorkspace.tsx
++++ b/apps/web/src/components/FileWorkspace.tsx
+@@ -157,6 +157,8 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) =>
+ 
+ interface Props {
+   projectId: string;
++  /** Correlated request to focus an existing sketch or create the first one. */
++  openSketchToolsRequestId?: string | null;
+   projectKind: TrackingProjectKind;
+   // Basename of the project's chosen working directory (e.g. "openclaw").
+   // Threaded to DesignFilesPanel as the breadcrumb root label. Undefined for
+@@ -1184,6 +1186,7 @@ interface WorkspaceActionToast {
+ 
+ export function FileWorkspace({
+   projectId,
++  openSketchToolsRequestId = null,
+   projectKind,
+   rootDirName,
+   reloading,
+@@ -1364,6 +1367,8 @@ export function FileWorkspace({
+   const draggedTabNameRef = useRef<string | null>(null);
+   const browserTabSequenceRef = useRef(0);
+   const openFileRef = useRef<(name: string) => void>(() => {});
++  const startNewSketchRef = useRef<() => Promise<void>>(async () => {});
++  const handledSketchToolsRequestRef = useRef('');
+   const designFilesNavProjectIdRef = useRef(projectId);
+   const designFilesNavRef = useRef<DesignFilesNavState>(createDefaultDesignFilesNavState());
+   if (designFilesNavProjectIdRef.current !== projectId) {
+@@ -2496,6 +2501,24 @@ export function FileWorkspace({
+     }
+   }
+ 
++  startNewSketchRef.current = startNewSketch;
++
++  useEffect(() => {
++    const requestId = openSketchToolsRequestId?.trim() ?? '';
++    if (!requestId || handledSketchToolsRequestRef.current === requestId) return;
++    handledSketchToolsRequestRef.current = requestId;
++    if (activeTab && isSketchName(activeTab)) return;
++    const latestSketch = sketchFiles.reduce<ProjectFile | null>(
++      (latest, file) => (!latest || file.mtime > latest.mtime ? file : latest),
++      null,
++    );
++    if (latestSketch) {
++      openFileRef.current(latestSketch.name);
++      return;
++    }
++    void startNewSketchRef.current();
++  }, [activeTab, openSketchToolsRequestId, sketchFiles]);
++
+   async function createMarkdownDocument() {
+     const target = nextMarkdownDocumentPath(files, uploadDir);
+     const file = await writeProjectTextFile(projectId, target, initialMarkdownDocument(target, projectKind, t));
+diff --git a/apps/web/src/components/ProjectView.tsx b/apps/web/src/components/ProjectView.tsx
+index ec621c7..cc209f0 100644
+--- a/apps/web/src/components/ProjectView.tsx
++++ b/apps/web/src/components/ProjectView.tsx
+@@ -390,6 +390,10 @@ function ensureConversationPresent(
+ 
+ interface Props {
+   project: Project;
++  /** Host-only request that reveals the native sketch tools for this project. */
++  openSketchToolsRequestId?: string | null;
++  /** Hosted mode omits desktop-only actions whose API routes are unavailable. */
++  maverickHosted?: boolean;
+   routeFileName: string | null;
+   /**
+    * Routed conversation id. When set (the URL is
+@@ -1331,6 +1335,8 @@ function artifactWithHtml(
+ 
+ export function ProjectView({
+   project,
++  openSketchToolsRequestId = null,
++  maverickHosted = false,
+   routeFileName,
+   routeConversationId = null,
+   config,
+@@ -8761,6 +8767,7 @@ export function ProjectView({
+         ) : null}
+         <FileWorkspace
+           projectId={project.id}
++          openSketchToolsRequestId={openSketchToolsRequestId}
+           projectKind={projectKindFromMetadataToTracking(currentProject.metadata) ?? 'prototype'}
+           rootDirName={(() => {
+             const baseDir = currentProject.metadata?.baseDir;
+@@ -8845,16 +8852,18 @@ export function ProjectView({
+           conversationId={activeConversationId}
+           headerActions={(
+             <>
+-              <HandoffButton
+-                projectId={project.id}
+-                projectName={project.name}
+-                projectDir={projectDetail.resolvedDir}
+-                agents={agents}
+-                artifactId={headerArtifact.artifact_id}
+-                artifactKind={headerArtifact.artifact_kind}
+-                metricsConsent={config.telemetry?.metrics === true}
+-                installationId={config.installationId}
+-              />
++              {maverickHosted ? null : (
++                <HandoffButton
++                  projectId={project.id}
++                  projectName={project.name}
++                  projectDir={projectDetail.resolvedDir}
++                  agents={agents}
++                  artifactId={headerArtifact.artifact_id}
++                  artifactKind={headerArtifact.artifact_kind}
++                  metricsConsent={config.telemetry?.metrics === true}
++                  installationId={config.installationId}
++                />
++              )}
+               <MessageCenter
+                 onOpenNotificationSettings={() => onOpenSettings('notifications')}
+               />
 diff --git a/apps/web/src/index.css b/apps/web/src/index.css
-index 685f2de..2e0cac9 100644
+index 685f2de..aa0fa19 100644
 --- a/apps/web/src/index.css
 +++ b/apps/web/src/index.css
 @@ -30,3 +30,74 @@
@@ -135,7 +283,7 @@ index 685f2de..2e0cac9 100644
  @import './styles/entrance.css';
 +
 +/* Maverick host integration: the isolated sidecar inherits the shell palette
-+ * and keeps the native tools pane collapsed until the shell requests it. */
++ * and delegates assistant chat to Maverick's contextual dock. */
 +:root {
 +  --mav-bg: #070708;
 +  --mav-panel: rgba(12, 12, 14, 0.96);
@@ -195,12 +343,12 @@ index 685f2de..2e0cac9 100644
 +  min-height: 0;
 +}
 +
-+html[data-maverick-hosted='true'][data-maverick-tools='closed'] .split {
++html[data-maverick-hosted='true'] .split {
 +  grid-template-columns: minmax(0, 1fr) !important;
 +}
 +
-+html[data-maverick-hosted='true'][data-maverick-tools='closed'] .split-chat-slot,
-+html[data-maverick-hosted='true'][data-maverick-tools='closed'] .split-resize-handle,
-+html[data-maverick-hosted='true'][data-maverick-tools='closed'] .split-edit-divider {
++html[data-maverick-hosted='true'] .split-chat-slot,
++html[data-maverick-hosted='true'] .split-resize-handle,
++html[data-maverick-hosted='true'] .split-edit-divider {
 +  display: none !important;
 +}

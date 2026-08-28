@@ -261,10 +261,15 @@ async function createProjectFromUi(page, frame, name) {
     workspaceBox && workspaceBox.height >= 300,
     `Hosted OpenDesign workspace remained compressed: ${JSON.stringify(workspaceBox)}`,
   );
-  const toolsPane = frame.locator('.split-chat-slot');
-  assert(await toolsPane.count() === 1 && !await toolsPane.isVisible(), 'Hosted native tools pane was not initially collapsed');
+  await frame.getByText('Tutti i file del progetto', { exact: true }).first().waitFor({ state: 'visible', timeout: 60_000 });
+  assert(!await frame.getByText('sidecar_route_blocked', { exact: true }).isVisible().catch(() => false), 'Hosted editor handoff called a blocked local route');
+  const nativeAssistant = frame.locator('.split-chat-slot');
+  assert(await nativeAssistant.count() === 1 && !await nativeAssistant.isVisible(), 'Hosted native assistant was not delegated to Maverick Chat');
   await footer.getByRole('button', { name: 'Strumenti', exact: true }).click();
-  await toolsPane.waitFor({ state: 'visible', timeout: 60_000 });
+  const sketchEditor = frame.locator('[data-testid="sketch-excalidraw-editor"]');
+  await sketchEditor.waitFor({ state: 'visible', timeout: 60_000 });
+  await sketchEditor.locator('[data-testid="toolbar-selection"]').waitFor({ state: 'visible', timeout: 60_000 });
+  assert(!await nativeAssistant.isVisible(), 'Strumenti opened the assistant instead of the drawing toolbar');
   let conversationId = String(body?.conversationId || body?.conversation?.id || '');
   if (!conversationId) {
     const conversations = await frameRequest(frame, `/api/projects/${encodeURIComponent(createdProjectId)}/conversations`);

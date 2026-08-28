@@ -220,6 +220,8 @@ with search, recent ordering, loading/error/empty states, and selected-project
 state; its fixed footer creates a canonical project. The widgets call the
 Design Studio backend and never persist a duplicate catalog. Their layout uses
 the shell-owned `is_mobile_layout` context rather than iframe media queries.
+Before creating a project, the UI allocates a collision-free Italian label
+(`Progetto senza titolo`, then a numeric suffix) from the canonical catalog.
 
 The editor host requests a one-shot launch from
 `POST /api/app-sidecars/browser-launch`, validates that the response names a
@@ -244,18 +246,23 @@ bootstrap the real OpenDesign `/projects/<id>` route. Without a deep link, the
 backend chooses the newest `createdAt`; with no projects the wrapper keeps
 OpenDesign Home unmounted and shows only `Nuovo progetto`. Sidebar selections
 and creation update shell-owned app params/history, so the sidebar and floating
-Chat always share the same project context.
+Chat always share the same project context. Same-app panel commands preserve
+that project context without leaking their transient request ids into the URL.
 
 The shell theme is forwarded as a sanitized dark/light message. The patched
 OpenDesign export maps its backgrounds, surfaces, borders, text, focus, dialog,
 popover and scrollbar colors to Maverick tokens. The React patch keeps the
 native `ProjectView`, fixes the hosted shell to give its body the full available
-height, and initially collapses the native project tools pane. The shell sidebar
-remains the only project catalog; its footer opens the tools pane and native
-`SettingsDialog` through typed commands. OpenDesign Home and the redundant
-native workspace tabs remain unmounted. The wrapper requires both the expected
-`event.origin` and `event.source` for sidecar messages, while the isolated
-bridge accepts commands only from its parent frame.
+height, and initializes the isolated editor in Italian. The shell sidebar
+remains the only project catalog; its `Strumenti` command focuses the latest
+native sketch or creates the first sketch so Excalidraw's drawing toolbar is
+actually usable, while the settings command opens the native `SettingsDialog`.
+The duplicate OpenDesign assistant stays unmounted in favor of Maverick Chat,
+and hosted mode omits the local-editor handoff control because its routes are
+intentionally denied. OpenDesign Home and the redundant native workspace tabs
+remain unmounted. The wrapper requires both the expected `event.origin` and
+`event.source` for sidecar messages, while the isolated bridge accepts commands
+only from its parent frame.
 
 ## Maverick Chat Integration
 

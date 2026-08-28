@@ -59,6 +59,8 @@ class OpenDesignSupplyChainTests(unittest.TestCase):
                 "apps/daemon/tests/plugins-bundled.test.ts",
                 "apps/web/app/layout.tsx",
                 "apps/web/src/App.tsx",
+                "apps/web/src/components/FileWorkspace.tsx",
+                "apps/web/src/components/ProjectView.tsx",
                 "apps/web/next.config.ts",
                 "apps/web/src/index.css",
                 "package.json",

@@ -14,7 +14,7 @@ import {
   themeMessage,
   writeCachedLaunchTarget,
 } from "./api";
-import { BackendRequestError, callDesignStudioBackend } from "./backendApi";
+import { BackendRequestError, callDesignStudioBackend, nextDefaultProjectName } from "./backendApi";
 import { startNonOverlappingPoll } from "./startupStatusPolling";
 import type { OpenDesignLaunchTarget, OpenDesignNavigation, SidecarDiagnostic, SidecarHostPhase, SidecarLaunch } from "./types";
 import "./styles/main.css";
@@ -449,9 +449,14 @@ export function App() {
     setCreating(true);
     setCreateError("");
     try {
+      const catalog = await callDesignStudioBackend<{ projects?: Array<Record<string, unknown>> }>(
+        "list_projects",
+        {},
+        appId,
+      );
       const payload = await callDesignStudioBackend<{ od_project_id?: string; project?: { id?: string } }>(
         "create_project",
-        { name: "Untitled design" },
+        { name: nextDefaultProjectName(catalog.projects || []) },
         appId,
       );
       const projectId = payload.od_project_id || payload.project?.id || "";

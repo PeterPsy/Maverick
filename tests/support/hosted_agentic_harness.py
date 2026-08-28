@@ -80,6 +80,7 @@ class HostedAgenticHarness:
         provider_api_version: str | None = "v1",
         routing_constraint=None,
         filesystem_list: bool = False,
+        recipe=None,
     ) -> None:
         feature_flags = patch.dict(
             os.environ,
@@ -102,6 +103,7 @@ class HostedAgenticHarness:
         workspace_root = self.root / "workspaces" / "default"
         workspace_root.mkdir(parents=True, exist_ok=True)
         self.filesystem_list = filesystem_list
+        self.recipe = recipe
         self.filesystem_marker = "hosted-loop-filesystem-marker.txt"
         if filesystem_list:
             (workspace_root / self.filesystem_marker).write_text(
@@ -172,15 +174,41 @@ class HostedAgenticHarness:
             provider_api_version=provider_api_version,
             routing_constraint=routing_constraint or codex_routing_constraint(),
             credential_binding_id=None,
-            reasoning_effort=None,
-            certified_reasoning_efforts=(),
-            default_reasoning_effort=None,
+            reasoning_effort=(
+                None
+                if recipe is None
+                else recipe.support_flags.reasoning_efforts[-1]
+            ),
+            certified_reasoning_efforts=(
+                () if recipe is None else recipe.support_flags.reasoning_efforts
+            ),
+            default_reasoning_effort=(
+                None
+                if recipe is None
+                else recipe.support_flags.reasoning_efforts[-1]
+            ),
             execution_mode="full-access",
             profile_policy_ceiling=self.policy,
             workspace_policy_ceiling=self.policy,
             egress_policy_id="fixture-public-remote",
             egress_policy_revision="1",
             created_at=NOW,
+            execution_family=("maverick_agent" if recipe is not None else ""),
+            harness_recipe_id=("" if recipe is None else recipe.recipe_id),
+            harness_recipe_revision=("" if recipe is None else recipe.revision),
+            harness_recipe_digest=("" if recipe is None else recipe.recipe_digest),
+            provider_capability_catalog_digest=(
+                "" if recipe is None else recipe.capability_catalog_digest
+            ),
+            semantic_projection_compiler_revision=(
+                ""
+                if recipe is None
+                else recipe.semantic_projection_compiler_revision
+            ),
+            tool_contract_revision=(
+                "" if recipe is None else recipe.tool_contract_revision
+            ),
+            context_policy=(None if recipe is None else recipe.context_policy),
         )
         self.session = RuntimeSessionRecord(
             session_id="session-hosted",
@@ -280,6 +308,8 @@ class HostedAgenticHarness:
         cost_estimator=None,
         authority_refresher=None,
         private_state_inspector=None,
+        request_preflight=None,
+        context_compactor=None,
         finalization_policy: HostedFinalizationPolicy | None = None,
         credential_required: bool = False,
     ) -> HostedAgenticEngineAdapter:
@@ -308,6 +338,9 @@ class HostedAgenticHarness:
                 ),
                 credential_required=credential_required,
                 private_state_inspector=private_state_inspector,
+                recipe=self.recipe,
+                context_compactor=context_compactor,
+                request_preflight=request_preflight,
             )
         )
         loop = HostedAgenticLoop(

@@ -37,6 +37,7 @@ class CertificationSuiteManifest:
 
 _SHARED_FIXTURE_TESTS = (
     "tests.unit.api.test_runtime_context_capability_preflight",
+    "tests.unit.api.test_runtime_message_steering",
     "tests.unit.apps.test_runtime_request_security_boundary",
     "tests.unit.providers.test_agentic_profiles",
     "tests.unit.providers.test_agentic_turn_submission",
@@ -44,6 +45,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.providers.test_certificate_tcb_enforcement",
     "tests.unit.providers.test_certified_execution_tcb",
     "tests.unit.providers.test_certification_pipeline",
+    "tests.unit.providers.test_hosted_harness_recipes",
     "tests.unit.providers.test_data_attestation_cli",
     "tests.unit.egress.test_agentic_egress",
     "tests.unit.egress.test_canonical_classification",
@@ -56,6 +58,8 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_state.test_hosted_agentic_finalization",
     "tests.unit.runtime_state.test_hosted_agentic_authority_audit",
     "tests.unit.runtime_state.test_hosted_agentic_loop",
+    "tests.unit.runtime_state.test_hosted_context_loop",
+    "tests.unit.runtime_state.test_hosted_context_management",
     "tests.unit.runtime_state.test_hosted_agentic_journal_loop",
     "tests.unit.runtime_state.test_hosted_agentic_multicall",
     "tests.unit.runtime_state.test_hosted_agentic_persisted_admission",
@@ -96,10 +100,10 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="17",
+        suite_version="18",
         provider_id=provider_id,
         matrix_path=matrix_path,
-        matrix_revision="2026-08-28-r17-p4b-full-workspace-tcb7",
+        matrix_revision="2026-08-28-r18-p4-context-provider-closure-tcb8",
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

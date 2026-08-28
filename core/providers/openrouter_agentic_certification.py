@@ -19,11 +19,14 @@ from core.providers.openrouter_agentic_profile import (
 )
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import canonical_digest
+from core.runtime.full_workspace_contract import validate_full_workspace_contract_claim
 
 
 OPENROUTER_CERTIFICATION_SUITE_ID = "maverick-openrouter-agentic-contract"
-OPENROUTER_CERTIFICATION_SUITE_VERSION = "17"
-OPENROUTER_CERTIFICATION_MATRIX_REVISION = "2026-08-28-r17-p4b-full-workspace-tcb7"
+OPENROUTER_CERTIFICATION_SUITE_VERSION = "18"
+OPENROUTER_CERTIFICATION_MATRIX_REVISION = (
+    "2026-08-28-r18-p4-context-provider-closure-tcb8"
+)
 OPENROUTER_CERTIFICATION_VALIDITY_DAYS = 30
 
 
@@ -62,7 +65,7 @@ def publish_openrouter_preview_certificate(
         tcb_live_digest=run.tcb_live_digest,
     )
     certificate = CapabilityCertificate(
-        certificate_id=definition.capability_certificate_id, schema_version="3",
+        certificate_id=definition.capability_certificate_id, schema_version="4",
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=str(getattr(adapter, "adapter_id", definition.adapter_id)),
         adapter_version=str(getattr(adapter, "adapter_version", "")),
@@ -74,12 +77,12 @@ def publish_openrouter_preview_certificate(
         certified_upstream_ids=definition.routing_constraint.allowed_upstream_ids,
         routing_constraint_digest=canonical_digest(definition.routing_constraint),
         certified_capabilities=RuntimeCapabilitySet(
-            streaming=True, tool_orchestration=True, cli=False, mcp=False,
-            skill_catalog=False, filesystem_list=True, filesystem_read=True, filesystem_write=False,
-            shell=False, interrupt=True, same_turn_steering=False, recovery=False,
+            streaming=True, tool_orchestration=True, cli=True, mcp=True,
+            skill_catalog=True, filesystem_list=True, filesystem_read=True, filesystem_write=True,
+            shell=True, interrupt=True, same_turn_steering=False, recovery=True,
             confirmation_resume=True, provider_private_state=True,
-            attachment_modalities=(),
-            app_references=False,
+            attachment_modalities=("file",),
+            app_references=True,
             confirmations=True,
         ),
         certified_reasoning_efforts=OPENROUTER_CERTIFIED_REASONING_EFFORTS,
@@ -92,5 +95,30 @@ def publish_openrouter_preview_certificate(
         tcb_manifest_version=run.tcb_manifest_version,
         tcb_structure_digest=run.tcb_structure_digest,
         tcb_live_digest=run.tcb_live_digest,
+        full_workspace_contract_revision=(
+            definition.full_workspace_contract_revision
+        ),
+        execution_family=definition.execution_family,
+        harness_recipe_id=definition.harness_recipe_id,
+        harness_recipe_revision=definition.harness_recipe_revision,
+        harness_recipe_digest=definition.harness_recipe_digest,
+        provider_capability_catalog_digest=(
+            definition.provider_capability_catalog_digest
+        ),
+        semantic_projection_compiler_revision=(
+            definition.semantic_projection_compiler_revision
+        ),
+        tool_contract_revision=definition.tool_contract_revision,
+        context_policy_revision=(
+            "" if definition.context_policy is None else definition.context_policy.revision
+        ),
     )
-    return publish_capability_certificate(store, certificate=certificate, evidence=evidence)
+    validate_full_workspace_contract_claim(
+        profile=definition,
+        certificate=certificate,
+    )
+    return publish_capability_certificate(
+        store,
+        certificate=certificate,
+        evidence=evidence,
+    )

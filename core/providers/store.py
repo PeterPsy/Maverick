@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
 from core.providers.agentic_models import (
+    AgenticContextPolicy,
     ActorSelectionPolicy,
     AgenticMigrationRecord,
     AgenticProfileDefinition,
@@ -525,6 +526,19 @@ class ProviderDocumentStore:
 def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefinition:
     payload = dict(document)
     payload.setdefault("full_workspace_contract_revision", "")
+    for field_name in (
+        "execution_family",
+        "harness_recipe_id",
+        "harness_recipe_revision",
+        "harness_recipe_digest",
+        "provider_capability_catalog_digest",
+        "semantic_projection_compiler_revision",
+        "tool_contract_revision",
+    ):
+        payload.setdefault(field_name, "")
+    payload["context_policy"] = _agentic_context_policy(
+        payload.get("context_policy")
+    )
     _migrate_legacy_agentic_profile_egress(payload)
     payload["routing_constraint"] = _routing_constraint(payload["routing_constraint"])
     payload["policy_ceiling"] = _agentic_runtime_policy(payload["policy_ceiling"])
@@ -565,6 +579,17 @@ def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
     ):
         payload.setdefault(field_name, "")
     payload.setdefault("full_workspace_contract_revision", "")
+    for field_name in (
+        "execution_family",
+        "harness_recipe_id",
+        "harness_recipe_revision",
+        "harness_recipe_digest",
+        "provider_capability_catalog_digest",
+        "semantic_projection_compiler_revision",
+        "tool_contract_revision",
+        "context_policy_revision",
+    ):
+        payload.setdefault(field_name, "")
     return CapabilityCertificate(**payload)
 
 
@@ -581,6 +606,14 @@ def _agentic_runtime_policy(document: dict[str, Any]) -> AgenticRuntimePolicy:
     for field_name in ("allowed_surface_kinds", "allowed_tool_handles", "allowed_remote_data_classes"):
         payload[field_name] = tuple(payload.get(field_name, ()))
     return AgenticRuntimePolicy(**payload)
+
+
+def _agentic_context_policy(
+    document: dict[str, Any] | AgenticContextPolicy | None,
+) -> AgenticContextPolicy | None:
+    if document is None or isinstance(document, AgenticContextPolicy):
+        return document
+    return AgenticContextPolicy(**dict(document))
 
 
 def _routing_constraint(document: dict[str, Any]) -> RoutingConstraint:

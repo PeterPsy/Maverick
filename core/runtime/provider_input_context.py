@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from core.egress.classification import CanonicalSourceClassification
@@ -25,6 +25,7 @@ class RuntimeProviderInputSource:
     role: str = "user"
     classification: CanonicalSourceClassification | None = None
     capability_modality: str | None = None
+    projection_mode: str | None = None
 
 
 def generalist_orchestration_input_text(state: Any, *, session: Any, input_text: str) -> str:
@@ -98,34 +99,96 @@ def runtime_provider_input_sources(
                 )
             )
     filesystem = _attachment_filesystem(state, session=session)
-    for index, attachment in enumerate(attachments or ()):
-        if not isinstance(attachment, dict):
-            continue
-        sources.append(
-            RuntimeProviderInputSource(
-                source_id=f"attachment:{index}",
-                provenance="attachment",
-                content_type="text/plain",
-                content=input_text_with_attachment_links(
-                    input_text="",
-                    attachments=[dict(attachment)],
-                    workspace_root=session.workspace_root,
-                ),
-                classification=_attachment_classification(
+    try:
+        for index, attachment in enumerate(attachments or ()):
+            sources.append(
+                _attachment_input_source(
                     filesystem,
+                    index=index,
                     attachment=attachment,
-                ),
-                capability_modality=str(
-                    attachment.get("type")
-                    or attachment.get("content_type")
-                    or ""
-                ).strip().lower()
-                or None,
+                )
             )
-        )
-    if filesystem is not None:
-        filesystem.close()
+    finally:
+        if filesystem is not None:
+            filesystem.close()
     return tuple(sources)
+
+
+def _attachment_input_source(
+    filesystem: ConfinedWorkspaceFilesystem | None,
+    *,
+    index: int,
+    attachment: object,
+) -> RuntimeProviderInputSource:
+    if not isinstance(attachment, dict):
+        raise ValueError("agentic_attachment_metadata_invalid")
+    for field_name in ("id", "name"):
+        if field_name in attachment and not isinstance(
+            attachment[field_name],
+            str,
+        ):
+            raise ValueError("agentic_attachment_metadata_invalid")
+    relative_path = _validated_attachment_relative_path(
+        attachment.get("relativePath") or attachment.get("relative_path")
+    )
+    raw_media_type = (
+        attachment.get("type")
+        or attachment.get("content_type")
+        or "application/octet-stream"
+    )
+    if not isinstance(raw_media_type, str) or not raw_media_type.strip():
+        raise ValueError("agentic_attachment_metadata_invalid")
+    media_type = raw_media_type.strip().lower()
+    size_bytes = (
+        attachment.get("size")
+        if "size" in attachment
+        else attachment.get("size_bytes")
+    )
+    if size_bytes is not None and (
+        not isinstance(size_bytes, int)
+        or isinstance(size_bytes, bool)
+        or size_bytes < 0
+    ):
+        raise ValueError("agentic_attachment_metadata_invalid")
+    return RuntimeProviderInputSource(
+        source_id=f"attachment:{index}",
+        provenance="attachment",
+        content_type="application/json",
+        content={
+            "attachment_id": str(attachment.get("id") or ""),
+            "name": str(attachment.get("name") or ""),
+            "workspace_relative_path": relative_path,
+            "media_type": media_type,
+            "size_bytes": size_bytes,
+            "projection": {
+                "mode": "workspace_reference",
+                "read_capability": "core-capability:filesystem.read",
+            },
+        },
+        classification=_attachment_classification(
+            filesystem,
+            attachment=attachment,
+        ),
+        capability_modality=media_type,
+        projection_mode="workspace_reference",
+    )
+
+
+def _validated_attachment_relative_path(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("agentic_attachment_metadata_invalid")
+    relative_path = value.strip()
+    path = PurePosixPath(relative_path)
+    if (
+        not relative_path
+        or "\\" in relative_path
+        or "\x00" in relative_path
+        or path.is_absolute()
+        or path.as_posix() != relative_path
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ValueError("agentic_attachment_metadata_invalid")
+    return relative_path
 
 
 def _generalist_orchestration_source(state: Any, *, session: Any) -> dict[str, object] | None:

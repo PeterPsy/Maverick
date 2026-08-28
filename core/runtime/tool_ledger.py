@@ -298,6 +298,9 @@ class RuntimeToolLedger:
         result_classification: CanonicalSourceClassification | None = None,
         resolution_status: ToolResolutionStatus | None = None,
         deterministic_error_result: bool = False,
+        result_artifact_private_ref: str | None = None,
+        result_artifact_sha256: str = "",
+        result_artifact_size_bytes: int | None = None,
         execution_lease_id: str | None = None,
         execution_lease_expires_at: datetime | None = None,
         require_active_execution_lease_id: str | None = None,
@@ -311,6 +314,25 @@ class RuntimeToolLedger:
             or result_private_ref is not None
         ):
             raise RuntimeToolError("tool_result_invalid")
+        artifact_values = (
+            result_artifact_private_ref,
+            result_artifact_sha256,
+            result_artifact_size_bytes,
+        )
+        if any(value not in {None, ""} for value in artifact_values) and (
+            state != "succeeded"
+            or result_private_ref is None
+            or not result_artifact_private_ref
+            or len(result_artifact_sha256) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in result_artifact_sha256
+            )
+            or not isinstance(result_artifact_size_bytes, int)
+            or isinstance(result_artifact_size_bytes, bool)
+            or result_artifact_size_bytes < 1
+        ):
+            raise RuntimeToolError("tool_result_artifact_invalid")
         if state == "executing" and not (
             (execution_lease_id is None and execution_lease_expires_at is None)
             or (
@@ -435,6 +457,9 @@ class RuntimeToolLedger:
             result_id=result_id,
             execution_lease_id=next_execution_lease_id,
             execution_lease_expires_at=next_execution_lease_expires_at,
+            result_artifact_private_ref=result_artifact_private_ref,
+            result_artifact_sha256=result_artifact_sha256,
+            result_artifact_size_bytes=result_artifact_size_bytes,
             revision=record.revision + 1,
             updated_at=timestamp,
         )
@@ -663,11 +688,35 @@ class RuntimeToolLedger:
         )
         return decode_tool_arguments(payload)
 
+    def load_result_artifact(self, record: ToolInvocationRecord) -> bytes:
+        """Read the original result retained behind a bounded provider projection."""
+        private_ref = record.result_artifact_private_ref or record.result_private_ref
+        if not private_ref:
+            raise RuntimeToolError("tool_result_unavailable")
+        payload = self.private_payload_store.read(
+            workspace_id=record.workspace_id,
+            session_id=record.session_id,
+            private_ref=private_ref,
+        )
+        if record.result_artifact_private_ref and (
+            record.result_artifact_size_bytes != len(payload)
+            or not hmac.compare_digest(
+                hashlib.sha256(payload).hexdigest(),
+                record.result_artifact_sha256,
+            )
+        ):
+            raise RuntimeToolError("tool_private_payload_integrity_failed")
+        return payload
+
     def delete_session_private_payloads(self, *, workspace_id: str, session_id: str) -> int:
         """Delete opaque argument/result payloads before ledger retention cleanup."""
         deleted = 0
         for record in self.store.list_tool_invocations(session_id=session_id):
-            for private_ref in (record.arguments_private_ref, record.result_private_ref):
+            for private_ref in (
+                record.arguments_private_ref,
+                record.result_private_ref,
+                record.result_artifact_private_ref,
+            ):
                 if private_ref and self.private_payload_store.delete(
                     workspace_id=workspace_id,
                     session_id=session_id,

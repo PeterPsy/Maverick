@@ -268,6 +268,57 @@ class HostedAgenticRecoveryTest(unittest.TestCase):
             "recovery_required",
         )
 
+    def test_recovery_charges_original_bytes_for_artifact_backed_results(self) -> None:
+        harness = HostedAgenticHarness(self)
+        adapter = harness.adapter(DeterministicFakeAgenticClient())
+        record, outcome, _envelope = self._tool_step(
+            harness,
+            adapter,
+            request_id="request-artifact-budget",
+        )
+        prepared = harness.orchestrator.prepare_observed_tool(
+            outcome.invocation,
+            requested_catalog=harness.orchestrator.materialize(
+                authority=harness.authority,
+                context=adapter.loop.actor_context_resolver(None),
+            ),
+            authority=harness.authority,
+            context=adapter.loop.actor_context_resolver(None),
+            policy=_no_confirmation_policy(),
+        )
+        executed = harness.orchestrator.execute_authorized(
+            prepared.invocation,
+            authority=harness.authority,
+            context=adapter.loop.actor_context_resolver(None),
+            policy=_no_confirmation_policy(),
+        ).invocation
+        summary = dict(executed.result_summary or {})
+        summary["original_serialized_bytes"] = 777
+        harness.store.update_tool_invocation(
+            replace(
+                executed,
+                result_summary=summary,
+                revision=executed.revision + 1,
+            ),
+            expected_revision=executed.revision,
+        )
+
+        recovered = asyncio.run(
+            adapter.recover(
+                RuntimeRecoveryContext(
+                    harness.session,
+                    harness.binding,
+                    harness.store.get_provider_state("session-hosted"),
+                    "artifact_result_crash",
+                )
+            )
+        )
+
+        self.assertTrue(recovered.recovered)
+        terminal = harness.store.get_provider_step_journal(record.journal_id)
+        self.assertEqual(terminal.budget_tool_result_bytes, 777)
+        self.assertEqual(terminal.commit_status, "committed")
+
     def test_staged_state_is_never_authoritative_before_pairing(self) -> None:
         harness = HostedAgenticHarness(self)
         adapter = harness.adapter(DeterministicFakeAgenticClient())

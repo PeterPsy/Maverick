@@ -147,9 +147,14 @@ class HostedAgenticEgressTest(unittest.TestCase):
         )
         effective_authority = replace(
             harness.authority,
+            allowed_tool_handles=(
+                *harness.authority.allowed_tool_handles,
+                "core-capability:filesystem.read",
+            ),
             allowed_capabilities=replace(
                 harness.authority.allowed_capabilities,
                 skill_catalog=True,
+                filesystem_read=True,
                 attachment_modalities=("text",),
                 app_references=True,
             ),
@@ -172,8 +177,19 @@ class HostedAgenticEgressTest(unittest.TestCase):
                     "attachment",
                     "attachment",
                     "application/json",
-                    {"relative_path": "storage/uploaded/fixture.txt"},
+                    {
+                        "attachment_id": "fixture-attachment",
+                        "name": "fixture.txt",
+                        "workspace_relative_path": "storage/uploaded/fixture.txt",
+                        "media_type": "text/plain",
+                        "size_bytes": 128,
+                        "projection": {
+                            "mode": "workspace_reference",
+                            "read_capability": "core-capability:filesystem.read",
+                        },
+                    },
                     capability_modality="text/plain",
+                    projection_mode="workspace_reference",
                 ),
                 RuntimeProviderInputSource(
                     "app-reference",

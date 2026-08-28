@@ -29,6 +29,11 @@ from core.providers.openrouter_agentic_profile import (
     ensure_openrouter_agentic_preview_profile,
 )
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
+from core.runtime.full_workspace_contract import (
+    FULL_WORKSPACE_CONTRACT_REVISION,
+    FULL_WORKSPACE_CORE_TOOL_HANDLES,
+)
+from core.runtime.hosted_harness_recipes import OPENROUTER_FULL_WORKSPACE_RECIPE
 from tests.support.repo import make_temp_repo_root
 
 
@@ -62,7 +67,8 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.adapter_version_constraint, "==13")
+        self.assertEqual(profile.revision, "21")
+        self.assertEqual(profile.adapter_version_constraint, "==14")
         self.assertEqual(profile.model_provider_id, "openrouter")
         self.assertEqual(profile.model_id, "deepseek/deepseek-v4-flash")
         self.assertEqual(profile.provider_protocol, "openrouter-chat-completions")
@@ -76,14 +82,28 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
         self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
         self.assertEqual(profile.egress_policy_revision, "2")
+        self.assertEqual(
+            profile.full_workspace_contract_revision,
+            FULL_WORKSPACE_CONTRACT_REVISION,
+        )
+        self.assertEqual(profile.execution_family, "maverick_agent")
+        self.assertEqual(
+            profile.harness_recipe_id,
+            OPENROUTER_FULL_WORKSPACE_RECIPE.recipe_id,
+        )
+        self.assertEqual(
+            profile.harness_recipe_digest,
+            OPENROUTER_FULL_WORKSPACE_RECIPE.recipe_digest,
+        )
+        self.assertEqual(
+            profile.context_policy,
+            OPENROUTER_FULL_WORKSPACE_RECIPE.context_policy,
+        )
         with self.assertRaises(ProviderNotFoundError):
             state.provider_store.get_capability_certificate(profile.capability_certificate_id)
         self.assertEqual(
             profile.policy_ceiling.allowed_tool_handles,
-            (
-                "core-capability:filesystem.list",
-                "core-capability:filesystem.read",
-            ),
+            FULL_WORKSPACE_CORE_TOOL_HANDLES,
         )
         self.assertFalse(
             any(
@@ -160,7 +180,14 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
             certificate.evidence_digest
         )
         self.assertTrue(certificate.certified_capabilities.filesystem_list)
-        self.assertFalse(certificate.certified_capabilities.recovery)
+        self.assertTrue(certificate.certified_capabilities.filesystem_write)
+        self.assertTrue(certificate.certified_capabilities.shell)
+        self.assertTrue(certificate.certified_capabilities.recovery)
+        self.assertEqual(certificate.harness_recipe_digest, profile.harness_recipe_digest)
+        self.assertEqual(
+            certificate.context_policy_revision,
+            profile.context_policy.revision,
+        )
         self.assertEqual(
             certificate.certified_reasoning_efforts,
             ("minimal", "low", "medium", "high"),

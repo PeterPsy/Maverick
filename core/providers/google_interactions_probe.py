@@ -58,7 +58,9 @@ async def probe_google_interactions(
     sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
 ) -> GoogleInteractionsProbeResult:
     """Run a paced two-tool continuation round trip per certified effort."""
-    active_client = client or GoogleInteractionsAgenticClient(state_mode="stateful")
+    # Certification exercises the exact full-workspace recipe rather than the
+    # historical provider-stored continuation mode.
+    active_client = client or GoogleInteractionsAgenticClient(state_mode="stateless")
     test_run_id = f"google-interactions-live:{uuid4()}"
     normalized_efforts = tuple(str(value).strip().lower() for value in reasoning_efforts)
     if not normalized_efforts or any(

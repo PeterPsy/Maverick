@@ -130,6 +130,10 @@ class AgenticModelRequest:
     semantic_projection_compiler_id: str = ""
     semantic_projection_compiler_revision: str = ""
     provider_egress_projection_digest: str = ""
+    context_policy_revision: str = ""
+    context_compaction_evidence_digest: str = ""
+    context_compaction_applied: bool = False
+    endpoint_capability_snapshot_digest: str = ""
 
 
 @dataclass(frozen=True)

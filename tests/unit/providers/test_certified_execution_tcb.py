@@ -26,7 +26,7 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
         identity = certified_tcb_identity(self.root)
         self.assertEqual(
             identity.structure_digest,
-            "1a9faa0aa5aacfa22f77c3976296f3a55aadaf81f341dd5b4355a6e0ef84b00f",
+            "cc03c8774c1d756c565ff32ecf02a9e2a8fa269a0c3ac0440dfe9550daafcdcf",
         )
         self.assertIn(
             "scripts/run_google_interactions_probe.py",

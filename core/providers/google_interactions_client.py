@@ -38,12 +38,16 @@ class GoogleInteractionsAgenticClient:
     def __init__(
         self,
         *,
+        model_id: str = GOOGLE_AGENTIC_MODEL_ID,
         state_mode: GoogleInteractionStateMode = "stateful",
         transport: GoogleInteractionsTransport | None = None,
     ) -> None:
         if state_mode not in {"stateful", "stateless"}:
             raise ValueError("Unsupported Google Interactions state mode.")
         self.state_mode = state_mode
+        self.model_id = str(model_id or "").strip()
+        if not self.model_id:
+            raise ValueError("Google Interactions model id is required.")
         self.transport = transport or GoogleInteractionsHttpTransport()
 
     @property
@@ -66,7 +70,7 @@ class GoogleInteractionsAgenticClient:
         decoder = None
         failure: GoogleInteractionsProtocolError | None = None
         try:
-            if request.model_id != GOOGLE_AGENTIC_MODEL_ID:
+            if request.model_id != self.model_id:
                 raise GoogleInteractionsProtocolError("provider_request_rejected")
             if credential is None:
                 raise GoogleInteractionsProtocolError("provider_authentication_failed")

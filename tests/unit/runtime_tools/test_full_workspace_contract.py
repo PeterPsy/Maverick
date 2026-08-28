@@ -28,6 +28,7 @@ from core.runtime.full_workspace_contract import (
     validate_full_workspace_contract_claim,
     validate_full_workspace_live_authority,
 )
+from core.runtime.hosted_harness_recipes import GOOGLE_FULL_WORKSPACE_RECIPE
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
 from core.runtime.process_control import runtime_processes_alive_for_session
 from core.runtime.tool_catalog import RuntimeToolActorContext
@@ -81,6 +82,18 @@ class FullWorkspaceContractTest(unittest.TestCase):
         profile = SimpleNamespace(
             full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
             policy_ceiling=policy,
+            execution_family="maverick_agent",
+            harness_recipe_id=GOOGLE_FULL_WORKSPACE_RECIPE.recipe_id,
+            harness_recipe_revision=GOOGLE_FULL_WORKSPACE_RECIPE.revision,
+            harness_recipe_digest=GOOGLE_FULL_WORKSPACE_RECIPE.recipe_digest,
+            provider_capability_catalog_digest=(
+                GOOGLE_FULL_WORKSPACE_RECIPE.capability_catalog_digest
+            ),
+            semantic_projection_compiler_revision=(
+                GOOGLE_FULL_WORKSPACE_RECIPE.semantic_projection_compiler_revision
+            ),
+            tool_contract_revision=GOOGLE_FULL_WORKSPACE_RECIPE.tool_contract_revision,
+            context_policy=GOOGLE_FULL_WORKSPACE_RECIPE.context_policy,
         )
         certificate = SimpleNamespace(
             full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,

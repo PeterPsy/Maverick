@@ -11,7 +11,11 @@ from typing import Any
 from uuid import uuid4
 
 from core.execution_policy.models import ExecutionMode
-from core.providers.agentic_models import AgenticRuntimePolicy, RoutingConstraint
+from core.providers.agentic_models import (
+    AgenticContextPolicy,
+    AgenticRuntimePolicy,
+    RoutingConstraint,
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +58,14 @@ class RuntimeExecutionBinding:
     tcb_structure_digest: str = ""
     tcb_live_digest: str = ""
     full_workspace_contract_revision: str = ""
+    execution_family: str = ""
+    harness_recipe_id: str = ""
+    harness_recipe_revision: str = ""
+    harness_recipe_digest: str = ""
+    provider_capability_catalog_digest: str = ""
+    semantic_projection_compiler_revision: str = ""
+    tool_contract_revision: str = ""
+    context_policy_snapshot: AgenticContextPolicy | None = None
 
 
 @dataclass(frozen=True)
@@ -84,6 +96,18 @@ _LEGACY_SCHEMA_FIELD_GROUPS = (
     ),
     _LegacySchemaFieldGroup(
         binding_fields=("full_workspace_contract_revision",),
+    ),
+    _LegacySchemaFieldGroup(
+        binding_fields=(
+            "execution_family",
+            "harness_recipe_id",
+            "harness_recipe_revision",
+            "harness_recipe_digest",
+            "provider_capability_catalog_digest",
+            "semantic_projection_compiler_revision",
+            "tool_contract_revision",
+            "context_policy_snapshot",
+        ),
     ),
 )
 
@@ -123,6 +147,14 @@ def build_runtime_execution_binding(
     tcb_structure_digest: str = "",
     tcb_live_digest: str = "",
     full_workspace_contract_revision: str = "",
+    execution_family: str = "",
+    harness_recipe_id: str = "",
+    harness_recipe_revision: str = "",
+    harness_recipe_digest: str = "",
+    provider_capability_catalog_digest: str = "",
+    semantic_projection_compiler_revision: str = "",
+    tool_contract_revision: str = "",
+    context_policy: AgenticContextPolicy | None = None,
 ) -> RuntimeExecutionBinding:
     """Build one self-digesting immutable execution binding."""
     if (
@@ -198,6 +230,16 @@ def build_runtime_execution_binding(
         tcb_structure_digest=tcb_structure_digest,
         tcb_live_digest=tcb_live_digest,
         full_workspace_contract_revision=full_workspace_contract_revision,
+        execution_family=execution_family,
+        harness_recipe_id=harness_recipe_id,
+        harness_recipe_revision=harness_recipe_revision,
+        harness_recipe_digest=harness_recipe_digest,
+        provider_capability_catalog_digest=provider_capability_catalog_digest,
+        semantic_projection_compiler_revision=(
+            semantic_projection_compiler_revision
+        ),
+        tool_contract_revision=tool_contract_revision,
+        context_policy_snapshot=context_policy,
     )
     return replace(record, binding_digest=canonical_digest(record))
 
@@ -234,6 +276,11 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
             for field_name in group.policy_fields
         )
     )
+    explicitly_absent_field_groups = tuple(
+        group
+        for group in legacy_compatible_field_groups
+        if _legacy_schema_field_group_is_absent(payload, group)
+    )
     payload["routing_constraint_snapshot"] = _routing_constraint_from_document(
         payload["routing_constraint_snapshot"]
     )
@@ -253,12 +300,23 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload.setdefault("tcb_structure_digest", "")
     payload.setdefault("tcb_live_digest", "")
     payload.setdefault("full_workspace_contract_revision", "")
+    payload.setdefault("execution_family", "")
+    payload.setdefault("harness_recipe_id", "")
+    payload.setdefault("harness_recipe_revision", "")
+    payload.setdefault("harness_recipe_digest", "")
+    payload.setdefault("provider_capability_catalog_digest", "")
+    payload.setdefault("semantic_projection_compiler_revision", "")
+    payload.setdefault("tool_contract_revision", "")
+    payload["context_policy_snapshot"] = _context_policy_from_document(
+        payload.get("context_policy_snapshot")
+    )
     binding = RuntimeExecutionBinding(**payload)
     digest_matches = binding.binding_digest == canonical_digest(binding)
     if not digest_matches:
         digest_matches = _matches_legacy_digest(
             binding,
             compatible_field_groups=legacy_compatible_field_groups,
+            explicitly_absent_field_groups=explicitly_absent_field_groups,
         )
     if not digest_matches:
         raise ValueError("Runtime execution binding digest does not match its immutable payload.")
@@ -269,11 +327,20 @@ def _matches_legacy_digest(
     binding: RuntimeExecutionBinding,
     *,
     compatible_field_groups: tuple[_LegacySchemaFieldGroup, ...],
+    explicitly_absent_field_groups: tuple[_LegacySchemaFieldGroup, ...],
 ) -> bool:
     """Accept exact legacy digests for explicit atomic schema extensions only."""
     current_payload = asdict(binding)
-    for group_count in range(1, len(compatible_field_groups) + 1):
-        for selected_groups in combinations(compatible_field_groups, group_count):
+    optional_field_groups = tuple(
+        group
+        for group in compatible_field_groups
+        if group not in explicitly_absent_field_groups
+    )
+    for group_count in range(len(optional_field_groups) + 1):
+        for optional_groups in combinations(optional_field_groups, group_count):
+            selected_groups = (*explicitly_absent_field_groups, *optional_groups)
+            if not selected_groups:
+                continue
             legacy_payload = dict(current_payload)
             for group in selected_groups:
                 for field_name in group.binding_fields:
@@ -287,6 +354,17 @@ def _matches_legacy_digest(
     return False
 
 
+def _legacy_schema_field_group_is_absent(
+    payload: dict[str, Any],
+    group: _LegacySchemaFieldGroup,
+) -> bool:
+    """Return whether the source document necessarily omitted this extension."""
+    return any(field_name not in payload for field_name in group.binding_fields) or any(
+        "allow_filesystem_list" not in payload[field_name]
+        for field_name in group.policy_fields
+    )
+
+
 def _legacy_binding_field_has_fail_closed_default(
     payload: dict[str, Any],
     field_name: str,
@@ -297,7 +375,9 @@ def _legacy_binding_field_has_fail_closed_default(
         return payload[field_name] in ([], ())
     if field_name == "default_reasoning_effort":
         return payload[field_name] is None
-    return False
+    if field_name == "context_policy_snapshot":
+        return payload[field_name] is None
+    return payload[field_name] == ""
 
 
 def _legacy_policy_field_has_fail_closed_default(
@@ -337,6 +417,14 @@ def _routing_constraint_from_document(document: dict[str, Any]) -> RoutingConstr
     for key in ("allowed_upstream_ids", "allowed_quantizations"):
         payload[key] = tuple(payload.get(key, ()))
     return RoutingConstraint(**payload)
+
+
+def _context_policy_from_document(
+    document: dict[str, Any] | AgenticContextPolicy | None,
+) -> AgenticContextPolicy | None:
+    if document is None or isinstance(document, AgenticContextPolicy):
+        return document
+    return AgenticContextPolicy(**dict(document))
 
 
 def _reasoning_contract(

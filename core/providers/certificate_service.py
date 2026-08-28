@@ -297,6 +297,22 @@ def validate_certificate_for_binding(
         "evidence_digest": binding.certificate_evidence_digest,
         "certified_reasoning_efforts": binding.certified_reasoning_efforts,
         "default_reasoning_effort": binding.default_reasoning_effort,
+        "execution_family": binding.execution_family,
+        "harness_recipe_id": binding.harness_recipe_id,
+        "harness_recipe_revision": binding.harness_recipe_revision,
+        "harness_recipe_digest": binding.harness_recipe_digest,
+        "provider_capability_catalog_digest": (
+            binding.provider_capability_catalog_digest
+        ),
+        "semantic_projection_compiler_revision": (
+            binding.semantic_projection_compiler_revision
+        ),
+        "tool_contract_revision": binding.tool_contract_revision,
+        "context_policy_revision": (
+            ""
+            if binding.context_policy_snapshot is None
+            else binding.context_policy_snapshot.revision
+        ),
     }
     for field_name, value in expected.items():
         if getattr(certificate, field_name) != value:
@@ -326,6 +342,39 @@ def validate_certificate_for_binding(
     if live_adapter_digest != binding.adapter_artifact_digest:
         raise CapabilityCertificateError("adapter_artifact_mismatch")
     return certificate
+
+
+def validate_profile_certificate_execution_contract(*, profile, certificate) -> None:
+    """Pin recipe, context, semantic, tool, and provider-catalog identities."""
+    expected = {
+        "execution_family": str(getattr(profile, "execution_family", "") or ""),
+        "harness_recipe_id": str(getattr(profile, "harness_recipe_id", "") or ""),
+        "harness_recipe_revision": str(
+            getattr(profile, "harness_recipe_revision", "") or ""
+        ),
+        "harness_recipe_digest": str(
+            getattr(profile, "harness_recipe_digest", "") or ""
+        ),
+        "provider_capability_catalog_digest": str(
+            getattr(profile, "provider_capability_catalog_digest", "") or ""
+        ),
+        "semantic_projection_compiler_revision": str(
+            getattr(profile, "semantic_projection_compiler_revision", "") or ""
+        ),
+        "tool_contract_revision": str(
+            getattr(profile, "tool_contract_revision", "") or ""
+        ),
+        "context_policy_revision": (
+            ""
+            if getattr(profile, "context_policy", None) is None
+            else str(profile.context_policy.revision or "")
+        ),
+    }
+    for field_name, value in expected.items():
+        if str(getattr(certificate, field_name, "") or "") != value:
+            raise CapabilityCertificateError(
+                f"certificate_{field_name}_mismatch"
+            )
 
 
 def _evidence_digest_is_valid(evidence: CapabilityEvidenceRecord) -> bool:
@@ -379,6 +428,27 @@ def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:
         default_effort is not None and default_effort not in efforts
     ):
         raise CapabilityCertificateError("certificate_default_reasoning_effort_invalid")
+    recipe_identity = (
+        certificate.execution_family,
+        certificate.harness_recipe_id,
+        certificate.harness_recipe_revision,
+        certificate.harness_recipe_digest,
+        certificate.provider_capability_catalog_digest,
+        certificate.semantic_projection_compiler_revision,
+        certificate.tool_contract_revision,
+        certificate.context_policy_revision,
+    )
+    if any(recipe_identity):
+        if not all(str(value or "").strip() for value in recipe_identity):
+            raise CapabilityCertificateError("certificate_recipe_identity_invalid")
+        _sha256(
+            certificate.harness_recipe_digest,
+            "certificate_recipe_digest_invalid",
+        )
+        _sha256(
+            certificate.provider_capability_catalog_digest,
+            "certificate_provider_catalog_digest_invalid",
+        )
     _evidence_refs(certificate.evidence_refs)
 
 

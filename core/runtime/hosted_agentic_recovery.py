@@ -682,7 +682,7 @@ class HostedAgenticRecovery:
                     )
                 }
             )
-            total_result_bytes += len(
+            serialized_size = len(
                 json.dumps(
                     result,
                     ensure_ascii=False,
@@ -690,6 +690,17 @@ class HostedAgenticRecovery:
                     sort_keys=True,
                 ).encode()
             )
+            original_size = (
+                invocation.result_summary.get("original_serialized_bytes")
+                if isinstance(invocation.result_summary, dict)
+                else None
+            )
+            if isinstance(original_size, int) and not isinstance(
+                original_size,
+                bool,
+            ):
+                serialized_size = max(serialized_size, original_size)
+            total_result_bytes += serialized_size
         record = self.journal.record_tool_result_bytes(
             record,
             total_bytes=total_result_bytes,

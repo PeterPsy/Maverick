@@ -86,6 +86,22 @@ _PUBLIC_MESSAGES = {
     "certificate_missing": "This model profile has no capability certificate.",
     "certificate_missing_status": "This model profile certificate has no live status.",
     "certificate_tcb_drift": "The certified execution boundary has changed.",
+    "context_compaction_invalid": (
+        "The runtime could not compact provider history without preserving its integrity."
+    ),
+    "context_compaction_pairing_unsafe": (
+        "The runtime refused to compact history because an active tool result could lose its pairing."
+    ),
+    "context_compaction_unavailable": (
+        "The selected provider recipe has no certified history compactor."
+    ),
+    "context_policy_invalid": "The selected runtime context policy is invalid.",
+    "context_summary_too_large": (
+        "The governed context summary exceeds its certified size limit."
+    ),
+    "context_window_reserve_unavailable": (
+        "The request cannot preserve the context-window reserve required for a safe response."
+    ),
     "credential_binding_unavailable": "The configured provider credentials are unavailable.",
     "credential_resolution_failed": "The configured provider credentials could not be loaded safely.",
     "egress_denied": "The request was blocked by the workspace data-egress policy.",
@@ -116,6 +132,9 @@ _PUBLIC_MESSAGES = {
     "full_workspace_contract_live_authority_incomplete": (
         "This agent is unavailable because its full workspace contract is no longer effective."
     ),
+    "harness_recipe_mismatch": (
+        "The pinned provider harness recipe does not match the active runtime."
+    ),
     "openrouter_agentic_preview_disabled": "OpenRouter agentic preview admission is disabled.",
     "model_provider_unavailable": "The selected model provider is unavailable.",
     "plain_hosted_chat_model_blocks_attachments": (
@@ -127,6 +146,15 @@ _PUBLIC_MESSAGES = {
     "provider_cancelled": "The model provider cancelled the request.",
     "provider_endpoint_parameters_unsupported": (
         "The certified provider endpoint does not support every required request parameter."
+    ),
+    "provider_endpoint_preflight_failed": (
+        "The runtime could not verify the provider endpoint before dispatch."
+    ),
+    "provider_endpoint_preflight_invalid": (
+        "The provider endpoint preflight returned invalid capability evidence."
+    ),
+    "provider_endpoint_preflight_unavailable": (
+        "The selected provider recipe has no endpoint preflight."
     ),
     "provider_credential_authorization_missing": "The configured provider credentials are unavailable.",
     "provider_execution_failed": "The model runtime could not complete the request.",
@@ -153,6 +181,12 @@ _PUBLIC_MESSAGES = {
         "The model requested a tool that is not available. The unavailable tool was not executed."
     ),
     "provider_unavailable": "The model provider is temporarily unavailable.",
+    "provider_capability_catalog_mismatch": (
+        "The pinned provider capability catalog does not match the active runtime."
+    ),
+    "provider_protocol_unavailable": (
+        "The pinned provider protocol recipe is unavailable."
+    ),
     "runtime_cancelled": "The runtime request was cancelled.",
     "runtime_health_unavailable": "The selected runtime is not currently healthy.",
     "runtime_actor_policy_denied": "The current actor is no longer authorized for this runtime profile.",
@@ -185,6 +219,9 @@ _PUBLIC_MESSAGES = {
         "Runtime classification, attestation, and egress authority are server-owned."
     ),
     "tool_execution_unknown": "The runtime could not verify whether the tool completed.",
+    "attachment_projection_not_supported": (
+        "The attachment cannot be projected through the certified workspace-reference contract."
+    ),
     "tool_capability_denied": "A tool requires a capability that is not effective for this turn.",
     "tool_effect_unclassified": "A tool has no certified execution-effect classification.",
     "tool_execution_mode_denied": "A tool is not authorized in the effective execution mode.",
@@ -192,6 +229,12 @@ _PUBLIC_MESSAGES = {
         "The model requested a tool that is not available. The unavailable tool was not executed."
     ),
     "tool_not_authorized": "A tool is not authorized for this runtime turn.",
+    "tool_result_artifact_chunk_invalid": (
+        "The requested tool-result artifact chunk exceeds its governed transport limit."
+    ),
+    "tool_result_summary_limit_invalid": (
+        "The runtime cannot represent this tool result within its certified summary limit."
+    ),
     "tool_schema_not_certified": "A tool schema is outside the certified runtime boundary.",
     "tool_workspace_mismatch": "A tool is outside the current workspace authority.",
     "workspace_profile_binding_disabled": "This workspace model profile is disabled.",

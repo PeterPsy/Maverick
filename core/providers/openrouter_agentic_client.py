@@ -33,7 +33,15 @@ from core.providers.openrouter_agentic_transport import (
 class OpenRouterAgenticClient:
     """Run one exact model/upstream protocol and expose normalized events."""
 
-    def __init__(self, *, transport: OpenRouterAgenticTransport | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        model_id: str = OPENROUTER_AGENTIC_MODEL_ID,
+        transport: OpenRouterAgenticTransport | None = None,
+    ) -> None:
+        self.model_id = str(model_id or "").strip()
+        if not self.model_id:
+            raise ValueError("OpenRouter agentic model id is required.")
         self.transport = transport or OpenRouterAgenticHttpTransport()
 
     @property
@@ -56,7 +64,7 @@ class OpenRouterAgenticClient:
         decoder = None
         failure: OpenRouterAgenticProtocolError | None = None
         try:
-            if request.model_id != OPENROUTER_AGENTIC_MODEL_ID:
+            if request.model_id != self.model_id:
                 raise OpenRouterAgenticProtocolError("provider_request_rejected")
             if credential is None:
                 raise OpenRouterAgenticProtocolError("provider_authentication_failed")

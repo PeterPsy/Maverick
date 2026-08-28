@@ -508,6 +508,48 @@ request evidence. Provider wire codecs remain deterministic TCB components;
 changing their rendering changes the hosted adapter artifact and requires a
 new immutable profile revision.
 
+### 7D. Context and provider behavior are recipe-bound
+
+Every hosted full-workspace definition pins an execution family, harness recipe
+id/revision/digest, provider-capability catalog digest, semantic compiler,
+tool-contract revision, and context policy. The same identities must match the
+certificate, immutable session binding, runtime registry, effective authority,
+and provider/model/protocol/API/endpoint/upstream/reasoning composition. Shared
+loop construction selects this data-only recipe; it contains no Google or
+OpenRouter model branch.
+
+Context policy `p4-context-v1` reserves capacity independently of ordinary turn
+budgets. At a deterministic threshold, the exact recipe compactor replaces old
+provider history with a bounded metadata summary while preserving encrypted
+state classification, provenance, authority digest, request/turn identity, and
+every call/result relation still active in the current turn. Google uses
+Core-managed stateless history; OpenRouter retains client-managed chat history.
+Compaction evidence and the endpoint snapshot digest enter the request-control
+digest and provider-step journal without exposing raw history.
+
+Tool output that cannot safely remain inline is retained as an immutable,
+session/workspace-owned artifact. The provider receives only a bounded summary,
+digest, byte count, and `artifact.read` reference. The complete serialized
+projection, including adversarially long field names, is hard-capped by the
+profile's `tool_result_summary_bytes`; accounting charges the original result
+size. An explicit `artifact.read` response is already a bounded byte window and
+therefore bypasses generic result re-compaction, preventing recursive artifact
+references while retaining its independent 64-KiB chunk cap. Attachments
+likewise remain distinct classified blocks
+and are projected as explicit workspace-relative references that require live
+filesystem-read authority. Neither payload type is silently flattened or
+dropped. Codex retains its native same-turn steering path; hosted recipes that
+cannot prove provider-native steering return an explicit `safe_next_turn`
+fallback.
+
+Immediately before a completion transport, Core performs the recipe-specific
+preflight while egress decisions are still staged. Google verifies the exact
+wire shape and omits tools on final requests. OpenRouter verifies the exact
+wire shape plus fresh model and ZDR endpoint records, including FP8 identity,
+all translated parameters, `tool_choice:none`, completion capacity, and total
+input-plus-output context capacity. Failed or incoherent preflight commits no
+content egress and sends no completion request.
+
 ### 8. Remote-provider egress is decided per content block
 
 Every system/developer instruction, user block, skill fragment, attachment,
@@ -547,19 +589,20 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 21
-and OpenRouter revision 20, both bound to
-`maverick-hosted-tool-loop==13`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 22
+and OpenRouter revision 21, both bound to
+`maverick-hosted-tool-loop==14`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
-These Phase-4B definitions remain deliberately read-only, uncertified
-candidates and do not claim `full_workspace_contract_revision`. Adapter 13 and
-TCB manifest v7 contain the complete common workspace surface and its
-confinement tests so later Phase-4 compatibility closure can create new,
-explicit full-workspace revisions instead of silently promoting these
-historical candidates.
+These Phase-4C-D definitions are new full-workspace claims under
+`codex-baseline-v2`, not promotions of the historical read-only candidates.
+Adapter 14, compiler revision 2, suite 18, and TCB manifest v8 contain the
+context, artifact, attachment, recipe and exact-preflight closure. They remain
+uncertified, unbound, unavailable and independently blocked by Phase-0
+admission; implementation completion is not provider evidence or release
+approval.
 
 ## Concrete persistence map
 

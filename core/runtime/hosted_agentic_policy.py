@@ -9,6 +9,7 @@ from core.runtime.tool_orchestrator import (
     RuntimeToolConfirmationPolicy,
     RuntimeToolInvocationOutcome,
 )
+from core.runtime.tool_result_artifacts import project_hosted_tool_result
 
 
 HOSTED_CORE_TOOL_HANDLES = FULL_WORKSPACE_CORE_TOOL_HANDLES
@@ -76,10 +77,20 @@ def tool_event_payload(
     }
 
 
-def normalized_tool_result(orchestrator, outcome) -> tuple[dict[str, object], bool]:
+def normalized_tool_result(
+    orchestrator,
+    outcome,
+    *,
+    context_policy=None,
+) -> tuple[dict[str, object], bool]:
     record = outcome.invocation
     if record.state == "succeeded":
-        return orchestrator.ledger.load_result(record), False
+        result = orchestrator.ledger.load_result(record)
+        return project_hosted_tool_result(
+            result,
+            invocation=record,
+            context_policy=context_policy,
+        ), False
     if record.state in {"denied", "expired", "failed", "cancelled"}:
         if record.result_private_ref:
             return orchestrator.ledger.load_result(record), True

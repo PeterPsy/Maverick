@@ -100,12 +100,15 @@ tool-less fallback, deadline-fenced slow handlers and result persistence,
 persisted execution leases checked atomically by the terminal success CAS,
 request-scoped OpenRouter finalization,
 whitespace rejection, journaled `budget_denied` final calls, and no more than
-one finalization recovery. The operator
+one finalization recovery. Phase-4 fixtures add the recipe/catalog identity,
+independent context reserve, pairing-safe compaction, bounded result artifacts,
+explicit attachment/steering behavior, and exact provider preflight before
+egress commit. The operator
 runbook documents canary,
 observation, incident
 recovery, and control-plane-first rollback. These controls do not close the
-production gate: Phase 4+ semantic/tool-contract work, provider-specific
-live and behavioral evidence, onboarding, leakage review, canary, production
+production gate: provider-specific live and behavioral evidence, onboarding,
+leakage review, canary, production
 key management, and the platform blockers above remain open.
 
 ## Design Studio OpenDesign Gate

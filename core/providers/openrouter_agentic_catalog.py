@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import socket
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from core.providers.openrouter_agentic_models import (
 from core.providers.openrouter_agentic_request import openrouter_chat_payload
 from core.providers.openrouter_agentic_state import decode_openrouter_chat_state
 from core.runtime.execution_binding import canonical_digest
+from core.runtime.hosted_agentic_budget import estimate_hosted_request_tokens
 
 
 OPENROUTER_AGENTIC_ENDPOINT_CATALOG = (
@@ -24,6 +26,7 @@ OPENROUTER_AGENTIC_ENDPOINT_CATALOG = (
 )
 OPENROUTER_ZDR_ENDPOINT_CATALOG = "https://openrouter.ai/api/v1/endpoints/zdr"
 MAX_OPENROUTER_CATALOG_BYTES = 8 * 1_048_576
+OPENROUTER_CATALOG_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,10 @@ class OpenRouterAgenticCatalogSnapshot:
     supported_parameters: tuple[str, ...]
     model_catalog_record_digest: str
     zdr_catalog_record_digest: str
+    supports_tool_choice_none: bool
+    context_length: int
+    max_completion_tokens: int
+    catalog_snapshot_digest: str
 
 
 def preflight_openrouter_agentic_catalog(
@@ -42,8 +49,25 @@ def preflight_openrouter_agentic_catalog(
     credential: EphemeralCredential,
 ) -> OpenRouterAgenticCatalogSnapshot:
     """Fetch both official catalogs and reject drift before a completion request."""
-    model_catalog = _fetch_catalog(OPENROUTER_AGENTIC_ENDPOINT_CATALOG, credential)
-    zdr_catalog = _fetch_catalog(OPENROUTER_ZDR_ENDPOINT_CATALOG, credential)
+    # Both snapshots are part of one pre-dispatch decision. Fetch them in
+    # parallel so two catalog timeouts cannot consume the protected terminal
+    # request reserve before completion transport begins.
+    with ThreadPoolExecutor(
+        max_workers=2,
+        thread_name_prefix="openrouter-catalog-preflight",
+    ) as executor:
+        model_future = executor.submit(
+            _fetch_catalog,
+            OPENROUTER_AGENTIC_ENDPOINT_CATALOG,
+            credential,
+        )
+        zdr_future = executor.submit(
+            _fetch_catalog,
+            OPENROUTER_ZDR_ENDPOINT_CATALOG,
+            credential,
+        )
+        model_catalog = model_future.result()
+        zdr_catalog = zdr_future.result()
     return validate_openrouter_agentic_catalog(
         request,
         model_catalog=model_catalog,
@@ -63,21 +87,47 @@ def validate_openrouter_agentic_catalog(
     model_record = _find_model_record(model_catalog)
     zdr_record = _find_zdr_record(zdr_catalog)
     required = _required_supported_parameters(request)
+    required_context_tokens = (
+        estimate_hosted_request_tokens(request) + request.max_output_tokens
+    )
     model_parameters = _validate_record(
         model_record,
         required=required,
         max_output_tokens=request.max_output_tokens,
+        required_context_tokens=required_context_tokens,
     )
     zdr_parameters = _validate_record(
         zdr_record,
         required=required,
         max_output_tokens=request.max_output_tokens,
+        required_context_tokens=required_context_tokens,
     )
+    model_none = _supports_tool_choice_none(model_record)
+    zdr_none = _supports_tool_choice_none(zdr_record)
+    if not model_none or not zdr_none:
+        raise OpenRouterAgenticProtocolError(
+            "provider_endpoint_parameters_unsupported"
+        )
+    model_context = _positive_int(model_record.get("context_length"))
+    zdr_context = _positive_int(zdr_record.get("context_length"))
+    model_completion = _positive_int(model_record.get("max_completion_tokens"))
+    zdr_completion = _positive_int(zdr_record.get("max_completion_tokens"))
+    snapshot_payload = {
+        "upstream_id": OPENROUTER_AGENTIC_UPSTREAM_ID,
+        "supported_parameters": tuple(sorted(model_parameters & zdr_parameters)),
+        "model_catalog_record_digest": canonical_digest(
+            _catalog_identity(model_record)
+        ),
+        "zdr_catalog_record_digest": canonical_digest(
+            _catalog_identity(zdr_record)
+        ),
+        "supports_tool_choice_none": True,
+        "context_length": min(model_context, zdr_context),
+        "max_completion_tokens": min(model_completion, zdr_completion),
+    }
     return OpenRouterAgenticCatalogSnapshot(
-        upstream_id=OPENROUTER_AGENTIC_UPSTREAM_ID,
-        supported_parameters=tuple(sorted(model_parameters & zdr_parameters)),
-        model_catalog_record_digest=canonical_digest(_catalog_identity(model_record)),
-        zdr_catalog_record_digest=canonical_digest(_catalog_identity(zdr_record)),
+        **snapshot_payload,
+        catalog_snapshot_digest=canonical_digest(snapshot_payload),
     )
 
 
@@ -126,6 +176,7 @@ def _validate_record(
     *,
     required: frozenset[str],
     max_output_tokens: int,
+    required_context_tokens: int,
 ) -> frozenset[str]:
     parameters = record.get("supported_parameters")
     if not isinstance(parameters, list) or any(not isinstance(item, str) for item in parameters):
@@ -143,6 +194,7 @@ def _validate_record(
         or not isinstance(completion_limit, int)
         or isinstance(completion_limit, bool)
         or completion_limit < max_output_tokens
+        or _positive_int(record.get("context_length")) < required_context_tokens
     ):
         raise OpenRouterAgenticProtocolError("provider_endpoint_parameters_unsupported")
     return supported
@@ -157,8 +209,27 @@ def _catalog_identity(record: dict[str, object]) -> dict[str, object]:
         "context_length": record.get("context_length"),
         "max_completion_tokens": record.get("max_completion_tokens"),
         "supported_parameters": tuple(sorted(record.get("supported_parameters", ()))),
+        "supports_tool_choice": record.get("supports_tool_choice"),
         "status": record.get("status"),
     }
+
+
+def _supports_tool_choice_none(record: dict[str, object]) -> bool:
+    value = record.get("supports_tool_choice")
+    return (
+        isinstance(value, dict)
+        and value.get("none") is True
+        and value.get("auto") is True
+        and all(isinstance(item, bool) for item in value.values())
+    )
+
+
+def _positive_int(value: object) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise OpenRouterAgenticProtocolError(
+            "provider_endpoint_parameters_unsupported"
+        )
+    return value
 
 
 def _fetch_catalog(url: str, credential: EphemeralCredential) -> object:
@@ -174,7 +245,10 @@ def _fetch_catalog(url: str, credential: EphemeralCredential) -> object:
     opener = urllib_request.build_opener(_RejectRedirects())
     response = None
     try:
-        response = opener.open(request, timeout=30)
+        response = opener.open(
+            request,
+            timeout=OPENROUTER_CATALOG_TIMEOUT_SECONDS,
+        )
         if response.geturl() != url:
             raise OpenRouterAgenticProtocolError("provider_request_rejected")
         payload = response.read(MAX_OPENROUTER_CATALOG_BYTES + 1)

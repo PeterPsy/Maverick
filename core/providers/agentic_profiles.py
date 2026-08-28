@@ -26,6 +26,7 @@ from core.providers.errors import (
 from core.providers.certificate_service import (
     runtime_adapter_artifact_digest,
     validate_certificate_for_binding,
+    validate_profile_certificate_execution_contract,
 )
 from core.providers.models import ProviderDefinition, ProviderSelection
 from core.providers.provider_credentials import resolve_provider_binding
@@ -300,6 +301,10 @@ def build_pinned_execution_binding(
         profile=definition,
         certificate=certificate,
     )
+    validate_profile_certificate_execution_contract(
+        profile=definition,
+        certificate=certificate,
+    )
     normalized_reasoning_effort = _validated_reasoning_effort(
         certificate,
         reasoning_effort=reasoning_effort,
@@ -346,6 +351,22 @@ def build_pinned_execution_binding(
         full_workspace_contract_revision=(
             getattr(certificate, "full_workspace_contract_revision", "")
         ),
+        execution_family=getattr(definition, "execution_family", ""),
+        harness_recipe_id=getattr(definition, "harness_recipe_id", ""),
+        harness_recipe_revision=getattr(
+            definition,
+            "harness_recipe_revision",
+            "",
+        ),
+        harness_recipe_digest=getattr(definition, "harness_recipe_digest", ""),
+        provider_capability_catalog_digest=(
+            getattr(definition, "provider_capability_catalog_digest", "")
+        ),
+        semantic_projection_compiler_revision=(
+            getattr(definition, "semantic_projection_compiler_revision", "")
+        ),
+        tool_contract_revision=getattr(definition, "tool_contract_revision", ""),
+        context_policy=getattr(definition, "context_policy", None),
     )
     validate_certificate_for_binding(
         store,

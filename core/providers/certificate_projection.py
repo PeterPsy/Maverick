@@ -6,7 +6,10 @@ from datetime import UTC, datetime
 
 from core.providers.agentic_models import AgenticProfileDefinition
 from core.providers.capability_models import CapabilityCertificate, CapabilityCertificateStatus
-from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.certificate_service import (
+    runtime_adapter_artifact_digest,
+    validate_profile_certificate_execution_contract,
+)
 from core.providers.certified_execution_tcb import (
     is_exact_codex_identity,
     validate_remote_tcb_identity,
@@ -46,6 +49,10 @@ def certificate_profile_status(
         return "identity_mismatch"
     try:
         validate_full_workspace_contract_claim(
+            profile=definition,
+            certificate=certificate,
+        )
+        validate_profile_certificate_execution_contract(
             profile=definition,
             certificate=certificate,
         )

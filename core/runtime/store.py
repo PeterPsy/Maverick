@@ -1092,6 +1092,9 @@ class RuntimeDocumentStore:
             failure_reason=record.failure_reason,
             execution_lease_id=record.execution_lease_id,
             execution_lease_expires_at=record.execution_lease_expires_at,
+            result_artifact_private_ref=record.result_artifact_private_ref,
+            result_artifact_sha256=record.result_artifact_sha256,
+            result_artifact_size_bytes=record.result_artifact_size_bytes,
             revision=record.revision,
             updated_at=record.updated_at,
         )

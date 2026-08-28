@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from core.providers.errors import CapabilityCertificateError
 
 
-FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v1"
+FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v2"
 
 FULL_WORKSPACE_CORE_TOOL_HANDLES = (
     "core-capability:workspace.instructions",
@@ -28,7 +28,9 @@ FULL_WORKSPACE_CORE_TOOL_HANDLES = (
     "core-capability:cli.run",
     "core-capability:mcp.list",
     "core-capability:mcp.call",
+    "core-capability:artifact.read",
 )
+
 
 @dataclass(frozen=True)
 class FullWorkspaceContractReport:
@@ -112,6 +114,29 @@ def validate_full_workspace_contract_claim(*, profile, certificate) -> None:
         raise CapabilityCertificateError("full_workspace_contract_identity_mismatch")
     if profile_revision != FULL_WORKSPACE_CONTRACT_REVISION:
         raise CapabilityCertificateError("full_workspace_contract_revision_unknown")
+    context_policy = getattr(profile, "context_policy", None)
+    required_profile_identity = (
+        getattr(profile, "execution_family", ""),
+        getattr(profile, "harness_recipe_id", ""),
+        getattr(profile, "harness_recipe_revision", ""),
+        getattr(profile, "harness_recipe_digest", ""),
+        getattr(profile, "provider_capability_catalog_digest", ""),
+        getattr(profile, "semantic_projection_compiler_revision", ""),
+        getattr(profile, "tool_contract_revision", ""),
+    )
+    if (
+        context_policy is None
+        or context_policy.compaction_mode != "provider_history"
+        or context_policy.max_request_input_tokens <= 0
+        or context_policy.context_reserve_tokens <= 0
+        or context_policy.compaction_trigger_tokens <= 0
+        or context_policy.max_compacted_state_bytes <= 0
+        or context_policy.summary_max_bytes <= 0
+        or context_policy.tool_result_inline_bytes <= 0
+        or context_policy.tool_result_summary_bytes <= 0
+        or not all(str(value or "").strip() for value in required_profile_identity)
+    ):
+        raise CapabilityCertificateError("full_workspace_context_contract_incomplete")
     report = inspect_full_workspace_contract(
         capabilities=certificate.certified_capabilities,
         policy=profile.policy_ceiling,

@@ -370,6 +370,7 @@ class RuntimeToolCatalogBuilder:
             "core-capability:cli.run": capability.cli,
             "core-capability:mcp.list": capability.mcp,
             "core-capability:mcp.call": capability.mcp,
+            "core-capability:artifact.read": capability.filesystem_read,
         }.get(handle, False)
 
     def _external_descriptor(

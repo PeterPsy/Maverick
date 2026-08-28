@@ -621,6 +621,20 @@ def workspace_agentic_profile_status(
                 "provider_api_version": definition.provider_api_version,
                 "adapter_id": definition.adapter_id,
                 "adapter_version_constraint": definition.adapter_version_constraint,
+                "execution_family": definition.execution_family or None,
+                "harness_recipe": {
+                    "id": definition.harness_recipe_id or None,
+                    "revision": definition.harness_recipe_revision or None,
+                    "digest": definition.harness_recipe_digest or None,
+                    "provider_capability_catalog_digest": (
+                        definition.provider_capability_catalog_digest or None
+                    ),
+                },
+                "context_policy": (
+                    None
+                    if definition.context_policy is None
+                    else asdict(definition.context_policy)
+                ),
                 "full_workspace_contract_revision": (
                     definition.full_workspace_contract_revision or None
                 ),
@@ -738,6 +752,18 @@ def _profile_effective_capability_snapshot(
             full_workspace_contract_revision=(
                 certificate.full_workspace_contract_revision
             ),
+            execution_family=certificate.execution_family,
+            harness_recipe_id=certificate.harness_recipe_id,
+            harness_recipe_revision=certificate.harness_recipe_revision,
+            harness_recipe_digest=certificate.harness_recipe_digest,
+            provider_capability_catalog_digest=(
+                certificate.provider_capability_catalog_digest
+            ),
+            semantic_projection_compiler_revision=(
+                certificate.semantic_projection_compiler_revision
+            ),
+            tool_contract_revision=certificate.tool_contract_revision,
+            context_policy=definition.context_policy,
         )
         health = run_runtime_coroutine(
             adapter.health(RuntimeHealthContext(binding=execution_binding))
@@ -919,6 +945,20 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 "provider_api_version": definition.provider_api_version,
                 "adapter_id": definition.adapter_id,
                 "adapter_version_constraint": definition.adapter_version_constraint,
+                "execution_family": definition.execution_family or None,
+                "harness_recipe": {
+                    "id": definition.harness_recipe_id or None,
+                    "revision": definition.harness_recipe_revision or None,
+                    "digest": definition.harness_recipe_digest or None,
+                    "provider_capability_catalog_digest": (
+                        definition.provider_capability_catalog_digest or None
+                    ),
+                },
+                "context_policy": (
+                    None
+                    if definition.context_policy is None
+                    else asdict(definition.context_policy)
+                ),
                 "full_workspace_contract_revision": (
                     definition.full_workspace_contract_revision or None
                 ),
@@ -1059,6 +1099,20 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
         "full_workspace_contract_revision": (
             certificate.full_workspace_contract_revision or None
         ),
+        "execution_family": certificate.execution_family or None,
+        "harness_recipe": {
+            "id": certificate.harness_recipe_id or None,
+            "revision": certificate.harness_recipe_revision or None,
+            "digest": certificate.harness_recipe_digest or None,
+            "provider_capability_catalog_digest": (
+                certificate.provider_capability_catalog_digest or None
+            ),
+        },
+        "semantic_projection_compiler_revision": (
+            certificate.semantic_projection_compiler_revision or None
+        ),
+        "tool_contract_revision": certificate.tool_contract_revision or None,
+        "context_policy_revision": certificate.context_policy_revision or None,
     }
 
 
@@ -1191,6 +1245,20 @@ def runtime_session_agentic_governance_payload(
         "runtime_engine_id": binding.runtime_engine_id,
         "full_workspace_contract_revision": (
             binding.full_workspace_contract_revision or None
+        ),
+        "execution_family": binding.execution_family or None,
+        "harness_recipe": {
+            "id": binding.harness_recipe_id or None,
+            "revision": binding.harness_recipe_revision or None,
+            "digest": binding.harness_recipe_digest or None,
+            "provider_capability_catalog_digest": (
+                binding.provider_capability_catalog_digest or None
+            ),
+        },
+        "context_policy": (
+            None
+            if binding.context_policy_snapshot is None
+            else asdict(binding.context_policy_snapshot)
         ),
         "model_provider_id": binding.model_provider_id,
         "model_id": binding.model_id,

@@ -88,6 +88,14 @@ class CapabilityCertificate:
     tcb_structure_digest: str = ""
     tcb_live_digest: str = ""
     full_workspace_contract_revision: str = ""
+    execution_family: str = ""
+    harness_recipe_id: str = ""
+    harness_recipe_revision: str = ""
+    harness_recipe_digest: str = ""
+    provider_capability_catalog_digest: str = ""
+    semantic_projection_compiler_revision: str = ""
+    tool_contract_revision: str = ""
+    context_policy_revision: str = ""
 
 
 @dataclass(frozen=True)

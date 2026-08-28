@@ -41,6 +41,7 @@ from core.runtime.hosted_provider_runtime import (
     GOOGLE_HOSTED_FINALIZATION_POLICY,
     OPENROUTER_HOSTED_FINALIZATION_POLICY,
 )
+from core.runtime.hosted_harness_recipes import hosted_full_context_policy
 
 
 class HostedAgenticBudgetTest(unittest.TestCase):
@@ -133,7 +134,6 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                 google_36_flash_request_ceiling_microusd,
                 160_000,
                 None,
-                200_000,
             ),
             (
                 openrouter_agentic_preview_policy(),
@@ -149,7 +149,6 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                         ),
                     )
                 ),
-                20_000,
             ),
         )
         for (
@@ -159,15 +158,17 @@ class HostedAgenticBudgetTest(unittest.TestCase):
             estimator,
             context_bytes,
             provider_private_state,
-            previous_reserve,
         ) in cases:
             with self.subTest(routing=routing.endpoint_id):
+                projected_result_limit = (
+                    hosted_full_context_policy().tool_result_summary_bytes
+                )
                 prefix = b'{"value":"'
                 suffix = b'"}'
                 maximum_result = (
                     prefix
                     + b"x"
-                    * (policy.max_tool_result_bytes - len(prefix) - len(suffix))
+                    * (projected_result_limit - len(prefix) - len(suffix))
                     + suffix
                 )
                 exploration = replace(
@@ -209,7 +210,11 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                 )
                 budget.complete_step()
 
-                self.assertGreater(estimator(request), previous_reserve)
+                self.assertEqual(len(maximum_result), projected_result_limit)
+                self.assertLessEqual(
+                    estimator(request),
+                    finalization.finalization_cost_reserve_microusd_per_attempt,
+                )
                 self.assertLessEqual(
                     budget.accounted_input_tokens
                     + estimate_hosted_request_tokens(request),

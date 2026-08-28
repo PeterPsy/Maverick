@@ -17,13 +17,18 @@ from core.providers.agentic_workspace_policy import (
     REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
 )
 from core.providers.store import ProviderStore
+from core.runtime.full_workspace_contract import (
+    FULL_WORKSPACE_CONTRACT_REVISION,
+    FULL_WORKSPACE_CORE_TOOL_HANDLES,
+)
+from core.runtime.hosted_harness_recipes import GOOGLE_FULL_WORKSPACE_RECIPE
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "21"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "20"
+GOOGLE_AGENTIC_PROFILE_REVISION = "22"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "21"
 GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
 )
 GOOGLE_CERTIFIED_REASONING_EFFORTS = ("high",)
 GOOGLE_DEFAULT_REASONING_EFFORT = "high"
@@ -33,27 +38,24 @@ GOOGLE_AGENTIC_CERTIFICATE_ID = (
 
 
 def google_agentic_preview_policy() -> AgenticRuntimePolicy:
-    """Allow bounded reads only over content classified public by Core."""
+    """Return the contained full-workspace candidate resource ceiling."""
     return AgenticRuntimePolicy(
-        max_steps_per_turn=8,
-        max_tool_calls_per_turn=4,
+        max_steps_per_turn=32,
+        max_tool_calls_per_turn=24,
         max_parallel_tool_calls=0,
-        max_wall_time_seconds=120,
-        max_tool_result_bytes=262_144,
-        max_total_tool_result_bytes=524_288,
+        max_wall_time_seconds=900,
+        max_tool_result_bytes=1_500_000,
+        max_total_tool_result_bytes=8_000_000,
         max_input_tokens=262_144,
         max_output_tokens=16_384,
-        max_estimated_cost_microusd=1_200_000,
+        max_estimated_cost_microusd=3_500_000,
         allowed_surface_kinds=("core-capability",),
         tool_handle_mode="exact",
-        allowed_tool_handles=(
-            "core-capability:filesystem.list",
-            "core-capability:filesystem.read",
-        ),
+        allowed_tool_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES,
         allow_filesystem_list=True,
         allow_filesystem_read=True,
-        allow_filesystem_write=False,
-        allow_shell=False,
+        allow_filesystem_write=True,
+        allow_shell=True,
         require_confirmation_for_mutating=True,
         require_confirmation_for_destructive=True,
         allowed_remote_data_classes=("public",),
@@ -83,20 +85,33 @@ def ensure_google_agentic_preview_profile(
     definition = AgenticProfileDefinition(
         definition_id=GOOGLE_AGENTIC_PROFILE_ID,
         revision=GOOGLE_AGENTIC_PROFILE_REVISION,
-        display_name="Google Gemini 3.6 Flash · fake-data preview",
+        display_name="Google Gemini 3.6 Flash · full-workspace candidate",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="google-ai-studio",
         model_id="gemini-3.6-flash",
         provider_protocol="google-interactions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==13",
+        adapter_version_constraint="==14",
         routing_constraint=google_interactions_routing_constraint(),
         policy_ceiling=google_agentic_preview_policy(),
         capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,
         created_at=timestamp,
         egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
+        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
+        execution_family="maverick_agent",
+        harness_recipe_id=GOOGLE_FULL_WORKSPACE_RECIPE.recipe_id,
+        harness_recipe_revision=GOOGLE_FULL_WORKSPACE_RECIPE.revision,
+        harness_recipe_digest=GOOGLE_FULL_WORKSPACE_RECIPE.recipe_digest,
+        provider_capability_catalog_digest=(
+            GOOGLE_FULL_WORKSPACE_RECIPE.capability_catalog_digest
+        ),
+        semantic_projection_compiler_revision=(
+            GOOGLE_FULL_WORKSPACE_RECIPE.semantic_projection_compiler_revision
+        ),
+        tool_contract_revision=GOOGLE_FULL_WORKSPACE_RECIPE.tool_contract_revision,
+        context_policy=GOOGLE_FULL_WORKSPACE_RECIPE.context_policy,
     )
     try:
         stored = store.get_agentic_profile_definition(

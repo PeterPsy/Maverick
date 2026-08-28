@@ -51,6 +51,7 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
 
     def test_unknown_function_name_reaches_the_preliminary_ledger_boundary(self) -> None:
         client = GoogleInteractionsAgenticClient(
+            state_mode="stateless",
             transport=_ScriptedTransport(
                 [
                     _tool_stream(
@@ -75,6 +76,7 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
         )
         stream.append(RuntimeError("synthetic transport interruption"))
         client = GoogleInteractionsAgenticClient(
+            state_mode="stateless",
             transport=_ScriptedTransport([stream])
         )
 
@@ -108,7 +110,10 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
         result = asyncio.run(
             probe_google_interactions(
                 credential=EphemeralCredential("probe-key"),
-                client=GoogleInteractionsAgenticClient(transport=transport),
+                client=GoogleInteractionsAgenticClient(
+                    state_mode="stateless",
+                    transport=transport,
+                ),
                 request_interval_seconds=0,
             )
         )
@@ -146,13 +151,12 @@ class GoogleInteractionsCertificationTest(unittest.TestCase):
                 )
             ],
         )
-        self.assertEqual(
-            transport.payloads[1]["input"][0]["call_id"],
-            "call-high-1",
-        )
-        self.assertEqual(
-            transport.payloads[2]["input"][0]["call_id"],
-            "call-high-2",
+        self.assertEqual(transport.payloads[1]["input"][-1]["call_id"], "call-high-1")
+        self.assertEqual(transport.payloads[2]["input"][-1]["call_id"], "call-high-2")
+        self.assertTrue(all(payload["store"] is False for payload in transport.payloads))
+        self.assertGreater(
+            len(transport.payloads[2]["input"]),
+            len(transport.payloads[1]["input"]),
         )
         final_payload = transport.payloads[2]
         self.assertNotIn("tools", final_payload)

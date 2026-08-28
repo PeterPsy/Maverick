@@ -90,6 +90,14 @@ class EffectiveRuntimeAuthority:
     tcb_live_digest: str = ""
     tcb_posture: str = "unavailable"
     full_workspace_contract_revision: str = ""
+    execution_family: str = ""
+    harness_recipe_id: str = ""
+    harness_recipe_revision: str = ""
+    harness_recipe_digest: str = ""
+    provider_capability_catalog_digest: str = ""
+    semantic_projection_compiler_revision: str = ""
+    tool_contract_revision: str = ""
+    context_policy_revision: str = ""
 
 
 def resolve_effective_runtime_authority(
@@ -246,6 +254,26 @@ def resolve_effective_runtime_authority(
         full_workspace_contract_revision=(
             binding.full_workspace_contract_revision
         ),
+        execution_family=getattr(binding, "execution_family", ""),
+        harness_recipe_id=getattr(binding, "harness_recipe_id", ""),
+        harness_recipe_revision=getattr(binding, "harness_recipe_revision", ""),
+        harness_recipe_digest=getattr(binding, "harness_recipe_digest", ""),
+        provider_capability_catalog_digest=getattr(
+            binding,
+            "provider_capability_catalog_digest",
+            "",
+        ),
+        semantic_projection_compiler_revision=getattr(
+            binding,
+            "semantic_projection_compiler_revision",
+            "",
+        ),
+        tool_contract_revision=getattr(binding, "tool_contract_revision", ""),
+        context_policy_revision=(
+            ""
+            if getattr(binding, "context_policy_snapshot", None) is None
+            else binding.context_policy_snapshot.revision
+        ),
     )
     return replace(authority, authority_digest=canonical_digest(authority))
 
@@ -346,6 +374,20 @@ def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> d
         "full_workspace_contract_revision": (
             authority.full_workspace_contract_revision or None
         ),
+        "execution_family": authority.execution_family or None,
+        "harness_recipe": {
+            "id": authority.harness_recipe_id or None,
+            "revision": authority.harness_recipe_revision or None,
+            "digest": authority.harness_recipe_digest or None,
+            "provider_capability_catalog_digest": (
+                authority.provider_capability_catalog_digest or None
+            ),
+        },
+        "semantic_projection_compiler_revision": (
+            authority.semantic_projection_compiler_revision or None
+        ),
+        "tool_contract_revision": authority.tool_contract_revision or None,
+        "context_policy_revision": authority.context_policy_revision or None,
         "allowed_tool_handle_count": len(authority.allowed_tool_handles),
         "allowed_capabilities": tuple(
             name
@@ -397,6 +439,20 @@ def effective_runtime_capability_payload(
         "full_workspace_contract_revision": (
             authority.full_workspace_contract_revision or None
         ),
+        "execution_family": authority.execution_family or None,
+        "harness_recipe": {
+            "id": authority.harness_recipe_id or None,
+            "revision": authority.harness_recipe_revision or None,
+            "digest": authority.harness_recipe_digest or None,
+            "provider_capability_catalog_digest": (
+                authority.provider_capability_catalog_digest or None
+            ),
+        },
+        "semantic_projection_compiler_revision": (
+            authority.semantic_projection_compiler_revision or None
+        ),
+        "tool_contract_revision": authority.tool_contract_revision or None,
+        "context_policy_revision": authority.context_policy_revision or None,
         "policy_revisions": authority.policy_revision_set,
         "actor_policy_revision": authority.actor_policy_revision,
         "feature_flag_revision": authority.feature_flag_revision,
@@ -755,6 +811,7 @@ def _narrow_capabilities_to_live_handles(
                     "core-capability:workspace.instructions",
                     "core-capability:filesystem.search",
                     "core-capability:filesystem.read",
+                    "core-capability:artifact.read",
                 }
                 for item in allowed
             )
@@ -824,6 +881,7 @@ def _narrow_handles_to_capabilities(
             "core-capability:process.status": capabilities.shell,
             "core-capability:process.input": capabilities.shell,
             "core-capability:process.interrupt": capabilities.shell,
+            "core-capability:artifact.read": capabilities.filesystem_read,
         }.get(handle, True)
 
     return tuple(handle for handle in handles if effective(handle))

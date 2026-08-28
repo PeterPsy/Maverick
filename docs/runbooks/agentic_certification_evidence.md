@@ -6,12 +6,12 @@ Scope: trusted CI or operator-controlled certification worker
 
 Production status: **not approved; no complete two-step certificate evidence recorded**
 
-P4B repository closure executes only the explicitly selected deterministic
+Phase-4 repository closure executes only the explicitly selected deterministic
 `fixture_contract` steps for Google and OpenRouter. It does not execute
 `live_probe`, produce behavioral evidence, sign/publish a remote certificate,
 or make any provider HTTP/SSE request.
 
-Suite 17 retains the P2 crash/pairing/outbox matrix and P3 finalization
+Suite 18 retains the P2 crash/pairing/outbox matrix and P3 finalization
 coverage, including durable step/tool/output/cost/time reservation, complete
 terminal-request cost projections, tool-less provider payloads, staged
 request-specific preflight, and request-scoped instructions. It also verifies
@@ -21,6 +21,11 @@ and adds semantic-envelope source/projection, scoped instruction, full-skill,
 journal-evidence, atomic Full Workspace contract, descriptor-confined mutation,
 fixed-path shell, managed-process, discovery-first CLI/MCP, compaction, and
 orphan-cleanup fixtures.
+It additionally binds recipe/catalog identity, compiler revision 2,
+`codex-baseline-v2`, context reserve and pairing-safe compaction, artifact-backed
+large results, attachment workspace references, explicit steering fallback,
+preflight-before-egress ordering, Google stateless continuation, and
+OpenRouter `tool_choice:none`/context-capacity catalog evidence.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
@@ -37,8 +42,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v17 matrix revision
-  `2026-08-28-r17-p4b-full-workspace-tcb7` declared by the provider certificate module;
+- the dated suite-v18 matrix revision
+  `2026-08-28-r18-p4-context-provider-closure-tcb8` declared by the provider certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
   provide or narrow its component list or digest;
@@ -72,7 +77,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 17 \
+  --suite-version 18 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -81,8 +86,9 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `17`, matrix revision `2026-08-28-r17-p4b-full-workspace-tcb7`, and the OpenRouter
-manifest. The Google suite uses version `17` and the same matrix revision. The
+version `18`, matrix revision
+`2026-08-28-r18-p4-context-provider-closure-tcb8`, and the OpenRouter
+manifest. The Google suite uses version `18` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.
@@ -106,7 +112,8 @@ project-quota cause from the broader family alone.
 Before its first completion request, the OpenRouter probe must fetch both the
 official model endpoint catalog and ZDR endpoint catalog. It fails closed unless
 the exact `deepinfra/fp8` record is active, FP8, ZDR-listed, has enough completion
-capacity, and declares every endpoint-gated translated parameter. In
+capacity, total input-plus-output context capacity, explicit support for
+`tool_choice:none`, and every endpoint-gated translated parameter. In
 particular, the request must not reintroduce `parallel_tool_calls` while the
 endpoint does not declare it. The required set is derived from the translated
 completion payload rather than maintained as a second hard-coded parameter

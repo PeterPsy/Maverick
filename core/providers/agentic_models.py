@@ -20,6 +20,27 @@ RuntimeDataClass = Literal[
 ToolHandleMode = Literal["none", "all_currently_authorized", "exact"]
 RuntimeSurfaceKind = Literal["cli", "mcp", "app-interface", "core-capability"]
 ProfileRolloutStatus = Literal["disabled", "preview", "available", "suspended"]
+ContextCompactionMode = Literal["disabled", "provider_history"]
+AttachmentProjectionMode = Literal["workspace_reference", "native_or_reference"]
+SteeringDeliveryMode = Literal["provider_native", "safe_next_turn"]
+
+
+@dataclass(frozen=True)
+class AgenticContextPolicy:
+    """Profile-pinned context window, compaction, and interaction contract."""
+
+    revision: str
+    max_request_input_tokens: int
+    context_reserve_tokens: int
+    compaction_mode: ContextCompactionMode
+    compaction_trigger_tokens: int
+    max_compacted_state_bytes: int
+    summary_max_bytes: int
+    tool_result_inline_bytes: int
+    tool_result_summary_bytes: int
+    attachment_projection_mode: AttachmentProjectionMode
+    steering_delivery_mode: SteeringDeliveryMode
+    max_same_turn_steering_messages: int
 
 
 @dataclass(frozen=True)
@@ -91,6 +112,14 @@ class AgenticProfileDefinition:
     egress_policy_id: str
     egress_policy_revision: str
     full_workspace_contract_revision: str = ""
+    execution_family: str = ""
+    harness_recipe_id: str = ""
+    harness_recipe_revision: str = ""
+    harness_recipe_digest: str = ""
+    provider_capability_catalog_digest: str = ""
+    semantic_projection_compiler_revision: str = ""
+    tool_contract_revision: str = ""
+    context_policy: AgenticContextPolicy | None = None
 
 
 @dataclass(frozen=True)

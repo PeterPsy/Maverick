@@ -53,6 +53,10 @@ class ProviderStepJournal:
         provider_egress_projection_digest: str | None = None,
         semantic_projection_compiler_id: str | None = None,
         semantic_projection_compiler_revision: str | None = None,
+        context_policy_revision: str | None = None,
+        context_compaction_evidence_digest: str | None = None,
+        context_compaction_applied: bool = False,
+        endpoint_capability_snapshot_digest: str | None = None,
         request_phase: str,
         request_max_output_tokens: int,
         budget_estimated_input_tokens: int,
@@ -155,6 +159,14 @@ class ProviderStepJournal:
             semantic_projection_compiler_revision=(
                 semantic_projection_compiler_revision
             ),
+            context_policy_revision=context_policy_revision,
+            context_compaction_evidence_digest=(
+                context_compaction_evidence_digest
+            ),
+            context_compaction_applied=context_compaction_applied,
+            endpoint_capability_snapshot_digest=(
+                endpoint_capability_snapshot_digest
+            ),
             request_phase=request_phase,
             request_max_output_tokens=request_max_output_tokens,
             budget_estimated_input_tokens=budget_estimated_input_tokens,
@@ -212,6 +224,8 @@ class ProviderStepJournal:
         for digest in (
             semantic_source_snapshot_digest,
             provider_egress_projection_digest,
+            context_compaction_evidence_digest,
+            endpoint_capability_snapshot_digest,
         ):
             if digest is not None and (
                 not isinstance(digest, str)
@@ -227,6 +241,25 @@ class ProviderStepJournal:
             isinstance(value, str) and value.strip() for value in compiler_values
         ):
             raise ValueError("Provider-step journal semantic compiler identity is invalid.")
+        if (
+            not isinstance(context_compaction_applied, bool)
+            or (
+                context_policy_revision is not None
+                and (
+                    not isinstance(context_policy_revision, str)
+                    or not context_policy_revision.strip()
+                )
+            )
+            or (
+                context_compaction_evidence_digest is not None
+                and not context_policy_revision
+            )
+            or (
+                context_compaction_applied
+                and not context_compaction_evidence_digest
+            )
+        ):
+            raise ValueError("Provider-step journal compaction evidence is invalid.")
         for value in (request_max_output_tokens, budget_estimated_input_tokens):
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise ValueError("Provider-step journal budget reservation is invalid.")

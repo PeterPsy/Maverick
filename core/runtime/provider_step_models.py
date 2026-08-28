@@ -73,6 +73,10 @@ class ProviderStepJournalRecord:
     provider_egress_projection_digest: str | None
     semantic_projection_compiler_id: str | None
     semantic_projection_compiler_revision: str | None
+    context_policy_revision: str | None
+    context_compaction_evidence_digest: str | None
+    context_compaction_applied: bool
+    endpoint_capability_snapshot_digest: str | None
     request_phase: ProviderRequestPhase
     request_max_output_tokens: int
     budget_estimated_input_tokens: int
@@ -154,6 +158,10 @@ def provider_step_journal_from_document(
     payload.setdefault("provider_egress_projection_digest", None)
     payload.setdefault("semantic_projection_compiler_id", None)
     payload.setdefault("semantic_projection_compiler_revision", None)
+    payload.setdefault("context_policy_revision", None)
+    payload.setdefault("context_compaction_evidence_digest", None)
+    payload.setdefault("context_compaction_applied", False)
+    payload.setdefault("endpoint_capability_snapshot_digest", None)
     payload.setdefault("request_phase", "exploration")
     payload.setdefault("request_max_output_tokens", 0)
     payload.setdefault("budget_estimated_input_tokens", 0)

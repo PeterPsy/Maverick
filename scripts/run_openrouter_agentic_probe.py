@@ -219,14 +219,21 @@ def _finish(events, request_count: int, filesystem_result_count: int, catalog) -
         and sum(event.event_type == "usage" for event in events) >= request_count
         and sum(event.event_type == "provider_state" for event in events) >= request_count
         and not any(event.event_type == "error" for event in events)
+        and catalog.supports_tool_choice_none is True
+        and catalog.context_length >= 16_384
+        and catalog.max_completion_tokens >= 16_384
     )
     print(json.dumps({
+        "catalog_snapshot_digest": catalog.catalog_snapshot_digest,
         "catalog_model_record_digest": catalog.model_catalog_record_digest,
         "catalog_zdr_record_digest": catalog.zdr_catalog_record_digest,
+        "context_length": catalog.context_length,
         "filesystem_result_count": filesystem_result_count,
+        "max_completion_tokens": catalog.max_completion_tokens,
         "reasoning_efforts": CERTIFIED_REASONING_EFFORTS,
         "request_count": request_count,
         "succeeded": succeeded,
+        "supports_tool_choice_none": catalog.supports_tool_choice_none,
         "upstream_id": catalog.upstream_id,
     }, sort_keys=True))
     return 0 if succeeded else 1

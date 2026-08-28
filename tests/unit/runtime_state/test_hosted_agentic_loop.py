@@ -5,6 +5,7 @@ from dataclasses import replace
 import json
 from threading import Thread
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -74,6 +75,59 @@ class HostedAgenticLoopTest(unittest.TestCase):
             len(self.harness.store.list_egress_decisions(session_id="session-hosted")),
             5,
         )
+
+    def test_endpoint_preflight_precedes_egress_commit_and_transport(self) -> None:
+        order: list[tuple[str, int]] = []
+
+        def preflight(request, _credential):
+            order.append(
+                (
+                    "preflight",
+                    len(
+                        self.harness.store.list_egress_decisions(
+                            session_id="session-hosted"
+                        )
+                    ),
+                )
+            )
+            self.assertEqual(request.endpoint_capability_snapshot_digest, "")
+            return SimpleNamespace(snapshot_digest="d" * 64)
+
+        client = _PreflightOrderingClient(self.harness, order)
+        adapter = self.harness.adapter(client, request_preflight=preflight)
+
+        result, _events, _adapter = self.execute(client, adapter=adapter)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(order[0], ("preflight", 0))
+        self.assertEqual(order[1][0], "transport")
+        self.assertGreater(order[1][1], 0)
+        self.assertEqual(client.requests[0].endpoint_capability_snapshot_digest, "d" * 64)
+        journal = self.harness.store.list_provider_step_journals(
+            session_id="session-hosted"
+        )[0]
+        self.assertEqual(journal.endpoint_capability_snapshot_digest, "d" * 64)
+
+    def test_failed_endpoint_preflight_commits_no_egress_and_dispatches_nothing(self) -> None:
+        client = DeterministicFakeAgenticClient()
+
+        def preflight(_request, _credential):
+            raise RuntimeError("untrusted-preflight-detail")
+
+        result, events, _adapter = self.execute(
+            client,
+            adapter=self.harness.adapter(client, request_preflight=preflight),
+        )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(client.requests, [])
+        self.assertEqual(
+            self.harness.store.list_egress_decisions(session_id="session-hosted"),
+            [],
+        )
+        serialized = json.dumps([event.payload for event in events])
+        self.assertIn("provider_endpoint_preflight_failed", serialized)
+        self.assertNotIn("untrusted-preflight-detail", serialized)
 
     def test_mutating_tool_waits_for_persisted_confirmation_and_executes_once(self) -> None:
         client = DeterministicFakeAgenticClient(tool_name=self.harness.mutate_tool_name)
@@ -405,6 +459,27 @@ class _CallThenTerminalErrorClient:
             3,
             error_code="provider_unavailable",
         )
+
+
+class _PreflightOrderingClient(DeterministicFakeAgenticClient):
+    def __init__(self, harness, order) -> None:
+        super().__init__()
+        self.harness = harness
+        self.order = order
+
+    async def create_response(self, request, *, credential):
+        self.order.append(
+            (
+                "transport",
+                len(
+                    self.harness.store.list_egress_decisions(
+                        session_id="session-hosted"
+                    )
+                ),
+            )
+        )
+        async for event in super().create_response(request, credential=credential):
+            yield event
 
 
 if __name__ == "__main__":

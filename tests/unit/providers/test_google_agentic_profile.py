@@ -30,6 +30,11 @@ from core.providers.google_agentic_profile import (
     ensure_google_agentic_preview_profile,
 )
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
+from core.runtime.full_workspace_contract import (
+    FULL_WORKSPACE_CONTRACT_REVISION,
+    FULL_WORKSPACE_CORE_TOOL_HANDLES,
+)
+from core.runtime.hosted_harness_recipes import GOOGLE_FULL_WORKSPACE_RECIPE
 from core.runtime.hosted_agentic_factory import classify_hosted_content_fail_closed
 from tests.support.repo import make_temp_repo_root
 
@@ -64,18 +69,24 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.adapter_version_constraint, "==13")
+        self.assertEqual(profile.revision, "22")
+        self.assertEqual(profile.adapter_version_constraint, "==14")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.provider_api_version, "v1")
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
         self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
         self.assertEqual(profile.egress_policy_revision, "2")
         self.assertEqual(
+            profile.full_workspace_contract_revision,
+            FULL_WORKSPACE_CONTRACT_REVISION,
+        )
+        self.assertEqual(profile.execution_family, "maverick_agent")
+        self.assertEqual(profile.harness_recipe_id, GOOGLE_FULL_WORKSPACE_RECIPE.recipe_id)
+        self.assertEqual(profile.harness_recipe_digest, GOOGLE_FULL_WORKSPACE_RECIPE.recipe_digest)
+        self.assertEqual(profile.context_policy, GOOGLE_FULL_WORKSPACE_RECIPE.context_policy)
+        self.assertEqual(
             profile.policy_ceiling.allowed_tool_handles,
-            (
-                "core-capability:filesystem.list",
-                "core-capability:filesystem.read",
-            ),
+            FULL_WORKSPACE_CORE_TOOL_HANDLES,
         )
         with self.assertRaises(ProviderNotFoundError):
             state.provider_store.get_capability_certificate(profile.capability_certificate_id)
@@ -142,7 +153,14 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         self.assertEqual(evidence.matrix_revision, GOOGLE_CERTIFICATION_MATRIX_REVISION)
         self.assertEqual(evidence.certification_outcome, "passed")
         self.assertTrue(certificate.certified_capabilities.filesystem_list)
-        self.assertFalse(certificate.certified_capabilities.recovery)
+        self.assertTrue(certificate.certified_capabilities.filesystem_write)
+        self.assertTrue(certificate.certified_capabilities.shell)
+        self.assertTrue(certificate.certified_capabilities.recovery)
+        self.assertEqual(certificate.harness_recipe_digest, profile.harness_recipe_digest)
+        self.assertEqual(
+            certificate.context_policy_revision,
+            profile.context_policy.revision,
+        )
         self.assertEqual(
             certificate.certified_reasoning_efforts,
             ("high",),

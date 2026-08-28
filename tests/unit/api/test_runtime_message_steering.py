@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 import tempfile
 import unittest
@@ -16,6 +17,106 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeMessageSteeringApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        title_job = patch(
+            "core.runtime.turn_submission_service_queue."
+            "schedule_runtime_thread_title_generation"
+        )
+        title_job.start()
+        self.addCleanup(title_job.stop)
+
+    def test_unsupported_same_turn_delivery_is_explicitly_queued_safely(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            session = create_runtime_session(
+                state.runtime_store,
+                session_id="session-steer-fallback-api",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                owner_user_id="user:admin",
+                requested_mode="sandbox",
+                governance=state.workspace_store.get_governance("default"),
+                platform_allows_full_access=True,
+                start_path=repo_root,
+                execution_binding=build_pinned_execution_binding(
+                    state.provider_store,
+                    state.provider_registry,
+                    session_id="session-steer-fallback-api",
+                    workspace_id="default",
+                    execution_mode="sandbox",
+                ),
+            )
+            queued_turn, _events = _queue_turn_with_event(
+                state,
+                session=session,
+                input_text="first message",
+                provider_id="codex",
+                client_message_id="client-first-fallback",
+                attachments=None,
+                app_references=None,
+            )
+            active_turn = transition_runtime_turn(
+                state.runtime_store,
+                turn_id=queued_turn.turn_id,
+                target_status="active",
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch(
+                "core.api.runtime_api.attempt_runtime_message_steer",
+                return_value=RuntimeMessageSteerAttempt(
+                    status="fallback",
+                    reason="same_turn_steering_not_certified",
+                ),
+            ), patch(
+                "core.api.runtime_api.submit_runtime_turn_async",
+                side_effect=lambda _state, **kwargs: (
+                    replace(
+                        active_turn,
+                        turn_id="turn-fallback-queued",
+                        status="queued",
+                        input_text=kwargs["input_text"],
+                        started_at=None,
+                    ),
+                    [],
+                ),
+            ):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path=f"/api/runtime/sessions/{session.session_id}/turns",
+                    method="POST",
+                    body={
+                        "input_text": "safe next direction",
+                        "client_message_id": "client-steer-fallback-api",
+                        "async": True,
+                        "delivery_policy": "steer_or_queue",
+                        "_maverick_steering_fallback_reason": "client-spoofed",
+                    },
+                    cookie=cookie,
+                )
+
+        self.assertEqual(status, 202)
+        self.assertEqual(payload["delivery"], "queued")
+        self.assertEqual(
+            payload["steering_fallback"],
+            {
+                "delivery": "safe_next_turn",
+                "reason": "same_turn_steering_not_certified",
+            },
+        )
+
     def test_turn_submit_returns_same_turn_delivery_and_steered_event(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

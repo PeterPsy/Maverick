@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
+from types import SimpleNamespace
 import unittest
 
 from core.providers.agentic_adapter import RuntimeTurnContext
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.hosted_agentic_policy import hosted_egress_policy
-from core.runtime.provider_input_context import RuntimeProviderInputSource
+from core.runtime.provider_input_context import (
+    RuntimeProviderInputSource,
+    runtime_provider_input_sources,
+)
 from core.runtime.tool_catalog import RuntimeToolCatalog
 from core.skills.models import SkillDefinition
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
@@ -16,6 +20,101 @@ from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 
 
 class SemanticEnvelopeTest(unittest.TestCase):
+    def test_attachment_is_an_explicit_authorized_workspace_reference(self) -> None:
+        harness = HostedAgenticHarness(self)
+        authority = replace(
+            harness.authority,
+            allowed_tool_handles=(
+                *harness.authority.allowed_tool_handles,
+                "core-capability:filesystem.read",
+            ),
+            allowed_capabilities=replace(
+                harness.authority.allowed_capabilities,
+                filesystem_read=True,
+                attachment_modalities=("file",),
+            ),
+        )
+        source = RuntimeProviderInputSource(
+            source_id="attachment:0",
+            provenance="attachment",
+            content_type="application/json",
+            content={
+                "attachment_id": "attachment-1",
+                "name": "evidence.pdf",
+                "workspace_relative_path": "attachments/evidence.pdf",
+                "media_type": "application/pdf",
+                "size_bytes": 128,
+                "projection": {
+                    "mode": "workspace_reference",
+                    "read_capability": "core-capability:filesystem.read",
+                },
+            },
+            capability_modality="application/pdf",
+            projection_mode="workspace_reference",
+        )
+        context = RuntimeTurnContext(
+            session=harness.session,
+            binding=harness.binding,
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            input_text="Inspect the attachment.",
+            correlation_id="turn-hosted",
+            effective_authority=authority,
+            input_sources=(source,),
+        )
+
+        request = self._request(harness, context)
+
+        attachment = next(
+            block for block in request.content_blocks if block.provenance == "attachment"
+        )
+        projection = json.loads(attachment.content)
+        self.assertEqual(
+            projection["workspace_relative_path"],
+            "attachments/evidence.pdf",
+        )
+        self.assertEqual(
+            projection["projection"]["read_capability"],
+            "core-capability:filesystem.read",
+        )
+        with self.assertRaisesRegex(
+            HostedAgenticLoopError,
+            "attachment_projection_not_supported",
+        ):
+            self._request(
+                harness,
+                replace(
+                    context,
+                    input_sources=(replace(source, projection_mode=None),),
+                ),
+            )
+
+    def test_invalid_attachment_metadata_is_never_silently_dropped(self) -> None:
+        for attachment in (
+            {"name": "missing-path.pdf"},
+            {"name": "escape.pdf", "relativePath": "../escape.pdf"},
+            {"name": "numeric-path.pdf", "relativePath": 42},
+            {
+                "name": "invalid-size.pdf",
+                "relativePath": "attachments/invalid-size.pdf",
+                "size": True,
+            },
+        ):
+            with self.subTest(attachment=attachment), self.assertRaisesRegex(
+                ValueError,
+                "agentic_attachment_metadata_invalid",
+            ):
+                runtime_provider_input_sources(
+                    SimpleNamespace(inter_agent_store=None, workspace_store=None),
+                    session=SimpleNamespace(
+                        workspace_id="default",
+                        session_id="session-attachment",
+                        workspace_root="/tmp",
+                    ),
+                    input_text="fixture",
+                    app_references=None,
+                    attachments=[attachment],
+                )
+
     def test_materializes_scoped_instructions_full_skill_and_stable_digests(self) -> None:
         harness = HostedAgenticHarness(self)
         workspace = harness.root / "workspaces" / "default"
@@ -78,7 +177,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
             second.provider_egress_projection_digest,
         )
         self.assertEqual(first.semantic_envelope_schema_version, "1")
-        self.assertEqual(first.semantic_projection_compiler_revision, "1")
+        self.assertEqual(first.semantic_projection_compiler_revision, "2")
         provenance = [block.provenance for block in first.content_blocks]
         self.assertEqual(
             provenance,

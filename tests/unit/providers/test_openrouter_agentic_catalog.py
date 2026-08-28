@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from threading import Barrier
 import unittest
 from unittest.mock import patch
 
@@ -10,9 +11,15 @@ from core.providers.agentic_protocol import (
     AgenticModelRequest,
     AgenticRequestContentBlock,
     AgenticToolDefinition,
+    EphemeralCredential,
 )
 from core.providers.agentic_filesystem_probe import FILESYSTEM_LIST_PROBE_TOOL_NAME
-from core.providers.openrouter_agentic_catalog import validate_openrouter_agentic_catalog
+from core.providers.openrouter_agentic_catalog import (
+    OPENROUTER_AGENTIC_ENDPOINT_CATALOG,
+    OPENROUTER_ZDR_ENDPOINT_CATALOG,
+    preflight_openrouter_agentic_catalog,
+    validate_openrouter_agentic_catalog,
+)
 from core.providers.openrouter_agentic_models import OpenRouterAgenticProtocolError
 from core.providers.openrouter_agentic_profile import openrouter_agentic_routing_constraint
 from core.providers.openrouter_agentic_request import openrouter_chat_payload
@@ -29,6 +36,36 @@ SUPPORTED = [
 
 
 class OpenRouterAgenticCatalogTest(unittest.TestCase):
+    def test_live_catalog_records_are_fetched_within_one_timeout_window(self) -> None:
+        rendezvous = Barrier(2)
+
+        def fetch(url, _credential):
+            rendezvous.wait(timeout=1)
+            return (
+                _model_catalog()
+                if url == OPENROUTER_AGENTIC_ENDPOINT_CATALOG
+                else _zdr_catalog()
+            )
+
+        with patch(
+            "core.providers.openrouter_agentic_catalog._fetch_catalog",
+            side_effect=fetch,
+        ) as mocked:
+            snapshot = preflight_openrouter_agentic_catalog(
+                _request(),
+                credential=EphemeralCredential("fixture-openrouter-key"),
+            )
+
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(
+            {call.args[0] for call in mocked.call_args_list},
+            {
+                OPENROUTER_AGENTIC_ENDPOINT_CATALOG,
+                OPENROUTER_ZDR_ENDPOINT_CATALOG,
+            },
+        )
+        self.assertEqual(snapshot.upstream_id, "deepinfra/fp8")
+
     def test_exact_model_and_zdr_records_support_the_request(self) -> None:
         zdr_catalog = _zdr_catalog()
         zdr_catalog["data"][0]["supported_parameters"].append("temperature")
@@ -42,6 +79,10 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
         self.assertEqual(snapshot.supported_parameters, tuple(sorted(SUPPORTED)))
         self.assertEqual(len(snapshot.model_catalog_record_digest), 64)
         self.assertEqual(len(snapshot.zdr_catalog_record_digest), 64)
+        self.assertTrue(snapshot.supports_tool_choice_none)
+        self.assertEqual(snapshot.context_length, 1_048_576)
+        self.assertEqual(snapshot.max_completion_tokens, 65_536)
+        self.assertEqual(len(snapshot.catalog_snapshot_digest), 64)
 
     def test_every_routed_parameter_must_exist_in_both_catalogs(self) -> None:
         for catalog_name in ("model", "zdr"):
@@ -111,6 +152,32 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
                         zdr_catalog=catalog,
                     )
 
+    def test_tool_choice_none_and_total_context_window_are_mandatory(self) -> None:
+        for catalog_name in ("model", "zdr"):
+            for update in (
+                {"supports_tool_choice": {"auto": True, "none": False}},
+                {"supports_tool_choice": {"auto": True}},
+                {"context_length": 16_384},
+            ):
+                with self.subTest(catalog=catalog_name, update=update):
+                    model_catalog = _model_catalog()
+                    zdr_catalog = _zdr_catalog()
+                    target = (
+                        model_catalog["data"]["endpoints"][0]
+                        if catalog_name == "model"
+                        else zdr_catalog["data"][0]
+                    )
+                    target.update(update)
+                    with self.assertRaisesRegex(
+                        OpenRouterAgenticProtocolError,
+                        "provider_endpoint_parameters_unsupported",
+                    ):
+                        validate_openrouter_agentic_catalog(
+                            _request(),
+                            model_catalog=model_catalog,
+                            zdr_catalog=zdr_catalog,
+                        )
+
 
 def _request() -> AgenticModelRequest:
     return AgenticModelRequest(
@@ -153,6 +220,7 @@ def _record() -> dict[str, object]:
         "context_length": 1_048_576,
         "max_completion_tokens": 65_536,
         "supported_parameters": list(SUPPORTED),
+        "supports_tool_choice": {"auto": True, "none": True},
         "status": 0,
     }
 

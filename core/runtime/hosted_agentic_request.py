@@ -95,6 +95,14 @@ def hosted_request_control_digest(request: AgenticModelRequest) -> str:
     payload = {
         "request_phase": request.request_phase,
         "max_output_tokens": request.max_output_tokens,
+        "context_policy_revision": request.context_policy_revision,
+        "context_compaction_evidence_digest": (
+            request.context_compaction_evidence_digest
+        ),
+        "context_compaction_applied": request.context_compaction_applied,
+        "endpoint_capability_snapshot_digest": (
+            request.endpoint_capability_snapshot_digest
+        ),
         "tools": tuple(
             {
                 "name": tool.name,
@@ -163,6 +171,9 @@ class HostedAgenticRequestBuilder:
         max_output_tokens: int,
         request_phase: AgenticRequestPhase = "exploration",
         pairing_source: ProviderStepJournalRecord | None = None,
+        context_policy_revision: str = "",
+        context_compaction_evidence_digest: str = "",
+        context_compaction_applied: bool = False,
     ) -> AgenticModelRequest:
         """Build a request and immediately commit all approved egress decisions."""
         return self.commit(
@@ -178,6 +189,11 @@ class HostedAgenticRequestBuilder:
                 max_output_tokens=max_output_tokens,
                 request_phase=request_phase,
                 pairing_source=pairing_source,
+                context_policy_revision=context_policy_revision,
+                context_compaction_evidence_digest=(
+                    context_compaction_evidence_digest
+                ),
+                context_compaction_applied=context_compaction_applied,
             )
         )
 
@@ -195,6 +211,9 @@ class HostedAgenticRequestBuilder:
         max_output_tokens: int,
         request_phase: AgenticRequestPhase = "exploration",
         pairing_source: ProviderStepJournalRecord | None = None,
+        context_policy_revision: str = "",
+        context_compaction_evidence_digest: str = "",
+        context_compaction_applied: bool = False,
     ) -> HostedAgenticPreparedRequest:
         """Evaluate and transform a candidate without observable egress commit."""
         binding = context.binding
@@ -318,6 +337,11 @@ class HostedAgenticRequestBuilder:
                 "provider_protocol": binding.provider_protocol,
                 "provider_api_version": binding.provider_api_version,
                 "request_phase": request_phase,
+                "context_policy_revision": context_policy_revision,
+                "context_compaction_evidence_digest": (
+                    context_compaction_evidence_digest
+                ),
+                "context_compaction_applied": context_compaction_applied,
                 "content": [
                     {
                         "semantic_block_id": block.source_metadata.semantic_block_id,
@@ -392,6 +416,11 @@ class HostedAgenticRequestBuilder:
                 self.semantic_compiler.compiler_revision
             ),
             provider_egress_projection_digest=projection_digest,
+            context_policy_revision=context_policy_revision,
+            context_compaction_evidence_digest=(
+                context_compaction_evidence_digest
+            ),
+            context_compaction_applied=context_compaction_applied,
         )
         return HostedAgenticPreparedRequest(
             request=request,

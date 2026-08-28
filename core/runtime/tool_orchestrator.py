@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 import json
 from threading import Event
 import time
@@ -34,6 +35,7 @@ from core.runtime.tool_errors import (
 from core.runtime.tool_ledger import RuntimeToolLedger
 from core.runtime.output_compaction.cli_result import compact_runtime_cli_result
 from core.runtime.tool_models import ToolConfirmationGrant, ToolInvocationRecord
+from core.runtime.tool_result_artifacts import TOOL_RESULT_ARTIFACT_READ_HANDLE
 from core.runtime.tool_schema import validate_tool_arguments
 
 
@@ -525,23 +527,39 @@ class RuntimeToolOrchestrator:
             # app-specific output schema verbatim.
             if descriptor.output_schema is not None:
                 validate_tool_arguments(descriptor.output_schema, result)
-            try:
-                result = compact_runtime_cli_result(
-                    result,
-                    argv=(descriptor.handle,),
-                    runtime_session_id=context.session_id,
-                )
-            except Exception as error:
-                raise RuntimeToolError("tool_output_compaction_failed") from error
-            encoded = json.dumps(
-                result, ensure_ascii=False, allow_nan=False, separators=(",", ":"), sort_keys=True
+            encoded_original = json.dumps(
+                result,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
             ).encode("utf-8")
-            if len(encoded) > policy.max_tool_result_bytes:
+            if len(encoded_original) > policy.max_tool_result_bytes:
                 raise RuntimeToolError("tool_result_too_large")
+            if descriptor.handle == TOOL_RESULT_ARTIFACT_READ_HANDLE:
+                projected_result = dict(result)
+            else:
+                try:
+                    projected_result = compact_runtime_cli_result(
+                        result,
+                        argv=(descriptor.handle,),
+                        runtime_session_id=context.session_id,
+                    )
+                except Exception as error:
+                    raise RuntimeToolError("tool_output_compaction_failed") from error
+            encoded = json.dumps(
+                projected_result,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
             summary = {
                 "root_type": "object",
-                "field_count": len(result),
+                "field_count": len(projected_result),
                 "serialized_bytes": len(encoded),
+                "original_serialized_bytes": len(encoded_original),
+                "artifact_available": encoded != encoded_original,
                 "data_class": classification.data_class,
                 "trust_level": classification.trust_level,
                 "source_revision": classification.source_revision,
@@ -553,6 +571,9 @@ class RuntimeToolOrchestrator:
             return self._persist_execution_success(
                 executing,
                 encoded=encoded,
+                artifact_encoded=(
+                    encoded_original if encoded != encoded_original else None
+                ),
                 result_summary=summary,
                 result_classification=classification,
                 control=control,
@@ -585,6 +606,7 @@ class RuntimeToolOrchestrator:
         executing: ToolInvocationRecord,
         *,
         encoded: bytes,
+        artifact_encoded: bytes | None,
         result_summary: dict[str, object],
         result_classification,
         control: RuntimeToolExecutionControl | None,
@@ -594,7 +616,14 @@ class RuntimeToolOrchestrator:
             session_id=executing.session_id,
             payload=encoded,
         )
+        artifact_ref = None
         try:
+            if artifact_encoded is not None:
+                artifact_ref = self.ledger.private_payload_store.put(
+                    workspace_id=executing.workspace_id,
+                    session_id=executing.session_id,
+                    payload=artifact_encoded,
+                )
             if control is not None:
                 control.check()
             return self.ledger.transition(
@@ -603,6 +632,15 @@ class RuntimeToolOrchestrator:
                 result_private_ref=private_ref,
                 result_summary=result_summary,
                 result_classification=result_classification,
+                result_artifact_private_ref=artifact_ref,
+                result_artifact_sha256=(
+                    ""
+                    if artifact_encoded is None
+                    else hashlib.sha256(artifact_encoded).hexdigest()
+                ),
+                result_artifact_size_bytes=(
+                    None if artifact_encoded is None else len(artifact_encoded)
+                ),
                 require_active_execution_lease_id=(
                     control.execution_lease_id if control is not None else None
                 ),
@@ -613,6 +651,12 @@ class RuntimeToolOrchestrator:
                 session_id=executing.session_id,
                 private_ref=private_ref,
             )
+            if artifact_ref is not None:
+                self.ledger.private_payload_store.delete(
+                    workspace_id=executing.workspace_id,
+                    session_id=executing.session_id,
+                    private_ref=artifact_ref,
+                )
             current = self.ledger.store.get_tool_invocation(executing.invocation_id)
             if current.state in {
                 "succeeded",
@@ -628,6 +672,12 @@ class RuntimeToolOrchestrator:
                 session_id=executing.session_id,
                 private_ref=private_ref,
             )
+            if artifact_ref is not None:
+                self.ledger.private_payload_store.delete(
+                    workspace_id=executing.workspace_id,
+                    session_id=executing.session_id,
+                    private_ref=artifact_ref,
+                )
             raise
 
     def _persist_execution_failure(

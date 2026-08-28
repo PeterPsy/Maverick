@@ -88,6 +88,10 @@ class OpenRouterAgenticProbeTest(unittest.TestCase):
                 upstream_id="deepinfra/fp8",
                 model_catalog_record_digest="a" * 64,
                 zdr_catalog_record_digest="b" * 64,
+                supports_tool_choice_none=True,
+                context_length=1_048_576,
+                max_completion_tokens=65_536,
+                catalog_snapshot_digest="c" * 64,
             ),
         ):
             exit_code = asyncio.run(probe._main())

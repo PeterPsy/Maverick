@@ -36,6 +36,9 @@ from core.runtime.tool_full_workspace_support import mutation_instruction_eviden
 from core.runtime.tool_full_workspace_schemas import (
     extended_filesystem_write_schema,
 )
+from core.runtime.tool_result_artifacts import (
+    build_tool_result_artifact_capabilities,
+)
 
 
 MAX_FILESYSTEM_READ_BYTES = 262_144
@@ -55,6 +58,7 @@ def build_core_runtime_tool_capabilities(
     process_registry: HostedToolProcessRegistry | None = None,
     cli_registry=None,
     mcp_registry=None,
+    tool_ledger=None,
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     """Build workspace-bound Core capabilities over one fd-relative boundary."""
     filesystem = ConfinedWorkspaceFilesystem(
@@ -278,7 +282,15 @@ def build_core_runtime_tool_capabilities(
         if cli_registry is not None and mcp_registry is not None
         else ()
     )
-    return (*base, *full_workspace, *discovery)
+    artifacts = (
+        build_tool_result_artifact_capabilities(
+            ledger=tool_ledger,
+            workspace_id=workspace_id,
+        )
+        if tool_ledger is not None
+        else ()
+    )
+    return (*base, *full_workspace, *discovery, *artifacts)
 
 
 def _core_surface(

@@ -193,6 +193,8 @@ class SemanticContextMaterializer:
             if provenance is None:
                 raise HostedAgenticLoopError("semantic_block_not_projectable")
             content = getattr(source, "content", None)
+            if provenance == "attachment":
+                self._validate_attachment_projection(context, source, content)
             raw_classification = getattr(source, "classification", None)
             classification = (
                 canonical_classification(raw_classification)
@@ -215,6 +217,32 @@ class SemanticContextMaterializer:
                     source_ref=str(getattr(source, "source_id", "") or ""),
                 )
             )
+
+    @staticmethod
+    def _validate_attachment_projection(context, source, content) -> None:
+        projection_mode = str(
+            getattr(source, "projection_mode", "") or ""
+        )
+        context_policy = getattr(context.binding, "context_policy_snapshot", None)
+        if (
+            projection_mode != "workspace_reference"
+            or not isinstance(content, dict)
+            or content.get("projection")
+            != {
+                "mode": "workspace_reference",
+                "read_capability": "core-capability:filesystem.read",
+            }
+            or not str(content.get("workspace_relative_path") or "").strip()
+            or not context.effective_authority.allowed_capabilities.filesystem_read
+            or "core-capability:filesystem.read"
+            not in context.effective_authority.allowed_tool_handles
+            or (
+                context_policy is not None
+                and context_policy.attachment_projection_mode
+                not in {"workspace_reference", "native_or_reference"}
+            )
+        ):
+            raise HostedAgenticLoopError("attachment_projection_not_supported")
 
     def append_skills(
         self,

@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="7",
+    manifest_version="8",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -146,6 +146,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/tool_full_workspace_schemas.py",
                 "core/runtime/tool_full_workspace_support.py",
                 "core/runtime/tool_process_capabilities.py",
+                "core/runtime/tool_result_artifacts.py",
                 "core/runtime/tool_orchestrator.py",
                 "core/runtime/tool_ledger.py",
                 "core/runtime/tool_models.py",
@@ -222,7 +223,14 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/semantic_tool_blocks.py",
                 "core/runtime/workspace_instructions.py",
                 "core/runtime/hosted_agentic_request.py",
+                "core/runtime/hosted_context_management.py",
+                "core/runtime/hosted_harness_recipes.py",
+                "core/runtime/hosted_provider_runtime.py",
+                "core/runtime/hosted_runtime_registry_builder.py",
                 "core/providers/google_interactions_request.py",
+                "core/providers/hosted_context_compactors.py",
+                "core/providers/hosted_endpoint_preflight.py",
+                "core/providers/openrouter_agentic_catalog.py",
                 "core/providers/openrouter_agentic_request.py",
             ),
             ("core.inter_agent",),
@@ -263,6 +271,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/tool_full_workspace_support.py",
                 "core/runtime/tool_orchestrator.py",
                 "core/runtime/tool_process_capabilities.py",
+                "core/runtime/tool_result_artifacts.py",
             ),
             ("core.runtime",),
         ),
@@ -345,7 +354,7 @@ def compute_certified_tcb_digest(root: Path) -> str:
     if not files:
         raise CapabilityCertificateError("certificate_tcb_artifact_empty")
     digest = hashlib.sha256()
-    digest.update(b"maverick.certified-execution-tcb.v7\x00")
+    digest.update(b"maverick.certified-execution-tcb.v8\x00")
     digest.update(CERTIFIED_EXECUTION_TCB.structure_digest.encode("ascii"))
     digest.update(b"\x00")
     for relative_path in sorted(files):

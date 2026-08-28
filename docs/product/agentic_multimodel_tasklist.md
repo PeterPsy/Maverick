@@ -2,8 +2,8 @@
 
 Status date: 2026-08-28
 
-Target: Phase 4B Full Workspace tool surface implemented; Phase 4C-D
-context and provider-compatibility closure remains open;
+Target: Phase 4A-D implementation closure complete; provider certification,
+security review, canary, and release gates remain open;
 remote agentic release remains **NO-GO**.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v7 records six maintained transitive dependency contracts. The
+- [x] Manifest v8 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v17 / matrix
-  `2026-08-28-r17-p4b-full-workspace-tcb7`
+- [x] Google and OpenRouter suite v18 / matrix
+  `2026-08-28-r18-p4-context-provider-closure-tcb8`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -362,10 +362,49 @@ completion claim.
   new full revisions after compatibility closure. No live probe, certificate,
   remote activation, or Codex profile/artifact change is part of P4B.
 
-## Later parity and release gates — still open
+## Phase 4C-D — context, interaction, and provider closure
 
-- [ ] Phase 4C-D complete context/interaction management and exact provider
-  compatibility closure, then create new certified full-workspace revisions.
+- [x] Immutable context policy `p4-context-v1` adds an independent request
+  reserve, deterministic history threshold and size bounds, bounded summaries,
+  attachment projection, tool-result projection, and steering-delivery mode.
+  Compaction evidence binds source/compacted state, live authority, provenance,
+  policy, omitted/retained counts, and stays redaction-safe in public events.
+- [x] Google uses Core-managed stateless history and OpenRouter uses
+  client-managed history. Both compactors preserve provider-private
+  classification/source metadata and active tool-call/result pairing; consumed
+  results from the current turn remain valid after compaction. Final output,
+  cancellation, and repeated recovery are covered after compaction.
+- [x] Large tool results retain an immutable session/workspace-owned original
+  behind `artifact.read`; providers receive a bounded summary/reference and
+  total-result accounting still charges the original serialized bytes.
+  Cross-session reads, invalid offsets, digest drift, and cleanup fail closed.
+- [x] Attachments are never silently flattened or discarded. They are distinct
+  classified semantic blocks carrying an explicit workspace-relative reference
+  and required `filesystem.read` capability; invalid metadata, unsupported
+  projection, modality, authority, or classification stops before egress.
+- [x] Exact Codex retains native same-turn steering. Hosted recipes explicitly
+  declare no provider-native same-turn delivery and return a visible
+  `safe_next_turn` fallback reason instead of implying that steering occurred.
+- [x] The shared loop selects a data-only harness recipe through the generic
+  provider runtime registry. Profile, certificate, binding, live authority,
+  adapter artifact, semantic compiler, tool contract, context policy, endpoint,
+  model/upstream, reasoning, and fine-grained capability-catalog digests must
+  all match; there is no provider/model branch in shared factory composition.
+- [x] Request preflight runs before egress commit and completion transport.
+  Google final requests must omit `tools`; OpenRouter must prove both live model
+  and ZDR catalog records, `tool_choice:none`, context/completion limits and
+  every translated endpoint parameter, then send `tools: []` and
+  `tool_choice: none` for finalization.
+- [x] Adapter 14, semantic compiler revision 2, Full Workspace contract
+  `codex-baseline-v2`, TCB manifest v8, suite 18, and matrix
+  `2026-08-28-r18-p4-context-provider-closure-tcb8` create new immutable Google
+  revision 22 and OpenRouter revision 21 full-workspace candidates. Historical
+  read-only revisions 21/20 are suspended, never promoted. No live probe,
+  signed certificate, binding, remote activation, or Codex profile/artifact
+  change is part of Phase 4.
+
+## Certification and release gates — still open
+
 - [ ] Run each complete provider manifest on an exact clean deployable commit:
   deterministic fixture, operator-only synthetic live probe, behavioral
   validation, signing, verification, and immutable certificate publication.
@@ -375,7 +414,7 @@ completion claim.
   `docs/security/production_readiness.md` under a separate security review.
 
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false. No remote binding,
-profile, or certificate is enabled by P4B; no Google/OpenRouter session, provider
+profile, or certificate is enabled by P4; no Google/OpenRouter session, provider
 HTTP/SSE request, live probe, real-store containment/migration apply, canary,
 production release, or push is part of this closure. A backend restart after
 the verified commit is an operational code/schema reload only and does not

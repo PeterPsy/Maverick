@@ -87,6 +87,9 @@ class ToolInvocationRecord:
     result_id: str | None = None
     execution_lease_id: str | None = None
     execution_lease_expires_at: datetime | None = None
+    result_artifact_private_ref: str | None = None
+    result_artifact_sha256: str = ""
+    result_artifact_size_bytes: int | None = None
 
 
 @dataclass(frozen=True)

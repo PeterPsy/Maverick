@@ -25,6 +25,8 @@ import core.runtime.hosted_agentic_recovery as hosted_agentic_recovery_module
 import core.runtime.hosted_agentic_state as hosted_agentic_state_module
 import core.runtime.hosted_agentic_stream as hosted_agentic_stream_module
 import core.runtime.hosted_agentic_tool_execution as hosted_agentic_tool_execution_module
+import core.runtime.hosted_context_management as hosted_context_management_module
+import core.runtime.hosted_harness_recipes as hosted_harness_recipes_module
 import core.runtime.hosted_tool_process_registry as hosted_tool_process_registry_module
 import core.runtime.hosted_workspace_shell as hosted_workspace_shell_module
 import core.runtime.hosted_process_output as hosted_process_output_module
@@ -49,6 +51,7 @@ import core.runtime.tool_full_workspace_capabilities as tool_full_workspace_capa
 import core.runtime.tool_full_workspace_schemas as tool_full_workspace_schemas_module
 import core.runtime.tool_full_workspace_support as tool_full_workspace_support_module
 import core.runtime.tool_process_capabilities as tool_process_capabilities_module
+import core.runtime.tool_result_artifacts as tool_result_artifacts_module
 import core.runtime.tool_orchestrator as tool_orchestrator_module
 import core.runtime.workspace_instructions as workspace_instructions_module
 from core.providers.agentic_protocol import (
@@ -98,6 +101,10 @@ from core.runtime.hosted_agentic_stream import (
 from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
 from core.runtime.hosted_agentic_tool_execution import (
     execute_hosted_authorized_tool,
+)
+from core.runtime.hosted_context_management import (
+    manage_hosted_provider_context,
+    validate_hosted_request_context,
 )
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.provider_private_state import ProviderPrivateStateService
@@ -170,6 +177,8 @@ class HostedAgenticLoop:
             hosted_agentic_stream_module,
             hosted_agentic_tool_execution_module,
             hosted_agentic_tool_results_module,
+            hosted_context_management_module,
+            hosted_harness_recipes_module,
             hosted_tool_process_registry_module,
             hosted_workspace_shell_module,
             hosted_process_output_module,
@@ -188,6 +197,7 @@ class HostedAgenticLoop:
             tool_full_workspace_schemas_module,
             tool_full_workspace_support_module,
             tool_process_capabilities_module,
+            tool_result_artifacts_module,
             tool_orchestrator_module,
             provider_step_journal_module,
             semantic_context_blocks_module,
@@ -265,6 +275,7 @@ class HostedAgenticLoop:
         authority = self.authority_refresher(context)
         policy = self.policy_resolver(context)
         provider_runtime = self.provider_runtimes.resolve(context.binding)
+        context_policy = getattr(context.binding, "context_policy_snapshot", None)
         private_state = HostedAgenticStateBridge(
             service=self.private_state_service,
             codec=provider_runtime.private_codec,
@@ -349,6 +360,7 @@ class HostedAgenticLoop:
                         self.actor_context_resolver(context),
                     ),
                     RuntimeToolInvocationOutcome(invocation),
+                    context_policy=context_policy,
                 )
                 tool_results.append(
                     make_agentic_tool_result(
@@ -375,6 +387,17 @@ class HostedAgenticLoop:
                 )
             actor_context = self.actor_context_resolver(effective_context)
             provider_private_state = private_state.read(context, authority)
+            provider_private_state, context_compaction = (
+                manage_hosted_provider_context(
+                    provider_private_state,
+                    context=effective_context,
+                    context_policy=context_policy,
+                    compactor=provider_runtime.context_compactor,
+                    active_tool_result_ids=tuple(
+                        item.provider_tool_call_id for item in tool_results
+                    ),
+                )
+            )
             tool_orchestrator = self.tool_orchestrator_resolver(context, actor_context)
             phase = budget.select_phase(
                 pairing_source=pairing_source,
@@ -402,10 +425,32 @@ class HostedAgenticLoop:
                     max_output_tokens=step_plan.max_output_tokens,
                     request_phase=phase,
                     pairing_source=pairing_source,
+                    context_policy_revision=(
+                        ""
+                        if context_policy is None
+                        else context_policy.revision
+                    ),
+                    context_compaction_evidence_digest=(
+                        ""
+                        if context_compaction is None
+                        else context_compaction.evidence_digest
+                    ),
+                    context_compaction_applied=(
+                        context_compaction is not None
+                        and context_compaction.applied
+                    ),
                 )
                 request = prepared_request.request
+                validate_hosted_request_context(
+                    request,
+                    context_policy=context_policy,
+                    endpoint_input_token_limit=(
+                        budget.policy.max_input_tokens
+                        if provider_runtime.recipe is None
+                        else provider_runtime.recipe.support_flags.input_token_limit
+                    ),
+                )
                 request_lineage_digest = hosted_request_lineage_digest(request)
-                request_control_digest = hosted_request_control_digest(request)
                 self._validate_request_pairing(
                     request,
                     pairing_source=pairing_source,
@@ -427,7 +472,48 @@ class HostedAgenticLoop:
                         phase = "finalization"
                         continue
                     raise
-                request = self.request_builder.commit(prepared_request)
+                endpoint_snapshot_digest = ""
+                if provider_runtime.request_preflight is not None:
+                    try:
+                        endpoint_snapshot = await asyncio.to_thread(
+                            provider_runtime.request_preflight,
+                            request,
+                            credential,
+                        )
+                    except Exception as error:
+                        raise HostedAgenticLoopError(
+                            str(
+                                getattr(
+                                    error,
+                                    "reason_code",
+                                    "provider_endpoint_preflight_failed",
+                                )
+                            )
+                        ) from error
+                    endpoint_snapshot_digest = str(
+                        getattr(endpoint_snapshot, "snapshot_digest", "") or ""
+                    )
+                    if (
+                        len(endpoint_snapshot_digest) != 64
+                        or any(
+                            character not in "0123456789abcdef"
+                            for character in endpoint_snapshot_digest
+                        )
+                    ):
+                        raise HostedAgenticLoopError(
+                            "provider_endpoint_preflight_invalid"
+                        )
+                elif provider_runtime.recipe is not None:
+                    raise HostedAgenticLoopError(
+                        "provider_endpoint_preflight_unavailable"
+                    )
+                request = replace(
+                    self.request_builder.commit(prepared_request),
+                    endpoint_capability_snapshot_digest=(
+                        endpoint_snapshot_digest
+                    ),
+                )
+                request_control_digest = hosted_request_control_digest(request)
                 break
             private_state.persist_request_identity(context, request)
             provider_state_snapshot = self.tool_ledger.store.get_provider_state(
@@ -458,6 +544,18 @@ class HostedAgenticLoop:
                 semantic_projection_compiler_revision=(
                     request.semantic_projection_compiler_revision or None
                 ),
+                context_policy_revision=(
+                    request.context_policy_revision or None
+                ),
+                context_compaction_evidence_digest=(
+                    request.context_compaction_evidence_digest or None
+                ),
+                context_compaction_applied=(
+                    request.context_compaction_applied
+                ),
+                endpoint_capability_snapshot_digest=(
+                    request.endpoint_capability_snapshot_digest or None
+                ),
                 request_phase=phase,
                 request_max_output_tokens=request.max_output_tokens,
                 budget_estimated_input_tokens=reservation.estimated_input_tokens,
@@ -482,6 +580,19 @@ class HostedAgenticLoop:
                         "id": request.semantic_projection_compiler_id,
                         "revision": request.semantic_projection_compiler_revision,
                     },
+                    "context": (
+                        {
+                            "policy_revision": request.context_policy_revision,
+                            **(
+                                {}
+                                if context_compaction is None
+                                else context_compaction.public_payload()
+                            ),
+                        }
+                    ),
+                    "endpoint_capability_snapshot_digest": (
+                        request.endpoint_capability_snapshot_digest
+                    ),
                     "budget": reservation.snapshot.public_payload(),
                 },
             )
@@ -829,7 +940,11 @@ class HostedAgenticLoop:
                         tool_event_payload(outcome),
                     )
                     raise HostedAgenticLoopError("tool_execution_unknown")
-                result, is_error = normalized_tool_result(tool_orchestrator, outcome)
+                result, is_error = normalized_tool_result(
+                    tool_orchestrator,
+                    outcome,
+                    context_policy=context_policy,
+                )
                 tool_event_type = (
                     "runtime.tool_call.completed"
                     if outcome.invocation.state == "succeeded"
@@ -844,6 +959,17 @@ class HostedAgenticLoop:
                         sort_keys=True,
                     ).encode()
                 )
+                original_size = (
+                    outcome.invocation.result_summary.get(
+                        "original_serialized_bytes"
+                    )
+                    if isinstance(outcome.invocation.result_summary, dict)
+                    else None
+                )
+                if isinstance(original_size, int) and not isinstance(
+                    original_size, bool
+                ):
+                    serialized_size = max(serialized_size, original_size)
                 step_journal = self.provider_step_journal.record_tool_result_bytes(
                     step_journal,
                     total_bytes=(

@@ -9,28 +9,6 @@ from core.cli.models import CliInvocationContext
 from core.mcp.models import McpInvocationContext
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.errors import CapabilityCertificateError, ProviderError
-from core.providers.google_interactions_client import (
-    GoogleInteractionsAgenticClient,
-    google_36_flash_request_ceiling_microusd,
-)
-from core.providers.google_interactions_models import (
-    GOOGLE_INTERACTIONS_CODEC_ID,
-    GOOGLE_INTERACTIONS_CODEC_VERSION,
-    GOOGLE_INTERACTIONS_CONTENT_TYPE,
-    GOOGLE_INTERACTIONS_SCHEMA_VERSION,
-)
-from core.providers.google_interactions_state import inspect_google_interaction_state
-from core.providers.openrouter_agentic_client import (
-    OpenRouterAgenticClient,
-    openrouter_deepinfra_v4_flash_request_ceiling_microusd,
-)
-from core.providers.openrouter_agentic_models import (
-    OPENROUTER_AGENTIC_CODEC_ID,
-    OPENROUTER_AGENTIC_CODEC_VERSION,
-    OPENROUTER_AGENTIC_CONTENT_TYPE,
-    OPENROUTER_AGENTIC_SCHEMA_VERSION,
-)
-from core.providers.openrouter_agentic_state import inspect_openrouter_chat_state
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.runtime.authority import (
@@ -46,7 +24,6 @@ from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     HostedContentClassification,
     HostedContentClassifier,
-    HostedProviderPrivateCodec,
 )
 from core.runtime.hosted_agentic_request import (
     HOSTED_TOOL_USE_INSTRUCTION,
@@ -54,11 +31,8 @@ from core.runtime.hosted_agentic_request import (
 )
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
-from core.runtime.hosted_provider_runtime import (
-    GOOGLE_HOSTED_FINALIZATION_POLICY,
-    OPENROUTER_HOSTED_FINALIZATION_POLICY,
-    HostedProviderRuntime,
-    HostedProviderRuntimeRegistry,
+from core.runtime.hosted_runtime_registry_builder import (
+    build_hosted_provider_runtime_registry,
 )
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.semantic_envelope import HostedSemanticEnvelopeCompiler
@@ -72,7 +46,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "13"
+HOSTED_AGENTIC_ADAPTER_VERSION = "14"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -88,7 +62,7 @@ def build_hosted_agentic_engine_adapter(
         or state.agentic_egress_evaluator is None
     ):
         raise RuntimeError("Hosted agentic runtime dependencies are unavailable.")
-    provider_runtimes = _provider_runtimes()
+    provider_runtimes = build_hosted_provider_runtime_registry()
     process_registry = HostedToolProcessRegistry(store=state.runtime_store)
     adapter_holder: dict[str, HostedAgenticEngineAdapter] = {}
 
@@ -172,7 +146,10 @@ def build_hosted_agentic_engine_adapter(
         adapter_id=HOSTED_AGENTIC_ADAPTER_ID,
         adapter_version=HOSTED_AGENTIC_ADAPTER_VERSION,
         loop=loop,
-        composition_components=(build_hosted_agentic_engine_adapter,),
+        composition_components=(
+            build_hosted_agentic_engine_adapter,
+            build_hosted_provider_runtime_registry,
+        ),
     )
     adapter_holder["adapter"] = adapter
     provider_registry.register_agentic_runtime_adapter(adapter)
@@ -192,48 +169,6 @@ def classify_hosted_content_fail_closed(
         "tool_result": "untrusted_tool_output",
     }.get(provenance, "trusted_actor")
     return HostedContentClassification("unclassified", trust)
-
-
-def _provider_runtimes() -> HostedProviderRuntimeRegistry:
-    registry = HostedProviderRuntimeRegistry()
-    registry.register(
-        HostedProviderRuntime(
-            model_provider_id="google-ai-studio",
-            provider_protocol="google-interactions",
-            provider_api_version="v1",
-            client=GoogleInteractionsAgenticClient(state_mode="stateful"),
-            private_codec=HostedProviderPrivateCodec(
-                codec_id=GOOGLE_INTERACTIONS_CODEC_ID,
-                codec_version=GOOGLE_INTERACTIONS_CODEC_VERSION,
-                schema_version=GOOGLE_INTERACTIONS_SCHEMA_VERSION,
-                content_type=GOOGLE_INTERACTIONS_CONTENT_TYPE,
-            ),
-            cost_estimator=google_36_flash_request_ceiling_microusd,
-            finalization_policy=GOOGLE_HOSTED_FINALIZATION_POLICY,
-            private_state_inspector=lambda content: inspect_google_interaction_state(
-                content,
-                mode="stateful",
-            ),
-        )
-    )
-    registry.register(
-        HostedProviderRuntime(
-            model_provider_id="openrouter",
-            provider_protocol="openrouter-chat-completions",
-            provider_api_version="v1",
-            client=OpenRouterAgenticClient(),
-            private_codec=HostedProviderPrivateCodec(
-                codec_id=OPENROUTER_AGENTIC_CODEC_ID,
-                codec_version=OPENROUTER_AGENTIC_CODEC_VERSION,
-                schema_version=OPENROUTER_AGENTIC_SCHEMA_VERSION,
-                content_type=OPENROUTER_AGENTIC_CONTENT_TYPE,
-            ),
-            cost_estimator=openrouter_deepinfra_v4_flash_request_ceiling_microusd,
-            finalization_policy=OPENROUTER_HOSTED_FINALIZATION_POLICY,
-            private_state_inspector=inspect_openrouter_chat_state,
-        )
-    )
-    return registry
 
 
 def _tool_orchestrator(
@@ -292,6 +227,7 @@ def _tool_orchestrator(
                 process_registry=process_registry,
                 cli_registry=cli_registry,
                 mcp_registry=mcp_registry,
+                tool_ledger=ledger,
                 resource_classification_resolver=lambda observation, provenance: (
                     resource_classification_for_observation(
                         workspace_store.get_resource_classification(

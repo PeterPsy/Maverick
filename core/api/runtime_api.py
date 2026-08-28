@@ -2039,8 +2039,9 @@ def _submit_runtime_turn_response(
         return _runtime_profile_upgrade_response(start_response, error)
     session = admission.session
     with runtime_message_admission_handoff(session.session_id):
+        steering_fallback_reason = None
         if delivery_policy == "steer_or_queue":
-            steer_response = _runtime_message_steer_response(
+            steer_response, steering_fallback_reason = _runtime_message_steer_response(
                 state,
                 context,
                 session,
@@ -2061,6 +2062,7 @@ def _submit_runtime_turn_response(
             reserved_turn_id=reserved_turn_id,
             received_perf_counter=received_perf_counter,
             release_claim_on_failure=release_claim_on_failure,
+            steering_fallback_reason=steering_fallback_reason,
         )
 
 
@@ -2099,7 +2101,7 @@ def _runtime_message_steer_response(
     start_response: StartResponse,
     *,
     start_path,
-) -> list[bytes] | None:
+) -> tuple[list[bytes] | None, str | None]:
     try:
         materialized_references = (
             materialize_runtime_app_references_with_metrics(
@@ -2114,7 +2116,7 @@ def _runtime_message_steer_response(
             else []
         )
     except Exception:
-        return None
+        return None, "same_turn_steering_preparation_failed"
     attempt = attempt_runtime_message_steer(
         state,
         session=session,
@@ -2127,9 +2129,20 @@ def _runtime_message_steer_response(
         invoked_skill_ids=draft.invoked_skill_ids,
     )
     if attempt.status == "fallback":
-        return None
+        return (
+            None,
+            attempt.reason or "same_turn_steering_unavailable",
+        )
     if attempt.status == "pending" and attempt.claim is not None:
-        return _pending_client_message_claim_response(state, context, attempt.claim, start_response)
+        return (
+            _pending_client_message_claim_response(
+                state,
+                context,
+                attempt.claim,
+                start_response,
+            ),
+            None,
+        )
     if attempt.status == "delivery_uncertain":
         payload: dict[str, object] = {
             "error": "runtime_message_delivery_uncertain",
@@ -2144,21 +2157,30 @@ def _runtime_message_steer_response(
                 "session_id": attempt.claim.session_id,
                 "turn_id": attempt.claim.turn_id,
             }
-        return json_response(start_response, payload, status="409 Conflict")
+        return (
+            json_response(start_response, payload, status="409 Conflict"),
+            None,
+        )
     if attempt.turn is None:
-        return None
+        return (
+            None,
+            attempt.reason or "same_turn_steering_unavailable",
+        )
     response_session = state.runtime_store.get_session(session.session_id)
-    return json_response(
-        start_response,
-        _runtime_turn_response_payload(
-            state,
-            context,
-            session=response_session,
-            turn=attempt.turn,
-            events=list(attempt.events),
-            delivery="steered",
+    return (
+        json_response(
+            start_response,
+            _runtime_turn_response_payload(
+                state,
+                context,
+                session=response_session,
+                turn=attempt.turn,
+                events=list(attempt.events),
+                delivery="steered",
+            ),
+            status="202 Accepted",
         ),
-        status="202 Accepted",
+        None,
     )
 
 
@@ -2322,6 +2344,7 @@ def _queue_runtime_turn_response(
     reserved_turn_id: str | None = None,
     received_perf_counter: float | None = None,
     release_claim_on_failure: RuntimeClientMessageClaim | None = None,
+    steering_fallback_reason: str | None = None,
 ):
     timing = draft.timing
     client_message_id = draft.client_message_id
@@ -2454,18 +2477,21 @@ def _queue_runtime_turn_response(
     )
     if post_queue_event is not None:
         events = [*events, post_queue_event]
-    return json_response(
-        start_response,
-        _runtime_turn_response_payload(
-            state,
-            context,
-            session=response_session,
-            turn=turn,
-            events=events,
-            delivery="queued",
-        ),
-        status=status,
+    payload = _runtime_turn_response_payload(
+        state,
+        context,
+        session=response_session,
+        turn=turn,
+        events=events,
+        delivery="queued",
     )
+    fallback_reason = str(steering_fallback_reason or "").strip()
+    if fallback_reason:
+        payload["steering_fallback"] = {
+            "delivery": "safe_next_turn",
+            "reason": fallback_reason,
+        }
+    return json_response(start_response, payload, status=status)
 
 def _handle_session_cleanup(
     state: PlatformState,

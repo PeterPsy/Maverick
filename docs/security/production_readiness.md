@@ -90,8 +90,9 @@ containment, containment-first fault injection, and private final-output outbox
 replay with one provider request and one terminal event identity. Phase-3
 fixtures additionally prove separate restart-safe step/tool accounting,
 step/output/cost/deadline reserves, tool-less Google/OpenRouter final payloads,
-maximum-result cost coverage, staged request-specific preflight with tool-less
-fallback, deadline-fenced slow tools, request-scoped OpenRouter finalization,
+complete-terminal-request cost coverage, staged request-specific preflight with
+tool-less fallback, deadline-fenced slow handlers and result persistence,
+request-scoped OpenRouter finalization,
 whitespace rejection, journaled `budget_denied` final calls, and no more than
 one finalization recovery. The operator
 runbook documents canary,

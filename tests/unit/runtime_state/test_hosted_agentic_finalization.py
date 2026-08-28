@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import time
 import unittest
+from unittest.mock import patch
 
 from core.providers.agentic_protocol import HOSTED_FINALIZATION_INSTRUCTION
 from core.runtime.execution import execute_runtime_turn
@@ -313,6 +315,64 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
         self.assertEqual(
             invocation.failure_reason,
             "agent_finalization_time_reserve_reached",
+        )
+        self.assertIsNotNone(invocation.result_id)
+        self.assertIsNone(invocation.result_private_ref)
+        self.assertEqual(
+            client.requests[-1].tool_results[0].content,
+            b'{"error":"agent_finalization_time_reserve_reached"}',
+        )
+        self.assertFalse(
+            any(event.event_type == "runtime.error" for event in events)
+        )
+
+    def test_slow_result_persistence_cannot_commit_success_after_deadline(self) -> None:
+        self.harness.policy = replace(
+            self.harness.policy,
+            max_wall_time_seconds=0.2,
+        )
+        client = DeterministicFakeAgenticClient(
+            tool_name=self.harness.read_tool_name
+        )
+        adapter = self.harness.adapter(
+            client,
+            finalization_policy=HostedFinalizationPolicy(
+                exploration_max_output_tokens=128,
+                finalization_max_output_tokens=128,
+                finalization_cost_reserve_microusd_per_attempt=0,
+                finalization_time_reserve_seconds_per_attempt=0.05,
+                max_recovery_attempts=0,
+            ),
+        )
+        private_store = self.harness.orchestrator.ledger.private_payload_store
+        original_put = private_store.put
+
+        def delayed_result_put(**kwargs):
+            if kwargs.get("private_ref") is None:
+                time.sleep(0.15)
+            return original_put(**kwargs)
+
+        with patch.object(private_store, "put", side_effect=delayed_result_put):
+            result, events = self.execute(client, adapter=adapter)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(
+            [request.request_phase for request in client.requests],
+            ["exploration", "finalization"],
+        )
+        invocation = self.harness.store.list_tool_invocations(
+            session_id="session-hosted"
+        )[0]
+        self.assertEqual(invocation.state, "failed")
+        self.assertEqual(
+            invocation.failure_reason,
+            "agent_finalization_time_reserve_reached",
+        )
+        self.assertIsNotNone(invocation.result_id)
+        self.assertIsNone(invocation.result_private_ref)
+        self.assertEqual(
+            client.requests[-1].tool_results[0].content,
+            b'{"error":"agent_finalization_time_reserve_reached"}',
         )
         self.assertFalse(
             any(event.event_type == "runtime.error" for event in events)

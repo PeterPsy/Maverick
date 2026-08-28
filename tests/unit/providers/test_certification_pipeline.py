@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "6907325ea5e1ecf24d0481fdf47cebce5459101b475df2d1733ce459fe04b8b3"
+                "e1786a3763f2f2703e3d3f0b940012b0071b46937102b9fe9e25d94df2bbe3ce"
             ),
             "openrouter": (
-                "fec4c83663fabf797210410e01daf4408a950d607ef829138ae09fad10ce135d"
+                "9447e7f2188f2b3e4a922d817fc702a1116e6c1d65c4f837ae35ab077188e765"
             ),
         }
         for manifest in (
@@ -192,7 +192,7 @@ class CertificationPipelineTest(unittest.TestCase):
             with self.subTest(provider_id=manifest.provider_id):
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-08-28-r13-p3-review-tcb5",
+                    "2026-08-28-r14-p3-review2-tcb5",
                 )
                 self.assertEqual(
                     manifest.digest,

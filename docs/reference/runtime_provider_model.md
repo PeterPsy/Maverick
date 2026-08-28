@@ -569,11 +569,12 @@ tighten but never loosen it.
 Each hosted adapter pins one normal finalization attempt and at most one
 recovery, including per-attempt output, cost, and deadline capacity. Google and
 OpenRouter currently use 2,048 output tokens and 20 seconds per attempt, with
-200,000 and 20,000 micro-USD respectively. Those values cover the conservative
-request estimator when one result reaches the profile's 262,144-byte per-result
-limit. Exploration stops before consuming those protected resources. A final
-request whose conservative cost estimate is larger than its per-attempt
-allocation is rejected before transport. Decoded streamed output also has a
+550,000 and 35,000 micro-USD respectively. Those values cover the conservative
+request estimator for every complete terminal projection inside the hosted
+262,144-token input ceiling, including retained context, provider-private state,
+and a maximum-size result. Exploration stops before consuming those protected
+resources. A final request whose conservative cost estimate is larger than its
+per-attempt allocation is rejected before transport. Decoded streamed output also has a
 conservative byte ceiling, so a provider cannot bypass the request limit by
 delaying usage events.
 
@@ -584,10 +585,11 @@ the eligible request. If an exploration candidate would cross the protected
 cost reserve, Core discards it and evaluates one tool-less finalization
 candidate instead; no exploration egress decision or request journal is left
 behind. Synchronous tool dispatch runs behind a deadline fence before the
-protected terminal window. A timeout persists a failed read result through CAS
-and prevents a late worker result from becoming authoritative, allowing the
-paired final request to proceed; a non-read effect remains
-`execution_unknown` and fails closed.
+protected terminal window. A timeout CAS-persists a deterministic failed read
+result in the invocation ledger without waiting for private result storage;
+success rechecks the lease after its private write, so a late worker cannot
+become authoritative and the paired final request can proceed. A non-read
+effect remains `execution_unknown` and fails closed.
 
 Google and OpenRouter preserve every call, including later OpenRouter indices
 and calls decoded before a terminal stream error. Parallel execution remains

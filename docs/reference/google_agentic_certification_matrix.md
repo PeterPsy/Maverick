@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-28
-Matrix revision: `2026-08-28-r13-p3-review-tcb5`
+Matrix revision: `2026-08-28-r14-p3-review2-tcb5`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==9`
+Adapter: `maverick-hosted-tool-loop==10`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==9`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `17` (revision `16` suspended) |
+| Immutable profile revision | `18` (revision `17` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -22,8 +22,8 @@ Adapter: `maverick-hosted-tool-loop==9`
 | Private codec | `google-gemini-interactions@3`, schema `3`; no silent migration |
 | Reasoning levels | `high`; deployed default `high` |
 | Synthetic live probe output budget | 2,048 tokens per request, including thinking tokens |
-| Finalization reserve | one 2,048-token / 200,000-micro-USD / 20-second final request plus one equal recovery |
-| Turn cost ceiling | 500,000 micro-USD; 400,000 remains protected for the two terminal attempts |
+| Finalization reserve | one 2,048-token / 550,000-micro-USD / 20-second final request plus one equal recovery |
+| Turn cost ceiling | 1,200,000 micro-USD; 1,100,000 remains protected for the two terminal attempts |
 | Final request | exact Core finalization instruction; `tools` omitted |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
@@ -66,7 +66,7 @@ Primary references:
 | Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
 | Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
-| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a maximum admitted result; request-specific staged preflight with tool-less fallback before egress commit; deadline-fenced tool execution; final payload omits tools; exact final instruction; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
+| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a complete terminal request at the hosted input ceiling; request-specific staged preflight with tool-less fallback before egress commit; deadline-fenced handler and result persistence; final payload omits tools; exact final instruction; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
 | Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
@@ -162,5 +162,13 @@ closure. It stages candidate egress decisions until request-specific cost
 eligibility succeeds, falls back from an unaffordable exploration request to a
 tool-less final request, fences synchronous tool execution before protected
 terminal time, and reserves enough cost for a maximum policy-admitted tool
-result. No live or behavioral run has been performed; revision 17 remains a
-contained, uncertified preview.
+result. No live or behavioral run was performed; revision 17 is suspended and
+uncertified.
+
+Revision 18 pins adapter 10, suite 14, matrix
+`2026-08-28-r14-p3-review2-tcb5`, and TCB manifest v5 for the second Phase-3
+review closure. Timeout publishes the deterministic terminal error by ledger
+CAS before private result I/O, success rechecks its lease after that I/O, and
+the per-attempt allocation covers a complete terminal request at the hosted
+input ceiling. No live or behavioral run has been performed; revision 18
+remains a contained, uncertified preview.

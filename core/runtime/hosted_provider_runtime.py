@@ -15,19 +15,19 @@ from core.runtime.hosted_agentic_models import (
 from core.runtime.remote_agentic_admission import require_remote_agentic_dispatch
 
 
-# These reserves exceed each pinned estimator for a 262,144-byte tool result,
-# the 2,048-token terminal output ceiling, and ordinary request framing.
+# These reserves exceed each pinned estimator for every terminal request whose
+# complete byte projection remains within the 262,144-token input ceiling.
 GOOGLE_HOSTED_FINALIZATION_POLICY = HostedFinalizationPolicy(
     exploration_max_output_tokens=2_048,
     finalization_max_output_tokens=2_048,
-    finalization_cost_reserve_microusd_per_attempt=200_000,
+    finalization_cost_reserve_microusd_per_attempt=550_000,
     finalization_time_reserve_seconds_per_attempt=20.0,
     max_recovery_attempts=1,
 )
 OPENROUTER_HOSTED_FINALIZATION_POLICY = HostedFinalizationPolicy(
     exploration_max_output_tokens=2_048,
     finalization_max_output_tokens=2_048,
-    finalization_cost_reserve_microusd_per_attempt=20_000,
+    finalization_cost_reserve_microusd_per_attempt=35_000,
     finalization_time_reserve_seconds_per_attempt=20.0,
     max_recovery_attempts=1,
 )

@@ -345,9 +345,9 @@ class HostedAgenticRecovery:
             for proposal_id in record.proposal_ids
         )
         if any(
-            item.result_private_ref is None
-            or item.result_id is None
+            item.result_id is None
             or item.disposition_id is None
+            or not _has_pairable_tool_result(item)
             for item in invocations
         ):
             raise _RecoveryAmbiguous(
@@ -643,7 +643,7 @@ class HostedAgenticRecovery:
                 "authorized",
             }:
                 invocation = self.tool_ledger.cancel_before_effect(invocation)
-            elif invocation.result_private_ref is None and invocation.state in {
+            elif invocation.result_id is None and invocation.state in {
                 "denied",
                 "failed",
                 "cancelled",
@@ -663,14 +663,25 @@ class HostedAgenticRecovery:
                 record,
                 invocation.disposition_id,
             )
-            if invocation.result_id is None or invocation.result_private_ref is None:
+            if (
+                invocation.result_id is None
+                or not _has_pairable_tool_result(invocation)
+            ):
                 raise _RecoveryAmbiguous(
                     "provider_pairing_ambiguous",
                     "tool_result_missing",
                     record,
                 )
             record = self.journal.add_result(record, invocation.result_id)
-            result = self.tool_ledger.load_result(invocation)
+            result = (
+                self.tool_ledger.load_result(invocation)
+                if invocation.result_private_ref is not None
+                else {
+                    "error": (
+                        invocation.failure_reason or f"tool_{invocation.state}"
+                    )
+                }
+            )
             total_result_bytes += len(
                 json.dumps(
                     result,
@@ -1297,6 +1308,14 @@ class HostedAgenticRecovery:
             except Exception:
                 continue
         return False
+
+
+def _has_pairable_tool_result(invocation: ToolInvocationRecord) -> bool:
+    if invocation.result_private_ref is not None:
+        return True
+    return invocation.state in {"failed", "execution_unknown"} and bool(
+        invocation.failure_reason
+    )
 
 
 __all__ = ["HostedAgenticRecovery", "HostedRecoveryResult"]

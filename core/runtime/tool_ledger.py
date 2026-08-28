@@ -296,10 +296,17 @@ class RuntimeToolLedger:
         result_summary: dict[str, object] | None = None,
         result_classification: CanonicalSourceClassification | None = None,
         resolution_status: ToolResolutionStatus | None = None,
+        deterministic_error_result: bool = False,
         now: datetime | None = None,
     ) -> ToolInvocationRecord:
         if state not in _TRANSITIONS[record.state]:
             raise RuntimeToolError("tool_state_transition_invalid", f"{record.state}->{state}")
+        if deterministic_error_result and (
+            state not in {"failed", "execution_unknown"}
+            or not failure_reason
+            or result_private_ref is not None
+        ):
+            raise RuntimeToolError("tool_result_invalid")
         timestamp = now or datetime.now(tz=UTC)
         effective_resolution = resolution_status or _resolution_for_state(
             state,
@@ -321,7 +328,9 @@ class RuntimeToolLedger:
                 )
             )
         result_id = record.result_id
-        if result_id is None and result_private_ref is not None:
+        if result_id is None and (
+            result_private_ref is not None or deterministic_error_result
+        ):
             result_id = str(
                 uuid5(
                     NAMESPACE_URL,
@@ -381,7 +390,7 @@ class RuntimeToolLedger:
             ),
             result_persisted_at=(
                 timestamp
-                if result_private_ref is not None
+                if result_private_ref is not None or deterministic_error_result
                 else record.result_persisted_at
             ),
             result_id=result_id,

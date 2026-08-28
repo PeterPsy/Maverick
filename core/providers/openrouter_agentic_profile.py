@@ -25,9 +25,9 @@ from core.providers.store import ProviderStore
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "16"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "17"
 OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
 )
 OPENROUTER_CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
 OPENROUTER_DEFAULT_REASONING_EFFORT = "high"
@@ -47,7 +47,7 @@ def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
         max_total_tool_result_bytes=524_288,
         max_input_tokens=262_144,
         max_output_tokens=16_384,
-        max_estimated_cost_microusd=50_000,
+        max_estimated_cost_microusd=80_000,
         allowed_surface_kinds=("core-capability",),
         tool_handle_mode="exact",
         allowed_tool_handles=(
@@ -95,7 +95,7 @@ def ensure_openrouter_agentic_preview_profile(
         provider_protocol="openrouter-chat-completions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==9",
+        adapter_version_constraint="==10",
         routing_constraint=openrouter_agentic_routing_constraint(),
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,

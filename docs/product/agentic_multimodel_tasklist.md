@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v13 / matrix
-  `2026-08-28-r13-p3-review-tcb5`
+- [x] Google and OpenRouter suite v14 / matrix
+  `2026-08-28-r14-p3-review2-tcb5`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -235,9 +235,11 @@ completion claim.
   input/output/cost, and conservative missing-usage reservations from
   provider-step journal schema v3.
 - [x] Each hosted adapter pins a finalization policy. Google reserves two
-  2,048-token / 200,000-micro-USD / 20-second attempts; OpenRouter reserves two
-  2,048-token / 20,000-micro-USD / 20-second attempts. Each cost allocation
-  covers the real conservative estimator with a maximum admitted tool result.
+  2,048-token / 550,000-micro-USD / 20-second attempts; OpenRouter reserves two
+  2,048-token / 35,000-micro-USD / 20-second attempts. Each cost allocation
+  covers the real conservative estimator for a complete terminal request at
+  the hosted input ceiling, including retained context/provider state and a
+  maximum admitted tool result.
   The second attempt is the
   sole permitted recovery. The live profile ceiling must retain the current
   final attempt plus any future recovery before dispatch.
@@ -260,10 +262,11 @@ completion claim.
   resource reaches its reserve—the next request likewise has an empty Core
   catalog and a final trusted system instruction placed last.
 - [x] Hosted synchronous tool dispatch has a pre-terminal deadline and
-  cancellation control. A slow read is CAS-fenced with an error result before
-  the reserve and cannot overwrite that disposition when it returns late;
-  finalization proceeds with the paired error. Ambiguous non-read effects remain
-  `execution_unknown` and quarantine fail closed.
+  cancellation control. A slow read is CAS-fenced with a deterministic ledger
+  error before any private result write; success checks the deadline again after
+  that write and cannot overwrite the terminal disposition when it returns
+  late. Finalization proceeds with the paired error. Ambiguous non-read effects
+  remain `execution_unknown` and quarantine fail closed.
 - [x] OpenRouter's finalization instruction is appended only to the current wire
   payload. It is absent from the encrypted durable history, so a later
   exploration turn receives tools and no stale closed-catalog instruction.

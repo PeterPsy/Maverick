@@ -7,7 +7,6 @@ import unittest
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.agentic_protocol import (
     AgenticModelRequest,
-    AgenticProviderPrivateState,
     AgenticRequestContentBlock,
     AgenticToolResult,
     AgenticUsage,
@@ -22,11 +21,18 @@ from core.providers.google_interactions_client import (
 from core.providers.openrouter_agentic_client import (
     openrouter_deepinfra_v4_flash_request_ceiling_microusd,
 )
+from core.providers.openrouter_agentic_state import (
+    encode_openrouter_chat_state,
+    initial_openrouter_chat_state,
+)
 from core.providers.openrouter_agentic_profile import (
     openrouter_agentic_preview_policy,
     openrouter_agentic_routing_constraint,
 )
-from core.runtime.hosted_agentic_budget import HostedAgenticBudget
+from core.runtime.hosted_agentic_budget import (
+    HostedAgenticBudget,
+    estimate_hosted_request_tokens,
+)
 from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     HostedFinalizationPolicy,
@@ -118,21 +124,32 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                     finalization.reserved_time_seconds,
                 )
 
-    def test_production_cost_reserves_cover_a_maximum_allowed_tool_result(self) -> None:
+    def test_production_cost_reserves_cover_reachable_terminal_requests(self) -> None:
         cases = (
             (
                 google_agentic_preview_policy(),
                 GOOGLE_HOSTED_FINALIZATION_POLICY,
                 google_interactions_routing_constraint(),
                 google_36_flash_request_ceiling_microusd,
-                False,
+                160_000,
+                None,
+                200_000,
             ),
             (
                 openrouter_agentic_preview_policy(),
                 OPENROUTER_HOSTED_FINALIZATION_POLICY,
                 openrouter_agentic_routing_constraint(),
                 openrouter_deepinfra_v4_flash_request_ceiling_microusd,
-                True,
+                250_000,
+                encode_openrouter_chat_state(
+                    replace(
+                        initial_openrouter_chat_state(),
+                        history=(
+                            {"role": "user", "content": "x" * 250_000},
+                        ),
+                    )
+                ),
+                20_000,
             ),
         )
         for (
@@ -140,7 +157,9 @@ class HostedAgenticBudgetTest(unittest.TestCase):
             finalization,
             routing,
             estimator,
-            carries_prior_result,
+            context_bytes,
+            provider_private_state,
+            previous_reserve,
         ) in cases:
             with self.subTest(routing=routing.endpoint_id):
                 prefix = b'{"value":"'
@@ -151,22 +170,23 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                     * (policy.max_tool_result_bytes - len(prefix) - len(suffix))
                     + suffix
                 )
-                request = replace(
+                exploration = replace(
                     self.request,
                     routing_constraint=routing,
+                    content_blocks=(
+                        replace(
+                            self.request.content_blocks[0],
+                            content=b"x" * context_bytes,
+                        ),
+                    ),
+                    request_phase="exploration",
+                    max_output_tokens=finalization.exploration_max_output_tokens,
+                )
+                request = replace(
+                    exploration,
                     request_phase="finalization",
                     max_output_tokens=finalization.finalization_max_output_tokens,
-                    provider_private_state=(
-                        AgenticProviderPrivateState(
-                            codec_id="fixture-codec",
-                            codec_version="1",
-                            schema_version="1",
-                            content_type="application/json",
-                            content=b"x" * policy.max_tool_result_bytes,
-                        )
-                        if carries_prior_result
-                        else None
-                    ),
+                    provider_private_state=provider_private_state,
                     tool_results=(
                         AgenticToolResult(
                             provider_tool_call_id="call-max-result",
@@ -177,10 +197,61 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                         ),
                     ),
                 )
+                budget = HostedAgenticBudget(
+                    policy,
+                    finalization,
+                    monotonic=_Clock(),
+                )
+                budget.begin_step(
+                    exploration,
+                    estimator(exploration),
+                    phase="exploration",
+                )
+                budget.complete_step()
 
+                self.assertGreater(estimator(request), previous_reserve)
                 self.assertLessEqual(
+                    budget.accounted_input_tokens
+                    + estimate_hosted_request_tokens(request),
+                    policy.max_input_tokens,
+                )
+                budget.begin_step(
+                    request,
                     estimator(request),
+                    phase="finalization",
+                )
+                maximal_request = replace(
+                    request,
+                    content_blocks=(
+                        replace(
+                            request.content_blocks[0],
+                            content=(
+                                b"x"
+                                * (
+                                    policy.max_input_tokens * 4
+                                    - len(maximum_result)
+                                )
+                            ),
+                        ),
+                    ),
+                    provider_private_state=None,
+                )
+                self.assertEqual(
+                    estimate_hosted_request_tokens(maximal_request),
+                    policy.max_input_tokens,
+                )
+                self.assertLessEqual(
+                    estimator(maximal_request),
                     finalization.finalization_cost_reserve_microusd_per_attempt,
+                )
+                HostedAgenticBudget(
+                    policy,
+                    finalization,
+                    monotonic=_Clock(),
+                ).begin_step(
+                    maximal_request,
+                    estimator(maximal_request),
+                    phase="finalization",
                 )
                 self.assertLessEqual(
                     finalization.reserved_cost_microusd,

@@ -526,6 +526,7 @@ class RuntimeToolOrchestrator:
                 encoded=encoded,
                 result_summary=summary,
                 result_classification=classification,
+                control=control,
             )
         except RuntimeToolError as error:
             state = (
@@ -557,6 +558,7 @@ class RuntimeToolOrchestrator:
         encoded: bytes,
         result_summary: dict[str, object],
         result_classification,
+        control: RuntimeToolExecutionControl | None,
     ) -> ToolInvocationRecord:
         private_ref = self.ledger.private_payload_store.put(
             workspace_id=executing.workspace_id,
@@ -564,6 +566,8 @@ class RuntimeToolOrchestrator:
             payload=encoded,
         )
         try:
+            if control is not None:
+                control.check()
             return self.ledger.transition(
                 executing,
                 "succeeded",
@@ -583,7 +587,7 @@ class RuntimeToolOrchestrator:
                 "failed",
                 "cancelled",
                 "execution_unknown",
-            } and current.result_private_ref is not None:
+            } and current.result_id is not None:
                 return current
             raise
         except Exception:
@@ -608,6 +612,48 @@ class RuntimeToolOrchestrator:
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8")
+        if reason_code not in {
+            "agent_finalization_time_reserve_reached",
+            "runtime_cancelled",
+        }:
+            return self._persist_private_execution_failure(
+                executing,
+                state=state,
+                reason_code=reason_code,
+                encoded=encoded,
+            )
+        try:
+            return self.ledger.transition(
+                executing,
+                state,
+                failure_reason=reason_code,
+                result_summary={
+                    "root_type": "object",
+                    "field_count": 1,
+                    "serialized_bytes": len(encoded),
+                    "is_error": True,
+                },
+                deterministic_error_result=True,
+            )
+        except RuntimeToolRevisionError:
+            current = self.ledger.store.get_tool_invocation(executing.invocation_id)
+            if current.state in {
+                "succeeded",
+                "failed",
+                "cancelled",
+                "execution_unknown",
+            } and current.result_id is not None:
+                return current
+            raise
+
+    def _persist_private_execution_failure(
+        self,
+        executing: ToolInvocationRecord,
+        *,
+        state,
+        reason_code: str,
+        encoded: bytes,
+    ) -> ToolInvocationRecord:
         private_ref = self.ledger.private_payload_store.put(
             workspace_id=executing.workspace_id,
             session_id=executing.session_id,
@@ -638,7 +684,7 @@ class RuntimeToolOrchestrator:
                 "failed",
                 "cancelled",
                 "execution_unknown",
-            } and current.result_private_ref is not None:
+            } and current.result_id is not None:
                 return current
             raise
         except Exception:

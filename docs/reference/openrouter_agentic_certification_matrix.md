@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-28
-Matrix revision: `2026-08-28-r13-p3-review-tcb5`
+Matrix revision: `2026-08-28-r14-p3-review2-tcb5`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==9`
+Adapter: `maverick-hosted-tool-loop==10`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==9`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `16` (revision `15` suspended) |
+| Immutable profile revision | `17` (revision `16` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -26,8 +26,8 @@ Adapter: `maverick-hosted-tool-loop==9`
 | Mixed response handling | provisional text plus one tool call is retained privately and continued |
 | Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
-| Finalization reserve | one 2,048-token / 20,000-micro-USD / 20-second final request plus one equal recovery |
-| Turn cost ceiling | 50,000 micro-USD; 40,000 remains protected for the two terminal attempts |
+| Finalization reserve | one 2,048-token / 35,000-micro-USD / 20-second final request plus one equal recovery |
+| Turn cost ceiling | 80,000 micro-USD; 70,000 remains protected for the two terminal attempts |
 | Final request | exact Core finalization instruction; `tools: []`; `tool_choice: none` |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
 | Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
@@ -100,7 +100,7 @@ Primary references:
 | Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
 | Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
-| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a maximum admitted result; request-specific staged preflight with tool-less fallback before egress commit; deadline-fenced tool execution; `tools: []` plus `tool_choice: none`; exact request-scoped final instruction after paired results; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
+| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a complete terminal request at the hosted input ceiling; request-specific staged preflight with tool-less fallback before egress commit; deadline-fenced handler and result persistence; `tools: []` plus `tool_choice: none`; exact request-scoped final instruction after paired results; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
 | Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
 | Outage after acceptance | terminal normalized failure with no blind retry | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
@@ -186,7 +186,15 @@ later turn's private history; candidate egress decisions remain staged until
 request-specific cost eligibility succeeds; unaffordable exploration falls
 back to tool-less finalization; synchronous tools are deadline-fenced; and the
 cost reserve covers a maximum policy-admitted result. No live or behavioral
-run has been performed; revision 16 remains a contained, uncertified preview.
+run was performed; revision 16 is suspended and uncertified.
+
+Revision 17 pins adapter 10, suite 14, matrix
+`2026-08-28-r14-p3-review2-tcb5`, and TCB manifest v5 for the second Phase-3
+review closure. Timeout publishes the deterministic terminal error by ledger
+CAS before private result I/O, success rechecks its lease after that I/O, and
+the per-attempt allocation covers a complete terminal request at the hosted
+input ceiling. No live or behavioral run has been performed; revision 17
+remains a contained, uncertified preview.
 
 ## Fail-closed conditions
 

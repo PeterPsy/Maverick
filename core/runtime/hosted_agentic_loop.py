@@ -731,7 +731,7 @@ class HostedAgenticLoop:
                     "cancelled",
                     "expired",
                     "execution_unknown",
-                } and outcome.invocation.result_private_ref is None:
+                } and outcome.invocation.result_id is None:
                     outcome = RuntimeToolInvocationOutcome(
                         self.tool_ledger.attach_terminal_result(outcome.invocation)
                     )

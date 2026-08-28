@@ -16,9 +16,10 @@ The Phase-3 finalization amendment was implemented on 2026-08-27: provider-step
 and tool-call budgets are separate and restart-safe, two terminal attempts keep
 step/output/cost/deadline reserves, final requests are tool-less, and an
 unexpected finalization call has exactly one denied-and-paired recovery.
-The 2026-08-28 review amendment makes terminal egress request-transactional,
-covers maximum admitted results in the cost reserve, deadline-fences synchronous
-tool execution, and keeps OpenRouter finalization instructions request-scoped.
+The 2026-08-28 review amendments make terminal egress request-transactional,
+cover complete terminal projections in the cost reserve, deadline-fence both
+synchronous tool execution and slow result persistence, and keep OpenRouter
+finalization instructions request-scoped.
 Remote agentic execution nevertheless remains **NO-GO**:
 the availability flag is false and no remote profile, binding, certificate,
 behavioral evidence, canary, or production gate is enabled. Codex agentic and
@@ -257,7 +258,7 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v13 manifests contain both
+publication. Google and OpenRouter suite-v14 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
@@ -437,7 +438,8 @@ keeps the conservative reservation. An in-budget proposal and its tool charge
 share one journal CAS; provider usage is durable before its public usage event. A
 terminal request whose certified cost ceiling exceeds its per-attempt
 allocation is rejected before transport. Per-attempt allocations cover the
-provider estimator with one maximum policy-admitted tool result.
+provider estimator for a complete terminal request at the hosted input ceiling,
+including retained context, provider-private state, and admitted tool results.
 
 Before catalog materialization, Core rechecks effective admission and credential
 availability. Per-block projection then stages deterministic egress decisions
@@ -453,9 +455,11 @@ instruction from durable history. Both codecs reject a non-empty final catalog,
 missing/modified instruction, or incoherent phase before transport.
 
 Synchronous tool surfaces execute behind a pre-terminal deadline and
-cancellation fence. Timeout CAS-publishes a failed read result before pairing;
-the late worker cannot overwrite it. Non-read effects that cross the boundary
-remain `execution_unknown` rather than being paired as safe completion.
+cancellation fence. Timeout CAS-publishes a deterministic failed read result
+directly in the invocation ledger before any optional private-payload I/O; a
+slow success write is rechecked after that I/O and cannot overwrite the fence.
+Non-read effects that cross the boundary remain `execution_unknown` rather than
+being paired as safe completion.
 
 An empty or whitespace-only provider final is an explicit invalid outcome, not
 a successful turn: its staged state is rolled back to the previous commit and
@@ -509,9 +513,9 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 17
-and OpenRouter revision 16, both bound to
-`maverick-hosted-tool-loop==9`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 18
+and OpenRouter revision 17, both bound to
+`maverick-hosted-tool-loop==10`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.

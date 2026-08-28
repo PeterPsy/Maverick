@@ -238,14 +238,17 @@ recovery. Provider requests and tool proposals use separate durable counters;
 journal schema v3 restores request reservations, usage, tool charges, and
 result bytes after restart. Proposal and accepted charge share one CAS; a
 terminal request above its certified per-attempt cost allocation fails before
-transport, and each allocation covers a maximum policy-admitted tool result.
+transport, and each allocation covers a complete request at the hosted input
+ceiling, including retained context/provider state and admitted tool results.
 Live policy only narrows. Required credentials and coarse eligibility are
 checked before catalog projection; per-request egress decisions remain staged
 until the real provider-specific estimator fits. An exploration candidate that
 crosses the reserve is discarded before egress commit and replaced by a
 tool-less finalization candidate. Synchronous read tools are deadline-fenced
-before protected terminal time, and a late result cannot win the invocation
-CAS; ambiguous non-read effects remain `execution_unknown`. Once a reserve
+before protected terminal time; timeout publishes a deterministic ledger result
+without private-payload I/O, and success rechecks its lease after a slow private
+write, so a late result cannot win the invocation CAS. Ambiguous non-read
+effects remain `execution_unknown`. Once a reserve
 boundary is reached, Core sends an empty tool catalog with an exact trusted
 final instruction. Google omits `tools`; OpenRouter sends `tools: []` with
 `tool_choice: none` and never persists the request-scoped instruction into

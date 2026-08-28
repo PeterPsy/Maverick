@@ -50,23 +50,23 @@
     {
       "component": "web-react",
       "path": "0003-maverick-web-react.patch",
-      "sha256": "0114433a2793771d733661a36078e9ee1163a3c4a57e2791bfd9d186e6d1f4d2",
-      "reason": "Delegate OpenDesign navigation and chat to Maverick at the React component boundary, expose the native settings dialog through a typed host command, and map the isolated web UI to Maverick dark and light palette tokens.",
+      "sha256": "d6026130898bce37224dc6918b11d1f9be4b73010aa826c4a8fee5970fd9c112",
+      "reason": "Keep OpenDesign navigation and project catalog delegated to Maverick, restore the native ProjectView tools pane behind a typed host command, correct the hosted workspace grid, and map the isolated web UI to Maverick dark and light palette tokens.",
       "files": [
         {
           "path": "apps/web/app/layout.tsx",
           "pre_sha256": "41bdd320b85971c770175f6afbcefcd436e50f34bf89e45f825407b2de10fcc4",
-          "post_sha256": "3fe4a225c7579b8fb10c3e32de61db8aaed6e409bba9f9106ba0f6c8244ba30c"
+          "post_sha256": "0e3d0c580b8bf03836004216239068c91c9245044c4a405ad0e79b2c8adcc18b"
         },
         {
           "path": "apps/web/src/App.tsx",
           "pre_sha256": "0eea6ad56d20099dc1427e7d17d4700e0e8c42f89b14a466f665ec1e6841e72f",
-          "post_sha256": "fc0f81659a70e9d3ce49b1d88479392f6d3f1539284bfab7baf57abff5d207f5"
+          "post_sha256": "e2bd28fd27105051d8e40e930d0aac84fef035bdbccf7ce427e48dd44811f3e4"
         },
         {
           "path": "apps/web/src/index.css",
           "pre_sha256": "eb6d72ef653365c66dccc65ae7b7d66a4b92b9a190472b621a63c73e1058d80c",
-          "post_sha256": "8355c28d679cfa04702b34d314535b5edf98bf237d143918b5e46a0b2dfcf769"
+          "post_sha256": "4bf20ae95e9dd3d7c2580551d4c12a5aeee03b938ec7bebb275828598f1652a2"
         }
       ]
     }

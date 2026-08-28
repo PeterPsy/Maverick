@@ -1,12 +1,12 @@
 diff --git a/apps/web/app/layout.tsx b/apps/web/app/layout.tsx
-index cc7a5f3af..c1ac9687d 100644
+index cc7a5f3..cc28da3 100644
 --- a/apps/web/app/layout.tsx
 +++ b/apps/web/app/layout.tsx
 @@ -28,6 +28,8 @@ export const viewport: Viewport = {
   */
  const themeInitScript = `(function(){try{var c=JSON.parse(localStorage.getItem('open-design:config')||'{}');var t=c.theme;if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);var a=typeof c.accentColor==='string'&&/^#[0-9a-fA-F]{6}$/.test(c.accentColor.trim())?c.accentColor.trim().toLowerCase():'#c96442';var s=document.documentElement.style;s.setProperty('--accent',a);s.setProperty('--accent-strong','color-mix(in srgb, '+a+' 86%, var(--text-strong))');s.setProperty('--accent-soft','color-mix(in srgb, '+a+' 22%, var(--bg-panel))');s.setProperty('--accent-tint','color-mix(in srgb, '+a+' 12%, var(--bg-panel))');s.setProperty('--accent-hover','color-mix(in srgb, '+a+' 90%, var(--text-strong))');}catch(e){}})();`;
  
-+const maverickHostBridgeScript = `(()=>{const root=document.documentElement;root.dataset.maverickHosted="true";let lastProject="";const valid=id=>/^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/.test(id||"");const project=()=>{const match=/^\\/projects\\/([^/?#]+)/.exec(location.pathname);if(!match)return"";try{return decodeURIComponent(match[1])}catch{return""}};const notify=()=>{const id=project();if(id===lastProject)return;lastProject=id;if(valid(id))parent.postMessage({type:"maverick.opendesign.navigation-changed",version:1,od_project_id:id},"*")};const applyTheme=theme=>{if(theme!=="dark"&&theme!=="light")return;root.dataset.maverickTheme=theme;root.dataset.theme=theme;root.style.colorScheme=theme};const navigate=id=>{if(!valid(id))return;const next=\`/projects/\${encodeURIComponent(id)}\`;if(location.pathname!==next){location.assign(next);return}notify()};addEventListener("message",event=>{if(event.source!==parent||!event.data||typeof event.data!=="object"||event.data.version!==1)return;if(event.data.type==="maverick.opendesign.navigate"&&event.data.od_project_id)navigate(event.data.od_project_id);if(event.data.type==="maverick.opendesign.theme")applyTheme(event.data.theme)});for(const method of ["pushState","replaceState"]){const original=history[method];history[method]=function(...args){const result=original.apply(this,args);queueMicrotask(notify);return result}}addEventListener("popstate",notify);const ready=()=>{notify();parent.postMessage({type:"maverick.opendesign.ready",version:1},"*")};document.readyState==="loading"?addEventListener("DOMContentLoaded",ready,{once:true}):ready()})();`;
++const maverickHostBridgeScript = `(()=>{const root=document.documentElement;root.dataset.maverickHosted="true";root.dataset.maverickTools="closed";let lastProject="";const valid=id=>/^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/.test(id||"");const project=()=>{const match=/^\\/projects\\/([^/?#]+)/.exec(location.pathname);if(!match)return"";try{return decodeURIComponent(match[1])}catch{return""}};const notify=()=>{const id=project();if(id===lastProject)return;lastProject=id;if(valid(id))parent.postMessage({type:"maverick.opendesign.navigation-changed",version:1,od_project_id:id},"*")};const applyTheme=theme=>{if(theme!=="dark"&&theme!=="light")return;root.dataset.maverickTheme=theme;root.dataset.theme=theme;root.style.colorScheme=theme};const navigate=id=>{if(!valid(id))return;const next=\`/projects/\${encodeURIComponent(id)}\`;if(location.pathname!==next){location.assign(next);return}notify()};addEventListener("message",event=>{if(event.source!==parent||!event.data||typeof event.data!=="object"||event.data.version!==1)return;if(event.data.type==="maverick.opendesign.navigate"&&event.data.od_project_id)navigate(event.data.od_project_id);if(event.data.type==="maverick.opendesign.theme")applyTheme(event.data.theme)});for(const method of ["pushState","replaceState"]){const original=history[method];history[method]=function(...args){const result=original.apply(this,args);queueMicrotask(notify);return result}}addEventListener("popstate",notify);const ready=()=>{notify();parent.postMessage({type:"maverick.opendesign.ready",version:1},"*")};document.readyState==="loading"?addEventListener("DOMContentLoaded",ready,{once:true}):ready()})();`;
 +
  export default function RootLayout({ children }: { children: ReactNode }) {
    return (
@@ -21,141 +21,10 @@ index cc7a5f3af..c1ac9687d 100644
        <body suppressHydrationWarning>
          <I18nProvider>
 diff --git a/apps/web/src/App.tsx b/apps/web/src/App.tsx
-index 9f30f2077..877e6e847 100644
+index 9f30f20..a357e30 100644
 --- a/apps/web/src/App.tsx
 +++ b/apps/web/src/App.tsx
-@@ -33,6 +33,7 @@ import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
- import { buildPetTaskCenter } from './components/pet/taskCenter';
- import { migrateCustomPetAtlas } from './components/pet/pets';
- import { ProjectView } from './components/ProjectView';
-+import { DESIGN_FILES_TAB, FileWorkspace } from './components/FileWorkspace';
- import { AmrArtifactUpgradeGate } from './components/AmrArtifactUpgradeGate';
- import { AmrArtifactUpgradeHomeCard } from './components/AmrArtifactUpgradeHomeCard';
- import { TooltipLayer } from './components/TooltipLayer';
-@@ -59,6 +60,8 @@ import {
-   fetchAgentsStream,
-   fetchDesignSystems,
-   fetchDesignTemplates,
-+  fetchLiveArtifacts,
-+  fetchProjectFiles,
-   fetchPromptTemplates,
-   fetchSkills,
-   openExternalUrl,
-@@ -110,7 +113,10 @@ import {
-   listTemplates,
-   deleteTemplate,
-   patchProject,
-+  loadTabs,
-+  saveTabs,
- } from './state/projects';
-+import { useProjectDetail } from './hooks/useProjectDetail';
- import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
- import type {
-   PluginShareAction,
-@@ -128,7 +134,10 @@ import type {
-   ChatAttachment,
-   DesignSystemGenerationJob,
-   DesignSystemSummary,
-+  LiveArtifactSummary,
-+  OpenTabsState,
-   Project,
-+  ProjectFile,
-   ProjectMetadata,
-   ProjectTemplate,
-   ProviderModelOption,
-@@ -161,6 +170,91 @@ const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
- const AMR_AGENT_ID = 'amr';
- const AMR_PROFILE_ENV_KEY = 'OPEN_DESIGN_AMR_PROFILE';
- const AGENT_FOCUS_REFRESH_THROTTLE_MS = 10_000;
-+const MAVERICK_EMPTY_TABS: OpenTabsState = { tabs: [], active: DESIGN_FILES_TAB };
-+
-+/** Maverick owns project navigation and chat; Open Design owns the real canvas. */
-+function MaverickProjectView({
-+  project,
-+  routeFileName,
-+}: {
-+  project: Project;
-+  routeFileName: string | null;
-+}) {
-+  const projectDetail = useProjectDetail(project.id);
-+  const currentProject = projectDetail.project ?? project;
-+  const [files, setFiles] = useState<ProjectFile[]>([]);
-+  const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
-+  const [tabsState, setTabsState] = useState<OpenTabsState>(MAVERICK_EMPTY_TABS);
-+  const [loading, setLoading] = useState(true);
-+
-+  const refreshWorkspace = useCallback(async () => {
-+    const [nextFiles, nextLiveArtifacts] = await Promise.all([
-+      fetchProjectFiles(project.id),
-+      fetchLiveArtifacts(project.id),
-+    ]);
-+    setFiles(nextFiles);
-+    setLiveArtifacts(nextLiveArtifacts);
-+  }, [project.id]);
-+
-+  useEffect(() => {
-+    let cancelled = false;
-+    setLoading(true);
-+    Promise.all([refreshWorkspace(), loadTabs(project.id)])
-+      .then(([, nextTabs]) => {
-+        if (!cancelled) setTabsState(withoutNativeChatTabs(nextTabs));
-+      })
-+      .finally(() => {
-+        if (!cancelled) setLoading(false);
-+      });
-+    return () => {
-+      cancelled = true;
-+    };
-+  }, [project.id, refreshWorkspace]);
-+
-+  const handleTabsStateChange = useCallback((next: OpenTabsState) => {
-+    const sanitized = withoutNativeChatTabs(next);
-+    setTabsState(sanitized);
-+    void saveTabs(project.id, sanitized);
-+  }, [project.id]);
-+
-+  const openRequest = useMemo(
-+    () => routeFileName ? { name: routeFileName, nonce: 1 } : null,
-+    [routeFileName],
-+  );
-+  const baseDir = currentProject.metadata?.baseDir;
-+  const rootDirName = typeof baseDir === 'string'
-+    ? baseDir.split(/[/\\]/).filter(Boolean).pop()
-+    : undefined;
-+
-+  if (loading) return <CenteredLoader />;
-+  return (
-+    <div className="app maverick-project-view" data-testid="maverick-project-view">
-+      <FileWorkspace
-+        projectId={project.id}
-+        projectKind={projectKindFromMetadataToTracking(currentProject.metadata) ?? 'prototype'}
-+        rootDirName={rootDirName}
-+        resolvedDir={projectDetail.resolvedDir}
-+        files={files}
-+        liveArtifacts={liveArtifacts}
-+        onRefreshFiles={refreshWorkspace}
-+        isDeck={currentProject.metadata?.kind === 'deck'}
-+        openRequest={openRequest}
-+        tabsState={tabsState}
-+        onTabsStateChange={handleTabsStateChange}
-+        preferredPreviewFile={currentProject.metadata?.entryFile ?? null}
-+        autoPreviewDesignArtifacts={currentProject.metadata?.importedFrom === 'folder'}
-+      />
-+    </div>
-+  );
-+}
-+
-+function withoutNativeChatTabs(state: OpenTabsState): OpenTabsState {
-+  const tabs = state.tabs.filter((tabId) => !tabId.startsWith('chat:'));
-+  const active = state.active && !state.active.startsWith('chat:')
-+    ? state.active
-+    : DESIGN_FILES_TAB;
-+  return { ...state, tabs, active };
-+}
- 
- export function shouldSyncMediaProvidersOnSave(
-   mediaProviders: AppConfig['mediaProviders'],
-@@ -390,6 +484,10 @@ function AppInner() {
+@@ -390,6 +390,10 @@ function AppInner() {
    const { t } = useI18n();
    const iframeKeepAlivePool = useIframeKeepAlivePool();
    const clientType = useMemo(() => detectClientType(), []);
@@ -166,27 +35,41 @@ index 9f30f2077..877e6e847 100644
    useModalWindowDragGuard();
    useEffect(() => {
      const onFirstPartyExternalLink = (event: MouseEvent) => openFirstPartyExternalLinkFromClick(
-@@ -2233,6 +2331,28 @@ function AppInner() {
+@@ -2233,6 +2237,42 @@ function AppInner() {
      setSettingsOpen(true);
    }, []);
  
 +  useEffect(() => {
 +    if (!maverickHosted) return undefined;
 +    function handleMaverickCommand(event: MessageEvent) {
-+      const data = event.data as { type?: unknown; version?: unknown } | null;
++      const data = event.data as { request_id?: unknown; type?: unknown; version?: unknown } | null;
 +      if (
 +        event.source !== window.parent
 +        || !data
-+        || data.type !== 'maverick.opendesign.open-settings'
 +        || data.version !== 1
 +      ) {
 +        return;
 +      }
-+      openSettings();
-+      window.parent.postMessage({
-+        type: 'maverick.opendesign.settings-opened',
-+        version: 1,
-+      }, '*');
++      if (data.type === 'maverick.opendesign.open-settings') {
++        openSettings();
++        window.parent.postMessage({
++          type: 'maverick.opendesign.settings-opened',
++          version: 1,
++        }, '*');
++        return;
++      }
++      if (data.type === 'maverick.opendesign.open-tools') {
++        const requestId = typeof data.request_id === 'string' && data.request_id.length <= 128
++          ? data.request_id.trim()
++          : '';
++        if (!requestId) return;
++        document.documentElement.dataset.maverickTools = 'open';
++        window.parent.postMessage({
++          type: 'maverick.opendesign.tools-opened',
++          version: 1,
++          request_id: requestId,
++        }, '*');
++      }
 +    }
 +    window.addEventListener('message', handleMaverickCommand);
 +    return () => window.removeEventListener('message', handleMaverickCommand);
@@ -195,22 +78,7 @@ index 9f30f2077..877e6e847 100644
    // Entry point from the failed-run AMR nudge: open Settings on the execution
    // section and flag the AMR agent card for a one-shot scroll-into-view +
    // highlight (and a sign-in coachmark when not yet authorized).
-@@ -2457,7 +2577,13 @@ function AppInner() {
-       />
-     );
-   } else if (activeProject) {
--    appMain = (
-+    appMain = maverickHosted ? (
-+      <MaverickProjectView
-+        key={activeProject.id}
-+        project={activeProject}
-+        routeFileName={route.kind === 'project' ? route.fileName : null}
-+      />
-+    ) : (
-       <ProjectView
-         key={activeProject.id}
-         project={activeProject}
-@@ -2497,7 +2623,7 @@ function AppInner() {
+@@ -2497,7 +2537,7 @@ function AppInner() {
        />
      );
    } else {
@@ -219,7 +87,7 @@ index 9f30f2077..877e6e847 100644
        <EntryView
          skills={enabledSkills}
          designTemplates={enabledDesignTemplates}
-@@ -2594,16 +2720,18 @@ function AppInner() {
+@@ -2594,16 +2634,18 @@ function AppInner() {
          className={`workspace-shell workspace-shell--${clientType}`}
          data-client-type={clientType}
        >
@@ -244,7 +112,7 @@ index 9f30f2077..877e6e847 100644
          <PetOverlay
            pet={config.pet?.enabled ? config.pet : undefined}
            taskCenter={petTaskCenter}
-@@ -2663,6 +2791,12 @@ function AppInner() {
+@@ -2663,6 +2705,12 @@ function AppInner() {
                setConfig(next);
              }
              setSettingsOpen(false);
@@ -258,16 +126,16 @@ index 9f30f2077..877e6e847 100644
              setSettingsHighlight(null);
            }}
 diff --git a/apps/web/src/index.css b/apps/web/src/index.css
-index 685f2defe..6f0b2c7c4 100644
+index 685f2de..2e0cac9 100644
 --- a/apps/web/src/index.css
 +++ b/apps/web/src/index.css
-@@ -30,3 +30,67 @@
+@@ -30,3 +30,74 @@
  @import './styles/viewer/routines.css';
  @import './styles/modal-window-drag.css';
  @import './styles/entrance.css';
 +
-+/* Maverick host integration: the isolated sidecar inherits the shell palette.
-+ * React components own project/chat delegation; this file is visual only. */
++/* Maverick host integration: the isolated sidecar inherits the shell palette
++ * and keeps the native tools pane collapsed until the shell requests it. */
 +:root {
 +  --mav-bg: #070708;
 +  --mav-panel: rgba(12, 12, 14, 0.96);
@@ -318,15 +186,21 @@ index 685f2defe..6f0b2c7c4 100644
 +  color: var(--mav-text) !important;
 +}
 +
-+.split-file-slot,
-+.file-workspace {
-+  grid-column: 1 / -1 !important;
-+  width: 100% !important;
-+  max-width: none !important;
++html[data-maverick-hosted='true'] .workspace-shell {
++  grid-template-rows: minmax(0, 1fr);
 +}
 +
-+.maverick-project-view {
++html[data-maverick-hosted='true'] .workspace-shell__body {
++  grid-row: 1;
 +  min-height: 0;
-+  height: 100%;
 +}
-
++
++html[data-maverick-hosted='true'][data-maverick-tools='closed'] .split {
++  grid-template-columns: minmax(0, 1fr) !important;
++}
++
++html[data-maverick-hosted='true'][data-maverick-tools='closed'] .split-chat-slot,
++html[data-maverick-hosted='true'][data-maverick-tools='closed'] .split-resize-handle,
++html[data-maverick-hosted='true'][data-maverick-tools='closed'] .split-edit-divider {
++  display: none !important;
++}

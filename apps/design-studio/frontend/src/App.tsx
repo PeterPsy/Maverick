@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Expand, LoaderCircle, Plus, RefreshCw, TriangleAlert } from "lucide-react";
+import { LoaderCircle, Plus, RefreshCw, TriangleAlert } from "lucide-react";
 import {
   currentDesignStudioAppId,
   initialNavigation,
@@ -7,6 +7,7 @@ import {
   navigationFromParams,
   navigationMessage,
   openSettingsMessage,
+  openToolsMessage,
   readCachedLaunchTarget,
   requestOpenDesignLaunch,
   SidecarLaunchError,
@@ -40,6 +41,9 @@ export function App() {
   const settingsRequestRef = useRef(initialSettingsRequest());
   const deliveredSettingsRequestRef = useRef("");
   const settingsDeliveryAttemptsRef = useRef(0);
+  const toolsRequestRef = useRef(initialToolsRequest());
+  const deliveredToolsRequestRef = useRef("");
+  const toolsDeliveryAttemptsRef = useRef(0);
   const themeRef = useRef<"dark" | "light">(initialTheme());
   const [, setNavigation] = useState(navigationRef.current);
   const [phase, setPhase] = useState<SidecarHostPhase>("launching");
@@ -94,6 +98,30 @@ export function App() {
     send();
   }, []);
 
+  const postTools = useCallback(() => {
+    const requestId = toolsRequestRef.current;
+    if (!requestId || deliveredToolsRequestRef.current === requestId) {
+      return;
+    }
+    function send() {
+      const frameWindow = frameRef.current?.contentWindow;
+      const origin = sidecarOriginRef.current;
+      if (
+        !frameWindow
+        || !origin
+        || toolsRequestRef.current !== requestId
+        || deliveredToolsRequestRef.current === requestId
+        || toolsDeliveryAttemptsRef.current >= 40
+      ) {
+        return;
+      }
+      toolsDeliveryAttemptsRef.current += 1;
+      frameWindow.postMessage(openToolsMessage(requestId), origin);
+      window.setTimeout(send, 250);
+    }
+    send();
+  }, []);
+
   const openInShell = useCallback((projectId: string, extra: Record<string, string> = {}) => {
     window.parent?.postMessage(
       {
@@ -137,7 +165,14 @@ export function App() {
           settingsDeliveryAttemptsRef.current = 0;
           postSettings();
         }
-        const next = settingsRequest && !scalarString(params.od_project_id)
+        const toolsRequest = scalarString(params.open_tools_request_id);
+        if (toolsRequest && toolsRequest !== toolsRequestRef.current) {
+          toolsRequestRef.current = toolsRequest;
+          deliveredToolsRequestRef.current = "";
+          toolsDeliveryAttemptsRef.current = 0;
+          postTools();
+        }
+        const next = (settingsRequest || toolsRequest) && !scalarString(params.od_project_id)
           ? navigationRef.current
           : navigationFromParams(params);
         if (next.od_project_id === navigationRef.current.od_project_id && next.od_run_id === navigationRef.current.od_run_id) {
@@ -175,6 +210,7 @@ export function App() {
         postNavigation();
         postTheme();
         postSettings();
+        postTools();
         return;
       }
       if (event.data.type === "maverick.opendesign.navigation-changed" && event.data.version === 1) {
@@ -195,12 +231,20 @@ export function App() {
       }
       if (event.data.type === "maverick.opendesign.settings-closed" && event.data.version === 1) {
         setSettingsOpen(false);
+        return;
+      }
+      if (
+        event.data.type === "maverick.opendesign.tools-opened"
+        && event.data.version === 1
+        && scalarString(event.data.request_id) === toolsRequestRef.current
+      ) {
+        deliveredToolsRequestRef.current = toolsRequestRef.current;
       }
     }
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [appId, openInShell, postNavigation, postSettings, postTheme]);
+  }, [appId, openInShell, postNavigation, postSettings, postTheme, postTools]);
 
   useEffect(() => {
     let canceled = false;
@@ -216,6 +260,8 @@ export function App() {
     sidecarOriginRef.current = "";
     deliveredSettingsRequestRef.current = "";
     settingsDeliveryAttemptsRef.current = 0;
+    deliveredToolsRequestRef.current = "";
+    toolsDeliveryAttemptsRef.current = 0;
     setDiagnostic(null);
     setPhase("launching");
     setLoadingVisible(false);
@@ -432,21 +478,6 @@ export function App() {
     }
   }
 
-  async function enterFullscreen() {
-    const target = frameRef.current?.parentElement;
-    if (!target?.requestFullscreen) {
-      setDiagnostic({ code: "fullscreen_unavailable", status: 0, retryable: false });
-      setPhase("degraded");
-      return;
-    }
-    try {
-      await target.requestFullscreen();
-    } catch {
-      setDiagnostic({ code: "fullscreen_denied", status: 0, retryable: false });
-      setPhase("degraded");
-    }
-  }
-
   const loading = loadingVisible && (phase === "launching" || phase === "bootstrapping" || phase === "repairing");
   const showRecovery = phase === "degraded" || phase === "error";
   const retryAllowed = diagnostic?.retryable !== false;
@@ -496,17 +527,6 @@ export function App() {
           {createError ? <p role="alert">{createError}</p> : null}
         </div>
       ) : null}
-
-      {phase === "ready" && !empty ? (
-        <div className="design-studio-toolbar" aria-label="OpenDesign host controls">
-          <button type="button" onClick={retry} aria-label="Reload OpenDesign in a new isolated session" title="Reload isolated session">
-            <RefreshCw size={17} aria-hidden="true" />
-          </button>
-          <button type="button" onClick={enterFullscreen} aria-label="Enter OpenDesign fullscreen" title="Fullscreen">
-            <Expand size={18} aria-hidden="true" />
-          </button>
-        </div>
-      ) : null}
     </main>
   );
 }
@@ -518,6 +538,10 @@ function initialTheme(): "dark" | "light" {
 
 function initialSettingsRequest(search = window.location.search): string {
   return scalarString(new URLSearchParams(search).get("open_settings_request_id"));
+}
+
+function initialToolsRequest(search = window.location.search): string {
+  return scalarString(new URLSearchParams(search).get("open_tools_request_id"));
 }
 
 function scalarString(value: unknown): string {

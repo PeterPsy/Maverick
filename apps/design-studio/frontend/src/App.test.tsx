@@ -103,12 +103,40 @@ describe("Design Studio transactional frame readiness", () => {
 
     await dispatchReady(frameWindow, LAUNCH.origin, 1);
     expect(hostPhase()).toBe("ready");
-    expect(container.querySelector(".design-studio-toolbar")).not.toBeNull();
+    expect(container.querySelector(".design-studio-toolbar")).toBeNull();
     expect(firstPaintEvents()).toHaveLength(1);
     expect(firstPaintEvents()[0]?.[1]).toMatchObject({
       metric: "first_paint_ms",
       source: "maverick.opendesign.ready",
     });
+
+    const sidecarPostMessage = vi.mocked(frameWindow!.postMessage);
+    sidecarPostMessage.mockClear();
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: {
+          type: "maverick.app.navigate",
+          app_id: "design-studio",
+          params: { od_project_id: "od_project_1", open_tools_request_id: "tools-request-1" },
+        },
+        origin: window.location.origin,
+        source: window.parent,
+      }));
+    });
+    expect(sidecarPostMessage).toHaveBeenCalledWith({
+      type: "maverick.opendesign.open-tools",
+      version: 1,
+      request_id: "tools-request-1",
+    }, LAUNCH.origin);
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent("message", {
+        data: { type: "maverick.opendesign.tools-opened", version: 1, request_id: "tools-request-1" },
+        origin: LAUNCH.origin,
+        source: frameWindow,
+      }));
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    expect(sidecarPostMessage).toHaveBeenCalledTimes(1);
 
     await dispatchReady(frameWindow, LAUNCH.origin, 1);
     expect(firstPaintEvents()).toHaveLength(1);

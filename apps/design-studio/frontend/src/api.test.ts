@@ -8,6 +8,7 @@ import {
   navigationMessage,
   openDesignPath,
   openSettingsMessage,
+  openToolsMessage,
   readCachedLaunchTarget,
   SidecarLaunchError,
   validateSidecarLaunch,
@@ -35,6 +36,14 @@ describe("currentDesignStudioAppId", () => {
 
   it("uses the typed native settings command", () => {
     expect(openSettingsMessage()).toEqual({ type: "maverick.opendesign.open-settings", version: 1 });
+  });
+
+  it("uses a correlated typed command for the native tools panel", () => {
+    expect(openToolsMessage("tools-request-1")).toEqual({
+      type: "maverick.opendesign.open-tools",
+      version: 1,
+      request_id: "tools-request-1",
+    });
   });
 });
 

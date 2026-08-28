@@ -67,7 +67,6 @@ try {
   const networkProof = {
     isolatedRequests: 0,
     bootstrapPosts: 0,
-    nativeChatRequests: 0,
     maverickCookieForwarded: false,
     browserBearerForwarded: false,
     diagnostics: [],
@@ -77,9 +76,6 @@ try {
     try { parsed = new URL(request.url()); } catch { return; }
     if (!isSidecarHostname(parsed.hostname)) return;
     networkProof.isolatedRequests += 1;
-    if (/\/api\/projects\/[^/]+\/conversations(?:\/|$)/.test(parsed.pathname)) {
-      networkProof.nativeChatRequests += 1;
-    }
     if (parsed.pathname === '/.well-known/maverick-sidecar-bootstrap' && request.method() === 'POST') {
       networkProof.bootstrapPosts += 1;
     }
@@ -116,7 +112,7 @@ try {
   const originA = new URL(sidecar.url()).origin;
   assert(originA !== platformOrigin, 'OpenDesign did not use an isolated origin');
 
-  const projectA = await createProjectFromUi(page, sidecar, 'Maverick WP10 browser project', networkProof);
+  const projectA = await createProjectFromUi(page, sidecar);
   if (profile === 'quick') {
     throw new ProfileComplete(buildProfileEvidence({
       profile,
@@ -126,7 +122,8 @@ try {
           project_created: true,
           sidebar_navigation: true,
           native_home_projects_hidden: true,
-          native_chat_unmounted: true,
+          native_tools_collapsed: true,
+          native_tools_opened: true,
         }),
       ],
       canonicalEntity: { od_project_id: projectA.projectId, od_run_id: '' },
@@ -348,7 +345,7 @@ try {
   const projectsB = await frameRequest(sidecarB, '/api/projects');
   const projectItemsB = Array.isArray(projectsB.body?.projects) ? projectsB.body.projects : [];
   assert(!projectItemsB.some((item) => item?.id === projectA.projectId), 'Workspace B observed workspace A project data');
-  const projectB = await createProjectFromUi(page, sidecarB, 'Maverick WP10 workspace B', networkProof);
+  const projectB = await createProjectFromUi(page, sidecarB);
   const successfulB = await createRun(sidecarB, projectB, 'Create the isolated workspace B artifact.');
   await readIncrementalStream(sidecarB, successfulB.runId);
   await waitForRun(sidecarB, successfulB.runId, 'succeeded');
@@ -593,8 +590,7 @@ async function completeOpenDesignOnboarding(page, frame) {
 }
 
 
-async function createProjectFromUi(page, frame, name, networkProof) {
-  const nativeChatRequestsBefore = networkProof.nativeChatRequests;
+async function createProjectFromUi(page, frame) {
   const appFrame = await waitForShellWidgetFrame(page, 'Design Studio viewport');
   assert(
     !await frame.locator('.home-view > .recent-projects, .home-view > .home-hero').isVisible().catch(() => false),
@@ -636,7 +632,7 @@ async function createProjectFromUi(page, frame, name, networkProof) {
   await frame.waitForURL((url) => url.pathname === `/projects/${projectId}`, { timeout: 60_000 });
   assert(await projectButton.getAttribute('aria-current') === 'page', 'Created project was not selected in the Maverick sidebar');
   try {
-    await frame.locator('[data-testid="maverick-project-view"]').waitFor({ state: 'visible', timeout: 60_000 });
+    await frame.locator('[data-testid="file-workspace"]').waitFor({ state: 'visible', timeout: 60_000 });
   } catch (error) {
     const diagnostic = {
       url: frame.url(),
@@ -646,19 +642,23 @@ async function createProjectFromUi(page, frame, name, networkProof) {
     };
     throw new Error(`Maverick project view did not render: ${JSON.stringify(diagnostic)}`, { cause: error });
   }
+  const workspaceBox = await frame.locator('[data-testid="file-workspace"]').boundingBox();
   assert(
-    await frame.locator('.split-chat-slot, .split-resize-handle, [data-testid="side-chat-tab"]').count() === 0,
-    'OpenDesign native project chat is still mounted',
+    workspaceBox && workspaceBox.height >= 300,
+    `Hosted OpenDesign workspace remained compressed: ${JSON.stringify(workspaceBox)}`,
   );
+  const toolsPane = frame.locator('.split-chat-slot');
   assert(
-    networkProof.nativeChatRequests === nativeChatRequestsBefore,
-    'Hosted project view issued a native conversation request',
+    await toolsPane.count() === 1 && !await toolsPane.isVisible(),
+    'OpenDesign native tools pane was not initially collapsed',
   );
   const footer = await waitForShellWidgetFrame(page, 'App sidebar footer');
+  await footer.getByRole('button', { name: 'Strumenti', exact: true }).click();
+  await toolsPane.waitFor({ state: 'visible', timeout: 60_000 });
   await footer.getByRole('button', { name: 'Impostazioni', exact: true }).click();
   await frame.locator('.modal-settings').waitFor({ state: 'visible', timeout: 60_000 });
   await frame.locator('.settings-close').click();
-  await frame.locator('[data-testid="maverick-project-view"]').waitFor({ state: 'visible', timeout: 60_000 });
+  await frame.locator('[data-testid="file-workspace"]').waitFor({ state: 'visible', timeout: 60_000 });
   let conversationId = String(payload?.conversationId || payload?.conversation?.id || '');
   if (!conversationId) {
     const conversations = await frameRequest(frame, `/api/projects/${encodeURIComponent(projectId)}/conversations`);
@@ -993,7 +993,7 @@ async function benchmarkWarmOpenings(page, networkProof, count) {
 async function settleOpenDesignInterface(page, sidecar) {
   const wrapper = await waitForShellWidgetFrame(page, 'Design Studio viewport');
   await Promise.any([
-    sidecar.locator('[data-testid="maverick-project-view"]').waitFor({
+    sidecar.locator('[data-testid="file-workspace"]').waitFor({
       state: 'visible',
       timeout: 10_000,
     }),
@@ -1241,8 +1241,8 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
       project_created: true,
       sidebar_navigation: true,
       native_home_projects_hidden: true,
-      native_chat_unmounted: true,
-      native_chat_background_requests: 0,
+      native_tools_collapsed: true,
+      native_tools_opened: true,
     }],
     ['storage_import', 'Import one Storage file with read-back', correlationA, { imported: true }],
     ['runtime_start', 'Start one Maverick-owned run', correlationA, { submitted: true }],

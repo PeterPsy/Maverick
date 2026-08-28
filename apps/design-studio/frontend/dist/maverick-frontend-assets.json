@@ -1,0 +1,67 @@
+{
+  "build_id": "be70d35c48f67bfd4320eb762ebeeaeb32bfa843a585d6ef169b3c0869c750df",
+  "entrypoints": [
+    "index.html",
+    "widgets/design-studio-sidebar/index.html",
+    "widgets/design-studio-sidebar-footer/index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/app-C8a2QeSG.js",
+      "sha256": "fd889df92f5956358b2e114026437fc5c81bddf786ad196eac3808216d353c9b",
+      "size_bytes": 3524
+    },
+    {
+      "path": "assets/app-CZkg2Pj5.js",
+      "sha256": "14b29a4417728daa56f6cba26ee13464de24b29149d5ef55e49dcfd39d291768",
+      "size_bytes": 3480
+    },
+    {
+      "path": "assets/app-DLGmKA4Y.css",
+      "sha256": "3e646799b6c54c3cbc8a744e93d861d2549ca0b9dbb8038df61074a54464f912",
+      "size_bytes": 2981
+    },
+    {
+      "path": "assets/app-toeOuWCF.js",
+      "sha256": "d07fe4ac0a3628c5638593aa9eddc8a625f2a6c05afd374f7accc6657099f57f",
+      "size_bytes": 15825
+    },
+    {
+      "path": "assets/jsx-runtime-B16RKXXW.js",
+      "sha256": "c0385cb35b18ba801fd8a441bf207ec9d9fc982992f7991111e6536f32de4bd5",
+      "size_bytes": 194104
+    },
+    {
+      "path": "assets/plus-b6e4sopn.js",
+      "sha256": "261d777b7f2368d758bd4c9e26e299829c77e099a0142ef43adabea109728c4d",
+      "size_bytes": 239
+    },
+    {
+      "path": "assets/sidebar-Dh88Bsa8.css",
+      "sha256": "3c47e0d63e56c02bb64094e71799fa34e28fae04dbe037413c735d7377b73525",
+      "size_bytes": 3373
+    },
+    {
+      "path": "assets/sidebar-n5UwXZ9c.js",
+      "sha256": "347e0af88cc4785f4752289d7ae013e71693799739b9c41306f407e534a4ff01",
+      "size_bytes": 565
+    },
+    {
+      "path": "index.html",
+      "sha256": "3cc9b89169a48de2bc318276e96838aac1bacdf98b5a063d91b7868d5df135f5",
+      "size_bytes": 627
+    },
+    {
+      "path": "widgets/design-studio-sidebar/index.html",
+      "sha256": "e3fae126f110ad9ee7e55b01fc52266257ec17369cd999ee28e6e5d122913052",
+      "size_bytes": 629
+    },
+    {
+      "path": "widgets/design-studio-sidebar-footer/index.html",
+      "sha256": "e71ddab910b9020e1e3c17eb694ae5d14f79b20200868d3d1cf637ba2526507c",
+      "size_bytes": 727
+    }
+  ],
+  "schema": "maverick.frontend-assets.v1"
+}

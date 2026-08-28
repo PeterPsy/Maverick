@@ -5,7 +5,7 @@
       "role": "current",
       "artifact_sha256": "6997f3ab7800c31c027bb1cdd9c9f7634e638b39577c74632eee3b0ce440c5fe",
       "manifest": "opendesign_bundle.json",
-      "manifest_sha256": "4059f6618335c7cd41a4a0f434a591d0b194896284fb1aa437d5cb48fc836180",
+      "manifest_sha256": "c417669f8933c8e187cd73e21fb525e973e319885a5db95083c1ceba3a997ce6",
       "source_subdirectory": ".",
       "verifier_profile": "current-v2"
     },

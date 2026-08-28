@@ -238,18 +238,21 @@ class OpenDesignOciImportTests(unittest.TestCase):
         react_patch = (SERVICE_ROOT / "patches/0003-maverick-web-react.patch").read_text(encoding="utf-8")
         self.assertNotIn("MutationObserver", compiled_patch)
         self.assertNotIn("querySelectorAll", compiled_patch)
+        self.assertNotIn("function MaverickProjectView", react_patch)
         for marker in (
-            "function MaverickProjectView",
             "maverickHosted ? null",
             "maverick.opendesign.open-settings",
+            "maverick.opendesign.open-tools",
             "maverick.opendesign.settings-closed",
+            "data-maverick-tools='closed'",
+            "grid-template-rows: minmax(0, 1fr)",
         ):
             self.assertIn(marker, react_patch)
         self.assertEqual(
             self.manifest["web_patch"]["capabilities"],
             [
                 "react_hosted_project_view",
-                "native_chat_unmounted",
+                "native_tools_bridge",
                 "native_home_unmounted",
                 "native_workspace_tabs_unmounted",
                 "native_settings_bridge",

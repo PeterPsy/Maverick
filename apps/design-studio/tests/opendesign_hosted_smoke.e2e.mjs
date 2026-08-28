@@ -254,11 +254,17 @@ async function createProjectFromUi(page, frame, name) {
   const createdProjectId = String(body?.od_project_id || body?.project?.id || body?.id || '');
   assert(createdProjectId, 'Hosted UI project creation returned no project id');
   await frame.waitForURL((url) => url.pathname === `/projects/${createdProjectId}`, { timeout: 60_000 });
-  await frame.locator('[data-testid="maverick-project-view"]').waitFor({ state: 'visible', timeout: 60_000 });
+  const workspace = frame.locator('[data-testid="file-workspace"]');
+  await workspace.waitFor({ state: 'visible', timeout: 60_000 });
+  const workspaceBox = await workspace.boundingBox();
   assert(
-    await frame.locator('.split-chat-slot, .split-resize-handle, [data-testid="side-chat-tab"]').count() === 0,
-    'Hosted OpenDesign native chat remains mounted',
+    workspaceBox && workspaceBox.height >= 300,
+    `Hosted OpenDesign workspace remained compressed: ${JSON.stringify(workspaceBox)}`,
   );
+  const toolsPane = frame.locator('.split-chat-slot');
+  assert(await toolsPane.count() === 1 && !await toolsPane.isVisible(), 'Hosted native tools pane was not initially collapsed');
+  await footer.getByRole('button', { name: 'Strumenti', exact: true }).click();
+  await toolsPane.waitFor({ state: 'visible', timeout: 60_000 });
   let conversationId = String(body?.conversationId || body?.conversation?.id || '');
   if (!conversationId) {
     const conversations = await frameRequest(frame, `/api/projects/${encodeURIComponent(createdProjectId)}/conversations`);

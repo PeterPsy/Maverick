@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Search } from "lucide-react";
+import { PencilRuler, Search } from "lucide-react";
 import { callDesignStudioBackend, mobileLayoutFromWidgetMessage, mountedAppId, projectCreatedAt, projectIdFromWidgetMessage } from "../../backendApi";
 import { applyInitialWidgetTheme, listenForWidgetTheme } from "../../widgetTheme";
 import "../../styles/sidebar.css";
@@ -105,7 +105,7 @@ function DesignStudioSidebar() {
               onClick={() => openProject(project.id)}
               type="button"
             >
-              <span aria-hidden="true" className="material-symbols-rounded">design_services</span>
+              <PencilRuler aria-hidden="true" className="ds-sidebar__project-icon" size={18} strokeWidth={1.8} />
               <span className="ds-sidebar__project-copy">
                 <strong>{project.name || "Untitled design"}</strong>
                 <small>{formatUpdatedAt(projectUpdatedAt(project))}</small>

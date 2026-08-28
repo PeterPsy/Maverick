@@ -46,3 +46,9 @@ export type OpenDesignOpenSettingsMessage = {
   type: "maverick.opendesign.open-settings";
   version: 1;
 };
+
+export type OpenDesignOpenToolsMessage = {
+  type: "maverick.opendesign.open-tools";
+  version: 1;
+  request_id: string;
+};

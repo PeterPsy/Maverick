@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { LoaderCircle, Plus, Settings } from "lucide-react";
+import { LoaderCircle, PanelLeftOpen, Plus, Settings } from "lucide-react";
 import { callDesignStudioBackend, mobileLayoutFromWidgetMessage, mountedAppId, projectIdFromWidgetMessage } from "../../backendApi";
 import { applyInitialWidgetTheme, listenForWidgetTheme } from "../../widgetTheme";
 import "../../styles/sidebar.css";
@@ -17,6 +17,18 @@ function publishPrimaryActionState() {
       available: true,
       label: "Nuovo progetto",
       preferred_surface: "sidebar",
+    },
+    window.location.origin,
+  );
+}
+
+function publishFooterHeight() {
+  window.parent?.postMessage(
+    {
+      type: "maverick.widget.resize",
+      owner_app_id: APP_ID,
+      widget_id: WIDGET_ID,
+      height: "3.25rem",
     },
     window.location.origin,
   );
@@ -62,6 +74,7 @@ function DesignStudioSidebarFooter() {
 
   useEffect(() => {
     publishPrimaryActionState();
+    publishFooterHeight();
     function handleMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.source !== window.parent || !event.data || typeof event.data !== "object") {
         return;
@@ -100,16 +113,33 @@ function DesignStudioSidebarFooter() {
     );
   }
 
+  function openTools() {
+    window.parent?.postMessage(
+      {
+        type: "maverick.widget.open-app",
+        app_id: APP_ID,
+        params: {
+          ...(projectId ? { od_project_id: projectId } : {}),
+          open_tools_request_id: crypto.randomUUID(),
+        },
+      },
+      window.location.origin,
+    );
+  }
+
   return (
     <main className="ds-sidebar-footer">
       <div className="ds-sidebar-footer__actions">
-      <button className="ds-sidebar-footer__primary" disabled={creating} onClick={() => void createProject()} type="button">
-        {creating ? <LoaderCircle aria-hidden="true" className="spin" size={16} /> : <Plus aria-hidden="true" size={17} />}
-        Nuovo progetto
-      </button>
-      <button aria-label="Impostazioni" className="ds-sidebar-footer__settings" onClick={openSettings} title="Impostazioni" type="button">
-        <Settings aria-hidden="true" size={17} />
-      </button>
+        <button className="ds-sidebar-footer__primary" disabled={creating} onClick={() => void createProject()} type="button">
+          {creating ? <LoaderCircle aria-hidden="true" className="spin" size={16} /> : <Plus aria-hidden="true" size={17} />}
+          Nuovo progetto
+        </button>
+        <button aria-label="Strumenti" className="ds-sidebar-footer__tools" onClick={openTools} title="Strumenti" type="button">
+          <PanelLeftOpen aria-hidden="true" size={17} />
+        </button>
+        <button aria-label="Impostazioni" className="ds-sidebar-footer__settings" onClick={openSettings} title="Impostazioni" type="button">
+          <Settings aria-hidden="true" size={17} />
+        </button>
       </div>
       {error ? <p role="alert">{error}</p> : null}
     </main>

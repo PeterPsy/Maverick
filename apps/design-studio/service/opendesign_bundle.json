@@ -316,7 +316,7 @@
     "source_output_path": "apps/web/out",
     "capabilities": [
       "react_hosted_project_view",
-      "native_chat_unmounted",
+      "native_tools_bridge",
       "native_home_unmounted",
       "native_workspace_tabs_unmounted",
       "native_settings_bridge",

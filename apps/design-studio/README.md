@@ -232,13 +232,14 @@ An iframe `load` event is transport-only and never marks the product ready: an
 HTTP 401, 410, or 503 document produces the same browser event. The wrapper
 keeps its governed startup phase and status polling until the exact iframe
 window, on the exact sidecar origin, posts version 1 of
-`maverick.opendesign.ready`. Only that message exposes ready controls, stops
+`maverick.opendesign.ready`. Only that message completes readiness, stops
 polling, and records `first_paint_ms`; duplicate or stale messages are ignored.
 
 After the `303`, the OpenDesign UI and all of its API requests stay same-origin
 on the opaque sidecar host. The wrapper exposes accessible loading/degraded/
-error recovery and reload/fullscreen controls. Maverick shell navigation
-accepts bounded scalar `od_project_id`/`od_run_id` values. Project deep links
+error recovery without adding reload/fullscreen controls over the workspace.
+Maverick shell navigation accepts bounded scalar `od_project_id`/`od_run_id`
+values. Project deep links
 bootstrap the real OpenDesign `/projects/<id>` route. Without a deep link, the
 backend chooses the newest `createdAt`; with no projects the wrapper keeps
 OpenDesign Home unmounted and shows only `Nuovo progetto`. Sidebar selections
@@ -247,13 +248,14 @@ Chat always share the same project context.
 
 The shell theme is forwarded as a sanitized dark/light message. The patched
 OpenDesign export maps its backgrounds, surfaces, borders, text, focus, dialog,
-popover and scrollbar colors to Maverick tokens. The React patch uses a hosted
-project view that never mounts `ProjectView`, `ChatPane`, resize/divider rails,
-side-chat tabs, Home or the native workspace tabs. The file workspace remains
-full width and the shell sidebar is the only project catalog. Its footer opens
-the native `SettingsDialog` through a typed command, including in the empty
-state. Every incoming shell/sidecar message requires both
-the expected `event.origin` and `event.source`.
+popover and scrollbar colors to Maverick tokens. The React patch keeps the
+native `ProjectView`, fixes the hosted shell to give its body the full available
+height, and initially collapses the native project tools pane. The shell sidebar
+remains the only project catalog; its footer opens the tools pane and native
+`SettingsDialog` through typed commands. OpenDesign Home and the redundant
+native workspace tabs remain unmounted. The wrapper requires both the expected
+`event.origin` and `event.source` for sidecar messages, while the isolated
+bridge accepts commands only from its parent frame.
 
 ## Maverick Chat Integration
 

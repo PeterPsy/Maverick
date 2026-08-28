@@ -32,8 +32,8 @@ button, input { font: inherit; }
 .ds-sidebar__project { display: flex; align-items: center; gap: 0.55rem; width: 100%; min-height: 3rem; padding: 0.48rem 0.58rem; border: 0; border-radius: 0.62rem; background: transparent; color: var(--ds-text); cursor: pointer; text-align: left; }
 .ds-sidebar__project:hover { background: var(--ds-hover); }
 .ds-sidebar__project.is-active { background: var(--ds-active); }
-.ds-sidebar__project > .material-symbols-rounded { color: var(--ds-soft); font-size: 1.15rem; }
-.ds-sidebar__project.is-active > .material-symbols-rounded { color: var(--ds-text); }
+.ds-sidebar__project-icon { flex: none; color: var(--ds-soft); }
+.ds-sidebar__project.is-active > .ds-sidebar__project-icon { color: var(--ds-text); }
 .ds-sidebar__project-copy { display: grid; min-width: 0; gap: 0.18rem; }
 .ds-sidebar__project-copy strong, .ds-sidebar__project-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-sidebar__project-copy strong { font-size: 0.82rem; font-weight: 680; }
@@ -42,10 +42,10 @@ button, input { font: inherit; }
 .ds-sidebar__skeleton { display: grid; gap: 0.45rem; padding: 0.3rem; }
 .ds-sidebar__skeleton span { height: 2.65rem; border-radius: 0.6rem; background: linear-gradient(90deg, var(--ds-hover), var(--ds-active), var(--ds-hover)); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
 .ds-sidebar-footer { display: grid; gap: 0.35rem; align-content: end; padding: 0.35rem 0.45rem 0.5rem; }
-.ds-sidebar-footer__actions { display: grid; grid-template-columns: minmax(0, 1fr) 2.4rem; gap: 0.42rem; }
+.ds-sidebar-footer__actions { display: grid; grid-template-columns: minmax(0, 1fr) 2.4rem 2.4rem; gap: 0.42rem; }
 .ds-sidebar-footer button { display: flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 2.4rem; border: 1px solid var(--ds-border); border-radius: 0.65rem; background: var(--ds-panel); color: var(--ds-text); cursor: pointer; font-weight: 680; transition: background 140ms ease, border-color 140ms ease; }
 .ds-sidebar-footer button:hover { border-color: color-mix(in srgb, var(--ds-border) 55%, var(--ds-text)); background: var(--ds-hover); }
-.ds-sidebar-footer__settings { width: 2.4rem; padding: 0; }
+.ds-sidebar-footer__tools, .ds-sidebar-footer__settings { width: 2.4rem; padding: 0; }
 .ds-sidebar-footer button:disabled { cursor: wait; opacity: 0.62; }
 .ds-sidebar-footer p { margin: 0; color: #e78383; font-size: 0.68rem; }
 .spin { animation: spin 0.9s linear infinite; }

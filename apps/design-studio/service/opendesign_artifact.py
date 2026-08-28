@@ -47,6 +47,26 @@ _BOUNDARY_ENVIRONMENT_BY_VERIFIER_PROFILE = {
         "OD_WEB_OVERLAY_SHA256",
     ],
 }
+_WEB_CAPABILITIES_BY_VERIFIER_PROFILE = {
+    "current-v2": [
+        "react_hosted_project_view",
+        "native_tools_bridge",
+        "native_home_unmounted",
+        "native_workspace_tabs_unmounted",
+        "native_settings_bridge",
+        "maverick_theme",
+        "project_navigation_bridge",
+    ],
+    "transactional-v1": [
+        "react_hosted_project_view",
+        "native_chat_unmounted",
+        "native_home_unmounted",
+        "native_workspace_tabs_unmounted",
+        "native_settings_bridge",
+        "maverick_theme",
+        "project_navigation_bridge",
+    ],
+}
 
 
 class ArtifactError(RuntimeError):
@@ -204,15 +224,8 @@ def validate_bundle_manifest(
         "build",
     ]:
         raise ArtifactError("OpenDesign web patch build command changed")
-    if web_patch.get("capabilities") != [
-        "react_hosted_project_view",
-        "native_chat_unmounted",
-        "native_home_unmounted",
-        "native_workspace_tabs_unmounted",
-        "native_settings_bridge",
-        "maverick_theme",
-        "project_navigation_bridge",
-    ]:
+    expected_capabilities = _WEB_CAPABILITIES_BY_VERIFIER_PROFILE.get(verifier_profile)
+    if expected_capabilities is None or web_patch.get("capabilities") != expected_capabilities:
         raise ArtifactError("OpenDesign web patch capability set changed")
     selected_asset(manifest, require_artifact_digest=require_artifact_digest)
 

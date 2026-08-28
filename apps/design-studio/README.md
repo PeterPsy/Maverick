@@ -90,8 +90,9 @@ Maverick keeps only:
 
 Existing workspaces created by the retired customized runtime are moved once
 from the active legacy generation into `opendesign-native/`. The operator
-command `service/cutover_native_opendesign.py` is deliberately unavailable
-while Maverick Core or an OpenDesign writer is running.
+command `service/cutover_native_opendesign.py` first installs a fail-closed
+quiescence marker and asks the live Core manager to stop the OpenDesign writer.
+Any concurrent relaunch sees that marker and exits before opening native data.
 
 `prepare` creates an immutable backup of the canonical OpenDesign directory,
 the previous native directory, and the explicit legacy correlation/config
@@ -105,7 +106,6 @@ and makes the retired generation and writer state read-only.
 Activation is explicit and ordered:
 
 ```bash
-systemctl stop maverick-core.service
 python3 apps/design-studio/service/cutover_native_opendesign.py prepare \
   --data-root /path/to/workspace/data/design-studio \
   --installation /path/to/artifacts/opendesign/official/<digest> \
@@ -114,16 +114,18 @@ python3 apps/design-studio/service/cutover_native_opendesign.py activate \
   --data-root /path/to/workspace/data/design-studio \
   --cutover-id <reported-cutover-id> \
   --confirm-writers-stopped
-systemctl start maverick-core.service
-# Verify native readiness and the public inventory, then:
+# `activate` closes legacy rollback and synchronously prewarms native OpenDesign.
+# Verify native readiness and the public inventory. If an offline recovery
+# requires an explicit readiness record instead, use:
 python3 apps/design-studio/service/cutover_native_opendesign.py finalize \
   --data-root /path/to/workspace/data/design-studio \
   --cutover-id <reported-cutover-id> --ready
 ```
 
-`activate` closes rollback to the legacy writer before Core starts. A failed
-native readiness check records `activation_failed` but never re-enables the
-legacy writer. Backups and certification records contain recovery bytes or
+`activate` closes rollback to the legacy writer before releasing quiescence and
+synchronously starting the native sidecar through Core. A failed native
+readiness check records `activation_failed` but never re-enables the legacy
+writer. Backups and certification records contain recovery bytes or
 category hashes as appropriate; the live Maverick marker contains no project,
 transcript, file, artifact, or settings bodies.
 
@@ -161,6 +163,7 @@ python3 -m unittest \
   apps.design-studio.tests.test_model_access_bridge \
   apps.design-studio.tests.test_native_delegation \
   apps.design-studio.tests.test_native_data_cutover \
+  apps.design-studio.tests.test_native_cutover_quiescence \
   apps.design-studio.tests.test_official_public_inventory \
   tests.unit.app_hosting.test_model_access_broker
 ```

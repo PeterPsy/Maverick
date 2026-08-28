@@ -15,6 +15,8 @@ from official_opendesign_release import (
     load_official_release,
     verify_official_installation,
 )
+from native_cutover_quiescence import reject_if_native_host_quiesced
+from native_cutover_state import NativeDataCutoverError
 from model_access_client import ModelAccessClient, ModelAccessClientError, ModelAccessConfiguration
 from model_access_profiles import (
     SANDBOX_PROFILE_PATH,
@@ -49,6 +51,10 @@ def main() -> None:
         create=True,
         label="OpenDesign data directory",
     )
+    try:
+        reject_if_native_host_quiesced(data_dir.parent)
+    except NativeDataCutoverError as error:
+        raise OfficialReleaseError(str(error)) from error
     release = load_official_release()
     installation_path = store_root / "official" / release.digest_key
     installation = verify_official_installation(installation_path, expected_release=release)

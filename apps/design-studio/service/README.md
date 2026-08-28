@@ -36,7 +36,7 @@ native OpenDesign remains usable if either bridge is unavailable.
 `cutover_native_opendesign.py` drives the operator-controlled transition from
 the retired customized generation to `opendesign-native/`:
 
-1. require Core and every OpenDesign writer to be stopped;
+1. install a fail-closed relaunch gate and stop the managed OpenDesign writer;
 2. verify the unchanged same-version official installation;
 3. create a byte-verified immutable backup of canonical and legacy state;
 4. run official migrations on disposable restored copies with both bridges
@@ -46,12 +46,14 @@ the retired customized generation to `opendesign-native/`:
 6. require identical redaction-safe category hashes;
 7. atomically select the migrated native directory and freeze retired writer
    state; and
-8. close legacy rollback before Core starts, then record native readiness.
+8. close legacy rollback, release the gate, synchronously prewarm through
+   Core, and record native readiness.
 
 The implementation is split by responsibility:
 
 - `native_cutover_files.py`: safe copies, hashes, fsync, and read-only state;
 - `native_cutover_state.py`: strict legacy paths, lock, and activation marker;
+- `native_cutover_quiescence.py`: the fail-closed relaunch gate;
 - `native_data_cutover.py`: backup/certification/atomic selection orchestration;
 - `official_inventory_process.py`: disposable unchanged process and bounded
   public HTTP client;
@@ -72,6 +74,7 @@ python3 -m unittest -v \
   apps/design-studio/tests/test_model_access_bridge.py \
   apps/design-studio/tests/test_native_delegation.py \
   apps/design-studio/tests/test_native_data_cutover.py \
+  apps/design-studio/tests/test_native_cutover_quiescence.py \
   apps/design-studio/tests/test_official_public_inventory.py
 ```
 

@@ -10,14 +10,12 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 SERVICE_ROOT = APP_ROOT / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from cutover_native_opendesign import _require_writers_stopped  # noqa: E402
 from native_cutover_files import NativeCutoverFileError  # noqa: E402
 from native_data_cutover import (  # noqa: E402
     NativeDataCutoverError,
@@ -263,18 +261,11 @@ class NativeDataCutoverTests(unittest.TestCase):
         with self.assertRaisesRegex(NativeDataCutoverError, "marker schema"):
             begin_native_writer_activation(self.root, cutover_id="native_test_poisoned")
 
-    def test_operator_refuses_cutover_without_stopped_core_confirmation(self) -> None:
-        with self.assertRaisesRegex(NativeDataCutoverError, "confirmation"):
-            _require_writers_stopped(False)
-        with patch("cutover_native_opendesign.subprocess.run") as run:
-            run.return_value = SimpleNamespace(returncode=0)
-            with self.assertRaisesRegex(NativeDataCutoverError, "Core must be stopped"):
-                _require_writers_stopped(True)
-
     def test_cutover_uses_no_private_database_reader(self) -> None:
         paths = (
             SERVICE_ROOT / "native_data_cutover.py",
             SERVICE_ROOT / "native_cutover_state.py",
+            SERVICE_ROOT / "native_cutover_quiescence.py",
             SERVICE_ROOT / "official_public_inventory.py",
             SERVICE_ROOT / "official_inventory_process.py",
             SERVICE_ROOT / "official_inventory_values.py",

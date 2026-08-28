@@ -25,6 +25,15 @@ import core.runtime.hosted_agentic_recovery as hosted_agentic_recovery_module
 import core.runtime.hosted_agentic_state as hosted_agentic_state_module
 import core.runtime.hosted_agentic_stream as hosted_agentic_stream_module
 import core.runtime.hosted_agentic_tool_execution as hosted_agentic_tool_execution_module
+import core.runtime.hosted_tool_process_registry as hosted_tool_process_registry_module
+import core.runtime.hosted_workspace_shell as hosted_workspace_shell_module
+import core.runtime.hosted_process_output as hosted_process_output_module
+import core.runtime.confined_filesystem_delete as confined_filesystem_delete_module
+import core.runtime.confined_filesystem_mutation_support as confined_filesystem_mutation_support_module
+import core.runtime.confined_filesystem_mutations as confined_filesystem_mutations_module
+import core.runtime.confined_filesystem_search as confined_filesystem_search_module
+import core.runtime.full_workspace_contract as full_workspace_contract_module
+import core.runtime.output_compaction.cli_result as output_compaction_cli_result_module
 import core.runtime.provider_step_journal as provider_step_journal_module
 import core.runtime.semantic_context_blocks as semantic_context_blocks_module
 import core.runtime.semantic_envelope as semantic_envelope_module
@@ -33,7 +42,13 @@ import core.runtime.semantic_tool_blocks as semantic_tool_blocks_module
 import core.runtime.hosted_agentic_tool_results as hosted_agentic_tool_results_module
 import core.runtime.hosted_provider_runtime as hosted_provider_runtime_module
 import core.runtime.tool_core_capabilities as tool_core_capabilities_module
+import core.runtime.tool_discovery_capabilities as tool_discovery_capabilities_module
+import core.runtime.tool_discovery_support as tool_discovery_support_module
 import core.runtime.tool_filesystem_listing as tool_filesystem_listing_module
+import core.runtime.tool_full_workspace_capabilities as tool_full_workspace_capabilities_module
+import core.runtime.tool_full_workspace_schemas as tool_full_workspace_schemas_module
+import core.runtime.tool_full_workspace_support as tool_full_workspace_support_module
+import core.runtime.tool_process_capabilities as tool_process_capabilities_module
 import core.runtime.tool_orchestrator as tool_orchestrator_module
 import core.runtime.workspace_instructions as workspace_instructions_module
 from core.providers.agentic_protocol import (
@@ -155,9 +170,24 @@ class HostedAgenticLoop:
             hosted_agentic_stream_module,
             hosted_agentic_tool_execution_module,
             hosted_agentic_tool_results_module,
+            hosted_tool_process_registry_module,
+            hosted_workspace_shell_module,
+            hosted_process_output_module,
+            confined_filesystem_delete_module,
+            confined_filesystem_mutation_support_module,
+            confined_filesystem_mutations_module,
+            confined_filesystem_search_module,
+            full_workspace_contract_module,
+            output_compaction_cli_result_module,
             hosted_provider_runtime_module,
             tool_core_capabilities_module,
+            tool_discovery_capabilities_module,
+            tool_discovery_support_module,
             tool_filesystem_listing_module,
+            tool_full_workspace_capabilities_module,
+            tool_full_workspace_schemas_module,
+            tool_full_workspace_support_module,
+            tool_process_capabilities_module,
             tool_orchestrator_module,
             provider_step_journal_module,
             semantic_context_blocks_module,

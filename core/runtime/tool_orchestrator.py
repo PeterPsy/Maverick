@@ -32,6 +32,7 @@ from core.runtime.tool_errors import (
     RuntimeToolSchemaError,
 )
 from core.runtime.tool_ledger import RuntimeToolLedger
+from core.runtime.output_compaction.cli_result import compact_runtime_cli_result
 from core.runtime.tool_models import ToolConfirmationGrant, ToolInvocationRecord
 from core.runtime.tool_schema import validate_tool_arguments
 
@@ -518,13 +519,25 @@ class RuntimeToolOrchestrator:
                         source_ref=descriptor.handle,
                     )
                 )
+            # Validate the capability result before the shared CLI compactor
+            # projects it into the bounded transport representation.  The
+            # projection is intentionally generic and need not preserve an
+            # app-specific output schema verbatim.
+            if descriptor.output_schema is not None:
+                validate_tool_arguments(descriptor.output_schema, result)
+            try:
+                result = compact_runtime_cli_result(
+                    result,
+                    argv=(descriptor.handle,),
+                    runtime_session_id=context.session_id,
+                )
+            except Exception as error:
+                raise RuntimeToolError("tool_output_compaction_failed") from error
             encoded = json.dumps(
                 result, ensure_ascii=False, allow_nan=False, separators=(",", ":"), sort_keys=True
             ).encode("utf-8")
             if len(encoded) > policy.max_tool_result_bytes:
                 raise RuntimeToolError("tool_result_too_large")
-            if descriptor.output_schema is not None:
-                validate_tool_arguments(descriptor.output_schema, result)
             summary = {
                 "root_type": "object",
                 "field_count": len(result),

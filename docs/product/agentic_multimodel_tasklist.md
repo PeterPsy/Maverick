@@ -2,8 +2,8 @@
 
 Status date: 2026-08-28
 
-Target: Phase 4A semantic envelope and materialization implemented; Phase 4B-D
-full-workspace parity remains open;
+Target: Phase 4B Full Workspace tool surface implemented; Phase 4C-D
+context and provider-compatibility closure remains open;
 remote agentic release remains **NO-GO**.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v6 records six maintained transitive dependency contracts. The
+- [x] Manifest v7 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v16 / matrix
-  `2026-08-28-r16-p4a-semantic-envelope-tcb6`
+- [x] Google and OpenRouter suite v17 / matrix
+  `2026-08-28-r17-p4b-full-workspace-tcb7`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -326,10 +326,46 @@ completion claim.
   manifest v6 are immutable contained candidates. No live probe, certificate,
   remote activation, or Codex profile/artifact change is part of P4A.
 
+## Phase 4B — Full Workspace tool surface
+
+- [x] `full_workspace_contract_revision=codex-baseline-v1` is a code-owned,
+  atomic profile/certificate/binding/live-authority contract. Any missing
+  required capability or handle rejects the claim or live refresh instead of
+  producing a partial agent.
+- [x] Descriptor-confined search and chunked reads are stable and versioned;
+  create/no-replace and atomic exchange, exact edit/ordered patch with bounded
+  diffs, rename, and quarantined recursive delete are version-fenced and
+  reject symlink/final-entry/parent races.
+- [x] Every mutation can bind a root-to-target `AGENTS.md` scope digest and
+  rechecks it before effect. Platform `runtime/` and `.git` are excluded from
+  agent filesystem enumeration and access.
+- [x] Hosted shell runs at fixed `/workspace`, masks platform runtime state,
+  exposes no host workspace path, uses an ephemeral HOME/TMP, read-only system
+  tooling, a disconnected network namespace, bounded output, and group timeout
+  cleanup.
+- [x] Session-owned long processes support bounded streaming status, stdin,
+  interrupt, timeout, redacted durable records, session cleanup, and the common
+  orphan reaper.
+- [x] Core/app CLI and MCP use discovery-first certified wrappers over the
+  official registries. Invocation tokens bind session, target, and registry;
+  the real runner rechecks policy. Authorized collaboration/inter-agent
+  commands are reached through the same official surfaces, not a shadow
+  implementation.
+- [x] Hosted results use the shared Codex result compactor before provider
+  egress. Confirmation remains in the common durable ledger, and the full
+  contract also requires skill, attachment, app-reference, interrupt, and
+  recovery capabilities.
+- [x] Adapter 13, Google profile revision 21, OpenRouter profile revision 20,
+  suite 17, matrix `2026-08-28-r17-p4b-full-workspace-tcb7`, and TCB manifest
+  v7 are immutable contained candidates. The profiles intentionally remain
+  read-only and do not claim the full-workspace contract; Phase 4D must create
+  new full revisions after compatibility closure. No live probe, certificate,
+  remote activation, or Codex profile/artifact change is part of P4B.
+
 ## Later parity and release gates — still open
 
-- [ ] Phase 4B-D complete the full-workspace tool contract, context/interaction
-  management, and exact provider compatibility closure.
+- [ ] Phase 4C-D complete context/interaction management and exact provider
+  compatibility closure, then create new certified full-workspace revisions.
 - [ ] Run each complete provider manifest on an exact clean deployable commit:
   deterministic fixture, operator-only synthetic live probe, behavioral
   validation, signing, verification, and immutable certificate publication.
@@ -339,7 +375,7 @@ completion claim.
   `docs/security/production_readiness.md` under a separate security review.
 
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false. No remote binding,
-profile, or certificate is enabled by P3; no Google/OpenRouter session, provider
+profile, or certificate is enabled by P4B; no Google/OpenRouter session, provider
 HTTP/SSE request, live probe, real-store containment/migration apply, canary,
 production release, or push is part of this closure. A backend restart after
 the verified commit is an operational code/schema reload only and does not

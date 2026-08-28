@@ -36,6 +36,8 @@ def core_cli_command(
         exposure_scope="core_global",
         invocation_policy=invocation_policy,
         entrypoint_path=None,
+        schema_public=True,
+        certified_tcb_component="tool-schema-catalog",
     )
 
 

@@ -4,18 +4,14 @@ from __future__ import annotations
 
 from core.egress.agentic_models import AgenticEgressPolicy
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
+from core.runtime.full_workspace_contract import FULL_WORKSPACE_CORE_TOOL_HANDLES
 from core.runtime.tool_orchestrator import (
     RuntimeToolConfirmationPolicy,
     RuntimeToolInvocationOutcome,
 )
 
 
-HOSTED_CORE_TOOL_HANDLES = (
-    "core-capability:filesystem.list",
-    "core-capability:filesystem.read",
-    "core-capability:filesystem.write",
-    "core-capability:shell.run",
-)
+HOSTED_CORE_TOOL_HANDLES = FULL_WORKSPACE_CORE_TOOL_HANDLES
 
 
 def authorized_core_tool_handles(binding) -> tuple[str, ...]:

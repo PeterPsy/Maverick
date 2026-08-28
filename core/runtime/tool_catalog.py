@@ -352,10 +352,24 @@ class RuntimeToolCatalogBuilder:
     def _core_capability_allowed(handle: str, authority: EffectiveRuntimeAuthority) -> bool:
         capability = authority.allowed_capabilities
         return {
+            "core-capability:workspace.instructions": capability.filesystem_read,
             "core-capability:filesystem.list": capability.filesystem_list,
+            "core-capability:filesystem.search": capability.filesystem_read,
             "core-capability:filesystem.read": capability.filesystem_read,
             "core-capability:filesystem.write": capability.filesystem_write,
+            "core-capability:filesystem.edit": capability.filesystem_write,
+            "core-capability:filesystem.patch": capability.filesystem_write,
+            "core-capability:filesystem.move": capability.filesystem_write,
+            "core-capability:filesystem.delete": capability.filesystem_write,
             "core-capability:shell.run": capability.shell,
+            "core-capability:process.start": capability.shell,
+            "core-capability:process.status": capability.shell,
+            "core-capability:process.input": capability.shell,
+            "core-capability:process.interrupt": capability.shell,
+            "core-capability:cli.list": capability.cli,
+            "core-capability:cli.run": capability.cli,
+            "core-capability:mcp.list": capability.mcp,
+            "core-capability:mcp.call": capability.mcp,
         }.get(handle, False)
 
     def _external_descriptor(

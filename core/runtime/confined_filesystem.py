@@ -26,6 +26,11 @@ from core.egress.classification import (
     join_classifications,
 )
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.confined_filesystem_mutation_support import (
+    rename_exchange,
+    rename_noreplace,
+    same_identity,
+)
 
 
 MAX_CONFINED_LIST_ENTRIES = 10_000
@@ -330,7 +335,7 @@ class ConfinedWorkspaceFilesystem:
                     "resource_identity": listing_observation.resource_identity,
                     "resource_revision": listing_observation.resource_revision,
                     "resource_digest": listing_observation.resource_digest,
-                    "excluded_names": (".git",),
+                    "excluded_names": (".git", "runtime"),
                 }
                 return ConfinedFilesystemResult(
                     payload,
@@ -350,18 +355,58 @@ class ConfinedWorkspaceFilesystem:
         content: str,
         create_only: bool,
         create_parents: bool = True,
+        replace_only: bool = False,
+        expected_resource_identity: str | None = None,
+        expected_resource_revision: str | None = None,
     ) -> ConfinedFilesystemResult:
         """Write and commit inside the verified parent descriptor only."""
         if not isinstance(content, str):
             raise RuntimeToolError("tool_arguments_invalid")
+        if create_only and replace_only:
+            raise RuntimeToolError("tool_arguments_invalid")
+        if bool(expected_resource_identity) != bool(expected_resource_revision):
+            raise RuntimeToolError("filesystem_expected_version_incomplete")
         components = self._components(relative_path, allow_root=False)
         chain = self._open_chain(components[:-1], create_missing=create_parents)
         temporary_name = f".maverick-write-{secrets.token_hex(16)}"
         temp_fd: int | None = None
         committed = False
         committed_stat: os.stat_result | None = None
+        rollback_kind: str | None = None
+        old_entry_retained = False
+        preserve_temporary = False
+        previous_stat: os.stat_result | None = None
+        previous_observation: FilesystemResourceObservation | None = None
         try:
             parent_fd = chain.leaf_fd
+            try:
+                previous_stat = os.stat(
+                    components[-1],
+                    dir_fd=parent_fd,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                previous_stat = None
+            if previous_stat is not None:
+                if stat.S_ISLNK(previous_stat.st_mode):
+                    raise RuntimeToolError("filesystem_symlink_denied")
+                if not stat.S_ISREG(previous_stat.st_mode):
+                    raise RuntimeToolError("filesystem_path_not_file")
+                previous_observation = self._observation(
+                    "filesystem_file",
+                    self._relative(components),
+                    previous_stat,
+                )
+            if replace_only and previous_stat is None:
+                raise RuntimeToolError("filesystem_path_not_found")
+            if expected_resource_identity is not None:
+                if previous_observation is None:
+                    raise RuntimeToolError("filesystem_resource_changed")
+                self._require_expected(
+                    previous_observation,
+                    identity=expected_resource_identity,
+                    revision=expected_resource_revision,
+                )
             temp_fd = os.open(
                 temporary_name,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW | _CLOEXEC,
@@ -373,6 +418,31 @@ class ConfinedWorkspaceFilesystem:
             os.fsync(temp_fd)
             self._hook("write_temporary_ready", relative_path)
             self._assert_chain(chain)
+            if previous_stat is not None:
+                try:
+                    current_stat = os.stat(
+                        components[-1],
+                        dir_fd=parent_fd,
+                        follow_symlinks=False,
+                    )
+                except FileNotFoundError as error:
+                    raise RuntimeToolError("filesystem_resource_changed") from error
+                self._assert_same_version(
+                    previous_stat,
+                    current_stat,
+                    "filesystem_resource_changed",
+                )
+            elif not create_only:
+                try:
+                    os.stat(
+                        components[-1],
+                        dir_fd=parent_fd,
+                        follow_symlinks=False,
+                    )
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise RuntimeToolError("filesystem_resource_changed")
             if create_only:
                 try:
                     os.link(
@@ -385,17 +455,55 @@ class ConfinedWorkspaceFilesystem:
                 except FileExistsError as error:
                     raise RuntimeToolError("filesystem_path_exists") from error
                 os.unlink(temporary_name, dir_fd=parent_fd)
-            else:
+                rollback_kind = "created"
+                committed = True
+                committed_stat = os.fstat(temp_fd)
+            elif previous_stat is not None:
                 self._reject_existing_symlink(parent_fd, components[-1])
-                os.replace(
+                rename_exchange(
+                    parent_fd,
                     temporary_name,
+                    parent_fd,
                     components[-1],
-                    src_dir_fd=parent_fd,
-                    dst_dir_fd=parent_fd,
                 )
+                rollback_kind = "exchanged"
+                old_entry_retained = True
+                committed = True
+                committed_stat = os.fstat(temp_fd)
+                swapped = os.stat(
+                    temporary_name,
+                    dir_fd=parent_fd,
+                    follow_symlinks=False,
+                )
+                if not same_identity(swapped, previous_stat) or not _same_exchange_version(
+                    swapped,
+                    previous_stat,
+                ):
+                    if not _rollback_confined_write(
+                        parent_fd,
+                        components[-1],
+                        temporary_name,
+                        committed_stat,
+                        previous_stat=previous_stat,
+                        rollback_kind=rollback_kind,
+                        old_entry_retained=old_entry_retained,
+                    ):
+                        preserve_temporary = True
+                        raise RuntimeToolError("tool_execution_unknown")
+                    committed = False
+                    old_entry_retained = False
+                    raise RuntimeToolError("filesystem_resource_changed")
+            else:
+                rename_noreplace(
+                    parent_fd,
+                    temporary_name,
+                    parent_fd,
+                    components[-1],
+                )
+                rollback_kind = "created"
+                committed = True
+                committed_stat = os.fstat(temp_fd)
             os.fsync(parent_fd)
-            committed = True
-            committed_stat = os.fstat(temp_fd)
             self._hook("write_committed", relative_path)
             committed_after_hook = os.fstat(temp_fd)
             self._assert_same_version(
@@ -409,32 +517,178 @@ class ConfinedWorkspaceFilesystem:
             observation = self._observation(
                 "filesystem_file", self._relative(components), committed_stat
             )
+            classification = self._classification(observation, "tool_result")
+            if old_entry_retained:
+                os.unlink(temporary_name, dir_fd=parent_fd)
+                old_entry_retained = False
+                os.fsync(parent_fd)
             return ConfinedFilesystemResult(
                 {
                     "path": observation.resource_ref,
                     "byte_count": len(payload),
+                    "created": previous_stat is None,
+                    "replaced": previous_stat is not None,
+                    "previous_resource_revision": (
+                        None
+                        if previous_observation is None
+                        else previous_observation.resource_revision
+                    ),
+                    "previous_resource_digest": (
+                        None
+                        if previous_observation is None
+                        else previous_observation.resource_digest
+                    ),
                     "resource_identity": observation.resource_identity,
                     "resource_revision": observation.resource_revision,
                     "resource_digest": observation.resource_digest,
                 },
-                self._classification(observation, "tool_result"),
+                classification,
             )
-        except RuntimeToolError:
+        except RuntimeToolError as error:
             if committed and committed_stat is not None:
-                self._unlink_if_identity(chain.leaf_fd, components[-1], committed_stat)
+                if _rollback_confined_write(
+                    chain.leaf_fd,
+                    components[-1],
+                    temporary_name,
+                    committed_stat,
+                    previous_stat=previous_stat,
+                    rollback_kind=rollback_kind,
+                    old_entry_retained=old_entry_retained,
+                ):
+                    committed = False
+                else:
+                    preserve_temporary = True
+                    if error.reason_code != "tool_execution_unknown":
+                        raise RuntimeToolError("tool_execution_unknown") from error
             raise
         except OSError as error:
             if committed and committed_stat is not None:
-                self._unlink_if_identity(chain.leaf_fd, components[-1], committed_stat)
+                if not _rollback_confined_write(
+                    chain.leaf_fd,
+                    components[-1],
+                    temporary_name,
+                    committed_stat,
+                    previous_stat=previous_stat,
+                    rollback_kind=rollback_kind,
+                    old_entry_retained=old_entry_retained,
+                ):
+                    preserve_temporary = True
+                    raise RuntimeToolError("tool_execution_unknown") from error
             raise RuntimeToolError("filesystem_write_failed") from error
         finally:
             if temp_fd is not None:
                 os.close(temp_fd)
-            try:
-                os.unlink(temporary_name, dir_fd=chain.leaf_fd)
-            except OSError:
-                pass
+            if not preserve_temporary:
+                try:
+                    os.unlink(temporary_name, dir_fd=chain.leaf_fd)
+                except OSError:
+                    pass
             chain.close()
+
+    def search_text(
+        self,
+        relative_path: str,
+        *,
+        query: str,
+        max_depth: int,
+        page_size: int,
+        cursor: str | None = None,
+        case_sensitive: bool = True,
+    ) -> ConfinedFilesystemResult:
+        """Search one stable descriptor-backed workspace snapshot."""
+        from core.runtime.confined_filesystem_search import search_confined_text
+
+        return search_confined_text(
+            self,
+            relative_path,
+            query=query,
+            max_depth=max_depth,
+            page_size=page_size,
+            cursor=cursor,
+            case_sensitive=case_sensitive,
+        )
+
+    def move_path(
+        self,
+        source_path: str,
+        destination_path: str,
+        *,
+        expected_resource_identity: str,
+        expected_resource_revision: str,
+        create_parents: bool = False,
+    ) -> ConfinedFilesystemResult:
+        """Atomically rename one version-fenced file or directory."""
+        from core.runtime.confined_filesystem_mutations import move_confined_path
+
+        return move_confined_path(
+            self,
+            source_path,
+            destination_path,
+            expected_resource_identity=expected_resource_identity,
+            expected_resource_revision=expected_resource_revision,
+            create_parents=create_parents,
+        )
+
+    def delete_path(
+        self,
+        relative_path: str,
+        *,
+        expected_resource_identity: str,
+        expected_resource_revision: str,
+        recursive: bool = False,
+    ) -> ConfinedFilesystemResult:
+        """Delete one version-fenced path without following links."""
+        from core.runtime.confined_filesystem_delete import delete_confined_path
+
+        return delete_confined_path(
+            self,
+            relative_path,
+            expected_resource_identity=expected_resource_identity,
+            expected_resource_revision=expected_resource_revision,
+            recursive=recursive,
+        )
+
+    def duplicate_root_fd(self) -> int:
+        """Return a verified duplicate for a confined child-process mount."""
+        if self._root_fd < 0 or self._root_stat is None:
+            raise RuntimeToolError("filesystem_root_unavailable")
+        duplicate = os.dup(self._root_fd)
+        try:
+            if not _same_identity(os.fstat(duplicate), self._root_stat):
+                raise RuntimeToolError("filesystem_root_moved")
+            self._assert_root_location(duplicate)
+            return duplicate
+        except Exception:
+            os.close(duplicate)
+            raise
+
+    def open_platform_runtime_fd(self, runtime_root: Path) -> int:
+        """Open the protected direct `runtime/` child without following links."""
+        configured = Path(os.path.abspath(os.fspath(runtime_root)))
+        if configured != self.workspace_root / "runtime":
+            raise RuntimeToolError("workspace_shell_root_mismatch")
+        root_fd = self.duplicate_root_fd()
+        try:
+            try:
+                os.mkdir("runtime", 0o700, dir_fd=root_fd)
+            except FileExistsError:
+                pass
+            runtime_fd = os.open(
+                "runtime",
+                os.O_RDONLY | _DIRECTORY | _NOFOLLOW | _CLOEXEC,
+                dir_fd=root_fd,
+            )
+            opened = os.fstat(runtime_fd)
+            if not stat.S_ISDIR(opened.st_mode):
+                os.close(runtime_fd)
+                raise RuntimeToolError("filesystem_path_not_directory")
+            return runtime_fd
+        except RuntimeToolError:
+            raise
+        except OSError as error:
+            raise RuntimeToolError("filesystem_path_outside_workspace") from error
+        finally:
+            os.close(root_fd)
 
     def open_shell_cwd(self, relative_path: str) -> _OpenChain:
         """Return a retained directory chain suitable for child ``fchdir``."""
@@ -448,6 +702,27 @@ class ConfinedWorkspaceFilesystem:
         except Exception:
             chain.close()
             raise
+
+    def path_is_directory(self, relative_path: str) -> bool:
+        """Inspect one exact final entry without following it or its parents."""
+        components = self._components(relative_path, allow_root=True)
+        if not components:
+            return True
+        with self._open_chain(components[:-1]) as chain:
+            try:
+                result = os.stat(
+                    components[-1],
+                    dir_fd=chain.leaf_fd,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                return False
+            except OSError as error:
+                raise RuntimeToolError("filesystem_resource_changed") from error
+            if stat.S_ISLNK(result.st_mode):
+                raise RuntimeToolError("filesystem_symlink_denied")
+            self._assert_chain(chain)
+            return stat.S_ISDIR(result.st_mode)
 
     def assert_shell_cwd(self, chain: _OpenChain) -> None:
         self._assert_chain(chain)
@@ -478,7 +753,7 @@ class ConfinedWorkspaceFilesystem:
                 except OSError as error:
                     raise RuntimeToolError("filesystem_list_failed") from error
                 for name in names:
-                    if name == ".git":
+                    if name == ".git" or (not components and name == "runtime"):
                         continue
                     try:
                         name.encode("utf-8", errors="strict")
@@ -789,6 +1064,7 @@ class ConfinedWorkspaceFilesystem:
         if (
             len(components) > MAX_CONFINED_PATH_COMPONENTS
             or any(part in {"", ".", "..", ".git"} for part in components)
+            or (components and components[0] == "runtime")
         ):
             raise RuntimeToolError("filesystem_path_outside_workspace")
         if not components and not allow_root:
@@ -832,6 +1108,75 @@ class ConfinedWorkspaceFilesystem:
     def _hook(self, event: str, path: str) -> None:
         if self.race_hook is not None:
             self.race_hook(event, path)
+
+
+def _rollback_confined_write(
+    parent_fd: int,
+    final_name: str,
+    temporary_name: str,
+    committed_stat: os.stat_result,
+    *,
+    previous_stat: os.stat_result | None,
+    rollback_kind: str | None,
+    old_entry_retained: bool,
+) -> bool:
+    """Restore the exact pre-write namespace only while both identities match."""
+    try:
+        current = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
+        if not same_identity(current, committed_stat):
+            return False
+        if rollback_kind == "created":
+            os.unlink(final_name, dir_fd=parent_fd)
+            os.fsync(parent_fd)
+            return True
+        if (
+            rollback_kind != "exchanged"
+            or not old_entry_retained
+            or previous_stat is None
+        ):
+            return False
+        retained = os.stat(
+            temporary_name,
+            dir_fd=parent_fd,
+            follow_symlinks=False,
+        )
+        if not same_identity(retained, previous_stat):
+            return False
+        rename_exchange(
+            parent_fd,
+            temporary_name,
+            parent_fd,
+            final_name,
+        )
+        restored = os.stat(final_name, dir_fd=parent_fd, follow_symlinks=False)
+        displaced = os.stat(
+            temporary_name,
+            dir_fd=parent_fd,
+            follow_symlinks=False,
+        )
+        if not same_identity(restored, previous_stat) or not same_identity(
+            displaced,
+            committed_stat,
+        ):
+            return False
+        os.unlink(temporary_name, dir_fd=parent_fd)
+        os.fsync(parent_fd)
+        return True
+    except Exception:
+        return False
+
+
+def _same_exchange_version(left: os.stat_result, right: os.stat_result) -> bool:
+    """Compare fields not intrinsically changed by a directory-entry exchange."""
+    fields = (
+        "st_dev",
+        "st_ino",
+        "st_mode",
+        "st_nlink",
+        "st_size",
+        "st_mtime_ns",
+    )
+    return all(getattr(left, field) == getattr(right, field) for field in fields)
 
 
 def _resource_revision(result: os.stat_result) -> str:

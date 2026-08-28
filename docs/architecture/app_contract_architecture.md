@@ -2275,6 +2275,15 @@ binding ceiling. A disabled or missing app, changed dependency selection,
 revoked grant, unknown handle, or policy mismatch fails closed. Live state may
 remove tools from a session but cannot add authority above its pinned ceiling.
 
+Full-workspace hosted profiles reach CLI and MCP through discovery-first Core
+wrappers rather than embedding every enabled app schema in the provider's base
+catalog. Discovery filters the authoritative registry by the current actor,
+workspace, execution mode, and app binding and returns a session- and registry-
+bound invocation token. Invocation without that token fails; invocation with
+it still re-enters the official CLI/MCP runner and rechecks policy. The same
+path exposes Core collaboration/inter-agent commands and tools when authorized,
+without granting them merely because their schema was discovered.
+
 The runtime must invoke the selected app through its declared, platform-hosted
 CLI, MCP, backend, or app-interface surface. It must not import an app module,
 read `data/<app_id>/`, inspect an app-private database, infer a provider from a

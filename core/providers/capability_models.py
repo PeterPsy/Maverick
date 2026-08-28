@@ -87,6 +87,7 @@ class CapabilityCertificate:
     tcb_manifest_version: str = ""
     tcb_structure_digest: str = ""
     tcb_live_digest: str = ""
+    full_workspace_contract_revision: str = ""
 
 
 @dataclass(frozen=True)

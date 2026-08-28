@@ -90,6 +90,7 @@ class AgenticProfileDefinition:
     created_at: datetime
     egress_policy_id: str
     egress_policy_revision: str
+    full_workspace_contract_revision: str = ""
 
 
 @dataclass(frozen=True)

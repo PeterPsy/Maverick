@@ -46,11 +46,13 @@ class HostedAgenticEngineAdapter:
         adapter_id: str,
         adapter_version: str,
         loop: HostedAgenticLoop,
+        composition_components: tuple[object, ...] = (),
     ) -> None:
         self.runtime_engine_id = runtime_engine_id
         self.adapter_id = adapter_id
         self.adapter_version = adapter_version
         self.loop = loop
+        self.composition_components = composition_components
         self._cancellations: dict[str, tuple[str, Event]] = {}
         self._lock = RLock()
 
@@ -60,6 +62,7 @@ class HostedAgenticEngineAdapter:
         return (
             self.loop,
             provider_step_admission_module,
+            *self.composition_components,
             *self.loop.artifact_components,
             *self.loop.provider_runtimes.artifact_components(),
         )

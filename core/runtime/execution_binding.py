@@ -53,6 +53,7 @@ class RuntimeExecutionBinding:
     tcb_manifest_version: str = ""
     tcb_structure_digest: str = ""
     tcb_live_digest: str = ""
+    full_workspace_contract_revision: str = ""
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,9 @@ _LEGACY_SCHEMA_FIELD_GROUPS = (
             "profile_policy_ceiling_snapshot",
             "workspace_policy_ceiling_snapshot",
         ),
+    ),
+    _LegacySchemaFieldGroup(
+        binding_fields=("full_workspace_contract_revision",),
     ),
 )
 
@@ -118,6 +122,7 @@ def build_runtime_execution_binding(
     tcb_manifest_version: str = "",
     tcb_structure_digest: str = "",
     tcb_live_digest: str = "",
+    full_workspace_contract_revision: str = "",
 ) -> RuntimeExecutionBinding:
     """Build one self-digesting immutable execution binding."""
     if (
@@ -192,6 +197,7 @@ def build_runtime_execution_binding(
         tcb_manifest_version=tcb_manifest_version,
         tcb_structure_digest=tcb_structure_digest,
         tcb_live_digest=tcb_live_digest,
+        full_workspace_contract_revision=full_workspace_contract_revision,
     )
     return replace(record, binding_digest=canonical_digest(record))
 
@@ -246,6 +252,7 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload.setdefault("tcb_manifest_version", "")
     payload.setdefault("tcb_structure_digest", "")
     payload.setdefault("tcb_live_digest", "")
+    payload.setdefault("full_workspace_contract_revision", "")
     binding = RuntimeExecutionBinding(**payload)
     digest_matches = binding.binding_digest == canonical_digest(binding)
     if not digest_matches:

@@ -22,6 +22,7 @@ from core.providers.certified_execution_tcb import (
 from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
+from core.runtime.full_workspace_contract import validate_full_workspace_binding
 
 
 _LEGACY_EVIDENCE_FIELDS = (
@@ -280,6 +281,7 @@ def validate_certificate_for_binding(
         if getattr(certificate, field_name) != getattr(evidence, field_name):
             raise CapabilityCertificateError("certificate_evidence_identity_mismatch")
     _validate_binding_tcb(certificate, binding)
+    validate_full_workspace_binding(certificate=certificate, binding=binding)
     timestamp = now or datetime.now(tz=UTC)
     if timestamp >= certificate.expires_at:
         raise CapabilityCertificateError("certificate_expired")

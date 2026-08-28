@@ -751,6 +751,43 @@ concurrent directory-to-symlink swap fails closed. Certification and policy
 must attest and grant listing independently from
 `core-capability:filesystem.read`.
 
+The code-owned Full Workspace Agent Contract is an atomic revisioned claim,
+not a menu of product tiers. Its Codex-derived baseline requires the complete
+workspace instruction, list/search/chunked-read, create/replace/edit/patch,
+move/delete, confined shell, managed process, CLI-discovery/invocation, and
+MCP-discovery/invocation handle set together with skills, file attachments,
+app references, confirmations, interrupt, and recovery capabilities. Profile,
+certificate, immutable execution binding, and every live authority refresh
+must retain the same contract revision. Losing one required live capability or
+handle makes the agent unavailable; Core does not materialize a partial agent.
+
+Hosted filesystem mutations are descriptor-relative and version-fenced.
+Replacement uses Linux atomic exchange/no-replace primitives so a final-entry
+swap cannot overwrite an unobserved inode. Recursive deletion first validates
+the bounded tree, then atomically moves the exact top-level inode into a
+platform-only quarantine before descriptor-only cleanup. Search cursors bind a
+complete revalidated snapshot, query, scope, and pagination position. Every
+mutation re-resolves the applicable root-to-target `AGENTS.md` chain and can
+bind the caller-observed instruction-scope digest before crossing the effect
+boundary.
+
+Hosted shell commands mount the retained workspace root at the fixed
+`/workspace` sandbox identity. Platform `runtime/` is masked, HOME and TMP are
+ephemeral, host absolute paths are not exposed, system tooling is read-only,
+and the network namespace is disconnected. Synchronous output is drained under
+a hard byte ceiling. Long commands use session-owned process handles with
+bounded streaming output, stdin, interrupt, timeout, process-group cleanup,
+durable redacted records, and the common orphan reaper.
+
+CLI and MCP access uses four fixed certified Core wrappers: discovery returns
+only definitions allowed by the authoritative registry invocation policy plus
+a registry/session-bound invocation token; run/call requires that token and
+re-enters the official runner, which rechecks current authority. Enabled app
+surfaces and collaboration/inter-agent commands therefore remain app/Core
+owned rather than being copied into a shadow registry. All tool results pass
+through the same bounded result compactor used by the Codex route before
+provider egress.
+
 ### 8. Secret management
 
 The core owns:

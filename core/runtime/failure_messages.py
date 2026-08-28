@@ -113,6 +113,9 @@ _PUBLIC_MESSAGES = {
     "hosted_runtime_failed": "The hosted runtime could not complete the request.",
     "hosted_agent_runtime_disabled": "Hosted agentic runtime admission is disabled.",
     "google_agentic_preview_disabled": "Google agentic preview admission is disabled.",
+    "full_workspace_contract_live_authority_incomplete": (
+        "This agent is unavailable because its full workspace contract is no longer effective."
+    ),
     "openrouter_agentic_preview_disabled": "OpenRouter agentic preview admission is disabled.",
     "model_provider_unavailable": "The selected model provider is unavailable.",
     "plain_hosted_chat_model_blocks_attachments": (

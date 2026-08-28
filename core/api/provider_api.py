@@ -621,6 +621,9 @@ def workspace_agentic_profile_status(
                 "provider_api_version": definition.provider_api_version,
                 "adapter_id": definition.adapter_id,
                 "adapter_version_constraint": definition.adapter_version_constraint,
+                "full_workspace_contract_revision": (
+                    definition.full_workspace_contract_revision or None
+                ),
                 "rollout_status": None if status is None else status.rollout_status,
                 "enabled": binding.enabled,
                 "is_default": binding.is_default,
@@ -732,6 +735,9 @@ def _profile_effective_capability_snapshot(
             tcb_manifest_version=certificate.tcb_manifest_version,
             tcb_structure_digest=certificate.tcb_structure_digest,
             tcb_live_digest=certificate.tcb_live_digest,
+            full_workspace_contract_revision=(
+                certificate.full_workspace_contract_revision
+            ),
         )
         health = run_runtime_coroutine(
             adapter.health(RuntimeHealthContext(binding=execution_binding))
@@ -913,6 +919,9 @@ def workspace_agentic_admin_status(state: PlatformState, *, workspace_id: str) -
                 "provider_api_version": definition.provider_api_version,
                 "adapter_id": definition.adapter_id,
                 "adapter_version_constraint": definition.adapter_version_constraint,
+                "full_workspace_contract_revision": (
+                    definition.full_workspace_contract_revision or None
+                ),
                 "routing_constraint": asdict(definition.routing_constraint),
                 "upstream_provider_ids": definition.routing_constraint.allowed_upstream_ids,
                 "data_destination": _agentic_data_destination_payload(
@@ -1047,6 +1056,9 @@ def capability_certificate_payload(certificate: CapabilityCertificate, status) -
             "structure_digest": certificate.tcb_structure_digest or None,
             "live_digest": certificate.tcb_live_digest or None,
         },
+        "full_workspace_contract_revision": (
+            certificate.full_workspace_contract_revision or None
+        ),
     }
 
 
@@ -1177,6 +1189,9 @@ def runtime_session_agentic_governance_payload(
         "workspace_binding_id": binding.workspace_binding_id,
         "workspace_binding_revision": binding.workspace_binding_revision,
         "runtime_engine_id": binding.runtime_engine_id,
+        "full_workspace_contract_revision": (
+            binding.full_workspace_contract_revision or None
+        ),
         "model_provider_id": binding.model_provider_id,
         "model_id": binding.model_id,
         "rollout_status": rollout_status,
@@ -1582,6 +1597,9 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                         "provider_api_version": item.provider_api_version,
                         "adapter_id": item.adapter_id,
                         "adapter_version_constraint": item.adapter_version_constraint,
+                        "full_workspace_contract_revision": (
+                            item.full_workspace_contract_revision or None
+                        ),
                         "routing_constraint": asdict(item.routing_constraint),
                         "capability_certificate_id": item.capability_certificate_id,
                         "created_at": item.created_at,

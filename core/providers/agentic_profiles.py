@@ -32,6 +32,7 @@ from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, build_runtime_execution_binding
+from core.runtime.full_workspace_contract import validate_full_workspace_contract_claim
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
     MAVERICK_FEATURE_AGENTIC_PROFILES,
@@ -295,6 +296,10 @@ def build_pinned_execution_binding(
         certificate = store.get_capability_certificate(definition.capability_certificate_id)
     except ProviderNotFoundError as error:
         raise CapabilityCertificateError("certificate_missing") from error
+    validate_full_workspace_contract_claim(
+        profile=definition,
+        certificate=certificate,
+    )
     normalized_reasoning_effort = _validated_reasoning_effort(
         certificate,
         reasoning_effort=reasoning_effort,
@@ -338,6 +343,9 @@ def build_pinned_execution_binding(
         tcb_manifest_version=certificate.tcb_manifest_version,
         tcb_structure_digest=certificate.tcb_structure_digest,
         tcb_live_digest=certificate.tcb_live_digest,
+        full_workspace_contract_revision=(
+            getattr(certificate, "full_workspace_contract_revision", "")
+        ),
     )
     validate_certificate_for_binding(
         store,

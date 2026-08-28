@@ -6,19 +6,21 @@ Scope: trusted CI or operator-controlled certification worker
 
 Production status: **not approved; no complete two-step certificate evidence recorded**
 
-P4A repository closure executes only the explicitly selected deterministic
+P4B repository closure executes only the explicitly selected deterministic
 `fixture_contract` steps for Google and OpenRouter. It does not execute
 `live_probe`, produce behavioral evidence, sign/publish a remote certificate,
 or make any provider HTTP/SSE request.
 
-Suite 16 retains the P2 crash/pairing/outbox matrix and P3 finalization
+Suite 17 retains the P2 crash/pairing/outbox matrix and P3 finalization
 coverage, including durable step/tool/output/cost/time reservation, complete
 terminal-request cost projections, tool-less provider payloads, staged
 request-specific preflight, and request-scoped instructions. It also verifies
 that a terminal success requires a persisted live execution lease in the same
 CAS, including the race where a worker pauses after its last cooperative check,
 and adds semantic-envelope source/projection, scoped instruction, full-skill,
-and journal-evidence fixtures.
+journal-evidence, atomic Full Workspace contract, descriptor-confined mutation,
+fixed-path shell, managed-process, discovery-first CLI/MCP, compaction, and
+orphan-cleanup fixtures.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
@@ -35,8 +37,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v16 matrix revision
-  `2026-08-28-r16-p4a-semantic-envelope-tcb6` declared by the provider certificate module;
+- the dated suite-v17 matrix revision
+  `2026-08-28-r17-p4b-full-workspace-tcb7` declared by the provider certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
   provide or narrow its component list or digest;
@@ -70,7 +72,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 16 \
+  --suite-version 17 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -79,8 +81,8 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `16`, matrix revision `2026-08-28-r16-p4a-semantic-envelope-tcb6`, and the OpenRouter
-manifest. The Google suite uses version `16` and the same matrix revision. The
+version `17`, matrix revision `2026-08-28-r17-p4b-full-workspace-tcb7`, and the OpenRouter
+manifest. The Google suite uses version `17` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.

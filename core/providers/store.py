@@ -524,6 +524,7 @@ class ProviderDocumentStore:
 
 def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefinition:
     payload = dict(document)
+    payload.setdefault("full_workspace_contract_revision", "")
     _migrate_legacy_agentic_profile_egress(payload)
     payload["routing_constraint"] = _routing_constraint(payload["routing_constraint"])
     payload["policy_ceiling"] = _agentic_runtime_policy(payload["policy_ceiling"])
@@ -563,6 +564,7 @@ def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
         "tcb_live_digest",
     ):
         payload.setdefault(field_name, "")
+    payload.setdefault("full_workspace_contract_revision", "")
     return CapabilityCertificate(**payload)
 
 

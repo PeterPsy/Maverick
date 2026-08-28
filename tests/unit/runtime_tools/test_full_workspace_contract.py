@@ -1,0 +1,573 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+import tempfile
+import time
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from core.cli.command_registry import CliCommandRegistry
+from core.cli.models import (
+    CliCommandDefinition,
+    CliInvocationPolicy,
+)
+from core.mcp.models import (
+    McpInvocationPolicy,
+    McpToolDefinition,
+)
+from core.mcp.tool_registry import McpToolRegistry
+from core.providers.agentic_models import codex_runtime_policy
+from core.providers.capability_models import RuntimeCapabilitySet
+from core.providers.errors import CapabilityCertificateError
+from core.runtime.full_workspace_contract import (
+    FULL_WORKSPACE_CONTRACT_REVISION,
+    FULL_WORKSPACE_CORE_TOOL_HANDLES,
+    inspect_full_workspace_contract,
+    validate_full_workspace_contract_claim,
+    validate_full_workspace_live_authority,
+)
+from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
+from core.runtime.process_control import runtime_processes_alive_for_session
+from core.runtime.tool_catalog import RuntimeToolActorContext
+from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
+from core.runtime.tool_discovery_capabilities import build_discovery_first_capabilities
+from core.runtime.tool_errors import RuntimeToolError
+from tests.support.hosted_agentic_harness import HostedAgenticHarness
+
+
+class FullWorkspaceContractTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.harness = HostedAgenticHarness(self)
+        self.workspace = self.harness.root / "workspaces" / "default"
+        self.context = RuntimeToolActorContext(
+            workspace_id="default",
+            actor_id="user-1",
+            agent_id="agent-1",
+            platform_role="admin",
+            workspace_role="admin",
+            session_id="session-hosted",
+            execution_mode="full-access",
+        )
+
+    def test_contract_rejects_every_partial_claim_and_accepts_exact_surface(self) -> None:
+        capabilities = RuntimeCapabilitySet(
+            streaming=True,
+            tool_orchestration=True,
+            cli=True,
+            mcp=True,
+            skill_catalog=True,
+            filesystem_list=True,
+            filesystem_read=True,
+            filesystem_write=True,
+            shell=True,
+            interrupt=True,
+            same_turn_steering=False,
+            recovery=True,
+            confirmation_resume=True,
+            provider_private_state=True,
+            attachment_modalities=("file",),
+            app_references=True,
+            confirmations=True,
+        )
+        policy = replace(
+            codex_runtime_policy(),
+            tool_handle_mode="exact",
+            allowed_tool_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES,
+            require_confirmation_for_mutating=True,
+            require_confirmation_for_destructive=True,
+        )
+        profile = SimpleNamespace(
+            full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
+            policy_ceiling=policy,
+        )
+        certificate = SimpleNamespace(
+            full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
+            certified_capabilities=capabilities,
+        )
+
+        report = inspect_full_workspace_contract(
+            capabilities=capabilities,
+            policy=policy,
+        )
+        self.assertTrue(report.complete)
+        validate_full_workspace_contract_claim(
+            profile=profile,
+            certificate=certificate,
+        )
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "full_workspace_contract_live_authority_incomplete",
+        ):
+            validate_full_workspace_live_authority(
+                revision=FULL_WORKSPACE_CONTRACT_REVISION,
+                capabilities=capabilities,
+                policy=policy,
+                allowed_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES[:-1],
+            )
+        self.assertFalse(
+            inspect_full_workspace_contract(
+                capabilities=capabilities,
+                policy=replace(
+                    policy,
+                    require_confirmation_for_destructive=False,
+                ),
+            ).complete
+        )
+
+        for missing in ("cli", "filesystem_write", "confirmations"):
+            with self.subTest(missing=missing), self.assertRaisesRegex(
+                CapabilityCertificateError,
+                "full_workspace_contract_incomplete",
+            ):
+                validate_full_workspace_contract_claim(
+                    profile=profile,
+                    certificate=SimpleNamespace(
+                        full_workspace_contract_revision=(
+                            FULL_WORKSPACE_CONTRACT_REVISION
+                        ),
+                        certified_capabilities=replace(
+                            capabilities,
+                            **{missing: False},
+                        ),
+                    ),
+                )
+
+    def test_filesystem_search_edit_patch_move_delete_and_scoped_instructions(self) -> None:
+        nested = self.workspace / "project"
+        nested.mkdir()
+        (self.workspace / "AGENTS.md").write_text(
+            "Root rules.\n",
+            encoding="utf-8",
+        )
+        (nested / "AGENTS.md").write_text(
+            "Project rules.\n",
+            encoding="utf-8",
+        )
+        target = nested / "notes.txt"
+        target.write_text("alpha needle\nbeta needle\n", encoding="utf-8")
+        capabilities = self._capabilities()
+
+        instructions = capabilities["core-capability:workspace.instructions"].handler(
+            {"path": "project/notes.txt"},
+            self.context,
+            None,
+        )
+        self.assertEqual(
+            [item["scope"] for item in instructions.payload["instructions"]],
+            [".", "project"],
+        )
+        scope_digest = instructions.payload["scope_digest"]
+
+        search = capabilities["core-capability:filesystem.search"].handler(
+            {"path": ".", "query": "needle", "max_results": 1},
+            self.context,
+            None,
+        )
+        self.assertEqual(search.payload["total_result_count"], 2)
+        second = capabilities["core-capability:filesystem.search"].handler(
+            {"query": "ignored", "cursor": search.payload["next_cursor"]},
+            self.context,
+            None,
+        )
+        self.assertEqual(second.payload["matches"][0]["line"], 2)
+
+        read = capabilities["core-capability:filesystem.read"].handler(
+            {"path": "project/notes.txt"},
+            self.context,
+            None,
+        )
+        edit = capabilities["core-capability:filesystem.edit"].handler(
+            {
+                "path": "project/notes.txt",
+                "old_text": "needle",
+                "new_text": "match",
+                "expected_occurrences": 2,
+                "expected_resource_identity": read.payload["resource_identity"],
+                "expected_resource_revision": read.payload["resource_revision"],
+                "instruction_scope_digest": scope_digest,
+            },
+            self.context,
+            None,
+        )
+        self.assertIn("+alpha match", edit.payload["diff"])
+
+        patch = capabilities["core-capability:filesystem.patch"].handler(
+            {
+                "path": "project/notes.txt",
+                "operations": [
+                    {"old_text": "alpha", "new_text": "one"},
+                    {"old_text": "beta", "new_text": "two"},
+                ],
+                "expected_resource_identity": edit.payload["resource_identity"],
+                "expected_resource_revision": edit.payload["resource_revision"],
+                "instruction_scope_digest": scope_digest,
+            },
+            self.context,
+            None,
+        )
+        move = capabilities["core-capability:filesystem.move"].handler(
+            {
+                "source_path": "project/notes.txt",
+                "destination_path": "project/renamed.txt",
+                "expected_resource_identity": patch.payload["resource_identity"],
+                "expected_resource_revision": patch.payload["resource_revision"],
+                "instruction_scope_digest": scope_digest,
+            },
+            self.context,
+            None,
+        )
+        self.assertFalse(target.exists())
+        self.assertTrue((nested / "renamed.txt").exists())
+        deleted = capabilities["core-capability:filesystem.delete"].handler(
+            {
+                "path": "project/renamed.txt",
+                "expected_resource_identity": move.payload["resource_identity"],
+                "expected_resource_revision": move.payload["resource_revision"],
+                "instruction_scope_digest": scope_digest,
+            },
+            self.context,
+            None,
+        )
+        self.assertTrue(deleted.payload["deleted"])
+        self.assertFalse((nested / "renamed.txt").exists())
+
+    def test_mutation_rechecks_instruction_digest_before_effect(self) -> None:
+        (self.workspace / "AGENTS.md").write_text("First.\n", encoding="utf-8")
+        capabilities = self._capabilities()
+        instructions = capabilities["core-capability:workspace.instructions"].handler(
+            {"path": "created.txt"},
+            self.context,
+            None,
+        )
+        (self.workspace / "AGENTS.md").write_text("Changed.\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_instruction_scope_changed",
+        ):
+            capabilities["core-capability:filesystem.write"].handler(
+                {
+                    "path": "created.txt",
+                    "content": "must not be written",
+                    "create_only": True,
+                    "instruction_scope_digest": instructions.payload["scope_digest"],
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((self.workspace / "created.txt").exists())
+
+    def test_search_cursor_and_versioned_mutations_fail_on_race(self) -> None:
+        target = self.workspace / "race.txt"
+        target.write_text("needle one\nneedle two\n", encoding="utf-8")
+        capabilities = self._capabilities()
+        first = capabilities["core-capability:filesystem.search"].handler(
+            {"query": "needle", "max_results": 1},
+            self.context,
+            None,
+        )
+        target.write_text("changed\n", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeToolError, "filesystem_snapshot_changed"):
+            capabilities["core-capability:filesystem.search"].handler(
+                {"query": "ignored", "cursor": first.payload["next_cursor"]},
+                self.context,
+                None,
+            )
+
+        observed = capabilities["core-capability:filesystem.read"].handler(
+            {"path": "race.txt"},
+            self.context,
+            None,
+        )
+        target.write_text("changed again\n", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeToolError, "filesystem_resource_changed"):
+            capabilities["core-capability:filesystem.write"].handler(
+                {
+                    "path": "race.txt",
+                    "content": "stale replacement",
+                    "replace_only": True,
+                    "expected_resource_identity": observed.payload[
+                        "resource_identity"
+                    ],
+                    "expected_resource_revision": observed.payload[
+                        "resource_revision"
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertEqual(target.read_text(encoding="utf-8"), "changed again\n")
+
+    def test_recursive_delete_unlinks_symlink_without_touching_target(self) -> None:
+        with tempfile.TemporaryDirectory() as outside_directory:
+            outside = Path(outside_directory)
+            protected = outside / "protected.txt"
+            protected.write_text("outside", encoding="utf-8")
+            tree = self.workspace / "tree"
+            tree.mkdir()
+            (tree / "local.txt").write_text("inside", encoding="utf-8")
+            (tree / "link.txt").symlink_to(protected)
+            capabilities = self._capabilities()
+            listing = capabilities["core-capability:filesystem.list"].handler(
+                {"path": "."},
+                self.context,
+                None,
+            )
+            tree_entry = next(
+                item
+                for item in listing.payload["entries"]
+                if item["path"] == "tree"
+            )
+            deleted = capabilities["core-capability:filesystem.delete"].handler(
+                {
+                    "path": "tree",
+                    "recursive": True,
+                    "expected_resource_identity": tree_entry["resource_identity"],
+                    "expected_resource_revision": tree_entry["resource_revision"],
+                },
+                self.context,
+                None,
+            )
+            self.assertEqual(deleted.payload["deleted_entry_count"], 3)
+            self.assertTrue(protected.exists())
+            self.assertEqual(protected.read_text(encoding="utf-8"), "outside")
+
+    def test_shell_and_long_process_are_confined_streamed_and_reaped(self) -> None:
+        capabilities = self._capabilities(processes=True)
+        runtime_marker = self.workspace / "runtime" / "private-marker"
+        runtime_marker.parent.mkdir(parents=True, exist_ok=True)
+        runtime_marker.write_text("platform-private", encoding="utf-8")
+        shell = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    (
+                        "printf '%s|' \"$PWD\"; "
+                        "test ! -e /etc/passwd && "
+                        "test ! -e /workspace/runtime/private-marker && "
+                        f"test ! -e {self.workspace!s} && printf confined"
+                    ),
+                ]
+            },
+            self.context,
+            None,
+        )
+        self.assertEqual(shell["output"], "/workspace|confined")
+
+        started = capabilities["core-capability:process.start"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    "read value; printf 'received:%s' \"$value\"",
+                ]
+            },
+            self.context,
+            None,
+        )
+        process_id = started.payload["process_id"]
+        capabilities["core-capability:process.input"].handler(
+            {"process_id": process_id, "content": "hello\n", "close": True},
+            self.context,
+            None,
+        )
+        status = None
+        for _ in range(50):
+            status = capabilities["core-capability:process.status"].handler(
+                {"process_id": process_id},
+                self.context,
+                None,
+            )
+            if status.payload["status"] == "exited":
+                break
+            time.sleep(0.02)
+        assert status is not None
+        self.assertEqual(status.payload["status"], "exited")
+        self.assertEqual(status.payload["output"], "received:hello")
+        self.assertFalse(runtime_processes_alive_for_session("session-hosted"))
+
+    def test_shell_and_process_output_and_time_are_hard_bounded(self) -> None:
+        capabilities = self._capabilities(processes=True)
+        with self.assertRaisesRegex(RuntimeToolError, "shell_output_too_large"):
+            capabilities["core-capability:shell.run"].handler(
+                {"argv": ["/usr/bin/head", "-c", "200000", "/dev/zero"]},
+                self.context,
+                None,
+            )
+
+        with patch("core.runtime.hosted_process_output.MAX_PROCESS_OUTPUT_BYTES", 64):
+            overflowing = capabilities["core-capability:process.start"].handler(
+                {
+                    "argv": ["/usr/bin/head", "-c", "1024", "/dev/zero"],
+                    "timeout_seconds": 5,
+                },
+                self.context,
+                None,
+            )
+            overflow_status = self._wait_for_process(
+                capabilities,
+                str(overflowing.payload["process_id"]),
+            )
+        self.assertEqual(overflow_status.payload["status"], "failed")
+        self.assertEqual(
+            overflow_status.payload["failure_reason"],
+            "process_output_too_large",
+        )
+        self.assertTrue(overflow_status.payload["output_truncated"])
+
+        timing_out = capabilities["core-capability:process.start"].handler(
+            {
+                "argv": ["/bin/sh", "-c", "sleep 10"],
+                "timeout_seconds": 1,
+            },
+            self.context,
+            None,
+        )
+        timeout_status = self._wait_for_process(
+            capabilities,
+            str(timing_out.payload["process_id"]),
+        )
+        self.assertEqual(timeout_status.payload["status"], "timed-out")
+        self.assertEqual(
+            timeout_status.payload["failure_reason"],
+            "process_timed_out",
+        )
+        self.assertFalse(runtime_processes_alive_for_session("session-hosted"))
+
+    def test_cli_and_mcp_require_discovery_token_across_catalog_refresh(self) -> None:
+        cli = CliCommandRegistry()
+        cli.register_command(
+            CliCommandDefinition(
+                command_id="fixture.echo",
+                path_segments=["fixture", "echo"],
+                description="Echo a fixture.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="core",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(
+                    operator_only=False,
+                    required_platform_role=None,
+                    sandbox_agent_allowed=True,
+                    requires_workspace_context=True,
+                    requires_full_access=False,
+                ),
+                entrypoint_path=None,
+                effect_class="read",
+                safe_to_retry=True,
+                schema_public=True,
+                certified_tcb_component="tool-schema-catalog",
+            ),
+            lambda arguments, _context: {"echo": arguments.get("value")},
+        )
+        mcp = McpToolRegistry()
+        mcp.register_tool(
+            McpToolDefinition(
+                tool_name="fixture_lookup",
+                description="Lookup a fixture.",
+                input_schema={"type": "object"},
+                output_schema=None,
+                owner_kind="core",
+                owner_id="core",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=McpInvocationPolicy(
+                    operator_only=False,
+                    sandbox_agent_allowed=True,
+                    requires_workspace_context=True,
+                    requires_full_access=False,
+                ),
+                entrypoint_path=None,
+                effect_class="read",
+                safe_to_retry=True,
+                schema_public=True,
+                certified_tcb_component="tool-schema-catalog",
+            ),
+            lambda arguments, _context: {"found": arguments.get("id")},
+        )
+        first = self._discovery(cli, mcp)
+        cli_listing = first["core-capability:cli.list"].handler(
+            {}, self.context, None
+        )
+        mcp_listing = first["core-capability:mcp.list"].handler(
+            {}, self.context, None
+        )
+
+        refreshed = self._discovery(cli, mcp)
+        cli_result = refreshed["core-capability:cli.run"].handler(
+            {
+                "command_id": "fixture.echo",
+                "invocation_token": cli_listing.payload["commands"][0][
+                    "invocation_token"
+                ],
+                "arguments": {"value": "ok"},
+            },
+            self.context,
+            None,
+        )
+        mcp_result = refreshed["core-capability:mcp.call"].handler(
+            {
+                "tool_name": "fixture_lookup",
+                "invocation_token": mcp_listing.payload["tools"][0][
+                    "invocation_token"
+                ],
+                "arguments": {"id": 7},
+            },
+            self.context,
+            None,
+        )
+        self.assertEqual(cli_result.payload, {"echo": "ok"})
+        self.assertEqual(mcp_result.payload, {"found": 7})
+        with self.assertRaisesRegex(RuntimeToolError, "tool_discovery_required"):
+            refreshed["core-capability:cli.run"].handler(
+                {
+                    "command_id": "fixture.echo",
+                    "arguments": {},
+                },
+                self.context,
+                None,
+            )
+
+    def _capabilities(self, *, processes: bool = False):
+        surfaces = build_core_runtime_tool_capabilities(
+            workspace_id="default",
+            workspace_root=self.workspace,
+            runtime_root=Path(self.harness.session.runtime_root),
+            process_registry=(
+                HostedToolProcessRegistry(store=self.harness.store)
+                if processes
+                else None
+            ),
+        )
+        return {surface.definition.handle: surface for surface in surfaces}
+
+    def _wait_for_process(self, capabilities, process_id: str):
+        status = None
+        for _ in range(150):
+            status = capabilities["core-capability:process.status"].handler(
+                {"process_id": process_id},
+                self.context,
+                None,
+            )
+            if status.payload["status"] != "running":
+                return status
+            time.sleep(0.02)
+        self.fail(f"process {process_id} did not reach a terminal status")
+
+    @staticmethod
+    def _discovery(cli, mcp):
+        return {
+            surface.definition.handle: surface
+            for surface in build_discovery_first_capabilities(
+                cli_registry=cli,
+                mcp_registry=mcp,
+            )
+        }
+
+
+if __name__ == "__main__":
+    unittest.main()

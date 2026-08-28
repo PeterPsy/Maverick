@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-import subprocess
 
 from core.runtime.confined_filesystem import (
     ConfinedWorkspaceFilesystem,
@@ -23,6 +21,21 @@ from core.runtime.tool_filesystem_listing import (
     MAX_FILESYSTEM_LIST_RESULTS,
     filesystem_list_schema,
 )
+from core.runtime.hosted_tool_process_registry import (
+    HostedToolProcessRegistry,
+    hosted_process_environment,
+)
+from core.runtime.hosted_workspace_shell import run_hosted_workspace_command
+from core.runtime.tool_discovery_capabilities import (
+    build_discovery_first_capabilities,
+)
+from core.runtime.tool_full_workspace_capabilities import (
+    build_full_workspace_capabilities,
+)
+from core.runtime.tool_full_workspace_support import mutation_instruction_evidence
+from core.runtime.tool_full_workspace_schemas import (
+    extended_filesystem_write_schema,
+)
 
 
 MAX_FILESYSTEM_READ_BYTES = 262_144
@@ -38,6 +51,10 @@ def build_core_runtime_tool_capabilities(
     workspace_root: Path,
     resource_classification_resolver: ResourceClassificationResolver | None = None,
     filesystem_race_hook: FilesystemRaceHook | None = None,
+    runtime_root: Path | None = None,
+    process_registry: HostedToolProcessRegistry | None = None,
+    cli_registry=None,
+    mcp_registry=None,
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     """Build workspace-bound Core capabilities over one fd-relative boundary."""
     filesystem = ConfinedWorkspaceFilesystem(
@@ -46,6 +63,7 @@ def build_core_runtime_tool_capabilities(
         classification_resolver=resource_classification_resolver,
         race_hook=filesystem_race_hook,
     )
+    resolved_runtime_root = runtime_root or (workspace_root / "runtime")
 
     def filesystem_list(
         arguments: dict[str, object],
@@ -117,13 +135,32 @@ def build_core_runtime_tool_capabilities(
             raise RuntimeToolError("tool_arguments_invalid")
         if len(content.encode("utf-8")) > MAX_FILESYSTEM_WRITE_BYTES:
             raise RuntimeToolError("filesystem_write_too_large")
+        path = str(arguments.get("path") or "")
+        evidence = mutation_instruction_evidence(
+            filesystem,
+            workspace_root=workspace_root,
+            path=path,
+            expected_digest=_optional_string(
+                arguments.get("instruction_scope_digest")
+            ),
+        )
         result = filesystem.write_text(
-            str(arguments.get("path") or ""),
+            path,
             content=content,
             create_only=arguments.get("create_only") is True,
             create_parents=arguments.get("create_parents") is not False,
+            replace_only=arguments.get("replace_only") is True,
+            expected_resource_identity=_optional_string(
+                arguments.get("expected_resource_identity")
+            ),
+            expected_resource_revision=_optional_string(
+                arguments.get("expected_resource_revision")
+            ),
         )
-        return RuntimeToolSurfaceResult(result.payload, result.classification)
+        return RuntimeToolSurfaceResult(
+            {**result.payload, **evidence},
+            result.classification,
+        )
 
     def shell_run(
         arguments: dict[str, object],
@@ -151,43 +188,33 @@ def build_core_runtime_tool_capabilities(
             or not 1 <= timeout <= MAX_SHELL_TIMEOUT_SECONDS
         ):
             raise RuntimeToolError("tool_arguments_invalid")
-        chain = filesystem.open_shell_cwd(str(arguments.get("cwd") or "."))
-        environment = {
-            "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-            "LANG": os.environ.get("LANG", "C.UTF-8"),
-            "LC_ALL": os.environ.get("LC_ALL", "C.UTF-8"),
-        }
-        cwd_fd = chain.leaf_fd
-        try:
-            completed = subprocess.run(
-                argv,
-                cwd=None,
-                env=environment,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                timeout=timeout,
-                check=False,
-                pass_fds=(cwd_fd,),
-                preexec_fn=lambda: os.fchdir(cwd_fd),
-            )
-            filesystem.assert_shell_cwd(chain)
-        except RuntimeToolError:
-            raise
-        except (OSError, subprocess.TimeoutExpired) as error:
-            raise RuntimeToolError("shell_execution_failed") from error
-        finally:
-            chain.close()
-        output = completed.stdout[: MAX_SHELL_OUTPUT_BYTES + 1]
-        if len(output) > MAX_SHELL_OUTPUT_BYTES:
-            raise RuntimeToolError("shell_output_too_large")
+        cwd = str(arguments.get("cwd") or ".")
+        evidence = mutation_instruction_evidence(
+            filesystem,
+            workspace_root=workspace_root,
+            path=cwd,
+            expected_digest=_optional_string(
+                arguments.get("instruction_scope_digest")
+            ),
+            target_is_directory=True,
+        )
         return {
-            "exit_code": completed.returncode,
-            "output": output.decode("utf-8", errors="replace"),
-            "output_bytes": len(output),
+            **run_hosted_workspace_command(
+                filesystem,
+                workspace_root=workspace_root,
+                runtime_root=resolved_runtime_root,
+                argv=argv,
+                cwd=cwd,
+                environment=hosted_process_environment(
+                    session_id=context.session_id
+                ),
+                timeout_seconds=timeout,
+                max_output_bytes=MAX_SHELL_OUTPUT_BYTES,
+            ),
+            **evidence,
         }
 
-    return (
+    base = (
         RuntimeCoreCapabilitySurface(
             definition=_core_surface(
                 handle="core-capability:filesystem.list",
@@ -218,7 +245,9 @@ def build_core_runtime_tool_capabilities(
             definition=_core_surface(
                 handle="core-capability:filesystem.write",
                 description="Atomically write through a verified workspace parent descriptor.",
-                input_schema=_filesystem_write_schema(),
+                input_schema=extended_filesystem_write_schema(
+                    MAX_FILESYSTEM_WRITE_BYTES
+                ),
                 effect_class="mutating",
             ),
             handler=filesystem_write,
@@ -235,6 +264,21 @@ def build_core_runtime_tool_capabilities(
             allowed_execution_modes=("full-access",),
         ),
     )
+    full_workspace = build_full_workspace_capabilities(
+        filesystem=filesystem,
+        workspace_root=workspace_root,
+        runtime_root=resolved_runtime_root,
+        process_registry=process_registry,
+    )
+    discovery = (
+        build_discovery_first_capabilities(
+            cli_registry=cli_registry,
+            mcp_registry=mcp_registry,
+        )
+        if cli_registry is not None and mcp_registry is not None
+        else ()
+    )
+    return (*base, *full_workspace, *discovery)
 
 
 def _core_surface(
@@ -298,20 +342,6 @@ def _filesystem_read_schema() -> dict[str, object]:
     }
 
 
-def _filesystem_write_schema() -> dict[str, object]:
-    return {
-        "type": "object",
-        "properties": {
-            "path": {"type": "string", "minLength": 1, "maxLength": 4096},
-            "content": {"type": "string", "maxLength": MAX_FILESYSTEM_WRITE_BYTES},
-            "create_only": {"type": "boolean"},
-            "create_parents": {"type": "boolean"},
-        },
-        "required": ["path", "content"],
-        "additionalProperties": False,
-    }
-
-
 def _shell_schema() -> dict[str, object]:
     return {
         "type": "object",
@@ -327,6 +357,11 @@ def _shell_schema() -> dict[str, object]:
                 "type": "integer",
                 "minimum": 1,
                 "maximum": MAX_SHELL_TIMEOUT_SECONDS,
+            },
+            "instruction_scope_digest": {
+                "type": "string",
+                "minLength": 64,
+                "maxLength": 64,
             },
         },
         "required": ["argv"],

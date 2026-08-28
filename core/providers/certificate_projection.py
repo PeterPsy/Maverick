@@ -13,6 +13,7 @@ from core.providers.certified_execution_tcb import (
 )
 from core.providers.errors import CapabilityCertificateError
 from core.runtime.execution_binding import canonical_digest
+from core.runtime.full_workspace_contract import validate_full_workspace_contract_claim
 
 
 def certificate_profile_status(
@@ -43,6 +44,13 @@ def certificate_profile_status(
     }
     if any(getattr(certificate, field_name) != value for field_name, value in expected.items()):
         return "identity_mismatch"
+    try:
+        validate_full_workspace_contract_claim(
+            profile=definition,
+            certificate=certificate,
+        )
+    except CapabilityCertificateError as error:
+        return error.reason_code
     adapter_version = str(getattr(adapter, "adapter_version", ""))
     if (
         certificate.adapter_version != adapter_version

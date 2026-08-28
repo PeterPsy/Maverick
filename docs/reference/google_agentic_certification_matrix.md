@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-28
-Matrix revision: `2026-08-28-r16-p4a-semantic-envelope-tcb6`
+Matrix revision: `2026-08-28-r17-p4b-full-workspace-tcb7`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==12`
+Adapter: `maverick-hosted-tool-loop==13`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==12`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `20` (revision `19` suspended) |
+| Immutable profile revision | `21` (revision `20` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -53,10 +53,11 @@ Primary references:
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@1`; per-block role/provenance/source digest, complete scoped `AGENTS.md`/skill materialization, exact provider projection digest, and journal evidence | not certified |
-| Certified execution TCB | manifest v6 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v7 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, full-workspace confinement/process/discovery surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
+| Full Workspace contract implementation | atomic `codex-baseline-v1` claim validation; stable search/read, atomic create/replace/edit/patch/move/quarantined-delete, scoped instructions, fixed-path networkless shell, bounded managed processes, official discovery-first CLI/MCP including inter-agent surfaces, shared output compaction, and orphan cleanup fixtures | implementation fixture only; revision 21 remains read-only and makes no full-workspace claim |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
 | Stateless continuation | exact user/thought/function history replay | not certified |
@@ -73,7 +74,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only two sequential real-filesystem-list calls plus one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r15 |
+| Live capability probe | operator-only two sequential real-filesystem-list calls plus one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r17 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
@@ -193,3 +194,13 @@ skill, tool, and provider-state blocks. Complete bounded `AGENTS.md` and
 snapshot and exact egress projection evidence are persisted in provider-step
 journal schema v4. No live or behavioral run has been performed; revision 20
 remains a contained, uncertified preview.
+
+Revision 21 pins adapter 13, suite 17, matrix
+`2026-08-28-r17-p4b-full-workspace-tcb7`, and TCB manifest v7 for Phase 4B.
+The adapter now contains the complete code-owned Full Workspace tool surface,
+descriptor/race confinement, platform-runtime masking, managed-process
+lifecycle, official discovery-first CLI/MCP registries, and shared result
+compaction. This contained profile deliberately retains only list/read handles
+and does not claim `full_workspace_contract_revision`; Phase 4D must create a
+new full revision after exact endpoint and interaction closure. No live or
+behavioral run has been performed; revision 21 remains an uncertified preview.

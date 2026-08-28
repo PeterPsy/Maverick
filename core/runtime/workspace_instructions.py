@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import os
 from pathlib import Path, PurePosixPath
 
@@ -99,6 +101,60 @@ def workspace_relative_workdir(
     return relative.as_posix() or "."
 
 
+def resolve_workspace_instruction_chain_for_path(
+    filesystem: ConfinedWorkspaceFilesystem,
+    *,
+    workspace_root: Path,
+    relative_path: str,
+    target_is_directory: bool = False,
+) -> tuple[ResolvedWorkspaceInstruction, ...]:
+    """Resolve instructions through the deepest existing parent of one target."""
+    components = filesystem._components(relative_path, allow_root=True)
+    scope_components = components if target_is_directory else components[:-1]
+    while True:
+        scope = "/".join(scope_components) or "."
+        try:
+            with filesystem.open_shell_cwd(scope):
+                pass
+            break
+        except RuntimeToolError as error:
+            if error.reason_code != "filesystem_path_not_found" or not scope_components:
+                raise
+            scope_components = scope_components[:-1]
+    return resolve_workspace_instruction_chain(
+        filesystem,
+        workspace_root=workspace_root,
+        workdir=workspace_root / scope,
+    )
+
+
+def workspace_instruction_scope_digest(
+    instructions: tuple[ResolvedWorkspaceInstruction, ...],
+) -> str:
+    """Digest the complete applicable instruction scope without host paths."""
+    return hashlib.sha256(
+        json.dumps(
+            [
+                {
+                    "path": item.relative_path,
+                    "scope": item.scope_path,
+                    "resource_identity": item.resource_identity,
+                    "resource_revision": item.resource_revision,
+                    "resource_digest": item.resource_digest,
+                    "content_digest": hashlib.sha256(
+                        item.content.encode("utf-8")
+                    ).hexdigest(),
+                }
+                for item in instructions
+            ],
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def read_complete_confined_text(
     filesystem: ConfinedWorkspaceFilesystem,
     relative_path: str,
@@ -160,5 +216,7 @@ __all__ = [
     "ResolvedWorkspaceInstruction",
     "read_complete_confined_text",
     "resolve_workspace_instruction_chain",
+    "resolve_workspace_instruction_chain_for_path",
+    "workspace_instruction_scope_digest",
     "workspace_relative_workdir",
 ]

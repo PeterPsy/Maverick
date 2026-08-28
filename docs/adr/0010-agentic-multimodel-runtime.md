@@ -547,12 +547,19 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 20
-and OpenRouter revision 19, both bound to
-`maverick-hosted-tool-loop==12`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 21
+and OpenRouter revision 20, both bound to
+`maverick-hosted-tool-loop==13`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
+
+These Phase-4B definitions remain deliberately read-only, uncertified
+candidates and do not claim `full_workspace_contract_revision`. Adapter 13 and
+TCB manifest v7 contain the complete common workspace surface and its
+confinement tests so later Phase-4 compatibility closure can create new,
+explicit full-workspace revisions instead of silently promoting these
+historical candidates.
 
 ## Concrete persistence map
 

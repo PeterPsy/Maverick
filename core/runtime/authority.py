@@ -18,6 +18,9 @@ from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.store import ProviderStore
 from core.runtime.execution_binding import RuntimeExecutionBinding, canonical_digest
 from core.runtime.failure_messages import public_runtime_failure_reason_code
+from core.runtime.full_workspace_contract import (
+    validate_full_workspace_live_authority,
+)
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
     MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
@@ -86,6 +89,7 @@ class EffectiveRuntimeAuthority:
     tcb_structure_digest: str = ""
     tcb_live_digest: str = ""
     tcb_posture: str = "unavailable"
+    full_workspace_contract_revision: str = ""
 
 
 def resolve_effective_runtime_authority(
@@ -180,6 +184,12 @@ def resolve_effective_runtime_authority(
             capabilities,
             tool_handles,
         )
+    validate_full_workspace_live_authority(
+        revision=binding.full_workspace_contract_revision,
+        capabilities=capabilities,
+        policy=policy,
+        allowed_handles=tool_handles,
+    )
     status = store.get_capability_certificate_status(certificate.certificate_id)
     status_revision = 0 if status is None else status.revision
     authority = EffectiveRuntimeAuthority(
@@ -232,6 +242,9 @@ def resolve_effective_runtime_authority(
                 provider_protocol=certificate.provider_protocol,
             )
             else "active"
+        ),
+        full_workspace_contract_revision=(
+            binding.full_workspace_contract_revision
         ),
     )
     return replace(authority, authority_digest=canonical_digest(authority))
@@ -330,6 +343,9 @@ def effective_authority_audit_payload(authority: EffectiveRuntimeAuthority) -> d
         "actor_policy_revision": authority.actor_policy_revision,
         "feature_flag_revision": authority.feature_flag_revision,
         "tcb_posture": authority.tcb_posture,
+        "full_workspace_contract_revision": (
+            authority.full_workspace_contract_revision or None
+        ),
         "allowed_tool_handle_count": len(authority.allowed_tool_handles),
         "allowed_capabilities": tuple(
             name
@@ -378,6 +394,9 @@ def effective_runtime_capability_payload(
             "live_digest": authority.tcb_live_digest or None,
             "posture": authority.tcb_posture,
         },
+        "full_workspace_contract_revision": (
+            authority.full_workspace_contract_revision or None
+        ),
         "policy_revisions": authority.policy_revision_set,
         "actor_policy_revision": authority.actor_policy_revision,
         "feature_flag_revision": authority.feature_flag_revision,
@@ -714,23 +733,48 @@ def _narrow_capabilities_to_live_handles(
     allowed = set(handles)
     narrowed = replace(
         capabilities,
-        cli=capabilities.cli and any(item.startswith("cli:") for item in allowed),
-        mcp=capabilities.mcp and any(item.startswith("mcp:") for item in allowed),
+        cli=capabilities.cli
+        and any(
+            item.startswith("cli:") or item.startswith("core-capability:cli.")
+            for item in allowed
+        ),
+        mcp=capabilities.mcp
+        and any(
+            item.startswith("mcp:") or item.startswith("core-capability:mcp.")
+            for item in allowed
+        ),
         filesystem_list=(
             capabilities.filesystem_list
             and "core-capability:filesystem.list" in allowed
         ),
         filesystem_read=(
             capabilities.filesystem_read
-            and "core-capability:filesystem.read" in allowed
+            and any(
+                item
+                in {
+                    "core-capability:workspace.instructions",
+                    "core-capability:filesystem.search",
+                    "core-capability:filesystem.read",
+                }
+                for item in allowed
+            )
         ),
         filesystem_write=(
             capabilities.filesystem_write
-            and "core-capability:filesystem.write" in allowed
+            and any(
+                item.startswith("core-capability:filesystem.")
+                and item.rsplit(".", 1)[-1]
+                in {"write", "edit", "patch", "move", "delete"}
+                for item in allowed
+            )
         ),
         shell=(
             capabilities.shell
-            and "core-capability:shell.run" in allowed
+            and any(
+                item == "core-capability:shell.run"
+                or item.startswith("core-capability:process.")
+                for item in allowed
+            )
         ),
     )
     return replace(
@@ -761,11 +805,25 @@ def _narrow_handles_to_capabilities(
             return capabilities.cli
         if handle.startswith("mcp:"):
             return capabilities.mcp
+        if handle.startswith("core-capability:cli."):
+            return capabilities.cli
+        if handle.startswith("core-capability:mcp."):
+            return capabilities.mcp
         return {
+            "core-capability:workspace.instructions": capabilities.filesystem_read,
             "core-capability:filesystem.list": capabilities.filesystem_list,
+            "core-capability:filesystem.search": capabilities.filesystem_read,
             "core-capability:filesystem.read": capabilities.filesystem_read,
             "core-capability:filesystem.write": capabilities.filesystem_write,
+            "core-capability:filesystem.edit": capabilities.filesystem_write,
+            "core-capability:filesystem.patch": capabilities.filesystem_write,
+            "core-capability:filesystem.move": capabilities.filesystem_write,
+            "core-capability:filesystem.delete": capabilities.filesystem_write,
             "core-capability:shell.run": capabilities.shell,
+            "core-capability:process.start": capabilities.shell,
+            "core-capability:process.status": capabilities.shell,
+            "core-capability:process.input": capabilities.shell,
+            "core-capability:process.interrupt": capabilities.shell,
         }.get(handle, True)
 
     return tuple(handle for handle in handles if effective(handle))

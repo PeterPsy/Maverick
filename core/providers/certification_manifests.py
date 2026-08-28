@@ -75,6 +75,8 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.shared.test_json_file_collection",
     "tests.unit.shared.test_mongo_document_collection",
     "tests.unit.runtime_tools.test_confined_filesystem",
+    "tests.unit.runtime_tools.test_full_workspace_contract",
+    "tests.unit.runtime_tools.test_hosted_agentic_factory_tools",
     "tests.unit.runtime_tools.test_tool_filesystem_listing",
     "tests.unit.runtime_tools.test_tool_orchestrator",
     "tests.unit.runtime_tools.test_tool_preliminary_ledger",
@@ -94,10 +96,10 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="16",
+        suite_version="17",
         provider_id=provider_id,
         matrix_path=matrix_path,
-        matrix_revision="2026-08-28-r16-p4a-semantic-envelope-tcb6",
+        matrix_revision="2026-08-28-r17-p4b-full-workspace-tcb7",
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

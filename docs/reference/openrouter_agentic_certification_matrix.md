@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-28
-Matrix revision: `2026-08-28-r16-p4a-semantic-envelope-tcb6`
+Matrix revision: `2026-08-28-r17-p4b-full-workspace-tcb7`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==12`
+Adapter: `maverick-hosted-tool-loop==13`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==12`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `19` (revision `18` suspended) |
+| Immutable profile revision | `20` (revision `19` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -84,7 +84,7 @@ Primary references:
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@1`; per-block role/provenance/source digest, complete scoped `AGENTS.md`/skill materialization, exact provider projection digest, and journal evidence | not certified |
-| Certified execution TCB | manifest v6 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v7 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, full-workspace confinement/process/discovery surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, DeepInfra FP8 identity, active status, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -93,6 +93,7 @@ Primary references:
 | Mixed text then tool | provisional narration is not finalized or duplicated; one call continues to the next step | not certified |
 | Multi-step continuation | deterministic fixtures for three sequential tool rounds followed by a final response at every reasoning effort | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
+| Full Workspace contract implementation | atomic `codex-baseline-v1` claim validation; stable search/read, atomic create/replace/edit/patch/move/quarantined-delete, scoped instructions, fixed-path networkless shell, bounded managed processes, official discovery-first CLI/MCP including inter-agent surfaces, shared output compaction, and orphan cleanup fixtures | implementation fixture only; revision 20 remains read-only and makes no full-workspace claim |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
 | Usage, generation id and price | success and decode-failure fixtures retain telemetry; active request reservations reconcile to reported micro-USD while missing usage remains worst-case | not certified |
@@ -108,7 +109,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r15 |
+| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r17 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the candidate profile and never manufactures a
@@ -216,6 +217,16 @@ skill, tool, and provider-state blocks. Complete bounded `AGENTS.md` and
 snapshot and exact egress projection evidence are persisted in provider-step
 journal schema v4. No live or behavioral run has been performed; revision 19
 remains a contained, uncertified preview.
+
+Revision 20 pins adapter 13, suite 17, matrix
+`2026-08-28-r17-p4b-full-workspace-tcb7`, and TCB manifest v7 for Phase 4B.
+The adapter now contains the complete code-owned Full Workspace tool surface,
+descriptor/race confinement, platform-runtime masking, managed-process
+lifecycle, official discovery-first CLI/MCP registries, and shared result
+compaction. This contained profile deliberately retains only list/read handles
+and does not claim `full_workspace_contract_revision`; Phase 4D must create a
+new full revision after exact endpoint and interaction closure. No live or
+behavioral run has been performed; revision 20 remains an uncertified preview.
 
 ## Fail-closed conditions
 

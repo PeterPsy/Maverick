@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="6",
+    manifest_version="7",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -132,6 +132,20 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/tool_core_capabilities.py",
                 "core/runtime/tool_filesystem_listing.py",
                 "core/runtime/confined_filesystem.py",
+                "core/runtime/confined_filesystem_delete.py",
+                "core/runtime/confined_filesystem_mutation_support.py",
+                "core/runtime/confined_filesystem_mutations.py",
+                "core/runtime/confined_filesystem_search.py",
+                "core/runtime/full_workspace_contract.py",
+                "core/runtime/hosted_process_output.py",
+                "core/runtime/hosted_tool_process_registry.py",
+                "core/runtime/hosted_workspace_shell.py",
+                "core/runtime/tool_discovery_capabilities.py",
+                "core/runtime/tool_discovery_support.py",
+                "core/runtime/tool_full_workspace_capabilities.py",
+                "core/runtime/tool_full_workspace_schemas.py",
+                "core/runtime/tool_full_workspace_support.py",
+                "core/runtime/tool_process_capabilities.py",
                 "core/runtime/tool_orchestrator.py",
                 "core/runtime/tool_ledger.py",
                 "core/runtime/tool_models.py",
@@ -229,12 +243,26 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             "Certified catalog/schema, confinement, invocation, ledger, and classified results.",
             (
                 "core/runtime/confined_filesystem.py",
+                "core/runtime/confined_filesystem_delete.py",
+                "core/runtime/confined_filesystem_mutation_support.py",
+                "core/runtime/confined_filesystem_mutations.py",
+                "core/runtime/confined_filesystem_search.py",
+                "core/runtime/full_workspace_contract.py",
+                "core/runtime/hosted_process_output.py",
+                "core/runtime/hosted_tool_process_registry.py",
+                "core/runtime/hosted_workspace_shell.py",
                 "core/runtime/hosted_agentic_loop.py",
                 "core/runtime/provider_step_journal.py",
                 "core/runtime/tool_ledger.py",
                 "core/runtime/tool_catalog.py",
                 "core/runtime/tool_core_capabilities.py",
+                "core/runtime/tool_discovery_capabilities.py",
+                "core/runtime/tool_discovery_support.py",
+                "core/runtime/tool_full_workspace_capabilities.py",
+                "core/runtime/tool_full_workspace_schemas.py",
+                "core/runtime/tool_full_workspace_support.py",
                 "core/runtime/tool_orchestrator.py",
+                "core/runtime/tool_process_capabilities.py",
             ),
             ("core.runtime",),
         ),
@@ -317,7 +345,7 @@ def compute_certified_tcb_digest(root: Path) -> str:
     if not files:
         raise CapabilityCertificateError("certificate_tcb_artifact_empty")
     digest = hashlib.sha256()
-    digest.update(b"maverick.certified-execution-tcb.v6\x00")
+    digest.update(b"maverick.certified-execution-tcb.v7\x00")
     digest.update(CERTIFIED_EXECUTION_TCB.structure_digest.encode("ascii"))
     digest.update(b"\x00")
     for relative_path in sorted(files):

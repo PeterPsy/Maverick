@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.authorization.errors import AuthorizationError
-from core.cli.command_registry import CliCommandRegistry
-from core.mcp.tool_registry import McpToolRegistry
+from core.cli.models import CliInvocationContext
+from core.mcp.models import McpInvocationContext
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.errors import CapabilityCertificateError, ProviderError
 from core.providers.google_interactions_client import (
@@ -52,6 +52,7 @@ from core.runtime.hosted_agentic_request import (
     HOSTED_TOOL_USE_INSTRUCTION,
     HostedAgenticRequestBuilder,
 )
+from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
 from core.runtime.hosted_provider_runtime import (
     GOOGLE_HOSTED_FINALIZATION_POLICY,
@@ -71,7 +72,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "12"
+HOSTED_AGENTIC_ADAPTER_VERSION = "13"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -88,6 +89,7 @@ def build_hosted_agentic_engine_adapter(
     ):
         raise RuntimeError("Hosted agentic runtime dependencies are unavailable.")
     provider_runtimes = _provider_runtimes()
+    process_registry = HostedToolProcessRegistry(store=state.runtime_store)
     adapter_holder: dict[str, HostedAgenticEngineAdapter] = {}
 
     def policy_resolver(context):
@@ -149,10 +151,13 @@ def build_hosted_agentic_engine_adapter(
                 resource_classification_resolver=classify_resource,
             ),
         ),
-        tool_orchestrator_resolver=lambda context, _actor: _tool_orchestrator(
+        tool_orchestrator_resolver=lambda context, actor: _tool_orchestrator(
             context,
+            actor=actor,
+            state=state,
             ledger=state.runtime_tool_ledger,
             workspace_store=state.workspace_store,
+            process_registry=process_registry,
         ),
         tool_ledger=state.runtime_tool_ledger,
         private_state_service=state.provider_private_state_service,
@@ -167,6 +172,7 @@ def build_hosted_agentic_engine_adapter(
         adapter_id=HOSTED_AGENTIC_ADAPTER_ID,
         adapter_version=HOSTED_AGENTIC_ADAPTER_VERSION,
         loop=loop,
+        composition_components=(build_hosted_agentic_engine_adapter,),
     )
     adapter_holder["adapter"] = adapter
     provider_registry.register_agentic_runtime_adapter(adapter)
@@ -230,15 +236,62 @@ def _provider_runtimes() -> HostedProviderRuntimeRegistry:
     return registry
 
 
-def _tool_orchestrator(context, *, ledger, workspace_store) -> RuntimeToolOrchestrator:
+def _tool_orchestrator(
+    context,
+    *,
+    actor,
+    state,
+    ledger,
+    workspace_store,
+    process_registry,
+) -> RuntimeToolOrchestrator:
+    # Registry builders load app-hosting integration, which depends on the API
+    # platform state.  Keep these imports on the post-bootstrap path to avoid a
+    # platform_state -> hosted factory -> app registry initialization cycle.
+    from core.cli.registry_builder import build_core_cli_registry
+    from core.mcp.registry_builder import build_core_mcp_registry
+
     root = Path(context.session.workspace_root)
+    cli_context = _cli_context(actor)
+    mcp_context = _mcp_context(actor)
+    common_registry_arguments = {
+        "app_store": state.app_store,
+        "identity_store": state.identity_store,
+        "workspace_store": state.workspace_store,
+        "provider_store": state.provider_store,
+        "runtime_store": state.runtime_store,
+        "inter_agent_store": state.inter_agent_store,
+        "secret_store": state.secret_store,
+        "recovery_store": state.recovery_store,
+        "job_service": state.job_service,
+        "provider_registry": state.provider_registry,
+        "observability_store": state.observability_store,
+        "runtime_event_bus": state.runtime_event_bus,
+        "runtime_thread_event_bus": state.runtime_thread_event_bus,
+        "app_event_bus": state.app_event_bus,
+        "workspace_id": context.session.workspace_id,
+        "start_path": state.repository_root,
+    }
+    cli_registry = build_core_cli_registry(
+        **common_registry_arguments,
+        context=cli_context,
+        sidecar_browser_sessions=state.sidecar_browser_sessions,
+    )
+    mcp_registry = build_core_mcp_registry(
+        **common_registry_arguments,
+        context=mcp_context,
+    )
     return RuntimeToolOrchestrator(
         catalog_builder=RuntimeToolCatalogBuilder(
-            cli_registry=CliCommandRegistry(),
-            mcp_registry=McpToolRegistry(),
+            cli_registry=cli_registry,
+            mcp_registry=mcp_registry,
             core_capabilities=build_core_runtime_tool_capabilities(
                 workspace_id=context.session.workspace_id,
                 workspace_root=root,
+                runtime_root=Path(context.session.runtime_root),
+                process_registry=process_registry,
+                cli_registry=cli_registry,
+                mcp_registry=mcp_registry,
                 resource_classification_resolver=lambda observation, provenance: (
                     resource_classification_for_observation(
                         workspace_store.get_resource_classification(
@@ -258,6 +311,40 @@ def _tool_orchestrator(context, *, ledger, workspace_store) -> RuntimeToolOrches
             ),
         ),
         ledger=ledger,
+    )
+
+
+def _cli_context(actor: RuntimeToolActorContext) -> CliInvocationContext:
+    return CliInvocationContext(
+        caller_kind=(
+            "full_access_agent"
+            if actor.execution_mode == "full-access"
+            else "sandbox_agent"
+        ),
+        workspace_id=actor.workspace_id,
+        agent_id=actor.agent_id,
+        effective_mode=actor.execution_mode,
+        platform_role=actor.platform_role,
+        user_id=actor.actor_id,
+        workspace_role=actor.workspace_role,
+        runtime_session_id=actor.session_id,
+    )
+
+
+def _mcp_context(actor: RuntimeToolActorContext) -> McpInvocationContext:
+    return McpInvocationContext(
+        caller_kind=(
+            "full_access_agent"
+            if actor.execution_mode == "full-access"
+            else "sandbox_agent"
+        ),
+        workspace_id=actor.workspace_id,
+        agent_id=actor.agent_id,
+        effective_mode=actor.execution_mode,
+        platform_role=actor.platform_role,
+        user_id=actor.actor_id,
+        workspace_role=actor.workspace_role,
+        runtime_session_id=actor.session_id,
     )
 
 

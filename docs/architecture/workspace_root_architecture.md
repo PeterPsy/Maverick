@@ -316,6 +316,14 @@ So the distinction is:
 - `runtime/` = runtime-local temporary and operational state, not the provider process cwd
 - `runtime/sessions/<runtime_session_id>/` = one physical agent session's mutable runtime records; a compatible Codex continuation child explicitly inherits its fenced lineage root's provider home
 
+Full-workspace access never makes `runtime/` agent-owned workspace content.
+Core filesystem capabilities reject that top-level component, omit it from
+recursive listing/search, and use it only for platform-private process output
+and deletion quarantine. The hosted shell overlays `workspace_root/runtime`
+with an empty sandbox mount and uses fixed `/runtime` scratch space, so a
+workspace command cannot read or mutate control-plane records even though it
+can write ordinary workspace paths.
+
 Provider processes that operate on workspace files should start in the workspace root.
 
 Notes:

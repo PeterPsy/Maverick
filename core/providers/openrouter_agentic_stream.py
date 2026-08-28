@@ -20,7 +20,10 @@ from core.providers.openrouter_agentic_models import (
     OpenRouterPendingToolCall,
     openrouter_error_reason,
 )
-from core.providers.openrouter_agentic_state import encode_openrouter_chat_state
+from core.providers.openrouter_agentic_state import (
+    encode_openrouter_chat_state,
+    merge_openrouter_request_history,
+)
 from core.providers.openrouter_agentic_stream_fields import (
     nonnegative_int,
     object_field,
@@ -335,7 +338,13 @@ class OpenRouterChatStreamDecoder:
                 schema_version=self.state.schema_version,
                 # Request-scoped controls such as the finalization instruction are
                 # deliberately absent from new_messages and never enter history.
-                history=(*self.state.history, *self.new_messages, assistant),
+                history=(
+                    *merge_openrouter_request_history(
+                        self.state.history,
+                        self.new_messages,
+                    ),
+                    assistant,
+                ),
                 pending_tool_calls=tuple(pending),
                 consumed_tool_call_ids=tuple(consumed),
             )

@@ -11,7 +11,7 @@ Phase-4 repository closure executes only the explicitly selected deterministic
 `live_probe`, produce behavioral evidence, sign/publish a remote certificate,
 or make any provider HTTP/SSE request.
 
-Suite 18 retains the P2 crash/pairing/outbox matrix and P3 finalization
+Suite 19 retains the P2 crash/pairing/outbox matrix and P3 finalization
 coverage, including durable step/tool/output/cost/time reservation, complete
 terminal-request cost projections, tool-less provider payloads, staged
 request-specific preflight, and request-scoped instructions. It also verifies
@@ -21,11 +21,13 @@ and adds semantic-envelope source/projection, scoped instruction, full-skill,
 journal-evidence, atomic Full Workspace contract, descriptor-confined mutation,
 fixed-path shell, managed-process, discovery-first CLI/MCP, compaction, and
 orphan-cleanup fixtures.
-It additionally binds recipe/catalog identity, compiler revision 2,
-`codex-baseline-v2`, context reserve and pairing-safe compaction, artifact-backed
-large results, attachment workspace references, explicit steering fallback,
-preflight-before-egress ordering, Google stateless continuation, and
-OpenRouter `tool_choice:none`/context-capacity catalog evidence.
+It additionally binds recipe/catalog identity, compiler revision 3,
+`codex-baseline-v3`, mandatory commit-bound instruction digests, semantic
+compaction schema 2, artifact-backed large results, UTF-8/base64 attachment
+workspace references, explicit steering fallback, production-composed
+classification/continuation, preflight-before-egress ordering, Google stateless
+continuation and live OpenAPI/model preflight, and OpenRouter request-scoped
+authority plus `tool_choice:none`/context-capacity catalog evidence.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
@@ -42,8 +44,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v18 matrix revision
-  `2026-08-28-r18-p4-context-provider-closure-tcb8` declared by the provider certificate module;
+- the dated suite-v19 matrix revision
+  `2026-08-28-r19-p4-review-closure-tcb9` declared by the provider certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
   provide or narrow its component list or digest;
@@ -77,7 +79,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 18 \
+  --suite-version 19 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -86,9 +88,9 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `18`, matrix revision
-`2026-08-28-r18-p4-context-provider-closure-tcb8`, and the OpenRouter
-manifest. The Google suite uses version `18` and the same matrix revision. The
+version `19`, matrix revision
+`2026-08-28-r19-p4-review-closure-tcb9`, and the OpenRouter
+manifest. The Google suite uses version `19` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.
@@ -109,7 +111,10 @@ among `quota_exceeded`, `resource_exhausted`, and `rate_limit_exceeded`; do not
 infer a
 project-quota cause from the broader family alone.
 
-Before its first completion request, the OpenRouter probe must fetch both the
+Before its first completion request, the Google probe must fetch the official
+current Interactions OpenAPI operation and the authenticated exact model record;
+streaming, usage, function tools, reasoning controls, model identity, and both
+token limits must match. Before its first completion request, the OpenRouter probe must fetch both the
 official model endpoint catalog and ZDR endpoint catalog. It fails closed unless
 the exact `deepinfra/fp8` record is active, FP8, ZDR-listed, has enough completion
 capacity, total input-plus-output context capacity, explicit support for
@@ -175,7 +180,7 @@ capability projection, Chat/Settings governance, and provider codec/transport/
 live policy. Drift in any component invalidates an older remote certificate
 before creation, continuation, refresh, or dispatch. A legacy remote
 certificate without a valid TCB identity is ineligible; exact Codex remains its
-separate local identity. Manifest v6 makes the transitive inventory executable:
+separate local identity. Manifest v9 makes the transitive inventory executable:
 six code-owned contracts statically walk local imports for admission, input,
 egress, tools, state/lifecycle, and served governance, including package
 initializers and the exact `core/inter_agent/generalist_context.py` closure.

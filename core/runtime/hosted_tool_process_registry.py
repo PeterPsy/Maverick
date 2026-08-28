@@ -58,6 +58,7 @@ class HostedToolProcessRegistry:
         cwd: str,
         environment: dict[str, str],
         timeout_seconds: int,
+        mutation_guard=None,
     ) -> dict[str, object]:
         process_id = f"agent-process-{uuid4().hex}"
         prepared = prepare_hosted_workspace_command(
@@ -108,6 +109,8 @@ class HostedToolProcessRegistry:
                 dir_fd=output_directory_fd,
             )
             output_handle = os.fdopen(os.dup(output_fd), "wb", buffering=0)
+            if mutation_guard is not None:
+                mutation_guard.verify_before()
             process = subprocess.Popen(
                 prepared.command,
                 env=environment,

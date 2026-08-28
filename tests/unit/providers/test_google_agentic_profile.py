@@ -43,7 +43,7 @@ NOW = datetime(2026, 8, 16, tzinfo=UTC)
 
 
 class GoogleAgenticProfileTest(unittest.TestCase):
-    def test_bootstrap_publishes_expiring_unbound_fake_data_preview(self) -> None:
+    def test_bootstrap_publishes_unbound_full_workspace_candidate(self) -> None:
         root = make_temp_repo_root(self)
         with mock.patch.dict(
             os.environ,
@@ -68,12 +68,44 @@ class GoogleAgenticProfileTest(unittest.TestCase):
             profile.runtime_engine_id
         )
 
+        production_classification = adapter.loop.request_builder.classifier(
+            SimpleNamespace(
+                session=SimpleNamespace(session_id="production-session"),
+                correlation_id="production-turn",
+            ),
+            "user_input",
+            "ordinary production prompt",
+        )
+
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "22")
-        self.assertEqual(profile.adapter_version_constraint, "==14")
+        self.assertEqual(profile.revision, "23")
+        self.assertEqual(profile.adapter_version_constraint, "==15")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.provider_api_version, "v1")
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
+        self.assertEqual(production_classification.data_class, "public")
+        self.assertEqual(production_classification.classification_revision, 1)
+        for resource_provenance in (
+            "attachment",
+            "skill",
+            "workspace_instruction",
+            "provider_state",
+            "tool_schema",
+        ):
+            with self.subTest(resource_provenance=resource_provenance):
+                self.assertEqual(
+                    adapter.loop.request_builder.classifier(
+                        SimpleNamespace(
+                            session=SimpleNamespace(
+                                session_id="production-session"
+                            ),
+                            correlation_id="production-turn",
+                        ),
+                        resource_provenance,
+                        {"unclassified": True},
+                    ).data_class,
+                    "unclassified",
+                )
         self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
         self.assertEqual(profile.egress_policy_revision, "2")
         self.assertEqual(
@@ -200,7 +232,7 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         self.assertEqual(previous.rollout_status, "suspended")
         self.assertEqual(previous.revision, 1)
 
-    def test_default_classifier_never_assumes_user_or_tool_data_is_fake(self) -> None:
+    def test_explicit_fail_closed_classifier_never_assumes_data_is_fake(self) -> None:
         self.assertEqual(
             classify_hosted_content_fail_closed(None, "user_input", "synthetic-looking text").data_class,
             "unclassified",

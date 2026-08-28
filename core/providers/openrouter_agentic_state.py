@@ -29,6 +29,28 @@ def initial_openrouter_chat_state() -> OpenRouterChatState:
     )
 
 
+def merge_openrouter_request_history(
+    history: tuple[dict[str, object], ...],
+    new_messages: tuple[dict[str, object], ...],
+) -> tuple[dict[str, object], ...]:
+    """Replace request-scoped authority blocks and append exact new dialogue."""
+    systems = tuple(
+        dict(item) for item in new_messages if item.get("role") == "system"
+    )
+    if len(systems) > 1:
+        raise OpenRouterAgenticProtocolError("provider_request_invalid")
+    retained = tuple(
+        dict(item) for item in history if item.get("role") != "system"
+    )
+    additions = tuple(
+        dict(item) for item in new_messages if item.get("role") != "system"
+    )
+    # System/developer authority is request scoped.  Even an empty current
+    # projection must not resurrect a stale authority block from private
+    # history.
+    return (*systems, *retained, *additions)
+
+
 def decode_openrouter_chat_state(
     private_state: AgenticProviderPrivateState | None,
 ) -> OpenRouterChatState:

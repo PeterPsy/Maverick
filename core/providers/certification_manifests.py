@@ -100,10 +100,10 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="18",
+        suite_version="19",
         provider_id=provider_id,
         matrix_path=matrix_path,
-        matrix_revision="2026-08-28-r18-p4-context-provider-closure-tcb8",
+        matrix_revision="2026-08-28-r19-p4-review-closure-tcb9",
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,
@@ -133,6 +133,7 @@ GOOGLE_AGENTIC_CERTIFICATION_MANIFEST = _suite(
         "tests.unit.providers.test_google_interactions_pairing_codec",
         "tests.unit.providers.test_google_interactions_journal_codec",
         "tests.unit.providers.test_google_interactions_hosted_loop",
+        "tests.unit.providers.test_google_interactions_catalog",
         "tests.unit.providers.test_google_interactions_certification",
         "tests.unit.providers.test_google_agentic_profile",
         "tests.unit.providers.test_google_interactions_transport",

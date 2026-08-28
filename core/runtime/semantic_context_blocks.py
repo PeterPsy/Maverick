@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from core.egress.classification import CanonicalSourceClassification
+from core.runtime.attachment_projection import attachment_read_encoding
 from core.runtime.confined_filesystem import (
     ConfinedWorkspaceFilesystem,
     ResourceClassificationResolver,
@@ -227,11 +228,17 @@ class SemanticContextMaterializer:
         if (
             projection_mode != "workspace_reference"
             or not isinstance(content, dict)
+            or not isinstance(content.get("projection"), dict)
             or content.get("projection")
             != {
                 "mode": "workspace_reference",
                 "read_capability": "core-capability:filesystem.read",
+                "read_encoding": attachment_read_encoding(
+                    str(content.get("media_type") or "")
+                ),
             }
+            or str(content.get("media_type") or "")
+            != str(getattr(source, "capability_modality", "") or "")
             or not str(content.get("workspace_relative_path") or "").strip()
             or not context.effective_authority.allowed_capabilities.filesystem_read
             or "core-capability:filesystem.read"

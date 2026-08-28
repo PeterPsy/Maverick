@@ -38,6 +38,7 @@ from core.runtime.tool_result_artifacts import (
 )
 from core.runtime.tool_schema import provider_tool_name
 from core.runtime.hosted_harness_recipes import hosted_full_context_policy
+from core.runtime.workspace_instructions import workspace_instruction_scope_digest
 from tests.support.collections import FakeCollection
 
 
@@ -677,7 +678,13 @@ class RuntimeToolOrchestratorTest(_RuntimeToolOrchestratorFixture, unittest.Test
             write = orchestrator.invoke_provider_tool(
                 provider_tool_name=provider_tool_name("core-capability:filesystem.write"),
                 provider_tool_call_id="call-core-write",
-                arguments={"path": "output.txt", "content": "confirmed"},
+                arguments={
+                    "path": "output.txt",
+                    "content": "confirmed",
+                    "instruction_scope_digest": workspace_instruction_scope_digest(
+                        ()
+                    ),
+                },
                 authority=authority,
                 context=self.context,
                 turn_id="turn-tools",

@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-28
-Matrix revision: `2026-08-28-r18-p4-context-provider-closure-tcb8`
+Matrix revision: `2026-08-28-r19-p4-review-closure-tcb9`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==14`
+Adapter: `maverick-hosted-tool-loop==15`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==14`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `22` (revision `21` suspended) |
+| Immutable profile revision | `23` (revision `22` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -27,7 +27,7 @@ Adapter: `maverick-hosted-tool-loop==14`
 | Final request | exact Core finalization instruction; `tools` omitted |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | complete `codex-baseline-v2` Full Workspace surface, including `artifact.read` |
+| Tool handles | complete `codex-baseline-v3` Full Workspace surface, including `artifact.read` and UTF-8/base64 attachment reads |
 | Certificate lifetime after a successful signed run | 45 days |
 
 Google documents Gemini 3.6 Flash as a stable model with a 1,048,576-token
@@ -52,13 +52,14 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
-| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@2`; per-block role/provenance/source digest, complete scoped `AGENTS.md`/skill materialization, explicit attachment workspace references, exact provider projection digest, and journal evidence | not certified |
-| Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent context reserve, authority/provenance-preserving stateless compaction, bounded tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v8 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/preflight/artifact surface, full-workspace confinement/process/discovery surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@3`; per-block role/provenance/source digest, complete scoped `AGENTS.md`/skill materialization, explicit UTF-8/base64 attachment workspace references, exact provider projection digest, and journal evidence | not certified |
+| Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent context reserve, semantic stateless-history compaction, bounded tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
+| Certified execution TCB | manifest v9 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, full-workspace confinement/process/discovery surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
-| Full Workspace contract implementation | atomic `codex-baseline-v2` claim validation; stable search/read, atomic create/replace/edit/patch/move/quarantined-delete, scoped instructions, fixed-path networkless shell, bounded managed processes, official discovery-first CLI/MCP including inter-agent surfaces, bounded artifact-backed results, and orphan cleanup fixtures | implementation fixture only; revision 22 makes the full claim but remains uncertified and unavailable |
+| Full Workspace contract implementation | atomic `codex-baseline-v3` claim validation; stable UTF-8/base64 reads, atomic create/replace/edit/patch/move/quarantined-delete with mandatory commit-bound instruction digests, fixed-path networkless shell, bounded managed processes, official discovery-first CLI/MCP including inter-agent surfaces, bounded artifact-backed results, and orphan cleanup fixtures | implementation fixture only; revision 23 makes the full claim but remains uncertified and unavailable |
+| Live endpoint/model preflight | official current Interactions OpenAPI operation plus authenticated exact model record prove streaming, usage, function tools, reasoning controls, model identity, and input/output limits before completion transport | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
 | Stateless continuation | exact user/thought/function history replay | not certified |
@@ -75,7 +76,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r18 |
+| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r19 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
@@ -216,3 +217,13 @@ explicit attachment references and safe-next-turn steering fallback. Every
 request performs an exact local wire preflight before egress commit; final
 requests omit `tools`. No live or behavioral run, certificate, binding,
 provider request, canary, or remote activation has been performed.
+
+Revision 23 pins adapter 15, recipe 2, suite 19, matrix
+`2026-08-28-r19-p4-review-closure-tcb9`, and TCB manifest v9. It closes the P4
+review findings with the production classifier/result-classifier composition,
+mandatory commit-bound `AGENTS.md` guards, semantic compaction schema 2,
+binary attachment reads, and an official live Interactions OpenAPI plus exact
+model-catalog preflight. Compiler revision 3 and `codex-baseline-v3` bind those
+behavior changes. This is still an uncertified, unbound, unavailable candidate;
+no live probe, behavioral run, provider completion, certificate, canary, or
+remote activation has been performed.

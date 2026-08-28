@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import UTC, datetime
 from pathlib import Path
 import tempfile
@@ -27,6 +28,32 @@ NOW = datetime(2026, 8, 26, tzinfo=UTC)
 
 
 class ConfinedWorkspaceFilesystemTest(unittest.TestCase):
+    def test_binary_chunks_are_readable_as_version_fenced_base64(self) -> None:
+        with tempfile.TemporaryDirectory() as root_dir:
+            root = Path(root_dir)
+            raw = b"%PDF-1.7\x00\xfffixture"
+            (root / "evidence.pdf").write_bytes(raw)
+            filesystem = ConfinedWorkspaceFilesystem(
+                workspace_id="default",
+                workspace_root=root,
+            )
+
+            first = filesystem.read_bytes("evidence.pdf", max_bytes=7)
+            second = filesystem.read_bytes(
+                "evidence.pdf",
+                offset=int(first.payload["next_offset"]),
+                max_bytes=64,
+                expected_resource_identity=str(first.payload["resource_identity"]),
+                expected_resource_revision=str(first.payload["resource_revision"]),
+            )
+
+            decoded = base64.b64decode(str(first.payload["content_base64"]))
+            decoded += base64.b64decode(str(second.payload["content_base64"]))
+            self.assertEqual(decoded, raw)
+            self.assertEqual(first.payload["encoding"], "base64")
+            self.assertTrue(first.payload["truncated"])
+            self.assertFalse(second.payload["truncated"])
+
     def test_atomic_replace_preserves_every_inode_across_final_entry_swap(self) -> None:
         with tempfile.TemporaryDirectory() as root_dir:
             root = Path(root_dir)

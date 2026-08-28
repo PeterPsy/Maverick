@@ -165,7 +165,7 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "a18e10f43d8a9e9ced37d7184fd4e9e0b2422ec09c0b74726e3840e49cdb26ab"
+                "90f6a6703fcedabac9eabcd6b8c3f31fb8944d546dee59e5860780a8d0ad9854"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "4ffcf58e04f8db537917ca641472bcdf86f885b1ca25f54111e061e86b5a974a"
+                "d3562bc86bfee3a96821ced379f9ba2ad7b7e9813abe6bf38e5e0c8848e0c6bd"
             ),
             "openrouter": (
-                "727217b970a4238fc977520a312a0ce4595b328299aa31827ead084c8d116933"
+                "de20de3ac9c12ad3e22589186c9306cff034320ddb83615a79bcd20684bfdbaa"
             ),
         }
         for manifest in (
@@ -190,9 +190,10 @@ class CertificationPipelineTest(unittest.TestCase):
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
+                self.assertEqual(manifest.suite_version, "19")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-08-28-r18-p4-context-provider-closure-tcb8",
+                    "2026-08-28-r19-p4-review-closure-tcb9",
                 )
                 self.assertEqual(
                     manifest.digest,

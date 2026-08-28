@@ -47,6 +47,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
                 "projection": {
                     "mode": "workspace_reference",
                     "read_capability": "core-capability:filesystem.read",
+                    "read_encoding": "base64",
                 },
             },
             capability_modality="application/pdf",
@@ -76,6 +77,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
             projection["projection"]["read_capability"],
             "core-capability:filesystem.read",
         )
+        self.assertEqual(projection["projection"]["read_encoding"], "base64")
         with self.assertRaisesRegex(
             HostedAgenticLoopError,
             "attachment_projection_not_supported",
@@ -177,7 +179,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
             second.provider_egress_projection_digest,
         )
         self.assertEqual(first.semantic_envelope_schema_version, "1")
-        self.assertEqual(first.semantic_projection_compiler_revision, "2")
+        self.assertEqual(first.semantic_projection_compiler_revision, "3")
         provenance = [block.provenance for block in first.content_blocks]
         self.assertEqual(
             provenance,

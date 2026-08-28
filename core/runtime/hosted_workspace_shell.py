@@ -104,6 +104,7 @@ def run_hosted_workspace_command(
     environment: dict[str, str],
     timeout_seconds: int,
     max_output_bytes: int,
+    mutation_guard=None,
 ) -> dict[str, object]:
     """Run one bounded command and kill its complete process group on timeout."""
     prepared = prepare_hosted_workspace_command(
@@ -115,6 +116,8 @@ def run_hosted_workspace_command(
     )
     process: subprocess.Popen[bytes] | None = None
     try:
+        if mutation_guard is not None:
+            mutation_guard.verify_before()
         process = subprocess.Popen(
             prepared.command,
             env=environment,

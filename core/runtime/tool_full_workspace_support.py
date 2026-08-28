@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import difflib
-import hashlib
-import json
+from pathlib import PurePosixPath
 
 from core.egress.classification import (
     CanonicalSourceClassification,
-    fail_closed_classification,
     join_classifications,
 )
 from core.runtime.tool_catalog import (
@@ -29,6 +28,66 @@ MAX_DIFF_BYTES = 65_536
 CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
 
 
+@dataclass(frozen=True)
+class MutationInstructionGuard:
+    """Bind one model-read instruction snapshot to the actual mutation commit."""
+
+    filesystem: object
+    workspace_root: object
+    path: str
+    target_is_directory: bool
+    expected_digest: str
+    initial_chain: tuple[object, ...]
+    affected_instruction_prefixes: tuple[str, ...] = ()
+
+    @property
+    def evidence(self) -> dict[str, object]:
+        return _instruction_evidence(self.initial_chain, self.expected_digest)
+
+    def verify_before(self) -> None:
+        chain = self._resolve()
+        if workspace_instruction_scope_digest(chain) != self.expected_digest:
+            raise RuntimeToolError("workspace_instruction_scope_changed")
+
+    def verify_after(self) -> None:
+        chain = self._resolve()
+        if not self.affected_instruction_prefixes:
+            if workspace_instruction_scope_digest(chain) != self.expected_digest:
+                raise RuntimeToolError("workspace_instruction_scope_changed")
+            return
+        before = _unaffected_instruction_snapshot(
+            self.initial_chain,
+            self.affected_instruction_prefixes,
+        )
+        after = _unaffected_instruction_snapshot(
+            chain,
+            self.affected_instruction_prefixes,
+        )
+        if before != after:
+            raise RuntimeToolError("workspace_instruction_scope_changed")
+
+    def _resolve(self):
+        return resolve_workspace_instruction_chain_for_path(
+            self.filesystem,
+            workspace_root=self.workspace_root,
+            relative_path=self.path,
+            target_is_directory=self.target_is_directory,
+        )
+
+
+@dataclass(frozen=True)
+class CombinedMutationInstructionGuard:
+    guards: tuple[MutationInstructionGuard, ...]
+
+    def verify_before(self) -> None:
+        for guard in self.guards:
+            guard.verify_before()
+
+    def verify_after(self) -> None:
+        for guard in self.guards:
+            guard.verify_after()
+
+
 def commit_text_change(
     filesystem,
     *,
@@ -38,6 +97,7 @@ def commit_text_change(
     expected_identity,
     expected_revision,
     evidence,
+    mutation_guard,
     operation_count,
 ):
     if before == after:
@@ -62,6 +122,7 @@ def commit_text_change(
         replace_only=True,
         expected_resource_identity=expected_identity,
         expected_resource_revision=expected_revision,
+        mutation_guard=mutation_guard,
     )
     payload = {
         **written.payload,
@@ -73,14 +134,21 @@ def commit_text_change(
     return RuntimeToolSurfaceResult(payload, written.classification)
 
 
-def mutation_instruction_evidence(
+def prepare_mutation_instruction_guard(
     filesystem,
     *,
     workspace_root,
     path,
     expected_digest,
     target_is_directory=None,
+    affected_instruction_prefixes=(),
 ):
+    if (
+        not isinstance(expected_digest, str)
+        or len(expected_digest) != 64
+        or any(character not in "0123456789abcdefABCDEF" for character in expected_digest)
+    ):
+        raise RuntimeToolError("tool_arguments_invalid")
     if target_is_directory is None:
         try:
             target_is_directory = filesystem.path_is_directory(path)
@@ -95,13 +163,67 @@ def mutation_instruction_evidence(
         target_is_directory=target_is_directory,
     )
     digest_value = workspace_instruction_scope_digest(chain)
-    if expected_digest is not None and expected_digest != digest_value:
+    if expected_digest.lower() != digest_value:
         raise RuntimeToolError("workspace_instruction_scope_changed")
+    normalized_prefixes = tuple(
+        _normalized_instruction_prefix(value)
+        for value in affected_instruction_prefixes
+    )
+    return MutationInstructionGuard(
+        filesystem=filesystem,
+        workspace_root=workspace_root,
+        path=path,
+        target_is_directory=bool(target_is_directory),
+        expected_digest=digest_value,
+        initial_chain=chain,
+        affected_instruction_prefixes=normalized_prefixes,
+    )
+
+
+def mutation_affected_instruction_prefixes(path, *, target_is_directory):
+    """Return instruction paths intentionally changed by this target effect."""
+    normalized = _normalized_instruction_prefix(path)
+    if target_is_directory or PurePosixPath(normalized).name == "AGENTS.md":
+        return (normalized,)
+    return ()
+
+
+def _instruction_evidence(chain, digest_value):
     return {
         "instruction_scope_digest": digest_value,
         "instruction_paths": [item.relative_path for item in chain],
         "instruction_revisions": [item.resource_revision for item in chain],
     }
+
+
+def _normalized_instruction_prefix(value):
+    raw = str(value or "").strip()
+    path = PurePosixPath(raw)
+    if (
+        not raw
+        or path.is_absolute()
+        or path.as_posix() != raw
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise RuntimeToolError("tool_arguments_invalid")
+    return raw
+
+
+def _unaffected_instruction_snapshot(chain, affected_prefixes):
+    return tuple(
+        (
+            item.relative_path,
+            item.resource_identity,
+            item.resource_revision,
+            item.resource_digest,
+        )
+        for item in chain
+        if not any(
+            item.relative_path == prefix
+            or item.relative_path.startswith(prefix.rstrip("/") + "/")
+            for prefix in affected_prefixes
+        )
+    )
 
 
 def instruction_classification(chain, digest_value):
@@ -128,20 +250,6 @@ def instruction_classification(chain, digest_value):
         resource_identity="workspace-instructions:" + digest_value,
         classification_revision=(
             max(revisions) if all(item is not None for item in revisions) else None
-        ),
-    )
-
-
-def unclassified_process_result(result, session_id):
-    result_digest = digest(result)
-    return RuntimeToolSurfaceResult(
-        result,
-        fail_closed_classification(
-            provenance="tool_result",
-            source_ref="hosted-process",
-            source_revision=result_digest,
-            source_digest=result_digest,
-            resource_identity=f"hosted-process:{session_id}",
         ),
     )
 
@@ -215,15 +323,3 @@ def optional_string(value):
     if value is None:
         return None
     return required_string(value)
-
-
-def digest(value):
-    return hashlib.sha256(
-        json.dumps(
-            value,
-            ensure_ascii=False,
-            allow_nan=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()

@@ -29,6 +29,7 @@ def move_confined_path(
     expected_resource_identity: str,
     expected_resource_revision: str,
     create_parents: bool,
+    mutation_guard=None,
 ) -> ConfinedFilesystemResult:
     """Atomically move one exact inode while retaining both parent anchors."""
     if not expected_resource_identity or not expected_resource_revision:
@@ -44,6 +45,7 @@ def move_confined_path(
     )
     committed = False
     source_stat: os.stat_result | None = None
+    destination_stat: os.stat_result | None = None
     try:
         source_stat = lstat_entry(source_chain.leaf_fd, source[-1])
         require_supported_type(source_stat)
@@ -65,6 +67,8 @@ def move_confined_path(
         else:
             raise RuntimeToolError("filesystem_path_exists")
         filesystem._hook("move_before_commit", source_path)
+        if mutation_guard is not None:
+            mutation_guard.verify_before()
         revalidate_entry(filesystem, source_chain, source[-1], source_stat)
         filesystem._assert_chain(destination_chain)
         rename_noreplace(
@@ -97,6 +101,8 @@ def move_confined_path(
         filesystem._hook("move_committed", destination_path)
         filesystem._assert_chain(source_chain)
         filesystem._assert_chain(destination_chain)
+        if mutation_guard is not None:
+            mutation_guard.verify_after()
         moved_observation = filesystem._observation(
             observation.resource_kind,
             filesystem._relative(destination),
@@ -113,8 +119,21 @@ def move_confined_path(
             filesystem._classification(moved_observation, "tool_result"),
         )
     except RuntimeToolError as error:
-        if committed and error.reason_code != "tool_execution_unknown":
-            raise RuntimeToolError("tool_execution_unknown") from error
+        if committed and destination_stat is not None:
+            restored = rollback_move(
+                destination_chain.leaf_fd,
+                destination[-1],
+                source_chain.leaf_fd,
+                source[-1],
+                expected_identity=destination_stat,
+            )
+            if restored:
+                committed = False
+                os.fsync(source_chain.leaf_fd)
+                if destination_chain.leaf_fd != source_chain.leaf_fd:
+                    os.fsync(destination_chain.leaf_fd)
+            elif error.reason_code != "tool_execution_unknown":
+                raise RuntimeToolError("tool_execution_unknown") from error
         raise
     except OSError as error:
         if committed:

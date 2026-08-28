@@ -6,6 +6,9 @@ from dataclasses import dataclass
 
 from core.providers.agentic_protocol import AgenticModelRequest, EphemeralCredential
 from core.providers.google_interactions_models import GoogleInteractionsProtocolError
+from core.providers.google_interactions_catalog import (
+    preflight_google_interactions_catalog,
+)
 from core.providers.google_interactions_request import google_interaction_payload
 from core.providers.google_interactions_state import decode_google_interaction_state
 from core.providers.openrouter_agentic_catalog import (
@@ -26,6 +29,7 @@ class HostedEndpointRequestSnapshot:
     request_phase: str
     streaming: bool
     usage_accounting: bool
+    tool_calling: bool
     tool_catalog_mode: str
     tool_choice_mode: str
     reasoning_mode: str
@@ -53,18 +57,28 @@ def preflight_google_interactions_request(
         or (not final and bool(request.tool_definitions) != ("tools" in payload))
     ):
         raise GoogleInteractionsProtocolError("provider_endpoint_parameters_unsupported")
+    catalog = preflight_google_interactions_catalog(
+        request,
+        credential=credential,
+    )
     projection = {
         "model_id": request.model_id,
         "request_phase": request.request_phase,
-        "streaming": True,
-        "usage_accounting": True,
+        "streaming": catalog.streaming,
+        "usage_accounting": catalog.usage_accounting,
+        "tool_calling": catalog.tool_calling,
         "tool_catalog_mode": "omitted" if final else "declared",
         "tool_choice_mode": "provider-default",
         "reasoning_mode": str(request.reasoning_effort or "default"),
         "max_output_tokens": request.max_output_tokens,
+        "live_catalog_snapshot_digest": catalog.catalog_snapshot_digest,
     }
     return HostedEndpointRequestSnapshot(
-        **projection,
+        **{
+            key: value
+            for key, value in projection.items()
+            if key != "live_catalog_snapshot_digest"
+        },
         snapshot_digest=canonical_digest(projection),
     )
 
@@ -98,6 +112,7 @@ def preflight_openrouter_completion_request(
         "request_phase": request.request_phase,
         "streaming": True,
         "usage_accounting": True,
+        "tool_calling": True,
         "tool_catalog_mode": "empty" if final else "declared",
         "tool_choice_mode": expected_choice,
         "reasoning_mode": str(request.reasoning_effort or "default"),

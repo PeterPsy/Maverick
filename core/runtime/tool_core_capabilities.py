@@ -32,7 +32,10 @@ from core.runtime.tool_discovery_capabilities import (
 from core.runtime.tool_full_workspace_capabilities import (
     build_full_workspace_capabilities,
 )
-from core.runtime.tool_full_workspace_support import mutation_instruction_evidence
+from core.runtime.tool_full_workspace_support import (
+    mutation_affected_instruction_prefixes,
+    prepare_mutation_instruction_guard,
+)
 from core.runtime.tool_full_workspace_schemas import (
     extended_filesystem_write_schema,
 )
@@ -59,6 +62,7 @@ def build_core_runtime_tool_capabilities(
     cli_registry=None,
     mcp_registry=None,
     tool_ledger=None,
+    result_classification_resolver=None,
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     """Build workspace-bound Core capabilities over one fd-relative boundary."""
     filesystem = ConfinedWorkspaceFilesystem(
@@ -115,7 +119,11 @@ def build_core_runtime_tool_capabilities(
             or offset < 0
         ):
             raise RuntimeToolError("tool_arguments_invalid")
-        result = filesystem.read_text(
+        encoding = str(arguments.get("encoding") or "utf-8")
+        if encoding not in {"utf-8", "base64"}:
+            raise RuntimeToolError("tool_arguments_invalid")
+        reader = filesystem.read_text if encoding == "utf-8" else filesystem.read_bytes
+        result = reader(
             str(arguments.get("path") or ""),
             offset=offset,
             max_bytes=min(requested, MAX_FILESYSTEM_READ_BYTES),
@@ -140,12 +148,16 @@ def build_core_runtime_tool_capabilities(
         if len(content.encode("utf-8")) > MAX_FILESYSTEM_WRITE_BYTES:
             raise RuntimeToolError("filesystem_write_too_large")
         path = str(arguments.get("path") or "")
-        evidence = mutation_instruction_evidence(
+        guard = prepare_mutation_instruction_guard(
             filesystem,
             workspace_root=workspace_root,
             path=path,
-            expected_digest=_optional_string(
+            expected_digest=_required_string(
                 arguments.get("instruction_scope_digest")
+            ),
+            affected_instruction_prefixes=mutation_affected_instruction_prefixes(
+                path,
+                target_is_directory=False,
             ),
         )
         result = filesystem.write_text(
@@ -160,9 +172,10 @@ def build_core_runtime_tool_capabilities(
             expected_resource_revision=_optional_string(
                 arguments.get("expected_resource_revision")
             ),
+            mutation_guard=guard,
         )
         return RuntimeToolSurfaceResult(
-            {**result.payload, **evidence},
+            {**result.payload, **guard.evidence},
             result.classification,
         )
 
@@ -193,11 +206,11 @@ def build_core_runtime_tool_capabilities(
         ):
             raise RuntimeToolError("tool_arguments_invalid")
         cwd = str(arguments.get("cwd") or ".")
-        evidence = mutation_instruction_evidence(
+        guard = prepare_mutation_instruction_guard(
             filesystem,
             workspace_root=workspace_root,
             path=cwd,
-            expected_digest=_optional_string(
+            expected_digest=_required_string(
                 arguments.get("instruction_scope_digest")
             ),
             target_is_directory=True,
@@ -214,8 +227,9 @@ def build_core_runtime_tool_capabilities(
                 ),
                 timeout_seconds=timeout,
                 max_output_bytes=MAX_SHELL_OUTPUT_BYTES,
+                mutation_guard=guard,
             ),
-            **evidence,
+            **guard.evidence,
         }
 
     base = (
@@ -236,7 +250,7 @@ def build_core_runtime_tool_capabilities(
             definition=_core_surface(
                 handle="core-capability:filesystem.read",
                 description=(
-                    "Read one mutation-detecting UTF-8 chunk through a workspace descriptor."
+                    "Read one mutation-detecting UTF-8 or base64 byte chunk through a workspace descriptor."
                 ),
                 input_schema=_filesystem_read_schema(),
                 effect_class="read",
@@ -273,11 +287,13 @@ def build_core_runtime_tool_capabilities(
         workspace_root=workspace_root,
         runtime_root=resolved_runtime_root,
         process_registry=process_registry,
+        result_classification_resolver=result_classification_resolver,
     )
     discovery = (
         build_discovery_first_capabilities(
             cli_registry=cli_registry,
             mcp_registry=mcp_registry,
+            result_classification_resolver=result_classification_resolver,
         )
         if cli_registry is not None and mcp_registry is not None
         else ()
@@ -327,6 +343,13 @@ def _optional_string(value: object) -> str | None:
     return value
 
 
+def _required_string(value: object) -> str:
+    resolved = _optional_string(value)
+    if resolved is None:
+        raise RuntimeToolError("tool_arguments_invalid")
+    return resolved
+
+
 def _filesystem_read_schema() -> dict[str, object]:
     return {
         "type": "object",
@@ -337,6 +360,10 @@ def _filesystem_read_schema() -> dict[str, object]:
                 "type": "integer",
                 "minimum": 1,
                 "maximum": MAX_FILESYSTEM_READ_BYTES,
+            },
+            "encoding": {
+                "type": "string",
+                "enum": ["utf-8", "base64"],
             },
             "expected_resource_identity": {
                 "type": "string",
@@ -376,6 +403,6 @@ def _shell_schema() -> dict[str, object]:
                 "maxLength": 64,
             },
         },
-        "required": ["argv"],
+        "required": ["argv", "instruction_scope_digest"],
         "additionalProperties": False,
     }

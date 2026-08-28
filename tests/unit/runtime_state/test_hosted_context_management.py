@@ -64,13 +64,15 @@ class HostedContextManagementTest(unittest.TestCase):
         )
 
     def test_openrouter_compaction_removes_raw_history_and_preserves_pairing(self) -> None:
-        secret = "do-not-copy-this-provider-private-history"
+        constraint = "Always answer in Italian and never delete fixture files."
+        filler = "provider-private-filler-" * 4_000
         private = encode_openrouter_chat_state(
             OpenRouterChatState(
                 schema_version=OPENROUTER_AGENTIC_SCHEMA_VERSION,
                 history=(
                     {"role": "system", "content": "stable-system"},
-                    {"role": "user", "content": (secret + " ") * 2_000},
+                    {"role": "user", "content": constraint},
+                    {"role": "user", "content": filler},
                     _openrouter_call("call-1", "fixture_tool"),
                     {
                         "role": "tool",
@@ -106,7 +108,7 @@ class HostedContextManagementTest(unittest.TestCase):
         self.assertIsNotNone(evidence)
         self.assertTrue(evidence.applied)
         self.assertLess(evidence.compacted_bytes, evidence.source_bytes)
-        self.assertNotIn(secret.encode(), compacted.content)
+        self.assertNotIn(filler.encode(), compacted.content)
         self.assertEqual(compacted.source_metadata, private.source_metadata)
         self.assertEqual(compacted.provider_request_id, private.provider_request_id)
         self.assertEqual(compacted.turn_generation, private.turn_generation)
@@ -124,9 +126,22 @@ class HostedContextManagementTest(unittest.TestCase):
         self.assertEqual(summary["authority_digest"], "a" * 64)
         self.assertNotIn("_active_tool_result_ids", summary)
         self.assertEqual(len(summary["provenance_digest"]), 64)
+        self.assertIn(
+            constraint,
+            [item["text"] for item in summary["semantic_history"]],
+        )
+        self.assertIn(
+            {"role": "assistant_action", "text": "Called tools: fixture_tool"},
+            summary["semantic_history"],
+        )
+        self.assertIn(
+            {"role": "tool", "text": '{"value":1}'},
+            summary["semantic_history"],
+        )
 
     def test_google_stateless_compaction_preserves_active_result_lineage(self) -> None:
-        secret = "private-google-history"
+        constraint = "Preserve the historical user constraint in this summary."
+        filler = "private-google-filler-" * 4_000
         private = encode_google_interaction_state(
             GoogleInteractionState(
                 schema_version="3",
@@ -135,7 +150,11 @@ class HostedContextManagementTest(unittest.TestCase):
                 history=(
                     {
                         "type": "user_input",
-                        "content": [{"type": "text", "text": secret * 3_000}],
+                        "content": [{"type": "text", "text": constraint}],
+                    },
+                    {
+                        "type": "user_input",
+                        "content": [{"type": "text", "text": filler}],
                     },
                     {"type": "function_call", "call_id": "call-1"},
                     {"type": "function_result", "call_id": "call-1"},
@@ -165,7 +184,7 @@ class HostedContextManagementTest(unittest.TestCase):
         )
 
         self.assertTrue(evidence.applied)
-        self.assertNotIn(secret.encode(), compacted.content)
+        self.assertNotIn(filler.encode(), compacted.content)
         state = decode_google_interaction_state(
             compacted,
             default_mode="stateless",
@@ -177,6 +196,11 @@ class HostedContextManagementTest(unittest.TestCase):
         )
         self.assertEqual(len(state.history), 4)
         self.assertEqual(compacted.source_metadata, private.source_metadata)
+        summary = json.loads(state.history[0]["content"][0]["text"])
+        self.assertIn(
+            constraint,
+            [item["text"] for item in summary["semantic_history"]],
+        )
 
     def test_request_reserve_is_independent_from_the_turn_budget(self) -> None:
         request = AgenticModelRequest(

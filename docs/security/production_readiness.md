@@ -44,7 +44,8 @@ production security gate is approved, remote agentic profiles must remain
 disabled by default, explicitly marked preview, and blocked by the independent
 server-owned availability/admission boundary. P0 material containment is
 recorded in the agentic tasklist; P1 implements the security boundary, P2
-implements journaled recovery, and P3 implements governed finalization, but
+implements journaled recovery, P3 implements governed finalization, and P4
+implements the reviewed semantic/full-workspace/provider closure, but
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false and no remote binding,
 profile, or certificate is enabled. Current profile policy lists only
 Core-classified public content. The fake class is not a declaration shortcut:
@@ -62,18 +63,19 @@ publication, execution binding, and live status recompute/compare the same
 digest; drift or a legacy missing identity fails closed. Effective authority is
 one intersection of certificate, profile, workspace, actor, live catalog,
 feature flags, and provider health and is reused by admission, dispatch, API,
-Chat, and Settings. This closes the P1/P2/P3 repository implementation slices; it does
+Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v6 additionally makes the known transitive boundary executable through
+Manifest v9 additionally makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 12 additionally places all provider-bound context in semantic-
-envelope schema v1, materializes scoped instructions through the confined
-filesystem, and journals distinct source/projection evidence. This is a
+Hosted adapter 15 places all provider-bound context in semantic-envelope schema
+v1/compiler revision 3, materializes scoped instructions through the confined
+filesystem, requires commit-bound instruction digests for mutations, and
+journals distinct source/projection evidence. This is a
 repository safety invariant, not certification or remote-release approval.
 
 The runtime now also separates actor-attributed CAS workspace attestation,
@@ -100,10 +102,11 @@ tool-less fallback, deadline-fenced slow handlers and result persistence,
 persisted execution leases checked atomically by the terminal success CAS,
 request-scoped OpenRouter finalization,
 whitespace rejection, journaled `budget_denied` final calls, and no more than
-one finalization recovery. Phase-4 fixtures add the recipe/catalog identity,
-independent context reserve, pairing-safe compaction, bounded result artifacts,
-explicit attachment/steering behavior, and exact provider preflight before
-egress commit. The operator
+one finalization recovery. Phase-4 fixtures add production-composed
+classification/continuation, recipe/catalog identity, independent context
+reserve, pairing-safe semantic compaction, bounded result artifacts,
+UTF-8/base64 attachment references, request-scoped OpenRouter authority, and
+exact live provider preflight before egress commit. The operator
 runbook documents canary,
 observation, incident
 recovery, and control-plane-first rollback. These controls do not close the

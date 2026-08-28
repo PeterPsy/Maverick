@@ -186,6 +186,7 @@ class HostedAgenticEgressTest(unittest.TestCase):
                         "projection": {
                             "mode": "workspace_reference",
                             "read_capability": "core-capability:filesystem.read",
+                            "read_encoding": "utf-8",
                         },
                     },
                     capability_modality="text/plain",

@@ -22,7 +22,7 @@ from core.runtime.hosted_context_management import (
     HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION,
     HostedContextCompactionEvidence,
     HostedContextCompactionResult,
-    bounded_context_summary,
+    bounded_semantic_context_summary,
     canonical_context_digest,
 )
 
@@ -32,7 +32,7 @@ def compact_openrouter_history(
     policy: AgenticContextPolicy,
     summary_base: dict[str, object],
 ) -> HostedContextCompactionResult:
-    """Replace old chat history with metadata-only summary plus an active suffix."""
+    """Replace old chat history with a semantic summary plus an active suffix."""
     try:
         state = decode_openrouter_chat_state(private_state)
     except Exception as error:
@@ -58,8 +58,9 @@ def compact_openrouter_history(
             tuple(item.call_id for item in state.pending_tool_calls)
         ),
     }
-    summary = bounded_context_summary(
+    summary = bounded_semantic_context_summary(
         summary_payload,
+        _openrouter_semantic_history(state.history),
         max_bytes=policy.summary_max_bytes,
     )
     history = (
@@ -124,8 +125,9 @@ def compact_google_stateless_history(
         "retained_history_items": len(retained),
         "active_pending_call_ids_digest": canonical_context_digest(pending_ids),
     }
-    summary = bounded_context_summary(
+    summary = bounded_semantic_context_summary(
         summary_payload,
+        _google_semantic_history(state.history),
         max_bytes=policy.summary_max_bytes,
     )
     summary_step = {
@@ -221,6 +223,77 @@ def _contains_exact_identifier(value: object, identifiers: set[str]) -> bool:
     if isinstance(value, (list, tuple)):
         return any(_contains_exact_identifier(item, identifiers) for item in value)
     return False
+
+
+def _openrouter_semantic_history(
+    history: tuple[dict[str, object], ...],
+) -> tuple[dict[str, str], ...]:
+    values: list[dict[str, str]] = []
+    for message in history:
+        role = str(message.get("role") or "")
+        content = message.get("content")
+        if role in {"user", "assistant", "tool"} and isinstance(content, str) and content.strip():
+            values.append({"role": role, "text": content})
+        if role == "assistant" and isinstance(message.get("tool_calls"), list):
+            names = []
+            for call in message["tool_calls"]:
+                function = call.get("function") if isinstance(call, dict) else None
+                name = function.get("name") if isinstance(function, dict) else None
+                if isinstance(name, str) and name:
+                    names.append(name)
+            if names:
+                values.append(
+                    {
+                        "role": "assistant_action",
+                        "text": "Called tools: " + ", ".join(names),
+                    }
+                )
+    return tuple(values)
+
+
+def _google_semantic_history(
+    history: tuple[dict[str, object], ...],
+) -> tuple[dict[str, str], ...]:
+    values: list[dict[str, str]] = []
+    for step in history:
+        step_type = str(step.get("type") or "")
+        if step_type in {"user_input", "model_output"}:
+            role = "user" if step_type == "user_input" else "assistant"
+            values.extend(
+                {"role": role, "text": text}
+                for text in _google_text_values(step.get("content"))
+            )
+        elif step_type == "function_result":
+            values.extend(
+                {"role": "tool", "text": text}
+                for text in _google_text_values(step.get("result"))
+            )
+        elif step_type == "function_call":
+            name = step.get("name")
+            values.append(
+                {
+                    "role": "assistant_action",
+                    "text": (
+                        f"Called tool: {name}"
+                        if isinstance(name, str) and name
+                        else "Called a tool."
+                    ),
+                }
+            )
+    return tuple(values)
+
+
+def _google_text_values(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(
+        str(item["text"])
+        for item in value
+        if isinstance(item, dict)
+        and item.get("type") == "text"
+        and isinstance(item.get("text"), str)
+        and str(item["text"]).strip()
+    )
 
 
 def _active_tool_result_ids(summary_base: dict[str, object]) -> tuple[str, ...]:

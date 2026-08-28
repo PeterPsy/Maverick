@@ -39,6 +39,7 @@ def delete_confined_path(
     expected_resource_identity: str,
     expected_resource_revision: str,
     recursive: bool,
+    mutation_guard=None,
 ) -> ConfinedFilesystemResult:
     """Atomically hide one exact inode before bounded descriptor-only cleanup."""
     if not expected_resource_identity or not expected_resource_revision:
@@ -49,6 +50,7 @@ def delete_confined_path(
     trash_name = f"delete-{secrets.token_hex(16)}"
     committed = False
     target_stat: os.stat_result | None = None
+    quarantine_stat: os.stat_result | None = None
     try:
         target_stat = lstat_entry(chain.leaf_fd, components[-1])
         require_supported_type(target_stat)
@@ -73,6 +75,8 @@ def delete_confined_path(
                     remaining=MAX_RECURSIVE_DELETE_ENTRIES,
                 )
         filesystem._hook("delete_before_commit", relative_path)
+        if mutation_guard is not None:
+            mutation_guard.verify_before()
         revalidate_entry(filesystem, chain, components[-1], target_stat)
         trash_fd = _open_quarantine(filesystem)
         rename_noreplace(
@@ -99,6 +103,8 @@ def delete_confined_path(
         os.fsync(trash_fd)
         filesystem._hook("delete_committed", relative_path)
         filesystem._assert_chain(chain)
+        if mutation_guard is not None:
+            mutation_guard.verify_after()
         deleted_entries, cleanup_reason = _cleanup_quarantine(
             trash_fd,
             trash_name,
@@ -120,8 +126,20 @@ def delete_confined_path(
             filesystem._classification(observation, "tool_result"),
         )
     except RuntimeToolError as error:
-        if committed and error.reason_code != "tool_execution_unknown":
-            raise RuntimeToolError("tool_execution_unknown") from error
+        if committed and trash_fd is not None and quarantine_stat is not None:
+            restored = rollback_move(
+                trash_fd,
+                trash_name,
+                chain.leaf_fd,
+                components[-1],
+                expected_identity=quarantine_stat,
+            )
+            if restored:
+                committed = False
+                os.fsync(chain.leaf_fd)
+                os.fsync(trash_fd)
+            elif error.reason_code != "tool_execution_unknown":
+                raise RuntimeToolError("tool_execution_unknown") from error
         raise
     except OSError as error:
         if committed:

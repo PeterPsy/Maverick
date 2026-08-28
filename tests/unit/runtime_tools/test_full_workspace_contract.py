@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import replace
 from pathlib import Path
 import tempfile
@@ -226,7 +227,8 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 "destination_path": "project/renamed.txt",
                 "expected_resource_identity": patch.payload["resource_identity"],
                 "expected_resource_revision": patch.payload["resource_revision"],
-                "instruction_scope_digest": scope_digest,
+                "source_instruction_scope_digest": scope_digest,
+                "destination_instruction_scope_digest": scope_digest,
             },
             self.context,
             None,
@@ -245,6 +247,50 @@ class FullWorkspaceContractTest(unittest.TestCase):
         )
         self.assertTrue(deleted.payload["deleted"])
         self.assertFalse((nested / "renamed.txt").exists())
+
+    def test_filesystem_read_exposes_binary_base64_projection(self) -> None:
+        raw = b"%PDF-1.7\x00\xffbinary-evidence"
+        (self.workspace / "evidence.pdf").write_bytes(raw)
+        capabilities = self._capabilities()
+        surface = capabilities["core-capability:filesystem.read"]
+
+        result = surface.handler(
+            {"path": "evidence.pdf", "encoding": "base64"},
+            self.context,
+            None,
+        )
+
+        self.assertEqual(
+            base64.b64decode(str(result.payload["content_base64"])),
+            raw,
+        )
+        self.assertEqual(result.payload["encoding"], "base64")
+        self.assertEqual(
+            surface.definition.input_schema["properties"]["encoding"]["enum"],
+            ["utf-8", "base64"],
+        )
+
+    def test_every_direct_mutation_schema_requires_instruction_snapshot(self) -> None:
+        capabilities = self._capabilities(processes=True)
+        expected = {
+            "core-capability:filesystem.write": {"instruction_scope_digest"},
+            "core-capability:filesystem.edit": {"instruction_scope_digest"},
+            "core-capability:filesystem.patch": {"instruction_scope_digest"},
+            "core-capability:filesystem.move": {
+                "source_instruction_scope_digest",
+                "destination_instruction_scope_digest",
+            },
+            "core-capability:filesystem.delete": {"instruction_scope_digest"},
+            "core-capability:shell.run": {"instruction_scope_digest"},
+            "core-capability:process.start": {"instruction_scope_digest"},
+        }
+
+        for handle, required in expected.items():
+            with self.subTest(handle=handle):
+                schema_required = set(
+                    capabilities[handle].definition.input_schema["required"]
+                )
+                self.assertTrue(required.issubset(schema_required))
 
     def test_mutation_rechecks_instruction_digest_before_effect(self) -> None:
         (self.workspace / "AGENTS.md").write_text("First.\n", encoding="utf-8")
@@ -272,6 +318,141 @@ class FullWorkspaceContractTest(unittest.TestCase):
             )
         self.assertFalse((self.workspace / "created.txt").exists())
 
+    def test_mutation_requires_digest_and_rolls_back_instruction_races(self) -> None:
+        agents = self.workspace / "AGENTS.md"
+        agents.write_text("Initial.\n", encoding="utf-8")
+        capabilities = self._capabilities()
+        with self.assertRaisesRegex(RuntimeToolError, "tool_arguments_invalid"):
+            capabilities["core-capability:filesystem.write"].handler(
+                {
+                    "path": "without-digest.txt",
+                    "content": "not written",
+                    "create_only": True,
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((self.workspace / "without-digest.txt").exists())
+
+        for race_stage in ("write_temporary_ready", "write_committed"):
+            with self.subTest(race_stage=race_stage):
+                agents.write_text("Initial.\n", encoding="utf-8")
+
+                def race(stage, _path):
+                    if stage == race_stage:
+                        agents.write_text("Raced.\n", encoding="utf-8")
+
+                racing = self._capabilities(race_hook=race)
+                scope_digest = self._scope_digest(racing, "raced.txt")
+                with self.assertRaisesRegex(
+                    RuntimeToolError,
+                    "workspace_instruction_scope_changed",
+                ):
+                    racing["core-capability:filesystem.write"].handler(
+                        {
+                            "path": "raced.txt",
+                            "content": "must roll back",
+                            "create_only": True,
+                            "instruction_scope_digest": scope_digest,
+                        },
+                        self.context,
+                        None,
+                    )
+                self.assertFalse((self.workspace / "raced.txt").exists())
+                self.assertEqual(agents.read_text(encoding="utf-8"), "Raced.\n")
+
+        for operation, race_stage in (("move", "move_committed"), ("delete", "delete_committed")):
+            with self.subTest(operation=operation):
+                agents.write_text("Initial.\n", encoding="utf-8")
+                source = self.workspace / f"{operation}-source.txt"
+                source.write_text("preserve me", encoding="utf-8")
+
+                def race(stage, _path):
+                    if stage == race_stage:
+                        agents.write_text("Raced.\n", encoding="utf-8")
+
+                racing = self._capabilities(race_hook=race)
+                observed = racing["core-capability:filesystem.read"].handler(
+                    {"path": source.name},
+                    self.context,
+                    None,
+                )
+                scope_digest = self._scope_digest(racing, source.name)
+                arguments = {
+                    "expected_resource_identity": observed.payload[
+                        "resource_identity"
+                    ],
+                    "expected_resource_revision": observed.payload[
+                        "resource_revision"
+                    ],
+                }
+                if operation == "move":
+                    destination = self.workspace / "moved.txt"
+                    arguments.update(
+                        source_path=source.name,
+                        destination_path=destination.name,
+                        source_instruction_scope_digest=scope_digest,
+                        destination_instruction_scope_digest=scope_digest,
+                    )
+                else:
+                    destination = None
+                    arguments.update(
+                        path=source.name,
+                        instruction_scope_digest=scope_digest,
+                    )
+                with self.assertRaisesRegex(
+                    RuntimeToolError,
+                    "workspace_instruction_scope_changed",
+                ):
+                    racing[f"core-capability:filesystem.{operation}"].handler(
+                        arguments,
+                        self.context,
+                        None,
+                    )
+                self.assertTrue(source.exists())
+                if destination is not None:
+                    self.assertFalse(destination.exists())
+
+    def test_intentional_agents_move_is_bound_to_both_original_scopes(self) -> None:
+        agents = self.workspace / "AGENTS.md"
+        destination_directory = self.workspace / "nested"
+        destination_directory.mkdir()
+        agents.write_text("Relocate this instruction.\n", encoding="utf-8")
+        capabilities = self._capabilities()
+        observed = capabilities["core-capability:filesystem.read"].handler(
+            {"path": "AGENTS.md"},
+            self.context,
+            None,
+        )
+        source_digest = self._scope_digest(capabilities, "AGENTS.md")
+        destination_digest = self._scope_digest(
+            capabilities,
+            "nested/AGENTS.md",
+        )
+
+        capabilities["core-capability:filesystem.move"].handler(
+            {
+                "source_path": "AGENTS.md",
+                "destination_path": "nested/AGENTS.md",
+                "expected_resource_identity": observed.payload[
+                    "resource_identity"
+                ],
+                "expected_resource_revision": observed.payload[
+                    "resource_revision"
+                ],
+                "source_instruction_scope_digest": source_digest,
+                "destination_instruction_scope_digest": destination_digest,
+            },
+            self.context,
+            None,
+        )
+
+        self.assertFalse(agents.exists())
+        self.assertEqual(
+            (destination_directory / "AGENTS.md").read_text(encoding="utf-8"),
+            "Relocate this instruction.\n",
+        )
+
     def test_search_cursor_and_versioned_mutations_fail_on_race(self) -> None:
         target = self.workspace / "race.txt"
         target.write_text("needle one\nneedle two\n", encoding="utf-8")
@@ -295,6 +476,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
             None,
         )
         target.write_text("changed again\n", encoding="utf-8")
+        scope_digest = self._scope_digest(capabilities, "race.txt")
         with self.assertRaisesRegex(RuntimeToolError, "filesystem_resource_changed"):
             capabilities["core-capability:filesystem.write"].handler(
                 {
@@ -307,6 +489,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
                     "expected_resource_revision": observed.payload[
                         "resource_revision"
                     ],
+                    "instruction_scope_digest": scope_digest,
                 },
                 self.context,
                 None,
@@ -323,6 +506,11 @@ class FullWorkspaceContractTest(unittest.TestCase):
             (tree / "local.txt").write_text("inside", encoding="utf-8")
             (tree / "link.txt").symlink_to(protected)
             capabilities = self._capabilities()
+            scope_digest = self._scope_digest(
+                capabilities,
+                "tree",
+                target_is_directory=True,
+            )
             listing = capabilities["core-capability:filesystem.list"].handler(
                 {"path": "."},
                 self.context,
@@ -339,6 +527,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
                     "recursive": True,
                     "expected_resource_identity": tree_entry["resource_identity"],
                     "expected_resource_revision": tree_entry["resource_revision"],
+                    "instruction_scope_digest": scope_digest,
                 },
                 self.context,
                 None,
@@ -349,6 +538,11 @@ class FullWorkspaceContractTest(unittest.TestCase):
 
     def test_shell_and_long_process_are_confined_streamed_and_reaped(self) -> None:
         capabilities = self._capabilities(processes=True)
+        root_scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
         runtime_marker = self.workspace / "runtime" / "private-marker"
         runtime_marker.parent.mkdir(parents=True, exist_ok=True)
         runtime_marker.write_text("platform-private", encoding="utf-8")
@@ -363,7 +557,8 @@ class FullWorkspaceContractTest(unittest.TestCase):
                         "test ! -e /workspace/runtime/private-marker && "
                         f"test ! -e {self.workspace!s} && printf confined"
                     ),
-                ]
+                ],
+                "instruction_scope_digest": root_scope_digest,
             },
             self.context,
             None,
@@ -376,7 +571,8 @@ class FullWorkspaceContractTest(unittest.TestCase):
                     "/bin/sh",
                     "-c",
                     "read value; printf 'received:%s' \"$value\"",
-                ]
+                ],
+                "instruction_scope_digest": root_scope_digest,
             },
             self.context,
             None,
@@ -404,9 +600,17 @@ class FullWorkspaceContractTest(unittest.TestCase):
 
     def test_shell_and_process_output_and_time_are_hard_bounded(self) -> None:
         capabilities = self._capabilities(processes=True)
+        root_scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
         with self.assertRaisesRegex(RuntimeToolError, "shell_output_too_large"):
             capabilities["core-capability:shell.run"].handler(
-                {"argv": ["/usr/bin/head", "-c", "200000", "/dev/zero"]},
+                {
+                    "argv": ["/usr/bin/head", "-c", "200000", "/dev/zero"],
+                    "instruction_scope_digest": root_scope_digest,
+                },
                 self.context,
                 None,
             )
@@ -416,6 +620,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 {
                     "argv": ["/usr/bin/head", "-c", "1024", "/dev/zero"],
                     "timeout_seconds": 5,
+                    "instruction_scope_digest": root_scope_digest,
                 },
                 self.context,
                 None,
@@ -435,6 +640,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
             {
                 "argv": ["/bin/sh", "-c", "sleep 10"],
                 "timeout_seconds": 1,
+                "instruction_scope_digest": root_scope_digest,
             },
             self.context,
             None,
@@ -545,7 +751,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 None,
             )
 
-    def _capabilities(self, *, processes: bool = False):
+    def _capabilities(self, *, processes: bool = False, race_hook=None):
         surfaces = build_core_runtime_tool_capabilities(
             workspace_id="default",
             workspace_root=self.workspace,
@@ -555,6 +761,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 if processes
                 else None
             ),
+            filesystem_race_hook=race_hook,
         )
         return {surface.definition.handle: surface for surface in surfaces}
 
@@ -570,6 +777,25 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 return status
             time.sleep(0.02)
         self.fail(f"process {process_id} did not reach a terminal status")
+
+    def _scope_digest(
+        self,
+        capabilities,
+        path: str,
+        *,
+        target_is_directory: bool = False,
+    ) -> str:
+        result = capabilities[
+            "core-capability:workspace.instructions"
+        ].handler(
+            {
+                "path": path,
+                "target_is_directory": target_is_directory,
+            },
+            self.context,
+            None,
+        )
+        return str(result.payload["scope_digest"])
 
     @staticmethod
     def _discovery(cli, mcp):

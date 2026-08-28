@@ -12,6 +12,7 @@ from core.providers.agentic_models import AgenticContextPolicy, codex_routing_co
 from core.providers.agentic_protocol import AgenticSourceMetadata
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.hosted_context_management import (
+    HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION,
     HostedContextCompactionEvidence,
     HostedContextCompactionResult,
 )
@@ -47,7 +48,7 @@ FIXTURE_RECIPE = HostedHarnessRecipeManifest(
     endpoint_id=codex_routing_constraint().endpoint_id,
     upstream_ids=(),
     state_mode="client-managed-history",
-    semantic_projection_compiler_revision="2",
+    semantic_projection_compiler_revision="3",
     tool_contract_revision="fixture-tool-contract-v1",
     context_policy=CONTEXT_POLICY,
     support_flags=HostedProviderSupportFlags(
@@ -222,7 +223,7 @@ def _compact_fixture_state(state, policy, summary_base):
     compacted = replace(state, content=b'{"compacted":true}')
     summary_digest = hashlib.sha256(b"fixture-metadata-summary").hexdigest()
     evidence = HostedContextCompactionEvidence(
-        schema_version="1",
+        schema_version=HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION,
         policy_revision=policy.revision,
         applied=True,
         source_state_digest=hashlib.sha256(state.content).hexdigest(),

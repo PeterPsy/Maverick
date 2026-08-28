@@ -304,10 +304,19 @@ Core filesystem read, list, write, and shell-cwd admission use a pinned
 workspace-root descriptor. Each component is opened relative to an already
 verified descriptor with no-follow/directory flags where the platform provides
 them; verified resources are not reopened by pathname. Identity/version-bound
-chunks and cursors reject mutation, UTF-8 chunks never split a code point, and
-listing never descends into `.git`. Final/parent symlinks, root or directory
+chunks and cursors reject mutation, UTF-8 chunks never split a code point,
+binary chunks use bounded base64, and listing never descends into `.git`.
+Final/parent symlinks, root or directory
 rename/swap, and validation/use races fail closed for reads, lists, writes, and
 shell cwd. The same exact observation supplies resource-derived classification.
+
+Every mutating provider schema requires the applicable root-to-target
+`AGENTS.md` digest. File writes, edits, patches, moves, and deletes revalidate
+that exact snapshot immediately before commit and immediately after it; a
+post-commit mismatch is rolled back before success can be reported. Shell and
+managed-process launch revalidate immediately before `exec`. Missing digests
+are invalid arguments rather than an instruction snapshot inferred on behalf
+of the model.
 
 ### 6. Tool side effects are journaled before execution
 
@@ -518,12 +527,15 @@ and provider/model/protocol/API/endpoint/upstream/reasoning composition. Shared
 loop construction selects this data-only recipe; it contains no Google or
 OpenRouter model branch.
 
-Context policy `p4-context-v1` reserves capacity independently of ordinary turn
+Context policy `p4-context-v2` reserves capacity independently of ordinary turn
 budgets. At a deterministic threshold, the exact recipe compactor replaces old
-provider history with a bounded metadata summary while preserving encrypted
+provider history with a bounded extractive semantic summary of user constraints,
+assistant decisions, tool actions, and tool outcomes while preserving encrypted
 state classification, provenance, authority digest, request/turn identity, and
 every call/result relation still active in the current turn. Google uses
-Core-managed stateless history; OpenRouter retains client-managed chat history.
+Core-managed stateless history; OpenRouter retains client-managed chat history
+and replaces request-scoped system/developer authority with the current
+projection on every continuation.
 Compaction evidence and the endpoint snapshot digest enter the request-control
 digest and provider-step journal without exposing raw history.
 
@@ -537,14 +549,18 @@ therefore bypasses generic result re-compaction, preventing recursive artifact
 references while retaining its independent 64-KiB chunk cap. Attachments
 likewise remain distinct classified blocks
 and are projected as explicit workspace-relative references that require live
-filesystem-read authority. Neither payload type is silently flattened or
-dropped. Codex retains its native same-turn steering path; hosted recipes that
+filesystem-read authority. The reference declares `utf-8` for textual MIME and
+`base64` for every other accepted MIME, matching the live tool schema. Neither
+payload type is silently flattened or dropped. Codex retains its native same-turn steering path; hosted recipes that
 cannot prove provider-native steering return an explicit `safe_next_turn`
 fallback.
 
 Immediately before a completion transport, Core performs the recipe-specific
-preflight while egress decisions are still staged. Google verifies the exact
-wire shape and omits tools on final requests. OpenRouter verifies the exact
+preflight while egress decisions are still staged. Google fetches and validates
+the official live Interactions OpenAPI operation plus the authenticated exact
+model record, including streaming, usage, function tools, reasoning, and token
+limits; it also verifies the exact wire shape and omits tools on final requests.
+OpenRouter verifies the exact
 wire shape plus fresh model and ZDR endpoint records, including FP8 identity,
 all translated parameters, `tool_choice:none`, completion capacity, and total
 input-plus-output context capacity. Failed or incoherent preflight commits no
@@ -561,9 +577,11 @@ content.
 
 Prompt, orchestration, skill, attachment, app reference, filesystem/tool
 result, and provider-private sources keep distinct provenance. Filesystem and
-tool-result classification comes from the exact resource identity, revision,
-and digest observed by Core, never from the model or browser. A missing or
-incoherent resource classification produces `unclassified`, and the
+resource-returning tool classification comes from the exact resource identity,
+revision, and digest observed by Core. Core-owned transient prompt/context and
+non-resource tool results use a server-owned, revisioned, content-addressed
+classification rule; model/browser declarations cannot select or widen it. A
+missing or incoherent resource classification produces `unclassified`, and the
 restrictive join prevents an attestation or less-sensitive sibling block from
 promoting it.
 
@@ -589,17 +607,18 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 22
-and OpenRouter revision 21, both bound to
-`maverick-hosted-tool-loop==14`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 23
+and OpenRouter revision 22, both bound to
+`maverick-hosted-tool-loop==15`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
-These Phase-4C-D definitions are new full-workspace claims under
-`codex-baseline-v2`, not promotions of the historical read-only candidates.
-Adapter 14, compiler revision 2, suite 18, and TCB manifest v8 contain the
-context, artifact, attachment, recipe and exact-preflight closure. They remain
+These review-closure definitions are new full-workspace claims under
+`codex-baseline-v3`, not mutations of earlier candidates. Adapter 15, compiler
+revision 3, context-compaction schema 2, suite 19, and TCB manifest v9 contain
+the production classification, instruction-commit guard, semantic compaction,
+attachment, OpenRouter projection, and live Google-preflight closure. They remain
 uncertified, unbound, unavailable and independently blocked by Phase-0
 admission; implementation completion is not provider evidence or release
 approval.

@@ -13,6 +13,7 @@ from core.providers.openrouter_agentic_models import (
     OpenRouterAgenticProtocolError,
     OpenRouterChatState,
 )
+from core.providers.openrouter_agentic_state import merge_openrouter_request_history
 
 
 def openrouter_chat_payload(
@@ -23,7 +24,7 @@ def openrouter_chat_payload(
     _validate_routing(request)
     _validate_request_phase(request)
     new_messages = _new_messages(request, state)
-    messages = [*state.history, *new_messages]
+    messages = list(merge_openrouter_request_history(state.history, new_messages))
     finalization_instruction = _finalization_instruction(request)
     if finalization_instruction is not None:
         messages.append({"role": "system", "content": finalization_instruction})
@@ -82,6 +83,7 @@ def _new_messages(
     request: AgenticModelRequest,
     state: OpenRouterChatState,
 ) -> tuple[dict[str, object], ...]:
+    system_message, user_messages = _request_content_messages(request)
     by_id = _tool_results_by_id(request.tool_results)
     pending = state.pending_tool_calls
     consumed = set(state.consumed_tool_call_ids)
@@ -91,6 +93,8 @@ def _new_messages(
         if set(by_id) - consumed != pending_ids:
             raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
         messages = []
+        if system_message is not None:
+            messages.append(system_message)
         for item in pending:
             result = by_id[item.call_id]
             if result.provider_tool_name != item.name:
@@ -104,6 +108,11 @@ def _new_messages(
                     "content": _decode_utf8(result.content, pairing=True),
                 }
             )
+        # New governed user blocks follow the mandatory assistant/tool pairing.
+        # Exact blocks already retained in private history need not be replayed.
+        for message in user_messages:
+            if message not in state.history:
+                messages.append(message)
         return tuple(messages)
     if any(
         value is not None
@@ -116,12 +125,19 @@ def _new_messages(
         raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
     if set(by_id) - consumed:
         raise OpenRouterAgenticProtocolError("provider_tool_result_pairing_invalid")
-    values: list[dict[str, object]] = []
-    existing_system = next(
-        (item for item in state.history if item.get("role") == "system"),
-        None,
+    if not user_messages:
+        raise OpenRouterAgenticProtocolError("provider_request_invalid")
+    return (
+        *((system_message,) if system_message is not None else ()),
+        *user_messages,
     )
+
+
+def _request_content_messages(
+    request: AgenticModelRequest,
+) -> tuple[dict[str, object] | None, tuple[dict[str, object], ...]]:
     system_values: list[str] = []
+    user_messages: list[dict[str, object]] = []
     for block in request.content_blocks:
         if block.provenance == "finalization_instruction":
             continue
@@ -133,17 +149,13 @@ def _new_messages(
         if block.role in {"system", "developer"}:
             system_values.append(content)
             continue
-        values.append({"role": "user", "content": content})
-    if system_values:
-        system_message = {"role": "system", "content": "\n\n".join(system_values)}
-        if existing_system is not None:
-            if system_message != existing_system:
-                raise OpenRouterAgenticProtocolError("provider_request_invalid")
-        else:
-            values.insert(0, system_message)
-    if not any(item["role"] == "user" for item in values):
-        raise OpenRouterAgenticProtocolError("provider_request_invalid")
-    return tuple(values)
+        user_messages.append({"role": "user", "content": content})
+    system_message = (
+        None
+        if not system_values
+        else {"role": "system", "content": "\n\n".join(system_values)}
+    )
+    return system_message, tuple(user_messages)
 
 
 def _validate_request_phase(request: AgenticModelRequest) -> None:

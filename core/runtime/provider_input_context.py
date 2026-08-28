@@ -9,6 +9,7 @@ from typing import Any
 
 from core.egress.classification import CanonicalSourceClassification
 from core.runtime.app_references import input_text_with_app_references
+from core.runtime.attachment_projection import attachment_read_encoding
 from core.runtime.attachments import input_text_with_attachment_links
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.workspaces.data_governance import resource_classification_for_observation
@@ -163,6 +164,7 @@ def _attachment_input_source(
             "projection": {
                 "mode": "workspace_reference",
                 "read_capability": "core-capability:filesystem.read",
+                "read_encoding": attachment_read_encoding(media_type),
             },
         },
         classification=_attachment_classification(

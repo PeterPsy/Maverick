@@ -43,6 +43,7 @@ def filesystem_edit_schema() -> dict[str, object]:
             "new_text",
             "expected_resource_identity",
             "expected_resource_revision",
+            "instruction_scope_digest",
         ),
     )
 
@@ -73,6 +74,7 @@ def filesystem_patch_schema() -> dict[str, object]:
             "operations",
             "expected_resource_identity",
             "expected_resource_revision",
+            "instruction_scope_digest",
         ),
     )
 
@@ -86,13 +88,14 @@ def filesystem_move_schema() -> dict[str, object]:
             "source_instruction_scope_digest": _instruction_digest_schema(),
             "destination_instruction_scope_digest": _instruction_digest_schema(),
             **_expected_version_properties(),
-            **_instruction_digest_property(),
         },
         required=(
             "source_path",
             "destination_path",
             "expected_resource_identity",
             "expected_resource_revision",
+            "source_instruction_scope_digest",
+            "destination_instruction_scope_digest",
         ),
     )
 
@@ -109,6 +112,7 @@ def filesystem_delete_schema() -> dict[str, object]:
             "path",
             "expected_resource_identity",
             "expected_resource_revision",
+            "instruction_scope_digest",
         ),
     )
 
@@ -125,7 +129,7 @@ def process_start_schema() -> dict[str, object]:
             },
             **_instruction_digest_property(),
         },
-        required=("argv",),
+        required=("argv", "instruction_scope_digest"),
     )
 
 
@@ -169,7 +173,7 @@ def extended_filesystem_write_schema(max_bytes: int) -> dict[str, object]:
             **_expected_version_properties(),
             **_instruction_digest_property(),
         },
-        required=("path", "content"),
+        required=("path", "content", "instruction_scope_digest"),
     )
 
 

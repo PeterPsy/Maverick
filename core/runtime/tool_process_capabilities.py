@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
+from core.egress.classification import fail_closed_classification
+from core.runtime.tool_catalog import RuntimeToolSurfaceResult
 from core.runtime.hosted_tool_process_registry import hosted_process_environment
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_full_workspace_schemas import (
@@ -14,11 +19,9 @@ from core.runtime.tool_full_workspace_support import (
     argv_argument,
     full_workspace_surface,
     integer_argument,
-    mutation_instruction_evidence,
-    optional_string,
+    prepare_mutation_instruction_guard,
     require_workspace_context,
     required_string,
-    unclassified_process_result,
 )
 
 
@@ -28,6 +31,7 @@ def build_process_capabilities(
     filesystem,
     workspace_root,
     runtime_root,
+    result_classification_resolver=None,
 ):
     """Build process start/status/input/interrupt surfaces for one workspace."""
 
@@ -37,11 +41,11 @@ def build_process_capabilities(
             raise RuntimeToolError("shell_requires_full_access")
         argv = argv_argument(arguments.get("argv"))
         cwd = str(arguments.get("cwd") or ".")
-        mutation_instruction_evidence(
+        guard = prepare_mutation_instruction_guard(
             filesystem,
             workspace_root=workspace_root,
             path=cwd,
-            expected_digest=optional_string(
+            expected_digest=required_string(
                 arguments.get("instruction_scope_digest")
             ),
             target_is_directory=True,
@@ -60,8 +64,15 @@ def build_process_capabilities(
                 minimum=1,
                 maximum=3_600,
             ),
+            mutation_guard=guard,
         )
-        return unclassified_process_result(result, context.session_id)
+        return _classified_result(
+            result,
+            handle="core-capability:process.start",
+            arguments=arguments,
+            context=context,
+            resolver=result_classification_resolver,
+        )
 
     def status(arguments, context, _idempotency_key):
         result = registry.status(
@@ -78,7 +89,13 @@ def build_process_capabilities(
                 maximum=131_072,
             ),
         )
-        return unclassified_process_result(result, context.session_id)
+        return _classified_result(
+            result,
+            handle="core-capability:process.status",
+            arguments=arguments,
+            context=context,
+            resolver=result_classification_resolver,
+        )
 
     def write_input(arguments, context, _idempotency_key):
         result = registry.write_input(
@@ -88,7 +105,13 @@ def build_process_capabilities(
             content=required_string(arguments.get("content"), allow_empty=True),
             close=arguments.get("close") is True,
         )
-        return unclassified_process_result(result, context.session_id)
+        return _classified_result(
+            result,
+            handle="core-capability:process.input",
+            arguments=arguments,
+            context=context,
+            resolver=result_classification_resolver,
+        )
 
     def interrupt(arguments, context, _idempotency_key):
         result = registry.interrupt(
@@ -96,7 +119,13 @@ def build_process_capabilities(
             session_id=context.session_id,
             workspace_id=context.workspace_id,
         )
-        return unclassified_process_result(result, context.session_id)
+        return _classified_result(
+            result,
+            handle="core-capability:process.interrupt",
+            arguments=arguments,
+            context=context,
+            resolver=result_classification_resolver,
+        )
 
     return (
         full_workspace_surface(
@@ -132,3 +161,26 @@ def build_process_capabilities(
             modes=("full-access",),
         ),
     )
+
+
+def _classified_result(result, *, handle, arguments, context, resolver):
+    if resolver is not None:
+        classification = resolver(handle, arguments, result, context)
+    else:
+        result_digest = hashlib.sha256(
+            json.dumps(
+                result,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        classification = fail_closed_classification(
+            provenance="tool_result",
+            source_ref=handle,
+            source_revision=result_digest,
+            source_digest=result_digest,
+            resource_identity=f"hosted-process:{context.session_id}:{handle}",
+        )
+    return RuntimeToolSurfaceResult(result, classification)

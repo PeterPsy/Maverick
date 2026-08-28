@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-28
-Matrix revision: `2026-08-28-r18-p4-context-provider-closure-tcb8`
+Matrix revision: `2026-08-28-r19-p4-review-closure-tcb9`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==14`
+Adapter: `maverick-hosted-tool-loop==15`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==14`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `21` (revision `20` suspended) |
+| Immutable profile revision | `22` (revision `21` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -30,7 +30,7 @@ Adapter: `maverick-hosted-tool-loop==14`
 | Turn cost ceiling | 250,000 micro-USD; 70,000 remains protected for the two terminal attempts |
 | Final request | exact Core finalization instruction; `tools: []`; `tool_choice: none` |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | complete `codex-baseline-v2` Full Workspace surface, including `artifact.read` |
+| Tool handles | complete `codex-baseline-v3` Full Workspace surface, including `artifact.read` and UTF-8/base64 attachment reads |
 | Certificate lifetime after a successful signed run | 30 days |
 
 The current OpenRouter model catalog lists `deepinfra/fp8` as active for
@@ -43,7 +43,7 @@ The certification probe fetches both official catalogs immediately before any
 completion request and fails unless this exact record is active, ZDR-listed,
 large enough for the requested completion budget, and supports every parameter
 the translated payload sends that participates in endpoint parameter routing.
-Suite 18 also requires `supports_tool_choice.none=true` in both exact records,
+Suite 19 also requires `supports_tool_choice.none=true` in both exact records,
 so the current DeepInfra record is an explicit certification blocker rather
 than a capability Maverick guesses or works around. A changed endpoint or
 upstream requires a new recipe/catalog digest and immutable profile revision.
@@ -88,8 +88,8 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
-| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@2`; per-block role/provenance/source digest, complete scoped `AGENTS.md`/skill materialization, explicit attachment workspace references, exact provider projection digest, and journal evidence | not certified |
-| Certified execution TCB | manifest v8 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/preflight/artifact surface, full-workspace confinement/process/discovery surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@3`; per-block role/provenance/source digest, complete scoped `AGENTS.md`/skill materialization, explicit UTF-8/base64 attachment workspace references, exact provider projection digest, and journal evidence | not certified |
+| Certified execution TCB | manifest v9 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/preflight/artifact surface, full-workspace confinement/process/discovery surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, `tool_choice:none`, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -98,8 +98,8 @@ Primary references:
 | Mixed text then tool | provisional narration is not finalized or duplicated; one call continues to the next step | not certified |
 | Multi-step continuation | deterministic fixtures for three sequential tool rounds followed by a final response at every reasoning effort | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
-| Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent context reserve, pairing-safe history compaction, bounded tool-result artifacts, explicit attachment workspace references, and safe-next-turn steering fallback | not certified |
-| Full Workspace contract implementation | atomic `codex-baseline-v2` claim validation; stable search/read, atomic create/replace/edit/patch/move/quarantined-delete, scoped instructions, fixed-path networkless shell, bounded managed processes, official discovery-first CLI/MCP including inter-agent surfaces, bounded artifact-backed results, and orphan cleanup fixtures | implementation fixture only; revision 21 makes the full claim but remains uncertified and unavailable |
+| Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent context reserve, pairing-safe semantic history compaction, request-scoped authority replacement, bounded tool-result artifacts, explicit attachment workspace references, and safe-next-turn steering fallback | not certified |
+| Full Workspace contract implementation | atomic `codex-baseline-v3` claim validation; stable UTF-8/base64 reads, atomic create/replace/edit/patch/move/quarantined-delete with mandatory commit-bound instruction digests, fixed-path networkless shell, bounded managed processes, official discovery-first CLI/MCP including inter-agent surfaces, bounded artifact-backed results, and orphan cleanup fixtures | implementation fixture only; revision 22 makes the full claim but remains uncertified and unavailable |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
 | Usage, generation id and price | success and decode-failure fixtures retain telemetry; active request reservations reconcile to reported micro-USD while missing usage remains worst-case | not certified |
@@ -115,7 +115,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r18 |
+| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r19 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the candidate profile and never manufactures a
@@ -245,6 +245,16 @@ safe-next-turn steering fallback. Every request performs the exact live
 catalog/ZDR and wire preflight before egress commit; final requests require
 `tools: []` and `tool_choice: none`. No live or behavioral run, certificate,
 binding, provider request, canary, or remote activation has been performed.
+
+Revision 22 pins adapter 15, recipe 2, suite 19, matrix
+`2026-08-28-r19-p4-review-closure-tcb9`, and TCB manifest v9. It closes the P4
+review findings with production request/result classification, mandatory
+commit-bound `AGENTS.md` guards, request-scoped system/developer reinjection,
+truthful persisted projection evidence, semantic compaction schema 2, and
+binary attachment reads. Compiler revision 3 and `codex-baseline-v3` bind the
+behavior changes. This remains an uncertified, unbound, unavailable candidate;
+no live probe, behavioral run, provider completion, certificate, canary, or
+remote activation has been performed.
 
 ## Fail-closed conditions
 

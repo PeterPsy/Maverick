@@ -20,12 +20,14 @@ from core.runtime.tool_full_workspace_schemas import (
     workspace_instructions_schema,
 )
 from core.runtime.tool_full_workspace_support import (
+    CombinedMutationInstructionGuard,
     MAX_EDIT_FILE_BYTES,
     commit_text_change as _commit_text_change,
     full_workspace_surface as _surface,
     instruction_classification as _instruction_classification,
     integer_argument as _integer,
-    mutation_instruction_evidence,
+    mutation_affected_instruction_prefixes,
+    prepare_mutation_instruction_guard,
     optional_string as _optional_string,
     require_workspace_context as _require_context,
     required_string as _required_string,
@@ -46,6 +48,7 @@ def build_full_workspace_capabilities(
     workspace_root: Path,
     runtime_root: Path,
     process_registry: HostedToolProcessRegistry | None,
+    result_classification_resolver=None,
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     """Build additional workspace surfaces over the shared filesystem anchor."""
 
@@ -122,12 +125,18 @@ def build_full_workspace_capabilities(
         if actual_count != expected_count:
             raise RuntimeToolError("filesystem_edit_match_count_mismatch")
         replacement = content.replace(old_text, new_text)
-        evidence = mutation_instruction_evidence(
+        guard = prepare_mutation_instruction_guard(
             filesystem,
             workspace_root=workspace_root,
             path=path,
-            expected_digest=_optional_string(
+            expected_digest=_required_string(
                 arguments.get("instruction_scope_digest")
+            ),
+            affected_instruction_prefixes=(
+                mutation_affected_instruction_prefixes(
+                    path,
+                    target_is_directory=False,
+                )
             ),
         )
         return _commit_text_change(
@@ -137,7 +146,8 @@ def build_full_workspace_capabilities(
             after=replacement,
             expected_identity=expected_identity,
             expected_revision=expected_revision,
-            evidence=evidence,
+            evidence=guard.evidence,
+            mutation_guard=guard,
             operation_count=actual_count,
         )
 
@@ -181,12 +191,18 @@ def build_full_workspace_capabilities(
                 raise RuntimeToolError("filesystem_patch_match_count_mismatch")
             replacement = replacement.replace(old_text, new_text)
             changed += actual_count
-        evidence = mutation_instruction_evidence(
+        guard = prepare_mutation_instruction_guard(
             filesystem,
             workspace_root=workspace_root,
             path=path,
-            expected_digest=_optional_string(
+            expected_digest=_required_string(
                 arguments.get("instruction_scope_digest")
+            ),
+            affected_instruction_prefixes=(
+                mutation_affected_instruction_prefixes(
+                    path,
+                    target_is_directory=False,
+                )
             ),
         )
         return _commit_text_change(
@@ -196,7 +212,8 @@ def build_full_workspace_capabilities(
             after=replacement,
             expected_identity=expected_identity,
             expected_revision=expected_revision,
-            evidence=evidence,
+            evidence=guard.evidence,
+            mutation_guard=guard,
             operation_count=changed,
         )
 
@@ -204,22 +221,40 @@ def build_full_workspace_capabilities(
         _require_context(context, filesystem.workspace_id)
         source = _required_string(arguments.get("source_path"))
         destination = _required_string(arguments.get("destination_path"))
-        source_evidence = mutation_instruction_evidence(
+        source_is_directory = filesystem.path_is_directory(source)
+        affected_source = mutation_affected_instruction_prefixes(
+            source,
+            target_is_directory=source_is_directory,
+        )
+        affected_destination = mutation_affected_instruction_prefixes(
+            destination,
+            target_is_directory=source_is_directory,
+        )
+        affected_instruction_prefixes = tuple(
+            dict.fromkeys((*affected_source, *affected_destination))
+        )
+        source_guard = prepare_mutation_instruction_guard(
             filesystem,
             workspace_root=workspace_root,
             path=source,
-            expected_digest=_optional_string(
+            expected_digest=_required_string(
                 arguments.get("source_instruction_scope_digest")
             ),
+            target_is_directory=source_is_directory,
+            affected_instruction_prefixes=affected_instruction_prefixes,
         )
-        destination_evidence = mutation_instruction_evidence(
+        destination_guard = prepare_mutation_instruction_guard(
             filesystem,
             workspace_root=workspace_root,
             path=destination,
-            expected_digest=_optional_string(
+            expected_digest=_required_string(
                 arguments.get("destination_instruction_scope_digest")
-                or arguments.get("instruction_scope_digest")
             ),
+            target_is_directory=source_is_directory,
+            affected_instruction_prefixes=affected_instruction_prefixes,
+        )
+        guard = CombinedMutationInstructionGuard(
+            (source_guard, destination_guard)
         )
         result = filesystem.move_path(
             source,
@@ -231,23 +266,32 @@ def build_full_workspace_capabilities(
                 arguments.get("expected_resource_revision")
             ),
             create_parents=arguments.get("create_parents") is True,
+            mutation_guard=guard,
         )
         payload = {
             **result.payload,
-            "source_instruction_scope": source_evidence,
-            "destination_instruction_scope": destination_evidence,
+            "source_instruction_scope": source_guard.evidence,
+            "destination_instruction_scope": destination_guard.evidence,
         }
         return RuntimeToolSurfaceResult(payload, result.classification)
 
     def delete(arguments, context, _idempotency_key):
         _require_context(context, filesystem.workspace_id)
         path = _required_string(arguments.get("path"))
-        evidence = mutation_instruction_evidence(
+        target_is_directory = filesystem.path_is_directory(path)
+        guard = prepare_mutation_instruction_guard(
             filesystem,
             workspace_root=workspace_root,
             path=path,
-            expected_digest=_optional_string(
+            expected_digest=_required_string(
                 arguments.get("instruction_scope_digest")
+            ),
+            target_is_directory=target_is_directory,
+            affected_instruction_prefixes=(
+                mutation_affected_instruction_prefixes(
+                    path,
+                    target_is_directory=target_is_directory,
+                )
             ),
         )
         result = filesystem.delete_path(
@@ -259,8 +303,9 @@ def build_full_workspace_capabilities(
                 arguments.get("expected_resource_revision")
             ),
             recursive=arguments.get("recursive") is True,
+            mutation_guard=guard,
         )
-        payload = {**result.payload, **evidence}
+        payload = {**result.payload, **guard.evidence}
         return RuntimeToolSurfaceResult(payload, result.classification)
 
     surfaces = [
@@ -278,6 +323,7 @@ def build_full_workspace_capabilities(
                 filesystem=filesystem,
                 workspace_root=workspace_root,
                 runtime_root=runtime_root,
+                result_classification_resolver=result_classification_resolver,
             )
         )
     return tuple(surfaces)

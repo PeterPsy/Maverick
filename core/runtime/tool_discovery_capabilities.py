@@ -37,12 +37,19 @@ _DISCOVERY_TOKEN_DOMAIN = b"maverick.runtime-tool-discovery.v1\0"
 class RuntimeToolDiscoveryBroker:
     """Issue turn-local tokens that prove a command/tool was discovered first."""
 
-    def __init__(self, *, cli_registry, mcp_registry) -> None:
+    def __init__(
+        self,
+        *,
+        cli_registry,
+        mcp_registry,
+        result_classification_resolver=None,
+    ) -> None:
         self.cli_registry = cli_registry
         self.mcp_registry = mcp_registry
         self.cli_runner = CliRunner(cli_registry)
         self.mcp_runner = McpRunner(mcp_registry)
         self.revision = _registry_revision(cli_registry, mcp_registry)
+        self.result_classification_resolver = result_classification_resolver
 
     def list_cli(self, arguments, context, _idempotency_key):
         invocation_context = _cli_context(context)
@@ -75,9 +82,16 @@ class RuntimeToolDiscoveryBroker:
             "next_cursor": next_cursor,
             "discovery_first": True,
         }
-        return RuntimeToolSurfaceResult(
-            payload,
-            _discovery_classification(
+        classification = (
+            self._result_classification(
+                "core-capability:cli.list",
+                arguments,
+                payload,
+                context,
+                source_ref="core:cli-discovery",
+            )
+            if self.result_classification_resolver is not None
+            else _discovery_classification(
                 payload,
                 source_ref="core:cli-discovery",
                 revision=self.revision,
@@ -88,8 +102,9 @@ class RuntimeToolDiscoveryBroker:
                     == CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT
                     for item in page
                 ),
-            ),
+            )
         )
+        return RuntimeToolSurfaceResult(payload, classification)
 
     def run_cli(self, arguments, context, idempotency_key):
         command_id = _required_string(arguments.get("command_id"))
@@ -117,12 +132,12 @@ class RuntimeToolDiscoveryBroker:
             raise RuntimeToolError("tool_result_invalid")
         return RuntimeToolSurfaceResult(
             result,
-            fail_closed_classification(
-                provenance="tool_result",
+            self._result_classification(
+                "core-capability:cli.run",
+                arguments,
+                result,
+                context,
                 source_ref=f"cli:{command_id}",
-                source_revision=self.revision,
-                source_digest=_digest(result),
-                resource_identity=f"cli-result:{command_id}:{context.session_id}",
             ),
         )
 
@@ -158,9 +173,16 @@ class RuntimeToolDiscoveryBroker:
             "next_cursor": next_cursor,
             "discovery_first": True,
         }
-        return RuntimeToolSurfaceResult(
-            payload,
-            _discovery_classification(
+        classification = (
+            self._result_classification(
+                "core-capability:mcp.list",
+                arguments,
+                payload,
+                context,
+                source_ref="core:mcp-discovery",
+            )
+            if self.result_classification_resolver is not None
+            else _discovery_classification(
                 payload,
                 source_ref="core:mcp-discovery",
                 revision=self.revision,
@@ -171,8 +193,9 @@ class RuntimeToolDiscoveryBroker:
                     == CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT
                     for item in page
                 ),
-            ),
+            )
         )
+        return RuntimeToolSurfaceResult(payload, classification)
 
     def call_mcp(self, arguments, context, idempotency_key):
         tool_name = _required_string(arguments.get("tool_name"))
@@ -199,13 +222,37 @@ class RuntimeToolDiscoveryBroker:
             raise RuntimeToolError("tool_result_invalid")
         return RuntimeToolSurfaceResult(
             result,
-            fail_closed_classification(
-                provenance="tool_result",
+            self._result_classification(
+                "core-capability:mcp.call",
+                arguments,
+                result,
+                context,
                 source_ref=f"mcp:{tool_name}",
-                source_revision=self.revision,
-                source_digest=_digest(result),
-                resource_identity=f"mcp-result:{tool_name}:{context.session_id}",
             ),
+        )
+
+    def _result_classification(
+        self,
+        handle,
+        arguments,
+        result,
+        context,
+        *,
+        source_ref,
+    ):
+        if self.result_classification_resolver is not None:
+            return self.result_classification_resolver(
+                handle,
+                arguments,
+                result,
+                context,
+            )
+        return fail_closed_classification(
+            provenance="tool_result",
+            source_ref=source_ref,
+            source_revision=self.revision,
+            source_digest=_digest(result),
+            resource_identity=f"{source_ref}:{context.session_id}",
         )
 
     def _token(self, kind: str, target: str, session_id: str) -> str:
@@ -282,10 +329,12 @@ def build_discovery_first_capabilities(
     *,
     cli_registry,
     mcp_registry,
+    result_classification_resolver=None,
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     broker = RuntimeToolDiscoveryBroker(
         cli_registry=cli_registry,
         mcp_registry=mcp_registry,
+        result_classification_resolver=result_classification_resolver,
     )
     return (
         _surface("cli.list", "Discover authorized Core and app CLI commands.", _list_schema(), "read", broker.list_cli),

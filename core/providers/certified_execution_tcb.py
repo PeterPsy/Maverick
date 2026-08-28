@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="8",
+    manifest_version="9",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -216,6 +216,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             "provider-input-composition",
             "Canonical source composition and provider request projection.",
             (
+                "core/runtime/attachment_projection.py",
                 "core/runtime/provider_input_context.py",
                 "core/runtime/semantic_context_blocks.py",
                 "core/runtime/semantic_envelope.py",
@@ -228,6 +229,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/hosted_provider_runtime.py",
                 "core/runtime/hosted_runtime_registry_builder.py",
                 "core/providers/google_interactions_request.py",
+                "core/providers/google_interactions_catalog.py",
                 "core/providers/hosted_context_compactors.py",
                 "core/providers/hosted_endpoint_preflight.py",
                 "core/providers/openrouter_agentic_catalog.py",
@@ -354,7 +356,7 @@ def compute_certified_tcb_digest(root: Path) -> str:
     if not files:
         raise CapabilityCertificateError("certificate_tcb_artifact_empty")
     digest = hashlib.sha256()
-    digest.update(b"maverick.certified-execution-tcb.v8\x00")
+    digest.update(b"maverick.certified-execution-tcb.v9\x00")
     digest.update(CERTIFIED_EXECUTION_TCB.structure_digest.encode("ascii"))
     digest.update(b"\x00")
     for relative_path in sorted(files):

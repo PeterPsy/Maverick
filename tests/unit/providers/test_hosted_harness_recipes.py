@@ -16,6 +16,9 @@ from core.providers.google_agentic_profile import (
     google_agentic_preview_policy,
     google_interactions_routing_constraint,
 )
+from core.providers.google_interactions_catalog import (
+    GoogleInteractionsCatalogSnapshot,
+)
 from core.providers.hosted_endpoint_preflight import (
     preflight_google_interactions_request,
     preflight_openrouter_completion_request,
@@ -29,6 +32,9 @@ from core.providers.openrouter_agentic_profile import (
 )
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
+from core.runtime.hosted_context_management import (
+    HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION,
+)
 from core.runtime.hosted_harness_recipes import (
     GOOGLE_FULL_WORKSPACE_RECIPE,
     OPENROUTER_FULL_WORKSPACE_RECIPE,
@@ -42,6 +48,21 @@ NOW = datetime(2026, 8, 28, tzinfo=UTC)
 
 
 class HostedHarnessRecipeTest(unittest.TestCase):
+    def test_review_closure_publishes_new_immutable_recipe_identities(self) -> None:
+        for recipe in (
+            GOOGLE_FULL_WORKSPACE_RECIPE,
+            OPENROUTER_FULL_WORKSPACE_RECIPE,
+        ):
+            with self.subTest(recipe_id=recipe.recipe_id):
+                self.assertEqual(recipe.revision, "2")
+                self.assertEqual(
+                    recipe.semantic_projection_compiler_revision,
+                    "3",
+                )
+                self.assertEqual(recipe.tool_contract_revision, "codex-baseline-v3")
+                self.assertEqual(recipe.context_policy.revision, "p4-context-v2")
+        self.assertEqual(HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION, "2")
+
     def test_registry_resolves_only_the_exact_recipe_and_catalog_identity(self) -> None:
         registry = build_hosted_provider_runtime_registry()
         binding = _binding(GOOGLE_FULL_WORKSPACE_RECIPE)
@@ -88,16 +109,36 @@ class HostedHarnessRecipeTest(unittest.TestCase):
         )
 
     def test_google_final_preflight_omits_tools(self) -> None:
-        exploration = preflight_google_interactions_request(
-            _request(GOOGLE_FULL_WORKSPACE_RECIPE, final=False),
-            EphemeralCredential("synthetic-google-key"),
+        catalog = GoogleInteractionsCatalogSnapshot(
+            api_version="v1",
+            operation_id="CreateInteraction",
+            model_name="models/gemini-3.6-flash",
+            model_version="stable-2026-07",
+            input_token_limit=1_048_576,
+            output_token_limit=65_536,
+            streaming=True,
+            usage_accounting=True,
+            tool_calling=True,
+            endpoint_schema_digest="a" * 64,
+            model_record_digest="b" * 64,
+            catalog_snapshot_digest="c" * 64,
         )
-        final = preflight_google_interactions_request(
-            _request(GOOGLE_FULL_WORKSPACE_RECIPE, final=True),
-            EphemeralCredential("synthetic-google-key"),
-        )
+        with patch(
+            "core.providers.hosted_endpoint_preflight."
+            "preflight_google_interactions_catalog",
+            return_value=catalog,
+        ):
+            exploration = preflight_google_interactions_request(
+                _request(GOOGLE_FULL_WORKSPACE_RECIPE, final=False),
+                EphemeralCredential("synthetic-google-key"),
+            )
+            final = preflight_google_interactions_request(
+                _request(GOOGLE_FULL_WORKSPACE_RECIPE, final=True),
+                EphemeralCredential("synthetic-google-key"),
+            )
 
         self.assertEqual(exploration.tool_catalog_mode, "declared")
+        self.assertTrue(exploration.tool_calling)
         self.assertEqual(final.tool_catalog_mode, "omitted")
         self.assertEqual(final.tool_choice_mode, "provider-default")
         self.assertNotEqual(exploration.snapshot_digest, final.snapshot_digest)

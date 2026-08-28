@@ -18,7 +18,7 @@ import os
 from pathlib import Path, PurePosixPath
 import secrets
 import stat
-from typing import Callable
+from typing import Callable, Protocol
 
 from core.egress.classification import (
     CanonicalSourceClassification,
@@ -64,6 +64,12 @@ ResourceClassificationResolver = Callable[
     [FilesystemResourceObservation, str], CanonicalSourceClassification
 ]
 FilesystemRaceHook = Callable[[str, str], None]
+
+
+class FilesystemMutationGuard(Protocol):
+    def verify_before(self) -> None: ...
+
+    def verify_after(self) -> None: ...
 
 
 @dataclass
@@ -198,6 +204,72 @@ class ConfinedWorkspaceFilesystem:
                     "path": observation.resource_ref,
                     "content": valid.decode("utf-8"),
                     "byte_count": len(valid),
+                    "offset": offset,
+                    "next_offset": next_offset if next_offset < after.st_size else None,
+                    "truncated": next_offset < after.st_size,
+                    "resource_identity": observation.resource_identity,
+                    "resource_revision": observation.resource_revision,
+                    "resource_digest": observation.resource_digest,
+                }
+                return ConfinedFilesystemResult(
+                    payload,
+                    self._classification(observation, "tool_result"),
+                )
+            except OSError as error:
+                raise RuntimeToolError("filesystem_read_failed") from error
+            finally:
+                os.close(fd)
+
+    def read_bytes(
+        self,
+        relative_path: str,
+        *,
+        offset: int = 0,
+        max_bytes: int,
+        expected_resource_identity: str | None = None,
+        expected_resource_revision: str | None = None,
+    ) -> ConfinedFilesystemResult:
+        """Read one raw byte chunk as base64 with the same version fencing."""
+        components = self._components(relative_path, allow_root=False)
+        if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+            raise RuntimeToolError("tool_arguments_invalid")
+        if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes < 1:
+            raise RuntimeToolError("tool_arguments_invalid")
+        if offset and (not expected_resource_identity or not expected_resource_revision):
+            raise RuntimeToolError("filesystem_chunk_identity_required")
+        with self._open_chain(components[:-1]) as chain:
+            self._hook("read_parent_opened", relative_path)
+            fd = self._open_file(chain.leaf_fd, components[-1], write=False)
+            try:
+                before = os.fstat(fd)
+                if not stat.S_ISREG(before.st_mode):
+                    raise RuntimeToolError("filesystem_path_not_file")
+                observation = self._observation(
+                    "filesystem_file", self._relative(components), before
+                )
+                self._require_expected(
+                    observation,
+                    identity=expected_resource_identity,
+                    revision=expected_resource_revision,
+                )
+                if offset > before.st_size:
+                    raise RuntimeToolError("filesystem_chunk_offset_invalid")
+                self._hook("read_file_opened", relative_path)
+                raw = os.pread(
+                    fd,
+                    min(max_bytes, max(0, before.st_size - offset)),
+                    offset,
+                )
+                after = os.fstat(fd)
+                self._assert_same_version(before, after, "filesystem_resource_changed")
+                self._assert_final_link(chain.leaf_fd, components[-1], after)
+                self._assert_chain(chain)
+                next_offset = offset + len(raw)
+                payload = {
+                    "path": observation.resource_ref,
+                    "content_base64": base64.b64encode(raw).decode("ascii"),
+                    "encoding": "base64",
+                    "byte_count": len(raw),
                     "offset": offset,
                     "next_offset": next_offset if next_offset < after.st_size else None,
                     "truncated": next_offset < after.st_size,
@@ -358,6 +430,7 @@ class ConfinedWorkspaceFilesystem:
         replace_only: bool = False,
         expected_resource_identity: str | None = None,
         expected_resource_revision: str | None = None,
+        mutation_guard: FilesystemMutationGuard | None = None,
     ) -> ConfinedFilesystemResult:
         """Write and commit inside the verified parent descriptor only."""
         if not isinstance(content, str):
@@ -417,6 +490,8 @@ class ConfinedWorkspaceFilesystem:
             _write_all(temp_fd, payload)
             os.fsync(temp_fd)
             self._hook("write_temporary_ready", relative_path)
+            if mutation_guard is not None:
+                mutation_guard.verify_before()
             self._assert_chain(chain)
             if previous_stat is not None:
                 try:
@@ -514,6 +589,8 @@ class ConfinedWorkspaceFilesystem:
             committed_stat = committed_after_hook
             self._assert_final_link(parent_fd, components[-1], committed_stat)
             self._assert_chain(chain)
+            if mutation_guard is not None:
+                mutation_guard.verify_after()
             observation = self._observation(
                 "filesystem_file", self._relative(components), committed_stat
             )
@@ -616,6 +693,7 @@ class ConfinedWorkspaceFilesystem:
         expected_resource_identity: str,
         expected_resource_revision: str,
         create_parents: bool = False,
+        mutation_guard: FilesystemMutationGuard | None = None,
     ) -> ConfinedFilesystemResult:
         """Atomically rename one version-fenced file or directory."""
         from core.runtime.confined_filesystem_mutations import move_confined_path
@@ -627,6 +705,7 @@ class ConfinedWorkspaceFilesystem:
             expected_resource_identity=expected_resource_identity,
             expected_resource_revision=expected_resource_revision,
             create_parents=create_parents,
+            mutation_guard=mutation_guard,
         )
 
     def delete_path(
@@ -636,6 +715,7 @@ class ConfinedWorkspaceFilesystem:
         expected_resource_identity: str,
         expected_resource_revision: str,
         recursive: bool = False,
+        mutation_guard: FilesystemMutationGuard | None = None,
     ) -> ConfinedFilesystemResult:
         """Delete one version-fenced path without following links."""
         from core.runtime.confined_filesystem_delete import delete_confined_path
@@ -646,6 +726,7 @@ class ConfinedWorkspaceFilesystem:
             expected_resource_identity=expected_resource_identity,
             expected_resource_revision=expected_resource_revision,
             recursive=recursive,
+            mutation_guard=mutation_guard,
         )
 
     def duplicate_root_fd(self) -> int:

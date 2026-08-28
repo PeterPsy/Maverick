@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v8 records six maintained transitive dependency contracts. The
+- [x] Manifest v9 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v18 / matrix
-  `2026-08-28-r18-p4-context-provider-closure-tcb8`
+- [x] Google and OpenRouter suite v19 / matrix
+  `2026-08-28-r19-p4-review-closure-tcb9`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -362,9 +362,9 @@ completion claim.
   new full revisions after compatibility closure. No live probe, certificate,
   remote activation, or Codex profile/artifact change is part of P4B.
 
-## Phase 4C-D — context, interaction, and provider closure
+## Phase 4C-D — context, interaction, provider, and review closure
 
-- [x] Immutable context policy `p4-context-v1` adds an independent request
+- [x] Immutable context policy `p4-context-v2` adds an independent request
   reserve, deterministic history threshold and size bounds, bounded summaries,
   attachment projection, tool-result projection, and steering-delivery mode.
   Compaction evidence binds source/compacted state, live authority, provenance,
@@ -372,16 +372,20 @@ completion claim.
 - [x] Google uses Core-managed stateless history and OpenRouter uses
   client-managed history. Both compactors preserve provider-private
   classification/source metadata and active tool-call/result pairing; consumed
-  results from the current turn remain valid after compaction. Final output,
-  cancellation, and repeated recovery are covered after compaction.
+  results from the current turn remain valid after compaction. Bounded
+  extractive summaries preserve prior user constraints, assistant decisions,
+  tool actions, and tool outcomes rather than replacing meaning with hashes.
+  Final output, cancellation, and repeated recovery are covered after compaction.
 - [x] Large tool results retain an immutable session/workspace-owned original
   behind `artifact.read`; providers receive a bounded summary/reference and
   total-result accounting still charges the original serialized bytes.
   Cross-session reads, invalid offsets, digest drift, and cleanup fail closed.
 - [x] Attachments are never silently flattened or discarded. They are distinct
   classified semantic blocks carrying an explicit workspace-relative reference
-  and required `filesystem.read` capability; invalid metadata, unsupported
-  projection, modality, authority, or classification stops before egress.
+  and required `filesystem.read` capability. Text uses version-fenced UTF-8
+  reads; every other accepted MIME uses version-fenced bounded base64 reads.
+  Invalid metadata, unsupported projection, modality, authority, or
+  classification stops before egress.
 - [x] Exact Codex retains native same-turn steering. Hosted recipes explicitly
   declare no provider-native same-turn delivery and return a visible
   `safe_next_turn` fallback reason instead of implying that steering occurred.
@@ -391,15 +395,28 @@ completion claim.
   model/upstream, reasoning, and fine-grained capability-catalog digests must
   all match; there is no provider/model branch in shared factory composition.
 - [x] Request preflight runs before egress commit and completion transport.
-  Google final requests must omit `tools`; OpenRouter must prove both live model
-  and ZDR catalog records, `tool_choice:none`, context/completion limits and
-  every translated endpoint parameter, then send `tools: []` and
+  Google validates the current official Interactions OpenAPI operation plus the
+  authenticated exact model record, streaming, usage, function-tool, reasoning,
+  and token limits; final requests omit `tools`. OpenRouter proves both live
+  model and ZDR catalog records, `tool_choice:none`, context/completion limits
+  and every translated endpoint parameter, then sends `tools: []` and
   `tool_choice: none` for finalization.
-- [x] Adapter 14, semantic compiler revision 2, Full Workspace contract
-  `codex-baseline-v2`, TCB manifest v8, suite 18, and matrix
-  `2026-08-28-r18-p4-context-provider-closure-tcb8` create new immutable Google
-  revision 22 and OpenRouter revision 21 full-workspace candidates. Historical
-  read-only revisions 21/20 are suspended, never promoted. No live probe,
+- [x] The production factory now supplies a server-owned transient-content rule
+  and canonical Core-tool result classifier. A production-composed E2E fixture
+  proves first dispatch, successful tool execution, classified continuation,
+  and final output without the harness-only classifier.
+- [x] Every mutating schema requires the exact applicable `AGENTS.md` digest.
+  Write/edit/patch/move/delete verify the snapshot immediately around the
+  commit and roll back on post-commit drift; shell and managed-process launch
+  verify immediately before `exec`.
+- [x] OpenRouter replaces request-scoped system/developer authority on every
+  continuation, persists the same messages actually sent, and delivers new
+  governed user blocks after mandatory tool pairing.
+- [x] Adapter 15, semantic compiler revision 3, Full Workspace contract
+  `codex-baseline-v3`, context-compaction schema 2, TCB manifest v9, suite 19,
+  and matrix `2026-08-28-r19-p4-review-closure-tcb9` create new immutable Google
+  revision 23 and OpenRouter revision 22 full-workspace candidates. Historical
+  revisions 22/21 are suspended, never promoted. No live probe,
   signed certificate, binding, remote activation, or Codex profile/artifact
   change is part of Phase 4.
 

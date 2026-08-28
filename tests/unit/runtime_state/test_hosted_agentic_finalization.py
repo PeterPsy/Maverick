@@ -241,6 +241,83 @@ class HostedAgenticFinalizationTest(unittest.TestCase):
             [{"reason_code": "agent_finalization_reserve_unavailable"}],
         )
 
+    def test_request_specific_cost_preflight_falls_back_before_egress_commit(self) -> None:
+        self.harness.policy = replace(
+            self.harness.policy,
+            max_estimated_cost_microusd=100,
+        )
+        client = DeterministicFakeAgenticClient()
+        adapter = self.harness.adapter(
+            client,
+            cost_estimator=lambda request: (
+                81 if request.request_phase == "exploration" else 9
+            ),
+            finalization_policy=HostedFinalizationPolicy(
+                exploration_max_output_tokens=128,
+                finalization_max_output_tokens=128,
+                finalization_cost_reserve_microusd_per_attempt=20,
+                finalization_time_reserve_seconds_per_attempt=0.25,
+                max_recovery_attempts=1,
+            ),
+        )
+
+        result, events = self.execute(client, adapter=adapter)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(
+            [request.request_phase for request in client.requests],
+            ["finalization"],
+        )
+        decisions = self.harness.store.list_egress_decisions(
+            session_id="session-hosted"
+        )
+        self.assertEqual(
+            {decision.provenance for decision in decisions},
+            {"platform_instruction", "user_input", "finalization_instruction"},
+        )
+        self.assertFalse(
+            any(event.event_type == "runtime.error" for event in events)
+        )
+
+    def test_slow_tool_is_fenced_before_it_consumes_finalization_time(self) -> None:
+        self.harness.policy = replace(
+            self.harness.policy,
+            max_wall_time_seconds=0.2,
+        )
+        self.harness.read_delay_seconds = 0.25
+        client = DeterministicFakeAgenticClient(
+            tool_name=self.harness.read_tool_name
+        )
+        adapter = self.harness.adapter(
+            client,
+            finalization_policy=HostedFinalizationPolicy(
+                exploration_max_output_tokens=128,
+                finalization_max_output_tokens=128,
+                finalization_cost_reserve_microusd_per_attempt=0,
+                finalization_time_reserve_seconds_per_attempt=0.05,
+                max_recovery_attempts=0,
+            ),
+        )
+
+        result, events = self.execute(client, adapter=adapter)
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(
+            [request.request_phase for request in client.requests],
+            ["exploration", "finalization"],
+        )
+        invocation = self.harness.store.list_tool_invocations(
+            session_id="session-hosted"
+        )[0]
+        self.assertEqual(invocation.state, "failed")
+        self.assertEqual(
+            invocation.failure_reason,
+            "agent_finalization_time_reserve_reached",
+        )
+        self.assertFalse(
+            any(event.event_type == "runtime.error" for event in events)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

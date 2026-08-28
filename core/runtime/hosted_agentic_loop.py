@@ -24,6 +24,7 @@ import core.runtime.hosted_agentic_request as hosted_agentic_request_module
 import core.runtime.hosted_agentic_recovery as hosted_agentic_recovery_module
 import core.runtime.hosted_agentic_state as hosted_agentic_state_module
 import core.runtime.hosted_agentic_stream as hosted_agentic_stream_module
+import core.runtime.hosted_agentic_tool_execution as hosted_agentic_tool_execution_module
 import core.runtime.provider_step_journal as provider_step_journal_module
 import core.runtime.hosted_agentic_tool_results as hosted_agentic_tool_results_module
 import core.runtime.hosted_provider_runtime as hosted_provider_runtime_module
@@ -75,6 +76,9 @@ from core.runtime.hosted_agentic_stream import (
     consume_hosted_provider_step,
 )
 from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
+from core.runtime.hosted_agentic_tool_execution import (
+    execute_hosted_authorized_tool,
+)
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.provider_private_state import ProviderPrivateStateService
 from core.runtime.provider_step_journal import ProviderStepJournal
@@ -144,6 +148,7 @@ class HostedAgenticLoop:
             hosted_agentic_recovery_module,
             hosted_agentic_state_module,
             hosted_agentic_stream_module,
+            hosted_agentic_tool_execution_module,
             hosted_agentic_tool_results_module,
             hosted_provider_runtime_module,
             tool_core_capabilities_module,
@@ -323,11 +328,6 @@ class HostedAgenticLoop:
             egress_policy = hosted_egress_policy(context, budget.policy)
             authority = self.authority_refresher(context)
             effective_context = replace(context, effective_authority=authority)
-            phase = budget.select_phase(
-                pairing_source=pairing_source,
-                existing_records=existing_turn_steps,
-            )
-            step_plan = budget.plan_step(phase)
             credential = self.credential_resolver(context)
             if provider_runtime.credential_required and credential is None:
                 raise HostedAgenticLoopError(
@@ -336,40 +336,59 @@ class HostedAgenticLoop:
             actor_context = self.actor_context_resolver(effective_context)
             provider_private_state = private_state.read(context, authority)
             tool_orchestrator = self.tool_orchestrator_resolver(context, actor_context)
-            catalog = (
-                tool_orchestrator.materialize(
-                    authority=authority,
-                    context=actor_context,
+            phase = budget.select_phase(
+                pairing_source=pairing_source,
+                existing_records=existing_turn_steps,
+            )
+            while True:
+                step_plan = budget.plan_step(phase)
+                catalog = (
+                    tool_orchestrator.materialize(
+                        authority=authority,
+                        context=actor_context,
+                    )
+                    if phase == "exploration"
+                    else RuntimeToolCatalog(())
                 )
-                if phase == "exploration"
-                else RuntimeToolCatalog(())
-            )
-            request = self.request_builder.build(
-                context=effective_context,
-                step=step,
-                input_text=context.input_text,
-                catalog=catalog,
-                tool_results=tuple(tool_results),
-                provider_private_state=provider_private_state,
-                egress_policy=egress_policy,
-                destination_upstream_id=destination_upstream_id,
-                max_output_tokens=step_plan.max_output_tokens,
-                request_phase=phase,
-                pairing_source=pairing_source,
-            )
-            request_lineage_digest = hosted_request_lineage_digest(request)
-            request_control_digest = hosted_request_control_digest(request)
-            self._validate_request_pairing(
-                request,
-                pairing_source=pairing_source,
-                turn_id=context.correlation_id,
-                request_lineage_digest=request_lineage_digest,
-            )
-            reservation = budget.begin_step(
-                request,
-                provider_runtime.cost_estimator(request),
-                phase=phase,
-            )
+                prepared_request = self.request_builder.prepare(
+                    context=effective_context,
+                    step=step,
+                    input_text=context.input_text,
+                    catalog=catalog,
+                    tool_results=tuple(tool_results),
+                    provider_private_state=provider_private_state,
+                    egress_policy=egress_policy,
+                    destination_upstream_id=destination_upstream_id,
+                    max_output_tokens=step_plan.max_output_tokens,
+                    request_phase=phase,
+                    pairing_source=pairing_source,
+                )
+                request = prepared_request.request
+                request_lineage_digest = hosted_request_lineage_digest(request)
+                request_control_digest = hosted_request_control_digest(request)
+                self._validate_request_pairing(
+                    request,
+                    pairing_source=pairing_source,
+                    turn_id=context.correlation_id,
+                    request_lineage_digest=request_lineage_digest,
+                )
+                try:
+                    reservation = budget.begin_step(
+                        request,
+                        provider_runtime.cost_estimator(request),
+                        phase=phase,
+                    )
+                except HostedAgenticLoopError as error:
+                    if (
+                        phase == "exploration"
+                        and error.reason_code
+                        == "agent_finalization_reserve_unavailable"
+                    ):
+                        phase = "finalization"
+                        continue
+                    raise
+                request = self.request_builder.commit(prepared_request)
+                break
             private_state.persist_request_identity(context, request)
             provider_state_snapshot = self.tool_ledger.store.get_provider_state(
                 context.session.session_id
@@ -726,11 +745,15 @@ class HostedAgenticLoop:
                         "runtime.tool_call.started",
                         tool_event_payload(outcome, display_state="executing"),
                     )
-                    outcome = tool_orchestrator.execute_authorized(
-                        outcome.invocation,
+                    outcome = await execute_hosted_authorized_tool(
+                        tool_orchestrator=tool_orchestrator,
+                        outcome=outcome,
                         authority=authority,
                         context=actor_context,
                         policy=tool_policy,
+                        budget=budget,
+                        cancellation=cancellation,
+                        poll_seconds=self.confirmation_poll_seconds,
                     )
                 if outcome.invocation.result_id is None:
                     raise HostedAgenticLoopError("tool_result_unavailable")

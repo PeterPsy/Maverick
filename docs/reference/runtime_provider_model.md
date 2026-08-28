@@ -569,13 +569,25 @@ tighten but never loosen it.
 Each hosted adapter pins one normal finalization attempt and at most one
 recovery, including per-attempt output, cost, and deadline capacity. Google and
 OpenRouter currently use 2,048 output tokens and 20 seconds per attempt, with
-25,000 and 2,000 micro-USD respectively. Exploration stops before consuming
-those protected resources. A final request whose conservative cost estimate is
-larger than its per-attempt allocation is rejected before transport. Decoded
-streamed output also has a conservative byte ceiling, so a provider cannot
-bypass the request limit by delaying usage events. Before request
-construction/export, Core rechecks effective eligibility and required
-credentials.
+200,000 and 20,000 micro-USD respectively. Those values cover the conservative
+request estimator when one result reaches the profile's 262,144-byte per-result
+limit. Exploration stops before consuming those protected resources. A final
+request whose conservative cost estimate is larger than its per-attempt
+allocation is rejected before transport. Decoded streamed output also has a
+conservative byte ceiling, so a provider cannot bypass the request limit by
+delaying usage events.
+
+Core checks coarse phase eligibility and credentials before catalog projection.
+It then evaluates a request candidate with egress decisions staged in memory,
+runs the provider-specific cost preflight, and commits those decisions only for
+the eligible request. If an exploration candidate would cross the protected
+cost reserve, Core discards it and evaluates one tool-less finalization
+candidate instead; no exploration egress decision or request journal is left
+behind. Synchronous tool dispatch runs behind a deadline fence before the
+protected terminal window. A timeout persists a failed read result through CAS
+and prevents a late worker result from becoming authoritative, allowing the
+paired final request to proceed; a non-read effect remains
+`execution_unknown` and fails closed.
 
 Google and OpenRouter preserve every call, including later OpenRouter indices
 and calls decoded before a terminal stream error. Parallel execution remains
@@ -614,8 +626,9 @@ reject private-state field names.
 When the tool budget reaches zero—or another protected resource reaches its
 reserve—the next request has phase `finalization`, no Core tools, and one exact
 trusted finalization instruction placed last. Google omits the `tools` member;
-OpenRouter sends `tools: []` with `tool_choice: none`. Both codecs reject a
-phase/catalog/instruction mismatch before transport. Empty or whitespace final
+OpenRouter sends `tools: []` with `tool_choice: none`; its instruction is
+request-scoped wire content and is excluded from durable chat history. Both
+codecs reject a phase/catalog/instruction mismatch before transport. Empty or whitespace final
 text is durably rejected and its staged state rolled back, never committed as a
 healthy output. A tool proposed despite the closed catalog is still journaled,
 gets a paired `budget_denied` result, and permits exactly one tool-less

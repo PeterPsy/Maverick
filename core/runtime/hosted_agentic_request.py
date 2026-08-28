@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
@@ -10,6 +12,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from core.egress.agentic_models import (
     AgenticEgressContentBlock,
+    AgenticEgressDecision,
     AgenticEgressPolicy,
 )
 from core.egress.agentic_policy import AgenticEgressEvaluator
@@ -51,6 +54,15 @@ HOSTED_TOOL_USE_INSTRUCTION = (
     "a function name. If the declared functions cannot perform a requested operation, explain "
     "that limitation instead of attempting a function call."
 )
+
+
+@dataclass(frozen=True)
+class HostedAgenticPreparedRequest:
+    """One fully evaluated request whose egress decisions are not committed yet."""
+
+    request: AgenticModelRequest
+    workspace_id: str
+    egress_decisions: tuple[AgenticEgressDecision, ...]
 
 
 def hosted_request_lineage_digest(request: AgenticModelRequest) -> str:
@@ -147,6 +159,39 @@ class HostedAgenticRequestBuilder:
         request_phase: AgenticRequestPhase = "exploration",
         pairing_source: ProviderStepJournalRecord | None = None,
     ) -> AgenticModelRequest:
+        """Build a request and immediately commit all approved egress decisions."""
+        return self.commit(
+            self.prepare(
+                context=context,
+                step=step,
+                input_text=input_text,
+                catalog=catalog,
+                tool_results=tool_results,
+                provider_private_state=provider_private_state,
+                egress_policy=egress_policy,
+                destination_upstream_id=destination_upstream_id,
+                max_output_tokens=max_output_tokens,
+                request_phase=request_phase,
+                pairing_source=pairing_source,
+            )
+        )
+
+    def prepare(
+        self,
+        *,
+        context,
+        step: int,
+        input_text: str,
+        catalog: RuntimeToolCatalog,
+        tool_results: tuple[AgenticToolResult, ...],
+        provider_private_state: AgenticProviderPrivateState | None,
+        egress_policy: AgenticEgressPolicy,
+        destination_upstream_id: str | None,
+        max_output_tokens: int,
+        request_phase: AgenticRequestPhase = "exploration",
+        pairing_source: ProviderStepJournalRecord | None = None,
+    ) -> HostedAgenticPreparedRequest:
+        """Evaluate and transform a candidate without observable egress commit."""
         binding = context.binding
         if request_phase not in {
             "exploration",
@@ -164,6 +209,7 @@ class HostedAgenticRequestBuilder:
                 f"maverick:hosted-request:{context.session.session_id}:{context.correlation_id}:{step}",
             )
         )
+        egress_decisions: list[AgenticEgressDecision] = []
         content_blocks: list[AgenticRequestContentBlock] = []
         content_blocks.append(
             self._content_block(
@@ -176,6 +222,7 @@ class HostedAgenticRequestBuilder:
                 content_type="text/plain",
                 egress_policy=egress_policy,
                 destination_upstream_id=destination_upstream_id,
+                egress_decisions=egress_decisions,
                 classification=HostedContentClassification(
                     "public",
                     "trusted_platform",
@@ -198,6 +245,7 @@ class HostedAgenticRequestBuilder:
                     content_type="text/plain",
                     egress_policy=egress_policy,
                     destination_upstream_id=destination_upstream_id,
+                    egress_decisions=egress_decisions,
                 )
             )
         input_sources = tuple(getattr(context, "input_sources", ()) or ())
@@ -221,6 +269,7 @@ class HostedAgenticRequestBuilder:
                         ),
                         egress_policy=egress_policy,
                         destination_upstream_id=destination_upstream_id,
+                        egress_decisions=egress_decisions,
                         classification=(
                             HostedContentClassification(
                                 source_classification.data_class,
@@ -249,6 +298,7 @@ class HostedAgenticRequestBuilder:
                     content_type="text/plain",
                     egress_policy=egress_policy,
                     destination_upstream_id=destination_upstream_id,
+                    egress_decisions=egress_decisions,
                 )
             )
         for skill in tuple(getattr(context, "invoked_skills", ()) or ()):
@@ -269,6 +319,7 @@ class HostedAgenticRequestBuilder:
                     content_type="application/json",
                     egress_policy=egress_policy,
                     destination_upstream_id=destination_upstream_id,
+                    egress_decisions=egress_decisions,
                 )
             )
         if request_phase != "exploration":
@@ -283,6 +334,7 @@ class HostedAgenticRequestBuilder:
                     content_type="text/plain",
                     egress_policy=egress_policy,
                     destination_upstream_id=destination_upstream_id,
+                    egress_decisions=egress_decisions,
                     classification=HostedContentClassification(
                         "public",
                         "trusted_platform",
@@ -301,6 +353,7 @@ class HostedAgenticRequestBuilder:
                 descriptor=descriptor,
                 egress_policy=egress_policy,
                 destination_upstream_id=destination_upstream_id,
+                egress_decisions=egress_decisions,
             )
             for index, descriptor in enumerate(catalog.descriptors)
         )
@@ -310,6 +363,7 @@ class HostedAgenticRequestBuilder:
             state=provider_private_state,
             egress_policy=egress_policy,
             destination_upstream_id=destination_upstream_id,
+            egress_decisions=egress_decisions,
         )
         approved_tool_results = tuple(
             self._request_tool_result(
@@ -318,6 +372,7 @@ class HostedAgenticRequestBuilder:
                 result=result,
                 egress_policy=egress_policy,
                 destination_upstream_id=destination_upstream_id,
+                egress_decisions=egress_decisions,
             )
             for result in tool_results
         )
@@ -331,7 +386,7 @@ class HostedAgenticRequestBuilder:
             )
             if metadata is not None
         )
-        return AgenticModelRequest(
+        request = AgenticModelRequest(
             schema_version="1",
             request_id=request_id,
             correlation_id=context.correlation_id,
@@ -355,6 +410,31 @@ class HostedAgenticRequestBuilder:
             ),
             request_phase=request_phase,
         )
+        return HostedAgenticPreparedRequest(
+            request=request,
+            workspace_id=context.session.workspace_id,
+            egress_decisions=tuple(egress_decisions),
+        )
+
+    def commit(self, prepared: HostedAgenticPreparedRequest) -> AgenticModelRequest:
+        """Commit every decision only after request-specific budget eligibility."""
+        self._commit_egress_decisions(
+            workspace_id=prepared.workspace_id,
+            decisions=prepared.egress_decisions,
+        )
+        return prepared.request
+
+    def _commit_egress_decisions(
+        self,
+        *,
+        workspace_id: str,
+        decisions: Iterable[AgenticEgressDecision],
+    ) -> None:
+        for decision in decisions:
+            self.egress_evaluator.commit_decision(
+                workspace_id=workspace_id,
+                decision=decision,
+            )
 
     def _content_block(
         self,
@@ -368,6 +448,7 @@ class HostedAgenticRequestBuilder:
         content_type: str,
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
+        egress_decisions: list[AgenticEgressDecision],
         classification: HostedContentClassification | None = None,
     ) -> AgenticRequestContentBlock:
         classification = classification or self.classifier(context, provenance, content)
@@ -380,6 +461,7 @@ class HostedAgenticRequestBuilder:
             content_type=content_type,
             egress_policy=egress_policy,
             destination_upstream_id=destination_upstream_id,
+            egress_decisions=egress_decisions,
             classification=classification,
         )
         return AgenticRequestContentBlock(
@@ -401,6 +483,7 @@ class HostedAgenticRequestBuilder:
         result: AgenticToolResult,
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
+        egress_decisions: list[AgenticEgressDecision],
     ) -> AgenticToolResult:
         classification = _tool_result_classification(result)
         exported, metadata = self._evaluate(
@@ -413,6 +496,7 @@ class HostedAgenticRequestBuilder:
             content_type=result.content_type,
             egress_policy=egress_policy,
             destination_upstream_id=destination_upstream_id,
+            egress_decisions=egress_decisions,
             classification=classification,
         )
         return AgenticToolResult(
@@ -433,6 +517,7 @@ class HostedAgenticRequestBuilder:
         descriptor,
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
+        egress_decisions: list[AgenticEgressDecision],
     ) -> AgenticToolDefinition:
         payload = {
             "name": descriptor.provider_name,
@@ -456,6 +541,7 @@ class HostedAgenticRequestBuilder:
             content_type="application/json",
             egress_policy=egress_policy,
             destination_upstream_id=destination_upstream_id,
+            egress_decisions=egress_decisions,
             classification=classification,
         )
         try:
@@ -528,6 +614,7 @@ class HostedAgenticRequestBuilder:
         state: AgenticProviderPrivateState | None,
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
+        egress_decisions: list[AgenticEgressDecision],
     ) -> AgenticProviderPrivateState | None:
         if state is None:
             return None
@@ -549,6 +636,7 @@ class HostedAgenticRequestBuilder:
             content_type=state.content_type,
             egress_policy=egress_policy,
             destination_upstream_id=destination_upstream_id,
+            egress_decisions=egress_decisions,
             classification=classification,
         )
         return AgenticProviderPrivateState(
@@ -574,6 +662,7 @@ class HostedAgenticRequestBuilder:
         content_type: str,
         egress_policy: AgenticEgressPolicy,
         destination_upstream_id: str | None,
+        egress_decisions: list[AgenticEgressDecision],
         classification=None,
     ) -> tuple[bytes, AgenticSourceMetadata]:
         require_agentic_feature(
@@ -621,9 +710,17 @@ class HostedAgenticRequestBuilder:
             policy=egress_policy,
             data_attestation=data_attestation,
             workspace_root=Path(context.session.workspace_root),
+            persist=False,
         )
         if not result.decision.export_allowed or result.exported_content is None:
+            egress_decisions.append(result.decision)
+            self._commit_egress_decisions(
+                workspace_id=context.session.workspace_id,
+                decisions=egress_decisions,
+            )
+            egress_decisions.clear()
             raise HostedAgenticLoopError(result.decision.reason_code)
+        egress_decisions.append(result.decision)
         source_ref = str(getattr(classification, "source_ref", "") or content_block_id)
         source_revision = str(
             getattr(classification, "source_revision", "") or context.correlation_id

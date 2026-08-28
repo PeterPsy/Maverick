@@ -200,6 +200,18 @@ class HostedAgenticBudget:
         if not self.snapshot().finalization_reserved:
             raise HostedAgenticLoopError("agent_finalization_reserve_unavailable")
 
+    def tool_execution_deadline(self, *, cleanup_seconds: float) -> float:
+        """Return an active-step deadline that leaves time to persist tool pairing."""
+        if (
+            not isinstance(cleanup_seconds, (int, float))
+            or isinstance(cleanup_seconds, bool)
+            or not math.isfinite(cleanup_seconds)
+            or cleanup_seconds < 0
+            or self._active_deadline is None
+        ):
+            raise HostedAgenticLoopError("agent_finalization_reserve_unavailable")
+        return self._active_deadline - cleanup_seconds
+
     def add_tool_result(self, size_bytes: int) -> None:
         if (
             not isinstance(size_bytes, int)

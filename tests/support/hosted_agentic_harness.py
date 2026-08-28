@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 import json
 import os
+import time
 from unittest.mock import patch
 
 from core.cli.command_registry import CliCommandRegistry
@@ -110,6 +111,7 @@ class HostedAgenticHarness:
         self.cli_calls = 0
         self.mcp_calls = 0
         self.read_result: dict[str, object] | None = None
+        self.read_delay_seconds = 0.0
         self.turn_statuses: list[tuple[str, str]] = []
         self.audit = FakeCollection()
         self.store = RuntimeDocumentStore(
@@ -458,6 +460,8 @@ class HostedAgenticHarness:
         )
 
     def _read(self, arguments, _context):
+        if self.read_delay_seconds > 0:
+            time.sleep(self.read_delay_seconds)
         self.cli_calls += 1
         return self.read_result or {"value": arguments["value"]}
 

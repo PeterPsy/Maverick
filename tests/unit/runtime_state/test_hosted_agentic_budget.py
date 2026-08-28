@@ -7,11 +7,25 @@ import unittest
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.agentic_protocol import (
     AgenticModelRequest,
+    AgenticProviderPrivateState,
     AgenticRequestContentBlock,
+    AgenticToolResult,
     AgenticUsage,
 )
-from core.providers.google_agentic_profile import google_agentic_preview_policy
-from core.providers.openrouter_agentic_profile import openrouter_agentic_preview_policy
+from core.providers.google_agentic_profile import (
+    google_agentic_preview_policy,
+    google_interactions_routing_constraint,
+)
+from core.providers.google_interactions_client import (
+    google_36_flash_request_ceiling_microusd,
+)
+from core.providers.openrouter_agentic_client import (
+    openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+)
+from core.providers.openrouter_agentic_profile import (
+    openrouter_agentic_preview_policy,
+    openrouter_agentic_routing_constraint,
+)
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
@@ -102,6 +116,75 @@ class HostedAgenticBudgetTest(unittest.TestCase):
                 self.assertGreaterEqual(
                     policy.max_wall_time_seconds,
                     finalization.reserved_time_seconds,
+                )
+
+    def test_production_cost_reserves_cover_a_maximum_allowed_tool_result(self) -> None:
+        cases = (
+            (
+                google_agentic_preview_policy(),
+                GOOGLE_HOSTED_FINALIZATION_POLICY,
+                google_interactions_routing_constraint(),
+                google_36_flash_request_ceiling_microusd,
+                False,
+            ),
+            (
+                openrouter_agentic_preview_policy(),
+                OPENROUTER_HOSTED_FINALIZATION_POLICY,
+                openrouter_agentic_routing_constraint(),
+                openrouter_deepinfra_v4_flash_request_ceiling_microusd,
+                True,
+            ),
+        )
+        for (
+            policy,
+            finalization,
+            routing,
+            estimator,
+            carries_prior_result,
+        ) in cases:
+            with self.subTest(routing=routing.endpoint_id):
+                prefix = b'{"value":"'
+                suffix = b'"}'
+                maximum_result = (
+                    prefix
+                    + b"x"
+                    * (policy.max_tool_result_bytes - len(prefix) - len(suffix))
+                    + suffix
+                )
+                request = replace(
+                    self.request,
+                    routing_constraint=routing,
+                    request_phase="finalization",
+                    max_output_tokens=finalization.finalization_max_output_tokens,
+                    provider_private_state=(
+                        AgenticProviderPrivateState(
+                            codec_id="fixture-codec",
+                            codec_version="1",
+                            schema_version="1",
+                            content_type="application/json",
+                            content=b"x" * policy.max_tool_result_bytes,
+                        )
+                        if carries_prior_result
+                        else None
+                    ),
+                    tool_results=(
+                        AgenticToolResult(
+                            provider_tool_call_id="call-max-result",
+                            provider_tool_name="fixture_read",
+                            content_type="application/json",
+                            content=maximum_result,
+                            is_error=False,
+                        ),
+                    ),
+                )
+
+                self.assertLessEqual(
+                    estimator(request),
+                    finalization.finalization_cost_reserve_microusd_per_attempt,
+                )
+                self.assertLessEqual(
+                    finalization.reserved_cost_microusd,
+                    policy.max_estimated_cost_microusd,
                 )
 
     def test_provider_steps_and_tool_calls_are_separate_budgets(self) -> None:

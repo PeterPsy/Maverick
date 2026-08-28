@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import json
+from threading import Event
+import time
 from typing import Literal
 
 from core.egress.classification import (
@@ -22,7 +25,11 @@ from core.runtime.tool_catalog import (
     RuntimeToolDescriptor,
     RuntimeToolSurfaceResult,
 )
-from core.runtime.tool_errors import RuntimeToolError, RuntimeToolSchemaError
+from core.runtime.tool_errors import (
+    RuntimeToolError,
+    RuntimeToolRevisionError,
+    RuntimeToolSchemaError,
+)
 from core.runtime.tool_ledger import RuntimeToolLedger
 from core.runtime.tool_models import ToolConfirmationGrant, ToolInvocationRecord
 from core.runtime.tool_schema import validate_tool_arguments
@@ -46,6 +53,26 @@ class RuntimeToolInvocationOutcome:
     @property
     def awaiting_confirmation(self) -> bool:
         return self.invocation.state == "awaiting_confirmation"
+
+
+@dataclass
+class RuntimeToolExecutionControl:
+    """Cooperative cancellation and a hard commit deadline for one tool effect."""
+
+    deadline_monotonic: float
+    cancellation: Event
+    monotonic: Callable[[], float] = time.monotonic
+    cancellation_reason: str = "runtime_cancelled"
+
+    def cancel(self, reason_code: str) -> None:
+        self.cancellation_reason = reason_code
+        self.cancellation.set()
+
+    def check(self) -> None:
+        if self.cancellation.is_set():
+            raise RuntimeToolError(self.cancellation_reason)
+        if self.monotonic() >= self.deadline_monotonic:
+            raise RuntimeToolError("agent_finalization_time_reserve_reached")
 
 
 class RuntimeToolOrchestrator:
@@ -237,19 +264,113 @@ class RuntimeToolOrchestrator:
         authority: EffectiveRuntimeAuthority,
         context: RuntimeToolActorContext,
         policy: RuntimeToolConfirmationPolicy,
+        control: RuntimeToolExecutionControl | None = None,
     ) -> RuntimeToolInvocationOutcome:
-        """Cross the effect boundary only after the caller persisted `started`."""
+        """Fence and execute one authorized invocation synchronously."""
+        started = self.start_authorized(
+            record,
+            authority=authority,
+            context=context,
+        )
+        return self.execute_started(
+            started.invocation,
+            authority=authority,
+            context=context,
+            policy=policy,
+            control=control,
+        )
+
+    def start_authorized(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        authority: EffectiveRuntimeAuthority,
+        context: RuntimeToolActorContext,
+    ) -> RuntimeToolInvocationOutcome:
+        """Fence the effect boundary before dispatching synchronous tool code."""
         if record.state != "authorized":
             return RuntimeToolInvocationOutcome(record)
         if record.resolved_tool_handle is None:
             raise RuntimeToolError("tool_not_authorized")
-        descriptor = self.materialize(
+        self.materialize(
             authority=authority,
             context=context,
         ).by_handle(record.resolved_tool_handle)
+        return RuntimeToolInvocationOutcome(self.ledger.transition(record, "executing"))
+
+    def execute_started(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        authority: EffectiveRuntimeAuthority,
+        context: RuntimeToolActorContext,
+        policy: RuntimeToolConfirmationPolicy,
+        control: RuntimeToolExecutionControl | None = None,
+    ) -> RuntimeToolInvocationOutcome:
+        """Invoke a fenced tool and commit a result only while its lease is live."""
+        if record.state != "executing":
+            return RuntimeToolInvocationOutcome(record)
+        if record.resolved_tool_handle is None:
+            raise RuntimeToolError("tool_not_authorized")
+        try:
+            descriptor = self.materialize(
+                authority=authority,
+                context=context,
+            ).by_handle(record.resolved_tool_handle)
+        except RuntimeToolError as error:
+            return RuntimeToolInvocationOutcome(
+                self._persist_execution_failure(
+                    record,
+                    state="failed",
+                    reason_code=error.reason_code,
+                )
+            )
+        except Exception:
+            return RuntimeToolInvocationOutcome(
+                self._persist_execution_failure(
+                    record,
+                    state="failed",
+                    reason_code="tool_execution_failed",
+                )
+            )
         return RuntimeToolInvocationOutcome(
-            self._execute(record, descriptor=descriptor, context=context, policy=policy)
+            self._execute_started(
+                record,
+                descriptor=descriptor,
+                context=context,
+                policy=policy,
+                control=control,
+            )
         )
+
+    def interrupt_started_execution(
+        self,
+        record: ToolInvocationRecord,
+        *,
+        failure_reason: str,
+    ) -> RuntimeToolInvocationOutcome:
+        """Fence a timed-out worker so a late result cannot become authoritative."""
+        current = self.ledger.store.get_tool_invocation(record.invocation_id)
+        if current.state in {
+            "denied",
+            "succeeded",
+            "failed",
+            "cancelled",
+            "expired",
+            "execution_unknown",
+        }:
+            return RuntimeToolInvocationOutcome(current)
+        if current.state != "executing":
+            raise RuntimeToolError("tool_state_transition_invalid")
+        state = "failed" if current.effect_class == "read" else "execution_unknown"
+        return RuntimeToolInvocationOutcome(
+            self._persist_execution_failure(
+                current,
+                state=state,
+                reason_code=failure_reason,
+            )
+        )
+
     def decide_confirmation(
         self,
         *,
@@ -334,21 +455,26 @@ class RuntimeToolOrchestrator:
         return RuntimeToolInvocationOutcome(
             self.ledger.recover_executing(record, safe_to_retry=descriptor.safe_to_retry)
         )
-    def _execute(
+    def _execute_started(
         self,
         record: ToolInvocationRecord,
         *,
         descriptor: RuntimeToolDescriptor,
         context: RuntimeToolActorContext,
         policy: RuntimeToolConfirmationPolicy,
+        control: RuntimeToolExecutionControl | None,
     ) -> ToolInvocationRecord:
-        if record.state != "authorized":
+        if record.state != "executing":
             return record
-        executing = self.ledger.transition(record, "executing")
+        executing = record
         crossed_effect_boundary = False
         try:
+            if control is not None:
+                control.check()
             arguments = self.ledger.load_arguments(executing)
             validate_tool_arguments(descriptor.original_input_schema, arguments)
+            if control is not None:
+                control.check()
             crossed_effect_boundary = True
             surface_result = self._invoke_surface(
                 descriptor=descriptor,
@@ -356,6 +482,8 @@ class RuntimeToolOrchestrator:
                 context=context,
                 idempotency_key=(executing.idempotency_key if descriptor.supports_idempotency else None),
             )
+            if control is not None:
+                control.check()
             if isinstance(surface_result, RuntimeToolSurfaceResult):
                 result = surface_result.payload
                 classification = join_classifications(
@@ -381,11 +509,6 @@ class RuntimeToolOrchestrator:
                 raise RuntimeToolError("tool_result_too_large")
             if descriptor.output_schema is not None:
                 validate_tool_arguments(descriptor.output_schema, result)
-            private_ref = self.ledger.private_payload_store.put(
-                workspace_id=executing.workspace_id,
-                session_id=executing.session_id,
-                payload=encoded,
-            )
             summary = {
                 "root_type": "object",
                 "field_count": len(result),
@@ -396,10 +519,11 @@ class RuntimeToolOrchestrator:
                 "resource_identity": classification.resource_identity,
                 "classification_revision": classification.classification_revision,
             }
-            return self.ledger.transition(
+            if control is not None:
+                control.check()
+            return self._persist_execution_success(
                 executing,
-                "succeeded",
-                result_private_ref=private_ref,
+                encoded=encoded,
                 result_summary=summary,
                 result_classification=classification,
             )
@@ -425,6 +549,50 @@ class RuntimeToolOrchestrator:
                 state=state,
                 reason_code="tool_execution_failed",
             )
+
+    def _persist_execution_success(
+        self,
+        executing: ToolInvocationRecord,
+        *,
+        encoded: bytes,
+        result_summary: dict[str, object],
+        result_classification,
+    ) -> ToolInvocationRecord:
+        private_ref = self.ledger.private_payload_store.put(
+            workspace_id=executing.workspace_id,
+            session_id=executing.session_id,
+            payload=encoded,
+        )
+        try:
+            return self.ledger.transition(
+                executing,
+                "succeeded",
+                result_private_ref=private_ref,
+                result_summary=result_summary,
+                result_classification=result_classification,
+            )
+        except RuntimeToolRevisionError:
+            self.ledger.private_payload_store.delete(
+                workspace_id=executing.workspace_id,
+                session_id=executing.session_id,
+                private_ref=private_ref,
+            )
+            current = self.ledger.store.get_tool_invocation(executing.invocation_id)
+            if current.state in {
+                "succeeded",
+                "failed",
+                "cancelled",
+                "execution_unknown",
+            } and current.result_private_ref is not None:
+                return current
+            raise
+        except Exception:
+            self.ledger.private_payload_store.delete(
+                workspace_id=executing.workspace_id,
+                session_id=executing.session_id,
+                private_ref=private_ref,
+            )
+            raise
 
     def _persist_execution_failure(
         self,
@@ -458,6 +626,21 @@ class RuntimeToolOrchestrator:
                     "is_error": True,
                 },
             )
+        except RuntimeToolRevisionError:
+            self.ledger.private_payload_store.delete(
+                workspace_id=executing.workspace_id,
+                session_id=executing.session_id,
+                private_ref=private_ref,
+            )
+            current = self.ledger.store.get_tool_invocation(executing.invocation_id)
+            if current.state in {
+                "succeeded",
+                "failed",
+                "cancelled",
+                "execution_unknown",
+            } and current.result_private_ref is not None:
+                return current
+            raise
         except Exception:
             self.ledger.private_payload_store.delete(
                 workspace_id=executing.workspace_id,

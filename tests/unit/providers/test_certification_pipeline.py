@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "d79b3885db99c38cf7493f0cb9927e276819679d356f8da61eb28f3f1be6c79d"
+                "6907325ea5e1ecf24d0481fdf47cebce5459101b475df2d1733ce459fe04b8b3"
             ),
             "openrouter": (
-                "5ab118cad08fc355e2086bf85e3eb5483521fe67f86dececbaf2487e794508be"
+                "fec4c83663fabf797210410e01daf4408a950d607ef829138ae09fad10ce135d"
             ),
         }
         for manifest in (
@@ -190,7 +190,10 @@ class CertificationPipelineTest(unittest.TestCase):
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.matrix_revision, "2026-08-27-r12-p3-tcb5")
+                self.assertEqual(
+                    manifest.matrix_revision,
+                    "2026-08-28-r13-p3-review-tcb5",
+                )
                 self.assertEqual(
                     manifest.digest,
                     expected_manifest_digests[manifest.provider_id],

@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-08-27
-Matrix revision: `2026-08-27-r12-p3-tcb5`
+Status date: 2026-08-28
+Matrix revision: `2026-08-28-r13-p3-review-tcb5`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==8`
+Adapter: `maverick-hosted-tool-loop==9`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==8`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `16` (revision `15` suspended) |
+| Immutable profile revision | `17` (revision `16` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -22,7 +22,8 @@ Adapter: `maverick-hosted-tool-loop==8`
 | Private codec | `google-gemini-interactions@3`, schema `3`; no silent migration |
 | Reasoning levels | `high`; deployed default `high` |
 | Synthetic live probe output budget | 2,048 tokens per request, including thinking tokens |
-| Finalization reserve | one 2,048-token / 25,000-micro-USD / 20-second final request plus one equal recovery |
+| Finalization reserve | one 2,048-token / 200,000-micro-USD / 20-second final request plus one equal recovery |
+| Turn cost ceiling | 500,000 micro-USD; 400,000 remains protected for the two terminal attempts |
 | Final request | exact Core finalization instruction; `tools` omitted |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
@@ -65,13 +66,13 @@ Primary references:
 | Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
 | Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
-| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve; final payload omits tools; exact final instruction; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
+| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a maximum admitted result; request-specific staged preflight with tool-less fallback before egress commit; deadline-fenced tool execution; final payload omits tools; exact final instruction; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
 | Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only two sequential real-filesystem-list calls plus one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r12 |
+| Live capability probe | operator-only two sequential real-filesystem-list calls plus one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r13 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
@@ -153,4 +154,13 @@ step-output-cost-deadline capacity, an exact tool-less Google final payload,
 whitespace rejection, journaled denial of unexpected final calls, and at most
 one paired recovery. The retained `live_probe` was updated to exercise the
 tool-less final request but was not selected or run. No behavioral evidence or
-certificate was created; revision 16 remains a contained, uncertified preview.
+certificate was created; revision 16 is suspended and uncertified.
+
+Revision 17 pins adapter 9, suite 13, matrix
+`2026-08-28-r13-p3-review-tcb5`, and TCB manifest v5 for the Phase-3 review
+closure. It stages candidate egress decisions until request-specific cost
+eligibility succeeds, falls back from an unaffordable exploration request to a
+tool-less final request, fences synchronous tool execution before protected
+terminal time, and reserves enough cost for a maximum policy-admitted tool
+result. No live or behavioral run has been performed; revision 17 remains a
+contained, uncertified preview.

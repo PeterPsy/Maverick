@@ -93,8 +93,9 @@ class AgenticEgressEvaluator:
         data_attestation: WorkspaceDataAttestation | None = None,
         workspace_root: Path | None = None,
         now: datetime | None = None,
+        persist: bool = True,
     ) -> AgenticEgressResult:
-        """Return transformed bytes only when every classification is known and allowed."""
+        """Return transformed bytes, optionally staging the decision for later commit."""
         timestamp = now or datetime.now(tz=UTC)
         source = canonical_egress_content(content)
         source_digest = _content_digest(self._digest_key, source)
@@ -189,13 +190,27 @@ class AgenticEgressEvaluator:
             attestation_id=attestation_id,
             attestation_revision=attestation_revision,
         )
+        if persist:
+            decision = self.commit_decision(
+                workspace_id=block.workspace_id,
+                decision=decision,
+            )
+        return AgenticEgressResult(decision=decision, exported_content=exported)
+
+    def commit_decision(
+        self,
+        *,
+        workspace_id: str,
+        decision: AgenticEgressDecision,
+    ) -> AgenticEgressDecision:
+        """Persist and audit one previously evaluated deterministic decision."""
         if self.decision_store is not None:
             decision = self.decision_store.initialize_egress_decision(
-                workspace_id=block.workspace_id,
+                workspace_id=workspace_id,
                 record=decision,
             )
-        self._audit(block.workspace_id, decision)
-        return AgenticEgressResult(decision=decision, exported_content=exported)
+        self._audit(workspace_id, decision)
+        return decision
 
     @staticmethod
     def _deny_reason(

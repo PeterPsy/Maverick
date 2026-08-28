@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-08-27
-Matrix revision: `2026-08-27-r12-p3-tcb5`
+Status date: 2026-08-28
+Matrix revision: `2026-08-28-r13-p3-review-tcb5`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==8`
+Adapter: `maverick-hosted-tool-loop==9`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==8`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `15` (revision `14` suspended) |
+| Immutable profile revision | `16` (revision `15` suspended) |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -26,7 +26,8 @@ Adapter: `maverick-hosted-tool-loop==8`
 | Mixed response handling | provisional text plus one tool call is retained privately and continued |
 | Reasoning levels | `minimal`, `low`, `medium`, `high`; deployed default `high` |
 | Router controls | fallback off, parameters required, collection denied, ZDR required |
-| Finalization reserve | one 2,048-token / 2,000-micro-USD / 20-second final request plus one equal recovery |
+| Finalization reserve | one 2,048-token / 20,000-micro-USD / 20-second final request plus one equal recovery |
+| Turn cost ceiling | 50,000 micro-USD; 40,000 remains protected for the two terminal attempts |
 | Final request | exact Core finalization instruction; `tools: []`; `tool_choice: none` |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
 | Tool handles | `core-capability:filesystem.list`, `core-capability:filesystem.read` |
@@ -99,14 +100,14 @@ Primary references:
 | Cancel/recovery/confirmation | startup, pre-admission, pre-prepare, worker-loss and uncertain-cancellation recovery; crash after every journal/state/effect/pairing transition; repeated restart without duplicate effect | not certified |
 | Turn lineage and terminal pairing | exact source journal/turn/request/input lineage; ordinary cross-turn input rejected before transport; limits, cancellation and revocation leave no ready pairing on a running session | not certified |
 | Final-output delivery | private outbox before commit; crash before either terminal event replays one stable output with one provider request and no duplicate event across repeated restart | not certified |
-| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve; `tools: []` plus `tool_choice: none`; exact final instruction after paired results; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
+| Governed finalization | separate durable step/tool budgets; full step/output/cost/time reserve covering a maximum admitted result; request-specific staged preflight with tool-less fallback before egress commit; deadline-fenced tool execution; `tools: []` plus `tool_choice: none`; exact request-scoped final instruction after paired results; whitespace rollback; unexpected call gets journaled `budget_denied`, one recovery, then quarantine | not certified |
 | Containment independence | diagnostic/private-payload failure, first journal CAS conflict, unavailable journal CAS, and runtime projection fault still preserve session quarantine whenever the session CAS succeeds | not certified |
 | Outage after acceptance | terminal normalized failure with no blind retry | not certified |
 | Revocation and egress drift | mid-step revocation, live-policy drift, workspace-path rewriting, tool-result host-path redaction, and non-tool denial fixtures | not certified |
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r12 |
+| Live capability probe | operator-only catalog/ZDR preflight, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r13 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the candidate profile and never manufactures a
@@ -175,8 +176,17 @@ step-output-cost-deadline capacity, exact `tools: []` plus
 `tool_choice: none`, whitespace rejection, journaled denial of unexpected final
 calls, and at most one paired recovery. The retained `live_probe` was updated
 to exercise the tool-less final request but was not selected or run. No
-behavioral evidence or certificate was created; revision 15 remains a
-contained, uncertified preview.
+behavioral evidence or certificate was created; revision 15 is suspended and
+uncertified.
+
+Revision 16 pins adapter 9, suite 13, matrix
+`2026-08-28-r13-p3-review-tcb5`, and TCB manifest v5 for the Phase-3 review
+closure. The finalization instruction is wire-only and cannot contaminate a
+later turn's private history; candidate egress decisions remain staged until
+request-specific cost eligibility succeeds; unaffordable exploration falls
+back to tool-less finalization; synchronous tools are deadline-fenced; and the
+cost reserve covers a maximum policy-admitted result. No live or behavioral
+run has been performed; revision 16 remains a contained, uncertified preview.
 
 ## Fail-closed conditions
 

@@ -104,6 +104,55 @@ class OpenRouterAgenticFinalizationCodecTest(unittest.TestCase):
             {"role": "system", "content": HOSTED_FINALIZATION_INSTRUCTION},
         )
 
+    def test_finalization_instruction_is_not_replayed_on_the_next_turn(self) -> None:
+        transport = _ScriptedTransport(
+            [
+                _tool_stream(
+                    "generation-transient-1",
+                    "fixture_read",
+                    call_id="call-transient",
+                ),
+                _text_stream("generation-transient-2", "first turn done"),
+                _text_stream("generation-transient-3", "next turn done"),
+            ]
+        )
+        client = OpenRouterAgenticClient(transport=transport)
+        first = asyncio.run(_events(client, _request("request-transient-1")))
+        final = _finalize(
+            _request(
+                "request-transient-2",
+                private_state=_private_state(first),
+                tool_results=(
+                    AgenticToolResult(
+                        "call-transient",
+                        "fixture_read",
+                        "application/json",
+                        b'{"value":4}',
+                        False,
+                    ),
+                ),
+            ),
+            "request-transient-2:finalize",
+        )
+        finalized = asyncio.run(_events(client, final))
+
+        next_turn = _request(
+            "request-transient-3",
+            private_state=_private_state(finalized),
+        )
+        events = asyncio.run(_events(client, next_turn))
+
+        self.assertEqual(events[-1].event_type, "completed")
+        payload = transport.payloads[-1]
+        self.assertEqual(payload["tool_choice"], "auto")
+        self.assertTrue(payload["tools"])
+        self.assertFalse(
+            any(
+                item.get("content") == HOSTED_FINALIZATION_INSTRUCTION
+                for item in payload["messages"]
+            )
+        )
+
     def _assert_mutations_fail_before_transport(self, client, transport, request) -> None:
         final_block = request.content_blocks[-1]
         mutations = (

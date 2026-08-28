@@ -1,8 +1,9 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-08-27
+Status date: 2026-08-28
 
-Target: Phase 3 hosted budget reservation and governed finalization implemented;
+Target: Phase 3 hosted budget reservation, governed finalization, and review
+closure implemented;
 remote agentic release remains **NO-GO**.
 
 Normative source: Maverick Agentic Multimodel Runtime specification, revision
@@ -96,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v12 / matrix
-  `2026-08-27-r12-p3-tcb5`
+- [x] Google and OpenRouter suite v13 / matrix
+  `2026-08-28-r13-p3-review-tcb5`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -234,8 +235,10 @@ completion claim.
   input/output/cost, and conservative missing-usage reservations from
   provider-step journal schema v3.
 - [x] Each hosted adapter pins a finalization policy. Google reserves two
-  2,048-token / 25,000-micro-USD / 20-second attempts; OpenRouter reserves two
-  2,048-token / 2,000-micro-USD / 20-second attempts. The second attempt is the
+  2,048-token / 200,000-micro-USD / 20-second attempts; OpenRouter reserves two
+  2,048-token / 20,000-micro-USD / 20-second attempts. Each cost allocation
+  covers the real conservative estimator with a maximum admitted tool result.
+  The second attempt is the
   sole permitted recovery. The live profile ceiling must retain the current
   final attempt plus any future recovery before dispatch.
 - [x] The controller exposes remaining provider steps, tool calls, output
@@ -248,11 +251,22 @@ completion claim.
 
 ### Toolless closure and terminal behavior
 
-- [x] Eligibility and credential availability are checked before catalog
-  materialization, request construction, egress decisions, or provider
-  transport. When tool calls are exhausted—or another protected resource
-  reaches its reserve—the next request is `finalization` with an empty Core
+- [x] Coarse eligibility and credential availability are checked before catalog
+  materialization. Request projection stages (but does not persist or audit)
+  egress decisions until the provider-specific cost preflight passes. An
+  exploration candidate that crosses the reserve is discarded and replaced by
+  a tool-less `finalization` candidate before any egress commit, request journal,
+  or provider transport. When tool calls are exhausted—or another protected
+  resource reaches its reserve—the next request likewise has an empty Core
   catalog and a final trusted system instruction placed last.
+- [x] Hosted synchronous tool dispatch has a pre-terminal deadline and
+  cancellation control. A slow read is CAS-fenced with an error result before
+  the reserve and cannot overwrite that disposition when it returns late;
+  finalization proceeds with the paired error. Ambiguous non-read effects remain
+  `execution_unknown` and quarantine fail closed.
+- [x] OpenRouter's finalization instruction is appended only to the current wire
+  payload. It is absent from the encrypted durable history, so a later
+  exploration turn receives tools and no stale closed-catalog instruction.
 - [x] OpenRouter serializes `tools: []` and `tool_choice: none`; Google omits
   `tools`. Both codecs require the exact Core finalization instruction and
   reject phase/catalog mismatches before transport. The operator live probes

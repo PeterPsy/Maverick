@@ -24,6 +24,9 @@ def openrouter_chat_payload(
     _validate_request_phase(request)
     new_messages = _new_messages(request, state)
     messages = [*state.history, *new_messages]
+    finalization_instruction = _finalization_instruction(request)
+    if finalization_instruction is not None:
+        messages.append({"role": "system", "content": finalization_instruction})
     if not messages:
         raise OpenRouterAgenticProtocolError("provider_request_invalid")
     payload: dict[str, object] = {
@@ -101,11 +104,6 @@ def _new_messages(
                     "content": _decode_utf8(result.content, pairing=True),
                 }
             )
-        finalization_instruction = _finalization_instruction(request)
-        if finalization_instruction is not None:
-            messages.append(
-                {"role": "system", "content": finalization_instruction}
-            )
         return tuple(messages)
     if any(
         value is not None
@@ -145,9 +143,6 @@ def _new_messages(
             values.insert(0, system_message)
     if not any(item["role"] == "user" for item in values):
         raise OpenRouterAgenticProtocolError("provider_request_invalid")
-    finalization_instruction = _finalization_instruction(request)
-    if finalization_instruction is not None:
-        values.append({"role": "system", "content": finalization_instruction})
     return tuple(values)
 
 

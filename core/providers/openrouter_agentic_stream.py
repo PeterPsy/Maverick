@@ -333,6 +333,8 @@ class OpenRouterChatStreamDecoder:
         private_state = encode_openrouter_chat_state(
             OpenRouterChatState(
                 schema_version=self.state.schema_version,
+                # Request-scoped controls such as the finalization instruction are
+                # deliberately absent from new_messages and never enter history.
                 history=(*self.state.history, *self.new_messages, assistant),
                 pending_tool_calls=tuple(pending),
                 consumed_tool_call_ids=tuple(consumed),

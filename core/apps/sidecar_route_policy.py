@@ -10,6 +10,7 @@ from core.apps.models import HttpSidecarRoutePolicy, HttpSidecarRouteRule
 
 
 _PARAMETER_SEGMENT = re.compile(r"^\{[A-Za-z][A-Za-z0-9_]*\}$")
+_SPLAT_PARAMETER_SEGMENT = re.compile(r"^\{\*[A-Za-z][A-Za-z0-9_]*\}$")
 _LITERAL_SEGMENT = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._~-]*$")
 _PERCENT_ESCAPE = re.compile(br"%[0-9A-Fa-f]{2}")
 _FORBIDDEN_RAW_ESCAPES = (b"%2f", b"%5c", b"%25", b"%2e")
@@ -27,15 +28,24 @@ def validate_route_template(value: str, *, static_tree: bool) -> str:
     if any(segment in {".", ".."} for segment in segments):
         raise ValueError("must not contain traversal segments")
     parameters: set[str] = set()
+    splat_seen = False
     for segment in segments:
         if not segment:
             continue
         if segment.startswith("{") or segment.endswith("}"):
-            if not _PARAMETER_SEGMENT.fullmatch(segment):
-                raise ValueError("dynamic parameters must be named and consume exactly one segment")
-            if segment in parameters:
+            ordinary = _PARAMETER_SEGMENT.fullmatch(segment) is not None
+            splat = _SPLAT_PARAMETER_SEGMENT.fullmatch(segment) is not None
+            if not ordinary and not splat:
+                raise ValueError(
+                    "dynamic parameters and splats must be named and occupy a complete segment"
+                )
+            parameter_name = segment.removeprefix("{*").removeprefix("{").removesuffix("}")
+            if parameter_name in parameters:
                 raise ValueError("dynamic parameter names must be unique within a template")
-            parameters.add(segment)
+            if splat and splat_seen:
+                raise ValueError("a route template may contain at most one named splat")
+            parameters.add(parameter_name)
+            splat_seen = splat_seen or splat
         elif "{" in segment or "}" in segment:
             raise ValueError("dynamic parameters must occupy a complete path segment")
         elif _LITERAL_SEGMENT.fullmatch(segment) is None:
@@ -104,16 +114,42 @@ def route_policy_mode(policy: HttpSidecarRoutePolicy, *, method: str, path: str)
 
 
 def route_rule_matches(rule: HttpSidecarRouteRule, *, method: str, path: str) -> bool:
-    """Match exact literal/one-segment templates, or an explicit safe static tree."""
+    """Match exact segment templates, or an explicit safe static tree.
+
+    A named splat consumes one or more canonical path segments.  Supporting one
+    such segment is necessary for upstream file APIs while keeping the
+    authorized literal prefix and suffix declarative and auditable.
+    """
     if rule.method is not None and rule.method != method and not (method == "HEAD" and rule.method == "GET"):
         return False
     if rule.static_tree:
         return path == rule.path_template or path.startswith(f"{rule.path_template}/")
     template_segments = rule.path_template.split("/")[1:]
     path_segments = path.split("/")[1:]
-    if len(template_segments) != len(path_segments):
+    splat_index = next(
+        (
+            index
+            for index, segment in enumerate(template_segments)
+            if _SPLAT_PARAMETER_SEGMENT.fullmatch(segment) is not None
+        ),
+        None,
+    )
+    if splat_index is None:
+        return len(template_segments) == len(path_segments) and _segments_match(
+            template_segments, path_segments
+        )
+    if len(path_segments) < len(template_segments):
         return False
-    return all(
+    prefix = template_segments[:splat_index]
+    suffix = template_segments[splat_index + 1 :]
+    return _segments_match(prefix, path_segments[:splat_index]) and _segments_match(
+        suffix,
+        path_segments[len(path_segments) - len(suffix) :] if suffix else [],
+    )
+
+
+def _segments_match(template_segments: list[str], path_segments: list[str]) -> bool:
+    return len(template_segments) == len(path_segments) and all(
         _PARAMETER_SEGMENT.fullmatch(template) is not None or template == actual
         for template, actual in zip(template_segments, path_segments)
     )

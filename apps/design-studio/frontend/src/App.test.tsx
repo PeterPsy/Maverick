@@ -10,24 +10,10 @@ import type { SidecarLaunch } from "./types";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const mocks = vi.hoisted(() => ({
-  requestLaunch: vi.fn(),
-  callBackend: vi.fn(),
-  startPoll: vi.fn(() => vi.fn()),
-}));
-
+const mocks = vi.hoisted(() => ({ requestLaunch: vi.fn() }));
 vi.mock("./api", async (importOriginal) => ({
   ...await importOriginal<typeof import("./api")>(),
   requestOpenDesignLaunch: mocks.requestLaunch,
-}));
-
-vi.mock("./backendApi", async (importOriginal) => ({
-  ...await importOriginal<typeof import("./backendApi")>(),
-  callDesignStudioBackend: mocks.callBackend,
-}));
-
-vi.mock("./startupStatusPolling", () => ({
-  startNonOverlappingPoll: mocks.startPoll,
 }));
 
 const LAUNCH: SidecarLaunch = {
@@ -40,25 +26,15 @@ const LAUNCH: SidecarLaunch = {
   sidecar_instance_id: "instance_12345678",
 };
 
-describe("Design Studio transactional frame readiness", () => {
+describe("Design Studio native OpenDesign host", () => {
   let container: HTMLDivElement;
   let root: Root;
-  let parentPostMessage: ReturnType<typeof vi.spyOn>;
-  let consoleInfo: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    window.history.replaceState({}, "", "/apps/design-studio?od_project_id=od_project_1");
-    sessionStorage.clear();
+    window.history.replaceState({}, "", "/apps/design-studio?od_project_id=project_1&od_conversation_id=conversation_1");
     mocks.requestLaunch.mockReset().mockResolvedValue(LAUNCH);
-    mocks.callBackend.mockReset().mockResolvedValue({
-      target: "empty",
-      od_project_id: "",
-      project: null,
-    });
-    mocks.startPoll.mockClear();
     vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => undefined);
-    parentPostMessage = vi.spyOn(window, "postMessage").mockImplementation(() => undefined);
-    consoleInfo = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    vi.spyOn(window, "postMessage").mockImplementation(() => undefined);
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -67,146 +43,61 @@ describe("Design Studio transactional frame readiness", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     container.remove();
-    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it("keeps 401/410/503-style iframe load events in bootstrapping", async () => {
+  it("launches the exact native deep link and has no replacement controls", async () => {
     const frame = await renderThroughBootstrap();
 
-    // Cross-origin iframe load events do not expose their HTTP status; these
-    // are intentionally identical to loads of 401, 410, and 503 documents.
-    for (const _status of [401, 410, 503]) {
-      await act(async () => {
-        frame.dispatchEvent(new Event("load"));
-      });
-      expect(hostPhase()).toBe("bootstrapping");
-    }
+    expect(mocks.requestLaunch).toHaveBeenCalledWith(
+      "design-studio",
+      "/projects/project_1/conversations/conversation_1",
+      window.location.origin,
+      expect.any(AbortSignal),
+    );
+    expect(container.querySelector("iframe")?.title).toBe("OpenDesign");
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.textContent).not.toContain("Nuovo progetto");
 
-    expect(firstPaintEvents()).toHaveLength(0);
-    expect(container.querySelector(".design-studio-toolbar")).toBeNull();
-    expect(container.querySelector(".design-studio-empty")).toBeNull();
+    await act(async () => frame.dispatchEvent(new Event("load")));
+    expect(container.querySelector("main")?.dataset.phase).toBe("ready");
   });
 
-  it("becomes ready only for the exact frame message and records it once", async () => {
-    vi.useFakeTimers();
-    vi.spyOn(performance, "now").mockReturnValueOnce(1).mockReturnValue(12);
-    const frame = await renderThroughBootstrap();
-    const frameWindow = frame.contentWindow;
-    expect(frameWindow).not.toBeNull();
+  it("requests a fresh authenticated launch instead of injecting navigation", async () => {
+    await renderThroughBootstrap();
+    mocks.requestLaunch.mockClear();
 
-    await dispatchReady(frameWindow, "https://untrusted.example", 1);
-    await dispatchReady(window, LAUNCH.origin, 1);
-    await dispatchReady(frameWindow, LAUNCH.origin, 2);
-    expect(hostPhase(), container.innerHTML).toBe("bootstrapping");
-    expect(firstPaintEvents()).toHaveLength(0);
-
-    await dispatchReady(frameWindow, LAUNCH.origin, 1);
-    expect(hostPhase()).toBe("ready");
-    expect(container.querySelector(".design-studio-toolbar")).toBeNull();
-    expect(firstPaintEvents()).toHaveLength(1);
-    expect(firstPaintEvents()[0]?.[1]).toMatchObject({
-      metric: "first_paint_ms",
-      source: "maverick.opendesign.ready",
-    });
-
-    const sidecarPostMessage = vi.mocked(frameWindow!.postMessage);
-    sidecarPostMessage.mockClear();
     await act(async () => {
       window.dispatchEvent(new MessageEvent("message", {
+        origin: window.location.origin,
+        source: window.parent,
         data: {
           type: "maverick.app.navigate",
           app_id: "design-studio",
-          params: { od_project_id: "od_project_1", open_tools_request_id: "tools-request-1" },
+          params: { od_project_id: "project_2", od_conversation_id: "conversation_2" },
         },
-        origin: window.location.origin,
-        source: window.parent,
       }));
+      await Promise.resolve();
+      await Promise.resolve();
     });
-    expect(sidecarPostMessage).toHaveBeenCalledWith({
-      type: "maverick.opendesign.open-tools",
-      version: 1,
-      request_id: "tools-request-1",
-    }, LAUNCH.origin);
-    await act(async () => {
-      window.dispatchEvent(new MessageEvent("message", {
-        data: { type: "maverick.opendesign.tools-opened", version: 1, request_id: "tools-request-1" },
-        origin: LAUNCH.origin,
-        source: frameWindow,
-      }));
-      await vi.advanceTimersByTimeAsync(250);
-    });
-    expect(sidecarPostMessage).toHaveBeenCalledTimes(1);
 
-    sidecarPostMessage.mockClear();
-    await act(async () => {
-      window.dispatchEvent(new MessageEvent("message", {
-        data: {
-          type: "maverick.app.navigate",
-          app_id: "design-studio",
-          params: {
-            od_project_id: "od_project_1",
-            open_settings_request_id: "settings-request-1",
-            settings_section: "designSystems",
-          },
-        },
-        origin: window.location.origin,
-        source: window.parent,
-      }));
-    });
-    expect(sidecarPostMessage).toHaveBeenCalledWith({
-      type: "maverick.opendesign.open-settings",
-      version: 1,
-      section: "designSystems",
-    }, LAUNCH.origin);
-
-    await dispatchReady(frameWindow, LAUNCH.origin, 1);
-    expect(firstPaintEvents()).toHaveLength(1);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_500);
-    });
-    expect(mocks.startPoll).not.toHaveBeenCalled();
+    expect(mocks.requestLaunch).toHaveBeenCalledWith(
+      "design-studio",
+      "/projects/project_2/conversations/conversation_2",
+      window.location.origin,
+      expect.any(AbortSignal),
+    );
   });
 
   async function renderThroughBootstrap(): Promise<HTMLIFrameElement> {
     await act(async () => {
       root.render(<App />);
+      await Promise.resolve();
+      await Promise.resolve();
     });
-    for (let index = 0; index < 4; index += 1) {
-      await act(async () => {
-        await Promise.resolve();
-      });
-    }
     const frame = container.querySelector("iframe");
     expect(frame).not.toBeNull();
-    if (frame?.contentWindow) {
-      vi.spyOn(frame.contentWindow, "postMessage").mockImplementation(() => undefined);
-    }
-    expect(hostPhase(), container.innerHTML).toBe("bootstrapping");
+    expect(container.querySelector("main")?.dataset.phase).toBe("bootstrapping");
     return frame as HTMLIFrameElement;
-  }
-
-  async function dispatchReady(
-    source: MessageEventSource | null,
-    origin: string,
-    version: number,
-  ): Promise<void> {
-    await act(async () => {
-      window.dispatchEvent(new MessageEvent("message", {
-        data: { type: "maverick.opendesign.ready", version },
-        origin,
-        source,
-      }));
-    });
-  }
-
-  function hostPhase(): string | undefined {
-    return container.querySelector("main")?.dataset.phase;
-  }
-
-  function firstPaintEvents(): unknown[][] {
-    return consoleInfo.mock.calls.filter(
-      (call: unknown[]) => call[0] === "maverick.opendesign.first-paint",
-    );
   }
 });

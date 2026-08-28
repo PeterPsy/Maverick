@@ -151,9 +151,11 @@ python3 apps/design-studio/service/sync_route_policy.py
 ```
 
 Authorized API rules use literal segments and named `{parameter}` segments;
-each parameter consumes exactly one segment. Unsafe authorized routes always
-name a method. App-provided regex, prefix matching, multi-segment splats,
-encoded slash/backslash/dot traversal, double encoding, and ambiguous paths are
+each ordinary parameter consumes exactly one segment. One named
+`{*project_path}` splat may consume one or more canonical segments inside the
+declared literal prefix and suffix. Unsafe authorized routes always name a
+method. App-provided regex, prefix matching, unnamed/repeated splats, encoded
+slash/backslash/dot traversal, double encoding, and ambiguous paths are
 rejected. A separate `static_tree` form is restricted to GET/HEAD roots outside
 `/api` for immutable web assets. Policy precedence remains blocked, then
 handled-by-core, then pass-through, with unknown routes denied.

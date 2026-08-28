@@ -27,6 +27,7 @@ MINIMAL_SIDECAR_ENV = {
 }
 RELAY_PROTOCOL_PREFIX = b"MAVERICK-SIDECAR-RELAY/1 "
 _SANDBOX_APP_ROOT = Path("/app")
+_SANDBOX_ROOTFS_APP_SOURCE_ROOT = Path("/maverick/app")
 _SANDBOX_DATA_ROOT = Path("/data")
 _SANDBOX_RELAY_SOCKET = Path("/relay/r.sock")
 _RUNTIME_READ_ONLY_DIRS = (Path("/etc/ssl"),)
@@ -128,7 +129,11 @@ def prepare_confined_sidecar_launch(
 
     source = _require_real_directory(source_root, label="sidecar source root")
     workspace = _require_real_directory(workspace_root, label="workspace root")
-    runtime_mount_arguments = _runtime_mount_arguments(sidecar)
+    execution_root = _resolve_execution_root(sidecar, artifact_mounts=artifact_mounts)
+    runtime_mount_arguments, relay_python, target_prefix = _runtime_mount_arguments(
+        sidecar,
+        artifact_root=execution_root is not None,
+    )
     app_data_path = workspace / "data" / app_id
     lexical_data = Path(os.path.abspath(data_root))
     try:
@@ -144,7 +149,8 @@ def prepare_confined_sidecar_launch(
     _ensure_real_directory(data, label="sidecar data root", create=True)
     _reject_symlink_components(lexical_data, anchor=workspace, label="sidecar data root")
 
-    workdir = (_SANDBOX_APP_ROOT / sidecar.working_directory).as_posix()
+    app_source_root = _SANDBOX_ROOTFS_APP_SOURCE_ROOT if execution_root is not None else _SANDBOX_APP_ROOT
+    workdir = (app_source_root / sidecar.working_directory).as_posix()
     relay_directory = _create_relay_directory(
         workspace=workspace,
         workspace_id=workspace_id,
@@ -175,25 +181,43 @@ def prepare_confined_sidecar_launch(
             "--tmpfs",
             "/",
         ]
-        for directory in (
-            "/usr",
-            "/usr/bin",
-            "/usr/lib",
-            "/usr/lib64",
-            "/usr/local",
-            "/usr/local/bin",
-            "/usr/local/lib",
-            "/etc",
-            "/etc/ssl",
-            "/app",
-            "/artifacts",
-            "/data",
-            "/relay",
-            "/maverick",
-            "/proc",
-            "/dev",
-            "/tmp",
-        ):
+        if execution_root is not None:
+            command.extend(_execution_root_mount_arguments(execution_root))
+            scaffold = (
+                "/artifacts",
+                "/data",
+                "/relay",
+                "/maverick",
+                "/maverick/app",
+                "/maverick/python",
+                "/maverick/python/lib",
+                "/maverick/python/glibc",
+                "/proc",
+                "/dev",
+                "/tmp",
+                "/run",
+            )
+        else:
+            scaffold = (
+                "/usr",
+                "/usr/bin",
+                "/usr/lib",
+                "/usr/lib64",
+                "/usr/local",
+                "/usr/local/bin",
+                "/usr/local/lib",
+                "/etc",
+                "/etc/ssl",
+                "/app",
+                "/artifacts",
+                "/data",
+                "/relay",
+                "/maverick",
+                "/proc",
+                "/dev",
+                "/tmp",
+            )
+        for directory in scaffold:
             command.extend(["--dir", directory])
         command.extend(runtime_mount_arguments)
         for artifact_mount in artifact_mounts:
@@ -210,12 +234,14 @@ def prepare_confined_sidecar_launch(
             )
         command.extend(
             [
-                "--file",
-                str(passwd_fd),
-                "/etc/passwd",
+                *(
+                    []
+                    if execution_root is not None
+                    else ["--file", str(passwd_fd), "/etc/passwd"]
+                ),
                 "--ro-bind",
                 str(source),
-                "/app",
+                app_source_root.as_posix(),
                 "--bind",
                 str(data),
                 "/data",
@@ -231,13 +257,14 @@ def prepare_confined_sidecar_launch(
                 "/dev",
                 "--tmpfs",
                 "/tmp",
+                *(["--tmpfs", "/run"] if execution_root is not None else []),
                 "--dir",
                 "/tmp/home",
                 "--remount-ro",
                 "/",
                 "--chdir",
                 workdir,
-                "/usr/bin/python3",
+                *relay_python,
                 "/maverick/sidecar_relay.py",
                 "--relay-socket",
                 str(_SANDBOX_RELAY_SOCKET),
@@ -256,7 +283,8 @@ def prepare_confined_sidecar_launch(
                 "--request-concurrency",
                 str(policy.limits.request_concurrency),
                 "--",
-                *sidecar.command,
+                *target_prefix,
+                *(sidecar.command[1:] if execution_root is not None else sidecar.command),
             ]
         )
     except Exception:
@@ -271,7 +299,7 @@ def prepare_confined_sidecar_launch(
         raise
     return ConfinedSidecarLaunch(
         command=command,
-        env=dict(env),
+        env={**env, **({"PYTHONHOME": "/maverick/python"} if execution_root is not None else {})},
         relay_directory=relay_directory,
         relay_socket=relay_socket,
         relay_capability=capability,
@@ -319,7 +347,11 @@ def _trusted_bubblewrap_binary() -> str:
     return str(path)
 
 
-def _runtime_mount_arguments(sidecar: HttpSidecarSpec) -> list[str]:
+def _runtime_mount_arguments(
+    sidecar: HttpSidecarSpec,
+    *,
+    artifact_root: bool,
+) -> tuple[list[str], list[str], list[str]]:
     python_binary = Path(sys.executable).resolve()
     python_stdlib = Path(sysconfig.get_path("stdlib")).resolve()
     multiarch = str(sysconfig.get_config_var("MULTIARCH") or "").strip()
@@ -327,6 +359,35 @@ def _runtime_mount_arguments(sidecar: HttpSidecarSpec) -> list[str]:
     required_paths = (python_binary, python_stdlib, shared_libraries, Path("/usr/lib64"))
     if any(not path.exists() for path in required_paths):
         raise AppHostingError("The minimal Python sidecar runtime closure is unavailable.")
+    if artifact_root:
+        loader = Path("/usr/lib64/ld-linux-x86-64.so.2").resolve()
+        if not loader.is_file():
+            raise AppHostingError("The sidecar relay dynamic loader is unavailable.")
+        arguments = [
+            "--ro-bind",
+            str(loader),
+            "/maverick/python/ld.so",
+            "--ro-bind",
+            str(python_binary),
+            "/maverick/python/python3",
+            "--ro-bind",
+            str(python_stdlib),
+            f"/maverick/python/lib/{python_stdlib.name}",
+            "--ro-bind",
+            str(shared_libraries),
+            "/maverick/python/glibc",
+        ]
+        relay_python = [
+            "/maverick/python/ld.so",
+            "--library-path",
+            "/maverick/python/glibc",
+            "/maverick/python/python3",
+        ]
+        if sidecar.runtime != "python" or sidecar.command[0] not in {"python", "python3"}:
+            raise AppHostingError(
+                "Artifact-root sidecars currently require a declared Python host launcher."
+            )
+        return arguments, relay_python, relay_python
     arguments = [
         "--ro-bind",
         str(python_binary),
@@ -368,6 +429,54 @@ def _runtime_mount_arguments(sidecar: HttpSidecarSpec) -> list[str]:
     for source in _RUNTIME_READ_ONLY_DIRS:
         if source.exists():
             arguments.extend(["--ro-bind", source.as_posix(), source.as_posix()])
+    return arguments, ["/usr/bin/python3"], []
+
+
+def _resolve_execution_root(
+    sidecar: HttpSidecarSpec,
+    *,
+    artifact_mounts: tuple[ResolvedArtifactMount, ...],
+) -> Path | None:
+    declaration = sidecar.root_filesystem
+    if declaration is None:
+        return None
+    matches = [mount for mount in artifact_mounts if mount.artifact_id == declaration.artifact_id]
+    if len(matches) != 1:
+        raise AppHostingError("Sidecar execution root does not resolve to one declared artifact.")
+    namespace = matches[0].source.resolve(strict=True)
+    current = namespace
+    for component in declaration.subpath.split("/"):
+        current /= component
+        if current.is_symlink():
+            raise AppHostingError("Sidecar execution root cannot contain symlink components.")
+    root = _require_real_directory(current, label="sidecar execution root")
+    try:
+        root.relative_to(namespace)
+    except ValueError as error:
+        raise AppHostingError("Sidecar execution root escapes its artifact namespace.") from error
+    return root
+
+
+def _execution_root_mount_arguments(root: Path) -> list[str]:
+    """Assemble an OCI-style root from unchanged read-only top-level trees."""
+    mutable = {"dev", "proc", "run", "tmp"}
+    arguments: list[str] = []
+    entries = sorted(root.iterdir(), key=lambda item: item.name)
+    if not entries:
+        raise AppHostingError("Sidecar execution root is empty.")
+    for entry in entries:
+        metadata = entry.lstat()
+        if (
+            entry.name in {"", ".", ".."}
+            or "/" in entry.name
+            or stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISDIR(metadata.st_mode)
+        ):
+            raise AppHostingError("Sidecar execution root has an unsupported top-level entry.")
+        if entry.name in mutable:
+            continue
+        target = f"/{entry.name}"
+        arguments.extend(["--dir", target, "--ro-bind", str(entry), target])
     return arguments
 
 

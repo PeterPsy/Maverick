@@ -37,6 +37,40 @@ class SidecarRoutePolicyTestCase(unittest.TestCase):
         self.assertFalse(route_rule_matches(project, method="GET", path="/api/projects/project-a/terminals"))
         self.assertFalse(route_rule_matches(project, method="GET", path="/api/projects/a/b"))
 
+    def test_named_splat_matches_one_or_more_segments_inside_an_exact_template(self) -> None:
+        raw_file = _rule("GET", "/api/projects/{project_id}/raw/{*project_path}")
+        version = _rule(
+            "GET",
+            "/api/projects/{project_id}/files/{*project_path}/versions/{version_id}",
+        )
+
+        self.assertTrue(
+            route_rule_matches(raw_file, method="GET", path="/api/projects/p1/raw/index.html")
+        )
+        self.assertTrue(
+            route_rule_matches(raw_file, method="GET", path="/api/projects/p1/raw/src/app.tsx")
+        )
+        self.assertFalse(route_rule_matches(raw_file, method="GET", path="/api/projects/p1/raw"))
+        self.assertTrue(
+            route_rule_matches(
+                version,
+                method="GET",
+                path="/api/projects/p1/files/src/app.tsx/versions/v2",
+            )
+        )
+        self.assertFalse(
+            route_rule_matches(
+                version,
+                method="GET",
+                path="/api/projects/p1/files/versions/v2",
+            )
+        )
+
+        self.assertEqual(
+            validate_route_template(raw_file.path_template, static_tree=False),
+            raw_file.path_template,
+        )
+
     def test_blocked_precedes_core_and_passthrough_and_unknown_is_denied(self) -> None:
         same = "/api/projects/{project_id}/danger"
         policy = HttpSidecarRoutePolicy(
@@ -64,9 +98,11 @@ class SidecarRoutePolicyTestCase(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 validate_route_template(invalid, static_tree=True)
 
-    def test_template_validation_rejects_regex_splats_and_partial_parameters(self) -> None:
+    def test_template_validation_rejects_unsafe_splats_and_partial_parameters(self) -> None:
         for invalid in (
-            "/api/projects/{*path}",
+            "/api/projects/{*}",
+            "/api/projects/{*path}/{*rest}",
+            "/api/projects/{path}/{*path}",
             "/api/projects/:id",
             "/api/projects/{id}.json",
             "/api/projects/(.*)",

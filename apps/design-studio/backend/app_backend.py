@@ -1,57 +1,52 @@
-"""Mounted backend entrypoint for Design Studio."""
+"""Thin Design Studio backend; native product operations stay in OpenDesign."""
 
 from __future__ import annotations
 
 from pathlib import Path
-import sys
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+import json
+import stat
+from typing import Any
 
 from core.app_sdk.runtime import backend_response, emit_json, read_entrypoint_payload
-from service import DesignStudioError, dispatch
 
 
 def main() -> None:
     payload = read_entrypoint_payload()
-    sidecar_core_handler = payload.raw.get("surface") == "sidecar_core_handler"
     action = str(payload.body.get("action") or "state")
-    if sidecar_core_handler:
-        action = "sidecar_core_route"
-    arguments = payload.body.get("arguments", payload.body)
-    if not isinstance(arguments, dict):
-        arguments = {}
+    if action not in {"state", "status"}:
+        emit_json(
+            backend_response(
+                404,
+                {
+                    "error": "unsupported_action",
+                    "detail": "Native OpenDesign operations are not intercepted by Maverick.",
+                },
+            )
+        )
+        return
+    emit_json(backend_response(200, _status(Path(payload.data_root))))
+
+
+def _status(data_root: Path) -> dict[str, Any]:
+    return {
+        "mode": "official-native",
+        "app_id": "design-studio",
+        "native_data_owner": "opendesign",
+        "host": _read_json(data_root / "native-host-status.json"),
+        "bridges": _read_json(data_root / "bridge-capabilities.json"),
+        "intercepts_native_routes": False,
+    }
+
+
+def _read_json(path: Path) -> dict[str, Any]:
     try:
-        result = dispatch(action, payload.raw, arguments)
-    except DesignStudioError as error:
-        emit_json(backend_response(error.status_code, {"error": error.error, "detail": error.detail}))
-        return
-    if sidecar_core_handler and "status_code" in result and ("json" in result or "body" in result):
-        emit_json(result)
-        return
-    response = backend_response(200, result)
-    if action in {
-        "create_project",
-        "import_from_storage",
-        "record_storage_import_result",
-        "export_to_storage",
-        "record_storage_export_result",
-        "set_view_filter",
-        "set_custom_view",
-        "clear_custom_view",
-    }:
-        response["app_events"] = [
-            {
-                "type": "maverick.app.data-changed",
-                "owner_app_id": payload.app_id or "design-studio",
-                "resource": "state",
-            },
-            {
-                "type": "maverick.app.data-changed",
-                "owner_app_id": payload.app_id or "design-studio",
-                "resource": "view-state",
-            },
-        ]
-    emit_json(response)
+        metadata = path.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            return {}
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 if __name__ == "__main__":

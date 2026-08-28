@@ -14,6 +14,7 @@ from core.apps.contracts import (
     build_app_services,
     build_http_sidecar_browser_origin,
     build_http_sidecar_artifact_mount,
+    build_http_sidecar_root_filesystem,
     build_http_sidecar_entrypoint_access,
     build_http_sidecar_entrypoint_surface,
     build_http_sidecar_logs,
@@ -49,6 +50,10 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(
                 loaded.contract.services.http_sidecars[0].artifact_mounts[0].mount_path,
                 "/artifacts/opendesign",
+            )
+            self.assertEqual(
+                loaded.contract.services.http_sidecars[0].root_filesystem.subpath,
+                "official/release/rootfs",
             )
             self.assertTrue(loaded.contract.services.http_sidecars[0].prewarm.on_core_start)
             self.assertEqual(loaded.contract.services.http_sidecars[0].browser_origin.mode, "isolated")
@@ -86,6 +91,22 @@ class AppContractServiceTests(unittest.TestCase):
                 restored_sidecar.entrypoint_access.surfaces[2].routes[0].path_template,
                 "/api/projects/{id}",
             )
+            self.assertEqual(restored_sidecar.root_filesystem.subpath, "official/release/rootfs")
+
+    def test_artifact_root_filesystem_is_bounded_to_a_declared_namespace(self) -> None:
+        mutations = (
+            ({"artifact_id": "missing", "subpath": "official/release/rootfs"}, "artifact mount"),
+            ({"artifact_id": "opendesign", "subpath": "../rootfs"}, "canonical path"),
+            ({"artifact_id": "opendesign", "subpath": "/rootfs"}, "canonical path"),
+        )
+        for root_filesystem, expected in mutations:
+            with self.subTest(root_filesystem=root_filesystem), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                payload["services"]["http_sidecars"][0]["root_filesystem"] = root_filesystem
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+                with self.assertRaisesRegex(AppContractValidationError, expected):
+                    parse_app_contract_file(app_root)
 
     def test_parse_contract_accepts_provider_model_proxy_permission(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -132,7 +153,7 @@ class AppContractServiceTests(unittest.TestCase):
         mutations = (
             ({"method": "GET", "path_prefix": "/api/projects"}, "path_prefix"),
             ({"path_template": "/api/projects/{id}"}, "method"),
-            ({"method": "POST", "path_template": "/api/projects/{*path}"}, "one segment"),
+            ({"method": "POST", "path_template": "/api/projects/{*}"}, "must be named"),
             ({"method": "GET", "path_template": "/api/projects", "static_tree": True}, "outside"),
         )
         for replacement, expected in mutations:
@@ -326,6 +347,10 @@ class AppContractServiceTests(unittest.TestCase):
                                 "OD_ARTIFACT_ROOT": "${artifact.opendesign}",
                             },
                             artifact_mounts=[build_http_sidecar_artifact_mount(artifact_id="opendesign")],
+                            root_filesystem=build_http_sidecar_root_filesystem(
+                                artifact_id="opendesign",
+                                subpath="official/release/rootfs",
+                            ),
                             prewarm=build_http_sidecar_prewarm(),
                             process_policy=build_http_sidecar_process_policy(
                                 memory_bytes=2 * 1024 * 1024 * 1024,

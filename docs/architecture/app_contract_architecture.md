@@ -936,13 +936,25 @@ Sandbox-compatible sidecars must bind only to loopback. Apps that expose sidecar
 Rules use `path_template`, not a prefix. Literal segments match exactly and a
 named segment such as `{project_id}` consumes one non-empty segment. Authorized
 pass-through and handled-by-core rules must declare a method; HEAD may use a GET
-rule. Regex, colon syntax, partial parameters, multi-segment splats, percent
-encoding in templates, and ambiguous/traversal forms are invalid. The only
+rule. One named splat such as `{*project_path}` may consume one or more
+canonical segments while preserving the declared literal prefix and suffix;
+this supports file APIs without granting a regex or global prefix. Regex,
+colon syntax, partial or repeated splats, percent encoding in templates, and
+ambiguous/traversal forms are invalid. The only
 tree match is `static_tree: true`, restricted to GET/HEAD roots outside `/api`
 for web assets such as `/_next`. Incoming paths are canonicalized once and
 encoded slash/backslash/dot traversal or double encoding fails before policy
 selection. `blocked` takes precedence over `handled_by_core`, which takes
 precedence over `pass_through`; every unknown method/template is denied.
+
+An app that installs a complete official runtime may select a protected
+artifact subtree with `root_filesystem`. Core assembles its verified top-level
+trees as the sidecar's read-only execution root while retaining the same outer
+network namespace, Unix relay, app-data mount, source read-only mount, and
+resource limits. The declaration must reference an existing `artifact_mounts`
+id and a canonical relative `subpath`; symlinked or escaping roots fail closed.
+This capability mounts an artifact unchanged and does not permit an app overlay
+or a host-root fallback.
 
 The core owns process lifecycle, technical token injection, app data-root substitution, route-policy enforcement, auth, workspace membership, app visibility, and error translation. The sidecar owns only its app protocol behind the loopback boundary. A frontend must call a sidecar through the generic core route:
 

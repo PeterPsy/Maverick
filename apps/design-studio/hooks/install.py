@@ -1,51 +1,60 @@
-"""Install hook for Design Studio."""
+"""Install the selected unchanged official OpenDesign release."""
 
 from __future__ import annotations
 
 from pathlib import Path
-import json
+import stat
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
-
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
-from store import ensure_state
+from core.apps.artifact_mounts import create_artifact_namespace
+from core.shared.repository import discover_repository_root
+
+
+APP_ROOT = Path(__file__).resolve().parents[1]
+SERVICE_ROOT = APP_ROOT / "service"
+sys.path.insert(0, str(SERVICE_ROOT))
+
+from official_opendesign_release import install_official_release, load_official_release  # noqa: E402
 
 
 def main() -> None:
     payload = read_entrypoint_payload()
-    ensure_state(payload.data_root)
-    result = {"ok": True}
-    if _declares_protected_store():
-        service_root = Path(__file__).resolve().parents[1] / "service"
-        sys.path.insert(0, str(service_root))
-        from opendesign_artifact_operations import run_artifact_operation
-
-        provisioned = run_artifact_operation(
-            "provision",
-            data_root=Path(payload.data_root),
-            workspace_id=str(payload.workspace_id or "default"),
-        )
-        result["artifact_store"] = {
-            "status": provisioned["status"],
-            "store_generation": provisioned["store_generation"],
-            "staging_recovery": provisioned["staging_recovery"],
-            "runtime_artifact_sha256": provisioned["runtime_artifact_sha256"],
-            "retained_runtime_artifacts": provisioned["retained_runtime_artifacts"],
-            "web_overlay_sha256": provisioned["web_overlay_sha256"],
-            "retained_web_overlays": provisioned["retained_web_overlays"],
+    if payload.app_id not in {"", "design-studio"}:
+        raise SystemExit("Design Studio install payload has the wrong app identity.")
+    data_dir = _ensure_real_directory(Path(payload.data_root) / "opendesign-native")
+    _ensure_real_directory(Path(payload.data_root) / "delegations")
+    release = load_official_release()
+    namespace = create_artifact_namespace(
+        repository_root=discover_repository_root(start_path=APP_ROOT),
+        app_id="design-studio",
+        artifact_id="opendesign",
+    )
+    installation = install_official_release(namespace / "official" / release.digest_key, release=release)
+    emit_json(
+        {
+            "ok": True,
+            "mode": "official-native",
+            "data_directory": data_dir.name,
+            "official_release": {
+                "image": release.image,
+                "version": release.version,
+                "manifest_digest": release.manifest_digest,
+                "source_commit": release.source_commit,
+                "rootfs_snapshot_sha256": installation.rootfs_snapshot_sha256,
+                "customizations": [],
+            },
         }
-    emit_json(result)
+    )
 
 
-def _declares_protected_store() -> bool:
-    contract_path = Path(__file__).resolve().parents[1] / "app_contract.json"
-    try:
-        contract = json.loads(contract_path.read_text(encoding="utf-8"))
-        sidecars = contract["services"]["http_sidecars"]
-    except (OSError, json.JSONDecodeError, KeyError, TypeError):
-        return False
-    return any(sidecar.get("artifact_mounts") for sidecar in sidecars if isinstance(sidecar, dict))
+def _ensure_real_directory(path: Path) -> Path:
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    metadata = path.lstat()
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise SystemExit(f"Design Studio data path must be a real directory: {path.name}")
+    path.chmod(0o700)
+    return path.resolve(strict=True)
 
 
 if __name__ == "__main__":

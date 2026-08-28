@@ -47,6 +47,7 @@ from core.apps.models import (
     HttpSidecarPrewarmSpec,
     HttpSidecarProxySpec,
     HttpSidecarResourceLimits,
+    HttpSidecarRootFilesystemSpec,
     HttpSidecarRoutePolicy,
     HttpSidecarRouteRule,
     HttpSidecarSpec,
@@ -366,6 +367,7 @@ def build_http_sidecar_spec(
     env: dict[str, str] | None = None,
     process_policy: HttpSidecarProcessPolicy | None = None,
     artifact_mounts: list[HttpSidecarArtifactMountSpec] | None = None,
+    root_filesystem: HttpSidecarRootFilesystemSpec | None = None,
     prewarm: HttpSidecarPrewarmSpec | None = None,
     diagnostics: HttpSidecarDiagnosticsSpec | None = None,
     browser_origin: HttpSidecarBrowserOriginSpec | None = None,
@@ -385,6 +387,7 @@ def build_http_sidecar_spec(
         env=env or {},
         process_policy=process_policy or build_http_sidecar_process_policy(),
         artifact_mounts=artifact_mounts or [],
+        root_filesystem=root_filesystem,
         prewarm=prewarm,
         diagnostics=diagnostics,
         browser_origin=browser_origin,
@@ -402,6 +405,13 @@ def build_http_sidecar_artifact_mount(*, artifact_id: str) -> HttpSidecarArtifac
         artifact_id=artifact_id,
         mount_path=f"/artifacts/{artifact_id}",
     )
+
+
+def build_http_sidecar_root_filesystem(
+    *, artifact_id: str, subpath: str
+) -> HttpSidecarRootFilesystemSpec:
+    """Build one artifact-backed, read-only sidecar execution root."""
+    return HttpSidecarRootFilesystemSpec(artifact_id=artifact_id, subpath=subpath)
 
 
 def build_http_sidecar_prewarm(

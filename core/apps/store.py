@@ -51,6 +51,7 @@ from core.apps.models import (
     HttpSidecarPrewarmSpec,
     HttpSidecarProxySpec,
     HttpSidecarResourceLimits,
+    HttpSidecarRootFilesystemSpec,
     HttpSidecarRoutePolicy,
     HttpSidecarRouteRule,
     HttpSidecarSpec,
@@ -426,6 +427,14 @@ def _app_services(payload: Any) -> AppServicesDeclaration:
                     for item in sidecar.get("artifact_mounts", [])
                     if isinstance(item, dict)
                 ],
+                root_filesystem=(
+                    HttpSidecarRootFilesystemSpec(
+                        artifact_id=str(sidecar["root_filesystem"]["artifact_id"]),
+                        subpath=str(sidecar["root_filesystem"]["subpath"]),
+                    )
+                    if isinstance(sidecar.get("root_filesystem"), dict)
+                    else None
+                ),
                 prewarm=(
                     HttpSidecarPrewarmSpec(**sidecar["prewarm"])
                     if isinstance(sidecar.get("prewarm"), dict)

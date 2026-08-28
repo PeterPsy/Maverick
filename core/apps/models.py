@@ -406,6 +406,14 @@ class HttpSidecarArtifactMountSpec:
 
 
 @dataclass(frozen=True)
+class HttpSidecarRootFilesystemSpec:
+    """Select a verified artifact subtree as the sidecar's read-only root."""
+
+    artifact_id: str
+    subpath: str
+
+
+@dataclass(frozen=True)
 class HttpSidecarPrewarmSpec:
     """Declare when Core should start and retain one sidecar."""
 
@@ -434,6 +442,7 @@ class HttpSidecarSpec:
     env: dict[str, str]
     process_policy: HttpSidecarProcessPolicy
     artifact_mounts: list[HttpSidecarArtifactMountSpec]
+    root_filesystem: HttpSidecarRootFilesystemSpec | None
     prewarm: HttpSidecarPrewarmSpec | None
     diagnostics: HttpSidecarDiagnosticsSpec | None
     browser_origin: HttpSidecarBrowserOriginSpec | None

@@ -28,6 +28,7 @@ from core.apps.contract_parser_sidecar_artifacts import (
     parse_sidecar_artifact_mounts,
     parse_sidecar_diagnostics,
     parse_sidecar_prewarm,
+    parse_sidecar_root_filesystem,
 )
 from core.apps.contract_parser_sidecar_policy import (
     parse_browser_origin,
@@ -93,6 +94,7 @@ def _parse_http_sidecar(
             "env",
             "process_policy",
             "artifact_mounts",
+            "root_filesystem",
             "prewarm",
             "diagnostics",
             "browser_origin",
@@ -128,6 +130,16 @@ def _parse_http_sidecar(
         label=label,
     )
     artifact_mounts = parse_sidecar_artifact_mounts(payload.get("artifact_mounts", []), label=label)
+    root_filesystem_payload = payload.get("root_filesystem")
+    root_filesystem = (
+        parse_sidecar_root_filesystem(
+            _expect_mapping(root_filesystem_payload, label=f"{label}.root_filesystem"),
+            artifact_ids={mount.artifact_id for mount in artifact_mounts},
+            label=label,
+        )
+        if root_filesystem_payload is not None
+        else None
+    )
     prewarm_payload = payload.get("prewarm")
     prewarm = (
         parse_sidecar_prewarm(_expect_mapping(prewarm_payload, label=f"{label}.prewarm"), label=label)
@@ -183,6 +195,7 @@ def _parse_http_sidecar(
         ),
         process_policy=process_policy,
         artifact_mounts=artifact_mounts,
+        root_filesystem=root_filesystem,
         prewarm=prewarm,
         diagnostics=diagnostics,
         browser_origin=browser_origin,

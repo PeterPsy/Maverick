@@ -2,15 +2,15 @@
   "app_id": "design-studio",
   "contract_version": "1.0",
   "name": "Design Studio",
-  "version": "0.1.0",
-  "description": "Generate, inspect, and export UI design artifacts using OpenDesign inside Maverick.",
+  "version": "0.2.0",
+  "description": "Host an unchanged official OpenDesign installation with optional naked-model and external-delegation bridges.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
       "interface": "design.studio",
       "version": "1",
-      "description": "Governed design projects, Storage imports and exports, and OpenDesign sidecar status.",
+      "description": "Native OpenDesign hosting and bounded external delegation.",
       "surfaces": [
         "backend",
         "cli",
@@ -73,9 +73,9 @@
       "outbound": []
     },
     "runtime": {
-      "create_sessions": true,
-      "cleanup_sessions": true,
-      "receive_cleanup_callbacks": true
+      "create_sessions": false,
+      "cleanup_sessions": false,
+      "receive_cleanup_callbacks": false
     },
     "host": {
       "telemetry": false
@@ -88,23 +88,14 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "design_studio_state",
-      "design_studio_create_project",
-      "design_studio_get_project",
-      "design_studio_import_from_storage",
-      "design_studio_export_to_storage",
-      "design_studio_view_filter",
-      "design_studio_set_view_filter",
-      "design_studio_set_custom_view",
-      "design_studio_clear_custom_view",
-      "design_studio_reference_manifest",
-      "design_studio_reference_search",
-      "design_studio_reference_resolve",
-      "design_studio_reference_summarize"
+      "design_studio_delegate",
+      "design_studio_delegation_status",
+      "design_studio_cancel_delegation",
+      "design_studio_delegation_result",
+      "design_studio_state"
     ],
     "cli_commands": [
-      "design-studio",
-      "dev"
+      "design-studio"
     ],
     "skills": [
       "design-studio-ops"
@@ -114,61 +105,15 @@
     ],
     "data_events": [
       {
-        "resource": "state",
-        "description": "Design Studio adapter import/export jobs or view state changed."
-      },
-      {
-        "resource": "view-state",
-        "description": "Design Studio filters or curated project selection changed."
+        "resource": "delegation",
+        "description": "A bounded external OpenDesign delegation changed state."
       }
     ],
-    "view_surfaces": [
-      {
-        "view_id": "main",
-        "display_name": "Design Studio",
-        "entity_types": [
-          "design_project"
-        ],
-        "state_actions": [
-          {
-            "action": "view_filter",
-            "standard": true,
-            "description": "Read the current Design Studio view filter."
-          },
-          {
-            "action": "set_view_filter",
-            "standard": true,
-            "description": "Set the current Design Studio search filter."
-          },
-          {
-            "action": "set_custom_view",
-            "standard": true,
-            "description": "Show a curated Design Studio project selection."
-          },
-          {
-            "action": "clear_custom_view",
-            "standard": true,
-            "description": "Return Design Studio to the default project list."
-          },
-          {
-            "action": "import_from_storage",
-            "standard": false,
-            "description": "Import a Storage file into a design project."
-          },
-          {
-            "action": "export_to_storage",
-            "standard": false,
-            "description": "Export a terminal OpenDesign run package and project files to Storage."
-          }
-        ],
-        "supports_custom_view": false,
-        "supports_filter_refinement": true
-      }
-    ],
+    "view_surfaces": [],
     "reference_entities": [
       {
         "entity_type": "design_project",
-        "display_name": "Design project",
+        "display_name": "OpenDesign project",
         "searchable": true,
         "resolvable": true,
         "summarizable": true,
@@ -180,11 +125,7 @@
     "hooks": {
       "install": "hooks/install.py",
       "migrate": "hooks/migrate.py",
-      "health_check": "hooks/health_check.py",
-      "backend_recovery": "hooks/backend_recovery.py",
-      "artifact_repair": "hooks/artifact_repair.py",
-      "background_tick": "hooks/background_tick.py",
-      "runtime_event": "backend/app_backend.py"
+      "health_check": "hooks/health_check.py"
     },
     "backend": "backend/app_backend.py",
     "frontend": "frontend/dist",
@@ -194,10 +135,10 @@
   },
   "storage": {
     "storage_kind": "json+files",
-    "data_schema_version": "2",
+    "data_schema_version": "3",
     "primary_paths": [
-      "data/design-studio/adapter-state.json",
-      "data/design-studio/opendesign"
+      "data/design-studio/opendesign-native",
+      "data/design-studio/delegations"
     ],
     "indices": null,
     "supports_export": true,
@@ -211,14 +152,14 @@
   },
   "hook_timeouts": {
     "backend_seconds": 60,
-    "install_seconds": 60,
-    "upgrade_seconds": 120,
+    "install_seconds": 180,
+    "upgrade_seconds": 300,
     "migrate_seconds": 300,
     "export_seconds": 120,
     "import_seconds": 120,
     "validate_after_import_seconds": 60,
     "repair_after_import_seconds": 180,
-    "health_check_seconds": 30
+    "health_check_seconds": 60
   },
   "lifecycle": {
     "install": true,
@@ -241,46 +182,11 @@
     "import_failure": "preserve_payload_mark_failed"
   },
   "rollback_support": {
-    "bundle": false,
-    "data": false,
+    "bundle": true,
+    "data": true,
     "repair_only": false
   },
-  "widgets": [
-    {
-      "widget_id": "design-studio-sidebar",
-      "host": "base-shell",
-      "content_kinds": [
-        "shell.sidebar.primary"
-      ],
-      "frontend": {
-        "kind": "iframe",
-        "mount": "frontend/dist/widgets/design-studio-sidebar",
-        "spa_fallback": true
-      },
-      "actions": {
-        "backend": true,
-        "mcp": false,
-        "cli": false
-      }
-    },
-    {
-      "widget_id": "design-studio-sidebar-footer",
-      "host": "base-shell",
-      "content_kinds": [
-        "shell.sidebar.footer"
-      ],
-      "frontend": {
-        "kind": "iframe",
-        "mount": "frontend/dist/widgets/design-studio-sidebar-footer",
-        "spa_fallback": true
-      },
-      "actions": {
-        "backend": true,
-        "mcp": false,
-        "cli": false
-      }
-    }
-  ],
+  "widgets": [],
   "services": {
     "http_sidecars": [
       {
@@ -299,8 +205,10 @@
           "OD_REQUIRE_API_TOKEN_ON_LOOPBACK": "1",
           "DO_NOT_TRACK": "1",
           "NEXT_TELEMETRY_DISABLED": "1",
-          "MAVERICK_OPENDESIGN_DATA_ROOT": "${app.data_dir}/opendesign",
-          "MAVERICK_OPENDESIGN_STORE_ROOT": "${artifact.opendesign}"
+          "MAVERICK_OPENDESIGN_DATA_DIR": "${app.data_dir}/opendesign-native",
+          "MAVERICK_OPENDESIGN_STORE_ROOT": "${artifact.opendesign}",
+          "MAVERICK_OPENDESIGN_MODEL_BRIDGE": "disabled",
+          "MAVERICK_OPENDESIGN_DELEGATION_BRIDGE": "disabled"
         },
         "artifact_mounts": [
           {
@@ -315,7 +223,7 @@
           "keep_alive": true
         },
         "diagnostics": {
-          "status_file": "opendesign/launcher-status.json"
+          "status_file": "native-host-status.json"
         },
         "process_policy": {
           "inherit_host_env": false,
@@ -346,7 +254,7 @@
         },
         "entrypoint_access": {
           "ttl_seconds": 30,
-          "request_budget": 16,
+          "request_budget": 64,
           "max_request_body_bytes": 14680064,
           "max_response_body_bytes": 67108864,
           "streaming": false,
@@ -375,24 +283,36 @@
                   "path_template": "/api/projects/{id}/conversations"
                 },
                 {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}/conversations/{cid}/messages"
+                },
+                {
                   "method": "PUT",
                   "path_template": "/api/projects/{id}/conversations/{cid}/messages/{mid}"
                 },
                 {
-                  "method": "GET",
-                  "path_template": "/api/projects/{id}/files"
-                },
-                {
                   "method": "POST",
                   "path_template": "/api/projects/{id}/files"
                 },
                 {
+                  "method": "POST",
+                  "path_template": "/api/runs"
+                },
+                {
                   "method": "GET",
-                  "path_template": "/api/projects/{id}/raw/{name}"
+                  "path_template": "/api/runs/{id}"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/runs/{id}/events"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/runs/{id}/result-package"
                 },
                 {
                   "method": "POST",
-                  "path_template": "/api/projects/{id}/archive/batch"
+                  "path_template": "/api/runs/{id}/cancel"
                 }
               ]
             },
@@ -413,11 +333,43 @@
                 },
                 {
                   "method": "GET",
+                  "path_template": "/api/projects/{id}/conversations"
+                },
+                {
+                  "method": "POST",
+                  "path_template": "/api/projects/{id}/conversations"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}/conversations/{cid}/messages"
+                },
+                {
+                  "method": "PUT",
+                  "path_template": "/api/projects/{id}/conversations/{cid}/messages/{mid}"
+                },
+                {
+                  "method": "POST",
                   "path_template": "/api/projects/{id}/files"
                 },
                 {
                   "method": "POST",
-                  "path_template": "/api/projects/{id}/archive/batch"
+                  "path_template": "/api/runs"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/runs/{id}"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/runs/{id}/events"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/runs/{id}/result-package"
+                },
+                {
+                  "method": "POST",
+                  "path_template": "/api/runs/{id}/cancel"
                 }
               ]
             },
@@ -438,11 +390,43 @@
                 },
                 {
                   "method": "GET",
+                  "path_template": "/api/projects/{id}/conversations"
+                },
+                {
+                  "method": "POST",
+                  "path_template": "/api/projects/{id}/conversations"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}/conversations/{cid}/messages"
+                },
+                {
+                  "method": "PUT",
+                  "path_template": "/api/projects/{id}/conversations/{cid}/messages/{mid}"
+                },
+                {
+                  "method": "POST",
                   "path_template": "/api/projects/{id}/files"
                 },
                 {
                   "method": "POST",
-                  "path_template": "/api/projects/{id}/archive/batch"
+                  "path_template": "/api/runs"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/runs/{id}"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/runs/{id}/events"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/runs/{id}/result-package"
+                },
+                {
+                  "method": "POST",
+                  "path_template": "/api/runs/{id}/cancel"
                 }
               ]
             },
@@ -466,8 +450,8 @@
           "port": "auto"
         },
         "health": {
-          "path": "/api/maverick-ready",
-          "timeout_ms": 12000
+          "path": "/api/ready",
+          "timeout_ms": 20000
         },
         "proxy": {
           "mount": "/opendesign",
@@ -482,364 +466,84 @@
               },
               {
                 "method": "GET",
+                "path_template": "/index.html"
+              },
+              {
+                "method": "GET",
+                "path_template": "/404"
+              },
+              {
+                "method": "GET",
+                "path_template": "/404.html"
+              },
+              {
+                "method": "GET",
+                "path_template": "/_not-found"
+              },
+              {
+                "method": "GET",
+                "path_template": "/logo.svg"
+              },
+              {
+                "method": "GET",
+                "path_template": "/official_badge.svg"
+              },
+              {
+                "method": "GET",
+                "path_template": "/avatar.png"
+              },
+              {
+                "method": "GET",
+                "path_template": "/app-icon.png"
+              },
+              {
+                "method": "GET",
+                "path_template": "/app-icon.svg"
+              },
+              {
+                "method": "GET",
+                "path_template": "/logo.png"
+              },
+              {
+                "method": "GET",
+                "path_template": "/startup-animation.webm"
+              },
+              {
+                "method": "GET",
+                "path_template": "/remixicon.woff2"
+              },
+              {
+                "method": "GET",
+                "path_template": "/od-notifications-sw.js"
+              },
+              {
+                "method": "GET",
+                "path_template": "/brand-icon.svg"
+              },
+              {
+                "method": "GET",
                 "path_template": "/_next",
                 "static_tree": true
               },
               {
                 "method": "GET",
-                "path_template": "/api/agents"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/artifacts/lint"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/artifacts/save"
+                "path_template": "/agent-icons",
+                "static_tree": true
               },
               {
                 "method": "GET",
-                "path_template": "/api/atoms"
+                "path_template": "/model-icons",
+                "static_tree": true
               },
               {
                 "method": "GET",
-                "path_template": "/api/atoms/{id}"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/chat"
+                "path_template": "/upgrade",
+                "static_tree": true
               },
               {
                 "method": "GET",
-                "path_template": "/api/codex-pets"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/codex-pets/{id}/spritesheet"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/craft"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/craft/{id}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems/generation-jobs/{jobId}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems/{id}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems/{id}/archive"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems/{id}/file"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems/{id}/files"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems/{id}/preview"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems/{id}/revisions"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems/{id}/showcase"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-systems/{id}/static"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-templates"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/design-templates/{id}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/health"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/maverick-ready"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/preview/isolation"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects"
-              },
-              {
-                "method": "DELETE",
-                "path_template": "/api/projects/{id}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}"
-              },
-              {
-                "method": "PATCH",
-                "path_template": "/api/projects/{id}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/archive"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/archive/batch"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/conversations"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/conversations"
-              },
-              {
-                "method": "DELETE",
-                "path_template": "/api/projects/{id}/conversations/{cid}"
-              },
-              {
-                "method": "PATCH",
-                "path_template": "/api/projects/{id}/conversations/{cid}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/conversations/{cid}/comments"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/conversations/{cid}/comments"
-              },
-              {
-                "method": "DELETE",
-                "path_template": "/api/projects/{id}/conversations/{cid}/comments/{commentId}"
-              },
-              {
-                "method": "PATCH",
-                "path_template": "/api/projects/{id}/conversations/{cid}/comments/{commentId}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/conversations/{cid}/messages"
-              },
-              {
-                "method": "PUT",
-                "path_template": "/api/projects/{id}/conversations/{cid}/messages/{mid}"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/design-system-copy"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/design-system-package-audit"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/duplicate"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/events"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/export"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/export/image"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/export/manifest"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/export/pdf"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/export/pdf-image"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/export/pptx"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/files"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/files"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/files/rename"
-              },
-              {
-                "method": "DELETE",
-                "path_template": "/api/projects/{id}/files/{name}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/files/{name}/preview"
-              },
-              {
-                "method": "DELETE",
-                "path_template": "/api/projects/{id}/folders"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/folders"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/folders"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/preview-url"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/raw/{name}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/search"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{id}/tabs"
-              },
-              {
-                "method": "PUT",
-                "path_template": "/api/projects/{id}/tabs"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{id}/upload"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/projects/{projectId}/genui"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{projectId}/genui/prefill"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/projects/{projectId}/genui/{surfaceId}/revoke"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/prompt-templates"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/prompt-templates/{surface}/{id}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/ready"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/runs/{id}/agui"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/runs/{id}/feedback"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/runs/{runId}/devloop-iterations"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/runs/{runId}/genui"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/runs/{runId}/genui/{surfaceId}"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/runs/{runId}/genui/{surfaceId}/respond"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/runs/{runId}/replay"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/skills"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/skills/{id}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/skills/{id}/example"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/skills/{id}/files"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/templates"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/templates"
-              },
-              {
-                "method": "DELETE",
-                "path_template": "/api/templates/{id}"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/templates/{id}"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/upload"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/version"
+                "path_template": "/desktop-pet",
+                "static_tree": true
               },
               {
                 "method": "GET",
@@ -848,86 +552,77 @@
               },
               {
                 "method": "GET",
-                "path_template": "/assets",
-                "static_tree": true
-              },
-              {
-                "method": "GET",
-                "path_template": "/favicon.ico"
-              },
-              {
-                "method": "GET",
                 "path_template": "/frames",
                 "static_tree": true
               },
               {
                 "method": "GET",
-                "path_template": "/index.html"
+                "path_template": "/projects"
               },
               {
                 "method": "GET",
-                "path_template": "/projects/{id}"
-              }
-            ],
-            "handled_by_core": [
-              {
-                "method": "GET",
-                "path_template": "/api/app-config"
-              },
-              {
-                "method": "PUT",
-                "path_template": "/api/app-config"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/attribution/claim"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/export/storage"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/import/storage"
+                "path_template": "/projects/{*native_path}"
               },
               {
                 "method": "GET",
-                "path_template": "/api/media/config"
-              },
-              {
-                "method": "PUT",
-                "path_template": "/api/media/config"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/provider/models"
+                "path_template": "/design-systems"
               },
               {
                 "method": "GET",
-                "path_template": "/api/runs"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/runs"
+                "path_template": "/design-systems/{*native_path}"
               },
               {
                 "method": "GET",
-                "path_template": "/api/runs/{id}"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/runs/{id}/cancel"
+                "path_template": "/brands"
               },
               {
                 "method": "GET",
-                "path_template": "/api/runs/{id}/events"
+                "path_template": "/brands/{*native_path}"
               },
               {
                 "method": "GET",
-                "path_template": "/api/runs/{id}/result-package"
-              }
-            ],
-            "blocked": [
+                "path_template": "/plugins"
+              },
+              {
+                "method": "GET",
+                "path_template": "/plugins/{*native_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/library"
+              },
+              {
+                "method": "GET",
+                "path_template": "/library/{*native_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/memory"
+              },
+              {
+                "method": "GET",
+                "path_template": "/memory/{*native_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/routines"
+              },
+              {
+                "method": "GET",
+                "path_template": "/routines/{*native_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/settings"
+              },
+              {
+                "method": "GET",
+                "path_template": "/settings/{*native_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/agents"
+              },
               {
                 "method": "POST",
                 "path_template": "/api/agents/{agentId}/oauth-launch"
@@ -939,6 +634,14 @@
               {
                 "method": "GET",
                 "path_template": "/api/analytics/config"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/app-config"
+              },
+              {
+                "method": "PUT",
+                "path_template": "/api/app-config"
               },
               {
                 "method": "GET",
@@ -961,12 +664,32 @@
                 "path_template": "/api/applied-plugins/{snapshotId}/canon"
               },
               {
+                "method": "POST",
+                "path_template": "/api/artifacts/lint"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/artifacts/save"
+              },
+              {
                 "method": "GET",
                 "path_template": "/api/asset-cache"
               },
               {
+                "method": "GET",
+                "path_template": "/api/atoms"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/atoms/{id}"
+              },
+              {
                 "method": "POST",
                 "path_template": "/api/attribution/bridge-url"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/attribution/claim"
               },
               {
                 "method": "POST",
@@ -1050,7 +773,19 @@
               },
               {
                 "method": "POST",
+                "path_template": "/api/chat"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/codex-pets"
+              },
+              {
+                "method": "POST",
                 "path_template": "/api/codex-pets/sync"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/codex-pets/{id}/spritesheet"
               },
               {
                 "method": "GET",
@@ -1106,6 +841,14 @@
               },
               {
                 "method": "GET",
+                "path_template": "/api/craft"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/craft/{id}"
+              },
+              {
+                "method": "GET",
                 "path_template": "/api/critique/conformance"
               },
               {
@@ -1141,12 +884,20 @@
                 "path_template": "/api/deploy/config"
               },
               {
+                "method": "GET",
+                "path_template": "/api/design-systems"
+              },
+              {
                 "method": "POST",
                 "path_template": "/api/design-systems"
               },
               {
                 "method": "POST",
                 "path_template": "/api/design-systems/generation-jobs"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/design-systems/generation-jobs/{jobId}"
               },
               {
                 "method": "POST",
@@ -1169,16 +920,48 @@
                 "path_template": "/api/design-systems/{id}"
               },
               {
+                "method": "GET",
+                "path_template": "/api/design-systems/{id}"
+              },
+              {
                 "method": "PATCH",
                 "path_template": "/api/design-systems/{id}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/design-systems/{id}/archive"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/design-systems/{id}/file"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/design-systems/{id}/files"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/design-systems/{id}/preview"
               },
               {
                 "method": "POST",
                 "path_template": "/api/design-systems/{id}/revision-jobs"
               },
               {
+                "method": "GET",
+                "path_template": "/api/design-systems/{id}/revisions"
+              },
+              {
                 "method": "PATCH",
                 "path_template": "/api/design-systems/{id}/revisions/{revisionId}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/design-systems/{id}/showcase"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/design-systems/{id}/static"
               },
               {
                 "method": "POST",
@@ -1187,6 +970,14 @@
               {
                 "method": "POST",
                 "path_template": "/api/design-systems/{id}/workspace"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/design-templates"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/design-templates/{id}"
               },
               {
                 "method": "GET",
@@ -1211,6 +1002,10 @@
               {
                 "method": "GET",
                 "path_template": "/api/github/open-design/releases/latest"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/health"
               },
               {
                 "method": "POST",
@@ -1426,6 +1221,14 @@
               },
               {
                 "method": "GET",
+                "path_template": "/api/media/config"
+              },
+              {
+                "method": "PUT",
+                "path_template": "/api/media/config"
+              },
+              {
+                "method": "GET",
                 "path_template": "/api/media/models"
               },
               {
@@ -1589,6 +1392,10 @@
                 "path_template": "/api/plugins/{id}/apply"
               },
               {
+                "method": "GET",
+                "path_template": "/api/plugins/{id}/asset/{*splat}"
+              },
+              {
                 "method": "POST",
                 "path_template": "/api/plugins/{id}/doctor"
               },
@@ -1622,6 +1429,10 @@
               },
               {
                 "method": "GET",
+                "path_template": "/api/preview/isolation"
+              },
+              {
+                "method": "GET",
                 "path_template": "/api/project-locations"
               },
               {
@@ -1631,6 +1442,74 @@
               {
                 "method": "POST",
                 "path_template": "/api/project-locations/scan"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects"
+              },
+              {
+                "method": "DELETE",
+                "path_template": "/api/projects/{id}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}"
+              },
+              {
+                "method": "PATCH",
+                "path_template": "/api/projects/{id}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/archive"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/archive/batch"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/conversations"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/conversations"
+              },
+              {
+                "method": "DELETE",
+                "path_template": "/api/projects/{id}/conversations/{cid}"
+              },
+              {
+                "method": "PATCH",
+                "path_template": "/api/projects/{id}/conversations/{cid}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/conversations/{cid}/comments"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/conversations/{cid}/comments"
+              },
+              {
+                "method": "DELETE",
+                "path_template": "/api/projects/{id}/conversations/{cid}/comments/{commentId}"
+              },
+              {
+                "method": "PATCH",
+                "path_template": "/api/projects/{id}/conversations/{cid}/comments/{commentId}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/conversations/{cid}/messages"
+              },
+              {
+                "method": "PUT",
+                "path_template": "/api/projects/{id}/conversations/{cid}/messages/{mid}"
               },
               {
                 "method": "POST",
@@ -1650,11 +1529,87 @@
               },
               {
                 "method": "POST",
+                "path_template": "/api/projects/{id}/design-system-copy"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/design-system-package-audit"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/duplicate"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/events"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/export"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/export/image"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/export/manifest"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/export/pdf"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/export/pdf-image"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/export/pptx"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/export/{*splat}"
+              },
+              {
+                "method": "POST",
                 "path_template": "/api/projects/{id}/figma/import"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/files"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/files"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/files/rename"
+              },
+              {
+                "method": "DELETE",
+                "path_template": "/api/projects/{id}/files/{name}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/files/{name}/preview"
               },
               {
                 "method": "POST",
                 "path_template": "/api/projects/{id}/finalize/{provider}"
+              },
+              {
+                "method": "DELETE",
+                "path_template": "/api/projects/{id}/folders"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/folders"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{id}/folders"
               },
               {
                 "method": "POST",
@@ -1706,6 +1661,22 @@
               },
               {
                 "method": "GET",
+                "path_template": "/api/projects/{id}/preview-url"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/search"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/tabs"
+              },
+              {
+                "method": "PUT",
+                "path_template": "/api/projects/{id}/tabs"
+              },
+              {
+                "method": "GET",
                 "path_template": "/api/projects/{id}/terminals"
               },
               {
@@ -1734,6 +1705,10 @@
               },
               {
                 "method": "POST",
+                "path_template": "/api/projects/{id}/upload"
+              },
+              {
+                "method": "POST",
                 "path_template": "/api/projects/{id}/working-dir"
               },
               {
@@ -1747,6 +1722,78 @@
               {
                 "method": "POST",
                 "path_template": "/api/projects/{projectId}/critique/{runId}/interrupt"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{projectId}/genui"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{projectId}/genui/prefill"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{projectId}/genui/{surfaceId}/revoke"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{project_id}/files/{*project_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{project_id}/files/{*project_path}/versions"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{project_id}/files/{*project_path}/versions"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{project_id}/files/{*project_path}/versions/{version_id}"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/projects/{project_id}/files/{*project_path}/versions/{version_id}/restore"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{project_id}/powered/{*project_path}"
+              },
+              {
+                "method": "OPTIONS",
+                "path_template": "/api/projects/{project_id}/powered/{*project_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{project_id}/preview/{preview_id}/{*project_path}"
+              },
+              {
+                "method": "DELETE",
+                "path_template": "/api/projects/{project_id}/raw/{*project_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{project_id}/raw/{*project_path}"
+              },
+              {
+                "method": "OPTIONS",
+                "path_template": "/api/projects/{project_id}/raw/{*project_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{project_id}/text-preview/{*project_path}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/prompt-templates"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/prompt-templates/{surface}/{id}"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/provider/models"
               },
               {
                 "method": "POST",
@@ -1779,6 +1826,10 @@
               {
                 "method": "POST",
                 "path_template": "/api/proxy/{provider}/stream"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/ready"
               },
               {
                 "method": "GET",
@@ -1821,6 +1872,62 @@
                 "path_template": "/api/routines/{id}/runs/{runId}/crystallize"
               },
               {
+                "method": "GET",
+                "path_template": "/api/runs"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/runs"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{id}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{id}/agui"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/runs/{id}/cancel"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{id}/events"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/runs/{id}/feedback"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{id}/result-package"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{runId}/devloop-iterations"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{runId}/genui"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{runId}/genui/{surfaceId}"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/runs/{runId}/genui/{surfaceId}/respond"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/runs/{runId}/replay"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/skills"
+              },
+              {
                 "method": "POST",
                 "path_template": "/api/skills/import"
               },
@@ -1833,8 +1940,24 @@
                 "path_template": "/api/skills/{id}"
               },
               {
+                "method": "GET",
+                "path_template": "/api/skills/{id}"
+              },
+              {
                 "method": "PUT",
                 "path_template": "/api/skills/{id}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/skills/{id}/assets/{*splat}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/skills/{id}/example"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/skills/{id}/files"
               },
               {
                 "method": "POST",
@@ -1843,6 +1966,22 @@
               {
                 "method": "POST",
                 "path_template": "/api/system/open-external"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/templates"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/templates"
+              },
+              {
+                "method": "DELETE",
+                "path_template": "/api/templates/{id}"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/templates/{id}"
               },
               {
                 "method": "POST",
@@ -1889,6 +2028,14 @@
                 "path_template": "/api/tools/media/generate"
               },
               {
+                "method": "POST",
+                "path_template": "/api/upload"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/version"
+              },
+              {
                 "method": "GET",
                 "path_template": "/api/whats-new"
               },
@@ -1916,12 +2063,18 @@
                 "method": "POST",
                 "path_template": "/api/xai/search"
               }
-            ]
+            ],
+            "handled_by_core": [],
+            "blocked": []
           }
         },
         "logs": {
           "stdout": "logs/apps/design-studio/sidecar.log",
           "stderr": "logs/apps/design-studio/sidecar.log"
+        },
+        "root_filesystem": {
+          "artifact_id": "opendesign",
+          "subpath": "official/170f56cdeb3a213423af150d4095b7729814eaf0ad26a99be7fab2344f0f5cd1/rootfs"
         }
       }
     ]

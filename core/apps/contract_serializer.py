@@ -216,6 +216,16 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                     ),
                     **(
                         {
+                            "root_filesystem": {
+                                "artifact_id": sidecar.root_filesystem.artifact_id,
+                                "subpath": sidecar.root_filesystem.subpath,
+                            }
+                        }
+                        if sidecar.root_filesystem is not None
+                        else {}
+                    ),
+                    **(
+                        {
                             "prewarm": {
                                 "on_core_start": sidecar.prewarm.on_core_start,
                                 "on_install": sidecar.prewarm.on_install,

@@ -17,6 +17,7 @@ from core.apps.models import (
     HttpSidecarArtifactMountSpec,
     HttpSidecarDiagnosticsSpec,
     HttpSidecarPrewarmSpec,
+    HttpSidecarRootFilesystemSpec,
 )
 
 
@@ -56,6 +57,34 @@ def parse_sidecar_artifact_mounts(payload: object, *, label: str) -> list[HttpSi
         seen.add(artifact_id)
         mounts.append(HttpSidecarArtifactMountSpec(artifact_id=artifact_id, mount_path=mount_path))
     return mounts
+
+
+def parse_sidecar_root_filesystem(
+    payload: dict[str, Any],
+    *,
+    artifact_ids: set[str],
+    label: str,
+) -> HttpSidecarRootFilesystemSpec:
+    """Parse an immutable artifact-relative execution root declaration."""
+    root_label = f"{label}.root_filesystem"
+    _reject_unexpected_fields(payload, {"artifact_id", "subpath"}, label=root_label)
+    artifact_id = _expect_slug(payload, "artifact_id")
+    if artifact_id not in artifact_ids:
+        raise AppContractValidationError(
+            f"`{root_label}.artifact_id` must reference a declared artifact mount."
+        )
+    value = _expect_string(payload, "subpath")
+    path = PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or not path.parts
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or len(value) > 512
+    ):
+        raise AppContractValidationError(
+            f"`{root_label}.subpath` must be a canonical path inside the artifact namespace."
+        )
+    return HttpSidecarRootFilesystemSpec(artifact_id=artifact_id, subpath=path.as_posix())
 
 
 def parse_sidecar_prewarm(payload: dict[str, Any], *, label: str) -> HttpSidecarPrewarmSpec:

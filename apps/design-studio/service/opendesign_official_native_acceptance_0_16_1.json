@@ -1,0 +1,76 @@
+{
+  "bridges": {
+    "delegation": "disabled",
+    "model_access": "disabled"
+  },
+  "commands": {
+    "install": "python3 apps/design-studio/service/install_official_opendesign.py --destination <artifact-store>/official/<manifest-sha256>",
+    "smoke": "python3 apps/design-studio/service/smoke_official_opendesign.py --installation <artifact-store>/official/<manifest-sha256>"
+  },
+  "kind": "official_opendesign_native_acceptance",
+  "notes": [
+    "The registry client verified the official OCI index, platform manifest, config, every layer, and upstream attestation by pinned digest.",
+    "The native root and public application surfaces were served by the unmodified official OCI command with both external Maverick bridges disabled."
+  ],
+  "proof": {
+    "completed_at": "2026-08-28T14:27:50.681615+00:00",
+    "maverick_runtime_session_created": false,
+    "native_root_title": "Open Design",
+    "native_static_assets": true,
+    "status": "passed",
+    "surfaces": {
+      "/": {
+        "body_bytes": 10440,
+        "content_type": "text/html",
+        "status": 200
+      },
+      "/api/agents": {
+        "body_bytes": 44571,
+        "content_type": "application/json",
+        "status": 200
+      },
+      "/api/app-config": {
+        "body_bytes": 56,
+        "body_sha256": "772c859fd31be7c160d804785a90c3b901537da371375540109169d6534e7739",
+        "content_type": "application/json",
+        "status": 200
+      },
+      "/api/design-systems": {
+        "body_bytes": 48990,
+        "content_type": "application/json",
+        "status": 200
+      },
+      "/api/projects": {
+        "body_bytes": 15,
+        "body_sha256": "46a926de2121dfc5e3e5c1c9430c5ec5235c1f0e5a32277765aab35e6536b8b4",
+        "content_type": "application/json",
+        "status": 200
+      },
+      "/api/ready": {
+        "body_bytes": 43,
+        "body_sha256": "c5607b7cfdb167a3822c8d1ea193257caa19b6bdb293636c0741c99c73b547fc",
+        "content_type": "application/json",
+        "status": 200
+      },
+      "/api/runs": {
+        "body_bytes": 11,
+        "body_sha256": "6f23bb10da82b8a196d50cdfbe0a86f583cc4df842d62052e624fb9b14bd5c90",
+        "content_type": "application/json",
+        "status": 200
+      },
+      "/api/skills": {
+        "body_bytes": 160855,
+        "content_type": "application/json",
+        "status": 200
+      }
+    }
+  },
+  "release": {
+    "customizations": [],
+    "image": "ghcr.io/nexu-io/od",
+    "manifest_digest": "sha256:170f56cdeb3a213423af150d4095b7729814eaf0ad26a99be7fab2344f0f5cd1",
+    "rootfs_snapshot_sha256": "d0a014cf8ea05599c2760b9c68df2854116cfed2bc8d418736827b0e5a5ba325",
+    "version": "0.16.1"
+  },
+  "schema_version": "1"
+}

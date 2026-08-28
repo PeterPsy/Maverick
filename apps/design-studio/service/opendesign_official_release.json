@@ -1,0 +1,158 @@
+{
+  "schema_version": "1",
+  "kind": "official_opendesign_oci_release",
+  "version": "0.16.1",
+  "source": {
+    "repository": "https://github.com/nexu-io/open-design.git",
+    "tag": "open-design-v0.16.1",
+    "commit": "276b4d8e970bc143d7ad060181a89a834e3d9caf"
+  },
+  "oci": {
+    "primary": "oci_import",
+    "registry": "ghcr.io",
+    "repository": "nexu-io/od",
+    "reference": "0.16.1",
+    "platform": {
+      "os": "linux",
+      "architecture": "amd64"
+    },
+    "index": {
+      "media_type": "application/vnd.oci.image.index.v1+json",
+      "digest": "sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1",
+      "size_bytes": 1609
+    },
+    "manifest": {
+      "media_type": "application/vnd.oci.image.manifest.v1+json",
+      "digest": "sha256:170f56cdeb3a213423af150d4095b7729814eaf0ad26a99be7fab2344f0f5cd1",
+      "size_bytes": 3349
+    },
+    "config": {
+      "media_type": "application/vnd.oci.image.config.v1+json",
+      "digest": "sha256:d7dbdd6a660cbc0fccad6e8aed6ce568021a8edc52618c801537b766f8a1a790",
+      "size_bytes": 11762
+    },
+    "layers": [
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:55afa1ecc21d2bb5e5045f32dafee56272ffd89860bac26f6c32123439af26a4",
+        "size_bytes": 3846391
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:7e2a5e2761f53b694faaee16c5ad1e400cb41224f693337aac52e74bee3b2f65",
+        "size_bytes": 52524717
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:57eb903fc7a4b0006b1253f877823b15c51433ccd41a20392812682211c46a6c",
+        "size_bytes": 1262109
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:21af007bacf625b557dda6dbce062088808612be54a955980b3d8efb8ea7d082",
+        "size_bytes": 448
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:25545c635da89f0745c7cd05ada2344859915345424c5ce7e001a70cd02f2fa4",
+        "size_bytes": 15018585
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:79541a8bced22b31e08376d39007eaacf3772678bde31b12f262b2e3828d7778",
+        "size_bytes": 93
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:3dbb6bd7c8e91b3e78afbc2c71a910f68a662dc8e221d3b3397f34990d3736b7",
+        "size_bytes": 26666992
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:8c05179197c03f1d8682a63dc8ceca10314565ee9c4427dc9c4efb51416052fb",
+        "size_bytes": 24483912
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:5845ee0180d8c5685b294ec18ba73d10e771c3a9de5cc16531f052866255ee4c",
+        "size_bytes": 1848208
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:92d65d0100461fdb08f13a790156f97fbff16b3e289e5b0817d26633121855a3",
+        "size_bytes": 6311613
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:47f69a4f2e9ae0f903f8473d8aef34e6ea7b42d4ee574ec43af984f4827cf55d",
+        "size_bytes": 44374
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:a2b9497ffdbc0ec14ea4a06453fd30d545ee3bdfc804867ea7bb0d84f839d144",
+        "size_bytes": 193253
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:50c63c9cf4536752347738f841566b200add0e92a80391ba4744028b010f406b",
+        "size_bytes": 5807
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:bfacca24a3bfa18537d91cddd63fddc8b22a3626422fbd528a54f5f3798a27a1",
+        "size_bytes": 13367165
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:ac9d57665593a7d8e5e285b7be155d6222ee5e010d36f780c6b04094d2f5d6e5",
+        "size_bytes": 53369474
+      },
+      {
+        "media_type": "application/vnd.oci.image.layer.v1.tar+gzip",
+        "digest": "sha256:65f183e60eef987b7d2c80ebc9660ef9cc6bf4a8e2688a1704c424770d94b7ff",
+        "size_bytes": 112
+      }
+    ],
+    "attestation": {
+      "manifest": {
+        "media_type": "application/vnd.oci.image.manifest.v1+json",
+        "digest": "sha256:c52f7a70361eebd43ec6142a42ef77d6fff81d4be569456448151a78d60f7b6c",
+        "size_bytes": 565
+      },
+      "config": {
+        "media_type": "application/vnd.oci.image.config.v1+json",
+        "digest": "sha256:ce5c1ecc0d9511de09d6a033e860a0d0dd423b30bab28bf731248071c69ea128",
+        "size_bytes": 167
+      },
+      "statement": {
+        "media_type": "application/vnd.in-toto+json",
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "digest": "sha256:46c51752abc19db8f0cbf523ab59c8ba80fb2d731a0e7660043435e42ed31cfc",
+        "size_bytes": 60703
+      },
+      "subject_manifest_digest": "sha256:170f56cdeb3a213423af150d4095b7729814eaf0ad26a99be7fab2344f0f5cd1"
+    },
+    "expected_revision": "276b4d8e970bc143d7ad060181a89a834e3d9caf",
+    "expected_version": "0.16.1",
+    "allowed_redirect_hosts": [
+      "ghcr.io",
+      "pkg-containers.githubusercontent.com"
+    ],
+    "max_blob_size_bytes": 67108864,
+    "minimum_mem_available_bytes": 3221225472
+  },
+  "runtime": {
+    "entrypoint": [
+      "/sbin/tini",
+      "--"
+    ],
+    "command": [
+      "node",
+      "apps/daemon/dist/cli.js",
+      "--no-open"
+    ],
+    "working_directory": "/app",
+    "data_directory": "/app/.od"
+  },
+  "customizations": []
+}

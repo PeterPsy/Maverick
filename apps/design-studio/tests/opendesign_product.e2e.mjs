@@ -629,7 +629,22 @@ async function createProjectFromUi(page, frame) {
   const sidebar = await waitForShellWidgetFrame(page, 'App sidebar content');
   const projectButton = sidebar.getByRole('button').filter({ hasText: 'Untitled design' }).first();
   await projectButton.waitFor({ state: 'visible', timeout: 60_000 });
-  await frame.waitForURL((url) => url.pathname === `/projects/${projectId}`, { timeout: 60_000 });
+  const projectPath = `/projects/${projectId}`;
+  try {
+    await frame.waitForURL(
+      (url) => url.pathname === projectPath || url.pathname.startsWith(`${projectPath}/`),
+      { timeout: 60_000 },
+    );
+  } catch (error) {
+    const diagnostic = {
+      expectedPath: projectPath,
+      frameUrl: frame.url(),
+      wrapperBody: (await appFrame.locator('body').innerText().catch(() => '')).slice(0, 1_000),
+      sidecarBody: (await frame.locator('body').innerText().catch(() => '')).slice(0, 1_000),
+      ariaCurrent: await projectButton.getAttribute('aria-current').catch(() => null),
+    };
+    throw new Error(`Created project navigation did not complete: ${JSON.stringify(diagnostic)}`, { cause: error });
+  }
   assert(await projectButton.getAttribute('aria-current') === 'page', 'Created project was not selected in the Maverick sidebar');
   try {
     await frame.locator('[data-testid="file-workspace"]').waitFor({ state: 'visible', timeout: 60_000 });

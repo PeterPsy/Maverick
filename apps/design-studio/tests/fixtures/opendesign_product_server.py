@@ -34,8 +34,11 @@ from core.providers.service import configure_workspace_provider  # noqa: E402
 from core.shared.entrypoints import EntrypointShutdownController  # noqa: E402
 from core.workspaces.service import create_workspace, set_active_workspace_for_user  # noqa: E402
 from opendesign_artifact import read_bundle_manifest, selected_asset, validate_bundle_manifest  # noqa: E402
+from opendesign_artifact_audit import fully_audited_web_overlay  # noqa: E402
 from opendesign_artifact_store import OpenDesignArtifactStore  # noqa: E402
 from opendesign_bootstrap import bootstrap_empty_generation  # noqa: E402
+from opendesign_runtime import protected_activation_inventory, verified_overlay_from_store  # noqa: E402
+from opendesign_web_activation import activate_web_overlay  # noqa: E402
 
 
 WORKSPACES = ("default", "workspace-b")
@@ -188,6 +191,33 @@ def _bootstrap_generation(root: Path, workspace_id: str, web_overlay_sha256: str
         runtime_artifact_sha256=asset["sha256"],
     )
     generation_root = root / "workspaces" / workspace_id / "data" / "design-studio" / "opendesign"
+    control_path = generation_root / "control.json"
+    if control_path.exists() or control_path.is_symlink():
+        control, verified_artifacts, verified_overlays = protected_activation_inventory(
+            store=store,
+            generation_root=generation_root,
+        )
+        audited_overlay = fully_audited_web_overlay(
+            store,
+            web_overlay_sha256,
+            runtime_artifact_sha256=control.active.runtime_artifact_sha256,
+        )
+        verified_overlays[audited_overlay.artifact_sha256] = verified_overlay_from_store(
+            audited_overlay
+        )
+        if control.active.web_overlay_sha256 == audited_overlay.artifact_sha256:
+            return
+        outcome = activate_web_overlay(
+            generation_root,
+            target_web_overlay_sha256=audited_overlay.artifact_sha256,
+            web_activation_id=f"web_e2e_{audited_overlay.artifact_sha256[:16]}",
+            verified_artifacts=verified_artifacts,
+            verified_overlays=verified_overlays,
+            restart_sidecars=lambda: {"ready": True, "service_count": 1},
+        )
+        if not outcome.activated or outcome.rolled_back:
+            raise RuntimeError("The synthetic OpenDesign candidate overlay did not activate.")
+        return
     bootstrap_empty_generation(
         generation_root,
         artifact_sha256=runtime.artifact_sha256,

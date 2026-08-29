@@ -27,6 +27,7 @@ INVENTORY_CATEGORIES = (
     "settings",
     "run_references",
 )
+PARTIALLY_PROTECTED_IDENTITY_CATEGORIES = {"design_systems"}
 FIELDS = {
     "schema_version",
     "kind",
@@ -250,9 +251,14 @@ def _identity_sets(
     normalized: dict[str, list[str]] = {}
     for category in INVENTORY_CATEGORIES:
         values = raw.get(category)
+        expected_count = categories[category]["count"]
         if (
             not isinstance(values, list)
-            or len(values) != categories[category]["count"]
+            or not _identity_count_matches_inventory(
+                category,
+                protected_count=len(values),
+                inventory_count=expected_count,
+            )
             or any(not isinstance(value, str) or not _sha256(value) for value in values)
         ):
             raise OfficialUpdateError("official update identity inventory is invalid")
@@ -351,14 +357,35 @@ def _validate_migration_guard(
         migrated_content_count = value["migrated_content_counts"][category]
         added_content_count = value["added_content_counts"][category]
         lost_content_count = value["lost_content_counts"][category]
+        baseline_inventory_count = baseline_inventory[category]["count"]
+        migrated_inventory_count = migrated_inventory[category]["count"]
+        identity_counts_match_inventory = _identity_count_matches_inventory(
+            category,
+            protected_count=baseline_count,
+            inventory_count=baseline_inventory_count,
+        ) and _identity_count_matches_inventory(
+            category,
+            protected_count=migrated_count,
+            inventory_count=migrated_inventory_count,
+        )
         if (
-            baseline_count != baseline_inventory[category]["count"]
-            or migrated_count != migrated_inventory[category]["count"]
+            not identity_counts_match_inventory
             or baseline_count - lost_count + added_count != migrated_count
             or baseline_content_count - lost_content_count + added_content_count
             != migrated_content_count
         ):
             raise OfficialUpdateError("official update migration guard is invalid")
+
+
+def _identity_count_matches_inventory(
+    category: str,
+    *,
+    protected_count: int,
+    inventory_count: int,
+) -> bool:
+    if category in PARTIALLY_PROTECTED_IDENTITY_CATEGORIES:
+        return protected_count <= inventory_count
+    return protected_count == inventory_count
 
 
 __all__ = [

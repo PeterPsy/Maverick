@@ -38,7 +38,14 @@ class E2EGateContractTests(unittest.TestCase):
         self.assertTrue((APP_ROOT / "tests/native_deep_link.e2e.mjs").is_file())
         self.assertNotIn("_write_wrappers", product)
         self.assertIn('agent_id=CLI_AGENT_ID', product)
-        for proof in ("assets_separate", "models_separate", "credentials_separate"):
+        self.assertIn("_prove_official_cli_cancellation", product)
+        for proof in (
+            "cross_asset_denied",
+            "cross_model_denied",
+            "cross_capability_denied",
+            "api_tools_media",
+            "cli_tools_media",
+        ):
             self.assertIn(proof, product)
 
     def test_contract_version_forces_existing_installations_through_upgrade_hook(self) -> None:
@@ -46,7 +53,7 @@ class E2EGateContractTests(unittest.TestCase):
 
         self.assertGreaterEqual(
             tuple(int(part) for part in contract["version"].split(".")),
-            (0, 5, 2),
+            (0, 5, 3),
         )
 
 

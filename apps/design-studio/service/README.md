@@ -30,11 +30,13 @@ selection. `native_official_update.py` verifies and installs a user-selected
 official lock, stops only the managed Design Studio writer, creates an
 immutable backup, runs upstream migration and public inventory on copies,
 requires the migrated identity multiset and field-level user-content claims to
-preserve every baseline item and value while permitting additive schema and
-server-metadata evolution,
+preserve every baseline user-owned item and value—including functional project
+metadata—while permitting additive schema, explicitly volatile server fields,
+and release-owned built-in Design System evolution,
 atomically swaps data and selection, and restores both if native readiness
 fails. If the previous writer cannot be resumed, it remains fail-closed behind
-quiescence with an explicit `recovery_required` marker.
+quiescence; the updater retries stop and writes `recovery_required` only after
+Core positively confirms that the live writer is stopped.
 `official_update_state.py` persists only release identities, category
 counts/hashes, redaction-safe preservation counts, bridge states, and recovery
 phase.
@@ -55,8 +57,10 @@ launcher emits whichever supported Codex and OpenCode profiles are independently
 usable plus a credential-free OpenCode provider configuration. This makes every
 Core-granted API model visible in the native selector without manual provider
 setup when the optional runtime is available, while a missing API or CLI catalog
-does not remove the other profile. Both paths operate without a Maverick runtime
-session, prompt, memory, persona, skill, tool catalog, or semantic rewrite.
+does not remove the other profile. The Codex wrapper rejects model ids outside
+that workspace-scoped profile before opening the CLI transport. Both paths
+operate without a Maverick runtime session, prompt, memory, persona, skill,
+tool catalog, or semantic rewrite.
 The official daemon finds the production wrappers on Core's `/app/service`
 mount, and both wrappers execute with `/usr/bin/python3`; `/maverick/python` is
 reserved for artifact-root sidecars and is not part of this contract.
@@ -109,10 +113,10 @@ The maintained release gate runs the complete Design Studio Python suite,
 frontend tests/build, the unchanged-official-package smoke, and two real E2E
 proofs. A disposable unchanged daemon runs in a faithful bubblewrap filesystem
 with `/app`, `/artifacts`, and `/model-access`, executes the production API and
-CLI wrappers, proves OpenCode streaming/cancellation, reopens a delegated
-conversation through the direct native API after restart, and verifies data,
-delegation stores, assets, model catalogs, and capability credentials remain
-isolated between two workspaces. Playwright then
+CLI wrappers, proves API and CLI cancellation plus tools/media forwarding,
+reopens a delegated conversation through the direct native API after restart,
+and attempts cross-workspace reads with project/asset identities, models,
+delegation ids, and capability credentials to prove denial. Playwright then
 drives the actual Base Shell frame host and Design Studio host through an exact
 conversation deep link into a cross-origin native iframe. Focused, affected,
 migration, and hosted profiles use the same runner:

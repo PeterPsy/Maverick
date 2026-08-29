@@ -12,6 +12,7 @@ PROJECT_CONTENT_FIELDS = (
     "skillId",
     "designSystemId",
     "pendingPrompt",
+    "metadata",
     "customInstructions",
     "appliedPluginSnapshotId",
 )
@@ -25,7 +26,7 @@ VOLATILE_FIELDS = {
     "resolvedDir",
     "eventsLogPath",
 }
-SERVER_METADATA_FIELDS = {*VOLATILE_FIELDS, "metadata"}
+SERVER_OWNED_RECORD_FIELDS = {*VOLATILE_FIELDS, "metadata"}
 
 
 def preservation_claim_sets(
@@ -36,8 +37,9 @@ def preservation_claim_sets(
     Claims bind each protected scalar to its native record identity and field
     path. A candidate may add schema fields or records without invalidating old
     claims, while deletion or mutation of an existing user value loses the
-    corresponding claim. Server metadata and bundled Design Systems are not
-    user-owned migration content.
+    corresponding claim. Project metadata is functional OpenDesign state, so
+    only its explicitly volatile server fields are removed. Bundled Design
+    Systems remain release-owned rather than user-owned migration content.
     """
     return {
         category: sorted(
@@ -67,7 +69,7 @@ def _protected_projection(
         return (
             {"id": record.get("id")},
             {
-                key: record[key]
+                key: _clean(record[key])
                 for key in PROJECT_CONTENT_FIELDS
                 if key in record and record[key] is not None
             },
@@ -81,7 +83,7 @@ def _protected_projection(
             },
             _without(
                 conversation,
-                {"id", "projectId", "runId", "status", *SERVER_METADATA_FIELDS},
+                {"id", "projectId", "runId", "status", *SERVER_OWNED_RECORD_FIELDS},
             ),
         )
     if category == "ordered_messages":
@@ -101,7 +103,7 @@ def _protected_projection(
                     "runStatus",
                     "lastRunEventId",
                     "status",
-                    *SERVER_METADATA_FIELDS,
+                    *SERVER_OWNED_RECORD_FIELDS,
                 },
             ),
         )
@@ -111,8 +113,8 @@ def _protected_projection(
         if summary.get("source") == "built-in":
             return identity, None
         return identity, {
-            "summary": _without(summary, {"id", "source", *SERVER_METADATA_FIELDS}),
-            "detail": _without(_dict(record.get("detail")), SERVER_METADATA_FIELDS),
+            "summary": _without(summary, {"id", "source", *SERVER_OWNED_RECORD_FIELDS}),
+            "detail": _without(_dict(record.get("detail")), SERVER_OWNED_RECORD_FIELDS),
             "files": _clean(record.get("files")),
         }
     if category == "project_files":
@@ -140,8 +142,8 @@ def _protected_projection(
                 "id": summary.get("id") or artifact.get("id") or detail.get("id"),
             },
             {
-                "summary": _without(summary, {"id", *SERVER_METADATA_FIELDS}),
-                "detail": _without(detail, {"id", *SERVER_METADATA_FIELDS}),
+                "summary": _without(summary, {"id", *SERVER_OWNED_RECORD_FIELDS}),
+                "detail": _without(detail, {"id", *SERVER_OWNED_RECORD_FIELDS}),
                 "template_sha256": record.get("template_sha256"),
                 "rendered_sha256": record.get("rendered_sha256"),
             },

@@ -140,12 +140,16 @@ class OfficialPublicInventoryTests(unittest.TestCase):
         self.assertTrue(all(path.startswith("/api/") for path in client.paths))
         self.assertFalse(any("sqlite" in path or "database" in path for path in client.paths))
 
-    def test_preservation_identities_are_complete_redaction_safe_hashes(self) -> None:
+    def test_protected_identities_are_redaction_safe_and_exclude_builtins(self) -> None:
         categories, identities = _inventory_with_identity_sets(FakePublicApi())
 
         self.assertEqual(set(identities), set(categories))
         for category, values in identities.items():
-            self.assertEqual(len(values), categories[category]["count"])
+            if category == "design_systems":
+                self.assertEqual(len(values), 1)
+                self.assertLess(len(values), categories[category]["count"])
+            else:
+                self.assertEqual(len(values), categories[category]["count"])
             self.assertEqual(values, sorted(values))
             self.assertTrue(
                 all(
@@ -179,14 +183,61 @@ class OfficialPublicInventoryTests(unittest.TestCase):
         rendered = str(content)
         self.assertNotIn("Secret transcript", rendered)
 
-    def test_content_guard_allows_schema_metadata_and_builtin_changes(self) -> None:
+    def test_project_functional_metadata_loss_fails_content_guard(self) -> None:
+        baseline = FakePublicApi()
+        baseline_get_json = baseline.get_json
+
+        def project_with_functional_metadata(path: str) -> dict:
+            payload = baseline_get_json(path)
+            if path == "/api/projects/project-1":
+                payload["project"]["metadata"] = {
+                    "entryFile": "design.html",
+                    "kind": "website",
+                    "voice": "warm",
+                    "media": {"template": "hero"},
+                }
+            return payload
+
+        baseline.get_json = project_with_functional_metadata  # type: ignore[method-assign]
+        migrated = FakePublicApi()
+        migrated_get_json = migrated.get_json
+
+        def project_without_metadata(path: str) -> dict:
+            payload = migrated_get_json(path)
+            if path == "/api/projects/project-1":
+                payload["project"]["metadata"] = {}
+            return payload
+
+        migrated.get_json = project_without_metadata  # type: ignore[method-assign]
+        baseline_categories, baseline_identities, baseline_content = (
+            _inventory_with_preservation_sets(baseline)
+        )
+        migrated_categories, migrated_identities, migrated_content = (
+            _inventory_with_preservation_sets(migrated)
+        )
+
+        guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(migrated_categories, migrated_identities, migrated_content),
+        )
+
+        self.assertEqual(baseline_identities, migrated_identities)
+        self.assertEqual(guard["state"], "failed")
+        self.assertGreater(guard["lost_content_counts"]["projects"], 0)
+
+    def test_content_guard_allows_volatile_metadata_and_additive_schema_changes(self) -> None:
         baseline = FakePublicApi()
         baseline_get_json = baseline.get_json
 
         def legacy_metadata(path: str) -> dict:
             payload = baseline_get_json(path)
             if path == "/api/projects/project-1":
-                payload["project"]["metadata"] = {"legacyShape": {"revision": 1}}
+                payload["project"]["metadata"] = {
+                    "entryFile": "design.html",
+                    "kind": "website",
+                    "updatedAt": "before",
+                    "resolvedDir": "/old/server/path",
+                }
             return payload
 
         baseline.get_json = legacy_metadata  # type: ignore[method-assign]
@@ -196,7 +247,13 @@ class OfficialPublicInventoryTests(unittest.TestCase):
         def compatible_migration(path: str) -> dict:
             payload = migrated_get_json(path)
             if path == "/api/projects/project-1":
-                payload["project"]["metadata"] = {"normalizedRevision": "1"}
+                payload["project"]["metadata"] = {
+                    "entryFile": "design.html",
+                    "kind": "website",
+                    "updatedAt": "after",
+                    "resolvedDir": "/new/server/path",
+                    "media": {"voice": "warm"},
+                }
                 payload["project"]["serverComputedField"] = "new-schema"
             if path == "/api/design-systems":
                 payload["designSystems"][0]["title"] = "Updated built-in preset"
@@ -219,7 +276,64 @@ class OfficialPublicInventoryTests(unittest.TestCase):
 
         self.assertEqual(guard["state"], "passed")
         self.assertFalse(any(guard["lost_content_counts"].values()))
+        self.assertGreater(guard["added_content_counts"]["projects"], 0)
         self.assertGreater(guard["added_content_counts"]["design_systems"], 0)
+
+    def test_builtin_design_system_removal_or_rename_is_release_owned(self) -> None:
+        baseline = FakePublicApi()
+        migrated = FakePublicApi()
+        migrated_get_json = migrated.get_json
+
+        def renamed_builtin(path: str) -> dict:
+            payload = migrated_get_json(path)
+            if path == "/api/design-systems":
+                payload["designSystems"][0] = {
+                    "id": "replacement-preset",
+                    "source": "built-in",
+                    "title": "Replacement preset",
+                }
+            return payload
+
+        migrated.get_json = renamed_builtin  # type: ignore[method-assign]
+        baseline_categories, baseline_identities, baseline_content = (
+            _inventory_with_preservation_sets(baseline)
+        )
+        migrated_categories, migrated_identities, migrated_content = (
+            _inventory_with_preservation_sets(migrated)
+        )
+
+        guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(migrated_categories, migrated_identities, migrated_content),
+        )
+
+        self.assertEqual(
+            baseline_identities["design_systems"],
+            migrated_identities["design_systems"],
+        )
+        self.assertEqual(guard["state"], "passed")
+        self.assertEqual(guard["lost_identity_counts"]["design_systems"], 0)
+
+        removed = FakePublicApi()
+        removed_get_json = removed.get_json
+
+        def removed_builtin(path: str) -> dict:
+            payload = removed_get_json(path)
+            if path == "/api/design-systems":
+                payload["designSystems"] = payload["designSystems"][1:]
+            return payload
+
+        removed.get_json = removed_builtin  # type: ignore[method-assign]
+        removed_categories, removed_identities, removed_content = (
+            _inventory_with_preservation_sets(removed)
+        )
+        removal_guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(removed_categories, removed_identities, removed_content),
+        )
+
+        self.assertEqual(removal_guard["state"], "passed")
+        self.assertEqual(removal_guard["lost_identity_counts"]["design_systems"], 0)
 
 
 def _inventory_payload(categories: dict, identities: dict, content: dict) -> dict:

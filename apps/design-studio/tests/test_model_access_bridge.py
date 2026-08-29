@@ -19,6 +19,7 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from model_access_profiles import API_CONFIG_PATH, write_model_access_profiles  # noqa: E402
 from model_access_server import MODEL_ACCESS_API_KEY, ModelAccessHttpBridge  # noqa: E402
+from maverick_codex_cli import _validate_selected_model  # noqa: E402
 from opencode_runtime import OpenCodeRuntimeError  # noqa: E402
 
 
@@ -89,6 +90,20 @@ class _ProxyClient:
 
 
 class NativeModelAccessAdapterTests(unittest.TestCase):
+    def test_codex_wrapper_rejects_a_model_outside_the_workspace_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            profile, _summary = write_model_access_profiles(
+                Path(temporary),
+                _CatalogClient(),
+            )
+
+            _validate_selected_model(("exec", "--model", "gpt-test"), profile_path=profile)
+            with self.assertRaisesRegex(RuntimeError, "unavailable in this workspace"):
+                _validate_selected_model(
+                    ("exec", "--model", "gpt-other-workspace"),
+                    profile_path=profile,
+                )
+
     def test_profile_uses_official_local_profile_contract_without_secrets_or_prompts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             target, summary = write_model_access_profiles(Path(temporary), _CatalogClient())

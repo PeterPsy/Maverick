@@ -236,9 +236,10 @@ def _inventory_with_preservation_sets(
             )
             record["files"] = design_system_files(client, system_id)
         system_records.append(record)
-        identity_sets["design_systems"].append(
-            canonical_digest(["design-system", system.get("source"), system_id])
-        )
+        if system.get("source") != "built-in":
+            identity_sets["design_systems"].append(
+                canonical_digest(["design-system", system.get("source"), system_id])
+            )
     settings = stable_value(client.get_json("/api/app-config"))
     active_runs = object_list(client.get_json("/api/runs"), "runs")
     run_references.extend(stable_run(run) for run in active_runs)

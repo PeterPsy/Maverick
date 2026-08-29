@@ -8,7 +8,7 @@ from base64 import b64encode
 from contextlib import contextmanager
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import secrets
 import shutil
 import socket
@@ -19,6 +19,7 @@ from threading import Event, Lock, Thread
 import time
 from types import SimpleNamespace
 from typing import Any, Iterator
+from urllib.parse import quote
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +65,8 @@ BETA_CLI_MODEL_ID = "gpt-beta"
 STREAM_MARKER = "native-e2e-stream"
 CANCEL_MARKER = "official-cancel-e2e"
 CLI_MARKER = "native-e2e-cli"
+CLI_CANCEL_MARKER = "official-cli-cancel-e2e"
+MEDIA_ASSET_NAME = "alpha-media-e2e.png"
 TERMINAL = {"succeeded", "failed", "canceled"}
 
 
@@ -103,7 +106,6 @@ def main() -> None:
                     timeout_seconds=args.timeout_seconds,
                 )
                 broker.assert_requests_since(alpha_start, workspace_id="alpha")
-                beta_start = broker.request_count
                 beta = _exercise_beta_workspace(
                     installation,
                     opencode_runtime=args.opencode_runtime,
@@ -112,7 +114,6 @@ def main() -> None:
                     alpha=alpha,
                     timeout_seconds=args.timeout_seconds,
                 )
-                broker.assert_requests_since(beta_start, workspace_id="beta")
             finally:
                 broker.stop()
     finally:
@@ -131,7 +132,10 @@ def main() -> None:
         },
         "opencode": {
             "streaming": transport["streaming"],
-            "cancellation": alpha["cancellation"],
+            "api_cancellation": alpha["api_cancellation"],
+            "cli_cancellation": alpha["cli_cancellation"],
+            "api_tools_media": alpha["api_tools_media"],
+            "cli_tools_media": alpha["cli_tools_media"],
         },
         "delegation": {
             "direct_conversation_continued": alpha["conversation_continued"],
@@ -145,6 +149,7 @@ class _E2EModelClient:
     def __init__(self) -> None:
         self.slow_started = Event()
         self.slow_closed = Event()
+        self.tools_media_seen = Event()
         self._lock = Lock()
         self.request_count = 0
 
@@ -162,6 +167,12 @@ class _E2EModelClient:
                 }).encode("utf-8")
             ], content_type="application/json")
         payload = _json_object(body)
+        if (
+            MEDIA_ASSET_NAME in json.dumps(payload, separators=(",", ":"))
+            and isinstance(payload.get("tools"), list)
+            and payload["tools"]
+        ):
+            self.tools_media_seen.set()
         title_request = any(
             isinstance(message, dict)
             and "title generator" in str(message.get("content") or "")
@@ -177,6 +188,12 @@ class _E2EModelClient:
     def reset_cancellation(self) -> None:
         self.slow_started.clear()
         self.slow_closed.clear()
+
+    def assert_tools_media_forwarded(self) -> None:
+        if not self.tools_media_seen.is_set():
+            raise OfficialReleaseError(
+                "OpenDesign tools and approved media did not reach the API model boundary"
+            )
 
 
 class _CatalogClient:
@@ -221,22 +238,26 @@ class _E2ECliBroker:
         self.cli_executor = self
         self._scopes: dict[str, ModelAccessScope] = {}
         self._requests: list[str] = []
+        self._denials: list[tuple[str, str]] = []
         self._lock = Lock()
         self._server: ThreadingUnixModelAccessServer | None = None
         self._thread: Thread | None = None
+        self.cli_slow_started = Event()
+        self.cli_slow_closed = Event()
+        self.cli_tools_media_seen = Event()
 
     @property
     def request_count(self) -> int:
         with self._lock:
             return len(self._requests)
 
-    def issue(self, workspace_id: str) -> str:
+    def issue(self, workspace_id: str, *, data_root: Path) -> str:
         token = f"native-e2e-{workspace_id}-{secrets.token_urlsafe(18)}"
         self._scopes[token] = ModelAccessScope(
             workspace_id=workspace_id,
             app_id="design-studio",
             sidecar_id="opendesign",
-            data_root=Path("/data/opendesign-native"),
+            data_root=data_root.resolve(strict=True),
             api=True,
             cli=("codex",),
         )
@@ -288,6 +309,33 @@ class _E2ECliBroker:
             yield CliFrame("stdout", b"codex-cli 1.0.0-e2e\n")
             yield CliFrame("exit", b'{"exit_code":0}')
             return
+        selected_model = _option_value(argv, "--model")
+        expected_model = {
+            "alpha": CLI_MODEL_ID,
+            "beta": BETA_CLI_MODEL_ID,
+        }.get(scope.workspace_id)
+        project_id = Path(cwd).name
+        connection_probe = project_id.startswith("od-conn-test-")
+        if not connection_probe and not _scope_contains_cwd(scope, cwd):
+            self._record_denial(scope.workspace_id, "workspace_project")
+            raise PermissionError("CLI capability cannot access this workspace project")
+        if selected_model != expected_model:
+            self._record_denial(scope.workspace_id, "workspace_model")
+            raise PermissionError("CLI model is outside this workspace catalog")
+        if MEDIA_ASSET_NAME.encode("utf-8") in stdin and "--add-dir" in argv:
+            self.cli_tools_media_seen.set()
+        if CLI_CANCEL_MARKER.encode("utf-8") in stdin:
+            self.cli_slow_started.set()
+            try:
+                yield CliFrame(
+                    "stdout",
+                    b'{"type":"thread.started","thread_id":"e2e-cli-cancel"}\n',
+                )
+                while not cancellation.wait(0.05):
+                    pass
+            finally:
+                self.cli_slow_closed.set()
+            return
         events = (
             {"type": "thread.started", "thread_id": "e2e-cli-thread"},
             {"type": "turn.started"},
@@ -305,6 +353,39 @@ class _E2ECliBroker:
                 return
             yield CliFrame("stdout", (json.dumps(event, separators=(",", ":")) + "\n").encode())
         yield CliFrame("exit", b'{"exit_code":0}')
+
+    def reset_cli_cancellation(self) -> None:
+        self.cli_slow_started.clear()
+        self.cli_slow_closed.clear()
+
+    def assert_tools_media_forwarded(self) -> None:
+        if not self.cli_tools_media_seen.is_set():
+            raise OfficialReleaseError(
+                "OpenDesign tools and approved media did not reach the CLI model boundary"
+            )
+
+    @property
+    def denial_count(self) -> int:
+        with self._lock:
+            return len(self._denials)
+
+    def assert_denial_since(
+        self,
+        offset: int,
+        *,
+        workspace_id: str,
+        reason: str,
+    ) -> None:
+        with self._lock:
+            denials = self._denials[offset:]
+        if (workspace_id, reason) not in denials:
+            raise OfficialReleaseError(
+                f"the {workspace_id} capability was not denied for {reason}"
+            )
+
+    def _record_denial(self, workspace_id: str, reason: str) -> None:
+        with self._lock:
+            self._denials.append((workspace_id, reason))
 
     def assert_requests_since(self, offset: int, *, workspace_id: str) -> None:
         with self._lock:
@@ -435,7 +516,7 @@ def _exercise_alpha_workspace(
     native = root / "opendesign-native"
     native.mkdir(parents=True)
     _profile(native, _CatalogClient("model/exact", CLI_MODEL_ID))
-    model_access_token = model_access.issue("alpha")
+    model_access_token = model_access.issue("alpha", data_root=native)
     payload = SimpleNamespace(app_id="design-studio", workspace_id="alpha", data_root=str(root))
     first_arguments = {
         "idempotency_key": "shared-e2e-key",
@@ -447,6 +528,14 @@ def _exercise_alpha_workspace(
             "name": "alpha-asset.txt",
             "media_type": "text/plain",
             "content_base64": b64encode(b"alpha workspace asset").decode("ascii"),
+        }, {
+            "authorized": True,
+            "name": MEDIA_ASSET_NAME,
+            "media_type": "image/png",
+            "content_base64": (
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+                "+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            ),
         }],
     }
     with _running_profiled_official(
@@ -474,8 +563,11 @@ def _exercise_alpha_workspace(
             str(item.get("path") or item.get("name") or "")
             for item in adapter.list_files(project_id)
         }
-        if not any("alpha-asset.txt" in path for path in asset_paths):
-            raise OfficialReleaseError("delegated alpha asset was not persisted")
+        if not all(
+            any(name in path for path in asset_paths)
+            for name in ("alpha-asset.txt", MEDIA_ASSET_NAME)
+        ):
+            raise OfficialReleaseError("delegated alpha assets were not persisted")
 
     with _running_profiled_official(
         installation,
@@ -533,17 +625,30 @@ def _exercise_alpha_workspace(
             conversation_id=conversation_id,
             timeout_seconds=timeout_seconds,
         )
+        _prove_official_cli_cancellation(
+            client,
+            model_access=model_access,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            timeout_seconds=timeout_seconds,
+        )
+        model_client.assert_tools_media_forwarded()
+        model_access.assert_tools_media_forwarded()
     _assert_profile_contains_no_capability(native, model_access_token)
 
     return {
         **selector,
         "cli_executed": True,
-        "cancellation": True,
+        "api_cancellation": True,
+        "cli_cancellation": True,
+        "api_tools_media": True,
+        "cli_tools_media": True,
         "conversation_continued": direct.get("conversationId", conversation_id) == conversation_id,
         "visible_user_message_count": len(visible),
         "delegation_id": first_delegation_id,
         "project_id": project_id,
         "asset_paths": sorted(asset_paths),
+        "_model_access_token": model_access_token,
     }
 
 
@@ -559,8 +664,9 @@ def _exercise_beta_workspace(
     native = root / "opendesign-native"
     native.mkdir(parents=True)
     _profile(native, _CatalogClient("model/beta", BETA_CLI_MODEL_ID))
-    model_access_token = model_access.issue("beta")
+    model_access_token = model_access.issue("beta", data_root=native)
     payload = SimpleNamespace(app_id="design-studio", workspace_id="beta", data_root=str(root))
+    correct_request_start = model_access.request_count
     with _running_profiled_official(
         installation,
         native=native,
@@ -585,16 +691,38 @@ def _exercise_beta_workspace(
             "model": BETA_API_MODEL_ID,
         })
         beta_record = _wait_delegation(service, beta, timeout_seconds=timeout_seconds)
+        project_id = beta_record["opendesign"]["project_id"]
+        conversation_id = beta_record["opendesign"]["conversation_id"]
         _run_direct_native_turn(
             client,
             adapter=adapter,
-            project_id=beta_record["opendesign"]["project_id"],
-            conversation_id=beta_record["opendesign"]["conversation_id"],
+            project_id=project_id,
+            conversation_id=conversation_id,
             message_id="beta-cli-user-e2e",
             assistant_message_id="beta-cli-assistant-e2e",
             text="exercise beta workspace CLI capability",
             agent_id=CLI_AGENT_ID,
             model=BETA_CLI_MODEL_ID,
+            timeout_seconds=timeout_seconds,
+        )
+        _assert_native_run_rejected(
+            client,
+            adapter=adapter,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            message_id="beta-cross-api-model-e2e",
+            agent_id=API_AGENT_ID,
+            model=API_MODEL_ID,
+            timeout_seconds=timeout_seconds,
+        )
+        _assert_native_run_rejected(
+            client,
+            adapter=adapter,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            message_id="beta-cross-cli-model-e2e",
+            agent_id=CLI_AGENT_ID,
+            model=CLI_MODEL_ID,
             timeout_seconds=timeout_seconds,
         )
         projects = {str(item.get("id") or "") for item in adapter.list_projects()}
@@ -609,6 +737,19 @@ def _exercise_beta_workspace(
                 raise
         else:
             raise OfficialReleaseError("alpha delegation metadata leaked into beta workspace")
+        try:
+            adapter.get_project(alpha["project_id"])
+        except OpenDesignNotFound:
+            pass
+        else:
+            raise OfficialReleaseError("beta read an alpha OpenDesign project by id")
+        alpha_asset = str(alpha["asset_paths"][0])
+        try:
+            adapter.read_file(alpha["project_id"], alpha_asset)
+        except OpenDesignNotFound:
+            pass
+        else:
+            raise OfficialReleaseError("beta read an alpha native asset by identity")
         beta_assets = {
             str(item.get("path") or item.get("name") or "")
             for project_id in projects
@@ -616,7 +757,34 @@ def _exercise_beta_workspace(
         }
         if set(alpha["asset_paths"]) & beta_assets:
             raise OfficialReleaseError("alpha native assets leaked into beta workspace")
+    model_access.assert_requests_since(correct_request_start, workspace_id="beta")
     _assert_profile_contains_no_capability(native, model_access_token)
+    denial_start = model_access.denial_count
+    with _running_profiled_official(
+        installation,
+        native=native,
+        opencode_runtime=opencode_runtime,
+        model_access=model_access,
+        model_access_token=alpha["_model_access_token"],
+        timeout_seconds=timeout_seconds,
+        log_path=root / "beta-cross-capability.log",
+    ) as client:
+        _assert_native_run_rejected(
+            client,
+            adapter=_DelegationApi(client),
+            project_id=project_id,
+            conversation_id=conversation_id,
+            message_id="beta-cross-capability-e2e",
+            agent_id=CLI_AGENT_ID,
+            model=BETA_CLI_MODEL_ID,
+            timeout_seconds=timeout_seconds,
+        )
+    model_access.assert_denial_since(
+        denial_start,
+        workspace_id="alpha",
+        reason="workspace_project",
+    )
+    _assert_profile_contains_no_capability(native, alpha["_model_access_token"])
     return {
         "native_data_separate": True,
         "delegation_store_separate": True,
@@ -624,6 +792,10 @@ def _exercise_beta_workspace(
         "assets_separate": True,
         "models_separate": True,
         "credentials_separate": True,
+        "cross_project_denied": True,
+        "cross_asset_denied": True,
+        "cross_model_denied": True,
+        "cross_capability_denied": True,
     }
 
 
@@ -664,6 +836,103 @@ def _prove_official_cancellation(
         raise OfficialReleaseError("OpenCode cancellation did not become terminal")
     if not model_client.slow_closed.wait(timeout_seconds):
         raise OfficialReleaseError("OpenCode cancellation did not close the upstream stream")
+
+
+def _prove_official_cli_cancellation(
+    client: OfficialApiClient,
+    *,
+    model_access: _E2ECliBroker,
+    project_id: str,
+    conversation_id: str,
+    timeout_seconds: float,
+) -> None:
+    model_access.reset_cli_cancellation()
+    started = client.send_json("POST", "/api/runs", {
+        "message": CLI_CANCEL_MARKER,
+        "currentPrompt": CLI_CANCEL_MARKER,
+        "projectId": project_id,
+        "conversationId": conversation_id,
+        "sessionMode": "design",
+        "assistantMessageId": "assistant-cli-cancel-e2e",
+        "clientRequestId": "native-product-cli-cancel-e2e",
+        "attachments": [],
+        "agentId": CLI_AGENT_ID,
+        "model": CLI_MODEL_ID,
+    })
+    run_id = str(started.get("runId") or "")
+    if not run_id or not model_access.cli_slow_started.wait(timeout_seconds):
+        raise OfficialReleaseError("Codex CLI cancellation stream did not start")
+    client.send_json("POST", f"/api/runs/{run_id}/cancel", {})
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        status = str(client.get_json(f"/api/runs/{run_id}").get("status") or "")
+        if status in TERMINAL:
+            if status != "canceled":
+                raise OfficialReleaseError(f"Codex CLI cancellation ended as {status}")
+            break
+        time.sleep(0.05)
+    else:
+        raise OfficialReleaseError("Codex CLI cancellation did not become terminal")
+    if not model_access.cli_slow_closed.wait(timeout_seconds):
+        raise OfficialReleaseError("Codex CLI cancellation did not close the broker stream")
+
+
+def _assert_native_run_rejected(
+    client: OfficialApiClient,
+    *,
+    adapter: "_DelegationApi",
+    project_id: str,
+    conversation_id: str,
+    message_id: str,
+    agent_id: str,
+    model: str,
+    timeout_seconds: float,
+) -> None:
+    now = int(time.time() * 1000)
+    text = f"cross-workspace denial proof {message_id}"
+    adapter.put_message(
+        project_id,
+        conversation_id,
+        message_id,
+        {
+            "role": "user",
+            "content": text,
+            "attachments": [],
+            "startedAt": now,
+            "endedAt": now,
+        },
+    )
+    try:
+        started = client.send_json("POST", "/api/runs", {
+            "message": text,
+            "currentPrompt": text,
+            "projectId": project_id,
+            "conversationId": conversation_id,
+            "sessionMode": "design",
+            "assistantMessageId": f"assistant-{message_id}",
+            "clientRequestId": f"native-product-{message_id}",
+            "attachments": [],
+            "agentId": agent_id,
+            "model": model,
+        })
+    except OfficialReleaseError as error:
+        if "HTTP 4" not in str(error):
+            raise
+        return
+    run_id = str(started.get("runId") or "")
+    if not run_id:
+        raise OfficialReleaseError("cross-workspace denial returned no run identity")
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        status = str(client.get_json(f"/api/runs/{run_id}").get("status") or "")
+        if status in TERMINAL:
+            if status != "failed":
+                raise OfficialReleaseError(
+                    f"cross-workspace model or capability unexpectedly ended as {status}"
+                )
+            return
+        time.sleep(0.05)
+    raise OfficialReleaseError("cross-workspace denial did not become terminal")
 
 
 def _run_direct_native_turn(
@@ -821,6 +1090,14 @@ class _DelegationApi:
     def list_files(self, project_id: str) -> list[dict[str, Any]]:
         return _objects(self._get(f"/api/projects/{project_id}/files"), "files")
 
+    def read_file(self, project_id: str, path: str) -> bytes:
+        try:
+            return self.client.get_bytes(
+                f"/api/projects/{project_id}/files/{quote(path, safe='/')}"
+            )
+        except OfficialReleaseError as error:
+            _raise_delegation_api(error)
+
     def start_run(self, body: dict[str, Any]) -> dict[str, Any]:
         return self._send("POST", "/api/runs", body)
 
@@ -909,7 +1186,11 @@ def _running_profiled_official(
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
             )
-            client = OfficialApiClient(port=port, token=token)
+            client = OfficialApiClient(
+                port=port,
+                token=token,
+                request_timeout_seconds=min(60.0, max(10.0, timeout_seconds)),
+            )
             _wait_ready(process, client=client, timeout_seconds=timeout_seconds)
             yield client
         finally:
@@ -1070,6 +1351,29 @@ def _json_object(body: bytes) -> dict[str, Any]:
     except (UnicodeDecodeError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _option_value(arguments: tuple[str, ...], option: str) -> str | None:
+    positions = [index for index, value in enumerate(arguments) if value == option]
+    if len(positions) != 1 or positions[0] + 1 >= len(arguments):
+        return None
+    return arguments[positions[0] + 1]
+
+
+def _scope_contains_cwd(scope: ModelAccessScope, cwd: str) -> bool:
+    sidecar_path = PurePosixPath(cwd)
+    if (
+        not sidecar_path.is_absolute()
+        or sidecar_path.parts[:3] != ("/", "data", "opendesign-native")
+        or ".." in sidecar_path.parts
+    ):
+        return False
+    root = scope.data_root.resolve(strict=True)
+    try:
+        candidate = root.joinpath(*sidecar_path.parts[3:]).resolve(strict=True)
+    except OSError:
+        return False
+    return candidate == root or root in candidate.parents
 
 
 def _unused_port() -> int:

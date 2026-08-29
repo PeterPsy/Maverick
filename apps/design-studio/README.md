@@ -61,8 +61,10 @@ remove a usable API profile.
 The API bridge validates the selected configured model, forwards the exact
 OpenDesign-authored JSON body, and streams the provider response. The CLI
 bridge forwards the native adapter's argv, cwd, stdin, stdout, stderr, exit,
-and cancellation semantics to a separately sandboxed Codex process. It does
-not create a Maverick runtime session and does not add Maverick prompts,
+and cancellation semantics to a separately sandboxed Codex process. Before
+forwarding, the wrapper requires the selected CLI model to remain present in
+the workspace-scoped native profile. It does not create a Maverick runtime
+session and does not add Maverick prompts,
 memory, Chat history, personas, skills, tools, planning, or model substitution.
 
 Profile and provider metadata is written only below OpenDesign's sandbox agent
@@ -100,18 +102,23 @@ APIs, runs the candidate's supported upstream migration against a private
 copy, inventories the migrated copy, and exercises the public delegation
 contract on another disposable copy. Activation is permitted only when the
 redaction-safe identity and field-level user-content claims prove that every
-pre-migration project, conversation, ordered message, Design System, file,
-artifact, setting, and run reference survives. New schema fields, normalized
-server metadata, and updated bundled Design Systems are allowed; identity loss
-or mutation/deletion of an existing user value fails before the active data or
+pre-migration project, conversation, ordered message, user-owned Design
+System, file, artifact, setting, and run reference survives. Functional
+project metadata such as entry files, media configuration, templates, and
+voice is protected; only explicitly enumerated volatile server fields are
+normalized away. New schema fields and updates, renames, or removals of
+release-owned bundled Design Systems remain allowed. Identity loss or
+mutation/deletion of an existing user value fails before the active data or
 release selection changes. Only then does the updater atomically select the
 migrated data and release descriptor and prewarm the candidate.
 
 Failure to start restores the complete prior data and release selection. If
 that previous writer cannot itself be restarted—or its prewarm call raises—the
-updater re-establishes quiescence, stops it again, and records
-`recovery_required` instead of reporting a safe rollback. A model or delegation capability mismatch is recorded as degraded
-and never rolls back or stops native OpenDesign.
+updater re-establishes quiescence and retries the synchronous Core stop. It
+records `recovery_required` only after a stop response or terminal sidecar
+status positively confirms that no writer remains active. A model or
+delegation capability mismatch is recorded as degraded and never rolls back
+or stops native OpenDesign.
 
 ## External delegation bridge
 
@@ -233,8 +240,9 @@ python3 -m unittest \
 
 Maintained aggregate gates (quick, affected, migration, hosted, and release)
 are exposed through the package scripts. The release gate is the default and
-adds real native selector, OpenCode streaming/cancellation, delegated
-continuation, workspace-isolation, and browser deep-link proofs:
+adds real native selector, API/CLI streaming and cancellation, tools/media at
+the model boundary, delegated continuation, explicit cross-workspace denial,
+and browser deep-link proofs:
 
 ```bash
 npm --prefix apps/design-studio run test:e2e

@@ -298,7 +298,7 @@ class OfficialUpdateTests(unittest.TestCase):
         with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
             self._run(control, removed=("projects",))
 
-        self.assertEqual(calls, ["stop", "prewarm"])
+        self.assertEqual(calls, ["stop", "prewarm", "stop"])
         marker = json.loads((self.data_root / "official-update.json").read_text())
         self.assertEqual(marker["phase"], "recovery_required")
         self.assertEqual(marker["migration_guard"]["state"], "failed")
@@ -348,6 +348,78 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertFalse(marker["native_ready"])
         self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
         self.assertEqual(calls[:4], ["stop", "prewarm", "stop", "prewarm"])
+
+    def test_recovery_retries_failed_stops_and_marks_only_after_writer_is_stopped(self) -> None:
+        calls: list[str] = []
+        stop_calls = 0
+        prewarm_calls = 0
+        writer_active = False
+
+        def control(operation: str, _workspace_id: str) -> dict:
+            nonlocal stop_calls, prewarm_calls, writer_active
+            calls.append(operation)
+            if operation == "stop":
+                stop_calls += 1
+                if stop_calls == 2:
+                    raise RuntimeError("stop response lost")
+                if stop_calls == 4:
+                    writer_active = False
+                    raise RuntimeError("stop completed but its response was lost")
+                if stop_calls in {5, 6}:
+                    raise RuntimeError("stop retry channel failed")
+                writer_active = False
+                return {"ready": False}
+            if operation == "status":
+                return {
+                    "services": [{"state": "ready" if writer_active else "stopped"}]
+                }
+            prewarm_calls += 1
+            writer_active = True
+            if prewarm_calls == 1:
+                return {"ready": False}
+            raise RuntimeError("prewarm started the writer but lost its response")
+
+        with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
+            self._run(control)
+
+        marker = json.loads((self.data_root / "official-update.json").read_text())
+        self.assertEqual(marker["phase"], "recovery_required")
+        self.assertFalse(writer_active)
+        self.assertEqual(stop_calls, 6)
+        self.assertIn("status", calls)
+        self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
+
+    def test_recovery_marker_is_not_written_when_writer_stop_cannot_be_confirmed(self) -> None:
+        stop_calls = 0
+        prewarm_calls = 0
+        writer_active = False
+
+        def control(operation: str, _workspace_id: str) -> dict:
+            nonlocal stop_calls, prewarm_calls, writer_active
+            if operation == "stop":
+                stop_calls += 1
+                if stop_calls == 1:
+                    writer_active = False
+                    return {"ready": False}
+                if stop_calls == 2:
+                    writer_active = False
+                    return {"ready": False}
+                raise RuntimeError("Core could not stop the active writer")
+            if operation == "status":
+                return {"services": [{"state": "ready"}]}
+            prewarm_calls += 1
+            writer_active = True
+            if prewarm_calls == 1:
+                return {"ready": False}
+            raise RuntimeError("prewarm started the writer but lost its response")
+
+        with self.assertRaisesRegex(OfficialUpdateError, "could not confirm.*writer stop"):
+            self._run(control)
+
+        marker = json.loads((self.data_root / "official-update.json").read_text())
+        self.assertNotEqual(marker["phase"], "recovery_required")
+        self.assertTrue(writer_active)
+        self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
 
 
 if __name__ == "__main__":

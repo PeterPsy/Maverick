@@ -51,6 +51,8 @@ from official_update_state import (
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 NATIVE_DATA_DIRECTORY = "opendesign-native"
+WRITER_STOP_ATTEMPTS = 3
+STOPPED_SERVICE_STATES = {"failed", "not_started", "stopped"}
 
 
 def perform_official_update(
@@ -98,9 +100,12 @@ def perform_official_update(
     migration_guard = incomplete_migration_guard()
     work = root / f".{identifier}.work"
     try:
-        response = control("stop", workspace_id)
-        if response.get("ready") is not False:
-            raise OfficialUpdateError("Core did not confirm the native OpenDesign writer stop")
+        _confirm_writer_stopped(
+            root,
+            identifier=identifier,
+            workspace_id=workspace_id,
+            control=control,
+        )
         backup = _prepare_backup(root, native, previous, identifier)
         work.mkdir(mode=0o700)
         baseline_data = work / "baseline-data"
@@ -212,8 +217,6 @@ def perform_official_update(
                 control=control,
             )
         except Exception as recovery_error:
-            with suppress(Exception):
-                quiesce_native_host(root, cutover_id=identifier)
             recovery = marker or _recovery_required_marker(
                 identifier,
                 previous=previous,
@@ -222,21 +225,16 @@ def perform_official_update(
                 migrated_inventory=migrated_categories,
                 migration_guard=migration_guard,
             )
-            recovery.update(
-                {
-                    "phase": "recovery_required",
-                    "updated_at": utc_now(),
-                    "native_ready": False,
-                    "rolled_back": False,
-                }
-            )
             try:
-                write_update_state(root, recovery)
-            except Exception as marker_error:
-                raise OfficialUpdateError(
-                    "official OpenDesign update recovery is quiesced but its "
-                    "recovery_required marker could not be recorded"
-                ) from marker_error
+                recovery = _write_confirmed_recovery_required(
+                    root,
+                    recovery,
+                    identifier=identifier,
+                    workspace_id=workspace_id,
+                    control=control,
+                )
+            except OfficialUpdateError:
+                raise
             shutil.rmtree(work, ignore_errors=True)
             if backup is not None:
                 with suppress(Exception):
@@ -315,8 +313,12 @@ def _rollback_activated_update(
     control: Callable[[str, str], dict[str, Any]],
 ) -> dict[str, Any]:
     try:
-        quiesce_native_host(root, cutover_id=identifier)
-        control("stop", workspace_id)
+        _confirm_writer_stopped(
+            root,
+            identifier=identifier,
+            workspace_id=workspace_id,
+            control=control,
+        )
         failed = work / "failed-candidate-data"
         if failed.exists():
             shutil.rmtree(failed)
@@ -327,21 +329,19 @@ def _rollback_activated_update(
         write_release_selection(root, previous.release, selected_at=previous.selected_at)
         write_bridge_contracts(root, previous.release, delegation=previous_delegation)
         release_native_host(root, cutover_id=identifier)
-        try:
-            readiness = control("prewarm", workspace_id)
-        except Exception:
-            quiesce_native_host(root, cutover_id=identifier)
-            with suppress(Exception):
-                control("stop", workspace_id)
-            raise
+        readiness = control("prewarm", workspace_id)
         ready = isinstance(readiness, dict) and readiness.get("ready") is True
+        if not ready:
+            raise OfficialUpdateError(
+                "the previous native OpenDesign writer did not become ready"
+            )
         state = _read_marker_for_recovery(root)
         state.update(
             {
-                "phase": "rolled_back" if ready else "recovery_required",
+                "phase": "rolled_back",
                 "updated_at": utc_now(),
-                "native_ready": ready,
-                "rolled_back": ready,
+                "native_ready": True,
+                "rolled_back": True,
                 "bridges": {
                     "model_access": {"state": "unchecked"},
                     "delegation": previous_delegation,
@@ -352,37 +352,26 @@ def _rollback_activated_update(
         _write_backup_evidence(backup, state)
         make_tree_read_only(backup)
         shutil.rmtree(work, ignore_errors=True)
-        if not ready:
-            quiesce_native_host(root, cutover_id=identifier)
-            with suppress(Exception):
-                control("stop", workspace_id)
-            raise OfficialUpdateError(
-                "official OpenDesign update recovery requires operator intervention"
-            )
         return state
     except Exception as recovery_error:
         try:
-            quiesce_native_host(root, cutover_id=identifier)
-        except Exception as quiescence_error:
-            raise OfficialUpdateError(
-                "official OpenDesign update recovery could not restore quiescence"
-            ) from quiescence_error
-        try:
-            state = _read_marker_for_recovery(root)
-            state.update(
-                {
-                    "phase": "recovery_required",
-                    "updated_at": utc_now(),
-                    "native_ready": False,
-                }
+            state = _write_confirmed_recovery_required(
+                root,
+                None,
+                identifier=identifier,
+                workspace_id=workspace_id,
+                control=control,
+                delegation=previous_delegation,
             )
-            write_update_state(root, state)
-        except Exception as marker_error:
-            raise OfficialUpdateError(
-                "official OpenDesign update recovery is quiesced but its "
-                "recovery_required marker could not be recorded"
-            ) from marker_error
-        raise OfficialUpdateError("official OpenDesign update recovery requires operator intervention") from recovery_error
+        except OfficialUpdateError:
+            raise
+        with suppress(Exception):
+            _write_backup_evidence(backup, state)
+            make_tree_read_only(backup)
+        shutil.rmtree(work, ignore_errors=True)
+        raise OfficialUpdateError(
+            "official OpenDesign update recovery requires operator intervention"
+        ) from recovery_error
 
 
 def _marker(
@@ -463,6 +452,90 @@ def _live_bridge_results(root: Path, delegation: dict[str, Any]) -> dict[str, An
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
         model = {"state": "degraded", "reason": "post_update_handshake_unavailable"}
     return {"model_access": model, "delegation": delegation}
+
+
+def _confirm_writer_stopped(
+    root: Path,
+    *,
+    identifier: str,
+    workspace_id: str,
+    control: Callable[[str, str], dict[str, Any]],
+) -> None:
+    """Quiesce relaunches and obtain positive Core evidence that no writer runs."""
+    try:
+        quiesce_native_host(root, cutover_id=identifier)
+    except Exception as error:
+        raise OfficialUpdateError(
+            "official OpenDesign update recovery could not restore quiescence"
+        ) from error
+    for _attempt in range(WRITER_STOP_ATTEMPTS):
+        try:
+            response = control("stop", workspace_id)
+        except Exception:
+            continue
+        if isinstance(response, dict) and response.get("ready") is False:
+            return
+    try:
+        status = control("status", workspace_id)
+    except Exception as error:
+        raise OfficialUpdateError(
+            "official OpenDesign update recovery could not confirm the writer stop"
+        ) from error
+    services = status.get("services") if isinstance(status, dict) else None
+    if (
+        isinstance(services, list)
+        and services
+        and all(
+            isinstance(service, dict)
+            and service.get("state") in STOPPED_SERVICE_STATES
+            for service in services
+        )
+    ):
+        return
+    raise OfficialUpdateError(
+        "official OpenDesign update recovery could not confirm the writer stop"
+    )
+
+
+def _write_confirmed_recovery_required(
+    root: Path,
+    state: dict[str, Any] | None,
+    *,
+    identifier: str,
+    workspace_id: str,
+    control: Callable[[str, str], dict[str, Any]],
+    delegation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist recovery-required only after the live writer is confirmed stopped."""
+    _confirm_writer_stopped(
+        root,
+        identifier=identifier,
+        workspace_id=workspace_id,
+        control=control,
+    )
+    if state is None:
+        state = _read_marker_for_recovery(root)
+    state.update(
+        {
+            "phase": "recovery_required",
+            "updated_at": utc_now(),
+            "native_ready": False,
+            "rolled_back": False,
+        }
+    )
+    if delegation is not None:
+        state["bridges"] = {
+            "model_access": {"state": "unchecked"},
+            "delegation": delegation,
+        }
+    try:
+        write_update_state(root, state)
+    except Exception as error:
+        raise OfficialUpdateError(
+            "official OpenDesign update recovery stopped the writer but its "
+            "recovery_required marker could not be recorded"
+        ) from error
+    return state
 
 
 def _resume_previous_writer(

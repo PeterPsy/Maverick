@@ -25,9 +25,18 @@ MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 class OfficialApiClient:
     """Bounded client for supported public APIs on one disposable process."""
 
-    def __init__(self, *, port: int, token: str) -> None:
+    def __init__(
+        self,
+        *,
+        port: int,
+        token: str,
+        request_timeout_seconds: float = 10.0,
+    ) -> None:
+        if not 0 < request_timeout_seconds <= 60:
+            raise ValueError("official API request timeout is invalid")
         self._port = port
         self._token = token
+        self._request_timeout_seconds = request_timeout_seconds
 
     def get_json(self, path: str) -> dict[str, Any]:
         _status, body = self.request("GET", path)
@@ -73,7 +82,11 @@ class OfficialApiClient:
             raise OfficialReleaseError("official API probe method is unsupported")
         if not path.startswith("/api/") or "\x00" in path:
             raise OfficialReleaseError("official API probe path is unsafe")
-        connection = http.client.HTTPConnection("127.0.0.1", self._port, timeout=10)
+        connection = http.client.HTTPConnection(
+            "127.0.0.1",
+            self._port,
+            timeout=self._request_timeout_seconds,
+        )
         try:
             connection.request(
                 method,

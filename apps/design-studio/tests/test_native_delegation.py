@@ -443,6 +443,36 @@ class NativeDelegationTests(unittest.TestCase):
             self.assertFalse(state["intercepts_native_routes"])
             self.assertEqual(json.loads((root / "native-host-status.json").read_text()), host)
 
+    def test_state_projects_cli_diagnostics_from_native_profile_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "native-host-status.json").write_text(json.dumps({
+                "schema_version": "1",
+                "mode": "official-native",
+                "state": "ready",
+                "model_bridge": {
+                    "state": "ready",
+                    "semantic_enrichment": False,
+                    "api": {"state": "ready", "protocol": "openai-compatible"},
+                    "profiles": {
+                        "state": "ready",
+                        "cli": {
+                            "state": "ready",
+                            "profile_id": "installed-codex-cli",
+                            "model_count": 7,
+                        },
+                    },
+                },
+            }), encoding="utf-8")
+
+            state = SurfaceService(payload(root), client=FakeOpenDesign()).state()
+
+        self.assertEqual(state["host"]["model_bridge"]["cli"], {
+            "state": "ready",
+            "profile_id": "installed-codex-cli",
+            "model_count": 7,
+        })
+
     def test_bridge_incompatibility_blocks_only_new_delegation_not_native_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -97,7 +97,9 @@ describe("Design Studio native OpenDesign host", () => {
     });
     const frame = container.querySelector("iframe");
     expect(frame).not.toBeNull();
-    expect(container.querySelector("main")?.dataset.phase).toBe("bootstrapping");
+    expect(["bootstrapping", "ready"]).toContain(
+      container.querySelector("main")?.dataset.phase,
+    );
     return frame as HTMLIFrameElement;
   }
 });

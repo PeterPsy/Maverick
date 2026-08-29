@@ -29,8 +29,9 @@ bridges are disabled.
 selection. `native_official_update.py` verifies and installs a user-selected
 official lock, stops only the managed Design Studio writer, creates an
 immutable backup, runs upstream migration and public inventory on copies,
-requires both the migrated identity and per-record content multisets to
-preserve every baseline item and value,
+requires the migrated identity multiset and field-level user-content claims to
+preserve every baseline item and value while permitting additive schema and
+server-metadata evolution,
 atomically swaps data and selection, and restores both if native readiness
 fails. If the previous writer cannot be resumed, it remains fail-closed behind
 quiescence with an explicit `recovery_required` marker.
@@ -56,6 +57,9 @@ Core-granted API model visible in the native selector without manual provider
 setup when the optional runtime is available, while a missing API or CLI catalog
 does not remove the other profile. Both paths operate without a Maverick runtime
 session, prompt, memory, persona, skill, tool catalog, or semantic rewrite.
+The official daemon finds the production wrappers on Core's `/app/service`
+mount, and both wrappers execute with `/usr/bin/python3`; `/maverick/python` is
+reserved for artifact-root sidecars and is not part of this contract.
 
 Delegation lives outside this service directory under `../backend/`. It calls
 only supported native project, conversation, message, file, run, result, and
@@ -103,9 +107,12 @@ identity, counts, and SHA-256 evidence.
 
 The maintained release gate runs the complete Design Studio Python suite,
 frontend tests/build, the unchanged-official-package smoke, and two real E2E
-proofs. A disposable unchanged daemon exposes both generated profiles, executes
-OpenCode streaming and cancellation, continues a delegated conversation after
-restart, and proves two workspace data/stores remain isolated. Playwright then
+proofs. A disposable unchanged daemon runs in a faithful bubblewrap filesystem
+with `/app`, `/artifacts`, and `/model-access`, executes the production API and
+CLI wrappers, proves OpenCode streaming/cancellation, reopens a delegated
+conversation through the direct native API after restart, and verifies data,
+delegation stores, assets, model catalogs, and capability credentials remain
+isolated between two workspaces. Playwright then
 drives the actual Base Shell frame host and Design Studio host through an exact
 conversation deep link into a cross-origin native iframe. Focused, affected,
 migration, and hosted profiles use the same runner:

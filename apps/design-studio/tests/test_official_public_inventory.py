@@ -15,6 +15,7 @@ from official_public_inventory import (  # noqa: E402
     _inventory_with_identity_sets,
     _inventory_with_preservation_sets,
 )
+from official_update_state import migration_preservation_guard  # noqa: E402
 
 
 class FakePublicApi:
@@ -177,6 +178,56 @@ class OfficialPublicInventoryTests(unittest.TestCase):
         self.assertEqual(set(content), set(_categories))
         rendered = str(content)
         self.assertNotIn("Secret transcript", rendered)
+
+    def test_content_guard_allows_schema_metadata_and_builtin_changes(self) -> None:
+        baseline = FakePublicApi()
+        baseline_get_json = baseline.get_json
+
+        def legacy_metadata(path: str) -> dict:
+            payload = baseline_get_json(path)
+            if path == "/api/projects/project-1":
+                payload["project"]["metadata"] = {"legacyShape": {"revision": 1}}
+            return payload
+
+        baseline.get_json = legacy_metadata  # type: ignore[method-assign]
+        migrated = FakePublicApi()
+        migrated_get_json = migrated.get_json
+
+        def compatible_migration(path: str) -> dict:
+            payload = migrated_get_json(path)
+            if path == "/api/projects/project-1":
+                payload["project"]["metadata"] = {"normalizedRevision": "1"}
+                payload["project"]["serverComputedField"] = "new-schema"
+            if path == "/api/design-systems":
+                payload["designSystems"][0]["title"] = "Updated built-in preset"
+            if path == "/api/design-systems/user%3Abrand":
+                payload["designSystem"]["newSchemaField"] = "additive"
+            return payload
+
+        migrated.get_json = compatible_migration  # type: ignore[method-assign]
+        baseline_categories, baseline_identities, baseline_content = (
+            _inventory_with_preservation_sets(baseline)
+        )
+        migrated_categories, migrated_identities, migrated_content = (
+            _inventory_with_preservation_sets(migrated)
+        )
+
+        guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(migrated_categories, migrated_identities, migrated_content),
+        )
+
+        self.assertEqual(guard["state"], "passed")
+        self.assertFalse(any(guard["lost_content_counts"].values()))
+        self.assertGreater(guard["added_content_counts"]["design_systems"], 0)
+
+
+def _inventory_payload(categories: dict, identities: dict, content: dict) -> dict:
+    return {
+        "categories": categories,
+        "identity_sets": identities,
+        "content_sets": content,
+    }
 
 
 if __name__ == "__main__":

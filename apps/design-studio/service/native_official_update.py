@@ -327,8 +327,14 @@ def _rollback_activated_update(
         write_release_selection(root, previous.release, selected_at=previous.selected_at)
         write_bridge_contracts(root, previous.release, delegation=previous_delegation)
         release_native_host(root, cutover_id=identifier)
-        readiness = control("prewarm", workspace_id)
-        ready = readiness.get("ready") is True
+        try:
+            readiness = control("prewarm", workspace_id)
+        except Exception:
+            quiesce_native_host(root, cutover_id=identifier)
+            with suppress(Exception):
+                control("stop", workspace_id)
+            raise
+        ready = isinstance(readiness, dict) and readiness.get("ready") is True
         state = _read_marker_for_recovery(root)
         state.update(
             {
@@ -348,15 +354,34 @@ def _rollback_activated_update(
         shutil.rmtree(work, ignore_errors=True)
         if not ready:
             quiesce_native_host(root, cutover_id=identifier)
+            with suppress(Exception):
+                control("stop", workspace_id)
             raise OfficialUpdateError(
                 "official OpenDesign update recovery requires operator intervention"
             )
         return state
     except Exception as recovery_error:
-        with suppress(Exception):
+        try:
+            quiesce_native_host(root, cutover_id=identifier)
+        except Exception as quiescence_error:
+            raise OfficialUpdateError(
+                "official OpenDesign update recovery could not restore quiescence"
+            ) from quiescence_error
+        try:
             state = _read_marker_for_recovery(root)
-            state.update({"phase": "recovery_required", "updated_at": utc_now(), "native_ready": False})
+            state.update(
+                {
+                    "phase": "recovery_required",
+                    "updated_at": utc_now(),
+                    "native_ready": False,
+                }
+            )
             write_update_state(root, state)
+        except Exception as marker_error:
+            raise OfficialUpdateError(
+                "official OpenDesign update recovery is quiesced but its "
+                "recovery_required marker could not be recorded"
+            ) from marker_error
         raise OfficialUpdateError("official OpenDesign update recovery requires operator intervention") from recovery_error
 
 

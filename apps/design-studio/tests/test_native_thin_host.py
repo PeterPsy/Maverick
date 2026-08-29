@@ -125,8 +125,17 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertEqual(env["NO_PROXY"], "*")
         self.assertEqual(env["OD_CODEX_DISABLE_PLUGINS"], "1")
         self.assertEqual(env["OD_CODEX_SANDBOX"], "danger-full-access")
+        self.assertEqual(env["PATH"].split(":", 1)[0], "/app/service")
+        self.assertFalse(any(part.startswith("/maverick/") for part in env["PATH"].split(":")))
+        codex_wrapper = SERVICE_ROOT / "maverick-codex"
         opencode_wrapper = SERVICE_ROOT / "maverick-opencode"
+        self.assertTrue(codex_wrapper.stat().st_mode & 0o111)
         self.assertTrue(opencode_wrapper.stat().st_mode & 0o111)
+        for wrapper in (codex_wrapper, opencode_wrapper):
+            source = wrapper.read_text(encoding="utf-8")
+            self.assertTrue(source.startswith("#!/usr/bin/python3\n"))
+            self.assertNotIn("/maverick/python", source)
+            self.assertNotIn("/maverick/app", source)
         self.assertIn(SANDBOX_BINARY_PATH.as_posix(), opencode_wrapper.read_text())
         self.assertNotIn("OPENAI_API_KEY", env)
         self.assertNotIn("MAVERICK_RUNTIME_API_TOKEN", env)

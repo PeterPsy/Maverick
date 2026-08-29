@@ -121,8 +121,8 @@ def migration_preservation_guard(
     migrated_categories = inventory_categories(migrated)
     baseline_sets = _identity_sets(baseline, baseline_categories)
     migrated_sets = _identity_sets(migrated, migrated_categories)
-    baseline_content = _content_sets(baseline, baseline_categories)
-    migrated_content = _content_sets(migrated, migrated_categories)
+    baseline_content = _content_sets(baseline)
+    migrated_content = _content_sets(migrated)
     lost_identity_counts: dict[str, int] = {}
     added_identity_counts: dict[str, int] = {}
     lost_content_counts: dict[str, int] = {}
@@ -262,7 +262,6 @@ def _identity_sets(
 
 def _content_sets(
     inventory: dict[str, Any],
-    categories: dict[str, dict[str, Any]],
 ) -> dict[str, list[str]]:
     raw = inventory.get("content_sets")
     if not isinstance(raw, dict) or set(raw) != set(INVENTORY_CATEGORIES):
@@ -272,7 +271,6 @@ def _content_sets(
         values = raw.get(category)
         if (
             not isinstance(values, list)
-            or len(values) != categories[category]["count"]
             or any(not isinstance(value, str) or not _sha256(value) for value in values)
         ):
             raise OfficialUpdateError("official update content inventory is invalid")
@@ -357,8 +355,6 @@ def _validate_migration_guard(
             baseline_count != baseline_inventory[category]["count"]
             or migrated_count != migrated_inventory[category]["count"]
             or baseline_count - lost_count + added_count != migrated_count
-            or baseline_content_count != baseline_inventory[category]["count"]
-            or migrated_content_count != migrated_inventory[category]["count"]
             or baseline_content_count - lost_content_count + added_content_count
             != migrated_content_count
         ):

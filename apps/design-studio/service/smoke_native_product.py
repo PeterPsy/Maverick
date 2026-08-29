@@ -4,18 +4,18 @@
 from __future__ import annotations
 
 import argparse
+from base64 import b64encode
 from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
 import secrets
-import shlex
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
-from threading import Event, Lock
+from threading import Event, Lock, Thread
 import time
 from types import SimpleNamespace
 from typing import Any, Iterator
@@ -29,7 +29,13 @@ sys.path.insert(0, str(BACKEND_ROOT))
 
 from delegation_errors import DelegationError  # noqa: E402
 from delegation_service import DelegationService  # noqa: E402
-from model_access_profiles import API_CONFIG_PATH, write_model_access_profiles  # noqa: E402
+from core.model_access.http_server import ThreadingUnixModelAccessServer  # noqa: E402
+from core.model_access.models import CliFrame, ModelAccessScope  # noqa: E402
+from model_access_profiles import (  # noqa: E402
+    API_CONFIG_PATH,
+    SANDBOX_PROFILE_PATH,
+    write_model_access_profiles,
+)
 from model_access_server import ModelAccessHttpBridge  # noqa: E402
 from official_inventory_process import (  # noqa: E402
     OfficialApiClient,
@@ -52,8 +58,12 @@ from opendesign_launcher import build_native_launch  # noqa: E402
 API_AGENT_ID = "installed-maverick-api"
 CLI_AGENT_ID = "installed-codex-cli"
 API_MODEL_ID = "maverick/model/exact"
+BETA_API_MODEL_ID = "maverick/model/beta"
+CLI_MODEL_ID = "gpt-e2e"
+BETA_CLI_MODEL_ID = "gpt-beta"
 STREAM_MARKER = "native-e2e-stream"
 CANCEL_MARKER = "official-cancel-e2e"
+CLI_MARKER = "native-e2e-cli"
 TERMINAL = {"succeeded", "failed", "canceled"}
 
 
@@ -66,9 +76,6 @@ def main() -> None:
 
     installation = verify_official_installation(args.installation)
     opencode = verify_opencode_runtime(args.opencode_runtime)
-    codex = shutil.which("codex")
-    if not codex:
-        raise OfficialReleaseError("Codex CLI is required for the native selector E2E proof")
 
     model_client = _E2EModelClient()
     bridge = ModelAccessHttpBridge(model_client)
@@ -77,28 +84,37 @@ def main() -> None:
     try:
         with tempfile.TemporaryDirectory(prefix="design-studio-native-product-e2e-") as temporary:
             root = Path(temporary)
-            wrappers = _write_wrappers(root / "bin", opencode=opencode, codex=Path(codex))
-            transport = _prove_opencode_streaming(
-                opencode,
-                model_client=model_client,
-                root=root / "transport",
-                timeout_seconds=args.timeout_seconds,
-            )
-            alpha = _exercise_alpha_workspace(
-                installation,
-                model_client=model_client,
-                root=root / "alpha",
-                wrappers=wrappers,
-                timeout_seconds=args.timeout_seconds,
-            )
-            beta = _exercise_beta_workspace(
-                installation,
-                model_client=model_client,
-                root=root / "beta",
-                wrappers=wrappers,
-                alpha=alpha,
-                timeout_seconds=args.timeout_seconds,
-            )
+            broker = _E2ECliBroker(root / "model-access")
+            broker.start()
+            try:
+                transport = _prove_opencode_streaming(
+                    opencode,
+                    model_client=model_client,
+                    root=root / "transport",
+                    timeout_seconds=args.timeout_seconds,
+                )
+                alpha_start = broker.request_count
+                alpha = _exercise_alpha_workspace(
+                    installation,
+                    opencode_runtime=args.opencode_runtime,
+                    model_client=model_client,
+                    root=root / "alpha",
+                    model_access=broker,
+                    timeout_seconds=args.timeout_seconds,
+                )
+                broker.assert_requests_since(alpha_start, workspace_id="alpha")
+                beta_start = broker.request_count
+                beta = _exercise_beta_workspace(
+                    installation,
+                    opencode_runtime=args.opencode_runtime,
+                    root=root / "beta",
+                    model_access=broker,
+                    alpha=alpha,
+                    timeout_seconds=args.timeout_seconds,
+                )
+                broker.assert_requests_since(beta_start, workspace_id="beta")
+            finally:
+                broker.stop()
     finally:
         bridge.stop()
 
@@ -111,13 +127,14 @@ def main() -> None:
             "api_profile": alpha["api_profile"],
             "cli_profile": alpha["cli_profile"],
             "api_model": alpha["api_model"],
+            "cli_executed": alpha["cli_executed"],
         },
         "opencode": {
             "streaming": transport["streaming"],
             "cancellation": alpha["cancellation"],
         },
         "delegation": {
-            "conversation_continued": alpha["conversation_continued"],
+            "direct_conversation_continued": alpha["conversation_continued"],
             "visible_user_message_count": alpha["visible_user_message_count"],
         },
         "workspace_isolation": beta,
@@ -132,24 +149,7 @@ class _E2EModelClient:
         self.request_count = 0
 
     def catalog(self) -> dict[str, Any]:
-        return {
-            "schema_version": "1",
-            "api_models": [{
-                "id": "model/exact",
-                "label": "Exact E2E API",
-                "provider_id": "e2e",
-                "transport": "api",
-                "available": True,
-            }],
-            "cli_models": [{
-                "id": "gpt-e2e",
-                "label": "Codex E2E",
-                "provider_id": "codex",
-                "transport": "cli",
-                "available": True,
-            }],
-            "cli_defaults": {"codex": "gpt-e2e"},
-        }
+        return _model_catalog("model/exact", CLI_MODEL_ID)
 
     def open(self, method: str, path: str, *, body: bytes = b"", **_kwargs):
         with self._lock:
@@ -177,6 +177,142 @@ class _E2EModelClient:
     def reset_cancellation(self) -> None:
         self.slow_started.clear()
         self.slow_closed.clear()
+
+
+class _CatalogClient:
+    def __init__(self, api_model: str, cli_model: str) -> None:
+        self.api_model = api_model
+        self.cli_model = cli_model
+
+    def catalog(self) -> dict[str, Any]:
+        return _model_catalog(self.api_model, self.cli_model)
+
+
+def _model_catalog(api_model: str, cli_model: str) -> dict[str, Any]:
+    return {
+        "schema_version": "1",
+        "api_models": [{
+            "id": api_model,
+            "label": f"E2E API {api_model}",
+            "provider_id": "e2e",
+            "transport": "api",
+            "available": True,
+        }],
+        "cli_models": [{
+            "id": cli_model,
+            "label": f"E2E CLI {cli_model}",
+            "provider_id": "codex",
+            "transport": "cli",
+            "available": True,
+        }],
+        "cli_defaults": {"codex": cli_model},
+    }
+
+
+class _E2ECliBroker:
+    """Minimal real Unix-wire broker used by the production Codex wrapper."""
+
+    api_proxy = None
+    state = None
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.socket_path = root / "broker.sock"
+        self.cli_executor = self
+        self._scopes: dict[str, ModelAccessScope] = {}
+        self._requests: list[str] = []
+        self._lock = Lock()
+        self._server: ThreadingUnixModelAccessServer | None = None
+        self._thread: Thread | None = None
+
+    @property
+    def request_count(self) -> int:
+        with self._lock:
+            return len(self._requests)
+
+    def issue(self, workspace_id: str) -> str:
+        token = f"native-e2e-{workspace_id}-{secrets.token_urlsafe(18)}"
+        self._scopes[token] = ModelAccessScope(
+            workspace_id=workspace_id,
+            app_id="design-studio",
+            sidecar_id="opendesign",
+            data_root=Path("/data/opendesign-native"),
+            api=True,
+            cli=("codex",),
+        )
+        return token
+
+    def start(self) -> None:
+        self.root.mkdir(mode=0o700)
+        self._server = ThreadingUnixModelAccessServer(str(self.socket_path), self)
+        self._thread = Thread(
+            target=self._server.serve_forever,
+            name="design-studio-e2e-cli-broker",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        if self._server is not None:
+            self._server.shutdown()
+            self._server.server_close()
+            self._server = None
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+            self._thread = None
+        self.socket_path.unlink(missing_ok=True)
+
+    def authorize(self, authorization: str) -> ModelAccessScope:
+        prefix = "Bearer "
+        token = authorization[len(prefix):] if authorization.startswith(prefix) else ""
+        scope = self._scopes.get(token)
+        if scope is None:
+            raise PermissionError("invalid E2E model-access capability")
+        with self._lock:
+            self._requests.append(scope.workspace_id)
+        return scope
+
+    def execute(
+        self,
+        *,
+        scope: ModelAccessScope,
+        provider_id: str,
+        argv: tuple[str, ...],
+        cwd: str,
+        stdin: bytes,
+        cancellation: Event,
+    ) -> Iterator[CliFrame]:
+        if provider_id != "codex" or scope.cli != ("codex",):
+            raise PermissionError("unexpected E2E CLI scope")
+        if "--version" in argv:
+            yield CliFrame("stdout", b"codex-cli 1.0.0-e2e\n")
+            yield CliFrame("exit", b'{"exit_code":0}')
+            return
+        events = (
+            {"type": "thread.started", "thread_id": "e2e-cli-thread"},
+            {"type": "turn.started"},
+            {
+                "type": "item.completed",
+                "item": {"id": "e2e-cli-item", "type": "agent_message", "text": CLI_MARKER},
+            },
+            {
+                "type": "turn.completed",
+                "usage": {"input_tokens": max(1, len(stdin)), "output_tokens": 1},
+            },
+        )
+        for event in events:
+            if cancellation.is_set():
+                return
+            yield CliFrame("stdout", (json.dumps(event, separators=(",", ":")) + "\n").encode())
+        yield CliFrame("exit", b'{"exit_code":0}')
+
+    def assert_requests_since(self, offset: int, *, workspace_id: str) -> None:
+        with self._lock:
+            requests = self._requests[offset:]
+        if not requests or set(requests) != {workspace_id}:
+            raise OfficialReleaseError(
+                f"model-access credentials were not isolated for workspace {workspace_id}"
+            )
 
 
 class _TrackedConnection:
@@ -290,54 +426,91 @@ def _prove_opencode_streaming(
 def _exercise_alpha_workspace(
     installation: OfficialInstallation,
     *,
+    opencode_runtime: Path,
     model_client: _E2EModelClient,
     root: Path,
-    wrappers: Path,
+    model_access: _E2ECliBroker,
     timeout_seconds: float,
 ) -> dict[str, Any]:
     native = root / "opendesign-native"
     native.mkdir(parents=True)
-    _profile(native, model_client)
+    _profile(native, _CatalogClient("model/exact", CLI_MODEL_ID))
+    model_access_token = model_access.issue("alpha")
     payload = SimpleNamespace(app_id="design-studio", workspace_id="alpha", data_root=str(root))
     first_arguments = {
         "idempotency_key": "shared-e2e-key",
         "brief": "alpha first delegated brief",
         "agent_id": API_AGENT_ID,
         "model": API_MODEL_ID,
+        "attachments": [{
+            "authorized": True,
+            "name": "alpha-asset.txt",
+            "media_type": "text/plain",
+            "content_base64": b64encode(b"alpha workspace asset").decode("ascii"),
+        }],
     }
     with _running_profiled_official(
         installation,
         native=native,
-        wrappers=wrappers,
+        opencode_runtime=opencode_runtime,
+        model_access=model_access,
+        model_access_token=model_access_token,
         timeout_seconds=timeout_seconds,
         log_path=root / "alpha-first.log",
     ) as client:
-        selector = _assert_native_selector(client)
-        service = DelegationService(payload, client=_DelegationApi(client))
+        selector = _assert_native_selector(
+            client,
+            api_model_id=API_MODEL_ID,
+            cli_model_id=CLI_MODEL_ID,
+        )
+        adapter = _DelegationApi(client)
+        service = DelegationService(payload, client=adapter)
         first = service.delegate(first_arguments)
         first_record = _wait_delegation(service, first, timeout_seconds=timeout_seconds)
         project_id = first_record["opendesign"]["project_id"]
         conversation_id = first_record["opendesign"]["conversation_id"]
         first_delegation_id = first_record["delegation_id"]
+        asset_paths = {
+            str(item.get("path") or item.get("name") or "")
+            for item in adapter.list_files(project_id)
+        }
+        if not any("alpha-asset.txt" in path for path in asset_paths):
+            raise OfficialReleaseError("delegated alpha asset was not persisted")
 
     with _running_profiled_official(
         installation,
         native=native,
-        wrappers=wrappers,
+        opencode_runtime=opencode_runtime,
+        model_access=model_access,
+        model_access_token=model_access_token,
         timeout_seconds=timeout_seconds,
         log_path=root / "alpha-continuation.log",
     ) as client:
         adapter = _DelegationApi(client)
-        service = DelegationService(payload, client=adapter)
-        second = service.delegate({
-            "idempotency_key": "alpha-continuation-key",
-            "brief": "alpha continued delegated brief",
-            "project_id": project_id,
-            "conversation_id": conversation_id,
-            "agent_id": API_AGENT_ID,
-            "model": API_MODEL_ID,
-        })
-        second_record = _wait_delegation(service, second, timeout_seconds=timeout_seconds)
+        direct = _run_direct_native_turn(
+            client,
+            adapter=adapter,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            message_id="direct-user-e2e",
+            assistant_message_id="direct-assistant-e2e",
+            text="alpha direct native continuation",
+            agent_id=API_AGENT_ID,
+            model=API_MODEL_ID,
+            timeout_seconds=timeout_seconds,
+        )
+        _run_direct_native_turn(
+            client,
+            adapter=adapter,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            message_id="cli-user-e2e",
+            assistant_message_id="cli-assistant-e2e",
+            text="exercise the real native Codex profile",
+            agent_id=CLI_AGENT_ID,
+            model=CLI_MODEL_ID,
+            timeout_seconds=timeout_seconds,
+        )
         messages = adapter.list_messages(project_id, conversation_id)
         visible = [
             str(message.get("content") or "")
@@ -346,9 +519,13 @@ def _exercise_alpha_workspace(
         ]
         if not all(
             brief in "\n".join(visible)
-            for brief in ("alpha first delegated brief", "alpha continued delegated brief")
+            for brief in ("alpha first delegated brief", "alpha direct native continuation")
         ):
-            raise OfficialReleaseError("delegated conversation continuation was not persisted")
+            raise OfficialReleaseError("direct native conversation continuation was not persisted")
+        if CLI_MARKER not in "\n".join(
+            str(message.get("content") or "") for message in messages
+        ):
+            raise OfficialReleaseError("the native Codex profile did not execute a real run")
         _prove_official_cancellation(
             client,
             model_client=model_client,
@@ -356,46 +533,70 @@ def _exercise_alpha_workspace(
             conversation_id=conversation_id,
             timeout_seconds=timeout_seconds,
         )
+    _assert_profile_contains_no_capability(native, model_access_token)
 
     return {
         **selector,
+        "cli_executed": True,
         "cancellation": True,
-        "conversation_continued": second_record["opendesign"]["conversation_id"] == conversation_id,
+        "conversation_continued": direct.get("conversationId", conversation_id) == conversation_id,
         "visible_user_message_count": len(visible),
         "delegation_id": first_delegation_id,
         "project_id": project_id,
+        "asset_paths": sorted(asset_paths),
     }
 
 
 def _exercise_beta_workspace(
     installation: OfficialInstallation,
     *,
-    model_client: _E2EModelClient,
+    opencode_runtime: Path,
     root: Path,
-    wrappers: Path,
+    model_access: _E2ECliBroker,
     alpha: dict[str, Any],
     timeout_seconds: float,
 ) -> dict[str, bool]:
     native = root / "opendesign-native"
     native.mkdir(parents=True)
-    _profile(native, model_client)
+    _profile(native, _CatalogClient("model/beta", BETA_CLI_MODEL_ID))
+    model_access_token = model_access.issue("beta")
     payload = SimpleNamespace(app_id="design-studio", workspace_id="beta", data_root=str(root))
     with _running_profiled_official(
         installation,
         native=native,
-        wrappers=wrappers,
+        opencode_runtime=opencode_runtime,
+        model_access=model_access,
+        model_access_token=model_access_token,
         timeout_seconds=timeout_seconds,
         log_path=root / "beta.log",
     ) as client:
         adapter = _DelegationApi(client)
+        _assert_native_selector(
+            client,
+            api_model_id=BETA_API_MODEL_ID,
+            cli_model_id=BETA_CLI_MODEL_ID,
+            forbidden_models={API_MODEL_ID, CLI_MODEL_ID},
+        )
         service = DelegationService(payload, client=adapter)
         beta = service.delegate({
             "idempotency_key": "shared-e2e-key",
             "brief": "beta isolated delegated brief",
             "agent_id": API_AGENT_ID,
-            "model": API_MODEL_ID,
+            "model": BETA_API_MODEL_ID,
         })
         beta_record = _wait_delegation(service, beta, timeout_seconds=timeout_seconds)
+        _run_direct_native_turn(
+            client,
+            adapter=adapter,
+            project_id=beta_record["opendesign"]["project_id"],
+            conversation_id=beta_record["opendesign"]["conversation_id"],
+            message_id="beta-cli-user-e2e",
+            assistant_message_id="beta-cli-assistant-e2e",
+            text="exercise beta workspace CLI capability",
+            agent_id=CLI_AGENT_ID,
+            model=BETA_CLI_MODEL_ID,
+            timeout_seconds=timeout_seconds,
+        )
         projects = {str(item.get("id") or "") for item in adapter.list_projects()}
         if alpha["project_id"] in projects:
             raise OfficialReleaseError("alpha OpenDesign project leaked into beta workspace")
@@ -408,10 +609,21 @@ def _exercise_beta_workspace(
                 raise
         else:
             raise OfficialReleaseError("alpha delegation metadata leaked into beta workspace")
+        beta_assets = {
+            str(item.get("path") or item.get("name") or "")
+            for project_id in projects
+            for item in adapter.list_files(project_id)
+        }
+        if set(alpha["asset_paths"]) & beta_assets:
+            raise OfficialReleaseError("alpha native assets leaked into beta workspace")
+    _assert_profile_contains_no_capability(native, model_access_token)
     return {
         "native_data_separate": True,
         "delegation_store_separate": True,
         "same_key_workspace_scoped": True,
+        "assets_separate": True,
+        "models_separate": True,
+        "credentials_separate": True,
     }
 
 
@@ -454,7 +666,67 @@ def _prove_official_cancellation(
         raise OfficialReleaseError("OpenCode cancellation did not close the upstream stream")
 
 
-def _assert_native_selector(client: OfficialApiClient) -> dict[str, bool]:
+def _run_direct_native_turn(
+    client: OfficialApiClient,
+    *,
+    adapter: "_DelegationApi",
+    project_id: str,
+    conversation_id: str,
+    message_id: str,
+    assistant_message_id: str,
+    text: str,
+    agent_id: str,
+    model: str,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    now = int(time.time() * 1000)
+    saved = adapter.put_message(
+        project_id,
+        conversation_id,
+        message_id,
+        {
+            "role": "user",
+            "content": text,
+            "attachments": [],
+            "startedAt": now,
+            "endedAt": now,
+        },
+    )
+    if saved.get("id") != message_id:
+        raise OfficialReleaseError("OpenDesign did not persist a direct native user turn")
+    started = client.send_json("POST", "/api/runs", {
+        "message": text,
+        "currentPrompt": text,
+        "projectId": project_id,
+        "conversationId": conversation_id,
+        "sessionMode": "design",
+        "assistantMessageId": assistant_message_id,
+        "clientRequestId": f"native-product-{message_id}",
+        "attachments": [],
+        "agentId": agent_id,
+        "model": model,
+    })
+    run_id = str(started.get("runId") or "")
+    if not run_id:
+        raise OfficialReleaseError("OpenDesign did not start the direct native run")
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        status = str(client.get_json(f"/api/runs/{run_id}").get("status") or "")
+        if status in TERMINAL:
+            if status != "succeeded":
+                raise OfficialReleaseError(f"direct native run ended as {status}")
+            return started
+        time.sleep(0.05)
+    raise OfficialReleaseError("direct native run did not become terminal")
+
+
+def _assert_native_selector(
+    client: OfficialApiClient,
+    *,
+    api_model_id: str,
+    cli_model_id: str,
+    forbidden_models: set[str] | None = None,
+) -> dict[str, bool]:
     agents = {
         str(agent.get("id") or ""): agent
         for agent in client.get_json("/api/agents").get("agents", [])
@@ -467,10 +739,17 @@ def _assert_native_selector(client: OfficialApiClient) -> dict[str, bool]:
         for model in api.get("models", [])
         if isinstance(model, dict)
     }
-    if api.get("available") is not True or API_MODEL_ID not in api_models:
+    cli_models = {
+        str(model.get("id") or "")
+        for model in cli.get("models", [])
+        if isinstance(model, dict)
+    }
+    if api.get("available") is not True or api_model_id not in api_models:
         raise OfficialReleaseError("the real OpenDesign selector omitted the API profile")
-    if cli.get("available") is not True or not cli.get("models"):
+    if cli.get("available") is not True or cli_model_id not in cli_models:
         raise OfficialReleaseError("the real OpenDesign selector omitted the CLI profile")
+    if (api_models | cli_models) & (forbidden_models or set()):
+        raise OfficialReleaseError("a model from another workspace leaked into the selector")
     return {"api_profile": True, "cli_profile": True, "api_model": True}
 
 
@@ -539,6 +818,9 @@ class _DelegationApi:
         value = self._send("POST", f"/api/projects/{project_id}/files", body).get("file")
         return value if isinstance(value, dict) else {}
 
+    def list_files(self, project_id: str) -> list[dict[str, Any]]:
+        return _objects(self._get(f"/api/projects/{project_id}/files"), "files")
+
     def start_run(self, body: dict[str, Any]) -> dict[str, Any]:
         return self._send("POST", "/api/runs", body)
 
@@ -580,17 +862,18 @@ def _running_profiled_official(
     installation: OfficialInstallation,
     *,
     native: Path,
-    wrappers: Path,
+    opencode_runtime: Path,
+    model_access: _E2ECliBroker,
+    model_access_token: str,
     timeout_seconds: float,
     log_path: Path,
 ) -> Iterator[OfficialApiClient]:
     port = _unused_port()
     token = secrets.token_urlsafe(32)
-    profile = native / "sandbox/agent-home/.maverick/model-access-agents.json"
     old_socket = os.environ.get("MAVERICK_MODEL_ACCESS_SOCKET")
     old_token = os.environ.get("MAVERICK_MODEL_ACCESS_TOKEN")
-    os.environ["MAVERICK_MODEL_ACCESS_SOCKET"] = "/native-product-e2e/model-access.sock"
-    os.environ["MAVERICK_MODEL_ACCESS_TOKEN"] = "native-product-e2e"
+    os.environ["MAVERICK_MODEL_ACCESS_SOCKET"] = "/model-access/broker.sock"
+    os.environ["MAVERICK_MODEL_ACCESS_TOKEN"] = model_access_token
     try:
         command, environment, cwd = build_native_launch(
             release=installation.release,
@@ -599,22 +882,20 @@ def _running_profiled_official(
             host="127.0.0.1",
             port=port,
             api_token=token,
-            model_profile_path=profile,
+            model_profile_path=SANDBOX_PROFILE_PATH,
         )
     finally:
         _restore_env("MAVERICK_MODEL_ACCESS_SOCKET", old_socket)
         _restore_env("MAVERICK_MODEL_ACCESS_TOKEN", old_token)
-    environment.update({
-        "HOME": str(native / "sandbox/agent-home"),
-        "OD_AGENT_PROFILES_CONFIG": str(profile),
-        "PATH": ":".join((
-            str(wrappers),
-            str(installation.rootfs / "usr/local/bin"),
-            str(installation.rootfs / "usr/bin"),
-            "/usr/bin",
-            "/bin",
-        )),
-    })
+    command, environment, cwd = _sandboxed_native_launch(
+        command,
+        environment=environment,
+        cwd=cwd,
+        installation=installation,
+        native=native,
+        opencode_runtime=opencode_runtime,
+        model_access=model_access.root,
+    )
     process: subprocess.Popen[bytes] | None = None
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with log_path.open("wb") as log:
@@ -636,26 +917,151 @@ def _running_profiled_official(
                 _stop_process(process)
 
 
-def _profile(native: Path, model_client: _E2EModelClient) -> Path:
+def _profile(native: Path, model_client: Any) -> Path:
     profile, _summary = write_model_access_profiles(native, model_client)
-    payload = json.loads(profile.read_text(encoding="utf-8"))
-    for agent in payload["agents"]:
-        if agent.get("id") == API_AGENT_ID:
-            agent["env"]["OPENCODE_CONFIG"] = str(native / API_CONFIG_PATH)
-    profile.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return profile
 
 
-def _write_wrappers(root: Path, *, opencode: Path, codex: Path) -> Path:
-    root.mkdir(parents=True)
-    for name, executable in (("maverick-opencode", opencode), ("maverick-codex", codex)):
-        wrapper = root / name
-        wrapper.write_text(
-            f"#!/bin/sh\nexec {shlex.quote(str(executable))} \"$@\"\n",
-            encoding="utf-8",
+def _sandboxed_native_launch(
+    command: list[str],
+    *,
+    environment: dict[str, str],
+    cwd: Path,
+    installation: OfficialInstallation,
+    native: Path,
+    opencode_runtime: Path,
+    model_access: Path,
+) -> tuple[list[str], dict[str, str], Path]:
+    """Run the unchanged daemon with the exact app/artifact paths used by Core."""
+    bwrap = shutil.which("bwrap")
+    if not bwrap:
+        raise OfficialReleaseError("bubblewrap is required for the native sandbox E2E proof")
+    artifact_namespace = installation.path.parents[1].resolve()
+    rootfs = installation.rootfs.resolve()
+    try:
+        sandbox_rootfs = Path("/artifacts/opendesign") / rootfs.relative_to(artifact_namespace)
+    except ValueError as error:
+        raise OfficialReleaseError("official installation escaped its artifact namespace") from error
+    sandbox_data = Path("/data/opendesign-native")
+    translated_environment = {
+        key: _translate_sandbox_path(
+            value,
+            rootfs=rootfs,
+            sandbox_rootfs=sandbox_rootfs,
+            native=native,
+            sandbox_data=sandbox_data,
         )
-        wrapper.chmod(0o555)
-    return root
+        for key, value in environment.items()
+    }
+    translated_command = [
+        _translate_sandbox_path(
+            value,
+            rootfs=rootfs,
+            sandbox_rootfs=sandbox_rootfs,
+            native=native,
+            sandbox_data=sandbox_data,
+        )
+        for value in command
+    ]
+    translated_cwd = Path(_translate_sandbox_path(
+        str(cwd),
+        rootfs=rootfs,
+        sandbox_rootfs=sandbox_rootfs,
+        native=native,
+        sandbox_data=sandbox_data,
+    ))
+    sandbox_runtime = Path("/artifacts/opendesign/opencode/1.14.17")
+    confined = [
+        bwrap,
+        "--die-with-parent",
+        "--unshare-pid",
+        "--unshare-ipc",
+        "--unshare-uts",
+        "--tmpfs",
+        "/",
+        "--dir",
+        "/usr",
+        "--ro-bind",
+        "/usr",
+        "/usr",
+        "--symlink",
+        "usr/bin",
+        "/bin",
+        "--symlink",
+        "usr/lib",
+        "/lib",
+        "--symlink",
+        "usr/lib64",
+        "/lib64",
+        "--dir",
+        "/etc",
+        "--ro-bind",
+        "/etc",
+        "/etc",
+        "--dir",
+        "/app",
+        "--ro-bind",
+        str(APP_ROOT),
+        "/app",
+        "--dir",
+        "/artifacts",
+        "--dir",
+        "/artifacts/opendesign",
+        "--ro-bind",
+        str(artifact_namespace),
+        "/artifacts/opendesign",
+        "--ro-bind",
+        str(opencode_runtime.resolve()),
+        str(sandbox_runtime),
+        "--dir",
+        "/data",
+        "--dir",
+        str(sandbox_data),
+        "--bind",
+        str(native.resolve()),
+        str(sandbox_data),
+        "--dir",
+        "/model-access",
+        "--ro-bind",
+        str(model_access.resolve()),
+        "/model-access",
+        "--proc",
+        "/proc",
+        "--dev",
+        "/dev",
+        "--tmpfs",
+        "/tmp",
+        "--tmpfs",
+        "/run",
+        "--chdir",
+        str(translated_cwd),
+        "--",
+        *translated_command,
+    ]
+    return confined, translated_environment, Path("/")
+
+
+def _translate_sandbox_path(
+    value: str,
+    *,
+    rootfs: Path,
+    sandbox_rootfs: Path,
+    native: Path,
+    sandbox_data: Path,
+) -> str:
+    return value.replace(str(rootfs), str(sandbox_rootfs)).replace(
+        str(native.resolve()),
+        str(sandbox_data),
+    )
+
+
+def _assert_profile_contains_no_capability(native: Path, token: str) -> None:
+    rendered = "\n".join(
+        (native / relative).read_text(encoding="utf-8")
+        for relative in (SANDBOX_PROFILE_PATH.relative_to("/data/opendesign-native"), API_CONFIG_PATH)
+    )
+    if token in rendered:
+        raise OfficialReleaseError("a model-access capability was persisted in native data")
 
 
 def _json_object(body: bytes) -> dict[str, Any]:

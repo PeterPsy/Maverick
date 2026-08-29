@@ -228,7 +228,8 @@ def _host_status(path: Path) -> dict[str, Any]:
     payload = _read_json(path)
     model = payload.get("model_bridge") if isinstance(payload.get("model_bridge"), dict) else {}
     api = model.get("api") if isinstance(model.get("api"), dict) else {}
-    cli = model.get("cli") if isinstance(model.get("cli"), dict) else {}
+    profiles = model.get("profiles") if isinstance(model.get("profiles"), dict) else {}
+    cli = profiles.get("cli") if isinstance(profiles.get("cli"), dict) else {}
     return {
         "schema_version": payload.get("schema_version", ""),
         "mode": payload.get("mode", ""),

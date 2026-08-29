@@ -41,8 +41,13 @@ native OpenDesign profile file:
 - a local agent profile named `installed-codex-cli`, based on the upstream
   `codex` adapter and the technical wrapper `service/maverick-codex`; and
 - a local agent profile named `installed-maverick-api`, based on the upstream
-  `opencode` adapter. Its generated OpenCode provider configuration exposes
-  every API model granted by Core under the `maverick/` provider namespace.
+`opencode` adapter. Its generated OpenCode provider configuration exposes
+every API model granted by Core under the `maverick/` provider namespace.
+
+The unchanged daemon resolves both technical wrappers from `/app/service`, the
+read-only app mount defined by Core for this sidecar type. The wrappers use the
+minimal `/usr/bin/python3` runtime supplied by the sandbox; they never depend on
+the artifact-root-only `/maverick/python` layout.
 
 The install/upgrade hook also attempts to materialize a separately
 digest-pinned official OpenCode technical runtime. `service/maverick-opencode`
@@ -94,17 +99,18 @@ an immutable full data backup, inventories the current release through public
 APIs, runs the candidate's supported upstream migration against a private
 copy, inventories the migrated copy, and exercises the public delegation
 contract on another disposable copy. Activation is permitted only when the
-redaction-safe identity and per-record content inventories prove that every
+redaction-safe identity and field-level user-content claims prove that every
 pre-migration project, conversation, ordered message, Design System, file,
-artifact, setting, and run reference survives unchanged. Additions are allowed;
-identity loss or mutation of an existing value fails before the active data or
+artifact, setting, and run reference survives. New schema fields, normalized
+server metadata, and updated bundled Design Systems are allowed; identity loss
+or mutation/deletion of an existing user value fails before the active data or
 release selection changes. Only then does the updater atomically select the
 migrated data and release descriptor and prewarm the candidate.
 
 Failure to start restores the complete prior data and release selection. If
-that previous writer cannot itself be restarted, the updater keeps Design
-Studio quiesced and records `recovery_required` instead of reporting a safe
-rollback. A model or delegation capability mismatch is recorded as degraded
+that previous writer cannot itself be restarted—or its prewarm call raises—the
+updater re-establishes quiescence, stops it again, and records
+`recovery_required` instead of reporting a safe rollback. A model or delegation capability mismatch is recorded as degraded
 and never rolls back or stops native OpenDesign.
 
 ## External delegation bridge

@@ -316,7 +316,7 @@ class OfficialUpdateTests(unittest.TestCase):
         with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
             self._run(control)
 
-        self.assertEqual(calls, ["stop", "prewarm", "stop", "prewarm"])
+        self.assertEqual(calls, ["stop", "prewarm", "stop", "prewarm", "stop"])
         marker = json.loads((self.data_root / "official-update.json").read_text())
         self.assertEqual(marker["phase"], "recovery_required")
         self.assertFalse(marker["native_ready"])
@@ -325,6 +325,29 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
         self.assertFalse((self.native / "upstream-migration").exists())
         self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
+
+    def test_previous_startup_exception_restores_quiescence_before_recovery_marker(self) -> None:
+        calls: list[str] = []
+        prewarms = 0
+
+        def control(operation: str, _workspace_id: str) -> dict:
+            nonlocal prewarms
+            calls.append(operation)
+            if operation == "stop":
+                return {"ready": False}
+            prewarms += 1
+            if prewarms == 1:
+                return {"ready": False}
+            raise RuntimeError("sidecar control channel failed")
+
+        with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
+            self._run(control)
+
+        marker = json.loads((self.data_root / "official-update.json").read_text())
+        self.assertEqual(marker["phase"], "recovery_required")
+        self.assertFalse(marker["native_ready"])
+        self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
+        self.assertEqual(calls[:4], ["stop", "prewarm", "stop", "prewarm"])
 
 
 if __name__ == "__main__":

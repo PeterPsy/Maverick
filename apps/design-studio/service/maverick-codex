@@ -1,3 +1,14 @@
-#!/bin/sh
-exec /maverick/python/ld.so --library-path /maverick/python/glibc \
-  /maverick/python/python3 /maverick/app/service/maverick_codex_cli.py "$@"
+#!/usr/bin/python3
+"""Executable entrypoint for the sandbox-mounted Codex bridge."""
+
+import sys
+
+from maverick_codex_cli import main
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(1) from None

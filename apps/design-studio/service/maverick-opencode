@@ -1,3 +1,9 @@
-#!/bin/sh
-exec /maverick/python/ld.so --library-path /maverick/python/glibc \
-  /artifacts/opendesign/opencode/1.14.17/bin/opencode "$@"
+#!/usr/bin/python3
+"""Execute only the digest-verified OpenCode runtime mounted by Core."""
+
+import os
+import sys
+
+
+EXECUTABLE = "/artifacts/opendesign/opencode/1.14.17/bin/opencode"
+os.execv(EXECUTABLE, [EXECUTABLE, *sys.argv[1:]])

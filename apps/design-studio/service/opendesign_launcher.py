@@ -183,7 +183,7 @@ def build_native_launch(
         "OD_SANDBOX_MODE": "1",
         "PATH": ":".join(
             (
-                "/maverick/app/service",
+                "/app/service",
                 str(root / "usr/local/sbin"),
                 str(root / "usr/local/bin"),
                 str(root / "usr/sbin"),

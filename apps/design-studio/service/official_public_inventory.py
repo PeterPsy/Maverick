@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import quote
 
 from official_inventory_process import OfficialApiClient, running_official_api
+from official_inventory_preservation import preservation_claim_sets
 from official_inventory_values import (
     canonical_digest,
     category_digest,
@@ -289,11 +290,5 @@ def _inventory_with_preservation_sets(
         category: sorted(values)
         for category, values in identity_sets.items()
     }
-    content_sets = {
-        category: sorted(
-            canonical_digest(["preserved-content", category, record])
-            for record in category_records
-        )
-        for category, category_records in records.items()
-    }
+    content_sets = preservation_claim_sets(records)
     return categories, normalized_identities, content_sets

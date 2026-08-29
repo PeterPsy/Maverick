@@ -30,18 +30,23 @@ class E2EGateContractTests(unittest.TestCase):
 
     def test_release_gate_contains_real_native_product_and_browser_proofs(self) -> None:
         gate = (APP_ROOT / "tests/opendesign_e2e_gate.py").read_text(encoding="utf-8")
+        product = (APP_ROOT / "service/smoke_native_product.py").read_text(encoding="utf-8")
 
         self.assertIn("smoke_native_product.py", gate)
         self.assertIn("native_deep_link.e2e.mjs", gate)
         self.assertTrue((APP_ROOT / "service/smoke_native_product.py").is_file())
         self.assertTrue((APP_ROOT / "tests/native_deep_link.e2e.mjs").is_file())
+        self.assertNotIn("_write_wrappers", product)
+        self.assertIn('agent_id=CLI_AGENT_ID', product)
+        for proof in ("assets_separate", "models_separate", "credentials_separate"):
+            self.assertIn(proof, product)
 
     def test_contract_version_forces_existing_installations_through_upgrade_hook(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
 
         self.assertGreaterEqual(
             tuple(int(part) for part in contract["version"].split(".")),
-            (0, 5, 1),
+            (0, 5, 2),
         )
 
 

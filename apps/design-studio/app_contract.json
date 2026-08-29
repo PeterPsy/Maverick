@@ -2,7 +2,7 @@
   "app_id": "design-studio",
   "contract_version": "1.0",
   "name": "Design Studio",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Host an unchanged official OpenDesign installation with optional naked-model and external-delegation bridges.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",

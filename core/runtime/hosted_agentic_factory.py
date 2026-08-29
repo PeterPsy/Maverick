@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 from core.authorization.errors import AuthorizationError
 from core.cli.models import CliInvocationContext
-from core.egress.agentic_transforms import canonical_egress_content
-from core.egress.classification import (
-    CanonicalSourceClassification,
-    fail_closed_classification,
-    validated_classification,
-)
 from core.mcp.models import McpInvocationContext
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.errors import CapabilityCertificateError, ProviderError
@@ -53,8 +46,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "15"
-HOSTED_RUNTIME_CLASSIFIER_REVISION = "1"
+HOSTED_AGENTIC_ADAPTER_VERSION = "16"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -103,10 +95,10 @@ def build_hosted_agentic_engine_adapter(
         except CapabilityCertificateError as error:
             raise HostedAgenticLoopError(error.reason_code) from error
 
-    # Resource-backed sources continue to use the exact workspace governance
-    # record below.  The generic classifier is only the Core-owned source rule
-    # for transient actor/runtime blocks that have no resource identity.
-    content_classifier = classifier or classify_hosted_runtime_content
+    # Transient content is admitted only when the server-owned input composer
+    # attaches an exact canonical classification.  The generic classifier is
+    # deliberately fail-closed and cannot promote bytes based on provenance.
+    content_classifier = classifier or classify_hosted_content_fail_closed
 
     def classify_resource(observation, provenance):
         return resource_classification_for_observation(
@@ -143,7 +135,6 @@ def build_hosted_agentic_engine_adapter(
             ledger=state.runtime_tool_ledger,
             workspace_store=state.workspace_store,
             process_registry=process_registry,
-            result_classification_resolver=classify_hosted_runtime_tool_result,
         ),
         tool_ledger=state.runtime_tool_ledger,
         private_state_service=state.provider_private_state_service,
@@ -183,86 +174,6 @@ def classify_hosted_content_fail_closed(
     return HostedContentClassification("unclassified", trust)
 
 
-def classify_hosted_runtime_content(
-    context,
-    provenance: str,
-    content: object,
-) -> HostedContentClassification:
-    """Classify only Core-owned transient sources; resources still fail closed.
-
-    This rule is intentionally provenance based rather than client declared.
-    Attachment, app, skill, workspace-file, and provider-state blocks must carry
-    their canonical resource/source classification and are never promoted here.
-    The ordinary egress transform remains responsible for rejecting detected
-    secrets and host metadata before transport.
-    """
-    if provenance not in {
-        "agent_instruction",
-        "user_input",
-        "governed_context",
-        "tool_result",
-    }:
-        return classify_hosted_content_fail_closed(context, provenance, content)
-    session = getattr(context, "session", None)
-    session_id = str(getattr(session, "session_id", "") or "")
-    turn_id = str(getattr(context, "correlation_id", "") or "")
-    if not session_id or not turn_id:
-        return classify_hosted_content_fail_closed(context, provenance, content)
-    try:
-        content_digest = hashlib.sha256(canonical_egress_content(content)).hexdigest()
-    except (TypeError, ValueError):
-        return classify_hosted_content_fail_closed(context, provenance, content)
-    trust = (
-        "untrusted_tool_output" if provenance == "tool_result" else "trusted_actor"
-    )
-    return HostedContentClassification(
-        "public",
-        trust,
-        source_ref=f"runtime-transient:{provenance}:{content_digest}",
-        source_revision=HOSTED_RUNTIME_CLASSIFIER_REVISION,
-        resource_identity=(
-            f"runtime-transient:{session_id}:{turn_id}:{provenance}:{content_digest}"
-        ),
-        classification_revision=1,
-    )
-
-
-def classify_hosted_runtime_tool_result(
-    tool_handle: str,
-    arguments: dict[str, object],
-    result: object,
-    context: RuntimeToolActorContext,
-) -> CanonicalSourceClassification:
-    """Return a canonical source record for non-resource Core tool output."""
-    try:
-        encoded = canonical_egress_content(result)
-        arguments_digest = hashlib.sha256(
-            canonical_egress_content(arguments)
-        ).hexdigest()
-    except (TypeError, ValueError):
-        encoded = b""
-        arguments_digest = ""
-    if not encoded or not arguments_digest or not tool_handle or not context.session_id:
-        return fail_closed_classification(
-            provenance="tool_result",
-            source_ref=tool_handle,
-        )
-    result_digest = hashlib.sha256(encoded).hexdigest()
-    return validated_classification(
-        data_class="public",
-        provenance="tool_result",
-        trust_level="untrusted_tool_output",
-        source_ref=tool_handle,
-        source_revision=HOSTED_RUNTIME_CLASSIFIER_REVISION,
-        source_digest=result_digest,
-        resource_identity=(
-            f"runtime-tool-result:{context.session_id}:{tool_handle}:"
-            f"{arguments_digest}:{result_digest}"
-        ),
-        classification_revision=1,
-    )
-
-
 def _tool_orchestrator(
     context,
     *,
@@ -271,7 +182,6 @@ def _tool_orchestrator(
     ledger,
     workspace_store,
     process_registry,
-    result_classification_resolver,
 ) -> RuntimeToolOrchestrator:
     # Registry builders load app-hosting integration, which depends on the API
     # platform state.  Keep these imports on the post-bootstrap path to avoid a
@@ -321,7 +231,6 @@ def _tool_orchestrator(
                 cli_registry=cli_registry,
                 mcp_registry=mcp_registry,
                 tool_ledger=ledger,
-                result_classification_resolver=result_classification_resolver,
                 resource_classification_resolver=lambda observation, provenance: (
                     resource_classification_for_observation(
                         workspace_store.get_resource_classification(
@@ -339,7 +248,6 @@ def _tool_orchestrator(
                     )
                 ),
             ),
-            result_classification_resolver=result_classification_resolver,
         ),
         ledger=ledger,
     )

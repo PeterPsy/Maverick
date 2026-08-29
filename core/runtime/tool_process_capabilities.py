@@ -8,6 +8,9 @@ import json
 from core.egress.classification import fail_closed_classification
 from core.runtime.tool_catalog import RuntimeToolSurfaceResult
 from core.runtime.hosted_tool_process_registry import hosted_process_environment
+from core.runtime.hosted_workspace_effects import (
+    parse_hosted_workspace_mutation_scopes,
+)
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_full_workspace_schemas import (
     process_input_schema,
@@ -19,7 +22,6 @@ from core.runtime.tool_full_workspace_support import (
     argv_argument,
     full_workspace_surface,
     integer_argument,
-    prepare_mutation_instruction_guard,
     require_workspace_context,
     required_string,
 )
@@ -41,14 +43,8 @@ def build_process_capabilities(
             raise RuntimeToolError("shell_requires_full_access")
         argv = argv_argument(arguments.get("argv"))
         cwd = str(arguments.get("cwd") or ".")
-        guard = prepare_mutation_instruction_guard(
-            filesystem,
-            workspace_root=workspace_root,
-            path=cwd,
-            expected_digest=required_string(
-                arguments.get("instruction_scope_digest")
-            ),
-            target_is_directory=True,
+        mutation_scopes = parse_hosted_workspace_mutation_scopes(
+            arguments.get("mutation_scopes")
         )
         result = registry.start(
             filesystem=filesystem,
@@ -64,7 +60,7 @@ def build_process_capabilities(
                 minimum=1,
                 maximum=3_600,
             ),
-            mutation_guard=guard,
+            mutation_scopes=mutation_scopes,
         )
         return _classified_result(
             result,

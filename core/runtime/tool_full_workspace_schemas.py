@@ -127,10 +127,25 @@ def process_start_schema() -> dict[str, object]:
                 "minimum": 1,
                 "maximum": 3_600,
             },
-            **_instruction_digest_property(),
+            "mutation_scopes": workspace_mutation_scopes_schema(),
         },
-        required=("argv", "instruction_scope_digest"),
+        required=("argv", "mutation_scopes"),
     )
+
+
+def workspace_mutation_scopes_schema() -> dict[str, object]:
+    """Declare every instruction-governed directory eligible for COW commit."""
+    return {
+        "type": "array",
+        "items": _object(
+            {
+                "path": _path(),
+                "instruction_scope_digest": _instruction_digest_schema(),
+            },
+            required=("path", "instruction_scope_digest"),
+        ),
+        "maxItems": 32,
+    }
 
 
 def process_status_schema() -> dict[str, object]:

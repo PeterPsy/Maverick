@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-08-28
+Status date: 2026-08-29
 
 Target: Phase 4A-D implementation closure complete; provider certification,
 security review, canary, and release gates remain open;
@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v9 records six maintained transitive dependency contracts. The
+- [x] Manifest v10 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v19 / matrix
-  `2026-08-28-r19-p4-review-closure-tcb9`
+- [x] Google and OpenRouter suite v20 / matrix
+  `2026-08-29-r20-p4-adversarial-closure-tcb10`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -364,7 +364,7 @@ completion claim.
 
 ## Phase 4C-D — context, interaction, provider, and review closure
 
-- [x] Immutable context policy `p4-context-v2` adds an independent request
+- [x] Immutable context policy `p4-context-v3` adds an independent request
   reserve, deterministic history threshold and size bounds, bounded summaries,
   attachment projection, tool-result projection, and steering-delivery mode.
   Compaction evidence binds source/compacted state, live authority, provenance,
@@ -373,8 +373,9 @@ completion claim.
   client-managed history. Both compactors preserve provider-private
   classification/source metadata and active tool-call/result pairing; consumed
   results from the current turn remain valid after compaction. Bounded
-  extractive summaries preserve prior user constraints, assistant decisions,
-  tool actions, and tool outcomes rather than replacing meaning with hashes.
+  extractive summaries retain every semantic event when it fits, including
+  middle constraints and canonical tool arguments; they never apply an item
+  window or silently delete a middle event under byte pressure.
   Final output, cancellation, and repeated recovery are covered after compaction.
 - [x] Large tool results retain an immutable session/workspace-owned original
   behind `artifact.read`; providers receive a bounded summary/reference and
@@ -401,22 +402,27 @@ completion claim.
   model and ZDR catalog records, `tool_choice:none`, context/completion limits
   and every translated endpoint parameter, then sends `tools: []` and
   `tool_choice: none` for finalization.
-- [x] The production factory now supplies a server-owned transient-content rule
-  and canonical Core-tool result classifier. A production-composed E2E fixture
-  proves first dispatch, successful tool execution, classified continuation,
-  and final output without the harness-only classifier.
+- [x] Transient prompt, agent-instruction, and governed-context classification
+  is attached at input admission only by a trusted server resolver bound to the
+  exact source identity/digest. The generic classifier is fail-closed. Resource
+  tool results propagate their observed classification; CLI/MCP/shell/process
+  output without concrete source evidence remains `unclassified`. A production-
+  composed fixture proves admitted first dispatch and continuation through an
+  exactly classified workspace result without a generic public fallback.
 - [x] Every mutating schema requires the exact applicable `AGENTS.md` digest.
   Write/edit/patch/move/delete verify the snapshot immediately around the
-  commit and roll back on post-commit drift; shell and managed-process launch
-  verify immediately before `exec`.
+  commit and roll back on post-commit drift. Shell and managed processes require
+  an explicit set of mutable directory scopes, run in a private overlay, and
+  validate every changed file against its actual instruction chain before any
+  workspace commit; invalid/failed/interrupted effects are discarded.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 15, semantic compiler revision 3, Full Workspace contract
-  `codex-baseline-v3`, context-compaction schema 2, TCB manifest v9, suite 19,
-  and matrix `2026-08-28-r19-p4-review-closure-tcb9` create new immutable Google
-  revision 23 and OpenRouter revision 22 full-workspace candidates. Historical
-  revisions 22/21 are suspended, never promoted. No live probe,
+- [x] Adapter 16, semantic compiler revision 4, Full Workspace contract
+  `codex-baseline-v4`, context-compaction schema 3, TCB manifest v10, suite 20,
+  and matrix `2026-08-29-r20-p4-adversarial-closure-tcb10` create new immutable
+  Google revision 24 and OpenRouter revision 23 full-workspace candidates.
+  Historical revisions 23/22 are suspended, never promoted. No live probe,
   signed certificate, binding, remote activation, or Codex profile/artifact
   change is part of Phase 4.
 

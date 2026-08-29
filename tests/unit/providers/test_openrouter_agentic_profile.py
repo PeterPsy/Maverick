@@ -67,8 +67,8 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "22")
-        self.assertEqual(profile.adapter_version_constraint, "==15")
+        self.assertEqual(profile.revision, "23")
+        self.assertEqual(profile.adapter_version_constraint, "==16")
         self.assertEqual(profile.model_provider_id, "openrouter")
         self.assertEqual(profile.model_id, "deepseek/deepseek-v4-flash")
         self.assertEqual(profile.provider_protocol, "openrouter-chat-completions")

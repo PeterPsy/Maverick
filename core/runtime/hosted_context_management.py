@@ -18,7 +18,7 @@ from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.tool_result_artifacts import MIN_TOOL_RESULT_SUMMARY_BYTES
 
 
-HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION = "2"
+HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION = "3"
 
 
 @dataclass(frozen=True)
@@ -274,62 +274,87 @@ def bounded_semantic_context_summary(
     *,
     max_bytes: int,
 ) -> str:
-    """Encode a bounded extractive history summary without private reasoning."""
-    # Keep both the initial contract and the most recent dialogue when a long
-    # history exceeds the extractive-summary entry ceiling.  Taking only the
-    # first entries would reproduce the original loss of recent decisions and
-    # tool outcomes.
-    selected_history = (
-        semantic_history
-        if len(semantic_history) <= 64
-        else (*semantic_history[:32], *semantic_history[-32:])
-    )
-    normalized: list[dict[str, str]] = []
-    for item in selected_history:
+    """Represent every semantic event; shorten text only as needed, never drop items."""
+    normalized: list[dict[str, object]] = []
+    for item in semantic_history:
         role = str(item.get("role") or "").strip()[:64]
         text = str(item.get("text") or "").strip()
         if role and text:
-            normalized.append({"role": role, "text": _clip_summary_text(text, 2_048)})
-    candidate = {**payload, "semantic_history": normalized}
+            normalized.append({"role": role, "text": text})
     while True:
+        candidate = {
+            **payload,
+            "semantic_history": normalized,
+            "semantic_history_item_count": len(normalized),
+            "semantic_history_truncated_items": sum(
+                item.get("truncated") is True for item in normalized
+            ),
+        }
         try:
             return bounded_context_summary(candidate, max_bytes=max_bytes)
         except HostedAgenticLoopError as error:
             if str(error) != "context_summary_too_large":
                 raise
         sizeable = [
-            (index, len(item["text"].encode("utf-8")))
+            (index, len(str(item["text"]).encode("utf-8")))
             for index, item in enumerate(normalized)
-            if len(item["text"].encode("utf-8")) > 96
+            if len(str(item["text"]).encode("utf-8")) > 128
         ]
         if sizeable:
             index, size = max(sizeable, key=lambda value: value[1])
-            normalized[index]["text"] = _clip_summary_text(
-                normalized[index]["text"],
-                max(64, size // 2),
-            )
+            original = str(normalized[index]["text"])
+            source_bytes = int(normalized[index].get("source_bytes") or size)
+            source_digest = str(normalized[index].get("source_digest") or "")
+            normalized[index] = {
+                "role": str(normalized[index]["role"]),
+                "text": _clip_summary_text(
+                    original,
+                    max(96, size // 2),
+                ),
+                "truncated": True,
+                "source_bytes": source_bytes,
+                "source_digest": source_digest
+                or hashlib.sha256(original.encode("utf-8")).hexdigest(),
+            }
             continue
-        if len(normalized) > 2:
-            # Preserve the earliest constraint and most recent outcome while
-            # removing low-information middle history deterministically.
-            del normalized[1]
-            continue
+        # Metadata for every retained item does not fit.  Failing explicitly is
+        # safer than deleting a middle request, decision, or result.
         raise HostedAgenticLoopError("context_summary_too_large")
 
 
 def _clip_summary_text(value: str, max_bytes: int) -> str:
+    """Keep both ends of a UTF-8 value and mark the omitted middle explicitly."""
     encoded = value.encode("utf-8")
     if len(encoded) <= max_bytes:
         return value
-    suffix = "…"
-    budget = max(1, max_bytes - len(suffix.encode("utf-8")))
-    clipped = encoded[:budget]
+    marker = "…<middle omitted>…"
+    marker_bytes = marker.encode("utf-8")
+    available = max(2, max_bytes - len(marker_bytes))
+    head_budget = available // 2
+    tail_budget = available - head_budget
+    head = _utf8_head(encoded, head_budget)
+    tail = _utf8_tail(encoded, tail_budget)
+    return head + marker + tail
+
+
+def _utf8_head(value: bytes, max_bytes: int) -> str:
+    clipped = value[:max_bytes]
     while clipped:
         try:
-            return clipped.decode("utf-8") + suffix
+            return clipped.decode("utf-8")
         except UnicodeDecodeError:
             clipped = clipped[:-1]
-    return suffix
+    return ""
+
+
+def _utf8_tail(value: bytes, max_bytes: int) -> str:
+    clipped = value[-max_bytes:]
+    while clipped:
+        try:
+            return clipped.decode("utf-8")
+        except UnicodeDecodeError:
+            clipped = clipped[1:]
+    return ""
 
 
 def canonical_context_digest(value: object) -> str:

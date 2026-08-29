@@ -19,7 +19,7 @@ from core.runtime.hosted_agentic_models import (
 
 SEMANTIC_ENVELOPE_SCHEMA_VERSION = "1"
 HOSTED_SEMANTIC_PROJECTION_COMPILER_ID = "maverick-hosted-semantic-projection"
-HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION = "3"
+HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION = "4"
 
 SemanticBlockKind = Literal[
     "content",

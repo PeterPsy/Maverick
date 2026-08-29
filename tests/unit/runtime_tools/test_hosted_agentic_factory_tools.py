@@ -7,12 +7,11 @@ import unittest
 from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
+from core.egress.classification import validated_classification
 from core.runtime.execution import execute_runtime_turn
-from core.runtime.hosted_agentic_factory import (
-    _tool_orchestrator,
-    classify_hosted_runtime_tool_result,
-)
+from core.runtime.hosted_agentic_factory import _tool_orchestrator
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
+from core.runtime.provider_input_context import runtime_provider_input_sources
 from core.runtime.tool_catalog import RuntimeToolActorContext
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
@@ -24,7 +23,7 @@ NOW = datetime(2026, 8, 28, tzinfo=UTC)
 
 class HostedAgenticFactoryToolsTest(unittest.TestCase):
     def test_production_composition_dispatches_and_continues_after_tool_result(self) -> None:
-        harness = HostedAgenticHarness(self)
+        harness = HostedAgenticHarness(self, filesystem_list=True)
         with patch.dict(
             os.environ,
             {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
@@ -34,18 +33,30 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                 start_path=harness.root,
                 now=NOW,
                 install_builtin_apps=False,
+                runtime_input_classification_resolver=(
+                    self._classify_admitted_input
+                ),
             )
         production_adapter = state.provider_registry.get_agentic_runtime_adapter(
             "maverick-tool-loop"
         )
         # Use the request builder selected by platform_state, not the harness
-        # classifier called out by the P4 review.  The fixture catalog likewise
-        # receives the exact production result-classification resolver.
+        # classifier called out by the P4 review.  Input classification comes
+        # from the server-owned admission resolver and the continuation result
+        # inherits the exact observed workspace resource classification.
         harness.request_builder = production_adapter.loop.request_builder
-        harness.orchestrator.catalog_builder.result_classification_resolver = (
-            classify_hosted_runtime_tool_result
+        client = DeterministicFakeAgenticClient(
+            tool_name=harness.filesystem_list_tool_name,
+            tool_arguments={"path": ".", "max_depth": 1},
         )
-        client = DeterministicFakeAgenticClient(tool_name=harness.read_tool_name)
+        input_sources = runtime_provider_input_sources(
+            state,
+            session=harness.session,
+            turn_id="turn-hosted",
+            input_text="Use the public fixture tool and finish.",
+            app_references=None,
+            attachments=None,
+        )
 
         result = execute_runtime_turn(
             session=harness.session,
@@ -55,6 +66,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             provider_state=harness.store.get_provider_state("session-hosted"),
             correlation_id="turn-hosted",
             effective_authority=harness.authority,
+            input_sources=input_sources,
         )
 
         self.assertEqual(result.exit_code, 0)
@@ -103,7 +115,6 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             ledger=state.runtime_tool_ledger,
             workspace_store=state.workspace_store,
             process_registry=HostedToolProcessRegistry(store=state.runtime_store),
-            result_classification_resolver=classify_hosted_runtime_tool_result,
         )
         surfaces = {
             item.definition.handle: item
@@ -117,7 +128,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             identity_field="command_id",
             identity="developer-context.list",
         )
-        self.assertEqual(cli_entry["result_data_class"], "public")
+        self.assertEqual(cli_entry["result_data_class"], "unclassified")
         cli_result = surfaces["core-capability:cli.run"].handler(
             {
                 "command_id": "developer-context.list",
@@ -131,7 +142,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             cli_result.payload["command_id"],
             "developer-context.list",
         )
-        self.assertEqual(cli_result.classification.data_class, "public")
+        self.assertEqual(cli_result.classification.data_class, "unclassified")
 
         mcp_entry = self._discover(
             surfaces["core-capability:mcp.list"],
@@ -151,14 +162,23 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             None,
         )
         self.assertIn("items", mcp_result.payload)
-        self.assertEqual(mcp_result.classification.data_class, "public")
-        shell_classification = orchestrator.catalog_builder.result_classification_resolver(
-            "core-capability:shell.run",
-            {"argv": ["/bin/true"]},
-            {"exit_code": 0, "output": ""},
-            actor,
+        self.assertEqual(mcp_result.classification.data_class, "unclassified")
+        self.assertIsNone(
+            orchestrator.catalog_builder.result_classification_resolver
         )
-        self.assertEqual(shell_classification.data_class, "public")
+
+    @staticmethod
+    def _classify_admitted_input(observation, _content):
+        return validated_classification(
+            data_class="public",
+            provenance=observation.provenance,
+            trust_level="trusted_actor",
+            source_ref=observation.source_ref,
+            source_revision=observation.source_revision,
+            source_digest=observation.source_digest,
+            resource_identity=observation.resource_identity,
+            classification_revision=1,
+        )
 
     def _discover(
         self,

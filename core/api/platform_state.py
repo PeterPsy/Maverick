@@ -40,6 +40,9 @@ from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.store import RuntimeDocumentStore, RuntimeCollections
 from core.runtime.private_payload_store import EncryptedRuntimePrivatePayloadStore
 from core.runtime.provider_private_state import ProviderPrivateStateService
+from core.runtime.provider_input_context import (
+    RuntimeProviderInputClassificationResolver,
+)
 from core.runtime.tool_ledger import RuntimeToolLedger
 from core.runtime.tool_private_payloads import EncryptedRuntimeToolPrivatePayloadStore
 from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
@@ -81,6 +84,9 @@ class PlatformState:
     runtime_tool_ledger: RuntimeToolLedger | None = None
     provider_private_state_service: ProviderPrivateStateService | None = None
     agentic_egress_evaluator: AgenticEgressEvaluator | None = None
+    runtime_input_classification_resolver: (
+        RuntimeProviderInputClassificationResolver | None
+    ) = None
 
 
 def bootstrap_platform_state(
@@ -91,6 +97,9 @@ def bootstrap_platform_state(
     install_builtin_apps: bool = True,
     register_builtin_provider_definitions: bool = True,
     bootstrap_admin: bool = True,
+    runtime_input_classification_resolver: (
+        RuntimeProviderInputClassificationResolver | None
+    ) = None,
 ) -> PlatformState:
     """Build in-memory platform state and optionally run host bootstrap work."""
     repository_root = discover_repository_root(start_path=start_path)
@@ -260,6 +269,9 @@ def bootstrap_platform_state(
         runtime_tool_ledger=runtime_tool_ledger,
         provider_private_state_service=provider_private_state_service,
         agentic_egress_evaluator=agentic_egress_evaluator,
+        runtime_input_classification_resolver=(
+            runtime_input_classification_resolver
+        ),
     )
     hosted_adapter = build_hosted_agentic_engine_adapter(
         state,

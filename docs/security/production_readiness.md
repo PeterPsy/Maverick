@@ -66,16 +66,19 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v9 additionally makes the known transitive boundary executable through
+Manifest v10 additionally makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 15 places all provider-bound context in semantic-envelope schema
-v1/compiler revision 3, materializes scoped instructions through the confined
-filesystem, requires commit-bound instruction digests for mutations, and
-journals distinct source/projection evidence. This is a
+Hosted adapter 16 places all provider-bound context in semantic-envelope schema
+v1/compiler revision 4, materializes scoped instructions through the confined
+filesystem, requires commit-bound instruction digests for direct mutations, and
+uses pre-commit COW overlays for shell/process effects. Transient input requires
+exact server-owned admission classification and non-resource results remain
+unclassified without concrete taint evidence. The runtime journals distinct
+source/projection evidence. This is a
 repository safety invariant, not certification or remote-release approval.
 
 The runtime now also separates actor-attributed CAS workspace attestation,

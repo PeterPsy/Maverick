@@ -12,6 +12,10 @@ import subprocess
 import time
 
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
+from core.runtime.hosted_workspace_effects import (
+    HostedWorkspaceEffectOverlay,
+    HostedWorkspaceMutationScope,
+)
 from core.runtime.tool_errors import RuntimeToolError
 
 
@@ -23,6 +27,7 @@ _ESSENTIAL_FILES = (
 )
 _SANDBOX_WORKSPACE_ROOT = Path("/workspace")
 _SANDBOX_RUNTIME_ROOT = Path("/runtime")
+_SANDBOX_LOWER_ROOT = _SANDBOX_RUNTIME_ROOT / "workspace-lower"
 
 
 @dataclass
@@ -33,6 +38,7 @@ class PreparedHostedWorkspaceCommand:
     pass_fds: tuple[int, ...]
     filesystem: ConfinedWorkspaceFilesystem
     cwd_chain: object
+    effect_overlay: HostedWorkspaceEffectOverlay | None = None
 
     def close(self) -> None:
         """Release retained parent descriptors after the child has spawned."""
@@ -57,8 +63,9 @@ def prepare_hosted_workspace_command(
     runtime_root: Path,
     argv: list[str],
     cwd: str,
+    mutation_scopes: tuple[HostedWorkspaceMutationScope, ...] = (),
 ) -> PreparedHostedWorkspaceCommand:
-    """Build a workspace-write-only process command from retained descriptors."""
+    """Build a COW-governed process command from retained descriptors."""
     if not argv:
         raise RuntimeToolError("tool_arguments_invalid")
     bwrap = shutil.which("bwrap")
@@ -66,6 +73,7 @@ def prepare_hosted_workspace_command(
         raise RuntimeToolError("workspace_shell_sandbox_unavailable")
     cwd_chain = filesystem.open_shell_cwd(cwd)
     root_fd = filesystem.duplicate_root_fd()
+    effect_overlay: HostedWorkspaceEffectOverlay | None = None
     try:
         workspace = Path(os.path.abspath(os.fspath(workspace_root)))
         runtime = Path(os.path.abspath(os.fspath(runtime_root)))
@@ -76,19 +84,30 @@ def prepare_hosted_workspace_command(
         relative_cwd = filesystem._relative(
             filesystem._components(cwd, allow_root=True)
         )
+        if mutation_scopes:
+            effect_overlay = HostedWorkspaceEffectOverlay.create(
+                filesystem,
+                workspace_root=workspace,
+                runtime_root=runtime,
+                scopes=mutation_scopes,
+            )
         command = _build_bwrap_command(
             bwrap=bwrap,
             root_fd=root_fd,
             relative_cwd=relative_cwd,
             argv=argv,
+            effect_overlay=effect_overlay,
         )
         return PreparedHostedWorkspaceCommand(
             command=command,
             pass_fds=(root_fd,),
             filesystem=filesystem,
             cwd_chain=cwd_chain,
+            effect_overlay=effect_overlay,
         )
     except Exception:
+        if effect_overlay is not None:
+            effect_overlay.discard()
         cwd_chain.close()
         os.close(root_fd)
         raise
@@ -104,7 +123,7 @@ def run_hosted_workspace_command(
     environment: dict[str, str],
     timeout_seconds: int,
     max_output_bytes: int,
-    mutation_guard=None,
+    mutation_scopes: tuple[HostedWorkspaceMutationScope, ...] = (),
 ) -> dict[str, object]:
     """Run one bounded command and kill its complete process group on timeout."""
     prepared = prepare_hosted_workspace_command(
@@ -113,11 +132,12 @@ def run_hosted_workspace_command(
         runtime_root=runtime_root,
         argv=argv,
         cwd=cwd,
+        mutation_scopes=mutation_scopes,
     )
     process: subprocess.Popen[bytes] | None = None
     try:
-        if mutation_guard is not None:
-            mutation_guard.verify_before()
+        if prepared.effect_overlay is not None:
+            prepared.effect_overlay.verify_before_spawn()
         process = subprocess.Popen(
             prepared.command,
             env=environment,
@@ -137,11 +157,23 @@ def run_hosted_workspace_command(
             if process.stdout is not None:
                 process.stdout.close()
         prepared.filesystem.assert_shell_cwd(prepared.cwd_chain)  # type: ignore[arg-type]
+        if prepared.effect_overlay is None:
+            effect_evidence = {
+                "workspace_effects_committed": True,
+                "workspace_effect_count": 0,
+                "workspace_effect_paths": (),
+                "mutation_scope_count": 0,
+            }
+        elif process.returncode == 0:
+            effect_evidence = prepared.effect_overlay.commit()
+        else:
+            effect_evidence = prepared.effect_overlay.discard()
         return {
             "exit_code": int(process.returncode),
             "output": output.decode("utf-8", errors="replace"),
             "output_bytes": len(output),
             "stream_complete": True,
+            **effect_evidence,
         }
     except RuntimeToolError:
         raise
@@ -154,6 +186,8 @@ def run_hosted_workspace_command(
             _terminate_group(process)
         raise RuntimeToolError("shell_execution_failed") from error
     finally:
+        if prepared.effect_overlay is not None:
+            prepared.effect_overlay.discard()
         prepared.close()
 
 
@@ -163,6 +197,7 @@ def _build_bwrap_command(
     root_fd: int,
     relative_cwd: str,
     argv: list[str],
+    effect_overlay: HostedWorkspaceEffectOverlay | None,
 ) -> list[str]:
     dependency_roots = [
         Path(value) for value in _SYSTEM_DEPENDENCY_ROOTS if Path(value).exists()
@@ -194,11 +229,35 @@ def _build_bwrap_command(
     for masked in (Path("/usr/share"), Path("/usr/local/share")):
         if masked.exists():
             command.extend(("--tmpfs", str(masked)))
+    if effect_overlay is None:
+        command.extend(
+            (
+                "--ro-bind-fd",
+                str(root_fd),
+                str(_SANDBOX_WORKSPACE_ROOT),
+            )
+        )
+    else:
+        command.extend(
+            (
+                "--overlay-src",
+                f"/proc/self/fd/{root_fd}",
+                "--overlay",
+                str(effect_overlay.upper),
+                str(effect_overlay.work),
+                str(_SANDBOX_WORKSPACE_ROOT),
+                # Consume and close the inherited live-root descriptor after
+                # overlay setup.  The temporary mount is masked below before
+                # the command starts, preventing openat(2) write bypasses.
+                "--dir",
+                str(_SANDBOX_LOWER_ROOT),
+                "--ro-bind-fd",
+                str(root_fd),
+                str(_SANDBOX_LOWER_ROOT),
+            )
+        )
     command.extend(
         (
-            "--bind",
-            f"/proc/self/fd/{root_fd}",
-            str(_SANDBOX_WORKSPACE_ROOT),
             "--tmpfs",
             str(_SANDBOX_WORKSPACE_ROOT / "runtime"),
             "--tmpfs",

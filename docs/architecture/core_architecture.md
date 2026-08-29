@@ -772,12 +772,35 @@ bind the caller-observed instruction-scope digest before crossing the effect
 boundary.
 
 Hosted shell commands mount the retained workspace root at the fixed
-`/workspace` sandbox identity. Platform `runtime/` is masked, HOME and TMP are
-ephemeral, host absolute paths are not exposed, system tooling is read-only,
-and the network namespace is disconnected. Synchronous output is drained under
-a hard byte ceiling. Long commands use session-owned process handles with
-bounded streaming output, stdin, interrupt, timeout, process-group cleanup,
-durable redacted records, and the common orphan reaper.
+`/workspace` sandbox identity. The live workspace is read-only. A caller that
+needs persistent command effects declares a bounded set of directory scopes and
+the exact `AGENTS.md` digest observed for each; the command runs against a
+private overlay. Core scans the complete bounded upper diff, rejects undeclared
+paths, instruction-file, non-UTF-8, deletion, symlink, and unsupported metadata
+effects, re-resolves the instructions for every changed file, and only then
+commits UTF-8 create/replace effects through the descriptor-confined mutation
+primitive. A root digest therefore cannot authorize a change governed by a
+nested `AGENTS.md`. Bubblewrap consumes the retained live-root descriptor while
+constructing the read-only/overlay mount and closes it before target `exec`, so
+the command cannot bypass the mount with `openat(2)`. Managed processes retain
+the same private overlay until a successful terminal status; timeout, failure,
+interrupt, or invalid diff
+discards it. Platform `runtime/` is masked, HOME and TMP are ephemeral, host
+absolute paths are not exposed, system tooling is read-only, and the network
+namespace is disconnected. Synchronous output is drained under a hard byte
+ceiling. Long commands use session-owned process handles with bounded streaming
+output, stdin, interrupt, timeout, process-group cleanup, durable redacted
+records, and the common orphan reaper.
+
+Transient prompt, agent-instruction, and governed-context blocks are not public
+by provenance. The provider-input composer may attach a canonical data class
+only through a trusted server-side admission resolver bound to the exact
+workspace, session, turn, source identity, digest, and classification revision;
+missing or mismatched evidence remains `unclassified`. Resource-returning tools
+propagate the exact observed resource classification. CLI, MCP, shell, process,
+and every other non-resource result remain `unclassified` unless their concrete
+surface supplies an independently validated source classification; generic
+serialization or redaction cannot promote them.
 
 CLI and MCP access uses four fixed certified Core wrappers: discovery returns
 only definitions allowed by the authoritative registry invocation policy plus

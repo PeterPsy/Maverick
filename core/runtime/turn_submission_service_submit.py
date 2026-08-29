@@ -252,6 +252,7 @@ def submit_runtime_turn(
                 provider_input_sources = runtime_provider_input_sources(
                     state,
                     session=session,
+                    turn_id=turn.turn_id,
                     input_text=input_text,
                     app_references=execution_app_references,
                     attachments=attachments,

@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 import unittest
 
+from core.egress.classification import validated_classification
 from core.providers.agentic_adapter import RuntimeTurnContext
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
@@ -20,6 +21,73 @@ from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 
 
 class SemanticEnvelopeTest(unittest.TestCase):
+    def test_transient_inputs_require_exact_server_owned_admission_classification(self) -> None:
+        session = SimpleNamespace(
+            workspace_id="default",
+            session_id="session-input",
+            workspace_root="/tmp",
+        )
+        source = runtime_provider_input_sources(
+            SimpleNamespace(
+                inter_agent_store=None,
+                workspace_store=None,
+                runtime_input_classification_resolver=None,
+            ),
+            session=session,
+            turn_id="turn-input",
+            input_text="confidential account narrative",
+            app_references=None,
+            attachments=None,
+        )[0]
+        self.assertEqual(source.classification.data_class, "unclassified")
+
+        def classify(observation, _content):
+            return validated_classification(
+                data_class="public",
+                provenance=observation.provenance,
+                trust_level="trusted_actor",
+                source_ref=observation.source_ref,
+                source_revision=observation.source_revision,
+                source_digest=observation.source_digest,
+                resource_identity=observation.resource_identity,
+                classification_revision=7,
+            )
+
+        admitted = runtime_provider_input_sources(
+            SimpleNamespace(
+                inter_agent_store=None,
+                workspace_store=None,
+                runtime_input_classification_resolver=classify,
+            ),
+            session=session,
+            turn_id="turn-input",
+            input_text="explicitly classified fixture",
+            app_references=None,
+            attachments=None,
+        )[0]
+        self.assertEqual(admitted.classification.data_class, "public")
+        self.assertEqual(admitted.classification.classification_revision, 7)
+
+        def mismatched(observation, content):
+            return replace(
+                classify(observation, content),
+                resource_identity="different-source",
+            )
+
+        rejected = runtime_provider_input_sources(
+            SimpleNamespace(
+                inter_agent_store=None,
+                workspace_store=None,
+                runtime_input_classification_resolver=mismatched,
+            ),
+            session=session,
+            turn_id="turn-input",
+            input_text="explicitly classified fixture",
+            app_references=None,
+            attachments=None,
+        )[0]
+        self.assertEqual(rejected.classification.data_class, "unclassified")
+
     def test_attachment_is_an_explicit_authorized_workspace_reference(self) -> None:
         harness = HostedAgenticHarness(self)
         authority = replace(
@@ -112,6 +180,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
                         session_id="session-attachment",
                         workspace_root="/tmp",
                     ),
+                    turn_id="turn-attachment",
                     input_text="fixture",
                     app_references=None,
                     attachments=[attachment],
@@ -179,7 +248,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
             second.provider_egress_projection_digest,
         )
         self.assertEqual(first.semantic_envelope_schema_version, "1")
-        self.assertEqual(first.semantic_projection_compiler_revision, "3")
+        self.assertEqual(first.semantic_projection_compiler_revision, "4")
         provenance = [block.provenance for block in first.content_blocks]
         self.assertEqual(
             provenance,

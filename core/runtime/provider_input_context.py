@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, Callable
 
-from core.egress.classification import CanonicalSourceClassification
+from core.egress.agentic_transforms import canonical_egress_content
+from core.egress.classification import (
+    CanonicalSourceClassification,
+    fail_closed_classification,
+    join_classifications,
+)
 from core.runtime.app_references import input_text_with_app_references
 from core.runtime.attachment_projection import attachment_read_encoding
 from core.runtime.attachments import input_text_with_attachment_links
@@ -27,6 +33,27 @@ class RuntimeProviderInputSource:
     classification: CanonicalSourceClassification | None = None
     capability_modality: str | None = None
     projection_mode: str | None = None
+
+
+@dataclass(frozen=True)
+class RuntimeProviderInputObservation:
+    """Server-owned identity for one transient turn input at admission."""
+
+    workspace_id: str
+    session_id: str
+    turn_id: str
+    source_id: str
+    provenance: str
+    content_type: str
+    source_ref: str
+    source_revision: str
+    source_digest: str
+    resource_identity: str
+
+
+RuntimeProviderInputClassificationResolver = Callable[
+    [RuntimeProviderInputObservation, object], CanonicalSourceClassification
+]
 
 
 def generalist_orchestration_input_text(state: Any, *, session: Any, input_text: str) -> str:
@@ -58,19 +85,50 @@ def runtime_provider_input_sources(
     state: Any,
     *,
     session: Any,
+    turn_id: str,
     input_text: str,
     app_references: list[dict[str, object]] | None,
     attachments: list[dict[str, object]] | None,
 ) -> tuple[RuntimeProviderInputSource, ...]:
     """Keep prompt, orchestration, attachment, and app provenance separate."""
-    sources: list[RuntimeProviderInputSource] = [
+    sources: list[RuntimeProviderInputSource] = []
+    agent_instruction = str(getattr(session, "system_prompt", "") or "")
+    if agent_instruction:
+        sources.append(
+            RuntimeProviderInputSource(
+                source_id="agent-instruction",
+                provenance="agent_instruction",
+                content_type="text/plain",
+                content=agent_instruction,
+                role="developer",
+                classification=_transient_input_classification(
+                    state,
+                    session=session,
+                    turn_id=turn_id,
+                    source_id="agent-instruction",
+                    provenance="agent_instruction",
+                    content_type="text/plain",
+                    content=agent_instruction,
+                ),
+            )
+        )
+    sources.append(
         RuntimeProviderInputSource(
             source_id="turn-prompt",
             provenance="user_input",
             content_type="text/plain",
             content=input_text,
+            classification=_transient_input_classification(
+                state,
+                session=session,
+                turn_id=turn_id,
+                source_id="turn-prompt",
+                provenance="user_input",
+                content_type="text/plain",
+                content=input_text,
+            ),
         )
-    ]
+    )
     orchestration = _generalist_orchestration_source(state, session=session)
     if orchestration is not None:
         sources.append(
@@ -79,6 +137,15 @@ def runtime_provider_input_sources(
                 provenance="governed_context",
                 content_type="application/json",
                 content=orchestration,
+                classification=_transient_input_classification(
+                    state,
+                    session=session,
+                    turn_id=turn_id,
+                    source_id="generalist-orchestration",
+                    provenance="governed_context",
+                    content_type="application/json",
+                    content=orchestration,
+                ),
             )
         )
     for index, reference in enumerate(app_references or ()):
@@ -113,6 +180,74 @@ def runtime_provider_input_sources(
         if filesystem is not None:
             filesystem.close()
     return tuple(sources)
+
+
+def _transient_input_classification(
+    state: Any,
+    *,
+    session: Any,
+    turn_id: str,
+    source_id: str,
+    provenance: str,
+    content_type: str,
+    content: object,
+) -> CanonicalSourceClassification:
+    """Resolve a transient source only through the trusted admission hook."""
+    try:
+        encoded = canonical_egress_content(content)
+    except (TypeError, ValueError):
+        encoded = b""
+    source_digest = hashlib.sha256(encoded).hexdigest() if encoded else ""
+    workspace_id = str(getattr(session, "workspace_id", "") or "")
+    session_id = str(getattr(session, "session_id", "") or "")
+    normalized_turn_id = str(turn_id or "").strip()
+    source_ref = f"runtime-turn:{normalized_turn_id}:{source_id}"
+    identity = (
+        f"runtime-input:{workspace_id}:{session_id}:{normalized_turn_id}:"
+        f"{source_id}:{source_digest}"
+    )
+    fallback = fail_closed_classification(
+        provenance=provenance,
+        source_ref=source_ref,
+        source_revision=source_digest,
+        source_digest=source_digest,
+        resource_identity=identity,
+    )
+    resolver = getattr(state, "runtime_input_classification_resolver", None)
+    if (
+        not callable(resolver)
+        or not workspace_id
+        or not session_id
+        or not normalized_turn_id
+        or not source_digest
+    ):
+        return fallback
+    observation = RuntimeProviderInputObservation(
+        workspace_id=workspace_id,
+        session_id=session_id,
+        turn_id=normalized_turn_id,
+        source_id=source_id,
+        provenance=provenance,
+        content_type=content_type,
+        source_ref=source_ref,
+        source_revision=source_digest,
+        source_digest=source_digest,
+        resource_identity=identity,
+    )
+    try:
+        candidate = resolver(observation, content)
+        normalized = join_classifications((candidate,)).sources[0]
+    except Exception:
+        return fallback
+    if (
+        normalized.provenance != provenance
+        or normalized.source_ref != source_ref
+        or normalized.source_revision != source_digest
+        or normalized.source_digest != source_digest
+        or normalized.resource_identity != identity
+    ):
+        return fallback
+    return normalized
 
 
 def _attachment_input_source(

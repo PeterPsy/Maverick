@@ -164,7 +164,12 @@ revocable CAS record; browser input, egress-policy ids, feature flags, UI labels
 replace it. Even a valid fake-data attestation only narrows authority. Prompt,
 skill, attachment, app-reference, filesystem/tool-result, and provider-private
 sources retain distinct provenance/trust/classes, and a restrictive join keeps
-missing or mismatched resource classification `unclassified`.
+missing or mismatched resource classification `unclassified`. Transient prompt,
+agent-instruction, and governed-context content is likewise `unclassified`
+unless a trusted server admission resolver returns a canonical record matching
+the exact turn/source identity and digest. Non-resource CLI, MCP, shell, and
+process output has no generic public fallback; redaction and a content hash do
+not establish a data class.
 
 Residual risk remains because content classification and prompt/tool-result
 provenance are security-critical enforcement paths. Phase-1 repository tests
@@ -433,7 +438,15 @@ available. They do not reopen verified paths, never descend automatically into
 `.git`, bind chunks/list cursors to identity and version, and revalidate the
 descriptor chain around use/commit. Repeated Linux tests swap final symlinks,
 parents, directories, and the root during read/list/write and shell-cwd
-admission; the fail-closed result must leave no outside read or write. Broader
+admission; the fail-closed result must leave no outside read or write. Hosted
+shell and managed-process writes are additionally isolated in a private overlay.
+The live workspace is mounted read-only until Core validates the complete
+bounded diff against every declared mutable scope and the actual root-to-target
+instruction digest for each changed file. A nested-scope mismatch,
+instruction-file or unsupported effect, non-zero exit, timeout, or interrupt
+discards the overlay before it can affect workspace data. The retained live-root
+descriptor is consumed during mount setup and is not inherited by target code,
+preventing a direct descriptor-relative write around the overlay. Broader
 app/backend sandboxing remains a production blocker.
 
 ### Secret exposure

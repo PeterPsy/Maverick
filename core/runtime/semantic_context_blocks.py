@@ -152,6 +152,27 @@ class SemanticContextMaterializer:
     def append_agent(self, blocks: list[SemanticEnvelopeBlock], *, context) -> None:
         content = context.session.system_prompt
         if content:
+            source = next(
+                (
+                    item
+                    for item in tuple(getattr(context, "input_sources", ()) or ())
+                    if str(getattr(item, "provenance", "") or "")
+                    == "agent_instruction"
+                    and getattr(item, "content", None) == content
+                    and str(getattr(item, "content_type", "") or "")
+                    == "text/plain"
+                    and str(getattr(item, "role", "") or "") == "developer"
+                    and str(getattr(item, "source_id", "") or "")
+                    == "agent-instruction"
+                ),
+                None,
+            )
+            raw_classification = getattr(source, "classification", None)
+            classification = (
+                canonical_classification(raw_classification)
+                if isinstance(raw_classification, CanonicalSourceClassification)
+                else self.classifier(context, "agent_instruction", content)
+            )
             blocks.append(
                 make_semantic_block(
                     blocks,
@@ -161,10 +182,10 @@ class SemanticContextMaterializer:
                     provenance="agent_instruction",
                     content_type="text/plain",
                     content=content,
-                    classification=self.classifier(
-                        context,
-                        "agent_instruction",
-                        content,
+                    classification=classification,
+                    source_ref=(
+                        classification.source_ref
+                        or str(getattr(source, "source_id", "") or "")
                     ),
                 )
             )
@@ -188,6 +209,8 @@ class SemanticContextMaterializer:
             "app_reference": "app_reference",
         }
         for source in sources:
+            if str(getattr(source, "provenance", "") or "") == "agent_instruction":
+                continue
             provenance = provenance_map.get(
                 str(getattr(source, "provenance", "") or "")
             )
@@ -215,7 +238,10 @@ class SemanticContextMaterializer:
                     ),
                     content=content,
                     classification=classification,
-                    source_ref=str(getattr(source, "source_id", "") or ""),
+                    source_ref=(
+                        classification.source_ref
+                        or str(getattr(source, "source_id", "") or "")
+                    ),
                 )
             )
 

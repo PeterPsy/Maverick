@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import hashlib
+import json
 
 from core.providers.agentic_models import AgenticContextPolicy
 from core.providers.agentic_protocol import AgenticProviderPrivateState
@@ -235,19 +236,22 @@ def _openrouter_semantic_history(
         if role in {"user", "assistant", "tool"} and isinstance(content, str) and content.strip():
             values.append({"role": role, "text": content})
         if role == "assistant" and isinstance(message.get("tool_calls"), list):
-            names = []
             for call in message["tool_calls"]:
                 function = call.get("function") if isinstance(call, dict) else None
                 name = function.get("name") if isinstance(function, dict) else None
-                if isinstance(name, str) and name:
-                    names.append(name)
-            if names:
-                values.append(
-                    {
-                        "role": "assistant_action",
-                        "text": "Called tools: " + ", ".join(names),
-                    }
+                arguments = (
+                    function.get("arguments") if isinstance(function, dict) else None
                 )
+                if isinstance(name, str) and name:
+                    values.append(
+                        {
+                            "role": "assistant_action",
+                            "text": (
+                                f"Called tool {name} with arguments: "
+                                f"{_canonical_tool_arguments(arguments)}"
+                            ),
+                        }
+                    )
     return tuple(values)
 
 
@@ -270,13 +274,16 @@ def _google_semantic_history(
             )
         elif step_type == "function_call":
             name = step.get("name")
+            arguments = step.get("arguments")
             values.append(
                 {
                     "role": "assistant_action",
                     "text": (
-                        f"Called tool: {name}"
+                        f"Called tool {name} with arguments: "
+                        f"{_canonical_tool_arguments(arguments)}"
                         if isinstance(name, str) and name
-                        else "Called a tool."
+                        else "Called a tool with arguments: "
+                        f"{_canonical_tool_arguments(arguments)}"
                     ),
                 }
             )
@@ -294,6 +301,21 @@ def _google_text_values(value: object) -> tuple[str, ...]:
         and isinstance(item.get("text"), str)
         and str(item["text"]).strip()
     )
+
+
+def _canonical_tool_arguments(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(
+            value if value is not None else {},
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    except (TypeError, ValueError):
+        return "<unprojectable>"
 
 
 def _active_tool_result_ids(summary_base: dict[str, object]) -> tuple[str, ...]:

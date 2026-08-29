@@ -36,6 +36,7 @@ from core.providers.openrouter_agentic_state import (
 )
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.hosted_context_management import (
+    bounded_semantic_context_summary,
     manage_hosted_provider_context,
     validate_agentic_context_policy,
     validate_hosted_request_context,
@@ -131,7 +132,13 @@ class HostedContextManagementTest(unittest.TestCase):
             [item["text"] for item in summary["semantic_history"]],
         )
         self.assertIn(
-            {"role": "assistant_action", "text": "Called tools: fixture_tool"},
+            {
+                "role": "assistant_action",
+                "text": (
+                    "Called tool fixture_tool with arguments: "
+                    '{"path":"fixture.txt"}'
+                ),
+            },
             summary["semantic_history"],
         )
         self.assertIn(
@@ -156,9 +163,19 @@ class HostedContextManagementTest(unittest.TestCase):
                         "type": "user_input",
                         "content": [{"type": "text", "text": filler}],
                     },
-                    {"type": "function_call", "call_id": "call-1"},
+                    {
+                        "type": "function_call",
+                        "call_id": "call-1",
+                        "name": "fixture_tool",
+                        "arguments": {"path": "fixture.txt"},
+                    },
                     {"type": "function_result", "call_id": "call-1"},
-                    {"type": "function_call", "call_id": "call-2"},
+                    {
+                        "type": "function_call",
+                        "call_id": "call-2",
+                        "name": "fixture_tool",
+                        "arguments": {"path": "next.txt"},
+                    },
                 ),
                 pending_function_calls=(
                     GooglePendingFunctionCall("call-2", "fixture_tool"),
@@ -201,6 +218,39 @@ class HostedContextManagementTest(unittest.TestCase):
             constraint,
             [item["text"] for item in summary["semantic_history"]],
         )
+        self.assertIn(
+            {
+                "role": "assistant_action",
+                "text": (
+                    "Called tool fixture_tool with arguments: "
+                    '{"path":"fixture.txt"}'
+                ),
+            },
+            summary["semantic_history"],
+        )
+
+    def test_semantic_summary_keeps_middle_history_when_budget_is_available(self) -> None:
+        critical = "CRITICAL: never overwrite the customer ledger."
+        history = tuple(
+            {
+                "role": "user",
+                "text": critical if index == 32 else f"ordinary item {index}",
+            }
+            for index in range(65)
+        )
+
+        summary = json.loads(
+            bounded_semantic_context_summary(
+                {"notice": "fixture"},
+                history,
+                max_bytes=100_000,
+            )
+        )
+
+        self.assertEqual(summary["semantic_history_item_count"], 65)
+        self.assertEqual(summary["semantic_history_truncated_items"], 0)
+        self.assertEqual(len(summary["semantic_history"]), 65)
+        self.assertEqual(summary["semantic_history"][32]["text"], critical)
 
     def test_request_reserve_is_independent_from_the_turn_budget(self) -> None:
         request = AgenticModelRequest(
@@ -276,7 +326,10 @@ def _openrouter_call(call_id: str, name: str) -> dict[str, object]:
             {
                 "id": call_id,
                 "type": "function",
-                "function": {"name": name, "arguments": "{}"},
+                "function": {
+                    "name": name,
+                    "arguments": '{"path":"fixture.txt"}',
+                },
             }
         ],
     }

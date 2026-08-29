@@ -54,14 +54,14 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_FULL_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "2")
+                self.assertEqual(recipe.revision, "3")
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
-                    "3",
+                    "4",
                 )
-                self.assertEqual(recipe.tool_contract_revision, "codex-baseline-v3")
-                self.assertEqual(recipe.context_policy.revision, "p4-context-v2")
-        self.assertEqual(HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION, "2")
+                self.assertEqual(recipe.tool_contract_revision, "codex-baseline-v4")
+                self.assertEqual(recipe.context_policy.revision, "p4-context-v3")
+        self.assertEqual(HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION, "3")
 
     def test_registry_resolves_only_the_exact_recipe_and_catalog_identity(self) -> None:
         registry = build_hosted_provider_runtime_registry()
@@ -203,7 +203,7 @@ def _binding(recipe):
         certificate_evidence_digest="a" * 64,
         runtime_engine_id="maverick-tool-loop",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version="14",
+        adapter_version="16",
         adapter_artifact_digest="b" * 64,
         model_provider_id=recipe.model_provider_id,
         model_id=recipe.model_id,

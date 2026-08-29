@@ -527,12 +527,17 @@ and provider/model/protocol/API/endpoint/upstream/reasoning composition. Shared
 loop construction selects this data-only recipe; it contains no Google or
 OpenRouter model branch.
 
-Context policy `p4-context-v2` reserves capacity independently of ordinary turn
+Context policy `p4-context-v3` reserves capacity independently of ordinary turn
 budgets. At a deterministic threshold, the exact recipe compactor replaces old
 provider history with a bounded extractive semantic summary of user constraints,
-assistant decisions, tool actions, and tool outcomes while preserving encrypted
-state classification, provenance, authority digest, request/turn identity, and
-every call/result relation still active in the current turn. Google uses
+assistant decisions, tool actions including canonical arguments, and tool
+outcomes. It retains every semantic event when the byte budget permits instead
+of imposing an item-count window; actual byte-pressure clipping is distributed,
+keeps both ends, and is explicitly marked with source size/digest. If even the
+bounded per-event representation cannot fit, compaction fails instead of
+deleting a middle event. Encrypted state classification, provenance, authority
+digest, request/turn identity, and every call/result relation still active in
+the current turn are preserved. Google uses
 Core-managed stateless history; OpenRouter retains client-managed chat history
 and replaces request-scoped system/developer authority with the current
 projection on every continuation.
@@ -578,12 +583,15 @@ content.
 Prompt, orchestration, skill, attachment, app reference, filesystem/tool
 result, and provider-private sources keep distinct provenance. Filesystem and
 resource-returning tool classification comes from the exact resource identity,
-revision, and digest observed by Core. Core-owned transient prompt/context and
-non-resource tool results use a server-owned, revisioned, content-addressed
-classification rule; model/browser declarations cannot select or widen it. A
-missing or incoherent resource classification produces `unclassified`, and the
-restrictive join prevents an attestation or less-sensitive sibling block from
-promoting it.
+revision, and digest observed by Core. Transient prompt, agent-instruction, and
+governed-context blocks receive a canonical classification only from a trusted
+server-owned admission resolver bound to their exact workspace/session/turn,
+source identity and digest. Hashing the bytes does not determine their class.
+The generic classifier and every CLI/MCP/shell/process result without concrete
+source evidence remain `unclassified`; model/browser declarations and generic
+redaction cannot select, infer, or widen a class. A missing or incoherent source
+classification produces `unclassified`, and the restrictive join prevents an
+attestation or less-sensitive sibling block from promoting it.
 
 Unknown classification, provenance, trust, destination, or policy fails closed.
 `workspace_internal_fake` is eligible for evaluation only when the exact
@@ -607,17 +615,19 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 23
-and OpenRouter revision 22, both bound to
-`maverick-hosted-tool-loop==15`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 24
+and OpenRouter revision 23, both bound to
+`maverick-hosted-tool-loop==16`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
-These review-closure definitions are new full-workspace claims under
-`codex-baseline-v3`, not mutations of earlier candidates. Adapter 15, compiler
-revision 3, context-compaction schema 2, suite 19, and TCB manifest v9 contain
-the production classification, instruction-commit guard, semantic compaction,
+These adversarial-review definitions are new full-workspace claims under
+`codex-baseline-v4`, not mutations of earlier candidates. Adapter 16, compiler
+revision 4, context-compaction schema 3, suite 20, and TCB manifest v10 remove
+generic public classification, bind transient admission to exact server-owned
+evidence, govern shell/process effects through pre-commit overlays, and retain
+middle history plus tool arguments during semantic compaction. They retain the
 attachment, OpenRouter projection, and live Google-preflight closure. They remain
 uncertified, unbound, unavailable and independently blocked by Phase-0
 admission; implementation completion is not provider evidence or release

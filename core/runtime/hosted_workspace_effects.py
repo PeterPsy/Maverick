@@ -1,0 +1,317 @@
+"""Copy-on-write workspace effects for hosted shell and managed processes."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import hashlib
+import json
+from pathlib import Path, PurePosixPath
+import shutil
+
+from core.runtime.confined_filesystem import (
+    MAX_CONFINED_LIST_ENTRIES,
+    MAX_CONFINED_PATH_COMPONENTS,
+    ConfinedWorkspaceFilesystem,
+)
+from core.runtime.hosted_workspace_effect_support import (
+    MAX_HOSTED_EFFECT_FILES,
+    MAX_HOSTED_EFFECT_FILE_BYTES,
+    MAX_HOSTED_EFFECT_TOTAL_BYTES,
+    create_hosted_effect_overlay_directories,
+    scan_hosted_effect_overlay_upper,
+)
+from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.tool_full_workspace_support import (
+    MutationInstructionGuard,
+    prepare_mutation_instruction_guard,
+)
+
+
+@dataclass(frozen=True)
+class HostedWorkspaceMutationScope:
+    """One caller-observed instruction scope eligible for overlay commit."""
+
+    path: str
+    instruction_scope_digest: str
+
+
+@dataclass(frozen=True)
+class _BaselineFile:
+    resource_identity: str
+    resource_revision: str
+
+
+@dataclass(frozen=True)
+class _ChangedFile:
+    path: str
+    content: str
+    baseline: _BaselineFile | None
+    guard: MutationInstructionGuard
+
+
+class HostedWorkspaceEffectOverlay:
+    """Keep arbitrary command writes private until a governed text diff commits."""
+
+    def __init__(
+        self,
+        *,
+        filesystem: ConfinedWorkspaceFilesystem,
+        workspace_root: Path,
+        scopes: tuple[HostedWorkspaceMutationScope, ...],
+        scope_guards: tuple[MutationInstructionGuard, ...],
+        baseline: dict[str, _BaselineFile],
+        root: Path,
+        upper: Path,
+        work: Path,
+    ) -> None:
+        self.filesystem = filesystem
+        self.workspace_root = workspace_root
+        self.scopes = scopes
+        self.scope_guards = scope_guards
+        self.baseline = baseline
+        self.root = root
+        self.upper = upper
+        self.work = work
+        self._closed = False
+
+    @classmethod
+    def create(
+        cls,
+        filesystem: ConfinedWorkspaceFilesystem,
+        *,
+        workspace_root: Path,
+        runtime_root: Path,
+        scopes: tuple[HostedWorkspaceMutationScope, ...],
+    ) -> "HostedWorkspaceEffectOverlay":
+        if not scopes:
+            raise RuntimeToolError("workspace_mutation_scopes_invalid")
+        guards: list[MutationInstructionGuard] = []
+        baseline: dict[str, _BaselineFile] = {}
+        for scope in scopes:
+            if not filesystem.path_is_directory(scope.path):
+                raise RuntimeToolError("workspace_mutation_scope_not_directory")
+            guards.append(
+                prepare_mutation_instruction_guard(
+                    filesystem,
+                    workspace_root=workspace_root,
+                    path=scope.path,
+                    expected_digest=scope.instruction_scope_digest,
+                    target_is_directory=True,
+                )
+            )
+            snapshot = filesystem.list_entries(
+                scope.path,
+                max_depth=MAX_CONFINED_PATH_COMPONENTS,
+                page_size=MAX_CONFINED_LIST_ENTRIES,
+            )
+            if snapshot.payload.get("next_cursor") is not None:
+                raise RuntimeToolError("workspace_effect_snapshot_too_large")
+            for item in snapshot.payload.get("entries", ()):
+                if not isinstance(item, dict) or item.get("type") != "file":
+                    continue
+                path = str(item.get("path") or "")
+                identity = str(item.get("resource_identity") or "")
+                revision = str(item.get("resource_revision") or "")
+                if not path or not identity or not revision:
+                    raise RuntimeToolError("workspace_effect_snapshot_invalid")
+                candidate = _BaselineFile(identity, revision)
+                previous = baseline.get(path)
+                if previous is not None and previous != candidate:
+                    raise RuntimeToolError("workspace_effect_snapshot_changed")
+                baseline[path] = candidate
+        root, upper, work = create_hosted_effect_overlay_directories(
+            filesystem,
+            runtime_root=runtime_root,
+        )
+        return cls(
+            filesystem=filesystem,
+            workspace_root=workspace_root,
+            scopes=scopes,
+            scope_guards=tuple(guards),
+            baseline=baseline,
+            root=root,
+            upper=upper,
+            work=work,
+        )
+
+    def verify_before_spawn(self) -> None:
+        for guard in self.scope_guards:
+            guard.verify_before()
+
+    def commit(self) -> dict[str, object]:
+        """Validate the complete upper diff before crossing any effect boundary."""
+        if self._closed:
+            raise RuntimeToolError("workspace_effect_overlay_closed")
+        try:
+            changed = self._validated_changes()
+            for item in changed:
+                if item.baseline is None:
+                    self.filesystem.write_text(
+                        item.path,
+                        content=item.content,
+                        create_only=True,
+                        create_parents=False,
+                        mutation_guard=item.guard,
+                    )
+                else:
+                    self.filesystem.write_text(
+                        item.path,
+                        content=item.content,
+                        create_only=False,
+                        create_parents=False,
+                        replace_only=True,
+                        expected_resource_identity=item.baseline.resource_identity,
+                        expected_resource_revision=item.baseline.resource_revision,
+                        mutation_guard=item.guard,
+                    )
+            paths = tuple(item.path for item in changed)
+            return {
+                "workspace_effects_committed": True,
+                "workspace_effect_count": len(paths),
+                "workspace_effect_paths": paths,
+                "mutation_scope_count": len(self.scopes),
+                "mutation_scope_digest": _scope_digest(self.scopes),
+            }
+        finally:
+            self.discard()
+
+    def discard(self) -> dict[str, object]:
+        if not self._closed:
+            self._closed = True
+            shutil.rmtree(self.root, ignore_errors=True)
+        return {
+            "workspace_effects_committed": False,
+            "workspace_effect_count": 0,
+            "workspace_effect_paths": (),
+            "mutation_scope_count": len(self.scopes),
+            "mutation_scope_digest": _scope_digest(self.scopes),
+        }
+
+    def _validated_changes(self) -> tuple[_ChangedFile, ...]:
+        raw_changes = scan_hosted_effect_overlay_upper(self.upper)
+        if len(raw_changes) > MAX_HOSTED_EFFECT_FILES:
+            raise RuntimeToolError("workspace_effect_file_limit_exceeded")
+        total_bytes = 0
+        prepared: list[_ChangedFile] = []
+        for path, content_bytes in raw_changes:
+            scope = _scope_for_path(self.scopes, path)
+            if scope is None:
+                raise RuntimeToolError("workspace_effect_outside_declared_scope")
+            if PurePosixPath(path).name == "AGENTS.md":
+                raise RuntimeToolError("workspace_instruction_shell_mutation_denied")
+            parent = PurePosixPath(path).parent.as_posix()
+            if not self.filesystem.path_is_directory(parent):
+                raise RuntimeToolError("workspace_effect_parent_not_directory")
+            if len(content_bytes) > MAX_HOSTED_EFFECT_FILE_BYTES:
+                raise RuntimeToolError("workspace_effect_file_too_large")
+            total_bytes += len(content_bytes)
+            if total_bytes > MAX_HOSTED_EFFECT_TOTAL_BYTES:
+                raise RuntimeToolError("workspace_effect_total_too_large")
+            try:
+                content = content_bytes.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise RuntimeToolError("workspace_effect_not_utf8") from error
+            guard = prepare_mutation_instruction_guard(
+                self.filesystem,
+                workspace_root=self.workspace_root,
+                path=path,
+                expected_digest=scope.instruction_scope_digest,
+                target_is_directory=False,
+            )
+            baseline = self.baseline.get(path)
+            if baseline is not None:
+                observation, _classification = self.filesystem.observe_file(
+                    path,
+                    provenance="tool_result",
+                )
+                if (
+                    observation.resource_identity != baseline.resource_identity
+                    or observation.resource_revision != baseline.resource_revision
+                ):
+                    raise RuntimeToolError("filesystem_resource_changed")
+            prepared.append(
+                _ChangedFile(
+                    path=path,
+                    content=content,
+                    baseline=baseline,
+                    guard=guard,
+                )
+            )
+        return tuple(prepared)
+
+
+def parse_hosted_workspace_mutation_scopes(
+    value: object,
+) -> tuple[HostedWorkspaceMutationScope, ...]:
+    """Require an explicit, bounded set; an empty set means read-only workspace."""
+    if not isinstance(value, list) or len(value) > 32:
+        raise RuntimeToolError("tool_arguments_invalid")
+    scopes: list[HostedWorkspaceMutationScope] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {
+            "path",
+            "instruction_scope_digest",
+        }:
+            raise RuntimeToolError("tool_arguments_invalid")
+        path = _normalized_relative_path(item.get("path"), allow_root=True)
+        digest = str(item.get("instruction_scope_digest") or "")
+        if (
+            len(digest) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in digest)
+            or path in seen
+        ):
+            raise RuntimeToolError("tool_arguments_invalid")
+        seen.add(path)
+        scopes.append(HostedWorkspaceMutationScope(path, digest.lower()))
+    return tuple(sorted(scopes, key=lambda item: (_path_depth(item.path), item.path)))
+
+
+def _scope_for_path(
+    scopes: tuple[HostedWorkspaceMutationScope, ...],
+    path: str,
+) -> HostedWorkspaceMutationScope | None:
+    matches = [scope for scope in scopes if _path_within(path, scope.path)]
+    return max(matches, key=lambda item: _path_depth(item.path), default=None)
+
+
+def _path_within(path: str, scope: str) -> bool:
+    return scope == "." or path == scope or path.startswith(scope + "/")
+
+
+def _path_depth(path: str) -> int:
+    return 0 if path == "." else len(PurePosixPath(path).parts)
+
+
+def _normalized_relative_path(value: object, *, allow_root: bool) -> str:
+    if not isinstance(value, str) or not value or "\x00" in value or "\\" in value:
+        raise RuntimeToolError("tool_arguments_invalid")
+    path = PurePosixPath(value)
+    parts = tuple(part for part in path.parts if part != ".")
+    if (
+        path.is_absolute()
+        or path.as_posix() != value
+        or any(part in {"", ".", "..", ".git"} for part in parts)
+        or (parts and parts[0] == "runtime")
+        or (not parts and not allow_root)
+    ):
+        raise RuntimeToolError("tool_arguments_invalid")
+    return "/".join(parts) or "."
+
+
+def _scope_digest(scopes: tuple[HostedWorkspaceMutationScope, ...]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            [scope.__dict__ for scope in scopes],
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+    ).hexdigest()
+
+
+__all__ = [
+    "HostedWorkspaceEffectOverlay",
+    "HostedWorkspaceMutationScope",
+    "parse_hosted_workspace_mutation_scopes",
+]

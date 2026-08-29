@@ -12,6 +12,10 @@ from uuid import uuid4
 
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.hosted_workspace_shell import prepare_hosted_workspace_command
+from core.runtime.hosted_workspace_effects import (
+    HostedWorkspaceEffectOverlay,
+    HostedWorkspaceMutationScope,
+)
 from core.runtime.hosted_process_output import HostedProcessOutputCapture
 from core.runtime.lifecycle_service_turns import (
     create_runtime_process,
@@ -36,6 +40,8 @@ class _LiveHostedToolProcess:
     output_capture: HostedProcessOutputCapture
     session_id: str
     workspace_id: str
+    effect_overlay: HostedWorkspaceEffectOverlay | None
+    workspace_effects: dict[str, object] | None = None
 
 
 class HostedToolProcessRegistry:
@@ -58,7 +64,7 @@ class HostedToolProcessRegistry:
         cwd: str,
         environment: dict[str, str],
         timeout_seconds: int,
-        mutation_guard=None,
+        mutation_scopes: tuple[HostedWorkspaceMutationScope, ...] = (),
     ) -> dict[str, object]:
         process_id = f"agent-process-{uuid4().hex}"
         prepared = prepare_hosted_workspace_command(
@@ -67,6 +73,7 @@ class HostedToolProcessRegistry:
             runtime_root=runtime_root,
             argv=argv,
             cwd=cwd,
+            mutation_scopes=mutation_scopes,
         )
         runtime_fd: int | None = None
         output_directory_fd: int | None = None
@@ -109,8 +116,8 @@ class HostedToolProcessRegistry:
                 dir_fd=output_directory_fd,
             )
             output_handle = os.fdopen(os.dup(output_fd), "wb", buffering=0)
-            if mutation_guard is not None:
-                mutation_guard.verify_before()
+            if prepared.effect_overlay is not None:
+                prepared.effect_overlay.verify_before_spawn()
             process = subprocess.Popen(
                 prepared.command,
                 env=environment,
@@ -142,13 +149,18 @@ class HostedToolProcessRegistry:
                     output_capture=output_capture,
                     session_id=session_id,
                     workspace_id=workspace_id,
+                    effect_overlay=prepared.effect_overlay,
                 )
             return {
                 "process_id": process_id,
                 "status": "running",
                 "output_offset": 0,
+                "workspace_effects_pending": prepared.effect_overlay is not None,
+                "mutation_scope_count": len(mutation_scopes),
             }
         except Exception as error:
+            if prepared.effect_overlay is not None:
+                prepared.effect_overlay.discard()
             if process is not None:
                 terminate_runtime_process(process)
                 unregister_runtime_process(session_id, process)
@@ -219,6 +231,7 @@ class HostedToolProcessRegistry:
             "output_truncated": (
                 live.output_capture.limit_reason == "process_output_too_large"
             ),
+            "workspace_effects": live.workspace_effects,
         }
         if record.status != "running" and not payload["output_pending"]:
             self._close_live(process_id, live)
@@ -263,6 +276,8 @@ class HostedToolProcessRegistry:
     ) -> dict[str, object]:
         live = self._owned_live(process_id, session_id, workspace_id)
         terminated = terminate_runtime_process(live.process)
+        if live.effect_overlay is not None:
+            live.workspace_effects = live.effect_overlay.discard()
         unregister_runtime_process(session_id, live.process)
         self._close_live(process_id, live)
         record = self.store.get_process(process_id)
@@ -317,11 +332,21 @@ class HostedToolProcessRegistry:
         record = self.store.get_process(process_id)
         if record.status == "running":
             reason = live.output_capture.limit_reason
+            effect_failure: str | None = None
+            if live.effect_overlay is not None:
+                if reason is None and exit_code == 0:
+                    try:
+                        live.workspace_effects = live.effect_overlay.commit()
+                    except RuntimeToolError as error:
+                        effect_failure = error.reason_code
+                        live.workspace_effects = live.effect_overlay.discard()
+                else:
+                    live.workspace_effects = live.effect_overlay.discard()
             target_status = (
                 "timed-out"
                 if reason == "process_timed_out"
                 else "failed"
-                if reason is not None
+                if reason is not None or effect_failure is not None
                 else "exited"
             )
             transition_runtime_process(
@@ -329,7 +354,7 @@ class HostedToolProcessRegistry:
                 process_id=process_id,
                 target_status=target_status,
                 exit_code=exit_code,
-                failure_reason=reason,
+                failure_reason=effect_failure or reason,
                 stdin_open=False,
                 stdout_open=False,
             )
@@ -348,6 +373,8 @@ class HostedToolProcessRegistry:
             live.process.stdin.close()
         if not live.output_capture.wait():
             raise RuntimeToolError("process_output_capture_failed")
+        if live.effect_overlay is not None:
+            live.effect_overlay.discard()
         try:
             os.close(live.output_fd)
         except OSError:

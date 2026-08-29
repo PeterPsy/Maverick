@@ -281,8 +281,8 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 "destination_instruction_scope_digest",
             },
             "core-capability:filesystem.delete": {"instruction_scope_digest"},
-            "core-capability:shell.run": {"instruction_scope_digest"},
-            "core-capability:process.start": {"instruction_scope_digest"},
+            "core-capability:shell.run": {"mutation_scopes"},
+            "core-capability:process.start": {"mutation_scopes"},
         }
 
         for handle, required in expected.items():
@@ -291,6 +291,16 @@ class FullWorkspaceContractTest(unittest.TestCase):
                     capabilities[handle].definition.input_schema["required"]
                 )
                 self.assertTrue(required.issubset(schema_required))
+                if "mutation_scopes" in required:
+                    item_required = set(
+                        capabilities[handle]
+                        .definition.input_schema["properties"]["mutation_scopes"]
+                        ["items"]["required"]
+                    )
+                    self.assertEqual(
+                        item_required,
+                        {"path", "instruction_scope_digest"},
+                    )
 
     def test_mutation_rechecks_instruction_digest_before_effect(self) -> None:
         (self.workspace / "AGENTS.md").write_text("First.\n", encoding="utf-8")
@@ -317,6 +327,44 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 None,
             )
         self.assertFalse((self.workspace / "created.txt").exists())
+
+    def test_shell_overlay_rolls_back_instruction_race_at_guarded_commit(self) -> None:
+        agents = self.workspace / "AGENTS.md"
+        agents.write_text("Initial.\n", encoding="utf-8")
+
+        def race(stage, _path):
+            if stage == "write_temporary_ready":
+                agents.write_text("Raced.\n", encoding="utf-8")
+
+        capabilities = self._capabilities(race_hook=race)
+        scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_instruction_scope_changed",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/bin/sh",
+                        "-c",
+                        "printf blocked > raced-shell.txt",
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": ".",
+                            "instruction_scope_digest": scope_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((self.workspace / "raced-shell.txt").exists())
+        self.assertEqual(agents.read_text(encoding="utf-8"), "Raced.\n")
 
     def test_mutation_requires_digest_and_rolls_back_instruction_races(self) -> None:
         agents = self.workspace / "AGENTS.md"
@@ -538,11 +586,6 @@ class FullWorkspaceContractTest(unittest.TestCase):
 
     def test_shell_and_long_process_are_confined_streamed_and_reaped(self) -> None:
         capabilities = self._capabilities(processes=True)
-        root_scope_digest = self._scope_digest(
-            capabilities,
-            ".",
-            target_is_directory=True,
-        )
         runtime_marker = self.workspace / "runtime" / "private-marker"
         runtime_marker.parent.mkdir(parents=True, exist_ok=True)
         runtime_marker.write_text("platform-private", encoding="utf-8")
@@ -558,12 +601,35 @@ class FullWorkspaceContractTest(unittest.TestCase):
                         f"test ! -e {self.workspace!s} && printf confined"
                     ),
                 ],
-                "instruction_scope_digest": root_scope_digest,
+                "mutation_scopes": [],
             },
             self.context,
             None,
         )
         self.assertEqual(shell["output"], "/workspace|confined")
+
+        fd_bypass = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": [
+                    "/usr/bin/python3",
+                    "-c",
+                    (
+                        "import os\n"
+                        "for fd in range(3,128):\n"
+                        " try:\n"
+                        "  handle=os.open('descriptor-bypass.txt',"
+                        "os.O_WRONLY|os.O_CREAT,0o600,dir_fd=fd)\n"
+                        "  os.write(handle,b'bypass'); os.close(handle)\n"
+                        " except OSError: pass\n"
+                    ),
+                ],
+                "mutation_scopes": [],
+            },
+            self.context,
+            None,
+        )
+        self.assertEqual(fd_bypass["exit_code"], 0)
+        self.assertFalse((self.workspace / "descriptor-bypass.txt").exists())
 
         started = capabilities["core-capability:process.start"].handler(
             {
@@ -572,7 +638,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
                     "-c",
                     "read value; printf 'received:%s' \"$value\"",
                 ],
-                "instruction_scope_digest": root_scope_digest,
+                "mutation_scopes": [],
             },
             self.context,
             None,
@@ -598,18 +664,212 @@ class FullWorkspaceContractTest(unittest.TestCase):
         self.assertEqual(status.payload["output"], "received:hello")
         self.assertFalse(runtime_processes_alive_for_session("session-hosted"))
 
-    def test_shell_and_process_output_and_time_are_hard_bounded(self) -> None:
+    def test_shell_and_process_commit_only_declared_nested_instruction_scopes(self) -> None:
+        nested = self.workspace / "nested"
+        nested.mkdir()
+        (self.workspace / "AGENTS.md").write_text("Root rules.\n", encoding="utf-8")
+        (nested / "AGENTS.md").write_text("Nested rules.\n", encoding="utf-8")
         capabilities = self._capabilities(processes=True)
-        root_scope_digest = self._scope_digest(
+        root_digest = self._scope_digest(
             capabilities,
             ".",
             target_is_directory=True,
         )
+        nested_digest = self._scope_digest(
+            capabilities,
+            "nested",
+            target_is_directory=True,
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_instruction_scope_changed",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/bin/sh",
+                        "-c",
+                        "printf blocked > nested/shell-blocked.txt",
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": ".",
+                            "instruction_scope_digest": root_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((nested / "shell-blocked.txt").exists())
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_outside_declared_scope",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/bin/sh",
+                        "-c",
+                        "printf blocked > outside-declared-scope.txt",
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": "nested",
+                            "instruction_scope_digest": nested_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((self.workspace / "outside-declared-scope.txt").exists())
+
+        overlay_fd_bypass = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": [
+                    "/usr/bin/python3",
+                    "-c",
+                    (
+                        "import os\n"
+                        "for fd in range(3,128):\n"
+                        " try:\n"
+                        "  handle=os.open('overlay-descriptor-bypass.txt',"
+                        "os.O_WRONLY|os.O_CREAT,0o600,dir_fd=fd)\n"
+                        "  os.write(handle,b'bypass'); os.close(handle)\n"
+                        " except OSError: pass\n"
+                    ),
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": "nested",
+                        "instruction_scope_digest": nested_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        self.assertEqual(overlay_fd_bypass["exit_code"], 0)
+        self.assertFalse(
+            (self.workspace / "overlay-descriptor-bypass.txt").exists()
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_parent_not_directory",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/bin/sh",
+                        "-c",
+                        "mkdir -p nested/new && printf blocked > nested/new/file.txt",
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": "nested",
+                            "instruction_scope_digest": nested_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((nested / "new").exists())
+
+        shell = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    "printf allowed > nested/shell-allowed.txt",
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": "nested",
+                        "instruction_scope_digest": nested_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        self.assertEqual(shell["workspace_effect_paths"], ("nested/shell-allowed.txt",))
+        self.assertEqual(
+            (nested / "shell-allowed.txt").read_text(encoding="utf-8"),
+            "allowed",
+        )
+
+        blocked = capabilities["core-capability:process.start"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    "printf blocked > nested/process-blocked.txt",
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": ".",
+                        "instruction_scope_digest": root_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        blocked_status = self._wait_for_process(
+            capabilities,
+            str(blocked.payload["process_id"]),
+        )
+        self.assertEqual(blocked_status.payload["status"], "failed")
+        self.assertEqual(
+            blocked_status.payload["failure_reason"],
+            "workspace_instruction_scope_changed",
+        )
+        self.assertFalse((nested / "process-blocked.txt").exists())
+
+        allowed = capabilities["core-capability:process.start"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    "printf allowed > nested/process-allowed.txt",
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": "nested",
+                        "instruction_scope_digest": nested_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        allowed_status = self._wait_for_process(
+            capabilities,
+            str(allowed.payload["process_id"]),
+        )
+        self.assertEqual(allowed_status.payload["status"], "exited")
+        self.assertTrue(
+            allowed_status.payload["workspace_effects"][
+                "workspace_effects_committed"
+            ]
+        )
+        self.assertEqual(
+            (nested / "process-allowed.txt").read_text(encoding="utf-8"),
+            "allowed",
+        )
+
+    def test_shell_and_process_output_and_time_are_hard_bounded(self) -> None:
+        capabilities = self._capabilities(processes=True)
         with self.assertRaisesRegex(RuntimeToolError, "shell_output_too_large"):
             capabilities["core-capability:shell.run"].handler(
                 {
                     "argv": ["/usr/bin/head", "-c", "200000", "/dev/zero"],
-                    "instruction_scope_digest": root_scope_digest,
+                    "mutation_scopes": [],
                 },
                 self.context,
                 None,
@@ -620,7 +880,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 {
                     "argv": ["/usr/bin/head", "-c", "1024", "/dev/zero"],
                     "timeout_seconds": 5,
-                    "instruction_scope_digest": root_scope_digest,
+                    "mutation_scopes": [],
                 },
                 self.context,
                 None,
@@ -640,7 +900,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
             {
                 "argv": ["/bin/sh", "-c", "sleep 10"],
                 "timeout_seconds": 1,
-                "instruction_scope_digest": root_scope_digest,
+                "mutation_scopes": [],
             },
             self.context,
             None,

@@ -26,6 +26,9 @@ from core.runtime.hosted_tool_process_registry import (
     hosted_process_environment,
 )
 from core.runtime.hosted_workspace_shell import run_hosted_workspace_command
+from core.runtime.hosted_workspace_effects import (
+    parse_hosted_workspace_mutation_scopes,
+)
 from core.runtime.tool_discovery_capabilities import (
     build_discovery_first_capabilities,
 )
@@ -38,6 +41,7 @@ from core.runtime.tool_full_workspace_support import (
 )
 from core.runtime.tool_full_workspace_schemas import (
     extended_filesystem_write_schema,
+    workspace_mutation_scopes_schema,
 )
 from core.runtime.tool_result_artifacts import (
     build_tool_result_artifact_capabilities,
@@ -206,31 +210,21 @@ def build_core_runtime_tool_capabilities(
         ):
             raise RuntimeToolError("tool_arguments_invalid")
         cwd = str(arguments.get("cwd") or ".")
-        guard = prepare_mutation_instruction_guard(
+        return run_hosted_workspace_command(
             filesystem,
             workspace_root=workspace_root,
-            path=cwd,
-            expected_digest=_required_string(
-                arguments.get("instruction_scope_digest")
+            runtime_root=resolved_runtime_root,
+            argv=argv,
+            cwd=cwd,
+            environment=hosted_process_environment(
+                session_id=context.session_id
             ),
-            target_is_directory=True,
+            timeout_seconds=timeout,
+            max_output_bytes=MAX_SHELL_OUTPUT_BYTES,
+            mutation_scopes=parse_hosted_workspace_mutation_scopes(
+                arguments.get("mutation_scopes")
+            ),
         )
-        return {
-            **run_hosted_workspace_command(
-                filesystem,
-                workspace_root=workspace_root,
-                runtime_root=resolved_runtime_root,
-                argv=argv,
-                cwd=cwd,
-                environment=hosted_process_environment(
-                    session_id=context.session_id
-                ),
-                timeout_seconds=timeout,
-                max_output_bytes=MAX_SHELL_OUTPUT_BYTES,
-                mutation_guard=guard,
-            ),
-            **guard.evidence,
-        }
 
     base = (
         RuntimeCoreCapabilitySurface(
@@ -397,12 +391,8 @@ def _shell_schema() -> dict[str, object]:
                 "minimum": 1,
                 "maximum": MAX_SHELL_TIMEOUT_SECONDS,
             },
-            "instruction_scope_digest": {
-                "type": "string",
-                "minLength": 64,
-                "maxLength": 64,
-            },
+            "mutation_scopes": workspace_mutation_scopes_schema(),
         },
-        "required": ["argv", "instruction_scope_digest"],
+        "required": ["argv", "mutation_scopes"],
         "additionalProperties": False,
     }

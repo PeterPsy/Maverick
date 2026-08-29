@@ -78,13 +78,13 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "23")
-        self.assertEqual(profile.adapter_version_constraint, "==15")
+        self.assertEqual(profile.revision, "24")
+        self.assertEqual(profile.adapter_version_constraint, "==16")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.provider_api_version, "v1")
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
-        self.assertEqual(production_classification.data_class, "public")
-        self.assertEqual(production_classification.classification_revision, 1)
+        self.assertEqual(production_classification.data_class, "unclassified")
+        self.assertIsNone(production_classification.classification_revision)
         for resource_provenance in (
             "attachment",
             "skill",

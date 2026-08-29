@@ -944,7 +944,10 @@ def submit_runtime_turn_async(
                         attachments=attachments,
                     )
                     provider_input_sources = runtime_provider_input_sources(
-                        state, session=current_session, input_text=input_text,
+                        state,
+                        session=current_session,
+                        turn_id=turn.turn_id,
+                        input_text=input_text,
                         app_references=execution_app_references,
                         attachments=attachments,
                     )

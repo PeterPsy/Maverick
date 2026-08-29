@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from core.egress.classification import validated_classification
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.mcp.models import McpInvocationPolicy, McpToolDefinition
@@ -243,6 +244,96 @@ class _RuntimeToolOrchestratorFixture:
 
 
 class RuntimeToolOrchestratorTest(_RuntimeToolOrchestratorFixture, unittest.TestCase):
+    def test_shell_output_never_downgrades_classified_workspace_reads(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "confidential.txt").write_text(
+                "internal-only",
+                encoding="utf-8",
+            )
+
+            def classify(observation, provenance):
+                return validated_classification(
+                    data_class="workspace_internal",
+                    provenance=provenance,
+                    trust_level="untrusted_tool_output",
+                    source_ref=observation.resource_ref,
+                    source_revision=observation.resource_revision,
+                    source_digest=observation.resource_digest,
+                    resource_identity=observation.resource_identity,
+                    classification_revision=1,
+                )
+
+            orchestrator = RuntimeToolOrchestrator(
+                catalog_builder=RuntimeToolCatalogBuilder(
+                    cli_registry=self.cli_registry,
+                    mcp_registry=self.mcp_registry,
+                    core_capabilities=build_core_runtime_tool_capabilities(
+                        workspace_id="default",
+                        workspace_root=root,
+                        runtime_root=root / "runtime",
+                        resource_classification_resolver=classify,
+                    ),
+                ),
+                ledger=self.ledger,
+            )
+            authority = replace(
+                self.authority,
+                allowed_capabilities=replace(
+                    self.authority.allowed_capabilities,
+                    filesystem_read=True,
+                    shell=True,
+                ),
+                allowed_tool_handles=(
+                    "core-capability:filesystem.read",
+                    "core-capability:shell.run",
+                ),
+                execution_mode="full-access",
+            )
+            context = replace(self.context, execution_mode="full-access")
+            policy = replace(
+                self.policy,
+                require_confirmation_for_destructive=False,
+            )
+
+            filesystem_read = orchestrator.invoke_provider_tool(
+                provider_tool_name=provider_tool_name(
+                    "core-capability:filesystem.read"
+                ),
+                provider_tool_call_id="call-classified-read",
+                arguments={"path": "confidential.txt"},
+                authority=authority,
+                context=context,
+                turn_id="turn-tools",
+                policy=policy,
+            )
+            shell_read = orchestrator.invoke_provider_tool(
+                provider_tool_name=provider_tool_name(
+                    "core-capability:shell.run"
+                ),
+                provider_tool_call_id="call-unclassified-shell-read",
+                arguments={
+                    "argv": [
+                        "/bin/cat",
+                        "/workspace/confidential.txt",
+                    ],
+                    "mutation_scopes": [],
+                },
+                authority=authority,
+                context=context,
+                turn_id="turn-tools",
+                policy=policy,
+            )
+
+            self.assertEqual(
+                filesystem_read.invocation.result_data_class,
+                "workspace_internal",
+            )
+            self.assertEqual(
+                shell_read.invocation.result_data_class,
+                "unclassified",
+            )
+
     def test_large_result_keeps_original_artifact_and_exposes_bounded_chunks(self) -> None:
         original = {"blob": "line of bounded synthetic output\n" * 1_000}
         self.cli_registry.register_command(

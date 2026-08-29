@@ -99,6 +99,7 @@ class HostedSemanticEnvelopeCompiler:
                         classification=platform_classification(
                             "core:hosted-finalization-instruction",
                             "1",
+                            HOSTED_FINALIZATION_INSTRUCTION,
                         ),
                     )
                 )

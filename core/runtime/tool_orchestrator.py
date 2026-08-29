@@ -12,6 +12,7 @@ import time
 from typing import Literal
 
 from core.egress.classification import (
+    derive_content_classification,
     fail_closed_classification,
     join_classifications,
 )
@@ -554,6 +555,12 @@ class RuntimeToolOrchestrator:
                 separators=(",", ":"),
                 sort_keys=True,
             ).encode("utf-8")
+            classification = derive_content_classification(
+                content=encoded,
+                provenance="tool_result",
+                source_ref=classification.source_ref or descriptor.handle,
+                sources=(classification,),
+            )
             summary = {
                 "root_type": "object",
                 "field_count": len(projected_result),

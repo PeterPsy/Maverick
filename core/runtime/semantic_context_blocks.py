@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from core.egress.classification import CanonicalSourceClassification
+from core.egress.agentic_transforms import canonical_egress_content
+from core.egress.classification import (
+    CanonicalSourceClassification,
+    derive_content_classification,
+)
 from core.runtime.attachment_projection import attachment_read_encoding
 from core.runtime.confined_filesystem import (
     ConfinedWorkspaceFilesystem,
@@ -48,6 +52,7 @@ class SemanticContextMaterializer:
         self.resource_classification_resolver = resource_classification_resolver
 
     def append_platform(self, blocks: list[SemanticEnvelopeBlock], *, context) -> None:
+        platform_instruction = self.platform_instruction
         blocks.append(
             make_semantic_block(
                 blocks,
@@ -56,14 +61,25 @@ class SemanticContextMaterializer:
                 role="system",
                 provenance="platform_instruction",
                 content_type="text/plain",
-                content=self.platform_instruction,
+                content=platform_instruction,
                 classification=platform_classification(
                     "core:maverick-platform-instruction",
                     SEMANTIC_ENVELOPE_SCHEMA_VERSION,
+                    platform_instruction,
                 ),
             )
         )
         binding = context.binding
+        runtime_context = {
+            "runtime_engine_id": binding.runtime_engine_id,
+            "adapter_id": binding.adapter_id,
+            "adapter_version": binding.adapter_version,
+            "model_provider_id": binding.model_provider_id,
+            "model_id": binding.model_id,
+            "provider_protocol": binding.provider_protocol,
+            "provider_api_version": binding.provider_api_version,
+            "workdir": "workspace://" + context.session.workspace_id,
+        }
         blocks.append(
             make_semantic_block(
                 blocks,
@@ -72,19 +88,11 @@ class SemanticContextMaterializer:
                 role="system",
                 provenance="runtime_context",
                 content_type="application/json",
-                content={
-                    "runtime_engine_id": binding.runtime_engine_id,
-                    "adapter_id": binding.adapter_id,
-                    "adapter_version": binding.adapter_version,
-                    "model_provider_id": binding.model_provider_id,
-                    "model_id": binding.model_id,
-                    "provider_protocol": binding.provider_protocol,
-                    "provider_api_version": binding.provider_api_version,
-                    "workdir": "workspace://" + context.session.workspace_id,
-                },
+                content=runtime_context,
                 classification=platform_classification(
                     f"runtime-binding:{binding.execution_binding_id}",
                     binding.binding_digest,
+                    runtime_context,
                 ),
             )
         )
@@ -107,6 +115,7 @@ class SemanticContextMaterializer:
                 classification=platform_classification(
                     f"runtime-authority:{authority.execution_binding_id}",
                     canonical_digest(capabilities),
+                    capabilities,
                 ),
             )
         )
@@ -305,14 +314,7 @@ class SemanticContextMaterializer:
                 )
             except Exception as error:
                 raise HostedAgenticLoopError("skill_materialization_failed") from error
-            content = {
-                "skill_id": str(getattr(skill, "skill_id", "")),
-                "name": str(getattr(skill, "name", "")),
-                "description": str(getattr(skill, "description", "")),
-                "owner_kind": str(getattr(skill, "owner_kind", "")),
-                "owner_id": str(getattr(skill, "owner_id", "")),
-                "instructions": str(result.payload["content"]),
-            }
+            content = str(result.payload["content"])
             blocks.append(
                 make_semantic_block(
                     blocks,
@@ -320,7 +322,7 @@ class SemanticContextMaterializer:
                     kind="content",
                     role="developer",
                     provenance="skill_fragment",
-                    content_type="application/json",
+                    content_type="text/markdown",
                     content=content,
                     classification=self._file_classification(
                         context,
@@ -343,7 +345,13 @@ class SemanticContextMaterializer:
     ) -> HostedContentClassification:
         if self.resource_classification_resolver is None:
             return self.classifier(context, provenance, content)
-        return canonical_classification(classification)
+        derived = derive_content_classification(
+            content=canonical_egress_content(content),
+            provenance=provenance,
+            source_ref=classification.source_ref,
+            sources=(classification,),
+        )
+        return canonical_classification(derived)
 
 
 @dataclass(frozen=True)

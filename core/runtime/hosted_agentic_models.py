@@ -26,6 +26,7 @@ class HostedContentClassification:
     source_revision: str = ""
     resource_identity: str = ""
     classification_revision: int | None = None
+    content_digest: str = ""
 
 
 @dataclass(frozen=True)

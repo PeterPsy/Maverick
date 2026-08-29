@@ -23,9 +23,31 @@ _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
 
 @dataclass
 class _OverlayScanState:
-    changes: list[tuple[str, bytes]] = field(default_factory=list)
+    changes: list["HostedEffectFile"] = field(default_factory=list)
+    directories: list["HostedEffectDirectory"] = field(default_factory=list)
     entry_count: int = 0
     total_bytes: int = 0
+
+
+@dataclass(frozen=True)
+class HostedEffectFile:
+    path: str
+    content: bytes
+    mode: int
+
+
+@dataclass(frozen=True)
+class HostedEffectDirectory:
+    path: str
+    mode: int
+
+
+@dataclass(frozen=True)
+class HostedEffectOverlayDiff:
+    """Complete representable upper-layer entries."""
+
+    files: tuple[HostedEffectFile, ...]
+    directories: tuple[HostedEffectDirectory, ...]
 
 
 def create_hosted_effect_overlay_directories(
@@ -56,6 +78,7 @@ def create_hosted_effect_overlay_directories(
         )
         os.mkdir("upper", 0o700, dir_fd=effect_fd)
         os.mkdir("work", 0o700, dir_fd=effect_fd)
+        os.mkdir("transaction", 0o700, dir_fd=effect_fd)
     except OSError as error:
         raise RuntimeToolError("workspace_effect_overlay_unavailable") from error
     finally:
@@ -68,7 +91,7 @@ def create_hosted_effect_overlay_directories(
     return root, root / "upper", root / "work"
 
 
-def scan_hosted_effect_overlay_upper(upper: Path) -> tuple[tuple[str, bytes], ...]:
+def scan_hosted_effect_overlay_upper(upper: Path) -> HostedEffectOverlayDiff:
     """Return a stable regular-file diff and reject opaque or special effects."""
     try:
         root_fd = os.open(
@@ -83,8 +106,12 @@ def scan_hosted_effect_overlay_upper(upper: Path) -> tuple[tuple[str, bytes], ..
         _scan_upper_directory(root_fd, (), state)
     finally:
         os.close(root_fd)
-    state.changes.sort(key=lambda item: item[0])
-    return tuple(state.changes)
+    state.changes.sort(key=lambda item: item.path)
+    state.directories.sort(key=lambda item: item.path)
+    return HostedEffectOverlayDiff(
+        files=tuple(state.changes),
+        directories=tuple(state.directories),
+    )
 
 
 def _scan_upper_directory(
@@ -113,6 +140,9 @@ def _scan_upper_directory(
             except OSError as error:
                 raise RuntimeToolError("workspace_effect_diff_changed") from error
             if stat.S_ISDIR(item.st_mode):
+                state.directories.append(
+                    HostedEffectDirectory(path, stat.S_IMODE(item.st_mode))
+                )
                 child_fd = os.open(
                     name,
                     os.O_RDONLY | _DIRECTORY | _NOFOLLOW | _CLOEXEC,
@@ -148,7 +178,13 @@ def _scan_upper_directory(
                     or len(content) != item.st_size
                 ):
                     raise RuntimeToolError("workspace_effect_diff_changed")
-                state.changes.append((path, content))
+                state.changes.append(
+                    HostedEffectFile(
+                        path,
+                        content,
+                        stat.S_IMODE(item.st_mode),
+                    )
+                )
                 state.total_bytes += len(content)
             finally:
                 os.close(fd)
@@ -167,6 +203,9 @@ __all__ = [
     "MAX_HOSTED_EFFECT_FILES",
     "MAX_HOSTED_EFFECT_FILE_BYTES",
     "MAX_HOSTED_EFFECT_TOTAL_BYTES",
+    "HostedEffectDirectory",
+    "HostedEffectFile",
+    "HostedEffectOverlayDiff",
     "create_hosted_effect_overlay_directories",
     "scan_hosted_effect_overlay_upper",
 ]

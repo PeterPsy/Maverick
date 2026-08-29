@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from core.egress.classification import content_sha256
 from core.providers.agentic_protocol import (
     AgenticProviderPrivateState,
     AgenticToolResult,
@@ -28,6 +29,11 @@ def append_semantic_tool_blocks(
     classifier: HostedContentClassifier,
 ) -> None:
     for descriptor in catalog.descriptors:
+        content = {
+            "name": descriptor.provider_name,
+            "description": descriptor.description,
+            "input_schema": descriptor.input_schema,
+        }
         blocks.append(
             make_semantic_block(
                 blocks,
@@ -36,14 +42,11 @@ def append_semantic_tool_blocks(
                 role="system",
                 provenance="tool_schema",
                 content_type="application/json",
-                content={
-                    "name": descriptor.provider_name,
-                    "description": descriptor.description,
-                    "input_schema": descriptor.input_schema,
-                },
+                content=content,
                 classification=platform_classification(
                     f"core-tool-schema:{descriptor.handle}",
                     str(descriptor.certified_tcb_component or ""),
+                    content,
                 ),
             )
         )
@@ -57,6 +60,7 @@ def append_semantic_tool_blocks(
                 source_revision=metadata.source_revision,
                 resource_identity=metadata.resource_identity,
                 classification_revision=metadata.classification_revision,
+                content_digest=metadata.source_block_digest,
             )
             if metadata is not None
             else classifier(context, "tool_result", result.content)
@@ -105,6 +109,7 @@ def append_semantic_tool_blocks(
                     and provider_private_state.turn_generation
                     else None
                 ),
+                content_digest=content_sha256(provider_private_state.content),
             ),
         )
     )

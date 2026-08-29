@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v10 records six maintained transitive dependency contracts. The
+- [x] Manifest v11 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v20 / matrix
-  `2026-08-29-r20-p4-adversarial-closure-tcb10`
+- [x] Google and OpenRouter suite v21 / matrix
+  `2026-08-29-r21-p4-composite-atomic-closure-tcb11`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -111,6 +111,11 @@ completion claim.
 - [x] Chunk reads and listing cursors bind resource identity/version, detect
   mutation, preserve UTF-8 boundaries, and feed resource-derived
   classification. Repeated Linux race tests leave zero escaped reads/writes.
+- [x] Hosted command overlays reject newly-created directories and other
+  unrepresentable effects. Multi-file text commits retain every pre-image and
+  roll the complete batch back after a late instruction race; terminal
+  `process.status` is mutating and non-retry-safe because it crosses that
+  boundary.
 
 ### Effective capabilities and UI governance
 
@@ -409,20 +414,25 @@ completion claim.
   output without concrete source evidence remains `unclassified`. A production-
   composed fixture proves admitted first dispatch and continuation through an
   exactly classified workspace result without a generic public fallback.
+- [x] Semantic classifications bind the exact canonical projected bytes.
+  Attachment metadata and file observations are classified separately then
+  restrictively joined; attachment-only turns omit the empty prompt. Skills
+  project exact `SKILL.md` bytes without unbound catalog/state metadata, and a
+  digest mismatch fails closed to `unclassified`.
 - [x] Every mutating schema requires the exact applicable `AGENTS.md` digest.
   Write/edit/patch/move/delete verify the snapshot immediately around the
   commit and roll back on post-commit drift. Shell and managed processes require
   an explicit set of mutable directory scopes, run in a private overlay, and
-  validate every changed file against its actual instruction chain before any
-  workspace commit; invalid/failed/interrupted effects are discarded.
+  validate every changed file against its actual instruction chain before a
+  rollback-safe batch commit; invalid/failed/interrupted effects are discarded.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 16, semantic compiler revision 4, Full Workspace contract
-  `codex-baseline-v4`, context-compaction schema 3, TCB manifest v10, suite 20,
-  and matrix `2026-08-29-r20-p4-adversarial-closure-tcb10` create new immutable
-  Google revision 24 and OpenRouter revision 23 full-workspace candidates.
-  Historical revisions 23/22 are suspended, never promoted. No live probe,
+- [x] Adapter 17, semantic compiler revision 5, Full Workspace contract
+  `codex-baseline-v5`, context-compaction schema 3, TCB manifest v11, suite 21,
+  and matrix `2026-08-29-r21-p4-composite-atomic-closure-tcb11` create new
+  immutable Google revision 25 and OpenRouter revision 24 full-workspace
+  candidates. Historical revisions 24/23 are suspended, never promoted. No live probe,
   signed certificate, binding, remote activation, or Codex profile/artifact
   change is part of Phase 4.
 

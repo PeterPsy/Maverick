@@ -210,7 +210,11 @@ class HostedToolProcessRegistry:
         process = live.process
         exit_code = process.poll()
         if exit_code is not None:
-            self._finish(process_id, live, exit_code=exit_code)
+            try:
+                self._finish(process_id, live, exit_code=exit_code)
+            except RuntimeToolError:
+                self._close_live(process_id, live)
+                raise
         size = os.fstat(live.output_fd).st_size
         if output_offset < 0 or output_offset > size:
             raise RuntimeToolError("process_output_offset_invalid")
@@ -358,9 +362,13 @@ class HostedToolProcessRegistry:
                 stdin_open=False,
                 stdout_open=False,
             )
+        else:
+            effect_failure = None
         unregister_runtime_process(live.session_id, live.process)
         if live.process.stdin is not None and not live.process.stdin.closed:
             live.process.stdin.close()
+        if effect_failure is not None:
+            raise RuntimeToolError(effect_failure)
 
     def _close_live(
         self,

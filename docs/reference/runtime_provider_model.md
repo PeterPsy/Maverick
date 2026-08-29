@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v10 also
+status, workspace binding, and upstream constraint. TCB manifest v11 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -129,6 +129,14 @@ step. The source snapshot digest is distinct from the versioned provider
 projection digest; both and the compiler identity are journaled without source
 content. A mandatory block that cannot be classified, materialized, or
 projected aborts before provider transport.
+
+Each block classification is bound to its exact canonical byte digest.
+Composite attachment metadata is independently admitted and restrictively
+joined with the referenced file classification; skills project exact
+`SKILL.md` content instead of unbound catalog metadata. Attachment-only input
+omits an empty prompt. Hosted shell/process text effects use a rollback-safe
+multi-file transaction, reject unrepresentable directories, and treat terminal
+process polling as mutating/non-retry-safe because it commits the overlay.
 
 Hosted full-workspace bindings additionally pin the execution family, harness
 recipe and digest, fine-grained provider-capability catalog digest, semantic

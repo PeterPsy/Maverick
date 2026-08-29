@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "8263d6d670d024e5880fd2eb77b6e806f9127081a520f40ded8746e21baa8b46"
+                "d993ea64361c17f35065df55028ff4689215ee4f7e67fecff45a8fc4e56801c1"
             ),
             "openrouter": (
-                "e3ae1ad5806850ce11ea42b816f39a508850c64420c4590af37ca4c1e7ac292f"
+                "8b4d478c62227c434cdcac981989a9e4ad540e4cea883426b727a1176f4d7976"
             ),
         }
         for manifest in (
@@ -190,10 +190,10 @@ class CertificationPipelineTest(unittest.TestCase):
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "20")
+                self.assertEqual(manifest.suite_version, "21")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-08-29-r20-p4-adversarial-closure-tcb10",
+                    "2026-08-29-r21-p4-composite-atomic-closure-tcb11",
                 )
                 self.assertEqual(
                     manifest.digest,

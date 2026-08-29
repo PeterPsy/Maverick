@@ -318,6 +318,14 @@ managed-process launch revalidate immediately before `exec`. Missing digests
 are invalid arguments rather than an instruction snapshot inferred on behalf
 of the model.
 
+Shell and managed-process writes remain in a private overlay until Core has
+validated the complete diff. Newly-created directories and every other
+unrepresentable effect are rejected explicitly. Representable text files are
+staged as one descriptor-confined batch with retained pre-images; a late
+instruction race or file failure rolls back every already-applied entry in
+reverse order. Terminal `process.status` performs that commit and is therefore
+classified as mutating and non-retry-safe rather than as a read.
+
 ### 6. Tool side effects are journaled before execution
 
 Every decoded provider tool proposal creates a preliminary
@@ -501,6 +509,15 @@ instructions, tool schemas/results, and applicable provider-private state.
 Attachment, app-reference, and orchestration inputs are never flattened into an
 unattributed prompt.
 
+The classification attached to a semantic block must also match the digest of
+its exact canonical projected bytes. Composite content is derived only by a
+restrictive join over every independently classified component. Attachment
+metadata is admitted separately from the referenced file and joined with it;
+an attachment-only turn omits the absent empty prompt. Skills project the
+complete descriptor-read `SKILL.md` and do not splice unbound catalog or
+`state.json` name/description fields into the file classification. Any digest
+or derivation mismatch becomes `unclassified` before egress.
+
 `AGENTS.md` and `SKILL.md` reads are descriptor-confined, bounded, complete,
 UTF-8 validated, and fenced to one resource identity/revision across chunks.
 The chain is recomputed on every provider step, so continuation, recovery, and
@@ -615,20 +632,21 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 24
-and OpenRouter revision 23, both bound to
-`maverick-hosted-tool-loop==16`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 25
+and OpenRouter revision 24, both bound to
+`maverick-hosted-tool-loop==17`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
 These adversarial-review definitions are new full-workspace claims under
-`codex-baseline-v4`, not mutations of earlier candidates. Adapter 16, compiler
-revision 4, context-compaction schema 3, suite 20, and TCB manifest v10 remove
-generic public classification, bind transient admission to exact server-owned
-evidence, govern shell/process effects through pre-commit overlays, and retain
-middle history plus tool arguments during semantic compaction. They retain the
-attachment, OpenRouter projection, and live Google-preflight closure. They remain
+`codex-baseline-v5`, not mutations of earlier candidates. Adapter 17, compiler
+revision 5, context-compaction schema 3, suite 21, and TCB manifest v11 bind
+composite classification to exact bytes and every component, make overlay
+multi-file commit rollback-safe, reject unrepresentable directory effects, and
+give terminal process polling mutation semantics. They retain the prior
+classification, compaction, attachment, OpenRouter projection, and live
+Google-preflight closure. They remain
 uncertified, unbound, unavailable and independently blocked by Phase-0
 admission; implementation completion is not provider evidence or release
 approval.

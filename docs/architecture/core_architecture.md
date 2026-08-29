@@ -776,16 +776,22 @@ Hosted shell commands mount the retained workspace root at the fixed
 needs persistent command effects declares a bounded set of directory scopes and
 the exact `AGENTS.md` digest observed for each; the command runs against a
 private overlay. Core scans the complete bounded upper diff, rejects undeclared
-paths, instruction-file, non-UTF-8, deletion, symlink, and unsupported metadata
-effects, re-resolves the instructions for every changed file, and only then
-commits UTF-8 create/replace effects through the descriptor-confined mutation
-primitive. A root digest therefore cannot authorize a change governed by a
-nested `AGENTS.md`. Bubblewrap consumes the retained live-root descriptor while
+paths, instruction-file, non-UTF-8, deletion, symlink, newly-created directory,
+and unsupported metadata effects, then re-resolves the instructions for every
+changed file. All UTF-8 creates/replacements are staged in one private
+transaction and committed with retained pre-images; a failure or late
+instruction race rolls the entire batch back in reverse order before any
+failure is reported. A root digest therefore cannot authorize a change governed
+by a nested `AGENTS.md`, and a rejected multi-file diff cannot leave an earlier
+file committed. Bubblewrap consumes the retained live-root descriptor while
 constructing the read-only/overlay mount and closes it before target `exec`, so
 the command cannot bypass the mount with `openat(2)`. Managed processes retain
-the same private overlay until a successful terminal status; timeout, failure,
-interrupt, or invalid diff
-discards it. Platform `runtime/` is masked, HOME and TMP are ephemeral, host
+the same private overlay until a successful terminal status. Terminal
+`process.status` is conservatively a mutating, non-retry-safe capability because
+it commits that overlay; commit failure crosses the mutation boundary and is
+reported with ambiguous-execution semantics while the batch itself is restored.
+Timeout, process failure, interrupt, or invalid diff discards the overlay.
+Platform `runtime/` is masked, HOME and TMP are ephemeral, host
 absolute paths are not exposed, system tooling is read-only, and the network
 namespace is disconnected. Synchronous output is drained under a hard byte
 ceiling. Long commands use session-owned process handles with bounded streaming
@@ -801,6 +807,16 @@ propagate the exact observed resource classification. CLI, MCP, shell, process,
 and every other non-resource result remain `unclassified` unless their concrete
 surface supplies an independently validated source classification; generic
 serialization or redaction cannot promote them.
+
+Every semantic-envelope classification is additionally bound to the SHA-256 of
+the exact canonical bytes projected for that block. Composite sources use a
+restrictive join over every independently classified component. Attachment
+metadata is admitted separately from the referenced file and then joined;
+neither a client-controlled name nor other metadata can inherit the file's
+class. Skill blocks project the complete descriptor-read `SKILL.md` itself and
+do not mix unbound catalog/state metadata into its classification. A digest
+mismatch is downgraded to `unclassified` before egress. Attachment-only turns
+omit the semantically absent empty prompt block.
 
 CLI and MCP access uses four fixed certified Core wrappers: discovery returns
 only definitions allowed by the authoritative registry invocation policy plus

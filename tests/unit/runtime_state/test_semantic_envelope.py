@@ -4,6 +4,7 @@ from dataclasses import replace
 import json
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from core.egress.classification import validated_classification
 from core.providers.agentic_adapter import RuntimeTurnContext
@@ -158,6 +159,139 @@ class SemanticEnvelopeTest(unittest.TestCase):
                 ),
             )
 
+    def test_attachment_metadata_is_joined_and_attachment_only_omits_empty_prompt(
+        self,
+    ) -> None:
+        harness = HostedAgenticHarness(self)
+        authority = replace(
+            harness.authority,
+            allowed_tool_handles=(
+                *harness.authority.allowed_tool_handles,
+                "core-capability:filesystem.read",
+            ),
+            allowed_capabilities=replace(
+                harness.authority.allowed_capabilities,
+                filesystem_read=True,
+                attachment_modalities=("file",),
+            ),
+        )
+
+        def classify(observation, content):
+            data_class = (
+                "credential_or_secret"
+                if "secret-name" in json.dumps(content, sort_keys=True)
+                else "public"
+            )
+            return validated_classification(
+                data_class=data_class,
+                provenance=observation.provenance,
+                trust_level="trusted_actor",
+                source_ref=observation.source_ref,
+                source_revision=observation.source_revision,
+                source_digest=observation.source_digest,
+                resource_identity=observation.resource_identity,
+                classification_revision=3,
+            )
+
+        file_classification = validated_classification(
+            data_class="public",
+            provenance="attachment",
+            trust_level="trusted_actor",
+            source_ref="attachments/benign.txt",
+            source_revision="a" * 64,
+            source_digest="a" * 64,
+            resource_identity="attachment-file:benign",
+            classification_revision=2,
+        )
+        state = SimpleNamespace(
+            inter_agent_store=None,
+            workspace_store=None,
+            runtime_input_classification_resolver=classify,
+        )
+        with patch(
+            "core.runtime.provider_input_context._attachment_classification",
+            return_value=file_classification,
+        ):
+            benign_sources = runtime_provider_input_sources(
+                state,
+                session=harness.session,
+                turn_id="turn-hosted",
+                input_text="",
+                app_references=None,
+                attachments=[
+                    {
+                        "id": "attachment-1",
+                        "name": "benign.txt",
+                        "relativePath": "attachments/benign.txt",
+                        "type": "text/plain",
+                        "size": 7,
+                    }
+                ],
+            )
+            sources = runtime_provider_input_sources(
+                state,
+                session=harness.session,
+                turn_id="turn-hosted",
+                input_text="",
+                app_references=None,
+                attachments=[
+                    {
+                        "id": "attachment-1",
+                        "name": "secret-name=fixture-token",
+                        "relativePath": "attachments/benign.txt",
+                        "type": "text/plain",
+                        "size": 7,
+                    }
+                ],
+            )
+
+        self.assertEqual(len(benign_sources), 1)
+        self.assertEqual(benign_sources[0].classification.data_class, "public")
+        benign_context = RuntimeTurnContext(
+            session=harness.session,
+            binding=harness.binding,
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            input_text="",
+            correlation_id="turn-hosted",
+            effective_authority=authority,
+            input_sources=benign_sources,
+        )
+        benign_request = self._request(harness, benign_context)
+        self.assertEqual(
+            sum(
+                block.provenance == "attachment"
+                for block in benign_request.content_blocks
+            ),
+            1,
+        )
+        self.assertFalse(
+            any(
+                block.provenance == "user_input"
+                for block in benign_request.content_blocks
+            )
+        )
+
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0].provenance, "attachment")
+        self.assertEqual(
+            sources[0].classification.data_class,
+            "credential_or_secret",
+        )
+        context = RuntimeTurnContext(
+            session=harness.session,
+            binding=harness.binding,
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            input_text="",
+            correlation_id="turn-hosted",
+            effective_authority=authority,
+            input_sources=sources,
+        )
+        with self.assertRaisesRegex(
+            HostedAgenticLoopError,
+            "egress_data_class_denied",
+        ):
+            self._request(harness, context)
+
     def test_invalid_attachment_metadata_is_never_silently_dropped(self) -> None:
         for attachment in (
             {"name": "missing-path.pdf"},
@@ -185,6 +319,41 @@ class SemanticEnvelopeTest(unittest.TestCase):
                     app_references=None,
                     attachments=[attachment],
                 )
+
+    def test_semantic_block_rejects_a_classification_for_different_bytes(self) -> None:
+        harness = HostedAgenticHarness(self)
+        mismatched = validated_classification(
+            data_class="public",
+            provenance="user_input",
+            trust_level="trusted_actor",
+            source_ref="runtime-turn:turn-hosted:mismatched",
+            source_revision="b" * 64,
+            source_digest="b" * 64,
+            resource_identity="runtime-input:mismatched",
+            classification_revision=1,
+        )
+        context = RuntimeTurnContext(
+            session=harness.session,
+            binding=harness.binding,
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            input_text="secret bytes not covered by the classification",
+            correlation_id="turn-hosted",
+            effective_authority=harness.authority,
+            input_sources=(
+                RuntimeProviderInputSource(
+                    "mismatched",
+                    "user_input",
+                    "text/plain",
+                    "secret bytes not covered by the classification",
+                    classification=mismatched,
+                ),
+            ),
+        )
+        with self.assertRaisesRegex(
+            HostedAgenticLoopError,
+            "egress_data_class_denied",
+        ):
+            self._request(harness, context)
 
     def test_materializes_scoped_instructions_full_skill_and_stable_digests(self) -> None:
         harness = HostedAgenticHarness(self)
@@ -225,8 +394,8 @@ class SemanticEnvelopeTest(unittest.TestCase):
                 SkillDefinition(
                     skill_id="complete-skill",
                     local_skill_id="complete-skill",
-                    name="Complete skill",
-                    description="Synthetic procedure.",
+                    name="secret-name=fixture-token",
+                    description="secret-description=fixture-token",
                     source_root=str(skill_root),
                     owner_kind="workspace",
                     owner_id="default",
@@ -248,7 +417,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
             second.provider_egress_projection_digest,
         )
         self.assertEqual(first.semantic_envelope_schema_version, "1")
-        self.assertEqual(first.semantic_projection_compiler_revision, "4")
+        self.assertEqual(first.semantic_projection_compiler_revision, "5")
         provenance = [block.provenance for block in first.content_blocks]
         self.assertEqual(
             provenance,
@@ -269,14 +438,13 @@ class SemanticEnvelopeTest(unittest.TestCase):
             if block.provenance == "workspace_instruction"
         ]
         self.assertEqual([item["scope"] for item in instructions], [".", "projects"])
-        skill = json.loads(
-            next(
-                block.content
-                for block in first.content_blocks
-                if block.provenance == "skill_fragment"
-            )
+        skill = next(
+            block.content.decode("utf-8")
+            for block in first.content_blocks
+            if block.provenance == "skill_fragment"
         )
-        self.assertIn("every materialized step", skill["instructions"])
+        self.assertIn("every materialized step", skill)
+        self.assertNotIn("fixture-token", skill)
         self.assertEqual(
             tuple(metadata.semantic_block_id for metadata in first.source_metadata),
             tuple(

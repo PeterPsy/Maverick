@@ -805,6 +805,28 @@ class ConfinedWorkspaceFilesystem:
             self._assert_chain(chain)
             return stat.S_ISDIR(result.st_mode)
 
+    def path_mode(self, relative_path: str, *, directory: bool) -> int:
+        """Return permission bits for one exact confined entry."""
+        components = self._components(relative_path, allow_root=directory)
+        if not components:
+            result = os.fstat(self._root_fd)
+            return stat.S_IMODE(result.st_mode)
+        with self._open_chain(components[:-1]) as chain:
+            try:
+                result = os.stat(
+                    components[-1],
+                    dir_fd=chain.leaf_fd,
+                    follow_symlinks=False,
+                )
+            except OSError as error:
+                raise RuntimeToolError("filesystem_resource_changed") from error
+            if stat.S_ISLNK(result.st_mode) or (
+                directory != stat.S_ISDIR(result.st_mode)
+            ):
+                raise RuntimeToolError("filesystem_resource_changed")
+            self._assert_chain(chain)
+            return stat.S_IMODE(result.st_mode)
+
     def assert_shell_cwd(self, chain: _OpenChain) -> None:
         self._assert_chain(chain)
 

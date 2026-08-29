@@ -134,9 +134,9 @@ def build_process_capabilities(
         ),
         full_workspace_surface(
             "process.status",
-            "Read a bounded output chunk and current process status.",
+            "Poll bounded output and commit governed effects on terminal success.",
             process_status_schema(),
-            "read",
+            "mutating",
             status,
             modes=("full-access",),
         ),

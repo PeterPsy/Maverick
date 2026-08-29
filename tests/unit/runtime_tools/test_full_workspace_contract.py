@@ -366,6 +366,101 @@ class FullWorkspaceContractTest(unittest.TestCase):
         self.assertFalse((self.workspace / "raced-shell.txt").exists())
         self.assertEqual(agents.read_text(encoding="utf-8"), "Raced.\n")
 
+    def test_shell_overlay_rolls_back_every_file_after_late_batch_race(self) -> None:
+        agents = self.workspace / "AGENTS.md"
+        agents.write_text("Initial.\n", encoding="utf-8")
+        existing = self.workspace / "0-existing.txt"
+        existing.write_text("original", encoding="utf-8")
+
+        def race(stage, path):
+            if stage == "write_committed" and path == "b.txt":
+                agents.write_text("Raced.\n", encoding="utf-8")
+
+        capabilities = self._capabilities(race_hook=race)
+        scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_instruction_scope_changed",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/bin/sh",
+                        "-c",
+                        (
+                            "printf replacement > 0-existing.txt; "
+                            "printf first > a.txt; printf second > b.txt"
+                        ),
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": ".",
+                            "instruction_scope_digest": scope_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((self.workspace / "a.txt").exists())
+        self.assertFalse((self.workspace / "b.txt").exists())
+        self.assertEqual(existing.read_text(encoding="utf-8"), "original")
+        self.assertEqual(agents.read_text(encoding="utf-8"), "Raced.\n")
+
+    def test_process_status_is_mutating_and_batch_failure_is_not_retry_safe(self) -> None:
+        agents = self.workspace / "AGENTS.md"
+        agents.write_text("Initial.\n", encoding="utf-8")
+
+        def race(stage, path):
+            if stage == "write_committed" and path == "process-b.txt":
+                agents.write_text("Raced.\n", encoding="utf-8")
+
+        capabilities = self._capabilities(processes=True, race_hook=race)
+        status_surface = capabilities["core-capability:process.status"]
+        self.assertEqual(status_surface.definition.effect_class, "mutating")
+        self.assertFalse(status_surface.definition.safe_to_retry)
+        scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+        started = capabilities["core-capability:process.start"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    (
+                        "printf first > process-a.txt; "
+                        "printf second > process-b.txt"
+                    ),
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": ".",
+                        "instruction_scope_digest": scope_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_instruction_scope_changed",
+        ):
+            self._wait_for_process(
+                capabilities,
+                str(started.payload["process_id"]),
+            )
+        record = self.harness.store.get_process(str(started.payload["process_id"]))
+        self.assertEqual(record.status, "failed")
+        self.assertFalse((self.workspace / "process-a.txt").exists())
+        self.assertFalse((self.workspace / "process-b.txt").exists())
+
     def test_mutation_requires_digest_and_rolls_back_instruction_races(self) -> None:
         agents = self.workspace / "AGENTS.md"
         agents.write_text("Initial.\n", encoding="utf-8")
@@ -669,6 +764,8 @@ class FullWorkspaceContractTest(unittest.TestCase):
         nested.mkdir()
         (self.workspace / "AGENTS.md").write_text("Root rules.\n", encoding="utf-8")
         (nested / "AGENTS.md").write_text("Nested rules.\n", encoding="utf-8")
+        metadata_file = nested / "metadata.txt"
+        metadata_file.write_text("unchanged", encoding="utf-8")
         capabilities = self._capabilities(processes=True)
         root_digest = self._scope_digest(
             capabilities,
@@ -759,7 +856,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             RuntimeToolError,
-            "workspace_effect_parent_not_directory",
+            "workspace_effect_directory_unsupported",
         ):
             capabilities["core-capability:shell.run"].handler(
                 {
@@ -779,6 +876,62 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 None,
             )
         self.assertFalse((nested / "new").exists())
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_directory_unsupported",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": ["/bin/mkdir", "nested/empty-directory"],
+                    "mutation_scopes": [
+                        {
+                            "path": "nested",
+                            "instruction_scope_digest": nested_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((nested / "empty-directory").exists())
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_metadata_unsupported",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": ["/bin/chmod", "700", "nested"],
+                    "mutation_scopes": [
+                        {
+                            "path": "nested",
+                            "instruction_scope_digest": nested_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_metadata_unsupported",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": ["/bin/chmod", "700", "nested/metadata.txt"],
+                    "mutation_scopes": [
+                        {
+                            "path": "nested",
+                            "instruction_scope_digest": nested_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertEqual(metadata_file.read_text(encoding="utf-8"), "unchanged")
 
         shell = capabilities["core-capability:shell.run"].handler(
             {
@@ -820,13 +973,20 @@ class FullWorkspaceContractTest(unittest.TestCase):
             self.context,
             None,
         )
-        blocked_status = self._wait_for_process(
-            capabilities,
-            str(blocked.payload["process_id"]),
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_instruction_scope_changed",
+        ):
+            self._wait_for_process(
+                capabilities,
+                str(blocked.payload["process_id"]),
+            )
+        blocked_record = self.harness.store.get_process(
+            str(blocked.payload["process_id"])
         )
-        self.assertEqual(blocked_status.payload["status"], "failed")
+        self.assertEqual(blocked_record.status, "failed")
         self.assertEqual(
-            blocked_status.payload["failure_reason"],
+            blocked_record.failure_reason,
             "workspace_instruction_scope_changed",
         )
         self.assertFalse((nested / "process-blocked.txt").exists())

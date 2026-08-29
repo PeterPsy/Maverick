@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import hashlib
+import json
 from typing import Iterable
 
 from core.egress.agentic_models import EgressProvenance, EgressTrustLevel
@@ -208,6 +209,58 @@ def join_trust_levels(values: Iterable[str]) -> EgressTrustLevel:
 def content_sha256(content: bytes) -> str:
     """Return an unkeyed resource-version digest, never an audit content digest."""
     return hashlib.sha256(content).hexdigest()
+
+
+def derive_content_classification(
+    *,
+    content: bytes,
+    provenance: str,
+    source_ref: str,
+    sources: Iterable[CanonicalSourceClassification],
+) -> CanonicalSourceClassification:
+    """Join source taints and bind the result to the exact composed bytes.
+
+    Composite blocks must not inherit the classification of just one component.
+    The derived identity commits to every normalized source observation while the
+    source digest commits to the bytes that will actually be projected.
+    """
+    joined = join_classifications(sources)
+    digest = content_sha256(content)
+    evidence = [
+        {
+            "data_class": source.data_class,
+            "provenance": source.provenance,
+            "trust_level": source.trust_level,
+            "source_ref": source.source_ref,
+            "source_revision": source.source_revision,
+            "source_digest": source.source_digest,
+            "resource_identity": source.resource_identity,
+            "classification_revision": source.classification_revision,
+        }
+        for source in joined.sources
+    ]
+    evidence_digest = hashlib.sha256(
+        json.dumps(
+            evidence,
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("ascii")
+    ).hexdigest()
+    proof_complete = bool(joined.sources) and all(
+        source.classification_revision is not None for source in joined.sources
+    )
+    return validated_classification(
+        data_class=joined.effective_data_class,
+        provenance=provenance,
+        trust_level=joined.effective_trust_level,
+        source_ref=source_ref,
+        source_revision=digest,
+        source_digest=digest,
+        resource_identity=f"derived-content:{evidence_digest}",
+        classification_revision=1 if proof_complete else None,
+    )
 
 
 def _normalize_source(

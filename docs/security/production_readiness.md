@@ -66,18 +66,23 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v10 additionally makes the known transitive boundary executable through
+Manifest v11 additionally makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 16 places all provider-bound context in semantic-envelope schema
-v1/compiler revision 4, materializes scoped instructions through the confined
+Hosted adapter 17 places all provider-bound context in semantic-envelope schema
+v1/compiler revision 5, materializes scoped instructions through the confined
 filesystem, requires commit-bound instruction digests for direct mutations, and
-uses pre-commit COW overlays for shell/process effects. Transient input requires
+uses rollback-safe batch COW overlays for shell/process effects. Terminal
+process polling is mutating/non-retry-safe and unsupported directory effects
+are rejected. Transient input requires
 exact server-owned admission classification and non-resource results remain
-unclassified without concrete taint evidence. The runtime journals distinct
+unclassified without concrete taint evidence. Composite attachment metadata is
+classified separately and restrictively joined with the file observation;
+skills export exact classified `SKILL.md` bytes, and every semantic class is
+bound to the exact projected digest. The runtime journals distinct
 source/projection evidence. This is a
 repository safety invariant, not certification or remote-release approval.
 
@@ -109,7 +114,10 @@ one finalization recovery. Phase-4 fixtures add production-composed
 classification/continuation, recipe/catalog identity, independent context
 reserve, pairing-safe semantic compaction, bounded result artifacts,
 UTF-8/base64 attachment references, request-scoped OpenRouter authority, and
-exact live provider preflight before egress commit. The operator
+exact live provider preflight before egress commit. The fixture suite also
+proves attachment-only admission, composite-taint denial,
+multi-file rollback after a late instruction race, unsupported-directory
+rejection, and non-retry-safe terminal process commit. The operator
 runbook documents canary,
 observation, incident
 recovery, and control-plane-first rollback. These controls do not close the

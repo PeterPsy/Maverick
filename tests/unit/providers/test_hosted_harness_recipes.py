@@ -54,12 +54,12 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_FULL_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "3")
+                self.assertEqual(recipe.revision, "4")
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
-                    "4",
+                    "5",
                 )
-                self.assertEqual(recipe.tool_contract_revision, "codex-baseline-v4")
+                self.assertEqual(recipe.tool_contract_revision, "codex-baseline-v5")
                 self.assertEqual(recipe.context_policy.revision, "p4-context-v3")
         self.assertEqual(HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION, "3")
 

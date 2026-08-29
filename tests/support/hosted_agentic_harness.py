@@ -12,6 +12,7 @@ from unittest.mock import patch
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.egress.agentic_policy import AgenticEgressEvaluator
+from core.egress.agentic_transforms import canonical_egress_content
 from core.egress.classification import content_sha256, validated_classification
 from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.mcp.tool_registry import McpToolRegistry
@@ -372,14 +373,18 @@ class HostedAgenticHarness:
         )
 
     @staticmethod
-    def classify(_context, provenance: str, _content: object) -> HostedContentClassification:
+    def classify(_context, provenance: str, content: object) -> HostedContentClassification:
         trust = {
             "platform_instruction": "trusted_platform",
             "tool_schema": "trusted_platform",
             "provider_state": "trusted_platform",
             "tool_result": "untrusted_tool_output",
         }.get(provenance, "trusted_actor")
-        return HostedContentClassification("public", trust)
+        return HostedContentClassification(
+            "public",
+            trust,
+            content_digest=content_sha256(canonical_egress_content(content)),
+        )
 
     def _authority(self) -> EffectiveRuntimeAuthority:
         authority = EffectiveRuntimeAuthority(

@@ -13,6 +13,10 @@ from core.runtime.confined_filesystem import (
     MAX_CONFINED_PATH_COMPONENTS,
     ConfinedWorkspaceFilesystem,
 )
+from core.runtime.confined_filesystem_batch import (
+    ConfinedTextBatchWrite,
+    write_confined_text_batch,
+)
 from core.runtime.hosted_workspace_effect_support import (
     MAX_HOSTED_EFFECT_FILES,
     MAX_HOSTED_EFFECT_FILE_BYTES,
@@ -72,7 +76,9 @@ class HostedWorkspaceEffectOverlay:
         self.root = root
         self.upper = upper
         self.work = work
+        self.transaction = root / "transaction"
         self._closed = False
+        self._recovery_required = False
 
     @classmethod
     def create(
@@ -144,26 +150,28 @@ class HostedWorkspaceEffectOverlay:
             raise RuntimeToolError("workspace_effect_overlay_closed")
         try:
             changed = self._validated_changes()
-            for item in changed:
-                if item.baseline is None:
-                    self.filesystem.write_text(
-                        item.path,
+            write_confined_text_batch(
+                self.filesystem,
+                tuple(
+                    ConfinedTextBatchWrite(
+                        path=item.path,
                         content=item.content,
-                        create_only=True,
-                        create_parents=False,
+                        expected_resource_identity=(
+                            None
+                            if item.baseline is None
+                            else item.baseline.resource_identity
+                        ),
+                        expected_resource_revision=(
+                            None
+                            if item.baseline is None
+                            else item.baseline.resource_revision
+                        ),
                         mutation_guard=item.guard,
                     )
-                else:
-                    self.filesystem.write_text(
-                        item.path,
-                        content=item.content,
-                        create_only=False,
-                        create_parents=False,
-                        replace_only=True,
-                        expected_resource_identity=item.baseline.resource_identity,
-                        expected_resource_revision=item.baseline.resource_revision,
-                        mutation_guard=item.guard,
-                    )
+                    for item in changed
+                ),
+                transaction_directory=self.transaction,
+            )
             paths = tuple(item.path for item in changed)
             return {
                 "workspace_effects_committed": True,
@@ -172,11 +180,15 @@ class HostedWorkspaceEffectOverlay:
                 "mutation_scope_count": len(self.scopes),
                 "mutation_scope_digest": _scope_digest(self.scopes),
             }
+        except RuntimeToolError as error:
+            if error.reason_code == "tool_execution_unknown":
+                self._recovery_required = True
+            raise
         finally:
             self.discard()
 
     def discard(self) -> dict[str, object]:
-        if not self._closed:
+        if not self._closed and not self._recovery_required:
             self._closed = True
             shutil.rmtree(self.root, ignore_errors=True)
         return {
@@ -188,12 +200,28 @@ class HostedWorkspaceEffectOverlay:
         }
 
     def _validated_changes(self) -> tuple[_ChangedFile, ...]:
-        raw_changes = scan_hosted_effect_overlay_upper(self.upper)
-        if len(raw_changes) > MAX_HOSTED_EFFECT_FILES:
+        raw_diff = scan_hosted_effect_overlay_upper(self.upper)
+        if len(raw_diff.files) > MAX_HOSTED_EFFECT_FILES:
             raise RuntimeToolError("workspace_effect_file_limit_exceeded")
+        changed_paths = tuple(item.path for item in raw_diff.files)
+        for directory in raw_diff.directories:
+            path = directory.path
+            if _scope_for_path(self.scopes, path) is None:
+                raise RuntimeToolError("workspace_effect_outside_declared_scope")
+            if not self.filesystem.path_is_directory(path):
+                raise RuntimeToolError("workspace_effect_directory_unsupported")
+            if directory.mode != self.filesystem.path_mode(path, directory=True):
+                raise RuntimeToolError("workspace_effect_metadata_unsupported")
+            if not any(
+                changed_path.startswith(path + "/")
+                for changed_path in changed_paths
+            ):
+                raise RuntimeToolError("workspace_effect_directory_unsupported")
         total_bytes = 0
         prepared: list[_ChangedFile] = []
-        for path, content_bytes in raw_changes:
+        for effect_file in raw_diff.files:
+            path = effect_file.path
+            content_bytes = effect_file.content
             scope = _scope_for_path(self.scopes, path)
             if scope is None:
                 raise RuntimeToolError("workspace_effect_outside_declared_scope")
@@ -220,6 +248,11 @@ class HostedWorkspaceEffectOverlay:
             )
             baseline = self.baseline.get(path)
             if baseline is not None:
+                if effect_file.mode != self.filesystem.path_mode(
+                    path,
+                    directory=False,
+                ):
+                    raise RuntimeToolError("workspace_effect_metadata_unsupported")
                 observation, _classification = self.filesystem.observe_file(
                     path,
                     provenance="tool_result",
@@ -229,6 +262,8 @@ class HostedWorkspaceEffectOverlay:
                     or observation.resource_revision != baseline.resource_revision
                 ):
                     raise RuntimeToolError("filesystem_resource_changed")
+            elif effect_file.mode & 0o7111:
+                raise RuntimeToolError("workspace_effect_metadata_unsupported")
             prepared.append(
                 _ChangedFile(
                     path=path,

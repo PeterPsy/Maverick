@@ -171,6 +171,14 @@ the exact turn/source identity and digest. Non-resource CLI, MCP, shell, and
 process output has no generic public fallback; redaction and a content hash do
 not establish a data class.
 
+Every semantic classification is bound to the digest of the exact projected
+bytes. Composite attachment blocks classify client metadata independently from
+the referenced resource and join both taints; a benign file cannot promote a
+secret-bearing name or id. Skill projection uses the exact confined
+`SKILL.md`, without catalog/`state.json` metadata inheriting that file's class.
+A missing component or digest mismatch becomes `unclassified`, and an
+attachment-only turn does not synthesize an unclassified empty prompt.
+
 Residual risk remains because content classification and prompt/tool-result
 provenance are security-critical enforcement paths. Phase-1 repository tests
 cover false-promotion and leakage-safe metadata, but remote agentic execution
@@ -444,7 +452,11 @@ The live workspace is mounted read-only until Core validates the complete
 bounded diff against every declared mutable scope and the actual root-to-target
 instruction digest for each changed file. A nested-scope mismatch,
 instruction-file or unsupported effect, non-zero exit, timeout, or interrupt
-discards the overlay before it can affect workspace data. The retained live-root
+discards the overlay before it can affect workspace data. Newly-created
+directories are explicitly unsupported rather than silently omitted. Text
+creates/replacements commit as one retained-preimage transaction; a late race
+on any file rolls every earlier file back. Terminal `process.status` is a
+mutating, non-retry-safe boundary because it performs that commit. The retained live-root
 descriptor is consumed during mount setup and is not inherited by target code,
 preventing a direct descriptor-relative write around the overlay. Broader
 app/backend sandboxing remains a production blocker.

@@ -7,6 +7,8 @@ import unittest
 
 from core.egress.classification import (
     content_sha256,
+    derive_content_classification,
+    fail_closed_classification,
     join_classifications,
     validated_classification,
 )
@@ -45,6 +47,32 @@ class CanonicalClassificationTestCase(unittest.TestCase):
         self.assertEqual(join_classifications(()).effective_data_class, "unclassified")
         malformed = replace(self.source("public"), source_revision="")
         self.assertEqual(join_classifications((malformed,)).effective_data_class, "unclassified")
+
+    def test_composite_classification_joins_every_source_and_binds_exact_bytes(self) -> None:
+        content = b'{"file":"public","name":"secret"}'
+        derived = derive_content_classification(
+            content=content,
+            provenance="attachment",
+            source_ref="runtime-turn:turn-1:attachment:0",
+            sources=(
+                self.source("public", provenance="attachment"),
+                self.source("credential_or_secret", provenance="attachment"),
+            ),
+        )
+        self.assertEqual(derived.data_class, "credential_or_secret")
+        self.assertEqual(derived.source_digest, content_sha256(content))
+        self.assertEqual(derived.source_revision, content_sha256(content))
+
+        unavailable = derive_content_classification(
+            content=content,
+            provenance="attachment",
+            source_ref="runtime-turn:turn-1:attachment:0",
+            sources=(
+                self.source("public", provenance="attachment"),
+                fail_closed_classification(provenance="attachment"),
+            ),
+        )
+        self.assertEqual(unavailable.data_class, "unclassified")
 
     def test_fake_labels_policy_ids_and_client_claims_cannot_reclassify_a_resource(self) -> None:
         now = datetime(2026, 8, 26, tzinfo=UTC)

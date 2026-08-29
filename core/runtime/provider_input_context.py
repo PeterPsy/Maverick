@@ -11,6 +11,7 @@ from typing import Any, Callable
 from core.egress.agentic_transforms import canonical_egress_content
 from core.egress.classification import (
     CanonicalSourceClassification,
+    derive_content_classification,
     fail_closed_classification,
     join_classifications,
 )
@@ -112,23 +113,24 @@ def runtime_provider_input_sources(
                 ),
             )
         )
-    sources.append(
-        RuntimeProviderInputSource(
-            source_id="turn-prompt",
-            provenance="user_input",
-            content_type="text/plain",
-            content=input_text,
-            classification=_transient_input_classification(
-                state,
-                session=session,
-                turn_id=turn_id,
+    if input_text:
+        sources.append(
+            RuntimeProviderInputSource(
                 source_id="turn-prompt",
                 provenance="user_input",
                 content_type="text/plain",
                 content=input_text,
-            ),
+                classification=_transient_input_classification(
+                    state,
+                    session=session,
+                    turn_id=turn_id,
+                    source_id="turn-prompt",
+                    provenance="user_input",
+                    content_type="text/plain",
+                    content=input_text,
+                ),
+            )
         )
-    )
     orchestration = _generalist_orchestration_source(state, session=session)
     if orchestration is not None:
         sources.append(
@@ -150,19 +152,40 @@ def runtime_provider_input_sources(
         )
     for index, reference in enumerate(app_references or ()):
         if isinstance(reference, dict):
+            content = input_text_with_app_references(
+                input_text="",
+                app_references=[dict(reference)],
+            ).strip()
+            metadata_classification = _transient_input_classification(
+                state,
+                session=session,
+                turn_id=turn_id,
+                source_id=f"app-reference:{index}:metadata",
+                provenance="app_reference",
+                content_type="text/plain",
+                content=content,
+            )
+            resource_classification = _app_reference_classification(
+                state,
+                session=session,
+                reference=reference,
+            )
             sources.append(
                 RuntimeProviderInputSource(
                     source_id=f"app-reference:{index}",
                     provenance="app_reference",
                     content_type="text/plain",
-                    content=input_text_with_app_references(
-                        input_text="",
-                        app_references=[dict(reference)],
-                    ).strip(),
-                    classification=_app_reference_classification(
-                        state,
-                        session=session,
-                        reference=reference,
+                    content=content,
+                    classification=derive_content_classification(
+                        content=canonical_egress_content(content),
+                        provenance="app_reference",
+                        source_ref=(
+                            f"runtime-turn:{turn_id}:app-reference:{index}"
+                        ),
+                        sources=(
+                            metadata_classification,
+                            resource_classification,
+                        ),
                     ),
                 )
             )
@@ -171,7 +194,10 @@ def runtime_provider_input_sources(
         for index, attachment in enumerate(attachments or ()):
             sources.append(
                 _attachment_input_source(
-                    filesystem,
+                    state,
+                    session=session,
+                    turn_id=turn_id,
+                    filesystem=filesystem,
                     index=index,
                     attachment=attachment,
                 )
@@ -197,7 +223,7 @@ def _transient_input_classification(
         encoded = canonical_egress_content(content)
     except (TypeError, ValueError):
         encoded = b""
-    source_digest = hashlib.sha256(encoded).hexdigest() if encoded else ""
+    source_digest = hashlib.sha256(encoded).hexdigest()
     workspace_id = str(getattr(session, "workspace_id", "") or "")
     session_id = str(getattr(session, "session_id", "") or "")
     normalized_turn_id = str(turn_id or "").strip()
@@ -251,8 +277,11 @@ def _transient_input_classification(
 
 
 def _attachment_input_source(
-    filesystem: ConfinedWorkspaceFilesystem | None,
+    state: Any,
     *,
+    session: Any,
+    turn_id: str,
+    filesystem: ConfinedWorkspaceFilesystem | None,
     index: int,
     attachment: object,
 ) -> RuntimeProviderInputSource:
@@ -286,26 +315,43 @@ def _attachment_input_source(
         or size_bytes < 0
     ):
         raise ValueError("agentic_attachment_metadata_invalid")
+    content = {
+        "attachment_id": str(attachment.get("id") or ""),
+        "name": str(attachment.get("name") or ""),
+        "workspace_relative_path": relative_path,
+        "media_type": media_type,
+        "size_bytes": size_bytes,
+        "projection": {
+            "mode": "workspace_reference",
+            "read_capability": "core-capability:filesystem.read",
+            "read_encoding": attachment_read_encoding(media_type),
+        },
+    }
+    metadata_classification = _transient_input_classification(
+        state,
+        session=session,
+        turn_id=turn_id,
+        source_id=f"attachment:{index}:metadata",
+        provenance="attachment",
+        content_type="application/json",
+        content=content,
+    )
+    file_classification = _attachment_classification(
+        filesystem,
+        attachment=attachment,
+    )
+    classification = derive_content_classification(
+        content=canonical_egress_content(content),
+        provenance="attachment",
+        source_ref=f"runtime-turn:{turn_id}:attachment:{index}",
+        sources=(metadata_classification, file_classification),
+    )
     return RuntimeProviderInputSource(
         source_id=f"attachment:{index}",
         provenance="attachment",
         content_type="application/json",
-        content={
-            "attachment_id": str(attachment.get("id") or ""),
-            "name": str(attachment.get("name") or ""),
-            "workspace_relative_path": relative_path,
-            "media_type": media_type,
-            "size_bytes": size_bytes,
-            "projection": {
-                "mode": "workspace_reference",
-                "read_capability": "core-capability:filesystem.read",
-                "read_encoding": attachment_read_encoding(media_type),
-            },
-        },
-        classification=_attachment_classification(
-            filesystem,
-            attachment=attachment,
-        ),
+        content=content,
+        classification=classification,
         capability_modality=media_type,
         projection_mode="workspace_reference",
     )
@@ -387,16 +433,19 @@ def _attachment_classification(
     filesystem: ConfinedWorkspaceFilesystem | None,
     *,
     attachment: dict[str, object],
-) -> CanonicalSourceClassification | None:
-    if filesystem is None:
-        return None
+) -> CanonicalSourceClassification:
     relative_path = str(
         attachment.get("relativePath")
         or attachment.get("relative_path")
         or ""
     ).strip()
+    if filesystem is None:
+        return fail_closed_classification(
+            provenance="attachment",
+            source_ref=relative_path,
+        )
     if not relative_path:
-        return None
+        return fail_closed_classification(provenance="attachment")
     try:
         _observation, classification = filesystem.observe_file(
             relative_path,
@@ -404,7 +453,10 @@ def _attachment_classification(
         )
         return classification
     except Exception:
-        return None
+        return fail_closed_classification(
+            provenance="attachment",
+            source_ref=relative_path,
+        )
 
 
 def _app_reference_classification(
@@ -412,10 +464,10 @@ def _app_reference_classification(
     *,
     session: Any,
     reference: dict[str, object],
-) -> CanonicalSourceClassification | None:
+) -> CanonicalSourceClassification:
     resolver = getattr(state, "runtime_app_reference_classification_resolver", None)
     if not callable(resolver):
-        return None
+        return fail_closed_classification(provenance="app_reference")
     try:
         result = resolver(
             workspace_id=session.workspace_id,
@@ -423,5 +475,9 @@ def _app_reference_classification(
             provenance="app_reference",
         )
     except Exception:
-        return None
-    return result if isinstance(result, CanonicalSourceClassification) else None
+        return fail_closed_classification(provenance="app_reference")
+    return (
+        result
+        if isinstance(result, CanonicalSourceClassification)
+        else fail_closed_classification(provenance="app_reference")
+    )

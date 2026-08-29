@@ -19,7 +19,7 @@ from core.runtime.hosted_agentic_models import (
 
 SEMANTIC_ENVELOPE_SCHEMA_VERSION = "1"
 HOSTED_SEMANTIC_PROJECTION_COMPILER_ID = "maverick-hosted-semantic-projection"
-HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION = "4"
+HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION = "5"
 
 SemanticBlockKind = Literal[
     "content",
@@ -83,6 +83,17 @@ def make_semantic_block(
         encoded = canonical_egress_content(content)
     except (TypeError, ValueError) as error:
         raise HostedAgenticLoopError("semantic_block_not_projectable") from error
+    content_digest = hashlib.sha256(encoded).hexdigest()
+    if classification.content_digest != content_digest:
+        classification = HostedContentClassification(
+            "unclassified",
+            "untrusted_external",
+            source_ref=classification.source_ref,
+            source_revision=classification.source_revision,
+            resource_identity=classification.resource_identity,
+            classification_revision=None,
+            content_digest=content_digest,
+        )
     block_id = f"semantic:{context.correlation_id}:{len(blocks)}"
     resolved_ref = source_ref or classification.source_ref or block_id
     resolved_revision = (
@@ -100,7 +111,7 @@ def make_semantic_block(
         content=content,
         source_ref=resolved_ref,
         source_revision=resolved_revision,
-        source_digest=hashlib.sha256(encoded).hexdigest(),
+        source_digest=content_digest,
         resource_identity=(
             resource_identity or classification.resource_identity or block_id
         ),
@@ -187,7 +198,9 @@ def semantic_projection_digest(
 def platform_classification(
     source_ref: str,
     source_revision: str,
+    content: object,
 ) -> HostedContentClassification:
+    content_digest = hashlib.sha256(canonical_egress_content(content)).hexdigest()
     return HostedContentClassification(
         "public",
         "trusted_platform",
@@ -195,6 +208,7 @@ def platform_classification(
         source_revision=source_revision,
         resource_identity=f"{source_ref}:{source_revision}",
         classification_revision=1,
+        content_digest=content_digest,
     )
 
 
@@ -208,6 +222,7 @@ def canonical_classification(
         source_revision=value.source_revision,
         resource_identity=value.resource_identity,
         classification_revision=value.classification_revision,
+        content_digest=value.source_digest,
     )
 
 
@@ -221,6 +236,7 @@ def semantic_block_classification(
         source_revision=block.source_revision,
         resource_identity=block.resource_identity,
         classification_revision=block.classification_revision,
+        content_digest=block.source_digest,
     )
 
 

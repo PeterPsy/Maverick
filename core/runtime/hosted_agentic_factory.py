@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from core.authorization.errors import AuthorizationError
 from core.cli.models import CliInvocationContext
+from core.egress.agentic_transforms import canonical_egress_content
 from core.mcp.models import McpInvocationContext
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.errors import CapabilityCertificateError, ProviderError
@@ -46,7 +48,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "16"
+HOSTED_AGENTIC_ADAPTER_VERSION = "17"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -162,7 +164,7 @@ def build_hosted_agentic_engine_adapter(
 def classify_hosted_content_fail_closed(
     _context,
     provenance: str,
-    _content: object,
+    content: object,
 ) -> HostedContentClassification:
     """Fail closed; certified Core schemas bypass this generic classifier entirely."""
     trust = {
@@ -171,7 +173,15 @@ def classify_hosted_content_fail_closed(
         "finalization_instruction": "trusted_platform",
         "tool_result": "untrusted_tool_output",
     }.get(provenance, "trusted_actor")
-    return HostedContentClassification("unclassified", trust)
+    try:
+        content_digest = hashlib.sha256(canonical_egress_content(content)).hexdigest()
+    except (TypeError, ValueError):
+        content_digest = ""
+    return HostedContentClassification(
+        "unclassified",
+        trust,
+        content_digest=content_digest,
+    )
 
 
 def _tool_orchestrator(

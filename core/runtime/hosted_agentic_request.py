@@ -769,4 +769,5 @@ def _semantic_classification(
         source_revision=block.source_revision,
         resource_identity=block.resource_identity,
         classification_revision=block.classification_revision,
+        content_digest=block.source_digest,
     )

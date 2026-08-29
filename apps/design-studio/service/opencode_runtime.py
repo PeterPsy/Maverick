@@ -81,6 +81,34 @@ def install_opencode_runtime(
     return verify_opencode_runtime(destination, spec=spec)
 
 
+def install_optional_opencode_runtime(
+    artifact_namespace: Path,
+    *,
+    install_runner: Callable[[Path], Path] = install_opencode_runtime,
+) -> tuple[Path | None, dict[str, object]]:
+    """Install the optional API-agent runtime without gating native OpenDesign.
+
+    Official OpenDesign is the product runtime. OpenCode is only the technical
+    adapter for API-backed models, so an unavailable package registry must
+    degrade that one adapter rather than abort app activation.
+    """
+    try:
+        executable = install_runner(artifact_namespace)
+    except OpenCodeRuntimeError:
+        return None, {
+            "name": "opencode",
+            "state": "degraded",
+            "installed": False,
+            "reason": "runtime_install_failed",
+        }
+    return executable, {
+        "name": "opencode",
+        "state": "ready",
+        "installed": True,
+        "executable": executable.name,
+    }
+
+
 def verify_opencode_runtime(
     destination: Path,
     *,
@@ -242,5 +270,6 @@ __all__ = [
     "RUNTIME_RELATIVE_PATH",
     "SANDBOX_BINARY_PATH",
     "install_opencode_runtime",
+    "install_optional_opencode_runtime",
     "verify_opencode_runtime",
 ]

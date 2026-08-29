@@ -19,11 +19,33 @@ from opencode_runtime import (  # noqa: E402
     OpenCodeRuntimeError,
     OpenCodeRuntimeSpec,
     install_opencode_runtime,
+    install_optional_opencode_runtime,
     verify_opencode_runtime,
 )
 
 
 class OpenCodeRuntimeTests(unittest.TestCase):
+    def test_optional_runtime_failure_degrades_without_blocking_native_install(self) -> None:
+        def fail(_namespace: Path) -> Path:
+            raise OpenCodeRuntimeError("offline")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            executable, status = install_optional_opencode_runtime(
+                Path(temporary),
+                install_runner=fail,
+            )
+
+        self.assertIsNone(executable)
+        self.assertEqual(
+            status,
+            {
+                "name": "opencode",
+                "state": "degraded",
+                "installed": False,
+                "reason": "runtime_install_failed",
+            },
+        )
+
     def test_digest_pinned_package_installs_and_tampering_fails_closed(self) -> None:
         binary = b"technical-opencode-fixture"
         archive = _package(binary, version="test-version")

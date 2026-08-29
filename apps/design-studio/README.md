@@ -44,11 +44,14 @@ native OpenDesign profile file:
   `opencode` adapter. Its generated OpenCode provider configuration exposes
   every API model granted by Core under the `maverick/` provider namespace.
 
-The install hook also materializes a separately digest-pinned official
-OpenCode technical runtime. `service/maverick-opencode` invokes only that
-verified runtime. Consequently, granted API models appear in OpenDesign's
-native selector on a fresh installation without asking the user to add an API
-provider manually.
+The install/upgrade hook also attempts to materialize a separately
+digest-pinned official OpenCode technical runtime. `service/maverick-opencode`
+invokes only that verified runtime. Consequently, granted API models appear in
+OpenDesign's native selector on a fresh or upgraded installation without asking
+the user to add an API provider manually. Download or verification failure is
+reported as an API-profile degradation and never blocks native OpenDesign; the
+Codex profile remains active. Conversely, an absent Codex catalog does not
+remove a usable API profile.
 
 The API bridge validates the selected configured model, forwards the exact
 OpenDesign-authored JSON body, and streams the provider response. The CLI
@@ -91,10 +94,11 @@ an immutable full data backup, inventories the current release through public
 APIs, runs the candidate's supported upstream migration against a private
 copy, inventories the migrated copy, and exercises the public delegation
 contract on another disposable copy. Activation is permitted only when the
-redaction-safe identity inventory proves that every pre-migration project,
-conversation, ordered message, Design System, file, artifact, setting, and run
-reference survives. Additions are allowed; losses fail before the active data
-or release selection changes. Only then does the updater atomically select the
+redaction-safe identity and per-record content inventories prove that every
+pre-migration project, conversation, ordered message, Design System, file,
+artifact, setting, and run reference survives unchanged. Additions are allowed;
+identity loss or mutation of an existing value fails before the active data or
+release selection changes. Only then does the updater atomically select the
 migrated data and release descriptor and prewarm the candidate.
 
 Failure to start restores the complete prior data and release selection. If
@@ -222,7 +226,9 @@ python3 -m unittest \
 ```
 
 Maintained aggregate gates (quick, affected, migration, hosted, and release)
-are exposed through the package scripts. The release gate is the default:
+are exposed through the package scripts. The release gate is the default and
+adds real native selector, OpenCode streaming/cancellation, delegated
+continuation, workspace-isolation, and browser deep-link proofs:
 
 ```bash
 npm --prefix apps/design-studio run test:e2e

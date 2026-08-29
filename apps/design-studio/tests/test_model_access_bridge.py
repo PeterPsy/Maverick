@@ -19,11 +19,16 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from model_access_profiles import API_CONFIG_PATH, write_model_access_profiles  # noqa: E402
 from model_access_server import MODEL_ACCESS_API_KEY, ModelAccessHttpBridge  # noqa: E402
+from opencode_runtime import OpenCodeRuntimeError  # noqa: E402
 
 
 class _CatalogClient:
+    def __init__(self, *, api: bool = True, cli: bool = True) -> None:
+        self.api = api
+        self.cli = cli
+
     def catalog(self):
-        return {
+        catalog = {
             "schema_version": "1",
             "api_models": [
                 {
@@ -45,6 +50,11 @@ class _CatalogClient:
             ],
             "cli_defaults": {"codex": "gpt-test"},
         }
+        if not self.api:
+            catalog["api_models"] = []
+        if not self.cli:
+            catalog["cli_models"] = []
+        return catalog
 
 
 class _Response:
@@ -108,6 +118,85 @@ class NativeModelAccessAdapterTests(unittest.TestCase):
         self.assertNotIn("secret", raw.lower())
         self.assertNotIn("systemprompt", raw.lower())
         self.assertNotIn("memory", raw.lower())
+
+    def test_cli_profile_remains_active_when_api_catalog_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target, summary = write_model_access_profiles(
+                Path(temporary),
+                _CatalogClient(api=False),
+            )
+            profiles = json.loads(target.read_text(encoding="utf-8"))["agents"]
+
+            self.assertEqual([profile["id"] for profile in profiles], ["installed-codex-cli"])
+            self.assertEqual(summary["cli"]["state"], "ready")
+            self.assertEqual(summary["api"]["state"], "degraded")
+            self.assertFalse((Path(temporary) / API_CONFIG_PATH).exists())
+
+    def test_api_profile_remains_active_when_cli_catalog_is_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target, summary = write_model_access_profiles(
+                Path(temporary),
+                _CatalogClient(cli=False),
+            )
+            profiles = json.loads(target.read_text(encoding="utf-8"))["agents"]
+
+        self.assertEqual([profile["id"] for profile in profiles], ["installed-maverick-api"])
+        self.assertEqual(summary["cli"]["state"], "degraded")
+        self.assertEqual(summary["api"]["state"], "ready")
+
+    def test_cli_profile_remains_active_when_optional_opencode_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            target, summary = write_model_access_profiles(
+                Path(temporary),
+                _CatalogClient(),
+                opencode_available=False,
+            )
+            profiles = json.loads(target.read_text(encoding="utf-8"))["agents"]
+
+            self.assertEqual([profile["id"] for profile in profiles], ["installed-codex-cli"])
+            self.assertEqual(summary["cli"]["state"], "ready")
+            self.assertEqual(summary["api"], {
+                "state": "degraded",
+                "reason": "opencode_runtime_unavailable",
+                "model_count": 1,
+            })
+            self.assertFalse((Path(temporary) / API_CONFIG_PATH).exists())
+
+    def test_launcher_keeps_cli_profile_when_optional_runtime_verification_fails(self) -> None:
+        from opendesign_launcher import _configure_model_access
+
+        class _Bridge:
+            def start(self) -> None:
+                return
+
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.dict("os.environ", {"MAVERICK_OPENDESIGN_MODEL_BRIDGE": "enabled"}),
+            patch("opendesign_launcher.ModelAccessConfiguration.from_environment", return_value=object()),
+            patch("opendesign_launcher.ModelAccessClient", return_value=_CatalogClient()),
+            patch(
+                "opendesign_launcher.verify_opencode_runtime",
+                side_effect=OpenCodeRuntimeError("missing"),
+            ),
+            patch("opendesign_launcher.ModelAccessHttpBridge", return_value=_Bridge()),
+        ):
+            data = Path(temporary) / "native"
+            data.mkdir()
+            bridge, status, profile_path = _configure_model_access(
+                data,
+                artifact_root=Path(temporary) / "artifacts",
+            )
+            profiles = json.loads(
+                (data / "sandbox/agent-home/.maverick/model-access-agents.json").read_text()
+            )["agents"]
+
+        self.assertIsNotNone(bridge)
+        self.assertIsNotNone(profile_path)
+        self.assertEqual([profile["id"] for profile in profiles], ["installed-codex-cli"])
+        self.assertEqual(
+            status["profiles"]["api"]["reason"],
+            "opencode_runtime_unavailable",
+        )
 
     def test_standard_endpoint_forwards_exact_open_design_body_and_stream(self) -> None:
         client = _ProxyClient()

@@ -122,15 +122,27 @@ def perform_official_update(
         migrated_categories = inventory_categories(migrated)
         migration_guard = migration_preservation_guard(baseline, migrated)
         if migration_guard["state"] != "passed":
-            removed = [
+            removed_identities = [
                 category
                 for category, count in migration_guard["lost_identity_counts"].items()
                 if count
             ]
-            raise OfficialUpdateError(
-                "candidate migration removed protected native identities: "
-                + ", ".join(removed)
-            )
+            changed_content = [
+                category
+                for category, count in migration_guard["lost_content_counts"].items()
+                if count
+            ]
+            if removed_identities:
+                reason = (
+                    "candidate migration removed protected native identities: "
+                    + ", ".join(removed_identities)
+                )
+            else:
+                reason = (
+                    "candidate migration changed protected native content: "
+                    + ", ".join(changed_content)
+                )
+            raise OfficialUpdateError(reason)
         delegation = _probe_delegation(
             candidate_installation,
             migrated_data=migrated_data,

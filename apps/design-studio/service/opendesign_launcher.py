@@ -33,7 +33,7 @@ from model_access_server import (
     ModelAccessHttpBridge,
 )
 from official_process_supervisor import official_api_ready, supervise_official_process
-from opencode_runtime import RUNTIME_RELATIVE_PATH, verify_opencode_runtime
+from opencode_runtime import OpenCodeRuntimeError, RUNTIME_RELATIVE_PATH, verify_opencode_runtime
 
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
@@ -253,16 +253,13 @@ def _configure_model_access(
     except ModelAccessClientError:
         return None, {"state": "degraded", "reason": "core_broker_unavailable"}, None
 
-    cli_status: dict[str, Any]
-    profile_path: Path | None = None
     try:
         verify_opencode_runtime(artifact_root / RUNTIME_RELATIVE_PATH)
-        _host_profile, profile = write_model_access_profiles(data_dir, client)
-        profile_path = SANDBOX_PROFILE_PATH
-        cli_status = {"state": "ready", **profile}
-    except Exception:
-        remove_model_access_profiles(data_dir)
-        cli_status = {"state": "degraded", "reason": "cli_profile_unavailable"}
+        opencode_available = True
+        opencode_reason = ""
+    except OpenCodeRuntimeError:
+        opencode_available = False
+        opencode_reason = "opencode_runtime_unavailable"
 
     bridge: ModelAccessHttpBridge | None = None
     try:
@@ -276,12 +273,36 @@ def _configure_model_access(
         }
     except Exception:
         api_status = {"state": "degraded", "reason": "api_endpoint_unavailable"}
-    state = "ready" if api_status["state"] == cli_status["state"] == "ready" else "degraded"
+
+    profile_path: Path | None = None
+    try:
+        api_profile_available = opencode_available and api_status["state"] == "ready"
+        unavailable_reason = (
+            opencode_reason
+            if not opencode_available
+            else "api_endpoint_unavailable"
+        )
+        _host_profile, profile = write_model_access_profiles(
+            data_dir,
+            client,
+            opencode_available=api_profile_available,
+            api_unavailable_reason=unavailable_reason,
+        )
+        profile_path = SANDBOX_PROFILE_PATH
+        profile_status: dict[str, Any] = profile
+    except Exception:
+        remove_model_access_profiles(data_dir)
+        profile_status = {"state": "degraded", "reason": "native_profiles_unavailable"}
+    state = (
+        "ready"
+        if api_status["state"] == profile_status["state"] == "ready"
+        else "degraded"
+    )
     return bridge, {
         "state": state,
         "semantic_enrichment": False,
         "api": api_status,
-        "cli": cli_status,
+        "profiles": profile_status,
     }, profile_path
 
 

@@ -10,7 +10,11 @@ import unittest
 SERVICE_ROOT = Path(__file__).resolve().parents[1] / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from official_public_inventory import _inventory, _inventory_with_identity_sets  # noqa: E402
+from official_public_inventory import (  # noqa: E402
+    _inventory,
+    _inventory_with_identity_sets,
+    _inventory_with_preservation_sets,
+)
 
 
 class FakePublicApi:
@@ -152,6 +156,27 @@ class OfficialPublicInventoryTests(unittest.TestCase):
         rendered = str(identities)
         for secret in ("Secret project", "Secret transcript", "Secret HTML", "Secret brand"):
             self.assertNotIn(secret, rendered)
+
+    def test_content_preservation_hashes_detect_mutation_without_exposing_content(self) -> None:
+        baseline = FakePublicApi()
+        _categories, identities, content = _inventory_with_preservation_sets(baseline)
+        migrated = FakePublicApi()
+        original_get_json = migrated.get_json
+
+        def emptied_message(path: str) -> dict:
+            payload = original_get_json(path)
+            if path.endswith("/messages"):
+                payload["messages"][0]["content"] = ""
+            return payload
+
+        migrated.get_json = emptied_message  # type: ignore[method-assign]
+        _next_categories, next_identities, next_content = _inventory_with_preservation_sets(migrated)
+
+        self.assertEqual(identities, next_identities)
+        self.assertNotEqual(content["ordered_messages"], next_content["ordered_messages"])
+        self.assertEqual(set(content), set(_categories))
+        rendered = str(content)
+        self.assertNotIn("Secret transcript", rendered)
 
 
 if __name__ == "__main__":

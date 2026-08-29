@@ -29,7 +29,8 @@ bridges are disabled.
 selection. `native_official_update.py` verifies and installs a user-selected
 official lock, stops only the managed Design Studio writer, creates an
 immutable backup, runs upstream migration and public inventory on copies,
-requires the migrated identity multiset to preserve every baseline item,
+requires both the migrated identity and per-record content multisets to
+preserve every baseline item and value,
 atomically swaps data and selection, and restores both if native readiness
 fails. If the previous writer cannot be resumed, it remains fail-closed behind
 quiescence with an explicit `recovery_required` marker.
@@ -47,12 +48,14 @@ Model Access Bridge after startup. Neither outcome gates native readiness.
 The Model Access Bridge consists of `model_access_client.py`,
 `model_access_server.py`, `model_access_profiles.py`, and the
 `maverick-codex` and `maverick-opencode` technical wrappers. The install hook
-verifies a digest-pinned OpenCode runtime; the launcher emits supported native
-Codex and OpenCode agent profiles plus a credential-free OpenCode provider
-configuration. This makes every Core-granted API model visible in the native
-selector without manual provider setup. Both paths operate without a Maverick
-runtime session, prompt, memory, persona, skill, tool catalog, or semantic
-rewrite.
+attempts to install a digest-pinned OpenCode runtime; registry or verification
+failure degrades only the API profile and never blocks native activation. The
+launcher emits whichever supported Codex and OpenCode profiles are independently
+usable plus a credential-free OpenCode provider configuration. This makes every
+Core-granted API model visible in the native selector without manual provider
+setup when the optional runtime is available, while a missing API or CLI catalog
+does not remove the other profile. Both paths operate without a Maverick runtime
+session, prompt, memory, persona, skill, tool catalog, or semantic rewrite.
 
 Delegation lives outside this service directory under `../backend/`. It calls
 only supported native project, conversation, message, file, run, result, and
@@ -99,8 +102,13 @@ identity, counts, and SHA-256 evidence.
 ## Verification
 
 The maintained release gate runs the complete Design Studio Python suite,
-frontend tests/build, and the unchanged-official-package smoke. Focused,
-affected, migration, and hosted profiles use the same runner:
+frontend tests/build, the unchanged-official-package smoke, and two real E2E
+proofs. A disposable unchanged daemon exposes both generated profiles, executes
+OpenCode streaming and cancellation, continues a delegated conversation after
+restart, and proves two workspace data/stores remain isolated. Playwright then
+drives the actual Base Shell frame host and Design Studio host through an exact
+conversation deep link into a cross-origin native iframe. Focused, affected,
+migration, and hosted profiles use the same runner:
 
 ```bash
 npm --prefix apps/design-studio run test:e2e

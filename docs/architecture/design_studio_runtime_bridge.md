@@ -360,97 +360,30 @@ are mutually exclusive.
 - Core contains no OpenDesign-specific route, event, schema, or persistence
   knowledge.
 
-## Executable proofs
+## Archived proof record
 
-The selected boundary is implemented by the generic core modules
-`core/runtime/app_streams.py`, `core/apps/runtime_requests.py`,
-`core/apps/runtime_root_capabilities.py`, and the ASGI stream host in
-`core/api/sidecar_core_routes.py`. Design Studio owns the correlation store,
-OpenDesign event translation, SSE payloads, and terminal packages in
-`apps/design-studio/backend/runtime_bridge.py`. Core source contains no
-OpenDesign route, identifier, event, or persistence names.
+The option-B translator, `backend/runtime_bridge.py`, its patched product
+spike, and their focused tests were deleted at the native cutover. Commands
+that exercised those files are intentionally not retained as runnable
+instructions: they prove a retired architecture and now resolve to no source.
 
-The stream record and its normalized events are durable JSON collections.
-Delivery is ordered by monotonic sequence and acknowledged only after the app
-translator returns the exact final sequence. SSE sends are awaited one at a
-time, use no `Content-Length`, emit a bounded keepalive while idle, and resume
-from `Last-Event-ID`. Replaying an already translated batch is safe and does
-not create a second runtime turn or terminal package.
-
-The project root is accepted only as an app-data-relative directory. Core
-mints and immediately consumes a five-second, one-shot capability bound to the
-workspace, source app, and authenticated actor; only its digest is retained.
-The resolved directory must remain inside the runtime session workspace and
-cannot contain a symlink. Interrupt, cleanup, stream reads, restart recovery,
-and session reuse all require exact workspace and source-app ownership.
-
-Implementation proof:
+The maintained proof for the replacement architecture is the Design Studio
+release gate:
 
 ```bash
-python3 -m unittest \
-  tests.unit.runtime_streams.test_app_streams \
-  tests.unit.api.test_app_runtime_cleanup_requests \
-  tests.integration.app_hosting.test_sidecar_core_routes \
-  tests.integration.recovery.test_backend_restart \
-  apps.design-studio.tests.test_runtime_bridge -v
+npm --prefix apps/design-studio run test:e2e
 ```
 
-These tests cover durable replay after store restart, provider-neutral event
-projection, real project-file change detection, one-shot capability isolation,
-idempotent submission, source-app-scoped cancel and cleanup, no duplicate turn
-after backend restart, unbuffered ASGI delivery, app-owned replay translation,
-and success/failed/canceled result packages.
+It verifies the unchanged official package, real native API/CLI profiles,
+OpenCode streaming and cancellation, delegated-conversation continuation,
+workspace isolation, and the Base Shell-to-isolated-iframe deep link. The
+current design and its focused commands live in
+[`design_studio_native_opendesign_architecture.md`](design_studio_native_opendesign_architecture.md)
+and `apps/design-studio/README.md`.
 
-Focused repository proof:
+## Historical consequence
 
-```bash
-.venv/bin/python -m unittest \
-  tests.architecture.test_design_studio_runtime_bridge_proof -v
-```
-
-Pinned-source and selected-contract proof:
-
-```bash
-.venv/bin/python \
-  apps/design-studio/service/verify_runtime_bridge_spike.py \
-  --upstream-root /tmp/maverick-opendesign-0-16-1
-```
-
-The second command verifies the exact source digests and semantic constraints,
-then proves idempotent submit, incremental delivery before terminal, file event,
-restart replay after sequence, cross-workspace denial, idempotent interrupt, and
-absence of credential markers in the durable journal.
-
-Expected result: selection `B`, upstream verified, and every selected-B contract
-field `true` with terminal status `canceled`.
-
-The heavy real-daemon/browser spike is reproducible after the pinned upstream
-install and web build:
-
-```bash
-node apps/design-studio/tests/spike_rejected_a_acp.mjs \
-  --upstream-root /tmp/maverick-opendesign-0-16-1
-```
-
-It allocates a temporary data root and loopback port, launches the exact daemon
-with a minimal environment, imports Playwright from the pinned checkout, and
-removes the process group and temporary data in `finally`.
-
-## Consequences and follow-up
-
-- WP4 creates the generic authenticated app-to-core entrypoint/capability needed
-  to invoke the bridge without exposing ports or tokens.
-- WP7 implemented the generic durable runtime stream in core and the Design
-  Studio translator, mapping, cancel, cleanup, recovery, and terminal packages.
-- WP8 routes Design Studio CLI, MCP, reference, import, and export through the
-  OpenDesign domain and removes the legacy writable project catalog.
-- WP10 repeats the real UI proof under the final sandbox/origin topology and
-  covers core/sidecar restart, timeout, retry, hostile workspace access, and
-  full result-package behavior. The real Chromium/OCI proof is committed as
-  `apps/design-studio/service/opendesign_product_acceptance_0_16_1.json`.
-
-WP8-WP10 are complete for this bridge: there is no writable legacy project
-catalog, Storage export is run-scoped, the full-bleed browser uses the isolated
-origin, and every scenario records the workspace/app/sidecar/OpenDesign/runtime
-correlation join without prompts or credentials. Maverick remains experimental
-and local-only under `SECURITY.md` and the production-readiness documentation.
+Option B was implemented and later removed rather than becoming a compatibility
+layer. No active Design Studio route uses the generic runtime-stream translator
+described in this ADR. The unchanged official OpenDesign host and its optional,
+independently degradable external bridges are the sole current implementation.

@@ -21,6 +21,7 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from core.apps.artifact_mounts import platform_artifact_store_root  # noqa: E402
 from official_opendesign_release import load_official_release  # noqa: E402
+from opencode_runtime import RUNTIME_RELATIVE_PATH  # noqa: E402
 
 
 PROFILES = {"quick", "affected", "release", "migration", "hosted"}
@@ -108,12 +109,26 @@ def _commands(profile: str, requested_installation: Path | None) -> list[tuple[l
     )
     if profile in {"release", "hosted"}:
         installation = _installation(requested_installation)
-        commands.append(([
-            sys.executable,
-            str(SERVICE_ROOT / "smoke_official_opendesign.py"),
-            "--installation",
-            str(installation),
-        ], REPOSITORY_ROOT))
+        opencode = _opencode_runtime()
+        commands.extend(
+            [
+                ([
+                    sys.executable,
+                    str(SERVICE_ROOT / "smoke_official_opendesign.py"),
+                    "--installation",
+                    str(installation),
+                ], REPOSITORY_ROOT),
+                ([
+                    sys.executable,
+                    str(SERVICE_ROOT / "smoke_native_product.py"),
+                    "--installation",
+                    str(installation),
+                    "--opencode-runtime",
+                    str(opencode),
+                ], REPOSITORY_ROOT),
+                (["node", "tests/native_deep_link.e2e.mjs"], APP_ROOT),
+            ]
+        )
     return commands
 
 
@@ -132,6 +147,20 @@ def _installation(requested: Path | None) -> Path:
             "install hook or pass --installation."
         )
     return installation
+
+
+def _opencode_runtime() -> Path:
+    configured = os.environ.get("MAVERICK_OPENCODE_RUNTIME", "").strip()
+    if configured:
+        return Path(configured).resolve()
+    store = platform_artifact_store_root(REPOSITORY_ROOT)
+    runtime = store / "design-studio/opendesign" / RUNTIME_RELATIVE_PATH
+    if not runtime.is_dir():
+        raise SystemExit(
+            "The verified OpenCode adapter runtime is missing; upgrade/reinstall Design Studio "
+            "or set MAVERICK_OPENCODE_RUNTIME."
+        )
+    return runtime
 
 
 if __name__ == "__main__":

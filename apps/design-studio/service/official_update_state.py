@@ -116,20 +116,32 @@ def migration_preservation_guard(
     baseline: dict[str, Any],
     migrated: dict[str, Any],
 ) -> dict[str, Any]:
-    """Prove that every redaction-safe native identity survives migration."""
+    """Prove that every native identity and its redaction-safe content survive."""
     baseline_categories = inventory_categories(baseline)
     migrated_categories = inventory_categories(migrated)
     baseline_sets = _identity_sets(baseline, baseline_categories)
     migrated_sets = _identity_sets(migrated, migrated_categories)
-    lost_counts: dict[str, int] = {}
-    added_counts: dict[str, int] = {}
+    baseline_content = _content_sets(baseline, baseline_categories)
+    migrated_content = _content_sets(migrated, migrated_categories)
+    lost_identity_counts: dict[str, int] = {}
+    added_identity_counts: dict[str, int] = {}
+    lost_content_counts: dict[str, int] = {}
+    added_content_counts: dict[str, int] = {}
     for category in INVENTORY_CATEGORIES:
         before = Counter(baseline_sets[category])
         after = Counter(migrated_sets[category])
-        lost_counts[category] = sum((before - after).values())
-        added_counts[category] = sum((after - before).values())
+        lost_identity_counts[category] = sum((before - after).values())
+        added_identity_counts[category] = sum((after - before).values())
+        before_content = Counter(baseline_content[category])
+        after_content = Counter(migrated_content[category])
+        lost_content_counts[category] = sum((before_content - after_content).values())
+        added_content_counts[category] = sum((after_content - before_content).values())
     return {
-        "state": "failed" if any(lost_counts.values()) else "passed",
+        "state": (
+            "failed"
+            if any(lost_identity_counts.values()) or any(lost_content_counts.values())
+            else "passed"
+        ),
         "protected_categories": list(INVENTORY_CATEGORIES),
         "baseline_identity_counts": {
             category: len(baseline_sets[category]) for category in INVENTORY_CATEGORIES
@@ -137,8 +149,16 @@ def migration_preservation_guard(
         "migrated_identity_counts": {
             category: len(migrated_sets[category]) for category in INVENTORY_CATEGORIES
         },
-        "added_identity_counts": added_counts,
-        "lost_identity_counts": lost_counts,
+        "added_identity_counts": added_identity_counts,
+        "lost_identity_counts": lost_identity_counts,
+        "baseline_content_counts": {
+            category: len(baseline_content[category]) for category in INVENTORY_CATEGORIES
+        },
+        "migrated_content_counts": {
+            category: len(migrated_content[category]) for category in INVENTORY_CATEGORIES
+        },
+        "added_content_counts": added_content_counts,
+        "lost_content_counts": lost_content_counts,
     }
 
 
@@ -151,6 +171,10 @@ def incomplete_migration_guard() -> dict[str, Any]:
         "migrated_identity_counts": dict(counts),
         "added_identity_counts": dict(counts),
         "lost_identity_counts": dict(counts),
+        "baseline_content_counts": dict(counts),
+        "migrated_content_counts": dict(counts),
+        "added_content_counts": dict(counts),
+        "lost_content_counts": dict(counts),
     }
 
 
@@ -236,6 +260,26 @@ def _identity_sets(
     return normalized
 
 
+def _content_sets(
+    inventory: dict[str, Any],
+    categories: dict[str, dict[str, Any]],
+) -> dict[str, list[str]]:
+    raw = inventory.get("content_sets")
+    if not isinstance(raw, dict) or set(raw) != set(INVENTORY_CATEGORIES):
+        raise OfficialUpdateError("official update content inventory is missing")
+    normalized: dict[str, list[str]] = {}
+    for category in INVENTORY_CATEGORIES:
+        values = raw.get(category)
+        if (
+            not isinstance(values, list)
+            or len(values) != categories[category]["count"]
+            or any(not isinstance(value, str) or not _sha256(value) for value in values)
+        ):
+            raise OfficialUpdateError("official update content inventory is invalid")
+        normalized[category] = list(values)
+    return normalized
+
+
 def _validate_migration_guard(
     value: object,
     *,
@@ -250,6 +294,10 @@ def _validate_migration_guard(
         "migrated_identity_counts",
         "added_identity_counts",
         "lost_identity_counts",
+        "baseline_content_counts",
+        "migrated_content_counts",
+        "added_content_counts",
+        "lost_content_counts",
     }
     if not isinstance(value, dict) or set(value) != fields:
         raise OfficialUpdateError("official update migration guard is invalid")
@@ -265,6 +313,10 @@ def _validate_migration_guard(
         "migrated_identity_counts",
         "added_identity_counts",
         "lost_identity_counts",
+        "baseline_content_counts",
+        "migrated_content_counts",
+        "added_content_counts",
+        "lost_content_counts",
     ):
         counts = value.get(key)
         if (
@@ -276,10 +328,13 @@ def _validate_migration_guard(
             )
         ):
             raise OfficialUpdateError("official update migration guard is invalid")
-    lost = value["lost_identity_counts"]
-    if state == "passed" and any(lost.values()):
+    lost_identities = value["lost_identity_counts"]
+    lost_content = value["lost_content_counts"]
+    if state == "passed" and (any(lost_identities.values()) or any(lost_content.values())):
         raise OfficialUpdateError("official update migration guard is invalid")
-    if state == "failed" and not any(lost.values()):
+    if state == "failed" and not (
+        any(lost_identities.values()) or any(lost_content.values())
+    ):
         raise OfficialUpdateError("official update migration guard is invalid")
     if state == "not_completed":
         if any(
@@ -294,10 +349,18 @@ def _validate_migration_guard(
         migrated_count = value["migrated_identity_counts"][category]
         added_count = value["added_identity_counts"][category]
         lost_count = value["lost_identity_counts"][category]
+        baseline_content_count = value["baseline_content_counts"][category]
+        migrated_content_count = value["migrated_content_counts"][category]
+        added_content_count = value["added_content_counts"][category]
+        lost_content_count = value["lost_content_counts"][category]
         if (
             baseline_count != baseline_inventory[category]["count"]
             or migrated_count != migrated_inventory[category]["count"]
             or baseline_count - lost_count + added_count != migrated_count
+            or baseline_content_count != baseline_inventory[category]["count"]
+            or migrated_content_count != migrated_inventory[category]["count"]
+            or baseline_content_count - lost_content_count + added_content_count
+            != migrated_content_count
         ):
             raise OfficialUpdateError("official update migration guard is invalid")
 

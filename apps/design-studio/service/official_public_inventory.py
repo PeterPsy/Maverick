@@ -39,7 +39,7 @@ def inventory_official_copy(
         log_path=log_path,
         timeout_seconds=timeout_seconds,
     ) as client:
-        inventory, identity_sets = _inventory_with_identity_sets(client)
+        inventory, identity_sets, content_sets = _inventory_with_preservation_sets(client)
     return {
         "schema_version": "1",
         "kind": "official-opendesign-public-inventory",
@@ -50,6 +50,7 @@ def inventory_official_copy(
         },
         "categories": inventory,
         "identity_sets": identity_sets,
+        "content_sets": content_sets,
         "semantic_content_retained": False,
         "private_database_read": False,
     }
@@ -60,13 +61,24 @@ def inventory_digest(inventory: dict[str, Any]) -> str:
 
 
 def _inventory(client: OfficialApiClient) -> dict[str, dict[str, Any]]:
-    inventory, _identity_sets = _inventory_with_identity_sets(client)
+    inventory, _identity_sets, _content_sets = _inventory_with_preservation_sets(client)
     return inventory
 
 
 def _inventory_with_identity_sets(
     client: OfficialApiClient,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
+    inventory, identity_sets, _content_sets = _inventory_with_preservation_sets(client)
+    return inventory, identity_sets
+
+
+def _inventory_with_preservation_sets(
+    client: OfficialApiClient,
+) -> tuple[
+    dict[str, dict[str, Any]],
+    dict[str, list[str]],
+    dict[str, list[str]],
+]:
     projects_payload = client.get_json("/api/projects")
     projects = object_list(projects_payload, "projects")
     project_records: list[dict[str, Any]] = []
@@ -249,6 +261,20 @@ def _inventory_with_identity_sets(
         ])
         for reference in run_references
     ]
+    ordered_run_references = sorted(
+        run_references,
+        key=lambda item: json.dumps(item, sort_keys=True),
+    )
+    records = {
+        "projects": project_records,
+        "conversations": conversation_records,
+        "ordered_messages": message_records,
+        "design_systems": system_records,
+        "project_files": file_records,
+        "artifacts": artifact_records,
+        "settings": [settings],
+        "run_references": ordered_run_references,
+    }
     categories = {
         "projects": category_digest(project_records),
         "conversations": category_digest(conversation_records),
@@ -257,11 +283,17 @@ def _inventory_with_identity_sets(
         "project_files": category_digest(file_records),
         "artifacts": category_digest(artifact_records),
         "settings": category_digest([settings]),
-        "run_references": category_digest(
-            sorted(run_references, key=lambda item: json.dumps(item, sort_keys=True))
-        ),
+        "run_references": category_digest(ordered_run_references),
     }
-    return categories, {
+    normalized_identities = {
         category: sorted(values)
         for category, values in identity_sets.items()
     }
+    content_sets = {
+        category: sorted(
+            canonical_digest(["preserved-content", category, record])
+            for record in category_records
+        )
+        for category, category_records in records.items()
+    }
+    return categories, normalized_identities, content_sets

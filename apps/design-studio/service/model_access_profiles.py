@@ -21,7 +21,18 @@ API_PROFILE_ID = "installed-maverick-api"
 API_PROVIDER_ID = "maverick"
 
 
-def write_model_access_profiles(data_dir: Path, client: ModelAccessClient) -> tuple[Path, dict[str, object]]:
+def write_model_access_profiles(
+    data_dir: Path,
+    client: ModelAccessClient,
+    *,
+    opencode_available: bool = True,
+    api_unavailable_reason: str = "opencode_runtime_unavailable",
+) -> tuple[Path, dict[str, object]]:
+    """Write every independently usable native agent profile.
+
+    A missing catalog or technical runtime removes only the affected profile.
+    At least one usable profile is required for a profile file to be published.
+    """
     catalog = client.catalog()
     raw_cli_models = catalog.get("cli_models")
     cli_models = [
@@ -45,37 +56,16 @@ def write_model_access_profiles(data_dir: Path, client: ModelAccessClient) -> tu
         and isinstance(item.get("id"), str)
         and item["id"]
     ]
-    if not cli_models:
-        raise RuntimeError("No configured Codex CLI model is available")
-    if not api_models:
-        raise RuntimeError("No configured API model is available")
     defaults = catalog.get("cli_defaults") if isinstance(catalog.get("cli_defaults"), dict) else {}
-    default_cli_model = (
-        defaults.get("codex")
-        if isinstance(defaults.get("codex"), str)
-        else cli_models[0]["id"]
-    )
-    default_api_model = api_models[0]["id"]
-    api_config = {
-        "provider": {
-            API_PROVIDER_ID: {
-                "name": "Maverick Model Access",
-                "npm": "@ai-sdk/openai-compatible",
-                "options": {
-                    "baseURL": MODEL_ACCESS_BASE_URL,
-                    "apiKey": MODEL_ACCESS_API_KEY,
-                },
-                "models": {
-                    item["id"].removeprefix(f"{API_PROVIDER_ID}/"): {
-                        "name": item["label"],
-                    }
-                    for item in api_models
-                },
-            }
-        }
-    }
-    payload = {
-        "agents": [
+    agents: list[dict[str, object]] = []
+    if cli_models:
+        default_cli_model = (
+            defaults.get("codex")
+            if isinstance(defaults.get("codex"), str)
+            and any(item["id"] == defaults["codex"] for item in cli_models)
+            else cli_models[0]["id"]
+        )
+        agents.append(
             {
                 "id": "installed-codex-cli",
                 "name": "Codex CLI (installed)",
@@ -83,7 +73,44 @@ def write_model_access_profiles(data_dir: Path, client: ModelAccessClient) -> tu
                 "bin": CODEX_WRAPPER,
                 "models": cli_models,
                 "defaultModel": default_cli_model,
-            },
+            }
+        )
+        cli_status: dict[str, object] = {
+            "state": "ready",
+            "profile_id": "installed-codex-cli",
+            "model_count": len(cli_models),
+            "default_model": default_cli_model,
+        }
+    else:
+        default_cli_model = None
+        cli_status = {
+            "state": "degraded",
+            "reason": "no_configured_cli_models",
+            "model_count": 0,
+        }
+
+    if api_models and opencode_available:
+        default_api_model = api_models[0]["id"]
+        api_config = {
+            "provider": {
+                API_PROVIDER_ID: {
+                    "name": "Maverick Model Access",
+                    "npm": "@ai-sdk/openai-compatible",
+                    "options": {
+                        "baseURL": MODEL_ACCESS_BASE_URL,
+                        "apiKey": MODEL_ACCESS_API_KEY,
+                    },
+                    "models": {
+                        item["id"].removeprefix(f"{API_PROVIDER_ID}/"): {
+                            "name": item["label"],
+                        }
+                        for item in api_models
+                    },
+                }
+            }
+        }
+        _atomic_json(data_dir / API_CONFIG_PATH, api_config)
+        agents.append(
             {
                 "id": API_PROFILE_ID,
                 "name": "Maverick API models",
@@ -95,32 +122,64 @@ def write_model_access_profiles(data_dir: Path, client: ModelAccessClient) -> tu
                 },
                 "models": api_models,
                 "defaultModel": default_api_model,
-            },
-        ]
-    }
-    _atomic_json(data_dir / API_CONFIG_PATH, api_config)
+            }
+        )
+        api_status: dict[str, object] = {
+            "state": "ready",
+            "profile_id": API_PROFILE_ID,
+            "model_count": len(api_models),
+            "default_model": default_api_model,
+        }
+    else:
+        default_api_model = None
+        _remove_regular_file(data_dir / API_CONFIG_PATH)
+        api_status = {
+            "state": "degraded",
+            "reason": (
+                api_unavailable_reason
+                if api_models and not opencode_available
+                else "no_configured_api_models"
+            ),
+            "model_count": len(api_models),
+        }
+
+    if not agents:
+        _remove_regular_file(data_dir / PROFILE_PATH)
+        raise RuntimeError("No configured native model profile is available")
+    payload = {"agents": agents}
     target = data_dir / PROFILE_PATH
     _atomic_json(target, payload)
     return target, {
-        "profile_id": "installed-codex-cli",
+        "state": (
+            "ready"
+            if cli_status["state"] == api_status["state"] == "ready"
+            else "degraded"
+        ),
+        "profile_count": len(agents),
+        "profile_id": "installed-codex-cli" if cli_models else None,
         "model_count": len(cli_models),
         "default_model": default_cli_model,
-        "api_profile_id": API_PROFILE_ID,
+        "api_profile_id": API_PROFILE_ID if api_status["state"] == "ready" else None,
         "api_model_count": len(api_models),
         "api_default_model": default_api_model,
-        "total_model_count": len(cli_models) + len(api_models),
+        "total_model_count": sum(len(profile["models"]) for profile in agents),
+        "cli": cli_status,
+        "api": api_status,
     }
 
 
 def remove_model_access_profiles(data_dir: Path) -> None:
     for relative in (PROFILE_PATH, API_CONFIG_PATH):
-        target = data_dir / relative
-        try:
-            metadata = target.lstat()
-            if stat.S_ISREG(metadata.st_mode):
-                target.unlink()
-        except FileNotFoundError:
-            continue
+        _remove_regular_file(data_dir / relative)
+
+
+def _remove_regular_file(target: Path) -> None:
+    try:
+        metadata = target.lstat()
+        if stat.S_ISREG(metadata.st_mode):
+            target.unlink()
+    except FileNotFoundError:
+        return
 
 
 def _atomic_json(path: Path, payload: dict[str, object]) -> None:

@@ -51,7 +51,13 @@ def _candidate_descriptor(path: Path) -> Path:
     return path
 
 
-def _inventory(release, *, changed: bool, removed: tuple[str, ...] = ()) -> dict:
+def _inventory(
+    release,
+    *,
+    changed: bool,
+    removed: tuple[str, ...] = (),
+    content_changed: bool = False,
+) -> dict:
     digest = ("d" if changed else "c") * 64
     categories = {
         name: {
@@ -68,6 +74,20 @@ def _inventory(release, *, changed: bool, removed: tuple[str, ...] = ()) -> dict
         )
         for name in CATEGORIES
     }
+    content_sets = {
+        name: (
+            []
+            if name in removed
+            else [
+                sha256(
+                    f"{name}:native-content:{'changed' if content_changed else 'preserved'}".encode(
+                        "utf-8"
+                    )
+                ).hexdigest()
+            ]
+        )
+        for name in CATEGORIES
+    }
     return {
         "schema_version": "1",
         "kind": "official-opendesign-public-inventory",
@@ -78,6 +98,7 @@ def _inventory(release, *, changed: bool, removed: tuple[str, ...] = ()) -> dict
         },
         "categories": categories,
         "identity_sets": identity_sets,
+        "content_sets": content_sets,
         "semantic_content_retained": False,
         "private_database_read": False,
     }
@@ -123,7 +144,14 @@ class OfficialUpdateTests(unittest.TestCase):
             installed_at="2026-08-28T00:00:00Z",
         )
 
-    def _run(self, control, *, probe=None, removed: tuple[str, ...] = ()):
+    def _run(
+        self,
+        control,
+        *,
+        probe=None,
+        removed: tuple[str, ...] = (),
+        content_changed: bool = False,
+    ):
         def inventory(installation, *, data_dir: Path, log_path: Path):
             self.assertTrue((data_dir / "project.txt").is_file())
             log_path.write_text("supported public APIs only", encoding="utf-8")
@@ -134,6 +162,7 @@ class OfficialUpdateTests(unittest.TestCase):
                 installation.release,
                 changed=changed,
                 removed=removed if changed else (),
+                content_changed=content_changed if changed else False,
             )
 
         def install(_destination, *, release):
@@ -244,6 +273,20 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
         self.assertFalse((self.native / "upstream-migration").exists())
         self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
+
+    def test_same_id_content_mutation_is_rejected_before_activation(self) -> None:
+        calls: list[str] = []
+
+        def control(operation: str, _workspace_id: str) -> dict:
+            calls.append(operation)
+            return {"ready": operation == "prewarm"}
+
+        with self.assertRaisesRegex(OfficialUpdateError, "changed protected native content"):
+            self._run(control, content_changed=True)
+
+        self.assertEqual(calls, ["stop", "prewarm"])
+        self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
+        self.assertFalse((self.native / "upstream-migration").exists())
 
     def test_pre_activation_recovery_failure_is_marked_and_stays_quiesced(self) -> None:
         calls: list[str] = []

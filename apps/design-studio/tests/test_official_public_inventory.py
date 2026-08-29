@@ -225,6 +225,95 @@ class OfficialPublicInventoryTests(unittest.TestCase):
         self.assertEqual(guard["state"], "failed")
         self.assertGreater(guard["lost_content_counts"]["projects"], 0)
 
+    def test_future_project_field_loss_fails_without_an_inventory_code_change(self) -> None:
+        baseline = FakePublicApi()
+        baseline_get_json = baseline.get_json
+
+        def project_with_future_field(path: str) -> dict:
+            payload = baseline_get_json(path)
+            if path == "/api/projects/project-1":
+                payload["project"]["futureFunctionalConfiguration"] = {
+                    "layoutMode": "editorial",
+                }
+            return payload
+
+        baseline.get_json = project_with_future_field  # type: ignore[method-assign]
+        migrated = FakePublicApi()
+        baseline_categories, baseline_identities, baseline_content = (
+            _inventory_with_preservation_sets(baseline)
+        )
+        migrated_categories, migrated_identities, migrated_content = (
+            _inventory_with_preservation_sets(migrated)
+        )
+
+        guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(migrated_categories, migrated_identities, migrated_content),
+        )
+
+        self.assertEqual(baseline_identities, migrated_identities)
+        self.assertEqual(guard["state"], "failed")
+        self.assertGreater(guard["lost_content_counts"]["projects"], 0)
+
+    def test_empty_project_containers_have_presence_and_type_claims(self) -> None:
+        baseline = FakePublicApi()
+        baseline_get_json = baseline.get_json
+
+        def project_with_empty_container(path: str) -> dict:
+            payload = baseline_get_json(path)
+            if path == "/api/projects/project-1":
+                payload["project"]["metadata"] = {"explicitPanels": []}
+            return payload
+
+        baseline.get_json = project_with_empty_container  # type: ignore[method-assign]
+        migrated = FakePublicApi()
+        migrated_get_json = migrated.get_json
+
+        def project_without_empty_container(path: str) -> dict:
+            payload = migrated_get_json(path)
+            if path == "/api/projects/project-1":
+                payload["project"]["metadata"] = {}
+            return payload
+
+        migrated.get_json = project_without_empty_container  # type: ignore[method-assign]
+        baseline_categories, baseline_identities, baseline_content = (
+            _inventory_with_preservation_sets(baseline)
+        )
+        migrated_categories, migrated_identities, migrated_content = (
+            _inventory_with_preservation_sets(migrated)
+        )
+
+        guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(migrated_categories, migrated_identities, migrated_content),
+        )
+
+        self.assertEqual(baseline_identities, migrated_identities)
+        self.assertEqual(guard["state"], "failed")
+        self.assertGreater(guard["lost_content_counts"]["projects"], 0)
+
+        changed_type = FakePublicApi()
+        changed_type_get_json = changed_type.get_json
+
+        def project_with_changed_empty_container_type(path: str) -> dict:
+            payload = changed_type_get_json(path)
+            if path == "/api/projects/project-1":
+                payload["project"]["metadata"] = {"explicitPanels": {}}
+            return payload
+
+        changed_type.get_json = (  # type: ignore[method-assign]
+            project_with_changed_empty_container_type
+        )
+        changed_categories, changed_identities, changed_content = (
+            _inventory_with_preservation_sets(changed_type)
+        )
+        type_guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(changed_categories, changed_identities, changed_content),
+        )
+        self.assertEqual(type_guard["state"], "failed")
+        self.assertGreater(type_guard["lost_content_counts"]["projects"], 0)
+
     def test_content_guard_allows_volatile_metadata_and_additive_schema_changes(self) -> None:
         baseline = FakePublicApi()
         baseline_get_json = baseline.get_json

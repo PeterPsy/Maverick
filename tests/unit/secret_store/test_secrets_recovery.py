@@ -112,14 +112,14 @@ class SecretsRecoveryTestCase(unittest.TestCase):
         )
 
     def make_app_store(self) -> AppDocumentStore:
-        return AppDocumentStore(
-            AppCollections(
-                app_sources=FakeCollection(),
-                workspace_local_app_projects=FakeCollection(),
-                workspace_app_bindings=FakeCollection(),
-                workspace_app_dependency_selections=FakeCollection(),
-            )
+        collections = AppCollections(
+            app_sources=FakeCollection(),
+            workspace_local_app_projects=FakeCollection(),
+            workspace_app_bindings=FakeCollection(),
+            workspace_app_sidecar_quarantines=FakeCollection(),
+            workspace_app_dependency_selections=FakeCollection(),
         )
+        return AppDocumentStore(collections)
 
     def make_runtime_store(self) -> RuntimeDocumentStore:
         return RuntimeDocumentStore(

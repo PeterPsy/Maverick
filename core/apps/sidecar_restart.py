@@ -9,6 +9,7 @@ from typing import Any
 from core.api.sidecar_proxy import restart_declared_app_sidecars
 from core.apps.errors import AppLifecycleError
 from core.apps.models import WorkspaceAppBindingRecord
+from core.apps.sidecar_quarantine import require_sidecar_not_quarantined
 from core.apps.store import AppStore
 from core.apps.surfaces import resolve_workspace_app_surface
 from core.observability.service import record_platform_audit, record_platform_event
@@ -67,6 +68,11 @@ def restart_workspace_app_sidecars(
             "sidecar_contract_resolve",
             f"App `{app_id}` must be enabled before sidecar restart.",
         )
+    require_sidecar_not_quarantined(
+        store,
+        workspace_id=workspace_id,
+        app_id=app_id,
+    )
     try:
         source_root, parsed = resolve_workspace_app_surface(
             store,

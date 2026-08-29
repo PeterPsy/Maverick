@@ -44,19 +44,17 @@ def category_digest(records: list[Any]) -> dict[str, Any]:
 
 
 def stable_project(project: dict[str, Any]) -> dict[str, Any]:
-    keys = (
-        "id",
-        "name",
-        "skillId",
-        "designSystemId",
-        "pendingPrompt",
-        "metadata",
-        "customInstructions",
-        "appliedPluginSnapshotId",
-        "createdAt",
-        "updatedAt",
-    )
-    return {key: stable_value(project.get(key)) for key in keys if key in project}
+    """Retain every public project field except explicit server volatility.
+
+    The upstream public schema can grow between releases.  A positive field
+    list would silently discard those new values before the migration guard
+    sees them, so normalization is intentionally denylist-based.
+    """
+    return {
+        str(key): stable_value(value)
+        for key, value in sorted(project.items())
+        if key not in PROJECT_VOLATILE_FIELDS
+    }
 
 
 def stable_file(file_record: dict[str, Any]) -> dict[str, Any]:
@@ -87,6 +85,18 @@ def stable_value(value: Any) -> Any:
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     raise OfficialReleaseError("official API inventory contained an unsupported value")
+
+
+PROJECT_VOLATILE_FIELDS = {
+    "createdAt",
+    "updatedAt",
+    "startedAt",
+    "endedAt",
+    "mtime",
+    "pid",
+    "resolvedDir",
+    "eventsLogPath",
+}
 
 
 def object_list(payload: dict[str, Any], key: str) -> list[dict[str, Any]]:

@@ -52,6 +52,7 @@ from official_update_state import (
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 NATIVE_DATA_DIRECTORY = "opendesign-native"
 WRITER_STOP_ATTEMPTS = 3
+QUARANTINE_ATTEMPTS = 3
 STOPPED_SERVICE_STATES = {"failed", "not_started", "stopped"}
 
 
@@ -226,7 +227,7 @@ def perform_official_update(
                 migration_guard=migration_guard,
             )
             try:
-                recovery = _write_confirmed_recovery_required(
+                recovery = _write_recovery_required(
                     root,
                     recovery,
                     identifier=identifier,
@@ -355,7 +356,7 @@ def _rollback_activated_update(
         return state
     except Exception as recovery_error:
         try:
-            state = _write_confirmed_recovery_required(
+            state = _write_recovery_required(
                 root,
                 None,
                 identifier=identifier,
@@ -497,7 +498,7 @@ def _confirm_writer_stopped(
     )
 
 
-def _write_confirmed_recovery_required(
+def _write_recovery_required(
     root: Path,
     state: dict[str, Any] | None,
     *,
@@ -506,13 +507,21 @@ def _write_confirmed_recovery_required(
     control: Callable[[str, str], dict[str, Any]],
     delegation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Persist recovery-required only after the live writer is confirmed stopped."""
-    _confirm_writer_stopped(
-        root,
-        identifier=identifier,
-        workspace_id=workspace_id,
-        control=control,
-    )
+    """Persist recovery after either a confirmed stop or durable Core quarantine."""
+    quarantine: dict[str, Any] | None = None
+    try:
+        _confirm_writer_stopped(
+            root,
+            identifier=identifier,
+            workspace_id=workspace_id,
+            control=control,
+        )
+    except OfficialUpdateError as stop_error:
+        quarantine = _establish_core_quarantine(
+            control,
+            workspace_id=workspace_id,
+            stop_error=stop_error,
+        )
     if state is None:
         state = _read_marker_for_recovery(root)
     state.update(
@@ -528,14 +537,53 @@ def _write_confirmed_recovery_required(
             "model_access": {"state": "unchecked"},
             "delegation": delegation,
         }
+    if quarantine is not None:
+        state["bridges"]["model_access"] = {
+            "state": "disabled",
+            "reason": "core_sidecar_quarantine",
+        }
     try:
         write_update_state(root, state)
     except Exception as error:
         raise OfficialUpdateError(
-            "official OpenDesign update recovery stopped the writer but its "
+            "official OpenDesign update recovery established a safety fence but its "
             "recovery_required marker could not be recorded"
         ) from error
     return state
+
+
+def _establish_core_quarantine(
+    control: Callable[[str, str], dict[str, Any]],
+    *,
+    workspace_id: str,
+    stop_error: OfficialUpdateError,
+) -> dict[str, Any]:
+    """Retry the idempotent Core fence when a completed response may be lost."""
+    required = {
+        "quarantined",
+        "persistent",
+        "proxy_revoked",
+        "browser_sessions_revoked",
+        "model_access_revoked",
+    }
+    last_error: Exception = stop_error
+    for _attempt in range(QUARANTINE_ATTEMPTS):
+        try:
+            response = control("quarantine", workspace_id)
+        except Exception as error:
+            last_error = error
+            continue
+        if isinstance(response, dict) and all(
+            response.get(field) is True for field in required
+        ):
+            return response
+        last_error = OfficialUpdateError(
+            "Core returned incomplete sidecar quarantine evidence"
+        )
+    raise OfficialUpdateError(
+        "official OpenDesign update recovery could not establish a durable "
+        "Core sidecar quarantine"
+    ) from last_error
 
 
 def _resume_previous_writer(

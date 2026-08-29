@@ -53,7 +53,7 @@ class E2EGateContractTests(unittest.TestCase):
 
         self.assertGreaterEqual(
             tuple(int(part) for part in contract["version"].split(".")),
-            (0, 5, 3),
+            (0, 5, 4),
         )
 
 

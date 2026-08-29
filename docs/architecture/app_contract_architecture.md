@@ -978,6 +978,13 @@ session or grants access to Maverick memory, Chat history, prompts, personas,
 skills, or tools. The sidecar may receive the technical socket and capability,
 but never a raw provider credential.
 
+CLI execution authorization belongs to the Core broker, not to configuration
+under the sidecar-writable app data root. Every non-diagnostic invocation must
+select exactly one model explicitly, and Core must match that model and
+provider against the current catalog resolved for the lease's workspace/app
+scope before invoking the executor. A bounded closed set of metadata-only
+diagnostics may omit `--model`.
+
 The core owns process lifecycle, technical token injection, app data-root substitution, route-policy enforcement, auth, workspace membership, app visibility, and error translation. The sidecar owns only its app protocol behind the loopback boundary. A frontend must call a sidecar through the generic core route:
 
 ```text
@@ -1057,6 +1064,15 @@ declared automatic repair succeeds but the following transactional startup
 fails, that startup is part of the same repair attempt; Core records a bounded
 backoff and cannot run the hook again on the next request. Concurrent callers
 join the in-flight repair/startup rather than creating another process or repair.
+
+When maintenance cannot prove that a writer stopped, the channel also exposes
+a generic quarantine operation. Core first persists a workspace/app fence in
+the control-plane adapter, then revokes browser sessions, model-access leases
+and active broker requests, and live relay/proxy authority before attempting
+process termination. Proxy resolution, browser launch, prewarm, restart, and
+model capability issue/authorization remain denied across Core restart until
+an explicit release clears both the durable and in-process gates. Quarantine
+does not infer app migration state and release does not prewarm automatically.
 
 App-owned backend, CLI, MCP, and reference entrypoints do not receive the
 sidecar listener, technical token, or sidecar filesystem. A sidecar may declare

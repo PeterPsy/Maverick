@@ -137,6 +137,7 @@ class ObservabilityTestBase(unittest.TestCase):
                 app_sources=FakeCollection(),
                 workspace_local_app_projects=FakeCollection(),
                 workspace_app_bindings=FakeCollection(),
+                workspace_app_sidecar_quarantines=FakeCollection(),
                 workspace_app_dependency_selections=FakeCollection(),
             )
         )

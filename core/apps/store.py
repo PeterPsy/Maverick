@@ -61,6 +61,7 @@ from core.apps.models import (
     WidgetFrontendDeclaration,
     WorkspaceAppBindingRecord,
     WorkspaceAppDependencySelectionRecord,
+    WorkspaceAppSidecarQuarantineRecord,
     WorkspaceLocalAppProjectRecord,
 )
 
@@ -117,6 +118,20 @@ class AppStore(Protocol):
     def delete_workspace_app_binding(self, *, workspace_id: str, app_id: str) -> None:
         ...
 
+    def save_workspace_app_sidecar_quarantine(
+        self,
+        record: WorkspaceAppSidecarQuarantineRecord,
+    ) -> WorkspaceAppSidecarQuarantineRecord:
+        ...
+
+    def get_workspace_app_sidecar_quarantine(
+        self,
+        *,
+        workspace_id: str,
+        app_id: str,
+    ) -> WorkspaceAppSidecarQuarantineRecord | None:
+        ...
+
     def save_workspace_app_dependency_selection(
         self,
         record: WorkspaceAppDependencySelectionRecord,
@@ -157,6 +172,7 @@ class AppCollections:
     app_sources: DocumentCollection
     workspace_local_app_projects: DocumentCollection
     workspace_app_bindings: DocumentCollection
+    workspace_app_sidecar_quarantines: DocumentCollection
     workspace_app_dependency_selections: DocumentCollection
 
 
@@ -350,6 +366,35 @@ class AppDocumentStore:
 
     def delete_workspace_app_binding(self, *, workspace_id: str, app_id: str) -> None:
         self.collections.workspace_app_bindings.delete_one({"workspace_id": workspace_id, "app_id": app_id})
+        self.collections.workspace_app_sidecar_quarantines.delete_one(
+            {"workspace_id": workspace_id, "app_id": app_id}
+        )
+
+    def save_workspace_app_sidecar_quarantine(
+        self,
+        record: WorkspaceAppSidecarQuarantineRecord,
+    ) -> WorkspaceAppSidecarQuarantineRecord:
+        collection = self.collections.workspace_app_sidecar_quarantines
+        collection.update_one(
+            {"workspace_id": record.workspace_id, "app_id": record.app_id},
+            {"$set": asdict(record)},
+            upsert=True,
+        )
+        return record
+
+    def get_workspace_app_sidecar_quarantine(
+        self,
+        *,
+        workspace_id: str,
+        app_id: str,
+    ) -> WorkspaceAppSidecarQuarantineRecord | None:
+        collection = self.collections.workspace_app_sidecar_quarantines
+        document = collection.find_one(
+            {"workspace_id": workspace_id, "app_id": app_id}
+        )
+        if document is None:
+            return None
+        return WorkspaceAppSidecarQuarantineRecord(**document)
 
     def save_workspace_app_dependency_selection(
         self,

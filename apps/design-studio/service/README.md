@@ -30,13 +30,15 @@ selection. `native_official_update.py` verifies and installs a user-selected
 official lock, stops only the managed Design Studio writer, creates an
 immutable backup, runs upstream migration and public inventory on copies,
 requires the migrated identity multiset and field-level user-content claims to
-preserve every baseline user-owned item and value—including functional project
-metadata—while permitting additive schema, explicitly volatile server fields,
-and release-owned built-in Design System evolution,
-atomically swaps data and selection, and restores both if native readiness
+preserve every baseline user-owned item and value—including every dynamically
+discovered public project field and empty object/array presence—while
+permitting additive schema, explicitly volatile server fields, and
+release-owned built-in Design System evolution, atomically swaps data and
+selection, and restores both if native readiness
 fails. If the previous writer cannot be resumed, it remains fail-closed behind
-quiescence; the updater retries stop and writes `recovery_required` only after
-Core positively confirms that the live writer is stopped.
+quiescence; the updater retries stop and, when stop cannot be confirmed,
+requires a durable Core quarantine that revokes proxy, browser, and model
+capabilities before writing `recovery_required`.
 `official_update_state.py` persists only release identities, category
 counts/hashes, redaction-safe preservation counts, bridge states, and recovery
 phase.
@@ -57,8 +59,10 @@ launcher emits whichever supported Codex and OpenCode profiles are independently
 usable plus a credential-free OpenCode provider configuration. This makes every
 Core-granted API model visible in the native selector without manual provider
 setup when the optional runtime is available, while a missing API or CLI catalog
-does not remove the other profile. The Codex wrapper rejects model ids outside
-that workspace-scoped profile before opening the CLI transport. Both paths
+does not remove the other profile. The wrapper is only a byte-preserving
+transport: the trusted Core broker requires `--model` for every non-diagnostic
+execution and checks it against the live workspace/app-scoped catalog before
+calling the CLI executor. Both paths
 operate without a Maverick runtime session, prompt, memory, persona, skill,
 tool catalog, or semantic rewrite.
 The official daemon finds the production wrappers on Core's `/app/service`

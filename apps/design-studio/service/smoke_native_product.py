@@ -31,7 +31,12 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from delegation_errors import DelegationError  # noqa: E402
 from delegation_service import DelegationService  # noqa: E402
 from core.model_access.http_server import ThreadingUnixModelAccessServer  # noqa: E402
-from core.model_access.models import CliFrame, ModelAccessScope  # noqa: E402
+from core.model_access.models import (  # noqa: E402
+    CliFrame,
+    ModelAccessCatalog,
+    ModelAccessModel,
+    ModelAccessScope,
+)
 from model_access_profiles import (  # noqa: E402
     API_CONFIG_PATH,
     SANDBOX_PROFILE_PATH,
@@ -238,6 +243,7 @@ class _E2ECliBroker:
         self.cli_executor = self
         self._scopes: dict[str, ModelAccessScope] = {}
         self._requests: list[str] = []
+        self._executions: list[str] = []
         self._denials: list[tuple[str, str]] = []
         self._lock = Lock()
         self._server: ThreadingUnixModelAccessServer | None = None
@@ -250,6 +256,11 @@ class _E2ECliBroker:
     def request_count(self) -> int:
         with self._lock:
             return len(self._requests)
+
+    @property
+    def execution_count(self) -> int:
+        with self._lock:
+            return len(self._executions)
 
     def issue(self, workspace_id: str, *, data_root: Path) -> str:
         token = f"native-e2e-{workspace_id}-{secrets.token_urlsafe(18)}"
@@ -283,7 +294,13 @@ class _E2ECliBroker:
             self._thread = None
         self.socket_path.unlink(missing_ok=True)
 
-    def authorize(self, authorization: str) -> ModelAccessScope:
+    def authorize(
+        self,
+        authorization: str,
+        *,
+        cancellation: Event | None = None,
+    ) -> ModelAccessScope:
+        del cancellation
         prefix = "Bearer "
         token = authorization[len(prefix):] if authorization.startswith(prefix) else ""
         scope = self._scopes.get(token)
@@ -292,6 +309,35 @@ class _E2ECliBroker:
         with self._lock:
             self._requests.append(scope.workspace_id)
         return scope
+
+    def release_authorization(
+        self,
+        _authorization: str,
+        *,
+        cancellation: Event | None,
+    ) -> None:
+        del cancellation
+
+    def catalog(self, scope: ModelAccessScope) -> ModelAccessCatalog:
+        """Use the production Core authorizer against this exact scoped fixture."""
+        model_id = {
+            "alpha": CLI_MODEL_ID,
+            "beta": BETA_CLI_MODEL_ID,
+        }.get(scope.workspace_id)
+        if model_id is None:
+            raise PermissionError("unexpected E2E catalog scope")
+        model = ModelAccessModel(
+            model_id=model_id,
+            label=f"E2E CLI {model_id}",
+            provider_id="codex",
+            transport="cli",
+            available=True,
+        )
+        return ModelAccessCatalog(
+            api_models=(),
+            cli_models=(model,),
+            cli_defaults={"codex": model_id},
+        )
 
     def execute(
         self,
@@ -305,23 +351,17 @@ class _E2ECliBroker:
     ) -> Iterator[CliFrame]:
         if provider_id != "codex" or scope.cli != ("codex",):
             raise PermissionError("unexpected E2E CLI scope")
+        with self._lock:
+            self._executions.append(scope.workspace_id)
         if "--version" in argv:
             yield CliFrame("stdout", b"codex-cli 1.0.0-e2e\n")
             yield CliFrame("exit", b'{"exit_code":0}')
             return
-        selected_model = _option_value(argv, "--model")
-        expected_model = {
-            "alpha": CLI_MODEL_ID,
-            "beta": BETA_CLI_MODEL_ID,
-        }.get(scope.workspace_id)
         project_id = Path(cwd).name
         connection_probe = project_id.startswith("od-conn-test-")
         if not connection_probe and not _scope_contains_cwd(scope, cwd):
             self._record_denial(scope.workspace_id, "workspace_project")
             raise PermissionError("CLI capability cannot access this workspace project")
-        if selected_model != expected_model:
-            self._record_denial(scope.workspace_id, "workspace_model")
-            raise PermissionError("CLI model is outside this workspace catalog")
         if MEDIA_ASSET_NAME.encode("utf-8") in stdin and "--add-dir" in argv:
             self.cli_tools_media_seen.set()
         if CLI_CANCEL_MARKER.encode("utf-8") in stdin:
@@ -381,6 +421,25 @@ class _E2ECliBroker:
         if (workspace_id, reason) not in denials:
             raise OfficialReleaseError(
                 f"the {workspace_id} capability was not denied for {reason}"
+            )
+
+    def assert_core_model_denial_since(
+        self,
+        request_offset: int,
+        execution_offset: int,
+        *,
+        workspace_id: str,
+    ) -> None:
+        with self._lock:
+            requests = self._requests[request_offset:]
+            executions = self._executions[execution_offset:]
+        if workspace_id not in requests:
+            raise OfficialReleaseError(
+                "the cross-workspace CLI model request did not reach the Core broker"
+            )
+        if workspace_id in executions:
+            raise OfficialReleaseError(
+                "Core invoked the CLI executor for a model outside the scoped catalog"
             )
 
     def _record_denial(self, workspace_id: str, reason: str) -> None:
@@ -715,6 +774,8 @@ def _exercise_beta_workspace(
             model=API_MODEL_ID,
             timeout_seconds=timeout_seconds,
         )
+        cross_cli_request_start = model_access.request_count
+        cross_cli_execution_start = model_access.execution_count
         _assert_native_run_rejected(
             client,
             adapter=adapter,
@@ -724,6 +785,11 @@ def _exercise_beta_workspace(
             agent_id=CLI_AGENT_ID,
             model=CLI_MODEL_ID,
             timeout_seconds=timeout_seconds,
+        )
+        model_access.assert_core_model_denial_since(
+            cross_cli_request_start,
+            cross_cli_execution_start,
+            workspace_id="beta",
         )
         projects = {str(item.get("id") or "") for item in adapter.list_projects()}
         if alpha["project_id"] in projects:
@@ -760,6 +826,10 @@ def _exercise_beta_workspace(
     model_access.assert_requests_since(correct_request_start, workspace_id="beta")
     _assert_profile_contains_no_capability(native, model_access_token)
     denial_start = model_access.denial_count
+    # Present the stolen alpha capability with its own catalog model so the
+    # trusted model check succeeds and the executor must still reject beta's
+    # project path from the alpha data-root scope.
+    _profile(native, _CatalogClient("model/beta", CLI_MODEL_ID))
     with _running_profiled_official(
         installation,
         native=native,
@@ -776,7 +846,7 @@ def _exercise_beta_workspace(
             conversation_id=conversation_id,
             message_id="beta-cross-capability-e2e",
             agent_id=CLI_AGENT_ID,
-            model=BETA_CLI_MODEL_ID,
+            model=CLI_MODEL_ID,
             timeout_seconds=timeout_seconds,
         )
     model_access.assert_denial_since(
@@ -1351,13 +1421,6 @@ def _json_object(body: bytes) -> dict[str, Any]:
     except (UnicodeDecodeError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
-
-
-def _option_value(arguments: tuple[str, ...], option: str) -> str | None:
-    positions = [index for index, value in enumerate(arguments) if value == option]
-    if len(positions) != 1 or positions[0] + 1 >= len(arguments):
-        return None
-    return arguments[positions[0] + 1]
 
 
 def _scope_contains_cwd(scope: ModelAccessScope, cwd: str) -> bool:

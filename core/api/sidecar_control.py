@@ -12,8 +12,16 @@ from threading import Lock, Thread, current_thread
 from typing import Any
 
 from core.api.sidecar_prewarm import prewarm_workspace_app_sidecars
-from core.api.sidecar_proxy import app_sidecar_startup_status, stop_app_sidecars
+from core.api.sidecar_proxy import (
+    app_sidecar_startup_status,
+    stop_app_sidecars,
+)
+from core.api.sidecar_quarantine_control import (
+    quarantine_workspace_app_sidecars,
+    release_workspace_app_sidecar_quarantine,
+)
 from core.apps.errors import AppHostingError
+from core.apps.sidecar_quarantine import active_sidecar_quarantine
 from core.apps.sidecar_restart import restart_workspace_app_sidecars
 from core.apps.surfaces import resolve_workspace_app_surface
 
@@ -185,6 +193,18 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
             "browser_sessions_revoked": True,
             "stopped_service_count": stopped,
         }
+    if operation == "quarantine":
+        return quarantine_workspace_app_sidecars(
+            state,
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
+    if operation == "release_quarantine":
+        return release_workspace_app_sidecar_quarantine(
+            state,
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
     if operation == "status":
         binding = state.app_store.get_workspace_app_binding(
             workspace_id=workspace_id,
@@ -195,9 +215,18 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
             binding=binding,
             start_path=state.repository_root,
         )
+        quarantine = active_sidecar_quarantine(
+            state.app_store,
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
         return {
             "workspace_id": workspace_id,
             "app_id": app_id,
+            "quarantined": quarantine is not None,
+            "quarantine_id": (
+                quarantine.quarantine_id if quarantine is not None else None
+            ),
             "services": [
                 {
                     "sidecar_id": sidecar.service_id,

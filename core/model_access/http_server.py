@@ -13,8 +13,14 @@ import struct
 from threading import Event, Thread
 from typing import Iterable, Protocol
 
-from core.model_access.catalog import build_model_access_catalog
-from core.model_access.models import CliFrame, ModelAccessScope, ModelCliExecutor, ProviderHttpResponse
+from core.model_access.cli_authorization import authorize_cli_invocation
+from core.model_access.models import (
+    CliFrame,
+    ModelAccessCatalog,
+    ModelAccessScope,
+    ModelCliExecutor,
+    ProviderHttpResponse,
+)
 
 
 MAX_HEADER_BYTES = 64 * 1024
@@ -47,7 +53,21 @@ class ModelAccessBrokerProtocol(Protocol):
     api_proxy: ModelApiProxyProtocol
     cli_executor: ModelCliExecutor
 
-    def authorize(self, authorization: str) -> ModelAccessScope: ...
+    def authorize(
+        self,
+        authorization: str,
+        *,
+        cancellation: Event | None = None,
+    ) -> ModelAccessScope: ...
+
+    def release_authorization(
+        self,
+        authorization: str,
+        *,
+        cancellation: Event | None,
+    ) -> None: ...
+
+    def catalog(self, scope: ModelAccessScope) -> ModelAccessCatalog: ...
 
 
 class ThreadingUnixModelAccessServer(socketserver.ThreadingUnixStreamServer):
@@ -65,9 +85,11 @@ class _BrokerRequestHandler(socketserver.StreamRequestHandler):
         broker: ModelAccessBrokerProtocol = self.server.broker  # type: ignore[attr-defined]
         cancellation = Event()
         disconnect_stop = Event()
+        authorization = ""
         try:
             request = _read_request(self.rfile)
-            scope = broker.authorize(request.headers.get("authorization", ""))
+            authorization = request.headers.get("authorization", "")
+            scope = broker.authorize(authorization, cancellation=cancellation)
             Thread(
                 target=_watch_disconnect,
                 args=(self.connection, cancellation, disconnect_stop),
@@ -75,10 +97,10 @@ class _BrokerRequestHandler(socketserver.StreamRequestHandler):
                 daemon=True,
             ).start()
             if request.method == "GET" and request.path == "/maverick/v1/catalog":
-                _send_json(self.wfile, 200, build_model_access_catalog(broker.state, scope).public_payload())
+                _send_json(self.wfile, 200, broker.catalog(scope).public_payload())
                 return
             if request.method == "GET" and request.path == "/v1/models":
-                catalog = build_model_access_catalog(broker.state, scope)
+                catalog = broker.catalog(scope)
                 _send_json(
                     self.wfile,
                     200,
@@ -114,10 +136,18 @@ class _BrokerRequestHandler(socketserver.StreamRequestHandler):
                     response.close()
                 return
             if request.method == "POST" and request.path == "/maverick/v1/cli/codex/exec":
+                argv = _decode_string_list_header(
+                    request.headers.get("x-maverick-cli-argv", "")
+                )
+                authorize_cli_invocation(
+                    broker.catalog(scope),
+                    provider_id="codex",
+                    argv=argv,
+                )
                 frames = broker.cli_executor.execute(
                     scope=scope,
                     provider_id="codex",
-                    argv=_decode_string_list_header(request.headers.get("x-maverick-cli-argv", "")),
+                    argv=argv,
                     cwd=_decode_string_header(request.headers.get("x-maverick-cli-cwd", "")),
                     stdin=request.body,
                     cancellation=cancellation,
@@ -139,6 +169,10 @@ class _BrokerRequestHandler(socketserver.StreamRequestHandler):
         finally:
             cancellation.set()
             disconnect_stop.set()
+            broker.release_authorization(
+                authorization,
+                cancellation=cancellation,
+            )
 
 
 def _read_request(stream) -> _Request:

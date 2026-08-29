@@ -219,6 +219,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
                 app_sources=InMemoryCollection(),
                 workspace_local_app_projects=InMemoryCollection(),
                 workspace_app_bindings=InMemoryCollection(),
+                workspace_app_sidecar_quarantines=InMemoryCollection(),
                 workspace_app_dependency_selections=InMemoryCollection(),
             )
         )

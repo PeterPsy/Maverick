@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 import secrets
 import stat
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from typing import Iterable
 
+from core.apps.sidecar_quarantine import require_sidecar_not_quarantined
 from core.model_access.api_proxy import ModelApiProxy
+from core.model_access.catalog import build_model_access_catalog
 from core.model_access.cli_proxy import CodexCliExecutor
 from core.model_access.http_server import ThreadingUnixModelAccessServer
 from core.model_access.models import (
+    ModelAccessCatalog,
     ModelAccessLease,
     ModelAccessScope,
     ModelApiTransport,
@@ -30,6 +33,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class _LeaseRecord:
     scope: ModelAccessScope
+    cancellations: set[Event] = field(default_factory=set)
 
 
 class ModelAccessBroker:
@@ -52,6 +56,10 @@ class ModelAccessBroker:
         self._server: ThreadingUnixModelAccessServer | None = None
         self._thread: Thread | None = None
         self._stopped = False
+
+    def catalog(self, scope: ModelAccessScope) -> ModelAccessCatalog:
+        """Resolve the live Core-owned catalog for one authorized lease scope."""
+        return build_model_access_catalog(self.state, scope)
 
     def start(self) -> None:
         """Bind synchronously so sidecar prewarm can issue a lease immediately."""
@@ -85,6 +93,11 @@ class ModelAccessBroker:
     ) -> ModelAccessLease:
         if self._stopped or self._server is None:
             raise RuntimeError("model-access broker is unavailable")
+        require_sidecar_not_quarantined(
+            self.state.app_store,
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
         token = secrets.token_urlsafe(48)
         scope = ModelAccessScope(
             workspace_id=workspace_id,
@@ -97,9 +110,18 @@ class ModelAccessBroker:
         with self._lock:
             self._leases[token] = _LeaseRecord(scope=scope)
 
+        try:
+            require_sidecar_not_quarantined(
+                self.state.app_store,
+                workspace_id=workspace_id,
+                app_id=app_id,
+            )
+        except Exception:
+            self._revoke_token(token)
+            raise
+
         def release() -> None:
-            with self._lock:
-                self._leases.pop(token, None)
+            self._revoke_token(token)
 
         return ModelAccessLease(
             socket_directory=self.socket_path.parent,
@@ -109,23 +131,79 @@ class ModelAccessBroker:
             release=release,
         )
 
-    def authorize(self, authorization: str) -> ModelAccessScope:
+    def authorize(
+        self,
+        authorization: str,
+        *,
+        cancellation: Event | None = None,
+    ) -> ModelAccessScope:
         prefix = "Bearer "
         if not authorization.startswith(prefix):
             raise PermissionError("model-access capability missing")
         token = authorization[len(prefix) :]
         with self._lock:
             lease = self._leases.get(token)
+            if lease is not None and cancellation is not None:
+                lease.cancellations.add(cancellation)
         if lease is None:
             raise PermissionError("model-access capability invalid")
+        try:
+            require_sidecar_not_quarantined(
+                self.state.app_store,
+                workspace_id=lease.scope.workspace_id,
+                app_id=lease.scope.app_id,
+            )
+        except Exception:
+            self._revoke_token(token)
+            raise PermissionError("model-access capability quarantined") from None
         return lease.scope
+
+    def release_authorization(
+        self,
+        authorization: str,
+        *,
+        cancellation: Event | None,
+    ) -> None:
+        if cancellation is None or not authorization.startswith("Bearer "):
+            return
+        token = authorization.removeprefix("Bearer ")
+        with self._lock:
+            lease = self._leases.get(token)
+            if lease is not None:
+                lease.cancellations.discard(cancellation)
+
+    def revoke_scope(self, *, workspace_id: str, app_id: str) -> int:
+        """Revoke matching tokens and cancel their already-open requests."""
+        with self._lock:
+            tokens = [
+                token
+                for token, lease in self._leases.items()
+                if lease.scope.workspace_id == workspace_id
+                and lease.scope.app_id == app_id
+            ]
+            leases = [self._leases.pop(token) for token in tokens]
+        for lease in leases:
+            for cancellation in lease.cancellations:
+                cancellation.set()
+        return len(leases)
+
+    def _revoke_token(self, token: str) -> None:
+        with self._lock:
+            lease = self._leases.pop(token, None)
+        if lease is not None:
+            for cancellation in lease.cancellations:
+                cancellation.set()
 
     def stop(self) -> None:
         with self._lock:
             if self._stopped:
                 return
             self._stopped = True
+            leases = list(self._leases.values())
             self._leases.clear()
+        for lease in leases:
+            for cancellation in lease.cancellations:
+                cancellation.set()
         if self._server is not None:
             self._server.shutdown()
             self._server.server_close()
@@ -187,3 +265,18 @@ def issue_model_access_lease(
         api=api,
         cli=cli,
     )
+
+
+def revoke_model_access_leases(
+    repository_root: Path,
+    *,
+    workspace_id: str,
+    app_id: str,
+) -> int:
+    """Revoke one quarantined app's model tokens without affecting other scopes."""
+    root = Path(repository_root).resolve(strict=True)
+    with _BROKERS_LOCK:
+        broker = _BROKERS.get(root)
+    if broker is None:
+        return 0
+    return broker.revoke_scope(workspace_id=workspace_id, app_id=app_id)

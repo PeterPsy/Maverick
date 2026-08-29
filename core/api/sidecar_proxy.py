@@ -40,6 +40,10 @@ from core.apps.sidecar_route_policy import (
     route_policy_mode,
     validate_asgi_raw_path,
 )
+from core.apps.sidecar_quarantine import (
+    SidecarQuarantineError,
+    require_sidecar_not_quarantined,
+)
 from core.apps.sidecar_execution import (
     ConfinedSidecarLaunch,
     MINIMAL_SIDECAR_ENV,
@@ -317,6 +321,7 @@ class HttpSidecarManager:
         self._running: dict[tuple[str, str, str, str], RunningSidecar] = {}
         self._starting: dict[tuple[str, str, str, str], SidecarStartup] = {}
         self._status: dict[tuple[str, str, str, str], dict[str, object]] = {}
+        self._quarantined: set[tuple[str, str]] = set()
 
     def ensure_running(
         self,
@@ -335,6 +340,10 @@ class HttpSidecarManager:
         existing: RunningSidecar | None = None
         owner = False
         with self._lock:
+            if (workspace_id, app_id) in self._quarantined:
+                raise SidecarQuarantineError(
+                    f"App `{app_id}` sidecars are quarantined pending operator recovery."
+                )
             running = self._running.get(key)
             if running is not None and running.process.poll() is None:
                 if not verify_existing_health:
@@ -639,6 +648,49 @@ class HttpSidecarManager:
                 pass
         return len(running_sidecars) + len(startups)
 
+    def quarantine_app(self, *, workspace_id: str, app_id: str) -> dict[str, object]:
+        """Revoke in-process authority first, then attempt bounded process cleanup."""
+        with self._lock:
+            self._quarantined.add((workspace_id, app_id))
+            keys = [key for key in self._running if key[:2] == (workspace_id, app_id)]
+            running_sidecars = [self._running.pop(key) for key in keys]
+            startup_keys = [
+                key for key in self._starting if key[:2] == (workspace_id, app_id)
+            ]
+            for key in startup_keys:
+                self._starting[key].cancel_event.set()
+            for key in {*keys, *startup_keys}:
+                self._status[key] = {
+                    "state": "quarantined",
+                    "phase": "core_quarantine",
+                    "updated_at": _utc_timestamp(),
+                    "last_failure": None,
+                }
+        stop_confirmed = not startup_keys
+        for running in running_sidecars:
+            try:
+                running.confined_launch.revoke_capabilities()
+            except Exception:
+                logger.exception("Quarantined sidecar capability cleanup did not complete.")
+                stop_confirmed = False
+            try:
+                self._cleanup_sidecar(running)
+            except Exception:
+                logger.exception("Quarantined sidecar process cleanup did not complete.")
+                stop_confirmed = False
+            else:
+                stop_confirmed = stop_confirmed and running.process.poll() is not None
+        return {
+            "proxy_revoked": True,
+            "writer_stop_confirmed": stop_confirmed,
+            "affected_service_count": len(running_sidecars) + len(startup_keys),
+        }
+
+    def release_quarantine(self, *, workspace_id: str, app_id: str) -> None:
+        """Open only the in-process gate; no sidecar is started implicitly."""
+        with self._lock:
+            self._quarantined.discard((workspace_id, app_id))
+
     def startup_status(
         self,
         *,
@@ -714,6 +766,19 @@ def stop_app_sidecars(*, workspace_id: str, app_id: str) -> int:
     if manager is not None:
         return manager.stop_app(workspace_id=workspace_id, app_id=app_id)
     return 0
+
+
+def quarantine_app_sidecars(*, workspace_id: str, app_id: str) -> dict[str, object]:
+    """Fence live proxy authority even when process termination cannot be proven."""
+    manager = _sidecar_manager()
+    return manager.quarantine_app(workspace_id=workspace_id, app_id=app_id)
+
+
+def release_app_sidecar_quarantine(*, workspace_id: str, app_id: str) -> None:
+    """Release the in-memory half of an explicitly cleared durable fence."""
+    manager = _SIDECAR_MANAGER
+    if manager is not None:
+        manager.release_quarantine(workspace_id=workspace_id, app_id=app_id)
 
 
 def app_sidecar_startup_status(
@@ -1056,6 +1121,17 @@ def resolve_authorized_sidecar(
     """Resolve one sidecar and actor without granting any route."""
     if user is None:
         return None, SidecarProxyError({"error": "authentication_required"}, "401 Unauthorized")
+    try:
+        require_sidecar_not_quarantined(
+            state.app_store,
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
+    except SidecarQuarantineError:
+        return None, SidecarProxyError(
+            {"error": "sidecar_quarantined"},
+            "503 Service Unavailable",
+        )
     try:
         binding, source_root, parsed = resolve_app_surface(
             state,

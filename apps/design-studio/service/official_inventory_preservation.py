@@ -7,15 +7,6 @@ from typing import Any
 from official_inventory_values import canonical_digest
 
 
-PROJECT_CONTENT_FIELDS = (
-    "name",
-    "skillId",
-    "designSystemId",
-    "pendingPrompt",
-    "metadata",
-    "customInstructions",
-    "appliedPluginSnapshotId",
-)
 VOLATILE_FIELDS = {
     "createdAt",
     "updatedAt",
@@ -56,8 +47,8 @@ def _record_claims(category: str, record: dict[str, Any]) -> list[str]:
     if content is None:
         return []
     return [
-        canonical_digest(["preserved-content-claim-v1", category, identity, path, value])
-        for path, value in _scalar_leaves(content)
+        canonical_digest(["preserved-content-claim-v2", category, identity, path, value])
+        for path, value in _claim_nodes(content)
     ]
 
 
@@ -68,11 +59,7 @@ def _protected_projection(
     if category == "projects":
         return (
             {"id": record.get("id")},
-            {
-                key: _clean(record[key])
-                for key in PROJECT_CONTENT_FIELDS
-                if key in record and record[key] is not None
-            },
+            _without(record, {"id", *VOLATILE_FIELDS}),
         )
     if category == "conversations":
         conversation = _dict(record.get("conversation"))
@@ -159,7 +146,7 @@ def _without(value: dict[str, Any], excluded: set[str]) -> dict[str, Any]:
     return {
         key: _clean(item)
         for key, item in value.items()
-        if key not in excluded and item is not None
+        if key not in excluded
     }
 
 
@@ -171,22 +158,18 @@ def _clean(value: Any) -> Any:
     return value
 
 
-def _scalar_leaves(value: Any, path: tuple[str, ...] = ()) -> list[tuple[list[str], Any]]:
+def _claim_nodes(value: Any, path: tuple[str, ...] = ()) -> list[tuple[list[str], Any]]:
     if isinstance(value, dict):
-        return [
-            leaf
-            for key in sorted(value)
-            for leaf in _scalar_leaves(value[key], (*path, key))
-        ]
+        claims = [(list(path), {"container": "object"})]
+        for key in sorted(value):
+            claims.extend(_claim_nodes(value[key], (*path, key)))
+        return claims
     if isinstance(value, list):
-        return [
-            leaf
-            for index, item in enumerate(value)
-            for leaf in _scalar_leaves(item, (*path, str(index)))
-        ]
-    if value is None:
-        return []
-    return [(list(path), value)]
+        claims = [(list(path), {"container": "array"})]
+        for index, item in enumerate(value):
+            claims.extend(_claim_nodes(item, (*path, str(index))))
+        return claims
+    return [(list(path), {"scalar": value})]
 
 
 def _dict(value: object) -> dict[str, Any]:

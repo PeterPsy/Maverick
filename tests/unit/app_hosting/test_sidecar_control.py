@@ -9,7 +9,8 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from core.api import sidecar_control
+from core.api import sidecar_control, sidecar_quarantine_control
+from core.apps.models import WorkspaceAppSidecarQuarantineRecord
 from core.apps.sidecar_restart import SidecarRestartError
 
 
@@ -96,6 +97,70 @@ class SidecarControlTests(unittest.TestCase):
             sidecar_id="opendesign",
             data_root="/data/design-studio",
         )
+
+    def test_quarantine_persists_before_revoking_every_live_capability(self) -> None:
+        calls: list[str] = []
+        browser_sessions = Mock()
+        browser_sessions.revoke_app.side_effect = lambda **_kwargs: calls.append("browser")
+        app_store = Mock()
+        state = SimpleNamespace(
+            repository_root=Path("/repo"),
+            app_store=app_store,
+            sidecar_browser_sessions=browser_sessions,
+        )
+        quarantine = WorkspaceAppSidecarQuarantineRecord(
+            quarantine_id="sidecar-quarantine-unit",
+            workspace_id="default",
+            app_id="design-studio",
+            reason="sidecar_recovery_required",
+            active=True,
+            created_at="2026-08-29T00:00:00Z",
+            updated_at="2026-08-29T00:00:00Z",
+        )
+
+        def persist(*_args, **_kwargs):
+            calls.append("persist")
+            return quarantine
+
+        with (
+            patch.object(
+                sidecar_quarantine_control,
+                "activate_sidecar_quarantine",
+                side_effect=persist,
+            ),
+            patch.object(
+                sidecar_quarantine_control,
+                "revoke_model_access_leases",
+                side_effect=lambda *_args, **_kwargs: calls.append("model") or 1,
+            ),
+            patch.object(
+                sidecar_quarantine_control,
+                "quarantine_app_sidecars",
+                side_effect=lambda **_kwargs: calls.append("proxy") or {
+                    "proxy_revoked": True,
+                    "writer_stop_confirmed": False,
+                    "affected_service_count": 1,
+                },
+            ),
+        ):
+            result = sidecar_control._dispatch(
+                {
+                    "schema_version": "1",
+                    "operation": "quarantine",
+                    "workspace_id": "default",
+                    "app_id": "design-studio",
+                },
+                state=state,
+                shutdown_controller=None,
+            )
+
+        self.assertEqual(calls, ["persist", "browser", "model", "proxy"])
+        self.assertTrue(result["quarantined"])
+        self.assertTrue(result["persistent"])
+        self.assertTrue(result["proxy_revoked"])
+        self.assertTrue(result["browser_sessions_revoked"])
+        self.assertTrue(result["model_access_revoked"])
+        self.assertFalse(result["writer_stop_confirmed"])
 
     def test_owner_authenticated_client_reaches_the_live_server_thread(self) -> None:
         with tempfile.TemporaryDirectory(prefix="sidecar-control-") as temporary:

@@ -61,11 +61,12 @@ remove a usable API profile.
 The API bridge validates the selected configured model, forwards the exact
 OpenDesign-authored JSON body, and streams the provider response. The CLI
 bridge forwards the native adapter's argv, cwd, stdin, stdout, stderr, exit,
-and cancellation semantics to a separately sandboxed Codex process. Before
-forwarding, the wrapper requires the selected CLI model to remain present in
-the workspace-scoped native profile. It does not create a Maverick runtime
-session and does not add Maverick prompts,
-memory, Chat history, personas, skills, tools, planning, or model substitution.
+and cancellation semantics to a separately sandboxed Codex process. Core—not
+the sidecar-writable native profile—requires exactly one `--model` on every
+non-diagnostic execution and authorizes it against the live catalog for the
+lease's workspace/app scope before the executor starts. It does not create a
+Maverick runtime session and does not add Maverick prompts, memory, Chat
+history, personas, skills, tools, planning, or model substitution.
 
 Profile and provider metadata is written only below OpenDesign's sandbox agent
 home. It contains the loopback endpoint and non-secret local handle, but no
@@ -105,8 +106,11 @@ redaction-safe identity and field-level user-content claims prove that every
 pre-migration project, conversation, ordered message, user-owned Design
 System, file, artifact, setting, and run reference survives. Functional
 project metadata such as entry files, media configuration, templates, and
-voice is protected; only explicitly enumerated volatile server fields are
-normalized away. New schema fields and updates, renames, or removals of
+voice is protected. Project fields are discovered dynamically from the public
+API rather than selected by a positive list; only explicitly enumerated
+volatile server fields are normalized away. Claims also encode object/array
+presence and type, so deleting an empty functional container is destructive.
+New schema fields and updates, renames, or removals of
 release-owned bundled Design Systems remain allowed. Identity loss or
 mutation/deletion of an existing user value fails before the active data or
 release selection changes. Only then does the updater atomically select the
@@ -114,9 +118,12 @@ migrated data and release descriptor and prewarm the candidate.
 
 Failure to start restores the complete prior data and release selection. If
 that previous writer cannot itself be restarted—or its prewarm call raises—the
-updater re-establishes quiescence and retries the synchronous Core stop. It
-records `recovery_required` only after a stop response or terminal sidecar
-status positively confirms that no writer remains active. A model or
+updater re-establishes quiescence and retries the synchronous Core stop. A
+confirmed stop permits `recovery_required` directly. If stop cannot be proven,
+the updater first requires Core to persist a workspace/app quarantine, revoke
+proxy and browser authority, revoke and cancel model-access leases, and fence
+all relaunches; only then is `recovery_required` recorded. The Core fence
+survives backend restart and requires explicit operator release. A model or
 delegation capability mismatch is recorded as degraded and never rolls back
 or stops native OpenDesign.
 

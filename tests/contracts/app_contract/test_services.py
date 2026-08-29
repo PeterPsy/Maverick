@@ -33,6 +33,17 @@ from core.apps.models import HttpSidecarBindSpec, HttpSidecarHealthSpec
 from core.apps.store import AppCollections, AppDocumentStore
 
 
+def _contract_store() -> AppDocumentStore:
+    collections = AppCollections(
+        app_sources=None,  # type: ignore[arg-type]
+        workspace_local_app_projects=None,  # type: ignore[arg-type]
+        workspace_app_bindings=None,  # type: ignore[arg-type]
+        workspace_app_sidecar_quarantines=None,  # type: ignore[arg-type]
+        workspace_app_dependency_selections=None,  # type: ignore[arg-type]
+    )
+    return AppDocumentStore(collections)
+
+
 class AppContractServiceTests(unittest.TestCase):
     def test_parse_contract_accepts_governed_http_sidecar(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -74,14 +85,7 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(json.loads((app_root / "app_contract.json").read_text(encoding="utf-8")), payload)
 
             persisted = asdict(loaded.contract)
-            restored = AppDocumentStore(
-                AppCollections(
-                    app_sources=None,  # type: ignore[arg-type]
-                    workspace_local_app_projects=None,  # type: ignore[arg-type]
-                    workspace_app_bindings=None,  # type: ignore[arg-type]
-                    workspace_app_dependency_selections=None,  # type: ignore[arg-type]
-                )
-            )._app_contract(persisted)
+            restored = _contract_store()._app_contract(persisted)
             restored_sidecar = restored.services.http_sidecars[0]
             self.assertEqual(
                 restored_sidecar.proxy.route_policy.pass_through[3].path_template,
@@ -151,14 +155,7 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertFalse(model_access.required)
             self.assertEqual(app_contract_payload(loaded)["services"]["http_sidecars"][0]["model_access"], payload["services"]["http_sidecars"][0]["model_access"])
 
-            restored = AppDocumentStore(
-                AppCollections(
-                    app_sources=None,  # type: ignore[arg-type]
-                    workspace_local_app_projects=None,  # type: ignore[arg-type]
-                    workspace_app_bindings=None,  # type: ignore[arg-type]
-                    workspace_app_dependency_selections=None,  # type: ignore[arg-type]
-                )
-            )._app_contract(asdict(loaded.contract))
+            restored = _contract_store()._app_contract(asdict(loaded.contract))
             self.assertEqual(restored.services.http_sidecars[0].model_access, model_access)
 
     def test_model_access_requires_model_proxy_and_cannot_block_native_startup(self) -> None:

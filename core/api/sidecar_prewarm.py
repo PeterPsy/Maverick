@@ -10,6 +10,10 @@ from typing import Literal
 
 from core.api.sidecar_proxy import ensure_sidecar_with_declared_auto_repair
 from core.apps.models import WorkspaceAppBindingRecord
+from core.apps.sidecar_quarantine import (
+    SidecarQuarantineError,
+    require_sidecar_not_quarantined,
+)
 from core.apps.surfaces import resolve_workspace_app_surface
 
 
@@ -115,6 +119,11 @@ def prewarm_workspace_app_sidecars(
     shutdown_controller=None,
 ) -> dict[str, object]:
     """Synchronously prewarm through the live manager for governed operator control."""
+    require_sidecar_not_quarantined(
+        state.app_store,
+        workspace_id=binding.workspace_id,
+        app_id=binding.app_id,
+    )
     arguments = _matching_prewarm_arguments(
         state,
         binding=binding,
@@ -154,6 +163,14 @@ def _matching_prewarm_arguments(
     shutdown_controller,
 ) -> tuple[dict[str, object], ...]:
     if binding.status != "enabled" or _is_shutting_down(shutdown_controller):
+        return ()
+    try:
+        require_sidecar_not_quarantined(
+            state.app_store,
+            workspace_id=binding.workspace_id,
+            app_id=binding.app_id,
+        )
+    except SidecarQuarantineError:
         return ()
     try:
         source_root, parsed = resolve_workspace_app_surface(

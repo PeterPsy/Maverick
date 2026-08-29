@@ -202,6 +202,16 @@ a workspace/app-scoped `maverick.app.runtime-changed` event. The capability
 does not know why a sidecar is restarting and must not contain app-specific
 artifact, migration, or protocol logic.
 
+Governed recovery also has a generic, owner-authenticated sidecar quarantine.
+Core persists the workspace/app fence in its control plane before attempting
+process cleanup. An active fence denies HTTP proxy and isolated-browser
+resolution, declarative prewarm, restart, relay reuse, and new model-access
+leases. Core revokes browser sessions and every matching model lease, including
+cancellation of requests already open at the broker, before making a bounded
+process-stop attempt. The fence survives Core restart and is removed only by an
+explicit recovery release; releasing it never starts a process implicitly.
+This quarantine contains no app-specific migration or data knowledge.
+
 The app-hosting domain should keep at least these concepts distinct:
 
 - app source or project material

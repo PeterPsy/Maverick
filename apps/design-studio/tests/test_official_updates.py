@@ -389,13 +389,15 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertIn("status", calls)
         self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
 
-    def test_recovery_marker_is_not_written_when_writer_stop_cannot_be_confirmed(self) -> None:
+    def test_unconfirmed_writer_is_durably_quarantined_before_recovery_marker(self) -> None:
         stop_calls = 0
         prewarm_calls = 0
+        quarantine_calls = 0
         writer_active = False
+        quarantined = False
 
         def control(operation: str, _workspace_id: str) -> dict:
-            nonlocal stop_calls, prewarm_calls, writer_active
+            nonlocal stop_calls, prewarm_calls, quarantine_calls, writer_active, quarantined
             if operation == "stop":
                 stop_calls += 1
                 if stop_calls == 1:
@@ -407,17 +409,36 @@ class OfficialUpdateTests(unittest.TestCase):
                 raise RuntimeError("Core could not stop the active writer")
             if operation == "status":
                 return {"services": [{"state": "ready"}]}
+            if operation == "quarantine":
+                quarantine_calls += 1
+                quarantined = True
+                if quarantine_calls == 1:
+                    raise RuntimeError("quarantine completed but its response was lost")
+                return {
+                    "quarantined": True,
+                    "persistent": True,
+                    "proxy_revoked": True,
+                    "browser_sessions_revoked": True,
+                    "model_access_revoked": True,
+                    "writer_stop_confirmed": False,
+                }
             prewarm_calls += 1
             writer_active = True
             if prewarm_calls == 1:
                 return {"ready": False}
             raise RuntimeError("prewarm started the writer but lost its response")
 
-        with self.assertRaisesRegex(OfficialUpdateError, "could not confirm.*writer stop"):
+        with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
             self._run(control)
 
         marker = json.loads((self.data_root / "official-update.json").read_text())
-        self.assertNotEqual(marker["phase"], "recovery_required")
+        self.assertEqual(marker["phase"], "recovery_required")
+        self.assertEqual(
+            marker["bridges"]["model_access"],
+            {"state": "disabled", "reason": "core_sidecar_quarantine"},
+        )
+        self.assertTrue(quarantined)
+        self.assertEqual(quarantine_calls, 2)
         self.assertTrue(writer_active)
         self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
 

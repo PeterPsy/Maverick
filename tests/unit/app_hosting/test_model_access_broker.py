@@ -170,8 +170,27 @@ class ModelAccessBrokerTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.data_root = self.root / "workspaces" / "default" / "data" / "design-studio"
         (self.data_root / "opendesign-native" / "project").mkdir(parents=True)
+        codex_executable = self.root / "codex"
+        codex_executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        codex_executable.chmod(0o555)
+        codex_home = self.root / "codex-home"
+        codex_home.mkdir()
+        (codex_home / "auth.json").write_text("{}\n", encoding="utf-8")
+        environment = patch.dict(
+            os.environ,
+            {
+                "MAVERICK_MODEL_ACCESS_CODEX_BIN": str(codex_executable),
+                "MAVERICK_MODEL_ACCESS_CODEX_HOME": str(codex_home),
+            },
+            clear=False,
+        )
+        environment.start()
+        self.addCleanup(environment.stop)
         self.state = SimpleNamespace(
             repository_root=self.root,
+            app_store=SimpleNamespace(
+                get_workspace_app_sidecar_quarantine=lambda **_kwargs: None,
+            ),
             provider_store=_ProviderStore(),
             secret_store=_SecretStore(),
             observability_store=None,
@@ -239,6 +258,24 @@ class ModelAccessBrokerTests(unittest.TestCase):
         self.assertTrue(transport.cancelled.wait(2))
         self.assertTrue(transport.closed.wait(2))
 
+    def test_scope_revocation_cancels_open_requests_and_invalidates_the_token(self) -> None:
+        broker, lease = self._start_broker()
+        cancellation = Event()
+        scope = broker.authorize(
+            f"Bearer {lease.token}",
+            cancellation=cancellation,
+        )
+
+        revoked = broker.revoke_scope(
+            workspace_id=scope.workspace_id,
+            app_id=scope.app_id,
+        )
+
+        self.assertEqual(revoked, 1)
+        self.assertTrue(cancellation.is_set())
+        with self.assertRaisesRegex(PermissionError, "invalid"):
+            broker.authorize(f"Bearer {lease.token}")
+
     def test_cli_protocol_preserves_native_adapter_argv_stdin_and_stream_channels(self) -> None:
         executor = _RecordingCliExecutor()
         broker, lease = self._start_broker(cli_executor=executor)
@@ -265,6 +302,28 @@ class ModelAccessBrokerTests(unittest.TestCase):
         self.assertEqual(frames[0], (b"O", b'{"type":"thread.started"}\n'))
         self.assertEqual(frames[1], (b"E", b"technical warning\n"))
         self.assertEqual(frames[2], (b"X", b'{"exit_code":0}'))
+
+    def test_core_rejects_cli_model_outside_the_scoped_catalog(self) -> None:
+        executor = _RecordingCliExecutor()
+        broker, lease = self._start_broker(cli_executor=executor)
+
+        response = _request(
+            broker.socket_path,
+            method="POST",
+            path="/maverick/v1/cli/codex/exec",
+            token=lease.token,
+            extra_headers={
+                "X-Maverick-Cli-Argv": _encoded_header(
+                    '["exec","--json","--model","gpt-other-workspace"]'
+                ),
+                "X-Maverick-Cli-Cwd": _encoded_header(
+                    "/data/opendesign-native/project"
+                ),
+            },
+        )
+
+        self.assertIn(b"HTTP/1.1 403 Forbidden", response)
+        self.assertEqual(executor.requests, [])
 
     def test_codex_adapter_validation_only_translates_scoped_paths(self) -> None:
         argv = (

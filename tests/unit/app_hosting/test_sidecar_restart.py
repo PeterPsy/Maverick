@@ -26,7 +26,10 @@ class SidecarRestartTests(unittest.TestCase):
             installed_at="2026-08-12T00:00:00Z",
             updated_at="2026-08-12T00:00:00Z",
         )
-        self.store = SimpleNamespace(get_workspace_app_binding=Mock(return_value=self.binding))
+        self.store = SimpleNamespace(
+            get_workspace_app_binding=Mock(return_value=self.binding),
+            get_workspace_app_sidecar_quarantine=Mock(return_value=None),
+        )
         self.sessions = SimpleNamespace(revoke_app=Mock())
         self.event_bus = SimpleNamespace(publish=Mock())
         self.sidecar = SimpleNamespace(service_id="opendesign")

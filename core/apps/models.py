@@ -580,6 +580,19 @@ class WorkspaceAppBindingRecord:
 
 
 @dataclass(frozen=True)
+class WorkspaceAppSidecarQuarantineRecord:
+    """Core-owned durable execution fence for one workspace app's sidecars."""
+
+    quarantine_id: str
+    workspace_id: str
+    app_id: str
+    reason: str
+    active: bool
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class WorkspaceAppDependencySelectionRecord:
     """Workspace-scoped provider selection for one consumer app requirement alias."""
 

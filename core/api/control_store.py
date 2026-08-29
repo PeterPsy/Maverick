@@ -41,6 +41,7 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "app_sources": (("source_id",),),
     "workspace_local_app_projects": (("workspace_id", "app_id"),),
     "workspace_app_bindings": (("workspace_id", "app_id"),),
+    "workspace_app_sidecar_quarantines": (("workspace_id", "app_id"),),
     "workspace_app_dependency_selections": (("workspace_id", "consumer_app_id", "alias"),),
     "provider_definitions": (("provider_id",),),
     "provider_credential_bindings": (("binding_id",),),
@@ -176,6 +177,10 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
         ControlPlaneCollectionSpec("workspace_local_app_projects", collections.apps.workspace_local_app_projects),
         ControlPlaneCollectionSpec("workspace_app_bindings", collections.apps.workspace_app_bindings),
         ControlPlaneCollectionSpec(
+            "workspace_app_sidecar_quarantines",
+            collections.apps.workspace_app_sidecar_quarantines,
+        ),
+        ControlPlaneCollectionSpec(
             "workspace_app_dependency_selections",
             collections.apps.workspace_app_dependency_selections,
         ),
@@ -257,6 +262,9 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             app_sources=JsonFileCollection(app_state_root / "app_sources.json"),
             workspace_local_app_projects=JsonFileCollection(app_state_root / "workspace_local_app_projects.json"),
             workspace_app_bindings=JsonFileCollection(app_state_root / "workspace_app_bindings.json"),
+            workspace_app_sidecar_quarantines=JsonFileCollection(
+                app_state_root / "workspace_app_sidecar_quarantines.json"
+            ),
             workspace_app_dependency_selections=JsonFileCollection(
                 app_state_root / "workspace_app_dependency_selections.json"
             ),
@@ -331,6 +339,9 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             app_sources=collection("app_sources"),
             workspace_local_app_projects=collection("workspace_local_app_projects"),
             workspace_app_bindings=collection("workspace_app_bindings"),
+            workspace_app_sidecar_quarantines=collection(
+                "workspace_app_sidecar_quarantines"
+            ),
             workspace_app_dependency_selections=collection("workspace_app_dependency_selections"),
         ),
         provider=ProviderCollections(

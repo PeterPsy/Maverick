@@ -65,14 +65,18 @@ class ConfinedSidecarLaunch:
 
     def cleanup(self) -> None:
         self.close_parent_fds()
-        if self.model_access_release is not None:
-            self.model_access_release()
-            self.model_access_release = None
-        self.relay_socket.unlink(missing_ok=True)
+        self.revoke_capabilities()
         try:
             self.relay_directory.rmdir()
         except OSError:
             pass
+
+    def revoke_capabilities(self) -> None:
+        """Make relay and model handles unusable before process cleanup completes."""
+        if self.model_access_release is not None:
+            self.model_access_release()
+            self.model_access_release = None
+        self.relay_socket.unlink(missing_ok=True)
 
 
 def sandbox_substitutions(

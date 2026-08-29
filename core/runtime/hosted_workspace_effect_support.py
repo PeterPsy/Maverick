@@ -23,6 +23,7 @@ MAX_HOSTED_EFFECT_TOTAL_BYTES = 4_194_304
 _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _DIRECTORY = getattr(os, "O_DIRECTORY", 0)
 _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
+_ROOT_ATIME_SENTINEL_OFFSET_NS = 86_400_000_000_000
 _OVERLAY_INFRASTRUCTURE_XATTRS = {
     f"{namespace}.{name}"
     for namespace in ("trusted.overlay", "user.overlay")
@@ -99,6 +100,21 @@ def create_hosted_effect_overlay_directories(
         # The upper root doubles as a metadata sentinel for mutations to `.`.
         # Its parent remains private even when the workspace root is 0755.
         os.fchmod(upper_fd, filesystem.path_mode(".", directory=True))
+        upper_stat = os.fstat(upper_fd)
+        # Keep ordinary relatime traversal from changing the sentinel. Any
+        # command-owned root atime mutation then remains distinguishable.
+        os.utime(
+            upper_fd,
+            ns=(
+                max(
+                    upper_stat.st_atime_ns,
+                    upper_stat.st_mtime_ns,
+                    upper_stat.st_ctime_ns,
+                )
+                + _ROOT_ATIME_SENTINEL_OFFSET_NS,
+                upper_stat.st_mtime_ns,
+            ),
+        )
         upper_metadata = capture_fd_metadata(
             upper_fd,
             unavailable_reason="workspace_effect_metadata_unavailable",
@@ -232,9 +248,14 @@ def _overlay_metadata(fd: int) -> ConfinedPathMetadata:
             raise RuntimeToolError("workspace_effect_type_unsupported")
         retained.append((name, value))
     return ConfinedPathMetadata(
+        device=metadata.device,
+        inode=metadata.inode,
+        file_type=metadata.file_type,
         mode=metadata.mode,
         uid=metadata.uid,
         gid=metadata.gid,
+        link_count=metadata.link_count,
+        size_bytes=metadata.size_bytes,
         atime_ns=metadata.atime_ns,
         mtime_ns=metadata.mtime_ns,
         ctime_ns=metadata.ctime_ns,

@@ -48,7 +48,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "18"
+HOSTED_AGENTIC_ADAPTER_VERSION = "19"
 
 
 def build_hosted_agentic_engine_adapter(

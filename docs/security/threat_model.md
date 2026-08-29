@@ -457,9 +457,14 @@ bounded diff against every declared mutable scope and the actual root-to-target
 instruction digest for each changed file. A nested-scope mismatch,
 instruction-file or unsupported effect, non-zero exit, timeout, or interrupt
 discards the overlay before it can affect workspace data. Newly-created
-directories are explicitly unsupported rather than silently omitted. Text
-creates/replacements commit as one retained-preimage transaction; a late race
-on any file rolls every earlier file back. Terminal `process.status` is a
+directories and hardlinked file effects are explicitly unsupported rather than
+silently materialized with different semantics. Text creates/replacements
+commit as one retained-preimage transaction; each descriptor-pinned pre-image
+is checked against its complete metadata/xattr snapshot immediately before
+exchange and against every preservable field afterward. A late content or
+metadata race on any file rolls every earlier file back. File timestamps
+accompanying content changes are applied exactly, while metadata-only
+directory/root effects fail closed. Terminal `process.status` is a
 mutating, non-retry-safe boundary because it performs that commit. The retained live-root
 descriptor is consumed during mount setup and is not inherited by target code,
 preventing a direct descriptor-relative write around the overlay. Broader

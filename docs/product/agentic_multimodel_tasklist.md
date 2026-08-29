@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v12 records six maintained transitive dependency contracts. The
+- [x] Manifest v13 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v22 / matrix
-  `2026-08-29-r22-p4-metadata-appref-closure-tcb12`
+- [x] Google and OpenRouter suite v23 / matrix
+  `2026-08-29-r23-p4-cow-fidelity-closure-tcb13`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -429,18 +429,23 @@ completion claim.
   an explicit set of mutable directory scopes, run in a private overlay, and
   validate every changed file against its actual instruction chain before a
   rollback-safe batch commit; invalid/failed/interrupted effects are discarded.
-- [x] Content-only shell/process replacement preserves and verifies existing
-  mode, ownership, ACL/xattrs. The complete upper scan includes the overlay root
-  and rejects unrepresented ordinary xattrs, explicit timestamps, ownership or
-  mode changes instead of reporting a lossy commit.
+- [x] Shell/process replacement preserves and verifies existing mode,
+  ownership, ACL/xattrs, keeps every pre-image descriptor open, and checks its
+  complete metadata/xattr snapshot immediately before exchange plus all
+  preservable fields afterward. A later-file metadata race therefore rolls the
+  full batch back while retaining the concurrent change.
+- [x] File content effects materialize exact upper atime/mtime, allowing
+  read-modify-write and read-after-write commands. Metadata-only directory/root
+  timestamps remain fail-closed, and new or existing hardlinks are rejected
+  instead of being split into independent files.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 18, semantic compiler revision 5, Full Workspace contract
-  `codex-baseline-v6`, context-compaction schema 3, TCB manifest v12, suite 22,
-  and matrix `2026-08-29-r22-p4-metadata-appref-closure-tcb12` create new
-  immutable Google revision 26 and OpenRouter revision 25 full-workspace
-  candidates. Historical revisions 25/24 are suspended, never promoted. No live
+- [x] Adapter 19, semantic compiler revision 5, Full Workspace contract
+  `codex-baseline-v7`, context-compaction schema 3, TCB manifest v13, suite 23,
+  and matrix `2026-08-29-r23-p4-cow-fidelity-closure-tcb13` create new immutable
+  Google revision 27 and OpenRouter revision 26 full-workspace candidates.
+  Historical revisions 26/25 are suspended, never promoted. No live
   probe, signed certificate, binding, remote activation, or Codex
   profile/artifact change is part of Phase 4.
 

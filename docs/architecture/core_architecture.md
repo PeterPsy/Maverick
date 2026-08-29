@@ -787,18 +787,26 @@ needs persistent command effects declares a bounded set of directory scopes and
 the exact `AGENTS.md` digest observed for each; the command runs against a
 private overlay. Core scans the complete bounded upper diff, rejects undeclared
 paths, instruction-file, non-UTF-8, deletion, symlink, newly-created directory,
-and unsupported metadata effects. Ordinary xattrs, explicit timestamps,
-ownership/mode changes, and mutations of the overlay root are compared against
-descriptor-confined live or pre-execution metadata and rejected rather than
-silently discarded. For a content-only replacement, the transaction clones and
+hardlink, and unsupported metadata effects. Ordinary xattrs, ownership/mode
+changes, metadata-only timestamps, and mutations of directory or overlay-root
+metadata are compared against descriptor-confined live or pre-execution
+metadata and rejected rather than silently discarded. File atime/mtime attached
+to an actual content create/replacement are representable and are materialized
+exactly, so read-modify-write editors and read-after-write tools retain their
+filesystem semantics. For a content replacement, the transaction clones and
 verifies the existing file's mode, ownership, ACL/xattr set; representable new
-file mode/ownership is applied explicitly. Core then re-resolves the
-instructions for every changed file. All UTF-8 creates/replacements are staged
-in one private transaction and committed with retained pre-images; a failure or late
-instruction race rolls the entire batch back in reverse order before any
-failure is reported. A root digest therefore cannot authorize a change governed
-by a nested `AGENTS.md`, and a rejected multi-file diff cannot leave an earlier
-file committed. Bubblewrap consumes the retained live-root descriptor while
+file mode/ownership is applied explicitly. Existing or upper-layer link counts
+greater than one are rejected so Core never silently splits an inode relation.
+Core then re-resolves the instructions for every changed file. All UTF-8
+creates/replacements are staged in one private transaction and committed with
+retained pre-images. Each pre-image remains descriptor-pinned, its complete
+metadata/xattr snapshot is checked immediately before exchange, and every
+retained preservable field is checked again afterward; a failure or late race
+rolls the entire batch back in reverse order before any failure is reported. A
+root digest therefore cannot authorize a change governed by a nested
+`AGENTS.md`, and a rejected multi-file diff cannot leave an earlier file
+committed or erase a concurrent metadata change. Bubblewrap consumes the
+retained live-root descriptor while
 constructing the read-only/overlay mount and closes it before target `exec`, so
 the command cannot bypass the mount with `openat(2)`. Managed processes retain
 the same private overlay until a successful terminal status. Terminal

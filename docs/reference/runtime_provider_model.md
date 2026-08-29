@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v12 also
+status, workspace binding, and upstream constraint. TCB manifest v13 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -135,10 +135,13 @@ Composite attachment metadata is independently admitted and restrictively
 joined with the referenced file classification; skills project exact
 `SKILL.md` content instead of unbound catalog metadata. Attachment-only input
 omits an empty prompt. Hosted shell/process text effects use a rollback-safe
-multi-file transaction, preserve existing mode/owner/ACL/xattrs, reject
-unrepresentable directory, timestamp, xattr, and overlay-root effects, and
-treat terminal process polling as mutating/non-retry-safe because it commits
-the overlay. App references use an exact server-materialized resource
+multi-file transaction, preserve existing mode/owner/ACL/xattrs, carry exact
+file atime/mtime for content effects, and retain a descriptor-pinned complete
+pre-image metadata snapshot across exchange. Metadata-only directory/root
+timestamps and xattrs are rejected, as are upper or existing hardlinks that the
+text transaction cannot reproduce. Terminal process polling is
+mutating/non-retry-safe because it commits the overlay. App references use an
+exact server-materialized resource
 observation resolved by production `PlatformState` against the workspace
 classification store; metadata classification alone cannot make them public.
 

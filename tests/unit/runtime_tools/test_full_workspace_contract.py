@@ -413,6 +413,60 @@ class FullWorkspaceContractTest(unittest.TestCase):
         self.assertEqual(existing.read_text(encoding="utf-8"), "original")
         self.assertEqual(agents.read_text(encoding="utf-8"), "Raced.\n")
 
+    def test_shell_overlay_rolls_back_concurrent_later_file_metadata(self) -> None:
+        (self.workspace / "AGENTS.md").write_text(
+            "Metadata race rules.\n",
+            encoding="utf-8",
+        )
+        first = self.workspace / "a.txt"
+        second = self.workspace / "b.txt"
+        first.write_text("first-old", encoding="utf-8")
+        second.write_text("second-old", encoding="utf-8")
+        try:
+            os.setxattr(second, "user.maverick.race-probe", b"probe")
+            os.removexattr(second, "user.maverick.race-probe")
+        except OSError as error:
+            self.skipTest(f"filesystem xattrs unavailable: {error}")
+
+        def race(stage, path):
+            if stage == "write_committed" and path == "a.txt":
+                os.setxattr(second, "user.maverick.concurrent", b"retained")
+
+        capabilities = self._capabilities(race_hook=race)
+        scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "filesystem_resource_changed",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/bin/sh",
+                        "-c",
+                        "printf first-new > a.txt; printf second-new > b.txt",
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": ".",
+                            "instruction_scope_digest": scope_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+
+        self.assertEqual(first.read_text(encoding="utf-8"), "first-old")
+        self.assertEqual(second.read_text(encoding="utf-8"), "second-old")
+        self.assertEqual(
+            os.getxattr(second, "user.maverick.concurrent"),
+            b"retained",
+        )
+
     def test_shell_and_process_preserve_existing_file_metadata(self) -> None:
         agents = self.workspace / "AGENTS.md"
         agents.write_text("Metadata rules.\n", encoding="utf-8")
@@ -492,6 +546,209 @@ class FullWorkspaceContractTest(unittest.TestCase):
                     os.getxattr(target, "user.maverick.fixture"),
                     b"retained",
                 )
+
+    def test_shell_overlay_supports_read_modify_write_and_read_after_write(self) -> None:
+        (self.workspace / "AGENTS.md").write_text(
+            "Read-modify-write rules.\n",
+            encoding="utf-8",
+        )
+        sed_target = self.workspace / "sed-existing.txt"
+        read_target = self.workspace / "read-after-write.txt"
+        sed_target.write_text("old value\n", encoding="utf-8")
+        read_target.write_text("old\n", encoding="utf-8")
+        old_atime_ns = time.time_ns() - 86_400_000_000_000
+        os.utime(
+            read_target,
+            ns=(old_atime_ns, read_target.stat().st_mtime_ns),
+        )
+        capabilities = self._capabilities()
+        scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+
+        sed_result = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": [
+                    "/bin/sed",
+                    "-i",
+                    "s/old/new/",
+                    "sed-existing.txt",
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": ".",
+                        "instruction_scope_digest": scope_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        self.assertTrue(sed_result["workspace_effects_committed"])
+        self.assertEqual(sed_target.read_text(encoding="utf-8"), "new value\n")
+
+        read_result = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    (
+                        "printf new > read-after-write.txt; "
+                        "cat read-after-write.txt >/dev/null"
+                    ),
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": ".",
+                        "instruction_scope_digest": scope_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        self.assertTrue(read_result["workspace_effects_committed"])
+        committed = read_target.stat()
+        self.assertGreater(committed.st_atime_ns, old_atime_ns)
+        self.assertEqual(read_target.read_text(encoding="utf-8"), "new")
+
+    def test_shell_overlay_materializes_file_times_and_rejects_root_atime(self) -> None:
+        (self.workspace / "AGENTS.md").write_text(
+            "Timestamp rules.\n",
+            encoding="utf-8",
+        )
+        target = self.workspace / "timestamp.txt"
+        target.write_text("old", encoding="utf-8")
+        requested_mtime_ns = time.time_ns() + 1_500_000_000
+        capabilities = self._capabilities()
+        scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+
+        result = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": [
+                    "/usr/bin/python3",
+                    "-c",
+                    (
+                        "import os; "
+                        "p='timestamp.txt'; "
+                        "open(p, 'w', encoding='utf-8').write('new'); "
+                        "s=os.stat(p); "
+                        f"os.utime(p, ns=(s.st_atime_ns, {requested_mtime_ns}))"
+                    ),
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": ".",
+                        "instruction_scope_digest": scope_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        self.assertTrue(result["workspace_effects_committed"])
+        self.assertEqual(target.read_text(encoding="utf-8"), "new")
+        self.assertEqual(target.stat().st_mtime_ns, requested_mtime_ns)
+
+        requested_root_atime_ns = 946_684_800_000_000_000
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_metadata_unsupported",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/usr/bin/python3",
+                        "-c",
+                        (
+                            "import os; s=os.stat('.'); "
+                            f"os.utime('.', ns=({requested_root_atime_ns}, "
+                            "s.st_mtime_ns))"
+                        ),
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": ".",
+                            "instruction_scope_digest": scope_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertNotEqual(
+            self.workspace.stat().st_atime_ns,
+            requested_root_atime_ns,
+        )
+
+    def test_shell_overlay_rejects_new_and_existing_hardlinks(self) -> None:
+        (self.workspace / "AGENTS.md").write_text(
+            "Hardlink rules.\n",
+            encoding="utf-8",
+        )
+        capabilities = self._capabilities()
+        scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_hardlink_unsupported",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/bin/sh",
+                        "-c",
+                        "printf x > new-a; ln new-a new-b",
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": ".",
+                            "instruction_scope_digest": scope_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertFalse((self.workspace / "new-a").exists())
+        self.assertFalse((self.workspace / "new-b").exists())
+
+        existing_a = self.workspace / "existing-a"
+        existing_b = self.workspace / "existing-b"
+        existing_a.write_text("old", encoding="utf-8")
+        os.link(existing_a, existing_b)
+        original_inode = existing_a.stat().st_ino
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_hardlink_unsupported",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": ["/bin/sh", "-c", "printf new > existing-a"],
+                    "mutation_scopes": [
+                        {
+                            "path": ".",
+                            "instruction_scope_digest": scope_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertEqual(existing_a.read_text(encoding="utf-8"), "old")
+        self.assertEqual(existing_b.read_text(encoding="utf-8"), "old")
+        self.assertEqual(existing_a.stat().st_ino, original_inode)
+        self.assertEqual(existing_b.stat().st_ino, original_inode)
 
     def test_process_status_is_mutating_and_batch_failure_is_not_retry_safe(self) -> None:
         agents = self.workspace / "AGENTS.md"

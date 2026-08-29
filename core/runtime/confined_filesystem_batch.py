@@ -20,6 +20,8 @@ from core.runtime.confined_filesystem_metadata import (
     apply_preserved_file_metadata,
     capture_fd_metadata,
     materialized_metadata_matches,
+    metadata_snapshot_matches,
+    renamed_preimage_metadata_matches,
 )
 from core.runtime.confined_filesystem_mutation_support import (
     rename_exchange,
@@ -46,6 +48,8 @@ class ConfinedTextBatchWrite:
     create_mode: int = 0o600
     create_uid: int | None = None
     create_gid: int | None = None
+    target_atime_ns: int | None = None
+    target_mtime_ns: int | None = None
 
 
 @dataclass
@@ -58,6 +62,8 @@ class _StagedWrite:
     payload: bytes
     previous_stat: os.stat_result | None
     previous_observation: FilesystemResourceObservation | None
+    previous_fd: int | None
+    previous_metadata: ConfinedPathMetadata | None
     expected_metadata: ConfinedPathMetadata
     committed_stat: os.stat_result | None = None
     committed: bool = False
@@ -104,6 +110,11 @@ def write_confined_text_batch(
         raise RuntimeToolError("filesystem_write_failed") from error
     finally:
         for item in reversed(staged):
+            if item.previous_fd is not None:
+                try:
+                    os.close(item.previous_fd)
+                except OSError:
+                    pass
             try:
                 os.close(item.temporary_fd)
             except OSError:
@@ -136,6 +147,7 @@ def _stage_write(
     chain = filesystem._open_chain(components[:-1])
     temporary_name = f"write-{secrets.token_hex(16)}"
     temporary_fd: int | None = None
+    previous_fd: int | None = None
     try:
         previous_stat = _lstat_optional(chain.leaf_fd, components[-1])
         previous_observation = None
@@ -168,7 +180,7 @@ def _stage_write(
         )
         payload = request.content.encode("utf-8")
         _write_all(temporary_fd, payload)
-        expected_metadata = _prepare_staged_metadata(
+        expected_metadata, previous_fd, previous_metadata = _prepare_staged_metadata(
             filesystem,
             chain,
             components[-1],
@@ -190,9 +202,13 @@ def _stage_write(
             payload=payload,
             previous_stat=previous_stat,
             previous_observation=previous_observation,
+            previous_fd=previous_fd,
+            previous_metadata=previous_metadata,
             expected_metadata=expected_metadata,
         )
     except Exception:
+        if previous_fd is not None:
+            os.close(previous_fd)
         if temporary_fd is not None:
             os.close(temporary_fd)
         try:
@@ -210,12 +226,7 @@ def _verify_staged(
     for item in staged:
         item.request.mutation_guard.verify_before()
         filesystem._assert_chain(item.chain)  # type: ignore[arg-type]
-        _revalidate_original(
-            filesystem,
-            item.chain,
-            item.components[-1],
-            item.previous_stat,
-        )
+        _verify_original_snapshot(filesystem, item)
 
 
 def _commit_staged(
@@ -225,6 +236,7 @@ def _commit_staged(
 ) -> None:
     parent_fd = item.chain.leaf_fd  # type: ignore[attr-defined]
     final_name = item.components[-1]
+    _verify_original_snapshot(filesystem, item)
     if item.previous_stat is None:
         rename_noreplace(
             transaction_fd,
@@ -254,6 +266,22 @@ def _commit_staged(
             item.previous_stat,
         ):
             raise RuntimeToolError("filesystem_resource_changed")
+        if item.previous_fd is None or item.previous_metadata is None:
+            raise RuntimeToolError("filesystem_resource_changed")
+        # RENAME_EXCHANGE changes inode ctime itself. The descriptor snapshot
+        # was compared exactly immediately before the syscall; after it, keep
+        # the same retained inode and compare every preservable field/xattr.
+        retained_metadata = capture_fd_metadata(item.previous_fd)
+        if not renamed_preimage_metadata_matches(
+            item.previous_metadata,
+            retained_metadata,
+        ):
+            raise RuntimeToolError("filesystem_resource_changed")
+        filesystem._assert_final_link(
+            transaction_fd,
+            item.temporary_name,
+            os.fstat(item.previous_fd),
+        )
     os.fsync(parent_fd)
     os.fsync(transaction_fd)
     filesystem._hook("write_committed", item.request.path)
@@ -448,8 +476,11 @@ def _same_exchange_version(left: os.stat_result, right: os.stat_result) -> bool:
             "st_dev",
             "st_ino",
             "st_mode",
+            "st_uid",
+            "st_gid",
             "st_nlink",
             "st_size",
+            "st_atime_ns",
             "st_mtime_ns",
         )
     )
@@ -462,13 +493,27 @@ def _prepare_staged_metadata(
     previous_stat: os.stat_result | None,
     temporary_fd: int,
     request: ConfinedTextBatchWrite,
-) -> ConfinedPathMetadata:
+) -> tuple[ConfinedPathMetadata, int | None, ConfinedPathMetadata | None]:
     if previous_stat is None:
-        return apply_new_file_metadata(
-            temporary_fd,
-            mode=request.create_mode,
-            uid=(os.geteuid() if request.create_uid is None else request.create_uid),
-            gid=(os.getegid() if request.create_gid is None else request.create_gid),
+        return (
+            apply_new_file_metadata(
+                temporary_fd,
+                mode=request.create_mode,
+                uid=(
+                    os.geteuid()
+                    if request.create_uid is None
+                    else request.create_uid
+                ),
+                gid=(
+                    os.getegid()
+                    if request.create_gid is None
+                    else request.create_gid
+                ),
+                target_atime_ns=request.target_atime_ns,
+                target_mtime_ns=request.target_mtime_ns,
+            ),
+            None,
+            None,
         )
     original_fd: int | None = None
     try:
@@ -490,14 +535,51 @@ def _prepare_staged_metadata(
             os.fstat(original_fd),
             "filesystem_resource_changed",
         )
-        return apply_preserved_file_metadata(temporary_fd, metadata)
+        staged_metadata = apply_preserved_file_metadata(
+            temporary_fd,
+            metadata,
+            target_atime_ns=request.target_atime_ns,
+            target_mtime_ns=request.target_mtime_ns,
+        )
+        return staged_metadata, original_fd, metadata
     except RuntimeToolError:
-        raise
-    except OSError as error:
-        raise RuntimeToolError("filesystem_metadata_preservation_failed") from error
-    finally:
         if original_fd is not None:
             os.close(original_fd)
+        raise
+    except OSError as error:
+        if original_fd is not None:
+            os.close(original_fd)
+        raise RuntimeToolError("filesystem_metadata_preservation_failed") from error
+
+
+def _verify_original_snapshot(
+    filesystem: ConfinedWorkspaceFilesystem,
+    item: _StagedWrite,
+) -> None:
+    _revalidate_original(
+        filesystem,
+        item.chain,
+        item.components[-1],
+        item.previous_stat,
+    )
+    if item.previous_stat is None:
+        return
+    if item.previous_fd is None or item.previous_metadata is None:
+        raise RuntimeToolError("filesystem_resource_changed")
+    current = os.fstat(item.previous_fd)
+    filesystem._assert_same_version(
+        item.previous_stat,
+        current,
+        "filesystem_resource_changed",
+    )
+    filesystem._assert_final_link(
+        item.chain.leaf_fd,  # type: ignore[attr-defined]
+        item.components[-1],
+        current,
+    )
+    observed = capture_fd_metadata(item.previous_fd)
+    if not metadata_snapshot_matches(item.previous_metadata, observed):
+        raise RuntimeToolError("filesystem_resource_changed")
 
 
 def _write_all(fd: int, payload: bytes) -> None:

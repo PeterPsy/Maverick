@@ -66,19 +66,23 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v11 additionally makes the known transitive boundary executable through
+Manifest v13 makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 18 places all provider-bound context in semantic-envelope schema
-v1/compiler revision 5, materializes scoped instructions through the confined
-filesystem, requires commit-bound instruction digests for direct mutations, and
-uses rollback-safe batch COW overlays for shell/process effects. Terminal
-process polling is mutating/non-retry-safe. Content-only replacements preserve
-mode, ownership, ACL/xattrs; ordinary xattr, explicit timestamp, directory, and
-overlay-root metadata effects are rejected. Transient input requires
+Hosted adapter 19 and Full Workspace `codex-baseline-v7` are bound by TCB
+manifest v13. The adapter places all provider-bound context in semantic-envelope
+schema v1/compiler revision 5, materializes scoped instructions through the
+confined filesystem, requires commit-bound instruction digests for direct
+mutations, and uses rollback-safe batch COW overlays for shell/process effects.
+Terminal process polling is mutating/non-retry-safe. Content replacements preserve mode,
+ownership, ACL/xattrs and carry exact file atime/mtime. Every pre-image remains
+descriptor-pinned and is checked against its complete metadata/xattr snapshot,
+so a later metadata race causes full rollback without losing the concurrent
+change. Metadata-only directory/root effects and hardlinks are rejected rather
+than committed with altered semantics. Transient input requires
 exact server-owned admission classification and non-resource results remain
 unclassified without concrete taint evidence. Composite attachment metadata is
 classified separately and restrictively joined with the file observation;
@@ -119,9 +123,10 @@ reserve, pairing-safe semantic compaction, bounded result artifacts,
 UTF-8/base64 attachment references, request-scoped OpenRouter authority, and
 exact live provider preflight before egress commit. The fixture suite also
 proves attachment-only admission, composite-taint denial,
-multi-file rollback after a late instruction race, unsupported-directory
-rejection, metadata preservation/rejection, production app-reference
-classification, and non-retry-safe terminal process commit. The operator
+multi-file rollback after late instruction or metadata races,
+unsupported-directory/hardlink rejection, read-modify-write timestamp fidelity,
+production app-reference classification, and non-retry-safe terminal process
+commit. The operator
 runbook documents canary,
 observation, incident
 recovery, and control-plane-first rollback. These controls do not close the

@@ -644,21 +644,25 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 26
-and OpenRouter revision 25, both bound to
-`maverick-hosted-tool-loop==18`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 27
+and OpenRouter revision 26, both bound to
+`maverick-hosted-tool-loop==19`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
 These adversarial-review definitions are new full-workspace claims under
-`codex-baseline-v6`, not mutations of earlier candidates. Adapter 18, compiler
-revision 5, context-compaction schema 3, suite 22, and TCB manifest v12 retain
-the exact composite-classification and rollback-safe multi-file invariants,
-preserve existing file mode/ownership/xattrs, reject unrepresented xattr,
-timestamp, directory, and overlay-root effects, and wire exact app-reference
-resource classification in production. They retain the prior compaction,
-attachment, OpenRouter projection, and live Google-preflight closure. They
+`codex-baseline-v7`, not mutations of earlier candidates. Adapter 19, recipe
+revision 6, context-compaction schema 3, suite 23, and TCB manifest v13 retain
+the exact composite-classification and rollback-safe multi-file invariants.
+Every existing pre-image stays descriptor-pinned across exchange and is checked
+against its complete metadata/xattr snapshot, so a later-file metadata race
+rolls back earlier writes without deleting the concurrent change. Content
+effects carry exact atime/mtime and therefore admit ordinary read-modify-write;
+directory/root-only metadata and hardlink effects that cannot be reproduced are
+rejected. The definitions retain production exact-resource app-reference
+classification, prior compaction, attachment, OpenRouter projection, and live
+Google-preflight closure. They
 remain uncertified, unbound, unavailable and independently blocked by Phase-0
 admission; implementation completion is not provider evidence or release
 approval.

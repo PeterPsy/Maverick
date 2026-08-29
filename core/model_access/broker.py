@@ -7,12 +7,13 @@ import logging
 from pathlib import Path
 import secrets
 import stat
-from threading import Event, Lock, Thread
+from threading import Lock, Thread
 from typing import Iterable
 
 from core.apps.sidecar_quarantine import require_sidecar_not_quarantined
 from core.model_access.api_proxy import ModelApiProxy
 from core.model_access.catalog import build_model_access_catalog
+from core.model_access.cancellation import CancellationSignal
 from core.model_access.cli_proxy import CodexCliExecutor
 from core.model_access.http_server import ThreadingUnixModelAccessServer
 from core.model_access.models import (
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class _LeaseRecord:
     scope: ModelAccessScope
-    cancellations: set[Event] = field(default_factory=set)
+    cancellations: set[CancellationSignal] = field(default_factory=set)
 
 
 class ModelAccessBroker:
@@ -135,7 +136,7 @@ class ModelAccessBroker:
         self,
         authorization: str,
         *,
-        cancellation: Event | None = None,
+        cancellation: CancellationSignal | None = None,
     ) -> ModelAccessScope:
         prefix = "Bearer "
         if not authorization.startswith(prefix):
@@ -162,7 +163,7 @@ class ModelAccessBroker:
         self,
         authorization: str,
         *,
-        cancellation: Event | None,
+        cancellation: CancellationSignal | None,
     ) -> None:
         if cancellation is None or not authorization.startswith("Bearer "):
             return

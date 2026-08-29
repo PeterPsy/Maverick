@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from threading import Event
 from typing import Callable, Iterable, Literal, Protocol
+
+from core.model_access.cancellation import CancellationSignal
 
 
 @dataclass(frozen=True)
@@ -89,7 +90,7 @@ class ModelApiTransport(Protocol):
         provider_id: str,
         body: bytes,
         credential: str,
-        cancellation: Event,
+        cancellation: CancellationSignal,
     ) -> ProviderHttpResponse: ...
 
 
@@ -112,5 +113,5 @@ class ModelCliExecutor(Protocol):
         argv: tuple[str, ...],
         cwd: str,
         stdin: bytes,
-        cancellation: Event,
+        cancellation: CancellationSignal,
     ) -> Iterable[CliFrame]: ...

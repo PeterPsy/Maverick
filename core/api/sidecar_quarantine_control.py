@@ -32,30 +32,55 @@ def quarantine_workspace_app_sidecars(
         app_id=app_id,
         reason="sidecar_recovery_required",
     )
-    state.sidecar_browser_sessions.revoke_app(
-        workspace_id=workspace_id,
-        app_id=app_id,
-    )
-    revoked_model_lease_count = revoke_model_access_leases(
-        state.repository_root,
-        workspace_id=workspace_id,
-        app_id=app_id,
-    )
-    process = quarantine_app_sidecars(
-        workspace_id=workspace_id,
-        app_id=app_id,
-    )
+    errors: list[str] = []
+    browser_sessions_revoked = False
+    try:
+        state.sidecar_browser_sessions.revoke_app(
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
+    except Exception:
+        errors.append("browser_sessions")
+    else:
+        browser_sessions_revoked = True
+
+    revoked_model_lease_count = 0
+    model_access_revoked = False
+    try:
+        revoked_model_lease_count = revoke_model_access_leases(
+            state.repository_root,
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
+    except Exception:
+        errors.append("model_access")
+    else:
+        model_access_revoked = True
+
+    process: dict[str, object] = {}
+    try:
+        process = quarantine_app_sidecars(
+            workspace_id=workspace_id,
+            app_id=app_id,
+        )
+    except Exception:
+        errors.append("proxy")
+    else:
+        if process.get("proxy_revoked") is not True:
+            errors.append("proxy")
+    proxy_revoked = process.get("proxy_revoked") is True
     return {
         "ready": False,
         "quarantined": True,
         "persistent": True,
         "quarantine_id": quarantine.quarantine_id,
-        "proxy_revoked": process.get("proxy_revoked") is True,
-        "browser_sessions_revoked": True,
-        "model_access_revoked": True,
+        "proxy_revoked": proxy_revoked,
+        "browser_sessions_revoked": browser_sessions_revoked,
+        "model_access_revoked": model_access_revoked,
         "revoked_model_lease_count": revoked_model_lease_count,
         "writer_stop_confirmed": process.get("writer_stop_confirmed") is True,
         "affected_service_count": int(process.get("affected_service_count") or 0),
+        "revocation_errors": errors,
     }
 
 

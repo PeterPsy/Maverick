@@ -31,7 +31,8 @@ official lock, stops only the managed Design Studio writer, creates an
 immutable backup, runs upstream migration and public inventory on copies,
 requires the migrated identity multiset and field-level user-content claims to
 preserve every baseline user-owned item and value—including every dynamically
-discovered public project field and empty object/array presence—while
+discovered public project field from the separately inventoried list and
+detail representations, plus empty object/array presence—while
 permitting additive schema, explicitly volatile server fields, and
 release-owned built-in Design System evolution, atomically swaps data and
 selection, and restores both if native readiness

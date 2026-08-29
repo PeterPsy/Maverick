@@ -50,10 +50,23 @@ def stable_project(project: dict[str, Any]) -> dict[str, Any]:
     list would silently discard those new values before the migration guard
     sees them, so normalization is intentionally denylist-based.
     """
+    return _stable_project(project, excluded=PROJECT_VOLATILE_FIELDS)
+
+
+def stable_project_list(project: dict[str, Any]) -> dict[str, Any]:
+    """Retain the distinct list representation minus explicit server run state."""
+    return _stable_project(project, excluded=PROJECT_LIST_SERVER_FIELDS)
+
+
+def _stable_project(
+    project: dict[str, Any],
+    *,
+    excluded: set[str],
+) -> dict[str, Any]:
     return {
         str(key): stable_value(value)
         for key, value in sorted(project.items())
-        if key not in PROJECT_VOLATILE_FIELDS
+        if key not in excluded
     }
 
 
@@ -97,6 +110,7 @@ PROJECT_VOLATILE_FIELDS = {
     "resolvedDir",
     "eventsLogPath",
 }
+PROJECT_LIST_SERVER_FIELDS = {*PROJECT_VOLATILE_FIELDS, "status"}
 
 
 def object_list(payload: dict[str, Any], key: str) -> list[dict[str, Any]]:

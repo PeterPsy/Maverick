@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import BoundedSemaphore
 from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest.mock import Mock
 
 from core.api.control_store import ControlStoreSettings, build_control_plane_collections
-from core.api.sidecar_proxy import HttpSidecarManager, resolve_authorized_sidecar
+from core.api.sidecar_proxy import (
+    HttpSidecarManager,
+    RunningSidecar,
+    resolve_authorized_sidecar,
+)
+from core.apps.sidecar_execution import ConfinedSidecarLaunch
 from core.apps.sidecar_quarantine import (
     SidecarQuarantineError,
     activate_sidecar_quarantine,
@@ -19,7 +26,73 @@ from core.apps.store import AppDocumentStore
 from core.model_access.broker import ModelAccessBroker
 
 
+def _confined_launch(
+    relay_directory: Path,
+    relay_socket: Path,
+    *,
+    model_access_release=None,
+) -> ConfinedSidecarLaunch:
+    return ConfinedSidecarLaunch(
+        command=[],
+        env={},
+        relay_directory=relay_directory,
+        relay_socket=relay_socket,
+        relay_capability="capability",
+        secret_fd=-1,
+        passwd_fd=-1,
+        model_access_release=model_access_release,
+    )
+
+
 class SidecarQuarantineTests(unittest.TestCase):
+    def test_capability_revocation_unlinks_relay_even_when_model_release_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            relay_directory = Path(temporary) / "relay"
+            relay_directory.mkdir()
+            relay_socket = relay_directory / "r.sock"
+            relay_socket.touch()
+            launch = _confined_launch(
+                relay_directory,
+                relay_socket,
+                model_access_release=Mock(side_effect=RuntimeError("release failed")),
+            )
+
+            result = launch.revoke_capabilities()
+
+            self.assertFalse(result.model_access_revoked)
+            self.assertTrue(result.relay_revoked)
+            self.assertFalse(relay_socket.exists())
+
+    def test_proxy_revocation_evidence_is_false_while_relay_path_remains(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            relay_directory = Path(temporary) / "relay"
+            relay_directory.mkdir()
+            relay_socket = relay_directory / "r.sock"
+            relay_socket.mkdir()
+            launch = _confined_launch(relay_directory, relay_socket)
+            process = Mock()
+            process.poll.return_value = 0
+            running = RunningSidecar(
+                process=process,
+                host="127.0.0.1",
+                port=1,
+                token="technical",
+                instance_id="instance",
+                confined_launch=launch,
+                request_slots=BoundedSemaphore(1),
+            )
+            manager = HttpSidecarManager()
+            manager._running[("default", "design-studio", "opendesign", "/data")] = running
+
+            result = manager.quarantine_app(
+                workspace_id="default",
+                app_id="design-studio",
+            )
+
+            self.assertFalse(result["proxy_revoked"])
+            self.assertTrue(result["writer_stop_confirmed"])
+            self.assertTrue(relay_socket.exists())
+
     def test_quarantine_survives_a_new_core_store_instance_until_explicit_release(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             settings = ControlStoreSettings.from_environment(

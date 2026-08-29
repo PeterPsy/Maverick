@@ -978,6 +978,15 @@ session or grants access to Maverick memory, Chat history, prompts, personas,
 skills, or tools. The sidecar may receive the technical socket and capability,
 but never a raw provider credential.
 
+Every authorized model request receives a Core-owned cancellation fence. The
+fence linearizes revocation against the external API submission or CLI spawn:
+if revocation wins, the provider transport is never opened and the process is
+never started; if submission wins, Core registers the connection or process
+group for cancellation before it can remain live. Revocation then shuts down
+the connection or signals the process immediately rather than waiting for a
+response-read loop. Transport adapters may not defer the first cancellation
+check until response streaming.
+
 CLI execution authorization belongs to the Core broker, not to configuration
 under the sidecar-writable app data root. Every non-diagnostic invocation must
 select exactly one model explicitly, and Core must match that model and
@@ -1072,7 +1081,11 @@ and active broker requests, and live relay/proxy authority before attempting
 process termination. Proxy resolution, browser launch, prewarm, restart, and
 model capability issue/authorization remain denied across Core restart until
 an explicit release clears both the durable and in-process gates. Quarantine
-does not infer app migration state and release does not prewarm automatically.
+attempts browser, model, and relay/process revocation independently after the
+durable write, so one cleanup failure cannot skip another boundary. Its public
+evidence reports each observed result separately; proxy revocation is true
+only when every affected relay path is confirmed absent. Quarantine does not
+infer app migration state and release does not prewarm automatically.
 
 App-owned backend, CLI, MCP, and reference entrypoints do not receive the
 sidecar listener, technical token, or sidecar filesystem. A sidecar may declare

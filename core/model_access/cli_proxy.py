@@ -9,10 +9,16 @@ import selectors
 import signal
 import subprocess
 import tempfile
-from threading import Event, Thread
+from threading import Thread
 from typing import Iterable
 
 from core.model_access.catalog import resolve_codex_executable
+from core.model_access.cancellation import (
+    CancellationSignal,
+    raise_if_cancelled,
+    register_cleanup,
+    submission_fence,
+)
 from core.model_access.cli_sandbox import (
     codex_sandbox_command as _codex_sandbox_command,
     is_opendesign_connection_probe as _is_opendesign_connection_probe,
@@ -38,8 +44,9 @@ class CodexCliExecutor:
         argv: tuple[str, ...],
         cwd: str,
         stdin: bytes,
-        cancellation: Event,
+        cancellation: CancellationSignal,
     ) -> Iterable[CliFrame]:
+        raise_if_cancelled(cancellation)
         if provider_id != "codex" or provider_id not in scope.cli:
             raise PermissionError("CLI provider is not authorized")
         if len(stdin) > MAX_CLI_STDIN_BYTES:
@@ -67,6 +74,7 @@ class CodexCliExecutor:
         else:
             workspace_context = _ExistingDirectory(scope.data_root)
         with workspace_context as workspace:
+            raise_if_cancelled(cancellation)
             command = _codex_sandbox_command(
                 executable=executable,
                 data_root=Path(workspace),
@@ -74,39 +82,50 @@ class CodexCliExecutor:
                 cli_home=cli_home,
                 argv=translated,
             )
-            process = subprocess.Popen(
-                command,
-                cwd="/",
-                env={
-                    "CODEX_HOME": "/codex-home",
-                    "HOME": "/home/codex",
-                    "LANG": "C.UTF-8",
-                    "LC_ALL": "C.UTF-8",
-                    "PATH": "/usr/local/bin:/usr/bin:/bin",
-                    "SSL_CERT_DIR": "/etc/ssl/certs",
-                    "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
-                    "TMPDIR": "/tmp",
-                },
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                start_new_session=True,
-                bufsize=0,
-            )
-            assert process.stdin is not None
-            assert process.stdout is not None
-            assert process.stderr is not None
-            writer = Thread(
-                target=_write_stdin,
-                args=(process.stdin, stdin),
-                name="maverick-model-access-codex-stdin",
-                daemon=True,
-            )
-            writer.start()
-            selector = selectors.DefaultSelector()
-            selector.register(process.stdout, selectors.EVENT_READ, "stdout")
-            selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+            process: subprocess.Popen[bytes] | None = None
+            writer: Thread | None = None
+            selector: selectors.BaseSelector | None = None
+            registration = None
             try:
+                with submission_fence(cancellation):
+                    process = subprocess.Popen(
+                        command,
+                        cwd="/",
+                        env={
+                            "CODEX_HOME": "/codex-home",
+                            "HOME": "/home/codex",
+                            "LANG": "C.UTF-8",
+                            "LC_ALL": "C.UTF-8",
+                            "PATH": "/usr/local/bin:/usr/bin:/bin",
+                            "SSL_CERT_DIR": "/etc/ssl/certs",
+                            "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
+                            "TMPDIR": "/tmp",
+                        },
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        start_new_session=True,
+                        bufsize=0,
+                    )
+                    spawned_process = process
+                    registration = register_cleanup(
+                        cancellation,
+                        lambda: _cancel_process_group(spawned_process),
+                    )
+                raise_if_cancelled(cancellation)
+                assert process.stdin is not None
+                assert process.stdout is not None
+                assert process.stderr is not None
+                writer = Thread(
+                    target=_write_stdin,
+                    args=(process.stdin, stdin),
+                    name="maverick-model-access-codex-stdin",
+                    daemon=True,
+                )
+                writer.start()
+                selector = selectors.DefaultSelector()
+                selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+                selector.register(process.stderr, selectors.EVENT_READ, "stderr")
                 while selector.get_map():
                     if cancellation.is_set():
                         _terminate_process_group(process)
@@ -121,10 +140,14 @@ class CodexCliExecutor:
                     _terminate_process_group(process)
                 exit_code = process.wait(timeout=10)
             finally:
-                selector.close()
-                if process.poll() is None:
+                if registration is not None:
+                    registration.close()
+                if selector is not None:
+                    selector.close()
+                if process is not None and process.poll() is None:
                     _terminate_process_group(process)
-                writer.join(timeout=1)
+                if writer is not None:
+                    writer.join(timeout=1)
         yield CliFrame(
             channel="exit",
             payload=json.dumps({"exit_code": exit_code}, separators=(",", ":")).encode("utf-8"),
@@ -168,3 +191,13 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
         except ProcessLookupError:
             pass
         process.wait(timeout=3)
+
+
+def _cancel_process_group(process: subprocess.Popen[bytes]) -> None:
+    """Signal immediately; the owning iterator retains bounded reap/escalation."""
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass

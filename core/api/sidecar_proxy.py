@@ -667,12 +667,14 @@ class HttpSidecarManager:
                     "last_failure": None,
                 }
         stop_confirmed = not startup_keys
+        proxy_revoked = True
         for running in running_sidecars:
-            try:
-                running.confined_launch.revoke_capabilities()
-            except Exception:
-                logger.exception("Quarantined sidecar capability cleanup did not complete.")
-                stop_confirmed = False
+            revocation = running.confined_launch.revoke_capabilities()
+            if revocation.errors:
+                logger.error(
+                    "Quarantined sidecar capability cleanup was incomplete: %s.",
+                    ",".join(revocation.errors),
+                )
             try:
                 self._cleanup_sidecar(running)
             except Exception:
@@ -680,8 +682,12 @@ class HttpSidecarManager:
                 stop_confirmed = False
             else:
                 stop_confirmed = stop_confirmed and running.process.poll() is not None
+            proxy_revoked = (
+                proxy_revoked
+                and running.confined_launch.relay_is_revoked()
+            )
         return {
-            "proxy_revoked": True,
+            "proxy_revoked": proxy_revoked,
             "writer_stop_confirmed": stop_confirmed,
             "affected_service_count": len(running_sidecars) + len(startup_keys),
         }

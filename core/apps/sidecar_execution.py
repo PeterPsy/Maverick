@@ -35,6 +35,15 @@ _SANDBOX_MODEL_ACCESS_ROOT = Path("/model-access")
 _RUNTIME_READ_ONLY_DIRS = (Path("/etc/ssl"),)
 
 
+@dataclass(frozen=True)
+class SidecarCapabilityRevocation:
+    """Observed result of independently revoking one launch's capabilities."""
+
+    model_access_revoked: bool
+    relay_revoked: bool
+    errors: tuple[str, ...] = ()
+
+
 @dataclass
 class ConfinedSidecarLaunch:
     """Prepared bubblewrap invocation plus relay identity and cleanup state."""
@@ -63,20 +72,49 @@ class ConfinedSidecarLaunch:
                 pass
             setattr(self, attribute, -1)
 
-    def cleanup(self) -> None:
+    def cleanup(self) -> SidecarCapabilityRevocation:
         self.close_parent_fds()
-        self.revoke_capabilities()
+        result = self.revoke_capabilities()
         try:
             self.relay_directory.rmdir()
         except OSError:
             pass
+        return result
 
-    def revoke_capabilities(self) -> None:
-        """Make relay and model handles unusable before process cleanup completes."""
+    def revoke_capabilities(self) -> SidecarCapabilityRevocation:
+        """Attempt each capability cleanup and report only observed revocation."""
+        errors: list[str] = []
+        model_access_revoked = self.model_access_release is None
         if self.model_access_release is not None:
-            self.model_access_release()
-            self.model_access_release = None
-        self.relay_socket.unlink(missing_ok=True)
+            try:
+                self.model_access_release()
+            except Exception:
+                errors.append("model_access")
+            else:
+                self.model_access_release = None
+                model_access_revoked = True
+        try:
+            self.relay_socket.unlink(missing_ok=True)
+        except OSError:
+            errors.append("relay")
+        relay_revoked = self.relay_is_revoked()
+        if not relay_revoked and "relay" not in errors:
+            errors.append("relay")
+        return SidecarCapabilityRevocation(
+            model_access_revoked=model_access_revoked,
+            relay_revoked=relay_revoked,
+            errors=tuple(errors),
+        )
+
+    def relay_is_revoked(self) -> bool:
+        """Prove that no path remains through which a resolved relay can reconnect."""
+        try:
+            self.relay_socket.lstat()
+        except FileNotFoundError:
+            return True
+        except OSError:
+            return False
+        return False
 
 
 def sandbox_substitutions(

@@ -255,6 +255,63 @@ class OfficialPublicInventoryTests(unittest.TestCase):
         self.assertEqual(guard["state"], "failed")
         self.assertGreater(guard["lost_content_counts"]["projects"], 0)
 
+    def test_future_list_only_project_field_loss_fails_content_guard(self) -> None:
+        baseline = FakePublicApi()
+        baseline_get_json = baseline.get_json
+
+        def project_list_with_future_field(path: str) -> dict:
+            payload = baseline_get_json(path)
+            if path == "/api/projects":
+                payload["projects"][0]["futureListConfiguration"] = {
+                    "preferredCanvas": "wide",
+                }
+            return payload
+
+        baseline.get_json = project_list_with_future_field  # type: ignore[method-assign]
+        migrated = FakePublicApi()
+        baseline_categories, baseline_identities, baseline_content = (
+            _inventory_with_preservation_sets(baseline)
+        )
+        migrated_categories, migrated_identities, migrated_content = (
+            _inventory_with_preservation_sets(migrated)
+        )
+
+        guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(migrated_categories, migrated_identities, migrated_content),
+        )
+
+        self.assertEqual(baseline_identities, migrated_identities)
+        self.assertEqual(guard["state"], "failed")
+        self.assertGreater(guard["lost_content_counts"]["projects"], 0)
+
+    def test_project_list_run_status_is_explicitly_server_owned(self) -> None:
+        baseline = FakePublicApi()
+        migrated = FakePublicApi()
+        migrated_get_json = migrated.get_json
+
+        def project_list_with_new_run_status(path: str) -> dict:
+            payload = migrated_get_json(path)
+            if path == "/api/projects":
+                payload["projects"][0]["status"]["value"] = "running"
+            return payload
+
+        migrated.get_json = project_list_with_new_run_status  # type: ignore[method-assign]
+        baseline_categories, baseline_identities, baseline_content = (
+            _inventory_with_preservation_sets(baseline)
+        )
+        migrated_categories, migrated_identities, migrated_content = (
+            _inventory_with_preservation_sets(migrated)
+        )
+
+        guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(migrated_categories, migrated_identities, migrated_content),
+        )
+
+        self.assertEqual(guard["state"], "passed")
+        self.assertEqual(baseline_content["projects"], migrated_content["projects"])
+
     def test_empty_project_containers_have_presence_and_type_claims(self) -> None:
         baseline = FakePublicApi()
         baseline_get_json = baseline.get_json

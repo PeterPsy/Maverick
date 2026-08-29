@@ -14,6 +14,11 @@ from threading import Event, Thread
 from typing import Iterable, Protocol
 
 from core.model_access.cli_authorization import authorize_cli_invocation
+from core.model_access.cancellation import (
+    CancellationSignal,
+    ModelAccessCancellation,
+    ModelAccessRequestCancelled,
+)
 from core.model_access.models import (
     CliFrame,
     ModelAccessCatalog,
@@ -42,7 +47,7 @@ class ModelApiProxyProtocol(Protocol):
         *,
         scope: ModelAccessScope,
         body: bytes,
-        cancellation: Event,
+        cancellation: CancellationSignal,
     ) -> ProviderHttpResponse: ...
 
 
@@ -57,14 +62,14 @@ class ModelAccessBrokerProtocol(Protocol):
         self,
         authorization: str,
         *,
-        cancellation: Event | None = None,
+        cancellation: CancellationSignal | None = None,
     ) -> ModelAccessScope: ...
 
     def release_authorization(
         self,
         authorization: str,
         *,
-        cancellation: Event | None,
+        cancellation: CancellationSignal | None,
     ) -> None: ...
 
     def catalog(self, scope: ModelAccessScope) -> ModelAccessCatalog: ...
@@ -83,7 +88,7 @@ class ThreadingUnixModelAccessServer(socketserver.ThreadingUnixStreamServer):
 class _BrokerRequestHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         broker: ModelAccessBrokerProtocol = self.server.broker  # type: ignore[attr-defined]
-        cancellation = Event()
+        cancellation = ModelAccessCancellation()
         disconnect_stop = Event()
         authorization = ""
         try:
@@ -258,7 +263,11 @@ def _send_headers(stream, status: int, headers: Iterable[tuple[str, str]]) -> No
     stream.flush()
 
 
-def _send_cli_frames(stream, frames: Iterable[CliFrame], cancellation: Event) -> None:
+def _send_cli_frames(
+    stream,
+    frames: Iterable[CliFrame],
+    cancellation: CancellationSignal,
+) -> None:
     codes = {"stdout": b"O", "stderr": b"E", "exit": b"X"}
     iterator = iter(frames)
     try:
@@ -269,7 +278,11 @@ def _send_cli_frames(stream, frames: Iterable[CliFrame], cancellation: Event) ->
             stream.flush()
     except (BrokenPipeError, OSError):
         cancellation.set()
+    except ModelAccessRequestCancelled:
+        return
     except Exception:
+        if cancellation.is_set():
+            return
         logger.exception("Native CLI model transport failed before completing its framed stream.")
         try:
             message = b"Codex model transport failed\n"
@@ -309,7 +322,11 @@ def _decode_header(value: str) -> str:
         raise ValueError("CLI bridge header is invalid") from error
 
 
-def _watch_disconnect(connection: socket.socket, cancellation: Event, stop: Event) -> None:
+def _watch_disconnect(
+    connection: socket.socket,
+    cancellation: CancellationSignal,
+    stop: Event,
+) -> None:
     while not stop.is_set() and not cancellation.is_set():
         try:
             readable, _writable, _exceptional = select.select([connection], [], [], 0.2)

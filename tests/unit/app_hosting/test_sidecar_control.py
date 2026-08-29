@@ -162,6 +162,64 @@ class SidecarControlTests(unittest.TestCase):
         self.assertTrue(result["model_access_revoked"])
         self.assertFalse(result["writer_stop_confirmed"])
 
+    def test_quarantine_attempts_every_revocation_after_independent_failures(self) -> None:
+        calls: list[str] = []
+        browser_sessions = Mock()
+        browser_sessions.revoke_app.side_effect = RuntimeError("browser failure")
+        state = SimpleNamespace(
+            repository_root=Path("/repo"),
+            app_store=Mock(),
+            sidecar_browser_sessions=browser_sessions,
+        )
+        quarantine = WorkspaceAppSidecarQuarantineRecord(
+            quarantine_id="sidecar-quarantine-errors",
+            workspace_id="default",
+            app_id="design-studio",
+            reason="sidecar_recovery_required",
+            active=True,
+            created_at="2026-08-29T00:00:00Z",
+            updated_at="2026-08-29T00:00:00Z",
+        )
+
+        with (
+            patch.object(
+                sidecar_quarantine_control,
+                "activate_sidecar_quarantine",
+                return_value=quarantine,
+            ),
+            patch.object(
+                sidecar_quarantine_control,
+                "revoke_model_access_leases",
+                side_effect=RuntimeError("model failure"),
+            ) as revoke_models,
+            patch.object(
+                sidecar_quarantine_control,
+                "quarantine_app_sidecars",
+                side_effect=lambda **_kwargs: calls.append("proxy") or {
+                    "proxy_revoked": True,
+                    "writer_stop_confirmed": False,
+                    "affected_service_count": 1,
+                },
+            ) as revoke_proxy,
+        ):
+            result = sidecar_quarantine_control.quarantine_workspace_app_sidecars(
+                state,
+                workspace_id="default",
+                app_id="design-studio",
+            )
+
+        self.assertEqual(calls, ["proxy"])
+        revoke_models.assert_called_once()
+        revoke_proxy.assert_called_once()
+        self.assertTrue(result["persistent"])
+        self.assertFalse(result["browser_sessions_revoked"])
+        self.assertFalse(result["model_access_revoked"])
+        self.assertTrue(result["proxy_revoked"])
+        self.assertEqual(
+            result["revocation_errors"],
+            ["browser_sessions", "model_access"],
+        )
+
     def test_owner_authenticated_client_reaches_the_live_server_thread(self) -> None:
         with tempfile.TemporaryDirectory(prefix="sidecar-control-") as temporary:
             repository = Path(temporary)

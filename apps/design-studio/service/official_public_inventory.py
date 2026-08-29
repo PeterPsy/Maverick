@@ -20,6 +20,7 @@ from official_inventory_values import (
     safe_file_path,
     stable_file,
     stable_project,
+    stable_project_list,
     stable_run,
     stable_value,
 )
@@ -104,7 +105,11 @@ def _inventory_with_preservation_sets(
         native_project = detail.get("project")
         if not isinstance(native_project, dict) or native_project.get("id") != project_id:
             raise OfficialReleaseError("official project detail identity mismatch")
-        project_records.append(stable_project(native_project))
+        project_records.append({
+            "id": project_id,
+            "list": stable_project_list(project),
+            "detail": stable_project(native_project),
+        })
         identity_sets["projects"].append(canonical_digest(["project", project_id]))
         status = project.get("status") if isinstance(project.get("status"), dict) else {}
         if status.get("runId"):

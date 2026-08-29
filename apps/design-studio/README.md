@@ -106,10 +106,12 @@ redaction-safe identity and field-level user-content claims prove that every
 pre-migration project, conversation, ordered message, user-owned Design
 System, file, artifact, setting, and run reference survives. Functional
 project metadata such as entry files, media configuration, templates, and
-voice is protected. Project fields are discovered dynamically from the public
-API rather than selected by a positive list; only explicitly enumerated
-volatile server fields are normalized away. Claims also encode object/array
-presence and type, so deleting an empty functional container is destructive.
+voice is protected. Project fields are discovered dynamically and protected
+independently from both `/api/projects` list records and `/api/projects/:id`
+details rather than selected by a positive list; only explicitly enumerated
+volatile server fields and list-only run status are normalized away. Claims
+also encode object/array presence and type, so deleting an empty functional
+container is destructive.
 New schema fields and updates, renames, or removals of
 release-owned bundled Design Systems remain allowed. Identity loss or
 mutation/deletion of an existing user value fails before the active data or

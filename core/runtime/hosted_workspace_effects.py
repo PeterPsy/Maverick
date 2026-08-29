@@ -5,8 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import shutil
+import stat
+import time
 
 from core.runtime.confined_filesystem import (
     MAX_CONFINED_LIST_ENTRIES,
@@ -16,6 +19,10 @@ from core.runtime.confined_filesystem import (
 from core.runtime.confined_filesystem_batch import (
     ConfinedTextBatchWrite,
     write_confined_text_batch,
+)
+from core.runtime.confined_filesystem_metadata import (
+    ConfinedPathMetadata,
+    preserved_metadata_matches,
 )
 from core.runtime.hosted_workspace_effect_support import (
     MAX_HOSTED_EFFECT_FILES,
@@ -51,6 +58,9 @@ class _ChangedFile:
     content: str
     baseline: _BaselineFile | None
     guard: MutationInstructionGuard
+    create_mode: int
+    create_uid: int
+    create_gid: int
 
 
 class HostedWorkspaceEffectOverlay:
@@ -67,6 +77,8 @@ class HostedWorkspaceEffectOverlay:
         root: Path,
         upper: Path,
         work: Path,
+        upper_baseline_metadata: ConfinedPathMetadata,
+        effect_started_at_ns: int,
     ) -> None:
         self.filesystem = filesystem
         self.workspace_root = workspace_root
@@ -77,6 +89,8 @@ class HostedWorkspaceEffectOverlay:
         self.upper = upper
         self.work = work
         self.transaction = root / "transaction"
+        self.upper_baseline_metadata = upper_baseline_metadata
+        self.effect_started_at_ns = effect_started_at_ns
         self._closed = False
         self._recovery_required = False
 
@@ -91,6 +105,7 @@ class HostedWorkspaceEffectOverlay:
     ) -> "HostedWorkspaceEffectOverlay":
         if not scopes:
             raise RuntimeToolError("workspace_mutation_scopes_invalid")
+        effect_started_at_ns = time.time_ns()
         guards: list[MutationInstructionGuard] = []
         baseline: dict[str, _BaselineFile] = {}
         for scope in scopes:
@@ -125,9 +140,11 @@ class HostedWorkspaceEffectOverlay:
                 if previous is not None and previous != candidate:
                     raise RuntimeToolError("workspace_effect_snapshot_changed")
                 baseline[path] = candidate
-        root, upper, work = create_hosted_effect_overlay_directories(
-            filesystem,
-            runtime_root=runtime_root,
+        root, upper, work, upper_baseline_metadata = (
+            create_hosted_effect_overlay_directories(
+                filesystem,
+                runtime_root=runtime_root,
+            )
         )
         return cls(
             filesystem=filesystem,
@@ -138,6 +155,8 @@ class HostedWorkspaceEffectOverlay:
             root=root,
             upper=upper,
             work=work,
+            upper_baseline_metadata=upper_baseline_metadata,
+            effect_started_at_ns=effect_started_at_ns,
         )
 
     def verify_before_spawn(self) -> None:
@@ -167,6 +186,9 @@ class HostedWorkspaceEffectOverlay:
                             else item.baseline.resource_revision
                         ),
                         mutation_guard=item.guard,
+                        create_mode=item.create_mode,
+                        create_uid=item.create_uid,
+                        create_gid=item.create_gid,
                     )
                     for item in changed
                 ),
@@ -201,8 +223,16 @@ class HostedWorkspaceEffectOverlay:
 
     def _validated_changes(self) -> tuple[_ChangedFile, ...]:
         raw_diff = scan_hosted_effect_overlay_upper(self.upper)
+        validated_at_ns = time.time_ns()
         if len(raw_diff.files) > MAX_HOSTED_EFFECT_FILES:
             raise RuntimeToolError("workspace_effect_file_limit_exceeded")
+        _validate_overlay_root_metadata(
+            baseline=self.upper_baseline_metadata,
+            observed=raw_diff.root_metadata,
+            has_entries=bool(raw_diff.files or raw_diff.directories),
+            started_at_ns=self.effect_started_at_ns,
+            validated_at_ns=validated_at_ns,
+        )
         changed_paths = tuple(item.path for item in raw_diff.files)
         for directory in raw_diff.directories:
             path = directory.path
@@ -210,13 +240,23 @@ class HostedWorkspaceEffectOverlay:
                 raise RuntimeToolError("workspace_effect_outside_declared_scope")
             if not self.filesystem.path_is_directory(path):
                 raise RuntimeToolError("workspace_effect_directory_unsupported")
-            if directory.mode != self.filesystem.path_mode(path, directory=True):
+            live_metadata = self.filesystem.path_metadata(path, directory=True)
+            if not preserved_metadata_matches(
+                directory.metadata,
+                live_metadata,
+            ):
                 raise RuntimeToolError("workspace_effect_metadata_unsupported")
             if not any(
                 changed_path.startswith(path + "/")
                 for changed_path in changed_paths
             ):
                 raise RuntimeToolError("workspace_effect_directory_unsupported")
+            if not _timestamp_in_effect_window(
+                directory.metadata.mtime_ns,
+                started_at_ns=self.effect_started_at_ns,
+                validated_at_ns=validated_at_ns,
+            ):
+                raise RuntimeToolError("workspace_effect_metadata_unsupported")
         total_bytes = 0
         prepared: list[_ChangedFile] = []
         for effect_file in raw_diff.files:
@@ -248,10 +288,14 @@ class HostedWorkspaceEffectOverlay:
             )
             baseline = self.baseline.get(path)
             if baseline is not None:
-                if effect_file.mode != self.filesystem.path_mode(
+                live_metadata = self.filesystem.path_metadata(
                     path,
                     directory=False,
-                ):
+                )
+                if not preserved_metadata_matches(
+                    effect_file.metadata,
+                    live_metadata,
+                ) or effect_file.metadata.atime_ns != live_metadata.atime_ns:
                     raise RuntimeToolError("workspace_effect_metadata_unsupported")
                 observation, _classification = self.filesystem.observe_file(
                     path,
@@ -262,7 +306,41 @@ class HostedWorkspaceEffectOverlay:
                     or observation.resource_revision != baseline.resource_revision
                 ):
                     raise RuntimeToolError("filesystem_resource_changed")
-            elif effect_file.mode & 0o7111:
+                if _existing_content_matches(
+                    self.filesystem,
+                    path=path,
+                    content=content_bytes,
+                    baseline=baseline,
+                ):
+                    raise RuntimeToolError("workspace_effect_metadata_unsupported")
+            else:
+                parent_metadata = self.filesystem.path_metadata(
+                    parent,
+                    directory=True,
+                )
+                expected_uid = os.geteuid()
+                expected_gid = (
+                    parent_metadata.gid
+                    if parent_metadata.mode & stat.S_ISGID
+                    else os.getegid()
+                )
+                if (
+                    effect_file.metadata.mode & 0o7111
+                    or effect_file.metadata.xattrs
+                    or effect_file.metadata.uid != expected_uid
+                    or effect_file.metadata.gid != expected_gid
+                    or not _timestamp_in_effect_window(
+                        effect_file.metadata.atime_ns,
+                        started_at_ns=self.effect_started_at_ns,
+                        validated_at_ns=validated_at_ns,
+                    )
+                ):
+                    raise RuntimeToolError("workspace_effect_metadata_unsupported")
+            if not _timestamp_in_effect_window(
+                effect_file.metadata.mtime_ns,
+                started_at_ns=self.effect_started_at_ns,
+                validated_at_ns=validated_at_ns,
+            ):
                 raise RuntimeToolError("workspace_effect_metadata_unsupported")
             prepared.append(
                 _ChangedFile(
@@ -270,6 +348,9 @@ class HostedWorkspaceEffectOverlay:
                     content=content,
                     baseline=baseline,
                     guard=guard,
+                    create_mode=effect_file.metadata.mode,
+                    create_uid=effect_file.metadata.uid,
+                    create_gid=effect_file.metadata.gid,
                 )
             )
         return tuple(prepared)
@@ -343,6 +424,58 @@ def _scope_digest(scopes: tuple[HostedWorkspaceMutationScope, ...]) -> str:
             sort_keys=True,
         ).encode("ascii")
     ).hexdigest()
+
+
+def _validate_overlay_root_metadata(
+    *,
+    baseline: ConfinedPathMetadata,
+    observed: ConfinedPathMetadata,
+    has_entries: bool,
+    started_at_ns: int,
+    validated_at_ns: int,
+) -> None:
+    if not preserved_metadata_matches(baseline, observed):
+        raise RuntimeToolError("workspace_effect_metadata_unsupported")
+    if not has_entries:
+        if observed.mtime_ns != baseline.mtime_ns:
+            raise RuntimeToolError("workspace_effect_metadata_unsupported")
+        return
+    if not _timestamp_in_effect_window(
+        observed.mtime_ns,
+        started_at_ns=started_at_ns,
+        validated_at_ns=validated_at_ns,
+    ):
+        raise RuntimeToolError("workspace_effect_metadata_unsupported")
+
+
+def _existing_content_matches(
+    filesystem: ConfinedWorkspaceFilesystem,
+    *,
+    path: str,
+    content: bytes,
+    baseline: _BaselineFile,
+) -> bool:
+    observed = filesystem.read_file_bytes_for_validation(
+        path,
+        max_bytes=MAX_HOSTED_EFFECT_FILE_BYTES + 1,
+        expected_resource_identity=baseline.resource_identity,
+        expected_resource_revision=baseline.resource_revision,
+    )
+    return observed == content if observed is not None else False
+
+
+def _timestamp_in_effect_window(
+    value: int,
+    *,
+    started_at_ns: int,
+    validated_at_ns: int,
+) -> bool:
+    tolerance_ns = 2_000_000_000
+    return (
+        started_at_ns - tolerance_ns
+        <= value
+        <= validated_at_ns + tolerance_ns
+    )
 
 
 __all__ = [

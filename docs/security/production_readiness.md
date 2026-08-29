@@ -72,18 +72,21 @@ projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 17 places all provider-bound context in semantic-envelope schema
+Hosted adapter 18 places all provider-bound context in semantic-envelope schema
 v1/compiler revision 5, materializes scoped instructions through the confined
 filesystem, requires commit-bound instruction digests for direct mutations, and
 uses rollback-safe batch COW overlays for shell/process effects. Terminal
-process polling is mutating/non-retry-safe and unsupported directory effects
-are rejected. Transient input requires
+process polling is mutating/non-retry-safe. Content-only replacements preserve
+mode, ownership, ACL/xattrs; ordinary xattr, explicit timestamp, directory, and
+overlay-root metadata effects are rejected. Transient input requires
 exact server-owned admission classification and non-resource results remain
 unclassified without concrete taint evidence. Composite attachment metadata is
 classified separately and restrictively joined with the file observation;
 skills export exact classified `SKILL.md` bytes, and every semantic class is
 bound to the exact projected digest. The runtime journals distinct
-source/projection evidence. This is a
+source/projection evidence. Exact app-reference resource observations are
+resolved by production `PlatformState` through revisioned workspace
+classification records. This is a
 repository safety invariant, not certification or remote-release approval.
 
 The runtime now also separates actor-attributed CAS workspace attestation,
@@ -117,7 +120,8 @@ UTF-8/base64 attachment references, request-scoped OpenRouter authority, and
 exact live provider preflight before egress commit. The fixture suite also
 proves attachment-only admission, composite-taint denial,
 multi-file rollback after a late instruction race, unsupported-directory
-rejection, and non-retry-safe terminal process commit. The operator
+rejection, metadata preservation/rejection, production app-reference
+classification, and non-retry-safe terminal process commit. The operator
 runbook documents canary,
 observation, incident
 recovery, and control-plane-first rollback. These controls do not close the

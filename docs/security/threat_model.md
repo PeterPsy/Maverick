@@ -178,6 +178,10 @@ secret-bearing name or id. Skill projection uses the exact confined
 `SKILL.md`, without catalog/`state.json` metadata inheriting that file's class.
 A missing component or digest mismatch becomes `unclassified`, and an
 attachment-only turn does not synthesize an unclassified empty prompt.
+Server-materialized app references additionally require a workspace
+resource-classification record matching their stable app/entity identity and
+exact payload digest. Production bootstrap wires that resolver explicitly;
+admitted metadata cannot classify the underlying reference by itself.
 
 Residual risk remains because content classification and prompt/tool-result
 provenance are security-critical enforcement paths. Phase-1 repository tests

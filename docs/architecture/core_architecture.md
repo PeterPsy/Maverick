@@ -777,9 +777,14 @@ needs persistent command effects declares a bounded set of directory scopes and
 the exact `AGENTS.md` digest observed for each; the command runs against a
 private overlay. Core scans the complete bounded upper diff, rejects undeclared
 paths, instruction-file, non-UTF-8, deletion, symlink, newly-created directory,
-and unsupported metadata effects, then re-resolves the instructions for every
-changed file. All UTF-8 creates/replacements are staged in one private
-transaction and committed with retained pre-images; a failure or late
+and unsupported metadata effects. Ordinary xattrs, explicit timestamps,
+ownership/mode changes, and mutations of the overlay root are compared against
+descriptor-confined live or pre-execution metadata and rejected rather than
+silently discarded. For a content-only replacement, the transaction clones and
+verifies the existing file's mode, ownership, ACL/xattr set; representable new
+file mode/ownership is applied explicitly. Core then re-resolves the
+instructions for every changed file. All UTF-8 creates/replacements are staged
+in one private transaction and committed with retained pre-images; a failure or late
 instruction race rolls the entire batch back in reverse order before any
 failure is reported. A root digest therefore cannot authorize a change governed
 by a nested `AGENTS.md`, and a rejected multi-file diff cannot leave an earlier
@@ -817,6 +822,13 @@ class. Skill blocks project the complete descriptor-read `SKILL.md` itself and
 do not mix unbound catalog/state metadata into its classification. A digest
 mismatch is downgraded to `unclassified` before egress. Attachment-only turns
 omit the semantically absent empty prompt block.
+
+Materialized app references have a separate resource-side classification. Core
+derives a stable app/entity identity and an exact revision/digest from the
+server-materialized reference, then the production `PlatformState` resolver
+looks up the matching workspace resource-classification record. Missing or
+mismatched records remain `unclassified`; app-reference metadata admission
+cannot substitute for resource evidence or promote the reference to `public`.
 
 CLI and MCP access uses four fixed certified Core wrappers: discovery returns
 only definitions allowed by the authoritative registry invocation policy plus

@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="11",
+    manifest_version="12",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -133,6 +133,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/tool_filesystem_listing.py",
                 "core/runtime/confined_filesystem.py",
                 "core/runtime/confined_filesystem_batch.py",
+                "core/runtime/confined_filesystem_metadata.py",
                 "core/runtime/confined_filesystem_delete.py",
                 "core/runtime/confined_filesystem_mutation_support.py",
                 "core/runtime/confined_filesystem_mutations.py",
@@ -219,6 +220,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             "provider-input-composition",
             "Canonical source composition and provider request projection.",
             (
+                "core/runtime/app_reference_classification.py",
                 "core/runtime/attachment_projection.py",
                 "core/runtime/provider_input_context.py",
                 "core/runtime/semantic_context_blocks.py",
@@ -256,13 +258,17 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
             "Certified catalog/schema, confinement, invocation, ledger, and classified results.",
             (
                 "core/runtime/confined_filesystem.py",
+                "core/runtime/confined_filesystem_batch.py",
                 "core/runtime/confined_filesystem_delete.py",
+                "core/runtime/confined_filesystem_metadata.py",
                 "core/runtime/confined_filesystem_mutation_support.py",
                 "core/runtime/confined_filesystem_mutations.py",
                 "core/runtime/confined_filesystem_search.py",
                 "core/runtime/full_workspace_contract.py",
                 "core/runtime/hosted_process_output.py",
                 "core/runtime/hosted_tool_process_registry.py",
+                "core/runtime/hosted_workspace_effect_support.py",
+                "core/runtime/hosted_workspace_effects.py",
                 "core/runtime/hosted_workspace_shell.py",
                 "core/runtime/hosted_agentic_loop.py",
                 "core/runtime/provider_step_journal.py",

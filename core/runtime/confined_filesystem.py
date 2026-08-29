@@ -26,6 +26,10 @@ from core.egress.classification import (
     join_classifications,
 )
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.confined_filesystem_metadata import (
+    ConfinedPathMetadata,
+    capture_fd_metadata,
+)
 from core.runtime.confined_filesystem_mutation_support import (
     rename_exchange,
     rename_noreplace,
@@ -40,6 +44,7 @@ _PROCESS_CURSOR_KEY = secrets.token_bytes(32)
 _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _DIRECTORY = getattr(os, "O_DIRECTORY", 0)
 _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
+_NOATIME = getattr(os, "O_NOATIME", 0)
 
 
 @dataclass(frozen=True)
@@ -283,6 +288,61 @@ class ConfinedWorkspaceFilesystem:
                 )
             except OSError as error:
                 raise RuntimeToolError("filesystem_read_failed") from error
+            finally:
+                os.close(fd)
+
+    def read_file_bytes_for_validation(
+        self,
+        relative_path: str,
+        *,
+        max_bytes: int,
+        expected_resource_identity: str,
+        expected_resource_revision: str,
+    ) -> bytes | None:
+        """Read exact validation bytes without changing the source atime."""
+        if not _NOATIME:
+            raise RuntimeToolError("filesystem_noatime_unavailable")
+        if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes < 1:
+            raise RuntimeToolError("tool_arguments_invalid")
+        components = self._components(relative_path, allow_root=False)
+        with self._open_chain(components[:-1]) as chain:
+            try:
+                fd = os.open(
+                    components[-1],
+                    os.O_RDONLY | _NOFOLLOW | _CLOEXEC | _NOATIME,
+                    dir_fd=chain.leaf_fd,
+                )
+            except OSError as error:
+                raise RuntimeToolError("filesystem_metadata_unavailable") from error
+            try:
+                before = os.fstat(fd)
+                if not stat.S_ISREG(before.st_mode):
+                    raise RuntimeToolError("filesystem_path_not_file")
+                observation = self._observation(
+                    "filesystem_file",
+                    self._relative(components),
+                    before,
+                )
+                self._require_expected(
+                    observation,
+                    identity=expected_resource_identity,
+                    revision=expected_resource_revision,
+                )
+                if before.st_size > max_bytes:
+                    content = None
+                else:
+                    content = os.pread(fd, before.st_size + 1, 0)
+                    if len(content) != before.st_size:
+                        raise RuntimeToolError("filesystem_resource_changed")
+                after = os.fstat(fd)
+                self._assert_same_version(
+                    before,
+                    after,
+                    "filesystem_resource_changed",
+                )
+                self._assert_final_link(chain.leaf_fd, components[-1], after)
+                self._assert_chain(chain)
+                return content
             finally:
                 os.close(fd)
 
@@ -807,25 +867,43 @@ class ConfinedWorkspaceFilesystem:
 
     def path_mode(self, relative_path: str, *, directory: bool) -> int:
         """Return permission bits for one exact confined entry."""
+        return self.path_metadata(relative_path, directory=directory).mode
+
+    def path_metadata(
+        self,
+        relative_path: str,
+        *,
+        directory: bool,
+    ) -> ConfinedPathMetadata:
+        """Return bounded metadata for one descriptor-confined path."""
         components = self._components(relative_path, allow_root=directory)
-        if not components:
-            result = os.fstat(self._root_fd)
-            return stat.S_IMODE(result.st_mode)
+        if directory:
+            with self._open_chain(components) as chain:
+                result = os.fstat(chain.leaf_fd)
+                if not stat.S_ISDIR(result.st_mode):
+                    raise RuntimeToolError("filesystem_resource_changed")
+                metadata = capture_fd_metadata(chain.leaf_fd)
+                self._assert_chain(chain)
+                return metadata
         with self._open_chain(components[:-1]) as chain:
             try:
-                result = os.stat(
+                fd = os.open(
                     components[-1],
+                    os.O_RDONLY | _NOFOLLOW | _CLOEXEC,
                     dir_fd=chain.leaf_fd,
-                    follow_symlinks=False,
                 )
             except OSError as error:
                 raise RuntimeToolError("filesystem_resource_changed") from error
-            if stat.S_ISLNK(result.st_mode) or (
-                directory != stat.S_ISDIR(result.st_mode)
-            ):
-                raise RuntimeToolError("filesystem_resource_changed")
-            self._assert_chain(chain)
-            return stat.S_IMODE(result.st_mode)
+            try:
+                result = os.fstat(fd)
+                if not stat.S_ISREG(result.st_mode):
+                    raise RuntimeToolError("filesystem_resource_changed")
+                metadata = capture_fd_metadata(fd)
+                self._assert_final_link(chain.leaf_fd, components[-1], result)
+                self._assert_chain(chain)
+                return metadata
+            finally:
+                os.close(fd)
 
     def assert_shell_cwd(self, chain: _OpenChain) -> None:
         self._assert_chain(chain)

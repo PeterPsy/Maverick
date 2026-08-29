@@ -9,6 +9,10 @@ import stat
 from uuid import uuid4
 
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
+from core.runtime.confined_filesystem_metadata import (
+    ConfinedPathMetadata,
+    capture_fd_metadata,
+)
 from core.runtime.tool_errors import RuntimeToolError
 
 
@@ -19,6 +23,11 @@ MAX_HOSTED_EFFECT_TOTAL_BYTES = 4_194_304
 _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _DIRECTORY = getattr(os, "O_DIRECTORY", 0)
 _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
+_OVERLAY_INFRASTRUCTURE_XATTRS = {
+    f"{namespace}.{name}"
+    for namespace in ("trusted.overlay", "user.overlay")
+    for name in ("impure", "origin", "uuid")
+}
 
 
 @dataclass
@@ -33,19 +42,20 @@ class _OverlayScanState:
 class HostedEffectFile:
     path: str
     content: bytes
-    mode: int
+    metadata: ConfinedPathMetadata
 
 
 @dataclass(frozen=True)
 class HostedEffectDirectory:
     path: str
-    mode: int
+    metadata: ConfinedPathMetadata
 
 
 @dataclass(frozen=True)
 class HostedEffectOverlayDiff:
     """Complete representable upper-layer entries."""
 
+    root_metadata: ConfinedPathMetadata
     files: tuple[HostedEffectFile, ...]
     directories: tuple[HostedEffectDirectory, ...]
 
@@ -54,11 +64,13 @@ def create_hosted_effect_overlay_directories(
     filesystem: ConfinedWorkspaceFilesystem,
     *,
     runtime_root: Path,
-) -> tuple[Path, Path, Path]:
+) -> tuple[Path, Path, Path, ConfinedPathMetadata]:
     """Create the private overlay upper/work directories below platform runtime."""
     runtime_fd = filesystem.open_platform_runtime_fd(runtime_root)
     parent_fd: int | None = None
     effect_fd: int | None = None
+    upper_fd: int | None = None
+    upper_metadata: ConfinedPathMetadata | None = None
     name = f"effect-{uuid4().hex}"
     try:
         try:
@@ -79,16 +91,32 @@ def create_hosted_effect_overlay_directories(
         os.mkdir("upper", 0o700, dir_fd=effect_fd)
         os.mkdir("work", 0o700, dir_fd=effect_fd)
         os.mkdir("transaction", 0o700, dir_fd=effect_fd)
+        upper_fd = os.open(
+            "upper",
+            os.O_RDONLY | _DIRECTORY | _NOFOLLOW | _CLOEXEC,
+            dir_fd=effect_fd,
+        )
+        # The upper root doubles as a metadata sentinel for mutations to `.`.
+        # Its parent remains private even when the workspace root is 0755.
+        os.fchmod(upper_fd, filesystem.path_mode(".", directory=True))
+        upper_metadata = capture_fd_metadata(
+            upper_fd,
+            unavailable_reason="workspace_effect_metadata_unavailable",
+        )
     except OSError as error:
         raise RuntimeToolError("workspace_effect_overlay_unavailable") from error
     finally:
+        if upper_fd is not None:
+            os.close(upper_fd)
         if effect_fd is not None:
             os.close(effect_fd)
         if parent_fd is not None:
             os.close(parent_fd)
         os.close(runtime_fd)
     root = runtime_root / "agent-workspace-effects" / name
-    return root, root / "upper", root / "work"
+    if upper_metadata is None:
+        raise RuntimeToolError("workspace_effect_overlay_unavailable")
+    return root, root / "upper", root / "work", upper_metadata
 
 
 def scan_hosted_effect_overlay_upper(upper: Path) -> HostedEffectOverlayDiff:
@@ -102,13 +130,14 @@ def scan_hosted_effect_overlay_upper(upper: Path) -> HostedEffectOverlayDiff:
         raise RuntimeToolError("workspace_effect_diff_unavailable") from error
     state = _OverlayScanState()
     try:
-        _reject_overlay_metadata(root_fd)
+        root_metadata = _overlay_metadata(root_fd)
         _scan_upper_directory(root_fd, (), state)
     finally:
         os.close(root_fd)
     state.changes.sort(key=lambda item: item.path)
     state.directories.sort(key=lambda item: item.path)
     return HostedEffectOverlayDiff(
+        root_metadata=root_metadata,
         files=tuple(state.changes),
         directories=tuple(state.directories),
     )
@@ -140,16 +169,16 @@ def _scan_upper_directory(
             except OSError as error:
                 raise RuntimeToolError("workspace_effect_diff_changed") from error
             if stat.S_ISDIR(item.st_mode):
-                state.directories.append(
-                    HostedEffectDirectory(path, stat.S_IMODE(item.st_mode))
-                )
                 child_fd = os.open(
                     name,
                     os.O_RDONLY | _DIRECTORY | _NOFOLLOW | _CLOEXEC,
                     dir_fd=directory_fd,
                 )
                 try:
-                    _reject_overlay_metadata(child_fd)
+                    metadata = _overlay_metadata(child_fd)
+                    state.directories.append(
+                        HostedEffectDirectory(path, metadata)
+                    )
                     _scan_upper_directory(child_fd, path_components, state)
                 finally:
                     os.close(child_fd)
@@ -164,25 +193,20 @@ def _scan_upper_directory(
                 dir_fd=directory_fd,
             )
             try:
-                _reject_overlay_metadata(fd)
+                metadata = _overlay_metadata(fd)
                 if item.st_size > MAX_HOSTED_EFFECT_FILE_BYTES:
                     raise RuntimeToolError("workspace_effect_file_too_large")
                 if state.total_bytes + item.st_size > MAX_HOSTED_EFFECT_TOTAL_BYTES:
                     raise RuntimeToolError("workspace_effect_total_too_large")
                 content = os.pread(fd, item.st_size + 1, 0)
                 after = os.fstat(fd)
-                if (
-                    after.st_dev != item.st_dev
-                    or after.st_ino != item.st_ino
-                    or after.st_size != item.st_size
-                    or len(content) != item.st_size
-                ):
+                if not _same_scanned_version(item, after) or len(content) != item.st_size:
                     raise RuntimeToolError("workspace_effect_diff_changed")
                 state.changes.append(
                     HostedEffectFile(
                         path,
                         content,
-                        stat.S_IMODE(item.st_mode),
+                        metadata,
                     )
                 )
                 state.total_bytes += len(content)
@@ -190,13 +214,49 @@ def _scan_upper_directory(
                 os.close(fd)
 
 
-def _reject_overlay_metadata(fd: int) -> None:
+def _overlay_metadata(fd: int) -> ConfinedPathMetadata:
     try:
-        names = os.listxattr(fd)
-    except OSError as error:
-        raise RuntimeToolError("workspace_effect_metadata_unavailable") from error
-    if any(name.endswith((".opaque", ".redirect", ".metacopy")) for name in names):
-        raise RuntimeToolError("workspace_effect_type_unsupported")
+        metadata = capture_fd_metadata(
+            fd,
+            unavailable_reason="workspace_effect_metadata_unavailable",
+        )
+    except RuntimeToolError as error:
+        if error.reason_code == "filesystem_resource_changed":
+            raise RuntimeToolError("workspace_effect_diff_changed") from error
+        raise
+    retained: list[tuple[str, bytes]] = []
+    for name, value in metadata.xattrs:
+        if name in _OVERLAY_INFRASTRUCTURE_XATTRS:
+            continue
+        if name.startswith(("trusted.overlay.", "user.overlay.")):
+            raise RuntimeToolError("workspace_effect_type_unsupported")
+        retained.append((name, value))
+    return ConfinedPathMetadata(
+        mode=metadata.mode,
+        uid=metadata.uid,
+        gid=metadata.gid,
+        atime_ns=metadata.atime_ns,
+        mtime_ns=metadata.mtime_ns,
+        ctime_ns=metadata.ctime_ns,
+        xattrs=tuple(retained),
+    )
+
+
+def _same_scanned_version(left: os.stat_result, right: os.stat_result) -> bool:
+    return all(
+        getattr(left, field) == getattr(right, field)
+        for field in (
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_uid",
+            "st_gid",
+            "st_nlink",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+    )
 
 
 __all__ = [

@@ -15,6 +15,9 @@ from core.egress.classification import (
     fail_closed_classification,
     join_classifications,
 )
+from core.runtime.app_reference_classification import (
+    classify_runtime_app_reference,
+)
 from core.runtime.app_references import input_text_with_app_references
 from core.runtime.attachment_projection import attachment_read_encoding
 from core.runtime.attachments import input_text_with_attachment_links
@@ -465,19 +468,8 @@ def _app_reference_classification(
     session: Any,
     reference: dict[str, object],
 ) -> CanonicalSourceClassification:
-    resolver = getattr(state, "runtime_app_reference_classification_resolver", None)
-    if not callable(resolver):
-        return fail_closed_classification(provenance="app_reference")
-    try:
-        result = resolver(
-            workspace_id=session.workspace_id,
-            reference=dict(reference),
-            provenance="app_reference",
-        )
-    except Exception:
-        return fail_closed_classification(provenance="app_reference")
-    return (
-        result
-        if isinstance(result, CanonicalSourceClassification)
-        else fail_closed_classification(provenance="app_reference")
+    return classify_runtime_app_reference(
+        state,
+        workspace_id=str(getattr(session, "workspace_id", "") or ""),
+        reference=dict(reference),
     )

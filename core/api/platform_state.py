@@ -32,6 +32,10 @@ from core.providers.service import builtin_provider_registry, effective_provider
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
 from core.providers.store import ProviderDocumentStore
 from core.recovery.store import RecoveryDocumentStore, RecoveryCollections
+from core.runtime.app_reference_classification import (
+    RuntimeAppReferenceClassificationResolver,
+    build_workspace_app_reference_classification_resolver,
+)
 from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.hosted_agentic_factory import build_hosted_agentic_engine_adapter
@@ -87,6 +91,9 @@ class PlatformState:
     runtime_input_classification_resolver: (
         RuntimeProviderInputClassificationResolver | None
     ) = None
+    runtime_app_reference_classification_resolver: (
+        RuntimeAppReferenceClassificationResolver | None
+    ) = None
 
 
 def bootstrap_platform_state(
@@ -99,6 +106,9 @@ def bootstrap_platform_state(
     bootstrap_admin: bool = True,
     runtime_input_classification_resolver: (
         RuntimeProviderInputClassificationResolver | None
+    ) = None,
+    runtime_app_reference_classification_resolver: (
+        RuntimeAppReferenceClassificationResolver | None
     ) = None,
 ) -> PlatformState:
     """Build in-memory platform state and optionally run host bootstrap work."""
@@ -271,6 +281,12 @@ def bootstrap_platform_state(
         agentic_egress_evaluator=agentic_egress_evaluator,
         runtime_input_classification_resolver=(
             runtime_input_classification_resolver
+        ),
+        runtime_app_reference_classification_resolver=(
+            runtime_app_reference_classification_resolver
+            or build_workspace_app_reference_classification_resolver(
+                workspace_store
+            )
         ),
     )
     hosted_adapter = build_hosted_agentic_engine_adapter(

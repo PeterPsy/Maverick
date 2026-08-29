@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import base64
 from dataclasses import replace
+import os
 from pathlib import Path
+import stat
 import tempfile
 import time
 import unittest
@@ -410,6 +412,86 @@ class FullWorkspaceContractTest(unittest.TestCase):
         self.assertFalse((self.workspace / "b.txt").exists())
         self.assertEqual(existing.read_text(encoding="utf-8"), "original")
         self.assertEqual(agents.read_text(encoding="utf-8"), "Raced.\n")
+
+    def test_shell_and_process_preserve_existing_file_metadata(self) -> None:
+        agents = self.workspace / "AGENTS.md"
+        agents.write_text("Metadata rules.\n", encoding="utf-8")
+        shell_target = self.workspace / "shell-script.sh"
+        process_target = self.workspace / "process-script.sh"
+        expected_atimes: dict[Path, int] = {}
+        for target in (shell_target, process_target):
+            target.write_text("old\n", encoding="utf-8")
+            target.chmod(0o755)
+            try:
+                os.setxattr(target, "user.maverick.fixture", b"retained")
+            except OSError as error:
+                self.skipTest(f"filesystem xattrs unavailable: {error}")
+            old_atime_ns = time.time_ns() - 86_400_000_000_000
+            os.utime(
+                target,
+                ns=(old_atime_ns, target.stat().st_mtime_ns),
+            )
+            expected_atimes[target] = old_atime_ns
+        expected_owner = (shell_target.stat().st_uid, shell_target.stat().st_gid)
+        capabilities = self._capabilities(processes=True)
+        scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+
+        shell = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": ["/bin/sh", "-c", "printf shell-new > shell-script.sh"],
+                "mutation_scopes": [
+                    {
+                        "path": ".",
+                        "instruction_scope_digest": scope_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        self.assertTrue(shell["workspace_effects_committed"])
+
+        started = capabilities["core-capability:process.start"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    "printf process-new > process-script.sh",
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": ".",
+                        "instruction_scope_digest": scope_digest,
+                    }
+                ],
+            },
+            self.context,
+            None,
+        )
+        terminal = self._wait_for_process(
+            capabilities,
+            str(started.payload["process_id"]),
+        )
+        self.assertEqual(terminal.payload["status"], "exited")
+
+        for target, expected_content in (
+            (shell_target, "shell-new"),
+            (process_target, "process-new"),
+        ):
+            with self.subTest(path=target.name):
+                current = target.stat()
+                self.assertEqual(target.read_text(encoding="utf-8"), expected_content)
+                self.assertEqual(stat.S_IMODE(current.st_mode), 0o755)
+                self.assertEqual((current.st_uid, current.st_gid), expected_owner)
+                self.assertEqual(current.st_atime_ns, expected_atimes[target])
+                self.assertEqual(
+                    os.getxattr(target, "user.maverick.fixture"),
+                    b"retained",
+                )
 
     def test_process_status_is_mutating_and_batch_failure_is_not_retry_safe(self) -> None:
         agents = self.workspace / "AGENTS.md"
@@ -932,6 +1014,84 @@ class FullWorkspaceContractTest(unittest.TestCase):
                 None,
             )
         self.assertEqual(metadata_file.read_text(encoding="utf-8"), "unchanged")
+
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_metadata_unsupported",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/usr/bin/python3",
+                        "-c",
+                        (
+                            "import os; "
+                            "os.setxattr('nested/metadata.txt', "
+                            "b'user.maverick.effect', b'ignored')"
+                        ),
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": "nested",
+                            "instruction_scope_digest": nested_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        with self.assertRaises(OSError):
+            os.getxattr(metadata_file, "user.maverick.effect")
+
+        original_mtime_ns = metadata_file.stat().st_mtime_ns
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_metadata_unsupported",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": [
+                        "/bin/touch",
+                        "-t",
+                        "200001010000",
+                        "nested/metadata.txt",
+                    ],
+                    "mutation_scopes": [
+                        {
+                            "path": "nested",
+                            "instruction_scope_digest": nested_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertEqual(metadata_file.stat().st_mtime_ns, original_mtime_ns)
+
+        self.workspace.chmod(0o755)
+        root_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+        with self.assertRaisesRegex(
+            RuntimeToolError,
+            "workspace_effect_metadata_unsupported",
+        ):
+            capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": ["/bin/chmod", "700", "."],
+                    "mutation_scopes": [
+                        {
+                            "path": ".",
+                            "instruction_scope_digest": root_digest,
+                        }
+                    ],
+                },
+                self.context,
+                None,
+            )
+        self.assertEqual(stat.S_IMODE(self.workspace.stat().st_mode), 0o755)
 
         shell = capabilities["core-capability:shell.run"].handler(
             {

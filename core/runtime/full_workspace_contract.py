@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from core.providers.errors import CapabilityCertificateError
 
 
-FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v5"
+FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v6"
 
 FULL_WORKSPACE_CORE_TOOL_HANDLES = (
     "core-capability:workspace.instructions",

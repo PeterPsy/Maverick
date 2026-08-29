@@ -320,8 +320,13 @@ of the model.
 
 Shell and managed-process writes remain in a private overlay until Core has
 validated the complete diff. Newly-created directories and every other
-unrepresentable effect are rejected explicitly. Representable text files are
-staged as one descriptor-confined batch with retained pre-images; a late
+unrepresentable effect are rejected explicitly. The upper scan includes the
+overlay root plus file/directory mode, owner, timestamps, and bounded xattrs.
+Ordinary xattr changes, explicit timestamp changes, and root metadata changes
+are rejected. Content-only replacement stages an exact clone of the existing
+mode, ownership, ACL/xattr set, while representable new-file creation metadata
+is applied explicitly. Representable text files are staged as one
+descriptor-confined batch with retained pre-images; a late
 instruction race or file failure rolls back every already-applied entry in
 reverse order. Terminal `process.status` performs that commit and is therefore
 classified as mutating and non-retry-safe rather than as a read.
@@ -518,6 +523,13 @@ complete descriptor-read `SKILL.md` and do not splice unbound catalog or
 `state.json` name/description fields into the file classification. Any digest
 or derivation mismatch becomes `unclassified` before egress.
 
+App-reference classification has two independent inputs: admission of the
+rendered metadata and an exact resource observation of the server-materialized
+reference. Production bootstrap always wires the resource resolver to the
+workspace classification store. Its app/entity key is stable while its
+revision/digest commits to the complete materialized payload; no matching
+record means `unclassified`, never an inferred `public` class.
+
 `AGENTS.md` and `SKILL.md` reads are descriptor-confined, bounded, complete,
 UTF-8 validated, and fenced to one resource identity/revision across chunks.
 The chain is recomputed on every provider step, so continuation, recovery, and
@@ -632,22 +644,22 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 25
-and OpenRouter revision 24, both bound to
-`maverick-hosted-tool-loop==17`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 26
+and OpenRouter revision 25, both bound to
+`maverick-hosted-tool-loop==18`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
 These adversarial-review definitions are new full-workspace claims under
-`codex-baseline-v5`, not mutations of earlier candidates. Adapter 17, compiler
-revision 5, context-compaction schema 3, suite 21, and TCB manifest v11 bind
-composite classification to exact bytes and every component, make overlay
-multi-file commit rollback-safe, reject unrepresentable directory effects, and
-give terminal process polling mutation semantics. They retain the prior
-classification, compaction, attachment, OpenRouter projection, and live
-Google-preflight closure. They remain
-uncertified, unbound, unavailable and independently blocked by Phase-0
+`codex-baseline-v6`, not mutations of earlier candidates. Adapter 18, compiler
+revision 5, context-compaction schema 3, suite 22, and TCB manifest v12 retain
+the exact composite-classification and rollback-safe multi-file invariants,
+preserve existing file mode/ownership/xattrs, reject unrepresented xattr,
+timestamp, directory, and overlay-root effects, and wire exact app-reference
+resource classification in production. They retain the prior compaction,
+attachment, OpenRouter projection, and live Google-preflight closure. They
+remain uncertified, unbound, unavailable and independently blocked by Phase-0
 admission; implementation completion is not provider evidence or release
 approval.
 

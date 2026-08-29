@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v11 also
+status, workspace binding, and upstream constraint. TCB manifest v12 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -135,8 +135,12 @@ Composite attachment metadata is independently admitted and restrictively
 joined with the referenced file classification; skills project exact
 `SKILL.md` content instead of unbound catalog metadata. Attachment-only input
 omits an empty prompt. Hosted shell/process text effects use a rollback-safe
-multi-file transaction, reject unrepresentable directories, and treat terminal
-process polling as mutating/non-retry-safe because it commits the overlay.
+multi-file transaction, preserve existing mode/owner/ACL/xattrs, reject
+unrepresentable directory, timestamp, xattr, and overlay-root effects, and
+treat terminal process polling as mutating/non-retry-safe because it commits
+the overlay. App references use an exact server-materialized resource
+observation resolved by production `PlatformState` against the workspace
+classification store; metadata classification alone cannot make them public.
 
 Hosted full-workspace bindings additionally pin the execution family, harness
 recipe and digest, fine-grained provider-capability catalog digest, semantic
@@ -560,6 +564,12 @@ no client or egress-policy id is attestation. Secret, host-operational, and
 unclassified content is always denied. Workspace paths are rewritten to
 `workspace://` references, other host paths are denied, and recognizable
 sensitive text must be redacted.
+
+For app references, Core hashes the complete server-materialized payload into
+the observed revision/digest and hashes its stable app/entity key into the
+resource identity. The production resolver reads the same revisioned workspace
+classification store used by other resource observations. Absent evidence or
+any identity/version mismatch stays `unclassified`.
 
 The complete decision metadata is inserted first into the session-owned
 `egress_decisions.json`; only then may transformed bytes be used. Its audit

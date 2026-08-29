@@ -14,6 +14,13 @@ from core.runtime.confined_filesystem import (
     FilesystemMutationGuard,
     FilesystemResourceObservation,
 )
+from core.runtime.confined_filesystem_metadata import (
+    ConfinedPathMetadata,
+    apply_new_file_metadata,
+    apply_preserved_file_metadata,
+    capture_fd_metadata,
+    materialized_metadata_matches,
+)
 from core.runtime.confined_filesystem_mutation_support import (
     rename_exchange,
     rename_noreplace,
@@ -36,6 +43,9 @@ class ConfinedTextBatchWrite:
     expected_resource_identity: str | None
     expected_resource_revision: str | None
     mutation_guard: FilesystemMutationGuard
+    create_mode: int = 0o600
+    create_uid: int | None = None
+    create_gid: int | None = None
 
 
 @dataclass
@@ -48,6 +58,7 @@ class _StagedWrite:
     payload: bytes
     previous_stat: os.stat_result | None
     previous_observation: FilesystemResourceObservation | None
+    expected_metadata: ConfinedPathMetadata
     committed_stat: os.stat_result | None = None
     committed: bool = False
     old_entry_retained: bool = False
@@ -157,6 +168,14 @@ def _stage_write(
         )
         payload = request.content.encode("utf-8")
         _write_all(temporary_fd, payload)
+        expected_metadata = _prepare_staged_metadata(
+            filesystem,
+            chain,
+            components[-1],
+            previous_stat,
+            temporary_fd,
+            request,
+        )
         os.fsync(temporary_fd)
         filesystem._hook("write_temporary_ready", request.path)
         request.mutation_guard.verify_before()
@@ -171,6 +190,7 @@ def _stage_write(
             payload=payload,
             previous_stat=previous_stat,
             previous_observation=previous_observation,
+            expected_metadata=expected_metadata,
         )
     except Exception:
         if temporary_fd is not None:
@@ -253,6 +273,12 @@ def _verify_committed(
         "filesystem_resource_changed",
     )
     item.committed_stat = after
+    observed_metadata = capture_fd_metadata(item.temporary_fd)
+    if not materialized_metadata_matches(
+        item.expected_metadata,
+        observed_metadata,
+    ):
+        raise RuntimeToolError("filesystem_metadata_preservation_failed")
     filesystem._assert_final_link(
         item.chain.leaf_fd,  # type: ignore[attr-defined]
         item.components[-1],
@@ -427,6 +453,51 @@ def _same_exchange_version(left: os.stat_result, right: os.stat_result) -> bool:
             "st_mtime_ns",
         )
     )
+
+
+def _prepare_staged_metadata(
+    filesystem: ConfinedWorkspaceFilesystem,
+    chain,
+    name: str,
+    previous_stat: os.stat_result | None,
+    temporary_fd: int,
+    request: ConfinedTextBatchWrite,
+) -> ConfinedPathMetadata:
+    if previous_stat is None:
+        return apply_new_file_metadata(
+            temporary_fd,
+            mode=request.create_mode,
+            uid=(os.geteuid() if request.create_uid is None else request.create_uid),
+            gid=(os.getegid() if request.create_gid is None else request.create_gid),
+        )
+    original_fd: int | None = None
+    try:
+        original_fd = os.open(
+            name,
+            os.O_RDONLY | _NOFOLLOW | _CLOEXEC,
+            dir_fd=chain.leaf_fd,
+        )
+        opened = os.fstat(original_fd)
+        filesystem._assert_same_version(
+            previous_stat,
+            opened,
+            "filesystem_resource_changed",
+        )
+        filesystem._assert_final_link(chain.leaf_fd, name, opened)
+        metadata = capture_fd_metadata(original_fd)
+        filesystem._assert_same_version(
+            previous_stat,
+            os.fstat(original_fd),
+            "filesystem_resource_changed",
+        )
+        return apply_preserved_file_metadata(temporary_fd, metadata)
+    except RuntimeToolError:
+        raise
+    except OSError as error:
+        raise RuntimeToolError("filesystem_metadata_preservation_failed") from error
+    finally:
+        if original_fd is not None:
+            os.close(original_fd)
 
 
 def _write_all(fd: int, payload: bytes) -> None:

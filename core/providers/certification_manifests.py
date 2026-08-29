@@ -100,10 +100,10 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="21",
+        suite_version="22",
         provider_id=provider_id,
         matrix_path=matrix_path,
-        matrix_revision="2026-08-29-r21-p4-composite-atomic-closure-tcb11",
+        matrix_revision="2026-08-29-r22-p4-metadata-appref-closure-tcb12",
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

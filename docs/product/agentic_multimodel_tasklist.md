@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v14 records six maintained transitive dependency contracts. The
+- [x] Manifest v15 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v24 / matrix
-  `2026-08-30-r24-p4-agentic-parity-closure-tcb14`
+- [x] Google and OpenRouter suite v25 / matrix
+  `2026-08-30-r25-p4-agentic-review-closure-tcb15`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -412,15 +412,16 @@ completion claim.
   model and ZDR catalog records, `tool_choice:none`, context/completion limits
   and every translated endpoint parameter, then sends `tools: []` and
   `tool_choice: none` for finalization.
-- [x] Transient prompt, agent-instruction, and governed-context classification
-  is attached at input admission by the closed Core-owned resolver installed by
-  production bootstrap and bound to the exact source identity/digest. The
-  generic classifier is fail-closed. Resource results propagate their observed
-  classification and edit/patch diffs retain pre-image taint. Non-resource
-  CLI/MCP/shell/process bytes are either explicitly certified public or
-  withheld behind exact public action metadata; app declarations cannot
-  promote them. Production fixtures prove first dispatch, continuation, and
-  official discovery/invocation without a generic public-content fallback.
+- [x] Transient prompt and agent-instruction admission requires an exact
+  revisioned workspace classification record; composer identity/digest proves
+  integrity but cannot create `public`. Governed context restrictively joins
+  exact control, summary, task/result, and artifact source records and remains
+  untrusted. The generic classifier is fail-closed. Resource results propagate
+  observed classification and edit/patch diffs retain pre-image taint.
+  Shell/process streams and CLI/MCP discovery/results remain complete and use
+  common compaction; absent admissible classification blocks egress instead of
+  returning a public acknowledgement. App declarations cannot promote output
+  and app entries are not silently filtered.
 - [x] Semantic classifications bind the exact canonical projected bytes.
   Attachment metadata and file observations are classified separately then
   restrictively joined; attachment-only turns omit the empty prompt. Skills
@@ -438,8 +439,10 @@ completion claim.
   rollback-safe batch commit; invalid/failed/interrupted effects are discarded.
 - [x] Synchronous shell and managed-process cancellation reaches the complete
   process group and COW overlay, then awaits worker quiescence before returning.
-  Session close and idle reap invoke adapter-owned process finalization,
-  closing capture descriptors, discarding overlays, clearing live handles, and
+  External cancellation and COW commit share one linearization gate, and
+  `wait_for_termination` reaches hosted turn quiescence. Session close, explicit
+  termination, and idle reap invoke adapter-owned process finalization, closing
+  capture descriptors, discarding overlays, clearing live handles, and
   persisting a terminal process record.
 - [x] Shell/process replacement preserves and verifies existing mode,
   ownership, ACL/xattrs, keeps every pre-image descriptor open, and checks its
@@ -453,11 +456,11 @@ completion claim.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 20, semantic compiler revision 5, Full Workspace contract
-  `codex-baseline-v8`, context-compaction schema 3, TCB manifest v14, suite 24,
-  and matrix `2026-08-30-r24-p4-agentic-parity-closure-tcb14` create new immutable
-  Google revision 28 and OpenRouter revision 27 full-workspace candidates.
-  Historical revisions 27/26 are suspended, never promoted. No live
+- [x] Adapter 21, semantic compiler revision 5, Full Workspace contract
+  `codex-baseline-v9`, context-compaction schema 3, TCB manifest v15, suite 25,
+  and matrix `2026-08-30-r25-p4-agentic-review-closure-tcb15` create new immutable
+  Google revision 29 and OpenRouter revision 28 full-workspace candidates.
+  Historical revisions 28/27 are suspended, never promoted. No live
   probe, signed certificate, binding, remote activation, or Codex
   profile/artifact change is part of Phase 4.
 

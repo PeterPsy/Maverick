@@ -7,7 +7,6 @@ import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
 import json
-from threading import Event
 from typing import Callable
 from uuid import NAMESPACE_URL, uuid5
 
@@ -37,6 +36,7 @@ import core.runtime.confined_filesystem_search as confined_filesystem_search_mod
 import core.runtime.full_workspace_contract as full_workspace_contract_module
 import core.runtime.output_compaction.cli_result as output_compaction_cli_result_module
 import core.runtime.provider_step_journal as provider_step_journal_module
+import core.runtime.runtime_cancellation as runtime_cancellation_module
 import core.runtime.semantic_context_blocks as semantic_context_blocks_module
 import core.runtime.semantic_envelope as semantic_envelope_module
 import core.runtime.semantic_envelope_models as semantic_envelope_models_module
@@ -108,6 +108,7 @@ from core.runtime.hosted_context_management import (
 )
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.provider_private_state import ProviderPrivateStateService
+from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 from core.runtime.provider_step_journal import ProviderStepJournal
 from core.runtime.provider_step_models import ProviderStepJournalRecord
 from core.runtime.hosted_provider_runtime import HostedProviderRuntimeRegistry
@@ -199,6 +200,7 @@ class HostedAgenticLoop:
             tool_process_capabilities_module,
             tool_result_artifacts_module,
             tool_orchestrator_module,
+            runtime_cancellation_module,
             provider_step_journal_module,
             semantic_context_blocks_module,
             semantic_envelope_module,
@@ -213,7 +215,7 @@ class HostedAgenticLoop:
         self,
         context: RuntimeTurnContext,
         *,
-        cancellation: Event,
+        cancellation: RuntimeCancellationSignal,
     ) -> AsyncIterator[RuntimeProviderEvent]:
         ordinal = 0
 
@@ -253,7 +255,7 @@ class HostedAgenticLoop:
         self,
         context: RuntimeTurnContext,
         *,
-        cancellation: Event,
+        cancellation: RuntimeCancellationSignal,
         event: Callable[[str, dict[str, object]], RuntimeProviderEvent],
     ) -> AsyncIterator[RuntimeProviderEvent]:
         require_agentic_feature(
@@ -1046,7 +1048,7 @@ class HostedAgenticLoop:
         self,
         *,
         context,
-        cancellation: Event,
+        cancellation: RuntimeCancellationSignal,
         budget: HostedAgenticBudget,
         outcome: RuntimeToolInvocationOutcome,
     ) -> RuntimeToolInvocationOutcome:

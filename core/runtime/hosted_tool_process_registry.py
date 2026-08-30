@@ -23,6 +23,7 @@ from core.runtime.lifecycle_service_turns import (
 )
 from core.runtime.process_control import (
     register_runtime_process,
+    terminate_orphaned_runtime_processes_for_session,
     terminate_runtime_process,
     unregister_runtime_process,
 )
@@ -309,6 +310,10 @@ class HostedToolProcessRegistry:
             )
             for process_id, _live in owned:
                 self._live.pop(process_id, None)
+        # Bubblewrap may outlive the Popen leader it forked from. Reap every
+        # marked process for the closing session before waiting on captures,
+        # including an orphan whose in-memory handle was already lost.
+        terminate_orphaned_runtime_processes_for_session(session_id)
         finalized = 0
         for process_id, live in owned:
             with live.lock:

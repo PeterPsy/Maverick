@@ -11,7 +11,7 @@ Phase-4 repository closure executes only the explicitly selected deterministic
 `live_probe`, produce behavioral evidence, sign/publish a remote certificate,
 or make any provider HTTP/SSE request.
 
-Suite 24 retains the P2 crash/pairing/outbox matrix and P3 finalization
+Suite 25 retains the P2 crash/pairing/outbox matrix and P3 finalization
 coverage, including durable step/tool/output/cost/time reservation, complete
 terminal-request cost projections, tool-less provider payloads, staged
 request-specific preflight, and request-scoped instructions. It also verifies
@@ -22,7 +22,7 @@ journal-evidence, atomic Full Workspace contract, descriptor-confined mutation,
 fixed-path shell, managed-process, discovery-first CLI/MCP, compaction, and
 orphan-cleanup fixtures.
 It additionally binds recipe/catalog identity, compiler revision 5,
-`codex-baseline-v8`, mandatory commit-bound instruction digests and governed
+`codex-baseline-v9`, mandatory commit-bound instruction digests and governed
 rollback-safe shell/process effect transactions, semantic compaction schema 3, artifact-backed
 large results, UTF-8/base64 attachment
 workspace references, explicit steering fallback, production-composed
@@ -37,10 +37,12 @@ It also proves exact production app-reference resource classification,
 mode/owner/xattr preservation, complete retained-pre-image metadata race
 rollback, exact file timestamp materialization for read-modify-write, and
 rejection of metadata-only root/directory and hardlink effects.
-The corpus additionally proves production transient-input bootstrap, safe
-action-metadata projection without raw-output promotion, byte-correct artifact
-summary digests, cancellation quiescence with no late COW commit,
-adapter-owned managed-process cleanup, and full-request-triggered compaction.
+The corpus additionally proves source-derived transient-input classification,
+restrictive governed-context joins, complete-or-egress-denied shell/process and
+CLI/MCP results, byte-correct artifact summary digests, a shared
+cancel-vs-COW-commit linearization gate, requested turn quiescence,
+adapter-owned explicit-session managed-process cleanup, and
+full-request-triggered compaction.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
@@ -57,8 +59,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v24 matrix revision
-  `2026-08-30-r24-p4-agentic-parity-closure-tcb14` declared by the provider
+- the dated suite-v25 matrix revision
+  `2026-08-30-r25-p4-agentic-review-closure-tcb15` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -93,7 +95,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 24 \
+  --suite-version 25 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -102,9 +104,9 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `24`, matrix revision
-`2026-08-30-r24-p4-agentic-parity-closure-tcb14`, and the OpenRouter manifest.
-The Google suite uses version `24` and the same matrix revision. The
+version `25`, matrix revision
+`2026-08-30-r25-p4-agentic-review-closure-tcb15`, and the OpenRouter manifest.
+The Google suite uses version `25` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.

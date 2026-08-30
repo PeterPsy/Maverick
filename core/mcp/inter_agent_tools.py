@@ -369,6 +369,8 @@ def _cleanup_runtime_session(state: SimpleNamespace, *, session_id: str, reason:
         event_bus=state.runtime_event_bus,
         observability_store=state.observability_store,
         start_path=state.repository_root,
+        provider_store=getattr(state, "provider_store", None),
+        provider_registry=getattr(state, "provider_registry", None),
     )
     return {**termination, "deleted": state.runtime_store.delete_session_records(session_id)}
 

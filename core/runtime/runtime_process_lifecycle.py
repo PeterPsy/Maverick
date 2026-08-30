@@ -157,6 +157,7 @@ def interrupt_runtime_provider_turn(
                 session_id=session.session_id,
                 correlation_id=turn_id or session.session_id,
                 adapter=engine.agentic_adapter,
+                wait_for_termination=wait_for_termination,
             ).cancelled
         return bool(
             engine.legacy_adapter

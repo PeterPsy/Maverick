@@ -36,6 +36,7 @@ from core.runtime.tool_errors import (
 )
 from core.runtime.tool_ledger import RuntimeToolLedger
 from core.runtime.output_compaction.cli_result import compact_runtime_cli_result
+from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 from core.runtime.tool_models import ToolConfirmationGrant, ToolInvocationRecord
 from core.runtime.tool_result_artifacts import TOOL_RESULT_ARTIFACT_READ_HANDLE
 from core.runtime.tool_schema import validate_tool_arguments
@@ -70,6 +71,7 @@ class RuntimeToolExecutionControl:
     execution_lease_id: str
     cancellation: Event
     monotonic: Callable[[], float] = time.monotonic
+    external_cancellation: RuntimeCancellationSignal | None = None
     cancellation_reason: str = "runtime_cancelled"
     _callbacks: dict[int, Callable[[], None]] = field(
         default_factory=dict,
@@ -91,8 +93,9 @@ class RuntimeToolExecutionControl:
 
     def cancel(self, reason_code: str) -> None:
         with self._callback_lock:
-            self.cancellation_reason = reason_code
-            self.cancellation.set()
+            if not self.cancellation.is_set():
+                self.cancellation_reason = reason_code
+                self.cancellation.set()
             callbacks = tuple(self._callbacks.values())
             self._callbacks.clear()
         for callback in callbacks:
@@ -102,6 +105,11 @@ class RuntimeToolExecutionControl:
                 pass
 
     def check(self) -> None:
+        if (
+            self.external_cancellation is not None
+            and self.external_cancellation.is_set()
+        ):
+            raise RuntimeToolError("runtime_cancelled")
         if self.cancellation.is_set():
             raise RuntimeToolError(self.cancellation_reason)
         if self.monotonic() >= self.deadline_monotonic:
@@ -128,9 +136,21 @@ class RuntimeToolExecutionControl:
 
     def run_if_active(self, action: Callable[[], object]) -> object:
         """Cross one effect boundary atomically with respect to cancellation."""
-        with self._callback_lock:
-            self.check()
-            return action()
+        def run() -> object:
+            with self._callback_lock:
+                self.check()
+                return action()
+
+        if self.external_cancellation is None:
+            return run()
+        return self.external_cancellation.run_if_active(
+            run,
+            cancelled=self._raise_external_cancellation,
+        )
+
+    @staticmethod
+    def _raise_external_cancellation() -> object:
+        raise RuntimeToolError("runtime_cancelled")
 
     def complete(self) -> None:
         """Release callbacks only after the authoritative ledger commit."""

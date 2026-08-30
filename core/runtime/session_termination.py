@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.providers.service import resolve_runtime_engine_for_session
+from core.runtime.agentic_runtime_service import close_agentic_runtime
 from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeTransitionError
 from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.process_control import terminate_runtime_processes
@@ -19,6 +21,9 @@ def terminate_runtime_session(
     event_bus: RuntimeEventBus | None = None,
     observability_store=None,
     start_path=None,
+    provider_store=None,
+    provider_registry=None,
+    agentic_adapter=None,
 ) -> dict[str, object]:
     """Stop live processes and cancel active work for one runtime session."""
     try:
@@ -27,7 +32,28 @@ def terminate_runtime_session(
         return {"session_id": session_id, "found": False, "terminated_processes": 0, "cancelled_turns": 0}
 
     clear_cached_runtime_launch_context(session_id)
-    terminated_processes = terminate_runtime_processes(session_id)
+    terminated_processes = 0
+    if (
+        session.execution_binding is not None
+        and agentic_adapter is None
+        and provider_store is not None
+        and provider_registry is not None
+    ):
+        agentic_adapter = resolve_runtime_engine_for_session(
+            provider_store,
+            session=session,
+            registry=provider_registry,
+        )[2]
+    if session.execution_binding is not None and agentic_adapter is not None:
+        closed = close_agentic_runtime(
+            store,
+            session_id=session_id,
+            adapter=agentic_adapter,
+        )
+        if not closed.closed:
+            raise RuntimeError("runtime_adapter_close_failed")
+        terminated_processes += closed.terminated_processes
+    terminated_processes += terminate_runtime_processes(session_id)
     cancelled_turns = 0
     for turn in store.list_turns(session_id):
         if turn.status in {"queued", "active", "waiting_for_tool_confirmation"}:

@@ -12,6 +12,7 @@ from core.egress.classification import (
     validated_classification,
 )
 from core.mcp.tool_registry import McpToolRegistry
+from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_admission_resolver,
 )
@@ -41,7 +42,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             mcp_registry=self.mcp,
         )
 
-    def test_shell_and_process_output_are_withheld_from_public_action_metadata(
+    def test_shell_and_process_output_remain_complete_and_fail_closed(
         self,
     ) -> None:
         shell = self.resolve(
@@ -59,12 +60,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             },
             self.actor,
         )
-        self.assertIsInstance(shell, RuntimeToolSurfaceResult)
-        self.assertEqual(shell.classification.data_class, "public")
-        self.assertTrue(shell.payload["output_withheld"])
-        self.assertNotIn("output", shell.payload)
-        self.assertNotIn("workspace_effect_paths", shell.payload)
-        self._assert_digest_matches(shell)
+        self.assertIsNone(shell)
 
         status = self.resolve(
             "core-capability:process.status",
@@ -84,22 +80,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             },
             self.actor,
         )
-        self.assertIsInstance(status, RuntimeToolSurfaceResult)
-        self.assertTrue(status.payload["output_withheld"])
-        self.assertTrue(status.payload["workspace_effects_withheld"])
-        self.assertNotIn("output", status.payload)
-        self.assertNotIn("workspace_effects", status.payload)
-        self._assert_digest_matches(status)
-
-        projected_again = self.resolve(
-            "core-capability:process.status",
-            {"process_id": "agent-process-1"},
-            status.payload,
-            self.actor,
-        )
-        self.assertTrue(projected_again.payload["output_withheld"])
-        self.assertTrue(projected_again.payload["workspace_effects_withheld"])
-        self._assert_digest_matches(projected_again)
+        self.assertIsNone(status)
 
     def test_process_start_identifier_survives_as_bounded_action_metadata(
         self,
@@ -201,10 +182,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             self.actor,
         )
 
-        self.assertIsInstance(resolved, RuntimeToolSurfaceResult)
-        self.assertTrue(resolved.payload["result_withheld"])
-        self.assertNotIn("secret", resolved.payload)
-        self._assert_digest_matches(resolved)
+        self.assertIsNone(resolved)
 
     def test_app_result_claim_cannot_promote_untrusted_cli_bytes(self) -> None:
         self.cli.register_command(
@@ -240,11 +218,87 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             self.actor,
         )
 
-        self.assertIsInstance(resolved, RuntimeToolSurfaceResult)
-        self.assertEqual(resolved.classification.data_class, "public")
-        self.assertTrue(resolved.payload["result_withheld"])
-        self.assertNotIn("secret", resolved.payload)
-        self._assert_digest_matches(resolved)
+        self.assertIsNone(resolved)
+
+    def test_app_cli_and_mcp_discovery_is_never_silently_filtered(self) -> None:
+        self.cli.register_command(
+            CliCommandDefinition(
+                command_id="app.visible",
+                path_segments=["app", "visible"],
+                description="Workspace app command.",
+                argument_schema={"type": "object"},
+                owner_kind="app",
+                owner_id="fixture-app",
+                workspace_id="default",
+                exposure_scope="workspace_enabled_app",
+                invocation_policy=CliInvocationPolicy(
+                    False,
+                    None,
+                    True,
+                    True,
+                    False,
+                ),
+                entrypoint_path="apps/fixture/cli.py",
+                effect_class="read",
+                schema_public=True,
+                certified_tcb_component="tool-schema-catalog",
+            ),
+            lambda _arguments, _context: {},
+        )
+        self.mcp.register_tool(
+            McpToolDefinition(
+                tool_name="app_visible",
+                description="Workspace app tool.",
+                input_schema={"type": "object"},
+                output_schema=None,
+                owner_kind="app",
+                owner_id="fixture-app",
+                workspace_id="default",
+                exposure_scope="workspace_enabled_app",
+                invocation_policy=McpInvocationPolicy(
+                    False,
+                    True,
+                    True,
+                    False,
+                ),
+                entrypoint_path="apps/fixture/mcp.py",
+                effect_class="read",
+                schema_public=True,
+                certified_tcb_component="tool-schema-catalog",
+            ),
+            lambda _arguments, _context: {},
+        )
+        cli_payload = {
+            "registry_revision": "fixture",
+            "commands": [{"command_id": "app.visible", "owner_kind": "app"}],
+            "next_cursor": None,
+            "discovery_first": True,
+        }
+        mcp_payload = {
+            "registry_revision": "fixture",
+            "tools": [{"tool_name": "app_visible", "owner_kind": "app"}],
+            "next_cursor": None,
+            "discovery_first": True,
+        }
+
+        self.assertIsNone(
+            self.resolve(
+                "core-capability:cli.list",
+                {},
+                cli_payload,
+                self.actor,
+            )
+        )
+        self.assertIsNone(
+            self.resolve(
+                "core-capability:mcp.list",
+                {},
+                mcp_payload,
+                self.actor,
+            )
+        )
+        self.assertEqual(cli_payload["commands"][0]["command_id"], "app.visible")
+        self.assertEqual(mcp_payload["tools"][0]["tool_name"], "app_visible")
 
     def test_unknown_resource_result_keeps_its_existing_fail_closed_taint(self) -> None:
         self.assertIsNone(

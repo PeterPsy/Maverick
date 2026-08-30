@@ -78,8 +78,8 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "28")
-        self.assertEqual(profile.adapter_version_constraint, "==20")
+        self.assertEqual(profile.revision, "29")
+        self.assertEqual(profile.adapter_version_constraint, "==21")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.provider_api_version, "v1")
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))

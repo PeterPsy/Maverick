@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v14 also
+status, workspace binding, and upstream constraint. TCB manifest v15 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -577,11 +577,16 @@ classification store used by other resource observations. Absent evidence or
 any identity/version mismatch stays `unclassified`.
 
 Production bootstrap also installs the closed transient-input admission
-resolver used by the composer. Tool results do not receive a generic public
-fallback: exact resource observations and edit pre-images retain their taint;
-unclassified shell/process/CLI/MCP content is withheld behind bounded Core
-action metadata unless a Core-owned certified definition explicitly admits the
-full public result. App definitions cannot self-promote. Large artifact
+resolver used by the composer. Integrity-bound source ids never imply
+`public`: ordinary transient inputs require exact workspace classification
+records, while governed orchestration context joins its independently
+classified control, summary, task/result, and artifact sources and retains
+untrusted provenance. Tool results do not receive a generic public fallback:
+exact resource observations and edit pre-images retain their taint; complete
+shell/process streams and CLI/MCP discovery/results remain available to the
+common compactor, but unclassified bytes block egress rather than becoming a
+public acknowledgement. App definitions remain discoverable and cannot
+self-promote. Large artifact
 summaries carry a digest of their exact provider-visible bytes while retaining
 the original result class/trust/identity separately.
 

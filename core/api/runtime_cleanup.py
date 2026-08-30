@@ -96,6 +96,8 @@ def cleanup_runtime_session(
         event_bus=state.runtime_event_bus,
         observability_store=state.observability_store,
         start_path=start_path or state.repository_root,
+        provider_store=getattr(state, "provider_store", None),
+        provider_registry=getattr(state, "provider_registry", None),
     )
     termination_finished_at = time.perf_counter()
     tool_ledger = getattr(state, "runtime_tool_ledger", None)

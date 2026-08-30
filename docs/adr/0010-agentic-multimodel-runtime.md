@@ -488,11 +488,12 @@ server `$$NOW`. A worker paused after its last cooperative check therefore
 cannot commit success after expiry even if the timeout CAS is delayed.
 Non-read effects that cross the boundary remain `execution_unknown` rather than
 being paired as safe completion. Core shell/process surfaces register
-cancellation cleanup with the lease before returning: cancellation kills the
-full process group, discards the COW overlay, and waits for the bounded worker
-to quiesce, so effects cannot appear after the cancelled turn has returned. The
-adapter owns the managed-process registry and session close/idle reap finalize
-its live map,
+cancellation cleanup with the lease before returning. The external signal and
+COW commit share one linearization gate, so cancellation that wins cannot be
+relayed by later polling into a post-cancel commit. Cancellation kills the full
+process group, discards the overlay, and requested provider termination waits
+for bounded worker quiescence. The adapter owns the managed-process registry;
+session close, explicit session termination, and idle reap finalize its live map,
 capture descriptors, overlays, global process registration, and durable status.
 
 An empty or whitespace-only provider final is an explicit invalid outcome, not
@@ -629,18 +630,23 @@ resource-returning tool classification comes from the exact resource identity,
 revision, and digest observed by Core. Transient prompt, agent-instruction, and
 governed-context blocks receive a canonical classification only from a trusted
 server-owned admission resolver bound to their exact workspace/session/turn,
-source identity and digest. Hashing the bytes does not determine their class.
-Production bootstrap installs a closed Core-owned resolver for the exact
-transient composer sources; unknown identities remain `unclassified`. For tool
-results, resource reads keep exact observed taint and edit/patch diffs inherit
-their pre-image taint. Core action-result policy may instead expose a bounded
-public acknowledgement after withholding unclassified shell/process or
-CLI/MCP content. Only a Core-owned TCB-certified CLI/MCP definition can opt its
-exact public result bytes into admission; an app declaration cannot. Model or
-browser declarations, generic hashing, and redaction cannot select, infer, or
-widen a class. A missing or incoherent source classification produces
-`unclassified`, and the restrictive join prevents an attestation or
-less-sensitive sibling block from promoting it.
+source identity and digest. Hashing the bytes and recognizing a Core composer
+id establish integrity, not a data class. Production bootstrap resolves prompt,
+agent-instruction, and reference-metadata classes from matching revisioned
+workspace resource records. Governed context cannot use one aggregate
+promotion: it restrictively joins exact control, summary, task/result, and
+artifact source records and forces untrusted trust. Unknown identities or
+missing source evidence remain `unclassified`. For tool results, resource reads
+keep exact observed taint and edit/patch diffs inherit their pre-image taint.
+Shell/process streams and CLI/MCP discovery/results remain complete through the
+shared compactor. Only a Core-owned TCB-certified definition can opt exact
+public result bytes into admission; otherwise egress blocks the agent instead
+of replacing content with a public acknowledgement. App surfaces remain
+discoverable but app declarations cannot promote their result. Model or browser
+declarations, generic hashing, and redaction cannot select, infer, or widen a
+class. A missing or incoherent source classification produces `unclassified`,
+and the restrictive join prevents an attestation or less-sensitive sibling
+block from promoting it.
 
 Unknown classification, provenance, trust, destination, or policy fails closed.
 `workspace_internal_fake` is eligible for evaluation only when the exact
@@ -664,16 +670,16 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 28
-and OpenRouter revision 27, both bound to
-`maverick-hosted-tool-loop==20`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 29
+and OpenRouter revision 28, both bound to
+`maverick-hosted-tool-loop==21`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
 These adversarial-review definitions are new full-workspace claims under
-`codex-baseline-v8`, not mutations of earlier candidates. Adapter 20, recipe
-revision 7, context-compaction schema 3, suite 24, and TCB manifest v14 retain
+`codex-baseline-v9`, not mutations of earlier candidates. Adapter 21, recipe
+revision 8, context-compaction schema 3, suite 25, and TCB manifest v15 retain
 the exact composite-classification and rollback-safe multi-file invariants.
 Every existing pre-image stays descriptor-pinned across exchange and is checked
 against its complete metadata/xattr snapshot, so a later-file metadata race

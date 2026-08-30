@@ -169,6 +169,8 @@ def quarantine_continuation_successor(
         event_bus=getattr(state, "runtime_event_bus", None),
         observability_store=getattr(state, "observability_store", None),
         start_path=getattr(state, "repository_root", None),
+        provider_store=getattr(state, "provider_store", None),
+        provider_registry=getattr(state, "provider_registry", None),
     )
     binding = successor.execution_binding
     release_idle_runtime_processes(

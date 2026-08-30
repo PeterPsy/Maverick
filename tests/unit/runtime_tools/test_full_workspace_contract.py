@@ -31,6 +31,7 @@ from core.runtime.full_workspace_contract import (
     validate_full_workspace_contract_claim,
     validate_full_workspace_live_authority,
 )
+from core.runtime.hosted_tool_result_admission import HOSTED_TOOL_RESULT_MODES
 from core.runtime.hosted_harness_recipes import GOOGLE_FULL_WORKSPACE_RECIPE
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
 from core.runtime.process_control import runtime_processes_alive_for_session
@@ -106,6 +107,7 @@ class FullWorkspaceContractTest(unittest.TestCase):
         report = inspect_full_workspace_contract(
             capabilities=capabilities,
             policy=policy,
+            tool_result_modes=HOSTED_TOOL_RESULT_MODES,
         )
         self.assertTrue(report.complete)
         validate_full_workspace_contract_claim(

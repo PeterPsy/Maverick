@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import hashlib
 import os
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
+from core.egress.agentic_transforms import canonical_egress_content
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.hosted_agentic_factory import _tool_orchestrator
@@ -15,7 +17,11 @@ from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
 from core.runtime.app_reference_classification import (
     observe_runtime_app_reference,
 )
+from core.runtime.app_references import input_text_with_app_references
 from core.runtime.provider_input_context import runtime_provider_input_sources
+from core.runtime.provider_input_admission import (
+    RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
+)
 from core.runtime.tool_catalog import RuntimeToolActorContext
 from core.workspaces.data_governance import WorkspaceResourceClassification
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
@@ -51,6 +57,13 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
         client = DeterministicFakeAgenticClient(
             tool_name=harness.filesystem_list_tool_name,
             tool_arguments={"path": ".", "max_depth": 1},
+        )
+        self._classify_runtime_input(
+            state,
+            session=harness.session,
+            turn_id="turn-hosted",
+            source_id="turn-prompt",
+            content="Use the public fixture tool and finish.",
         )
         input_sources = runtime_provider_input_sources(
             state,
@@ -124,6 +137,23 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                 updated_at=NOW,
             ),
             expected_revision=0,
+        )
+        self._classify_runtime_input(
+            state,
+            session=harness.session,
+            turn_id="turn-hosted",
+            source_id="turn-prompt",
+            content="Inspect the public record.",
+        )
+        self._classify_runtime_input(
+            state,
+            session=harness.session,
+            turn_id="turn-hosted",
+            source_id="app-reference:0:metadata",
+            content=input_text_with_app_references(
+                input_text="",
+                app_references=[reference],
+            ).strip(),
         )
         sources = runtime_provider_input_sources(
             state,
@@ -230,7 +260,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             identity_field="command_id",
             identity="developer-context.list",
         )
-        self.assertEqual(cli_entry["result_data_class"], "public")
+        self.assertEqual(cli_entry["result_data_class"], "unclassified")
         cli_result = surfaces["core-capability:cli.run"].handler(
             {
                 "command_id": "developer-context.list",
@@ -267,6 +297,41 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
         self.assertEqual(mcp_result.classification.data_class, "public")
         self.assertIsNotNone(
             orchestrator.catalog_builder.result_classification_resolver
+        )
+
+    @staticmethod
+    def _classify_runtime_input(
+        state,
+        *,
+        session,
+        turn_id: str,
+        source_id: str,
+        content: object,
+    ) -> None:
+        digest = hashlib.sha256(canonical_egress_content(content)).hexdigest()
+        source_ref = f"runtime-turn:{turn_id}:{source_id}"
+        state.workspace_store.save_resource_classification(
+            WorkspaceResourceClassification(
+                classification_id=(
+                    f"classification-{session.session_id}-{turn_id}-{source_id}"
+                ),
+                workspace_id=session.workspace_id,
+                resource_kind=RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
+                resource_ref=source_ref,
+                resource_identity=(
+                    f"runtime-input:{session.workspace_id}:{session.session_id}:"
+                    f"{turn_id}:{source_id}:{digest}"
+                ),
+                resource_revision=digest,
+                resource_digest=digest,
+                data_class="public",
+                trust_level="trusted_actor",
+                revision=1,
+                classified_by_actor_id="fixture-classifier",
+                classified_at=NOW,
+                updated_at=NOW,
+            ),
+            expected_revision=0,
         )
 
     def _discover(

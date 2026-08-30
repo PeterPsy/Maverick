@@ -19,39 +19,17 @@ from core.runtime.tool_discovery_support import (
 )
 
 
-HOSTED_TOOL_RESULT_ADMISSION_REVISION = 1
+HOSTED_TOOL_RESULT_ADMISSION_REVISION = 2
+HOSTED_TOOL_RESULT_MODES = {
+    "core-capability:shell.run": "complete_or_egress_denied",
+    "core-capability:process.status": "complete_or_egress_denied",
+    "core-capability:cli.list": "complete_or_egress_denied",
+    "core-capability:cli.run": "complete_or_egress_denied",
+    "core-capability:mcp.list": "complete_or_egress_denied",
+    "core-capability:mcp.call": "complete_or_egress_denied",
+}
 
 _ACTION_METADATA_FIELDS: dict[str, tuple[str, ...]] = {
-    "core-capability:filesystem.write": (
-        "path",
-        "byte_count",
-        "created",
-        "replaced",
-        "previous_resource_revision",
-        "previous_resource_digest",
-        "resource_identity",
-        "resource_revision",
-        "resource_digest",
-        "instruction_scope_digest",
-    ),
-    "core-capability:filesystem.move": (
-        "source_path",
-        "destination_path",
-        "resource_identity",
-        "resource_revision",
-        "resource_digest",
-    ),
-    "core-capability:filesystem.delete": (
-        "path",
-        "deleted",
-        "recursive",
-        "deleted_entry_count",
-        "cleanup_pending",
-        "cleanup_reason",
-        "resource_identity",
-        "resource_revision",
-        "resource_digest",
-    ),
     "core-capability:process.start": (
         "process_id",
         "status",
@@ -96,71 +74,23 @@ def build_hosted_tool_result_admission_resolver(
                 trust_level="trusted_platform",
             )
         if handle == "core-capability:shell.run":
-            projection = _metadata_projection(
-                handle,
-                result,
-                (
-                    "exit_code",
-                    "output_bytes",
-                    "stream_complete",
-                    "workspace_effects_committed",
-                    "workspace_effect_count",
-                    "mutation_scope_count",
-                ),
-            )
-            projection["output_withheld"] = (
-                bool(result.get("output"))
-                or result.get("output_withheld") is True
-            )
-            return _admitted_surface(
-                handle,
-                projection,
-                context,
-                trust_level="trusted_platform",
-            )
+            return None
         if handle == "core-capability:process.status":
-            projection = _metadata_projection(
-                handle,
-                result,
-                (
-                    "process_id",
-                    "status",
-                    "exit_code",
-                    "output_offset",
-                    "next_output_offset",
-                    "output_pending",
-                    "stdin_open",
-                    "failure_reason",
-                    "output_truncated",
-                ),
-            )
-            projection["output_withheld"] = (
-                bool(result.get("output"))
-                or result.get("output_withheld") is True
-            )
-            projection["workspace_effects_withheld"] = (
-                result.get("workspace_effects") is not None
-                or result.get("workspace_effects_withheld") is True
-            )
-            return _admitted_surface(
-                handle,
-                projection,
-                context,
-                trust_level="trusted_platform",
-            )
+            return None
         if handle in {
             "core-capability:cli.list",
             "core-capability:mcp.list",
         }:
-            projection = _discovery_projection(
+            if not _discovery_is_certified_public(
                 handle,
                 result,
                 cli_registry=cli_registry,
                 mcp_registry=mcp_registry,
-            )
+            ):
+                return None
             return _admitted_surface(
                 handle,
-                projection,
+                dict(result),
                 context,
                 trust_level="trusted_platform",
             )
@@ -178,12 +108,7 @@ def build_hosted_tool_result_admission_resolver(
                     context,
                     trust_level="untrusted_tool_output",
                 )
-            return _withheld_invocation(
-                handle,
-                "command_id",
-                command_id,
-                context,
-            )
+            return None
         if handle == "core-capability:mcp.call" or handle.startswith("mcp:"):
             tool_name = (
                 str(arguments.get("tool_name") or "").strip()
@@ -198,12 +123,7 @@ def build_hosted_tool_result_admission_resolver(
                     context,
                     trust_level="untrusted_tool_output",
                 )
-            return _withheld_invocation(
-                handle,
-                "tool_name",
-                tool_name,
-                context,
-            )
+            return None
         return None
 
     return resolve
@@ -228,68 +148,31 @@ def _safe_metadata_value(value: object) -> bool:
     return value is None or isinstance(value, (str, int, bool))
 
 
-def _withheld_invocation(
-    handle: str,
-    identity_field: str,
-    identity: str,
-    context: RuntimeToolActorContext,
-) -> RuntimeToolSurfaceResult:
-    return _admitted_surface(
-        handle,
-        {
-            "action": handle,
-            identity_field: identity,
-            "outcome": "succeeded",
-            "result_withheld": True,
-            "withheld_reason": "tool_result_classification_unavailable",
-        },
-        context,
-        trust_level="trusted_platform",
-    )
-
-
-def _discovery_projection(
+def _discovery_is_certified_public(
     handle: str,
     result: dict[str, object],
     *,
     cli_registry,
     mcp_registry,
-) -> dict[str, object]:
+) -> bool:
     is_cli = handle.endswith("cli.list")
     collection = "commands" if is_cli else "tools"
     identity_field = "command_id" if is_cli else "tool_name"
     raw_items = result.get(collection)
-    admitted: list[object] = []
-    prior_withheld = result.get("withheld_result_count", 0)
-    withheld = (
-        prior_withheld
-        if isinstance(prior_withheld, int)
-        and not isinstance(prior_withheld, bool)
-        and prior_withheld >= 0
-        else 0
-    )
-    if isinstance(raw_items, list):
-        for raw_item in raw_items:
-            if not isinstance(raw_item, dict):
-                withheld += 1
-                continue
-            identity = str(raw_item.get(identity_field) or "").strip()
-            definition = (
-                _cli_definition(cli_registry, identity)
-                if is_cli
-                else _mcp_definition(mcp_registry, identity)
-            )
-            if _certified_core_definition(definition):
-                admitted.append(dict(raw_item))
-            else:
-                withheld += 1
-    return {
-        "registry_revision": result.get("registry_revision"),
-        collection: admitted,
-        "next_cursor": result.get("next_cursor"),
-        "discovery_first": result.get("discovery_first") is True,
-        "withheld_result_count": withheld,
-    }
+    if not isinstance(raw_items, list):
+        return False
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            return False
+        identity = str(raw_item.get(identity_field) or "").strip()
+        definition = (
+            _cli_definition(cli_registry, identity)
+            if is_cli
+            else _mcp_definition(mcp_registry, identity)
+        )
+        if not _certified_core_definition(definition):
+            return False
+    return True
 
 
 def _cli_definition(registry, command_id: str):
@@ -359,5 +242,6 @@ def _admitted_surface(
 
 __all__ = [
     "HOSTED_TOOL_RESULT_ADMISSION_REVISION",
+    "HOSTED_TOOL_RESULT_MODES",
     "build_hosted_tool_result_admission_resolver",
 ]

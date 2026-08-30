@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 from threading import Event, RLock
 
@@ -31,7 +32,15 @@ from core.runtime.provider_private_state import (
     public_provider_private_reason,
 )
 from core.runtime.provider_step_admission import provider_step_admission_reason
+from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 from core.runtime.service import transition_runtime_turn
+
+
+@dataclass(frozen=True)
+class _ActiveHostedTurn:
+    session_id: str
+    cancellation: RuntimeCancellationSignal
+    terminated: Event
 
 
 class HostedAgenticEngineAdapter:
@@ -55,7 +64,7 @@ class HostedAgenticEngineAdapter:
         self.loop = loop
         self.composition_components = composition_components
         self.process_registry = process_registry
-        self._cancellations: dict[str, tuple[str, Event]] = {}
+        self._cancellations: dict[str, _ActiveHostedTurn] = {}
         self._lock = RLock()
 
     @property
@@ -188,30 +197,36 @@ class HostedAgenticEngineAdapter:
                 terminal_reason_code=journal_reason,
             )
             raise HostedAgenticLoopError(journal_reason)
-        cancellation = Event()
+        active = _ActiveHostedTurn(
+            session_id=context.session.session_id,
+            cancellation=RuntimeCancellationSignal(),
+            terminated=Event(),
+        )
         with self._lock:
             if context.correlation_id in self._cancellations:
                 raise RuntimeError("hosted_turn_already_active")
-            self._cancellations[context.correlation_id] = (
-                context.session.session_id,
-                cancellation,
-            )
+            self._cancellations[context.correlation_id] = active
         try:
             async for event in self.loop.execute(
                 persisted_context,
-                cancellation=cancellation,
+                cancellation=active.cancellation,
             ):
                 yield event
         finally:
             with self._lock:
-                self._cancellations.pop(context.correlation_id, None)
+                current = self._cancellations.get(context.correlation_id)
+                if current is active:
+                    active.terminated.set()
+                    self._cancellations.pop(context.correlation_id, None)
 
     async def cancel(self, context: RuntimeCancelContext) -> RuntimeCancelResult:
         with self._lock:
             active = self._cancellations.get(context.correlation_id)
-        if active is None or active[0] != context.session.session_id:
+        if active is None or active.session_id != context.session.session_id:
             return RuntimeCancelResult(cancelled=False, reason_code="runtime_turn_not_active")
-        active[1].set()
+        await asyncio.to_thread(active.cancellation.set)
+        if context.wait_for_termination:
+            await asyncio.to_thread(active.terminated.wait)
         return RuntimeCancelResult(cancelled=True, reason_code="cancelled")
 
     async def recover(self, context: RuntimeRecoveryContext) -> RuntimeRecoveryResult:
@@ -239,12 +254,16 @@ class HostedAgenticEngineAdapter:
         )
 
     async def close(self, context: RuntimeCloseContext) -> RuntimeCloseResult:
-        cancelled = 0
         with self._lock:
-            for session_id, cancellation in self._cancellations.values():
-                if session_id == context.session.session_id:
-                    cancellation.set()
-                    cancelled += 1
+            active_turns = tuple(
+                active
+                for active in self._cancellations.values()
+                if active.session_id == context.session.session_id
+            )
+        for active in active_turns:
+            await asyncio.to_thread(active.cancellation.set)
+        for active in active_turns:
+            await asyncio.to_thread(active.terminated.wait)
         terminated = (
             self.process_registry.terminate_session(context.session.session_id)
             if self.process_registry is not None
@@ -252,7 +271,7 @@ class HostedAgenticEngineAdapter:
         )
         return RuntimeCloseResult(
             closed=True,
-            terminated_processes=cancelled + terminated,
+            terminated_processes=terminated,
         )
 
     async def health(self, context: RuntimeHealthContext) -> RuntimeHealth:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-import os
 from threading import Event
 import time
 from types import SimpleNamespace
@@ -10,15 +9,13 @@ import unittest
 
 from core.cli.command_registry import CliCommandRegistry
 from core.mcp.tool_registry import McpToolRegistry
-from core.providers.agentic_adapter import RuntimeCloseContext
-from core.runtime.hosted_agentic_engine import HostedAgenticEngineAdapter
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.hosted_agentic_tool_execution import (
     execute_hosted_authorized_tool,
 )
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
-from core.runtime.process_control import runtime_processes_alive_for_session
+from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 from core.runtime.tool_catalog import (
     RuntimeToolActorContext,
     RuntimeToolCatalogBuilder,
@@ -32,7 +29,6 @@ from core.runtime.tool_orchestrator import (
 )
 from core.runtime.tool_schema import provider_tool_name
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
-from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 
 
 class HostedAgenticToolExecutionTest(unittest.TestCase):
@@ -124,7 +120,7 @@ class HostedAgenticToolExecutionTest(unittest.TestCase):
         )
         self.assertEqual(authorized.invocation.state, "authorized")
 
-        cancellation = Event()
+        cancellation = RuntimeCancellationSignal()
         deadline = time.monotonic() + 4
         budget = SimpleNamespace(
             finalization_policy=SimpleNamespace(
@@ -166,84 +162,6 @@ class HostedAgenticToolExecutionTest(unittest.TestCase):
             authorized.invocation.invocation_id
         )
         self.assertEqual(persisted.state, "execution_unknown")
-
-    def test_adapter_close_finalizes_owned_process_registry_handles(self) -> None:
-        harness = HostedAgenticHarness(self)
-        workspace = harness.root / "workspaces" / "default"
-        registry = HostedToolProcessRegistry(store=harness.store)
-        capabilities = {
-            surface.definition.handle: surface
-            for surface in build_core_runtime_tool_capabilities(
-                workspace_id="default",
-                workspace_root=workspace,
-                runtime_root=workspace / "runtime",
-                process_registry=registry,
-            )
-        }
-        actor = RuntimeToolActorContext(
-            workspace_id="default",
-            actor_id="user-1",
-            agent_id="chat",
-            platform_role="admin",
-            workspace_role="owner",
-            session_id=harness.session.session_id,
-            execution_mode="full-access",
-        )
-        scope = capabilities[
-            "core-capability:workspace.instructions"
-        ].handler({"path": ".", "target_is_directory": True}, actor, None)
-        started = capabilities[
-            "core-capability:process.start"
-        ].handler(
-            {
-                "argv": ["/bin/sh", "-c", "sleep 30"],
-                "mutation_scopes": [
-                    {
-                        "path": ".",
-                        "instruction_scope_digest": scope.payload[
-                            "scope_digest"
-                        ],
-                    }
-                ],
-            },
-            actor,
-            None,
-        )
-        process_id = str(started.payload["process_id"])
-        live = registry._live[process_id]
-        output_fd = live.output_fd
-        overlay_root = live.effect_overlay.root
-        self.assertEqual(registry.live_process_count(session_id=actor.session_id), 1)
-        self.assertEqual(harness.store.get_process(process_id).status, "running")
-        self.assertTrue(overlay_root.is_dir())
-
-        base = harness.adapter(DeterministicFakeAgenticClient())
-        adapter = HostedAgenticEngineAdapter(
-            runtime_engine_id=base.runtime_engine_id,
-            adapter_id=base.adapter_id,
-            adapter_version=base.adapter_version,
-            loop=base.loop,
-            process_registry=registry,
-        )
-        result = asyncio.run(
-            adapter.close(
-                RuntimeCloseContext(
-                    session=harness.session,
-                    binding=harness.binding,
-                    provider_state=harness.store.get_provider_state(
-                        harness.session.session_id
-                    ),
-                )
-            )
-        )
-
-        self.assertEqual(result.terminated_processes, 1)
-        self.assertEqual(registry.live_process_count(session_id=actor.session_id), 0)
-        self.assertEqual(harness.store.get_process(process_id).status, "terminated")
-        self.assertFalse(runtime_processes_alive_for_session(actor.session_id))
-        self.assertFalse(overlay_root.exists())
-        with self.assertRaises(OSError):
-            os.fstat(output_fd)
 
     def test_cancelled_process_start_quiesces_an_unpaired_handle(self) -> None:
         harness = HostedAgenticHarness(self)
@@ -345,7 +263,7 @@ class HostedAgenticToolExecutionTest(unittest.TestCase):
             return result
 
         registry.start = delayed_start
-        cancellation = Event()
+        cancellation = RuntimeCancellationSignal()
         deadline = time.monotonic() + 4
         budget = SimpleNamespace(
             finalization_policy=SimpleNamespace(

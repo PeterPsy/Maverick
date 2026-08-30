@@ -830,24 +830,28 @@ records, and the common orphan reaper. Cancellation is carried into synchronous
 Core surfaces: shell and managed-process execution terminate complete process
 groups, discard private overlays, and reach worker quiescence before the
 cancelled turn is released. The hosted adapter owns its managed-process
-registry; session close and idle reap finalize live handles, output capture/FDs,
-overlays, the global process registry, and durable terminal process status
-together.
+registry; session close, explicit session termination, and idle reap finalize
+live handles, output capture/FDs, overlays, the global process registry, and
+durable terminal process status together.
 
 Transient prompt, agent-instruction, and governed-context blocks are not public
 by provenance. Production bootstrap always installs a closed Core-owned
-admission resolver for the exact composer source ids; it binds workspace,
-session, turn, source identity, canonical digest, and classification revision.
-Unknown source ids and any mismatch remain `unclassified`. Resource-returning
-tools propagate the exact observed resource classification. Mutating edit/patch
-diffs inherit the exact pre-image taint rather than attempting to classify the
-new revision with a stale record. For Core-owned action surfaces whose raw
-output has no class, the result policy separates bounded action metadata from
-content: shell/process output and uncertified CLI/MCP payloads are withheld,
-while only the exact action acknowledgement is classified public. A Core-owned,
-TCB-certified CLI/MCP definition may explicitly admit a public result; app
-claims cannot do so. Generic serialization, hashing, or redaction never
-promotes raw content.
+admission resolver for the exact composer source ids; source-id and digest
+validation prove integrity but never select a data class. Prompt, agent and
+reference-metadata bytes require a matching revisioned workspace resource
+classification. Governed orchestration context is classified only by a
+restrictive join over its exact control, summary, task/result, and artifact
+source records, and remains untrusted regardless of a less restrictive sibling.
+Unknown source ids, absent source records, and any mismatch remain
+`unclassified`. Resource-returning tools propagate the exact observed resource
+classification. Mutating edit/patch diffs inherit the exact pre-image taint
+rather than attempting to classify the new revision with a stale record.
+Shell/process streams and CLI/MCP discovery/results remain complete through the
+common result compactor. A Core-owned, TCB-certified definition may explicitly
+admit exact public bytes; otherwise the full result remains `unclassified` and
+egress blocks the agent instead of replacing content with a public
+acknowledgement. App commands/tools remain in discovery and cannot self-promote.
+Generic serialization, hashing, or redaction never promotes raw content.
 
 Every semantic-envelope classification is additionally bound to the SHA-256 of
 the exact canonical bytes projected for that block. Composite sources use a

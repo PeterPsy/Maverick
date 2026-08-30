@@ -100,6 +100,7 @@ def cancel_agentic_runtime(
     session_id: str,
     correlation_id: str,
     adapter: AgenticRuntimeEngineAdapter,
+    wait_for_termination: bool = False,
 ) -> RuntimeCancelResult:
     """Cancel one active request through the provider-neutral contract."""
     session = store.get_session(session_id)
@@ -114,6 +115,7 @@ def cancel_agentic_runtime(
                 binding=binding,
                 provider_state=provider_state,
                 correlation_id=correlation_id,
+                wait_for_termination=wait_for_termination,
             )
         )
     )

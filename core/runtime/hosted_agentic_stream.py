@@ -6,7 +6,6 @@ import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
 import json
-from threading import Event
 from typing import Callable
 
 from core.providers.agentic_reason_codes import normalized_agentic_provider_reason
@@ -21,6 +20,7 @@ from core.runtime.hosted_agentic_models import (
     HostedAgenticLoopError,
     raise_if_hosted_cancelled,
 )
+from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ async def consume_hosted_provider_step(
     request,
     credential: EphemeralCredential | None,
     budget: HostedAgenticBudget,
-    cancellation: Event,
+    cancellation: RuntimeCancellationSignal,
     destination_upstream_id: str | None,
     on_accepted: Callable[[AgenticModelEvent], None] | None = None,
     on_tool_call: Callable[[AgenticModelEvent], dict[str, object]] | None = None,
@@ -157,7 +157,11 @@ async def consume_hosted_provider_step(
     )
 
 
-async def _cancellable_events(stream, cancellation: Event, budget: HostedAgenticBudget):
+async def _cancellable_events(
+    stream,
+    cancellation: RuntimeCancellationSignal,
+    budget: HostedAgenticBudget,
+):
     iterator = stream.__aiter__()
     pending = asyncio.create_task(iterator.__anext__())
     try:

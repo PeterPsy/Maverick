@@ -105,7 +105,7 @@ def hosted_full_context_policy() -> AgenticContextPolicy:
 
 GOOGLE_FULL_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-google-interactions-full-workspace",
-    revision="7",
+    revision="8",
     model_provider_id="google-ai-studio",
     model_id=GOOGLE_AGENTIC_MODEL_ID,
     provider_protocol="google-interactions",
@@ -138,7 +138,7 @@ GOOGLE_FULL_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 
 OPENROUTER_FULL_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-openrouter-chat-full-workspace",
-    revision="7",
+    revision="8",
     model_provider_id="openrouter",
     model_id=OPENROUTER_AGENTIC_MODEL_ID,
     provider_protocol="openrouter-chat-completions",

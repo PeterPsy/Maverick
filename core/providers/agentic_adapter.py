@@ -95,6 +95,7 @@ class RuntimeCancelContext:
     binding: RuntimeExecutionBinding
     provider_state: RuntimeProviderState
     correlation_id: str
+    wait_for_termination: bool = False
 
 
 @dataclass(frozen=True)

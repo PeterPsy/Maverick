@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from threading import Event
 from typing import Callable
 
 from core.providers.agentic_models import AgenticRuntimePolicy, RuntimeDataClass
@@ -16,6 +15,7 @@ from core.providers.agentic_protocol import (
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.tool_catalog import RuntimeToolActorContext
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
+from core.runtime.runtime_cancellation import RuntimeCancellationSignal
 
 
 @dataclass(frozen=True)
@@ -132,6 +132,6 @@ class HostedAgenticLoopError(RuntimeError):
         self.reason_code = reason_code
 
 
-def raise_if_hosted_cancelled(cancellation: Event) -> None:
+def raise_if_hosted_cancelled(cancellation: RuntimeCancellationSignal) -> None:
     if cancellation.is_set():
         raise HostedAgenticLoopError("runtime_cancelled")

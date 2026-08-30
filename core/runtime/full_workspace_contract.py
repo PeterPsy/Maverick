@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from core.providers.errors import CapabilityCertificateError
 
 
-FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v8"
+FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v9"
 
 FULL_WORKSPACE_CORE_TOOL_HANDLES = (
     "core-capability:workspace.instructions",
@@ -30,6 +31,14 @@ FULL_WORKSPACE_CORE_TOOL_HANDLES = (
     "core-capability:mcp.call",
     "core-capability:artifact.read",
 )
+FULL_WORKSPACE_REQUIRED_RESULT_MODES = {
+    "core-capability:shell.run": "complete_or_egress_denied",
+    "core-capability:process.status": "complete_or_egress_denied",
+    "core-capability:cli.list": "complete_or_egress_denied",
+    "core-capability:cli.run": "complete_or_egress_denied",
+    "core-capability:mcp.list": "complete_or_egress_denied",
+    "core-capability:mcp.call": "complete_or_egress_denied",
+}
 
 
 @dataclass(frozen=True)
@@ -40,10 +49,15 @@ class FullWorkspaceContractReport:
     required_handles: tuple[str, ...]
     missing_capabilities: tuple[str, ...]
     missing_handles: tuple[str, ...]
+    missing_result_modes: tuple[str, ...]
 
     @property
     def complete(self) -> bool:
-        return not self.missing_capabilities and not self.missing_handles
+        return (
+            not self.missing_capabilities
+            and not self.missing_handles
+            and not self.missing_result_modes
+        )
 
 
 def inspect_full_workspace_contract(
@@ -51,6 +65,7 @@ def inspect_full_workspace_contract(
     capabilities,
     policy,
     allowed_handles: tuple[str, ...] | None = None,
+    tool_result_modes: Mapping[str, str] | None = None,
 ) -> FullWorkspaceContractReport:
     """Compare an immutable capability/policy pair with the common baseline."""
     required_capabilities = {
@@ -92,11 +107,18 @@ def inspect_full_workspace_contract(
         )
     else:
         missing_handles = FULL_WORKSPACE_CORE_TOOL_HANDLES
+    active_result_modes = dict(tool_result_modes or {})
+    missing_result_modes = tuple(
+        handle
+        for handle, required_mode in FULL_WORKSPACE_REQUIRED_RESULT_MODES.items()
+        if active_result_modes.get(handle) != required_mode
+    )
     return FullWorkspaceContractReport(
         revision=FULL_WORKSPACE_CONTRACT_REVISION,
         required_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES,
         missing_capabilities=missing_capabilities,
         missing_handles=missing_handles,
+        missing_result_modes=missing_result_modes,
     )
 
 
@@ -134,12 +156,15 @@ def validate_full_workspace_contract_claim(*, profile, certificate) -> None:
         or context_policy.summary_max_bytes <= 0
         or context_policy.tool_result_inline_bytes <= 0
         or context_policy.tool_result_summary_bytes <= 0
+        or getattr(profile, "tool_contract_revision", "")
+        != FULL_WORKSPACE_CONTRACT_REVISION
         or not all(str(value or "").strip() for value in required_profile_identity)
     ):
         raise CapabilityCertificateError("full_workspace_context_contract_incomplete")
     report = inspect_full_workspace_contract(
         capabilities=certificate.certified_capabilities,
         policy=profile.policy_ceiling,
+        tool_result_modes=_hosted_tool_result_modes(),
     )
     if not report.complete:
         raise CapabilityCertificateError("full_workspace_contract_incomplete")
@@ -173,6 +198,7 @@ def validate_full_workspace_live_authority(
         capabilities=capabilities,
         policy=policy,
         allowed_handles=allowed_handles,
+        tool_result_modes=_hosted_tool_result_modes(),
     )
     if not report.complete:
         raise CapabilityCertificateError(
@@ -180,9 +206,20 @@ def validate_full_workspace_live_authority(
         )
 
 
+def _hosted_tool_result_modes() -> Mapping[str, str]:
+    # Import lazily: result admission depends on the tool catalog, whose
+    # authority path imports certificate validation and therefore this module.
+    from core.runtime.hosted_tool_result_admission import (
+        HOSTED_TOOL_RESULT_MODES,
+    )
+
+    return HOSTED_TOOL_RESULT_MODES
+
+
 __all__ = [
     "FULL_WORKSPACE_CONTRACT_REVISION",
     "FULL_WORKSPACE_CORE_TOOL_HANDLES",
+    "FULL_WORKSPACE_REQUIRED_RESULT_MODES",
     "FullWorkspaceContractReport",
     "inspect_full_workspace_contract",
     "validate_full_workspace_binding",

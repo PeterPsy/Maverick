@@ -210,8 +210,19 @@ class HostedWorkspaceEffectOverlay:
 
     def discard(self) -> dict[str, object]:
         if not self._closed and not self._recovery_required:
-            self._closed = True
+            # Overlayfs leaves its private work/work directory mode 000 after
+            # unmount. Restore owner traversal before removing the Core-owned
+            # overlay tree; never follow a command-created symlink here.
+            try:
+                os.chmod(
+                    self.work / "work",
+                    stat.S_IRWXU,
+                    follow_symlinks=False,
+                )
+            except (NotImplementedError, OSError):
+                pass
             shutil.rmtree(self.root, ignore_errors=True)
+            self._closed = not self.root.exists()
         return {
             "workspace_effects_committed": False,
             "workspace_effect_count": 0,

@@ -19,6 +19,7 @@ sys.path.insert(0, str(SERVICE_ROOT))
 
 from native_official_update import (  # noqa: E402
     OfficialUpdateError,
+    _live_bridge_results,
     perform_official_update,
     recover_interrupted_official_update,
 )
@@ -204,6 +205,26 @@ class OfficialUpdateTests(unittest.TestCase):
                         }
                     ],
                 }
+            if operation == "prewarm" and isinstance(response, dict):
+                ready = response.get("ready") is True
+                if "data_root" not in response:
+                    return {
+                        "workspace_id": workspace_id,
+                        "app_id": "design-studio",
+                        "data_root": str(self.data_root.resolve()),
+                        "ready": ready,
+                        "declared_service_count": 1,
+                        "verified_ready_service_count": 1 if ready else 0,
+                        "services": [
+                            {
+                                "sidecar_id": "opendesign",
+                                "live_instance_id": (
+                                    "unit-test-ready-instance" if ready else None
+                                ),
+                                "state": "ready" if ready else "failed",
+                            }
+                        ],
+                    }
             if operation == "status" and isinstance(response, dict):
                 services = response.get("services")
                 if isinstance(services, list) and "data_root" not in response:
@@ -272,7 +293,21 @@ class OfficialUpdateTests(unittest.TestCase):
                 ],
             }
         if operation == "prewarm":
-            return {"ready": True}
+            return {
+                "workspace_id": workspace_id,
+                "app_id": "design-studio",
+                "data_root": str(self.data_root.resolve()),
+                "ready": True,
+                "declared_service_count": 1,
+                "verified_ready_service_count": 1,
+                "services": [
+                    {
+                        "sidecar_id": "opendesign",
+                        "live_instance_id": "unit-test-ready-instance",
+                        "state": "ready",
+                    }
+                ],
+            }
         if operation == "release_quarantine":
             return {"ready": False, "quarantined": False, "released": True}
         raise AssertionError(operation)
@@ -296,6 +331,50 @@ class OfficialUpdateTests(unittest.TestCase):
         selection.write_text(json.dumps(payload), encoding="utf-8")
         with self.assertRaisesRegex(OfficialReleaseError, "digest"):
             read_release_selection(self.data_root)
+
+    def test_post_update_handshake_uses_live_host_model_status_not_prepare_placeholder(self) -> None:
+        (self.data_root / "bridge-capabilities.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "manifest_digest": self.candidate.manifest_digest,
+                    "model_access": {"state": "ready", "source": "placeholder"},
+                    "delegation": {"state": "ready"},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.data_root / "native-host-status.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "mode": "official-native",
+                    "state": "ready",
+                    "manifest_digest": self.candidate.manifest_digest,
+                    "model_bridge": {
+                        "state": "degraded",
+                        "reason": "core_broker_unavailable",
+                        "semantic_enrichment": False,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = _live_bridge_results(
+            self.data_root,
+            {"state": "ready"},
+            manifest_digest=self.candidate.manifest_digest,
+        )
+
+        self.assertEqual(
+            result["model_access"],
+            {
+                "state": "degraded",
+                "reason": "core_broker_unavailable",
+                "semantic_enrichment": False,
+            },
+        )
 
     def test_update_runs_upstream_migration_and_keeps_native_when_bridges_degrade(self) -> None:
         calls: list[str] = []
@@ -322,7 +401,7 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertEqual((backup / "native-data/project.txt").read_text(), "semantic design content")
         self.assertFalse(backup.stat().st_mode & 0o222)
 
-    def test_failed_candidate_startup_restores_full_previous_selection_and_data(self) -> None:
+    def test_failed_candidate_startup_never_rolls_back_a_durable_commit(self) -> None:
         calls: list[str] = []
         prewarms = 0
 
@@ -332,17 +411,171 @@ class OfficialUpdateTests(unittest.TestCase):
             if operation == "stop":
                 return {"ready": False}
             prewarms += 1
-            return {"ready": prewarms == 2}
+            return {"ready": False}
 
         result = self._run(control)
 
-        self.assertFalse(result["update_applied"])
-        self.assertEqual(result["update"]["phase"], "rolled_back")
-        self.assertTrue(result["update"]["native_ready"])
-        self.assertEqual(calls, ["stop", "prewarm", "stop", "prewarm"])
-        self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
-        self.assertFalse((self.native / "upstream-migration").exists())
+        self.assertTrue(result["update_applied"])
+        self.assertEqual(result["error"], "candidate_startup_failed")
+        self.assertEqual(result["update"]["phase"], "committed")
+        self.assertFalse(result["update"]["native_ready"])
+        self.assertEqual(calls, ["stop", "prewarm"])
+        self.assertEqual(read_release_selection(self.data_root).release.version, "0.17.0")
+        self.assertTrue((self.native / "upstream-migration").exists())
         self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
+
+    def test_preparing_marker_is_durable_before_quiescence_and_startup_recovers_it(self) -> None:
+        from unittest.mock import patch
+
+        with patch(
+            "native_official_update.quiesce_native_host",
+            side_effect=SystemExit("simulated death before quiescence"),
+        ):
+            with self.assertRaisesRegex(SystemExit, "before quiescence"):
+                self._run(self._verified_control)
+
+        marker = json.loads((self.data_root / "official-update.json").read_text())
+        self.assertEqual(marker["phase"], "preparing")
+        self.assertFalse((self.data_root / "native-cutover-quiesce.json").exists())
+
+        environment = dict(__import__("os").environ)
+        environment["PYTHONPATH"] = str(APP_ROOT.parents[1])
+        prepared = subprocess.run(
+            [sys.executable, str(APP_ROOT / "hooks" / "sidecar_prepare.py")],
+            input=json.dumps(
+                {
+                    "app_id": "design-studio",
+                    "workspace_id": "default",
+                    "data_root": str(self.data_root),
+                    "sidecar_id": "opendesign",
+                    "managed_writer_stopped": True,
+                }
+            ),
+            text=True,
+            capture_output=True,
+            check=False,
+            env=environment,
+        )
+
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        recovered = json.loads((self.data_root / "official-update.json").read_text())
+        self.assertEqual(recovered["phase"], "rolled_back")
+        self.assertTrue(recovered["native_ready"])
+        self.assertFalse((self.data_root / "native-cutover-quiesce.json").exists())
+
+    def test_crash_during_backup_build_ignores_partial_backup_on_startup_recovery(self) -> None:
+        from unittest.mock import patch
+
+        real_copy = __import__("native_official_update").copy_verified_tree
+
+        def crash_during_backup(source: Path, destination: Path):
+            if destination.name == "native-data" and destination.parent.name.endswith(
+                ".backup"
+            ):
+                destination.mkdir(parents=True)
+                (destination / "partial.txt").write_text("incomplete", encoding="utf-8")
+                raise SystemExit("simulated death during backup")
+            return real_copy(source, destination)
+
+        with patch(
+            "native_official_update.copy_verified_tree",
+            side_effect=crash_during_backup,
+        ):
+            with self.assertRaisesRegex(SystemExit, "during backup"):
+                self._run(self._verified_control)
+
+        staging = self.data_root / ".update_unit_test.backup"
+        final_backup = (
+            self.data_root
+            / "opendesign-update-backups/official-update-update_unit_test"
+        )
+        self.assertTrue(staging.is_dir())
+        self.assertFalse(final_backup.exists())
+
+        environment = dict(__import__("os").environ)
+        environment["PYTHONPATH"] = str(APP_ROOT.parents[1])
+        prepared = subprocess.run(
+            [sys.executable, str(APP_ROOT / "hooks" / "sidecar_prepare.py")],
+            input=json.dumps(
+                {
+                    "app_id": "design-studio",
+                    "workspace_id": "default",
+                    "data_root": str(self.data_root),
+                    "sidecar_id": "opendesign",
+                    "managed_writer_stopped": True,
+                }
+            ),
+            text=True,
+            capture_output=True,
+            check=False,
+            env=environment,
+        )
+
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        recovered = json.loads((self.data_root / "official-update.json").read_text())
+        self.assertEqual(recovered["phase"], "rolled_back")
+        self.assertTrue(recovered["native_ready"])
+        self.assertFalse(staging.exists())
+        self.assertEqual(
+            (self.native / "project.txt").read_text(encoding="utf-8"),
+            "semantic design content",
+        )
+
+    def test_candidate_is_committed_before_prewarm_can_expose_it(self) -> None:
+        observed_phase = ""
+
+        def control(operation: str, _workspace_id: str) -> dict:
+            nonlocal observed_phase
+            if operation == "stop":
+                return {"ready": False}
+            observed_phase = json.loads(
+                (self.data_root / "official-update.json").read_text(encoding="utf-8")
+            )["phase"]
+            (self.native / "post-prewarm-write.txt").write_text(
+                "must-survive",
+                encoding="utf-8",
+            )
+            return {"ready": True}
+
+        result = self._run(control)
+
+        self.assertEqual(observed_phase, "committed")
+        self.assertTrue(result["update_applied"])
+        self.assertEqual(
+            (self.native / "post-prewarm-write.txt").read_text(encoding="utf-8"),
+            "must-survive",
+        )
+
+    def test_crash_after_prewarm_preserves_candidate_writes_during_recovery(self) -> None:
+        def control(operation: str, _workspace_id: str) -> dict:
+            if operation == "stop":
+                return {"ready": False}
+            marker = json.loads(
+                (self.data_root / "official-update.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(marker["phase"], "committed")
+            (self.native / "write-after-prewarm.txt").write_text(
+                "canonical-after-commit",
+                encoding="utf-8",
+            )
+            raise SystemExit("simulated death after prewarm")
+
+        with self.assertRaisesRegex(SystemExit, "after prewarm"):
+            self._run(control)
+
+        recovered = recover_interrupted_official_update(
+            self.data_root,
+            workspace_id="default",
+            sidecar_control=self._verified_control,
+        )
+
+        self.assertEqual(recovered["update"]["phase"], "committed")
+        self.assertTrue(recovered["update"]["native_ready"])
+        self.assertEqual(read_release_selection(self.data_root).release.version, "0.17.0")
+        self.assertEqual(
+            (self.native / "write-after-prewarm.txt").read_text(encoding="utf-8"),
+            "canonical-after-commit",
+        )
 
     def test_crash_after_native_retirement_is_recovered_from_durable_journal(self) -> None:
         from unittest.mock import patch
@@ -471,27 +704,35 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
         self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
 
-    def test_failed_previous_startup_stays_quiesced_for_operator_recovery(self) -> None:
+    def test_failed_committed_startup_stays_quiesced_without_rolling_back(self) -> None:
         calls: list[str] = []
 
         def control(operation: str, _workspace_id: str) -> dict:
             calls.append(operation)
             return {"ready": False}
 
-        with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
-            self._run(control)
+        result = self._run(control)
+        self.assertTrue(result["update_applied"])
+        self.assertEqual(result["update"]["phase"], "committed")
 
-        self.assertEqual(calls, ["stop", "prewarm", "stop", "prewarm", "stop"])
+        with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
+            recover_interrupted_official_update(
+                self.data_root,
+                workspace_id="default",
+                sidecar_control=control,
+            )
+
+        self.assertEqual(calls, ["stop", "prewarm", "prewarm"])
         marker = json.loads((self.data_root / "official-update.json").read_text())
-        self.assertEqual(marker["phase"], "recovery_required")
+        self.assertEqual(marker["phase"], "committed")
         self.assertFalse(marker["native_ready"])
         self.assertFalse(marker["rolled_back"])
         self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
-        self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
-        self.assertFalse((self.native / "upstream-migration").exists())
+        self.assertEqual(read_release_selection(self.data_root).release.version, "0.17.0")
+        self.assertTrue((self.native / "upstream-migration").exists())
         self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
 
-    def test_previous_startup_exception_restores_quiescence_before_recovery_marker(self) -> None:
+    def test_committed_recovery_exception_restores_quiescence_without_rollback(self) -> None:
         calls: list[str] = []
         prewarms = 0
 
@@ -505,72 +746,83 @@ class OfficialUpdateTests(unittest.TestCase):
                 return {"ready": False}
             raise RuntimeError("sidecar control channel failed")
 
+        result = self._run(control)
+        self.assertTrue(result["update_applied"])
         with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
-            self._run(control)
+            recover_interrupted_official_update(
+                self.data_root,
+                workspace_id="default",
+                sidecar_control=control,
+            )
 
         marker = json.loads((self.data_root / "official-update.json").read_text())
-        self.assertEqual(marker["phase"], "recovery_required")
+        self.assertEqual(marker["phase"], "committed")
         self.assertFalse(marker["native_ready"])
         self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
-        self.assertEqual(calls[:4], ["stop", "prewarm", "stop", "prewarm"])
+        self.assertEqual(calls, ["stop", "prewarm", "prewarm"])
 
     def test_recovery_retries_failed_stops_and_marks_only_after_writer_is_stopped(self) -> None:
+        from unittest.mock import patch
+
         calls: list[str] = []
         stop_calls = 0
-        prewarm_calls = 0
-        writer_active = False
+
+        real_replace = __import__("os").replace
+
+        def crash_after_replace(source, destination):
+            real_replace(source, destination)
+            if Path(source) == self.native:
+                raise SystemExit("simulated interrupted activation")
+
+        with patch("native_official_update.os.replace", side_effect=crash_after_replace):
+            with self.assertRaisesRegex(SystemExit, "interrupted activation"):
+                self._run(self._verified_control)
 
         def control(operation: str, _workspace_id: str) -> dict:
-            nonlocal stop_calls, prewarm_calls, writer_active
+            nonlocal stop_calls
             calls.append(operation)
             if operation == "stop":
                 stop_calls += 1
-                if stop_calls == 2:
-                    raise RuntimeError("stop response lost")
-                if stop_calls == 4:
-                    writer_active = False
-                    raise RuntimeError("stop completed but its response was lost")
-                if stop_calls in {5, 6}:
-                    raise RuntimeError("stop retry channel failed")
-                writer_active = False
-                return {"ready": False}
+                raise RuntimeError("stop response lost")
             if operation == "status":
                 return {
-                    "services": [{"state": "ready" if writer_active else "stopped"}]
+                    "workspace_id": "default",
+                    "app_id": "design-studio",
+                    "data_root": str(self.data_root.resolve()),
+                    "declared_service_count": 1,
+                    "verified_stopped_service_count": 1,
+                    "services": [
+                        {
+                            "sidecar_id": "opendesign",
+                            "live_instance_id": None,
+                            "state": "stopped",
+                        }
+                    ],
                 }
-            prewarm_calls += 1
-            writer_active = True
-            if prewarm_calls == 1:
-                return {"ready": False}
-            raise RuntimeError("prewarm started the writer but lost its response")
+            return self._verified_control(operation, "default")
 
-        with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
-            self._run(control)
+        recovered = recover_interrupted_official_update(
+            self.data_root,
+            workspace_id="default",
+            sidecar_control=control,
+        )
 
-        marker = json.loads((self.data_root / "official-update.json").read_text())
-        self.assertEqual(marker["phase"], "recovery_required")
-        self.assertFalse(writer_active)
-        self.assertEqual(stop_calls, 6)
+        self.assertEqual(recovered["update"]["phase"], "rolled_back")
+        self.assertTrue(recovered["update"]["native_ready"])
+        self.assertEqual(stop_calls, 3)
         self.assertIn("status", calls)
-        self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
+        self.assertFalse((self.data_root / "native-cutover-quiesce.json").exists())
 
     def test_unconfirmed_writer_is_durably_quarantined_before_recovery_marker(self) -> None:
         stop_calls = 0
-        prewarm_calls = 0
         quarantine_calls = 0
-        writer_active = False
+        writer_active = True
         quarantined = False
 
         def control(operation: str, _workspace_id: str) -> dict:
-            nonlocal stop_calls, prewarm_calls, quarantine_calls, writer_active, quarantined
+            nonlocal stop_calls, quarantine_calls, writer_active, quarantined
             if operation == "stop":
                 stop_calls += 1
-                if stop_calls == 1:
-                    writer_active = False
-                    return {"ready": False}
-                if stop_calls == 2:
-                    writer_active = False
-                    return {"ready": False}
                 raise RuntimeError("Core could not stop the active writer")
             if operation == "status":
                 return {"services": [{"state": "ready"}]}
@@ -587,11 +839,7 @@ class OfficialUpdateTests(unittest.TestCase):
                     "model_access_revoked": True,
                     "writer_stop_confirmed": False,
                 }
-            prewarm_calls += 1
-            writer_active = True
-            if prewarm_calls == 1:
-                return {"ready": False}
-            raise RuntimeError("prewarm started the writer but lost its response")
+            raise AssertionError(operation)
 
         with self.assertRaisesRegex(OfficialUpdateError, "operator intervention"):
             self._run(control)
@@ -605,6 +853,7 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertTrue(quarantined)
         self.assertEqual(quarantine_calls, 2)
         self.assertTrue(writer_active)
+        self.assertEqual(stop_calls, 9)
         self.assertTrue((self.data_root / "native-cutover-quiesce.json").is_file())
 
 

@@ -39,6 +39,10 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertEqual(sidecar["model_access"], {"api": True, "cli": ["codex"], "required": False})
         self.assertEqual(sidecar["data_mount"], {"subpath": "opendesign-native"})
         self.assertEqual(
+            sidecar["diagnostics"],
+            {"status_file": "native-host-status.json"},
+        )
+        self.assertEqual(
             sidecar["host_prepare"],
             {
                 "entrypoint": "hooks/sidecar_prepare.py",
@@ -153,6 +157,37 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertNotIn("MAVERICK_RUNTIME_API_TOKEN", env)
         self.assertNotIn("MAVERICK_API_BASE", env)
         self.assertFalse(any("memory" in value.lower() or "persona" in value.lower() for value in env.values()))
+
+    def test_host_status_reporter_publishes_real_model_and_lifecycle_state_in_place(self) -> None:
+        from opendesign_launcher import _host_status_reporter
+
+        with tempfile.TemporaryDirectory() as temporary:
+            status_file = Path(temporary) / "native-host-status.json"
+            status_file.write_bytes(b"")
+            status_file.chmod(0o600)
+            inode = status_file.stat().st_ino
+            reporter = _host_status_reporter(
+                status_file,
+                {
+                    "schema_version": "1",
+                    "mode": "official-native",
+                    "version": "0.17.0",
+                    "manifest_digest": "f" * 64,
+                    "model_bridge": {
+                        "state": "ready",
+                        "semantic_enrichment": False,
+                    },
+                },
+            )
+
+            reporter("starting", None)
+            reporter("ready", None)
+            payload = json.loads(status_file.read_text(encoding="utf-8"))
+
+            self.assertEqual(status_file.stat().st_ino, inode)
+            self.assertEqual(payload["state"], "ready")
+            self.assertEqual(payload["model_bridge"]["state"], "ready")
+            self.assertFalse(payload["model_bridge"]["semantic_enrichment"])
 
     def test_external_supervisor_marks_the_unchanged_official_process_ready(self) -> None:
         from official_process_supervisor import supervise_official_process

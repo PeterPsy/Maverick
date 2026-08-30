@@ -73,10 +73,6 @@ def main() -> None:
         {
             "schema_version": "1",
             "manifest_digest": selection.release.manifest_digest,
-            "model_access": {
-                "state": "degraded",
-                "reason": "confined_runtime_status_not_exported",
-            },
             "delegation": delegation,
         },
     )

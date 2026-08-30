@@ -5,13 +5,17 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 import tempfile
 import time
 import unittest
 from unittest.mock import patch
 
 from core.model_access import cli_sandbox
+from core.model_access.cancellation import (
+    ModelAccessCancellation,
+    ModelAccessRequestCancelled,
+)
 from core.model_access.models import ModelAccessScope
 
 
@@ -90,6 +94,79 @@ class ModelAccessCliSandboxTests(unittest.TestCase):
                 list(pool.map(invocation, range(16)))
 
             self.assertEqual(maximum_active, 1)
+
+    def test_cancelled_home_preparation_stops_waiting_for_the_shared_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source_home = root / "source-codex"
+            source_home.mkdir()
+            (source_home / "auth.json").write_text("{}\n", encoding="utf-8")
+            scope = ModelAccessScope(
+                workspace_id="default",
+                app_id="design-studio",
+                sidecar_id="opendesign",
+                data_root=root / "native",
+                api=True,
+                cli=("codex",),
+            )
+            scope.data_root.mkdir()
+            shared_home = (
+                root
+                / "tmp/model-access/state/default/design-studio/codex-home"
+            )
+            shared_home.mkdir(parents=True)
+            cancellation = ModelAccessCancellation()
+            started = Event()
+
+            def prepare() -> Path:
+                started.set()
+                return cli_sandbox.prepare_codex_home(
+                    root,
+                    scope,
+                    cancellation=cancellation,
+                )
+
+            with (
+                patch.dict(
+                    os.environ,
+                    {"MAVERICK_MODEL_ACCESS_CODEX_HOME": str(source_home)},
+                    clear=False,
+                ),
+                cli_sandbox.codex_home_lock(shared_home),
+                ThreadPoolExecutor(max_workers=1) as pool,
+            ):
+                future = pool.submit(prepare)
+                self.assertTrue(started.wait(1))
+                time.sleep(0.05)
+                cancellation.set()
+                with self.assertRaises(ModelAccessRequestCancelled):
+                    future.result(timeout=0.5)
+
+    def test_cancelled_invocation_stops_waiting_for_the_shared_home_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary) / "codex-home"
+            home.mkdir()
+            cancellation = ModelAccessCancellation()
+            started = Event()
+
+            def wait_for_invocation_lock() -> None:
+                started.set()
+                with cli_sandbox.codex_home_lock(
+                    home,
+                    cancellation=cancellation,
+                ):
+                    raise AssertionError("cancelled waiter acquired the lock")
+
+            with (
+                cli_sandbox.codex_home_lock(home),
+                ThreadPoolExecutor(max_workers=1) as pool,
+            ):
+                future = pool.submit(wait_for_invocation_lock)
+                self.assertTrue(started.wait(1))
+                time.sleep(0.05)
+                cancellation.set()
+                with self.assertRaises(ModelAccessRequestCancelled):
+                    future.result(timeout=0.5)
 
 
 if __name__ == "__main__":

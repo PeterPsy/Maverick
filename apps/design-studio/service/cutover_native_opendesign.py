@@ -21,7 +21,10 @@ from native_cutover_state import (
 )
 from native_cutover_quiescence import quiesce_native_host, release_native_host
 from native_data_cutover import perform_native_data_cutover
-from managed_sidecar_stop import require_verified_writer_stop
+from managed_sidecar_evidence import (
+    require_verified_writer_ready,
+    require_verified_writer_stop,
+)
 from official_opendesign_release import OfficialReleaseError, verify_official_installation
 
 
@@ -57,9 +60,10 @@ def main() -> None:
         begin_native_writer_activation(args.data_root, cutover_id=args.cutover_id)
         release_native_host(args.data_root, cutover_id=args.cutover_id)
         try:
-            readiness = _request_sidecar_control("prewarm", workspace_id=args.workspace_id)
-            if readiness.get("ready") is not True:
-                raise NativeDataCutoverError("Core did not confirm native OpenDesign readiness")
+            _require_managed_writer_ready(
+                args.data_root,
+                workspace_id=args.workspace_id,
+            )
         except Exception:
             finish_native_writer_activation(
                 args.data_root,
@@ -138,6 +142,24 @@ def _stop_managed_writer(
     except ValueError as error:
         raise NativeDataCutoverError(
             "Core did not confirm the OpenDesign writer stop"
+        ) from error
+
+
+def _require_managed_writer_ready(
+    app_data_root: Path,
+    *,
+    workspace_id: str,
+) -> dict[str, Any]:
+    readiness = _request_sidecar_control("prewarm", workspace_id=workspace_id)
+    try:
+        return require_verified_writer_ready(
+            readiness,
+            workspace_id=workspace_id,
+            app_data_root=app_data_root,
+        )
+    except ValueError as error:
+        raise NativeDataCutoverError(
+            "Core did not confirm native OpenDesign readiness for the requested binding"
         ) from error
 
 

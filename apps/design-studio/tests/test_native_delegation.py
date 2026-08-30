@@ -506,6 +506,51 @@ class NativeDelegationTests(unittest.TestCase):
             self.assertIn(recent_id, persisted)
             self.assertIn(new_id, persisted)
 
+    def test_claimed_expired_terminal_record_survives_until_release(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            identifier = "dlg_" + "d" * 32
+            expired_identifier = "dlg_" + "e" * 32
+            state_path = root / "delegations/state.json"
+            state_path.parent.mkdir(parents=True)
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "delegations": {
+                            identifier: {
+                                "delegation_id": identifier,
+                                "status": "succeeded",
+                                "created_at": "2020-01-01T00:00:00Z",
+                                "updated_at": "2020-01-01T00:00:00Z",
+                                "completed_at": "2020-01-01T00:00:00Z",
+                            },
+                            expired_identifier: {
+                                "delegation_id": expired_identifier,
+                                "status": "succeeded",
+                                "created_at": "2020-01-01T00:00:00Z",
+                                "updated_at": "2020-01-01T00:00:00Z",
+                                "completed_at": "2020-01-01T00:00:00Z",
+                            }
+                        },
+                        "view_state": {},
+                        "updated_at": "2020-01-01T00:00:00Z",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            store = DelegationStore(str(root))
+
+            claim = store.claim(identifier, {"status": "preparing"})
+            store.claim("dlg_" + "f" * 32, {"status": "preparing"})
+            released = store.release(identifier, claim.owner)
+
+            self.assertTrue(claim.acquired)
+            self.assertEqual(released["delegation_id"], identifier)
+            self.assertEqual(released["operation_owner"], "")
+            self.assertIsNotNone(store.get(identifier))
+            self.assertIsNone(store.get(expired_identifier))
+
     def test_state_degrades_only_delegation_when_public_api_is_unavailable(self) -> None:
         class Unavailable:
             def list_projects(self):

@@ -172,6 +172,8 @@ class ModelAccessCancellationTests(unittest.TestCase):
         executor = CodexCliExecutor(repository_root=self.root)
         process = Mock()
         process.poll.return_value = 0
+        cli_home = self.root / "codex-home"
+        cli_home.mkdir()
 
         def spawn(*_args, **_kwargs):
             cancellation.set()
@@ -179,7 +181,10 @@ class ModelAccessCancellationTests(unittest.TestCase):
 
         with (
             patch("core.model_access.cli_proxy.resolve_codex_executable", return_value=Path("/codex")),
-            patch("core.model_access.cli_proxy._prepare_codex_home", return_value=Path("/home")),
+            patch(
+                "core.model_access.cli_proxy._prepare_codex_home",
+                return_value=cli_home,
+            ),
             patch("core.model_access.cli_proxy._codex_sandbox_command", return_value=["codex"]),
             patch("core.model_access.cli_proxy.subprocess.Popen", side_effect=spawn),
             patch("core.model_access.cli_proxy._cancel_process_group") as cancel_process,

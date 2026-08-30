@@ -983,6 +983,17 @@ forbidden, and only trusted app source may declare the hook. The pattern lets a
 host transaction recover journals and project a digest-validated product
 selection without exposing the transaction root to the product process.
 
+When a narrowed sidecar also declares `diagnostics.status_file`, that path
+remains relative to the binding's app-data root but does not widen `/data`.
+Core creates and validates exactly that owner-only regular file, clears stale
+content before launch, and bind-mounts only its inode at the fixed
+`/run/maverick/sidecar-status.json` capability path. The surrounding directory,
+release controls, journals, and backups remain absent. Core injects the fixed
+path itself; app static environment and `host_prepare` output cannot choose a
+host path. A launcher must update the bound file in place rather than replacing
+the mount inode. This surface is redaction-safe operational evidence, never an
+authorization or release-selection input.
+
 A sidecar with `permissions.providers.model_proxy: true` may additionally
 request an optional private model transport:
 
@@ -1014,6 +1025,12 @@ group for cancellation before it can remain live. Revocation then shuts down
 the connection or signals the process immediately rather than waiting for a
 response-read loop. Transport adapters may not defer the first cancellation
 check until response streaming.
+
+If a provider requires serialized access to a shared technical home, lock
+acquisition is part of the same cancellation boundary. Preparation and full
+invocation locks must use bounded non-blocking acquisition attempts and check
+the request cancellation signal between attempts; a revoked queued request may
+not wait for the preceding invocation to finish.
 
 CLI execution authorization belongs to the Core broker, not to configuration
 under the sidecar-writable app data root. Every non-diagnostic invocation must

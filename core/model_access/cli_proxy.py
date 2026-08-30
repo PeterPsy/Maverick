@@ -67,14 +67,21 @@ class CodexCliExecutor:
             inner_cwd = "/workspace"
         else:
             _host_cwd, inner_cwd = _map_sidecar_path(scope.data_root, cwd)
-        cli_home = _prepare_codex_home(self.repository_root, scope)
+        cli_home = _prepare_codex_home(
+            self.repository_root,
+            scope,
+            cancellation=cancellation,
+        )
         probe_parent = self.repository_root / "tmp" / "model-access" / "probe-workspaces"
         probe_parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if isolated_probe or connection_probe:
             workspace_context = tempfile.TemporaryDirectory(prefix="codex-", dir=probe_parent)
         else:
             workspace_context = _ExistingDirectory(scope.data_root)
-        with _codex_home_execution_lock(cli_home), workspace_context as workspace:
+        with _codex_home_execution_lock(
+            cli_home,
+            cancellation=cancellation,
+        ), workspace_context as workspace:
             raise_if_cancelled(cancellation)
             command = _codex_sandbox_command(
                 executable=executable,

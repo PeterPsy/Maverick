@@ -9,9 +9,11 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
+import time
 from uuid import uuid4
 
 from core.model_access.catalog import resolve_codex_source_home
+from core.model_access.cancellation import CancellationSignal, raise_if_cancelled
 from core.model_access.models import ModelAccessScope
 
 
@@ -126,7 +128,12 @@ def map_sidecar_path(data_root: Path, raw: str) -> tuple[Path, str]:
     return candidate, PurePosixPath("/workspace").joinpath(*relative.parts).as_posix()
 
 
-def prepare_codex_home(repository_root: Path, scope: ModelAccessScope) -> Path:
+def prepare_codex_home(
+    repository_root: Path,
+    scope: ModelAccessScope,
+    *,
+    cancellation: CancellationSignal | None = None,
+) -> Path:
     """Create a technical CLI home containing auth only, never runtime state."""
     target = (
         repository_root
@@ -138,7 +145,10 @@ def prepare_codex_home(repository_root: Path, scope: ModelAccessScope) -> Path:
         / "codex-home"
     )
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with _codex_home_lock(target.parent / ".codex-home.lock"):
+    with _codex_home_lock(
+        target.parent / ".codex-home.lock",
+        cancellation=cancellation,
+    ):
         target.mkdir(parents=True, exist_ok=True, mode=0o700)
         target.chmod(0o700)
         source_auth = resolve_codex_source_home() / "auth.json"
@@ -153,13 +163,20 @@ def prepare_codex_home(repository_root: Path, scope: ModelAccessScope) -> Path:
 
 
 @contextmanager
-def codex_home_lock(cli_home: Path):
+def codex_home_lock(
+    cli_home: Path,
+    *,
+    cancellation: CancellationSignal | None = None,
+):
     """Serialize a complete Codex invocation that shares mutable CLI home state."""
     home = Path(cli_home).resolve(strict=True)
     metadata = home.stat()
     if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.geteuid():
         raise PermissionError("Codex home is unsafe")
-    with _codex_home_lock(home.parent / ".codex-home.lock"):
+    with _codex_home_lock(
+        home.parent / ".codex-home.lock",
+        cancellation=cancellation,
+    ):
         yield
 
 
@@ -277,11 +294,16 @@ def _atomic_private_write(destination: Path, body: bytes) -> None:
 
 
 @contextmanager
-def _codex_home_lock(path: Path):
+def _codex_home_lock(
+    path: Path,
+    *,
+    cancellation: CancellationSignal | None = None,
+):
     flags = os.O_RDWR | os.O_CREAT
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     descriptor = os.open(path, flags, 0o600)
+    acquired = False
     try:
         metadata = os.fstat(descriptor)
         if (
@@ -290,10 +312,25 @@ def _codex_home_lock(path: Path):
             or metadata.st_mode & 0o077
         ):
             raise PermissionError("Codex home lock is unsafe")
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        while True:
+            if cancellation is not None:
+                raise_if_cancelled(cancellation)
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                if cancellation is None:
+                    time.sleep(0.05)
+                else:
+                    cancellation.wait(0.05)
+                continue
+            acquired = True
+            break
+        if cancellation is not None:
+            raise_if_cancelled(cancellation)
         yield
     finally:
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            if acquired:
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
         finally:
             os.close(descriptor)

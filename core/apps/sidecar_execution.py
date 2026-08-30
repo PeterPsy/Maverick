@@ -32,6 +32,8 @@ _SANDBOX_ROOTFS_APP_SOURCE_ROOT = Path("/maverick/app")
 _SANDBOX_DATA_ROOT = Path("/data")
 _SANDBOX_RELAY_SOCKET = Path("/relay/r.sock")
 _SANDBOX_MODEL_ACCESS_ROOT = Path("/model-access")
+_SANDBOX_STATUS_FILE = Path("/run/maverick/sidecar-status.json")
+_SIDECAR_STATUS_ENV = "MAVERICK_SIDECAR_STATUS_FILE"
 _RUNTIME_READ_ONLY_DIRS = (Path("/etc/ssl"),)
 
 
@@ -208,6 +210,11 @@ def prepare_confined_sidecar_launch(
     if binding_data != app_data_root and app_data_root not in binding_data.parents:
         raise AppHostingError("Sidecar data root must stay within its app-owned workspace data root.")
     _reject_symlink_components(lexical_data, anchor=workspace, label="sidecar data root")
+    diagnostics_file = _prepare_sidecar_diagnostics_file(
+        workspace=workspace,
+        binding_data=lexical_data,
+        sidecar=sidecar,
+    )
 
     app_source_root = _SANDBOX_ROOTFS_APP_SOURCE_ROOT if execution_root is not None else _SANDBOX_APP_ROOT
     workdir = (app_source_root / sidecar.working_directory).as_posix()
@@ -256,7 +263,6 @@ def prepare_confined_sidecar_launch(
                 "/proc",
                 "/dev",
                 "/tmp",
-                "/run",
             )
         else:
             scaffold = (
@@ -327,7 +333,19 @@ def prepare_confined_sidecar_launch(
                 "/dev",
                 "--tmpfs",
                 "/tmp",
-                *(["--tmpfs", "/run"] if execution_root is not None else []),
+                "--tmpfs",
+                "/run",
+                "--dir",
+                "/run/maverick",
+                *(
+                    [
+                        "--bind",
+                        diagnostics_file.as_posix(),
+                        _SANDBOX_STATUS_FILE.as_posix(),
+                    ]
+                    if diagnostics_file is not None
+                    else []
+                ),
                 "--dir",
                 "/tmp/home",
                 "--remount-ro",
@@ -369,7 +387,15 @@ def prepare_confined_sidecar_launch(
         raise
     return ConfinedSidecarLaunch(
         command=command,
-        env={**env, **({"PYTHONHOME": "/maverick/python"} if execution_root is not None else {})},
+        env={
+            **env,
+            **({"PYTHONHOME": "/maverick/python"} if execution_root is not None else {}),
+            **(
+                {_SIDECAR_STATUS_ENV: _SANDBOX_STATUS_FILE.as_posix()}
+                if diagnostics_file is not None
+                else {}
+            ),
+        },
         relay_directory=relay_directory,
         relay_socket=relay_socket,
         relay_capability=capability,
@@ -420,6 +446,106 @@ def resolve_sidecar_data_root(
     if resolved != binding and binding not in resolved.parents:
         raise AppHostingError("Sidecar data mount escapes its binding data root.")
     _reject_symlink_components(selected, anchor=workspace, label="sidecar data mount")
+    return resolved
+
+
+def _prepare_sidecar_diagnostics_file(
+    *,
+    workspace: Path,
+    binding_data: Path,
+    sidecar: HttpSidecarSpec,
+) -> Path | None:
+    declaration = sidecar.diagnostics
+    if declaration is None:
+        return None
+    parts = declaration.status_file.split("/")
+    if (
+        not parts
+        or any(part in {"", ".", ".."} for part in parts)
+        or Path(declaration.status_file).is_absolute()
+    ):
+        raise AppHostingError("Sidecar diagnostics path is invalid.")
+    parent = binding_data
+    for component in parts[:-1]:
+        parent /= component
+        try:
+            metadata = parent.lstat()
+        except FileNotFoundError:
+            try:
+                parent.mkdir(mode=0o700)
+            except FileExistsError:
+                pass
+            except OSError as error:
+                raise AppHostingError(
+                    "Sidecar diagnostics directory is unavailable."
+                ) from error
+            try:
+                metadata = parent.lstat()
+            except OSError as error:
+                raise AppHostingError(
+                    "Sidecar diagnostics directory is unavailable."
+                ) from error
+        except OSError as error:
+            raise AppHostingError("Sidecar diagnostics directory is unavailable.") from error
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise AppHostingError("Sidecar diagnostics directory is unsafe.")
+    _reject_symlink_components(parent, anchor=workspace, label="sidecar diagnostics directory")
+    path = parent / parts[-1]
+    try:
+        before = path.lstat()
+    except FileNotFoundError:
+        before = None
+    except OSError as error:
+        raise AppHostingError("Sidecar diagnostics file is unavailable.") from error
+    if before is not None and (
+        stat.S_ISLNK(before.st_mode)
+        or not stat.S_ISREG(before.st_mode)
+        or before.st_uid != os.geteuid()
+        or before.st_nlink != 1
+    ):
+        raise AppHostingError("Sidecar diagnostics file is unsafe.")
+    flags = os.O_WRONLY | getattr(os, "O_CLOEXEC", 0)
+    if before is None:
+        flags |= os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except OSError as error:
+        raise AppHostingError("Sidecar diagnostics file is unavailable.") from error
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.geteuid()
+            or metadata.st_nlink != 1
+        ):
+            raise AppHostingError("Sidecar diagnostics file is unsafe.")
+        if before is not None and (metadata.st_dev, metadata.st_ino) != (
+            before.st_dev,
+            before.st_ino,
+        ):
+            raise AppHostingError("Sidecar diagnostics file changed during launch.")
+        os.ftruncate(descriptor, 0)
+        os.fchmod(descriptor, 0o600)
+        os.fsync(descriptor)
+    except OSError as error:
+        raise AppHostingError("Sidecar diagnostics file is unavailable.") from error
+    finally:
+        os.close(descriptor)
+    try:
+        after = path.lstat()
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise AppHostingError("Sidecar diagnostics file is unavailable.") from error
+    if (
+        stat.S_ISLNK(after.st_mode)
+        or not stat.S_ISREG(after.st_mode)
+        or after.st_uid != os.geteuid()
+        or after.st_nlink != 1
+        or (after.st_dev, after.st_ino) != (metadata.st_dev, metadata.st_ino)
+    ):
+        raise AppHostingError("Sidecar diagnostics file changed during launch.")
     return resolved
 
 

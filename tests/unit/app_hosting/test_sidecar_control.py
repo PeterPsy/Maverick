@@ -22,6 +22,59 @@ class _Shutdown:
 
 
 class SidecarControlTests(unittest.TestCase):
+    def test_prewarm_returns_canonical_binding_and_live_instance_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            data_root = Path(temporary) / "data/design-studio"
+            data_root.mkdir(parents=True)
+            binding = SimpleNamespace(
+                workspace_id="default",
+                app_id="design-studio",
+                data_root=str(data_root),
+                status="enabled",
+            )
+            app_store = Mock()
+            app_store.get_workspace_app_binding.return_value = binding
+            state = SimpleNamespace(
+                app_store=app_store,
+                repository_root=Path(temporary),
+            )
+            prewarm_result = {
+                "ready": True,
+                "service_count": 1,
+                "instance_count": 1,
+                "verified_ready_service_count": 1,
+                "services": [
+                    {
+                        "sidecar_id": "opendesign",
+                        "live_instance_id": "instance-ready",
+                        "state": "ready",
+                    }
+                ],
+            }
+
+            with patch.object(
+                sidecar_control,
+                "prewarm_workspace_app_sidecars",
+                return_value=prewarm_result,
+            ):
+                result = sidecar_control._dispatch(
+                    {
+                        "schema_version": "1",
+                        "operation": "prewarm",
+                        "workspace_id": "default",
+                        "app_id": "design-studio",
+                    },
+                    state=state,
+                    shutdown_controller=None,
+                )
+
+        self.assertEqual(result["workspace_id"], "default")
+        self.assertEqual(result["app_id"], "design-studio")
+        self.assertEqual(result["data_root"], str(data_root.resolve()))
+        self.assertEqual(result["declared_service_count"], 1)
+        self.assertEqual(result["verified_ready_service_count"], 1)
+        self.assertEqual(result["services"][0]["live_instance_id"], "instance-ready")
+
     def test_stop_revokes_browser_authority_before_stopping_the_app(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             data_root = Path(temporary) / "data/design-studio"

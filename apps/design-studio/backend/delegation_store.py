@@ -64,6 +64,11 @@ class DelegationStore:
             nonlocal acquired, captured
             state = normalized_state(raw)
             records = state["delegations"]
+            _prune_records(
+                records,
+                now_epoch=now_epoch,
+                protected_ids={identifier},
+            )
             record = records.get(identifier)
             if not isinstance(record, dict):
                 _prune_records(records, reserve=1, now_epoch=now_epoch)
@@ -90,7 +95,6 @@ class DelegationStore:
             record["updated_at"] = utc_now()
             acquired = True
             captured = deepcopy(record)
-            _prune_records(records, now_epoch=now_epoch)
             state["updated_at"] = record["updated_at"]
             return state
 
@@ -183,12 +187,20 @@ def _prune_records(
     *,
     reserve: int = 0,
     now_epoch: float | None = None,
+    protected_ids: set[str] | None = None,
 ) -> None:
     """Expire terminal metadata and make bounded room before a new claim."""
     target = MAX_RECORDS - max(0, reserve)
     current_epoch = time() if now_epoch is None else now_epoch
+    protected = protected_ids or set()
     terminal = sorted(
-        (record for record in records.values() if record.get("status") in TERMINAL_STATUSES),
+        (
+            record
+            for record in records.values()
+            if record.get("status") in TERMINAL_STATUSES
+            and record.get("delegation_id") not in protected
+            and not _active_lease(record, now_epoch=current_epoch)
+        ),
         key=lambda item: (_terminal_epoch(item), str(item.get("delegation_id") or "")),
     )
     for record in terminal:
@@ -196,6 +208,16 @@ def _prune_records(
         if not expired and len(records) <= target:
             break
         records.pop(str(record.get("delegation_id") or ""), None)
+
+
+def _active_lease(record: dict[str, Any], *, now_epoch: float) -> bool:
+    expiry = record.get("operation_expires_at")
+    return bool(
+        record.get("operation_owner")
+        and isinstance(expiry, (int, float))
+        and not isinstance(expiry, bool)
+        and expiry > now_epoch
+    )
 
 
 def _terminal_epoch(record: dict[str, Any]) -> float:

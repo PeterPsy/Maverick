@@ -78,10 +78,13 @@ home. It contains the loopback endpoint and non-secret local handle, but no
 provider credential or semantic content. Users can still configure additional
 providers through OpenDesign's own settings.
 
-The host-only launch preparation writes a redaction-safe bridge projection to
-`data/design-studio/bridge-capabilities.json`; the confined product does not
-write control-plane metadata. Native operation remains available when a bridge
-is degraded or disabled.
+The host-only launch preparation writes only the release-bound delegation
+projection to `data/design-studio/bridge-capabilities.json`. Core separately
+mounts one declared diagnostics file—not the surrounding app-data root—at
+`/run/maverick/sidecar-status.json`. The thin launcher writes its real
+lifecycle and Model Access result through that single-file capability, so
+`native-host-status.json` cannot remain a stale prelaunch placeholder. Native
+operation remains available when a bridge is degraded or disabled.
 
 ## Official updates
 
@@ -124,27 +127,35 @@ New schema fields and updates, renames, or removals of
 release-owned bundled Design Systems remain allowed. Identity loss or
 mutation/deletion of an existing user value fails before the active data or
 release selection changes. Only then does the updater atomically select the
-migrated data and release descriptor and prewarm the candidate.
+migrated data and release descriptor.
 
-The per-workspace update lock remains held through prewarm and commit or
-rollback. A durable intent journal is fsynced before each directory rename.
-On the next managed launch, host preparation automatically restores the prior
-selection and full backup for any non-terminal journal; the explicit `recover`
+The per-workspace update lock remains held through readiness or safe recovery.
+A durable `preparing` marker is fsynced before quiescence, and an intent journal
+is fsynced before each directory rename. Before quiescence is released or Core
+can prewarm the selected candidate, the updater durably records the irreversible
+`committed` decision with `native_ready: false`. A crash can therefore never
+expose candidate writes and later restore an older backup over them. The live,
+canonically bound prewarm then sets `native_ready: true` and records the real
+launcher handshake. On the next managed launch, host preparation automatically
+restores the prior selection and full backup for any pre-commit transaction, or
+resumes the committed candidate without rollback. The explicit `recover`
 action performs the same operation and restarts the verified writer. Disposable
 migration, inventory, smoke, and delegation probes run without a network
 interface; their public API is reachable only through an authenticated local
 Unix relay inside that namespace.
 
-Failure to start restores the complete prior data and release selection. If
-that previous writer cannot itself be restarted—or its prewarm call raises—the
-updater re-establishes quiescence and retries the synchronous Core stop. A
-confirmed stop permits `recovery_required` directly. If stop cannot be proven,
-the updater first requires Core to persist a workspace/app quarantine, revoke
-proxy and browser authority, revoke and cancel model-access leases, and fence
-all relaunches; only then is `recovery_required` recorded. The Core fence
-survives backend restart and requires explicit operator release. A model or
-delegation capability mismatch is recorded as degraded and never rolls back
-or stops native OpenDesign.
+Failure before the commit decision restores the complete prior data and release
+selection. Failure after that decision leaves the candidate selected and marks
+it not ready; recovery retries that same candidate and never discards writes
+that could have occurred after exposure. Every stop and readiness decision
+requires Core evidence for the exact workspace id, app id, canonical data root,
+declared `opendesign` service, and live/stopped instance state. If a pre-commit
+stop cannot be proven, the updater first requires Core to persist a
+workspace/app quarantine, revoke proxy and browser authority, revoke and cancel
+model-access leases, and fence all relaunches; only then is
+`recovery_required` recorded. The Core fence survives backend restart and
+requires explicit operator release. A model or delegation capability mismatch
+is recorded as degraded and never rolls back or stops native OpenDesign.
 
 ## External delegation bridge
 

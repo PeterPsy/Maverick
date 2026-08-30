@@ -16,7 +16,14 @@ from native_cutover_files import atomic_write_json, real_directory
 UPDATE_FILE = "official-update.json"
 UPDATE_BACKUPS = "opendesign-update-backups"
 UPDATE_ID_PATTERN = re.compile(r"^update_[A-Za-z0-9._-]{1,120}$")
-PHASES = {"prepared", "activating", "committed", "rolled_back", "recovery_required"}
+PHASES = {
+    "preparing",
+    "prepared",
+    "activating",
+    "committed",
+    "rolled_back",
+    "recovery_required",
+}
 INVENTORY_CATEGORIES = (
     "projects",
     "conversations",

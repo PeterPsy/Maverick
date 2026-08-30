@@ -13,7 +13,10 @@ from unittest.mock import patch
 SERVICE_ROOT = Path(__file__).resolve().parents[1] / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from cutover_native_opendesign import _stop_managed_writer  # noqa: E402
+from cutover_native_opendesign import (  # noqa: E402
+    _require_managed_writer_ready,
+    _stop_managed_writer,
+)
 from native_cutover_quiescence import (  # noqa: E402
     quiesce_native_host,
     reject_if_native_host_quiesced,
@@ -103,6 +106,32 @@ class NativeCutoverQuiescenceTests(unittest.TestCase):
                         cutover_id="native_invalid_stop_test",
                         confirmed=True,
                     )
+
+    def test_activation_rejects_readiness_from_an_unrelated_workspace(self) -> None:
+        response = {
+            "workspace_id": "unrelated-workspace",
+            "app_id": "design-studio",
+            "data_root": str(self.root.resolve()),
+            "ready": True,
+            "declared_service_count": 1,
+            "verified_ready_service_count": 1,
+            "services": [
+                {
+                    "sidecar_id": "opendesign",
+                    "live_instance_id": "unrelated-instance",
+                    "state": "ready",
+                }
+            ],
+        }
+        with patch(
+            "cutover_native_opendesign._request_sidecar_control",
+            return_value=response,
+        ):
+            with self.assertRaisesRegex(NativeDataCutoverError, "did not confirm"):
+                _require_managed_writer_ready(
+                    self.root,
+                    workspace_id="default",
+                )
 
     def test_quiescence_blocks_relaunch_until_the_matching_cutover_releases_it(self) -> None:
         quiesce_native_host(self.root, cutover_id="native_quiesce_test")

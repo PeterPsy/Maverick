@@ -173,16 +173,40 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
     workspace_id = _identifier(request.get("workspace_id"))
     app_id = _identifier(request.get("app_id"))
     if operation == "prewarm":
-        binding = state.app_store.get_workspace_app_binding(
-            workspace_id=workspace_id,
-            app_id=app_id,
-        )
-        return prewarm_workspace_app_sidecars(
+        try:
+            binding = state.app_store.get_workspace_app_binding(
+                workspace_id=workspace_id,
+                app_id=app_id,
+            )
+            if (
+                getattr(binding, "workspace_id", None) != workspace_id
+                or getattr(binding, "app_id", None) != app_id
+                or getattr(binding, "status", None) != "enabled"
+            ):
+                raise ValueError("binding is not enabled")
+            data_root = _canonical_binding_data_root(binding.data_root)
+        except Exception as error:
+            raise SidecarControlError(
+                "runtime_binding_invalid", "sidecar_prewarm_resolve"
+            ) from error
+        result = prewarm_workspace_app_sidecars(
             state,
             binding=binding,
             trigger="activation",
             shutdown_controller=shutdown_controller,
         )
+        services = result.get("services")
+        if not isinstance(services, list) or not services:
+            raise SidecarControlError(
+                "daemon_spawn_failed", "sidecar_prewarm_verify"
+            )
+        return {
+            **result,
+            "workspace_id": workspace_id,
+            "app_id": app_id,
+            "data_root": data_root,
+            "declared_service_count": len(services),
+        }
     if operation == "stop":
         try:
             binding = state.app_store.get_workspace_app_binding(

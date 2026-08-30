@@ -10,7 +10,8 @@ import shutil
 import stat
 from typing import Any, Callable
 
-from managed_sidecar_stop import (
+from managed_sidecar_evidence import (
+    require_verified_writer_ready,
     require_verified_writer_status,
     require_verified_writer_stop,
 )
@@ -28,6 +29,7 @@ from native_cutover_quiescence import (
     read_quiescence,
     release_native_host,
 )
+from native_host_status import read_live_model_bridge
 from official_bridge_contracts import (
     read_delegation_contract,
     validate_delegation_status,
@@ -104,7 +106,7 @@ def recover_official_update_locked(
     if state["phase"] in TERMINAL_PHASES:
         cleaned = _finalize_terminal_transaction(root, state)
         resumed = False
-        if resume_writer and state["phase"] == "rolled_back" and not state["native_ready"]:
+        if resume_writer and not state["native_ready"]:
             if sidecar_control is None:
                 raise OfficialUpdateError("official update recovery has no Core control channel")
             state = _resume_recovered_writer(
@@ -114,10 +116,13 @@ def recover_official_update_locked(
                 control=sidecar_control,
             )
             resumed = True
-        elif not resume_writer and state["phase"] == "rolled_back" and not state["native_ready"]:
+        elif not resume_writer and not state["native_ready"]:
             state.update({"native_ready": True, "updated_at": utc_now()})
             write_update_state(root, state)
             resumed = True
+        backup = _optional_backup(root, state)
+        if backup is not None and resumed:
+            _finalize_backup(backup, state)
         return {"recovered": cleaned or resumed, "update": state}
 
     quiesce_native_host(root, cutover_id=identifier)
@@ -286,21 +291,29 @@ def _resume_recovered_writer(
     release_quarantine: bool = False,
 ) -> dict[str, Any]:
     identifier = state["update_id"]
+    terminal_phase = state["phase"]
+    committed = terminal_phase == "committed"
     try:
         if release_quarantine:
             released = control("release_quarantine", workspace_id)
             if not isinstance(released, dict) or released.get("quarantined") is not False:
                 raise OfficialUpdateError("Core did not release sidecar quarantine")
         readiness = control("prewarm", workspace_id)
-        if not isinstance(readiness, dict) or readiness.get("ready") is not True:
-            raise OfficialUpdateError(
-                "the previous native OpenDesign writer did not become ready"
+        try:
+            require_verified_writer_ready(
+                readiness,
+                workspace_id=workspace_id,
+                app_data_root=root,
             )
+        except ValueError as error:
+            raise OfficialUpdateError(
+                "the selected native OpenDesign writer did not become ready"
+            ) from error
     except Exception as error:
         quiesce_native_host(root, cutover_id=identifier)
         state.update(
             {
-                "phase": "recovery_required",
+                "phase": "committed" if committed else "recovery_required",
                 "updated_at": utc_now(),
                 "native_ready": False,
                 "rolled_back": False,
@@ -312,12 +325,19 @@ def _resume_recovered_writer(
         ) from error
     state.update(
         {
-            "phase": "rolled_back",
+            "phase": terminal_phase,
             "updated_at": utc_now(),
             "native_ready": True,
-            "rolled_back": True,
+            "rolled_back": terminal_phase == "rolled_back",
         }
     )
+    if terminal_phase == "committed":
+        state["bridges"]["model_access"] = read_live_model_bridge(
+            root,
+            manifest_digest=state["candidate_release"]["manifest_digest"],
+            unavailable_reason="post_update_handshake_unavailable",
+            wait_seconds=2.0,
+        )
     write_update_state(root, state)
     return state
 
@@ -327,6 +347,7 @@ def _finalize_terminal_transaction(root: Path, state: dict[str, Any]) -> bool:
     real_directory(root / "opendesign-native", label="native OpenDesign data")
     paths = (
         root / f".{identifier}.work",
+        root / f".{identifier}.backup",
         root / f".{identifier}.recovery-data",
         root / f".{identifier}.failed-data",
     )
@@ -390,6 +411,7 @@ def _read_previous_delegation(
 def _cleanup_transaction_paths(root: Path, *, identifier: str) -> None:
     for path in (
         root / f".{identifier}.work",
+        root / f".{identifier}.backup",
         root / f".{identifier}.recovery-data",
         root / f".{identifier}.failed-data",
     ):

@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 import stat
-from typing import Any
+from typing import Any, Callable
 
 from official_opendesign_release import (
     OfficialRelease,
@@ -34,7 +34,9 @@ from opencode_runtime import OpenCodeRuntimeError, RUNTIME_RELATIVE_PATH, verify
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 OFFICIAL_STORE_MOUNT = Path("/artifacts/opendesign")
 SIDECAR_DATA_MOUNT = Path("/data")
+SIDECAR_STATUS_MOUNT = Path("/run/maverick/sidecar-status.json")
 LAUNCH_CONFIGURATION_ENV = "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
+SIDECAR_STATUS_ENV = "MAVERICK_SIDECAR_STATUS_FILE"
 
 
 def main() -> None:
@@ -54,13 +56,30 @@ def main() -> None:
         create=True,
         label="OpenDesign data directory",
     )
-    release, _delegation_status = _launch_configuration()
+    release, delegation_status = _launch_configuration()
     installation_path = store_root / "official" / release.digest_key
     installation = verify_official_installation(installation_path, expected_release=release)
-    model_bridge, _model_status, model_profile_path = _configure_model_access(
+    model_bridge, model_status, model_profile_path = _configure_model_access(
         data_dir,
         artifact_root=store_root,
     )
+    status_file = _required_status_file()
+    report_status = _host_status_reporter(
+        status_file,
+        {
+            "schema_version": "1",
+            "mode": "official-native",
+            "image": release.image,
+            "version": release.version,
+            "manifest_digest": release.manifest_digest,
+            "rootfs_snapshot_sha256": installation.rootfs_snapshot_sha256,
+            "customizations": [],
+            "model_bridge": model_status,
+            "delegation_bridge": delegation_status,
+            "direct_delegation_bridge": "disabled",
+        },
+    )
+    report_status("starting", None)
     command, environment, cwd = build_native_launch(
         release=release,
         rootfs=installation.rootfs,
@@ -82,7 +101,7 @@ def main() -> None:
                 port=port,
                 api_token=api_token,
             ),
-            state_changed=lambda _state, _exit_code: None,
+            state_changed=report_status,
         )
     except OSError as error:
         raise SystemExit(f"Official OpenDesign process could not start: {error}") from error
@@ -196,14 +215,26 @@ def _configure_model_access(
     remove_model_access_profiles(data_dir)
     mode = os.environ.get("MAVERICK_OPENDESIGN_MODEL_BRIDGE", "disabled")
     if mode == "disabled":
-        return None, {"state": "disabled", "reason": "disabled_by_configuration"}, None
+        return None, {
+            "state": "disabled",
+            "reason": "disabled_by_configuration",
+            "semantic_enrichment": False,
+        }, None
     if mode not in {"auto", "enabled"}:
-        return None, {"state": "degraded", "reason": "invalid_configuration"}, None
+        return None, {
+            "state": "degraded",
+            "reason": "invalid_configuration",
+            "semantic_enrichment": False,
+        }, None
     try:
         configuration = ModelAccessConfiguration.from_environment()
         client = ModelAccessClient(configuration)
     except ModelAccessClientError:
-        return None, {"state": "degraded", "reason": "core_broker_unavailable"}, None
+        return None, {
+            "state": "degraded",
+            "reason": "core_broker_unavailable",
+            "semantic_enrichment": False,
+        }, None
 
     try:
         verify_opencode_runtime(artifact_root / RUNTIME_RELATIVE_PATH)
@@ -301,6 +332,93 @@ def _required_directory(
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
         raise OfficialReleaseError(f"{label} must be a real directory")
     return resolved
+
+
+def _required_status_file() -> Path:
+    path = Path(_required_env(SIDECAR_STATUS_ENV))
+    if path != SIDECAR_STATUS_MOUNT:
+        raise OfficialReleaseError(
+            "sidecar status must use the declared diagnostics capability"
+        )
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise OfficialReleaseError("sidecar diagnostics capability is unavailable") from error
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.geteuid()
+        or metadata.st_nlink != 1
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+    ):
+        raise OfficialReleaseError("sidecar diagnostics capability is unsafe")
+    return path
+
+
+def _host_status_reporter(
+    status_file: Path,
+    base_status: dict[str, Any],
+) -> Callable[[str, int | None], None]:
+    """Return the lifecycle callback for Core's single-file status capability."""
+
+    def report(state: str, exit_code: int | None) -> None:
+        payload = {**base_status, "state": state}
+        if exit_code is not None:
+            payload["process_exit_code"] = exit_code
+        _write_bound_status(status_file, payload)
+
+    return report
+
+
+def _write_bound_status(path: Path, payload: dict[str, Any]) -> None:
+    body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8") + b"\n"
+    if len(body) > 64 * 1024:
+        raise OfficialReleaseError("sidecar diagnostics payload is too large")
+    try:
+        before = path.lstat()
+    except OSError as error:
+        raise OfficialReleaseError("sidecar diagnostics capability is unavailable") from error
+    if (
+        stat.S_ISLNK(before.st_mode)
+        or not stat.S_ISREG(before.st_mode)
+        or before.st_uid != os.geteuid()
+        or before.st_nlink != 1
+        or stat.S_IMODE(before.st_mode) != 0o600
+    ):
+        raise OfficialReleaseError("sidecar diagnostics capability is unsafe")
+    flags = os.O_WRONLY | getattr(os, "O_CLOEXEC", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise OfficialReleaseError(
+            "sidecar diagnostics capability could not be opened"
+        ) from error
+    try:
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_uid != os.geteuid()
+            or opened.st_nlink != 1
+            or stat.S_IMODE(opened.st_mode) != 0o600
+            or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+        ):
+            raise OfficialReleaseError("sidecar diagnostics capability changed")
+        os.ftruncate(descriptor, 0)
+        remaining = memoryview(body)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            if written <= 0:
+                raise OSError("sidecar diagnostics write made no progress")
+            remaining = remaining[written:]
+        os.fsync(descriptor)
+    except OSError as error:
+        raise OfficialReleaseError(
+            "sidecar diagnostics capability could not be updated"
+        ) from error
+    finally:
+        os.close(descriptor)
 
 
 def _port(value: str) -> int:

@@ -16,6 +16,7 @@ from unittest.mock import patch
 from core.api.sidecar_proxy import HttpSidecarManager, RunningSidecar, UnixRelayHTTPConnection, _proxy_to_running_sidecar
 from core.apps.contracts import (
     build_http_sidecar_data_mount,
+    build_http_sidecar_diagnostics,
     build_http_sidecar_model_access,
     build_http_sidecar_process_policy,
     build_http_sidecar_spec,
@@ -72,6 +73,9 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
                     request_concurrency=1,
                 ),
                 data_mount=build_http_sidecar_data_mount(subpath="opendesign-native"),
+                diagnostics=build_http_sidecar_diagnostics(
+                    status_file="native-host-status.json"
+                ),
                 model_access=build_http_sidecar_model_access(
                     api=True,
                     cli=["codex"],
@@ -151,6 +155,8 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
                 "operator_home_absent",
                 "other_workspace_absent",
                 "control_metadata_absent",
+                "diagnostic_capability_present",
+                "diagnostic_parent_is_hidden",
                 "bundle_read_only",
                 "outside_write_denied",
                 "data_write_allowed",
@@ -168,6 +174,12 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
             self.assertEqual(
                 (data_root / "official-update.json").read_text(encoding="utf-8"),
                 "host-control",
+            )
+            self.assertEqual(
+                json.loads(
+                    (data_root / "native-host-status.json").read_text(encoding="utf-8")
+                ),
+                {"state": "ready", "source": "confined-sidecar"},
             )
 
             self.assertTrue(running.request_slots.acquire(blocking=False))
@@ -428,6 +440,8 @@ def _probe_server_source(*, operator_secret: Path, other_workspace_secret: Path,
             "operator_home_absent": not Path({str(operator_secret)!r}).exists(),
             "other_workspace_absent": not Path({str(other_workspace_secret)!r}).exists(),
             "control_metadata_absent": not Path("/data/official-update.json").exists(),
+            "diagnostic_capability_present": os.environ.get("MAVERICK_SIDECAR_STATUS_FILE") == "/run/maverick/sidecar-status.json",
+            "diagnostic_parent_is_hidden": not Path("/run/maverick/official-update.json").exists(),
             "technical_token_present": bool(os.environ.get("PROBE_TOKEN")),
             "memory_limit": resource.getrlimit(resource.RLIMIT_AS)[0],
             "open_files_limit": resource.getrlimit(resource.RLIMIT_NOFILE)[0],
@@ -444,6 +458,12 @@ def _probe_server_source(*, operator_secret: Path, other_workspace_secret: Path,
             results["outside_write_denied"] = True
         Path("/data/allowed.txt").write_text("allowed", encoding="utf-8")
         results["data_write_allowed"] = True
+        status_file = os.environ.get("MAVERICK_SIDECAR_STATUS_FILE", "")
+        if status_file:
+            Path(status_file).write_text(
+                json.dumps({{"state": "ready", "source": "confined-sidecar"}}),
+                encoding="utf-8",
+            )
         routes = Path("/proc/net/route").read_text(encoding="utf-8").splitlines()[1:]
         results["no_default_route"] = not any(line.split()[1] == "00000000" for line in routes if line.split())
         results["host_loopback_denied"] = denied(("127.0.0.1", {host_port}))

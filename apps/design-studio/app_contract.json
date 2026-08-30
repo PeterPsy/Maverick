@@ -260,6 +260,9 @@
         "data_mount": {
           "subpath": "opendesign-native"
         },
+        "diagnostics": {
+          "status_file": "native-host-status.json"
+        },
         "host_prepare": {
           "entrypoint": "hooks/sidecar_prepare.py",
           "timeout_seconds": 30,

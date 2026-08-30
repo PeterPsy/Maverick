@@ -22,6 +22,7 @@ from official_opendesign_release import (  # noqa: E402
     load_official_release,
     verify_official_installation,
 )
+from native_host_status import model_bridge_from_status  # noqa: E402
 from official_release_selection import ensure_release_selection  # noqa: E402
 
 
@@ -85,7 +86,10 @@ def main() -> None:
                 "host": host,
             },
             "bridges": {
-                "model_access": _bridge_status(bridges, "model_access"),
+                "model_access": _model_bridge_status(
+                    host,
+                    manifest_digest=release.manifest_digest,
+                ),
                 "delegation": _bridge_status(bridges, "delegation"),
             },
         }
@@ -97,6 +101,24 @@ def _bridge_status(payload: dict[str, Any], name: str) -> dict[str, Any]:
     if isinstance(candidate, dict) and candidate.get("state") in {"ready", "degraded", "disabled"}:
         return candidate
     return {"state": "disabled", "reason": "not_configured"}
+
+
+def _model_bridge_status(
+    payload: dict[str, Any],
+    *,
+    manifest_digest: str,
+) -> dict[str, Any]:
+    candidate = model_bridge_from_status(
+        payload,
+        manifest_digest=manifest_digest,
+    )
+    if candidate is not None:
+        return candidate
+    return {
+        "state": "degraded",
+        "reason": "runtime_handshake_unavailable",
+        "semantic_enrichment": False,
+    }
 
 
 def _real_directory(path: Path) -> Path:

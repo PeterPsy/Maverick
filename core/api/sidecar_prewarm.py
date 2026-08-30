@@ -133,6 +133,7 @@ def prewarm_workspace_app_sidecars(
     if not arguments:
         raise RuntimeError("No matching declarative sidecar prewarm policy is enabled.")
     instances: list[str] = []
+    services: list[dict[str, object]] = []
     for item in arguments:
         sidecar = item["sidecar"]
         with _prewarm_family_lock(binding.app_id, sidecar.service_id):
@@ -148,10 +149,19 @@ def prewarm_workspace_app_sidecars(
                 verify_existing_health=True,
             )
             instances.append(running.instance_id)
+            services.append(
+                {
+                    "sidecar_id": sidecar.service_id,
+                    "live_instance_id": running.instance_id,
+                    "state": "ready",
+                }
+            )
     return {
         "ready": True,
         "service_count": len(instances),
         "instance_count": len(set(instances)),
+        "verified_ready_service_count": len(services),
+        "services": services,
     }
 
 

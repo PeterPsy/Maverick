@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 import hashlib
 import json
-from threading import Event
+from threading import Event, RLock
 import time
 from typing import Literal
 
 from core.egress.classification import (
+    CanonicalSourceClassification,
     derive_content_classification,
     fail_closed_classification,
     join_classifications,
@@ -70,16 +71,77 @@ class RuntimeToolExecutionControl:
     cancellation: Event
     monotonic: Callable[[], float] = time.monotonic
     cancellation_reason: str = "runtime_cancelled"
+    _callbacks: dict[int, Callable[[], None]] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
+    _callback_lock: RLock = field(
+        default_factory=RLock,
+        init=False,
+        repr=False,
+    )
+    _next_callback_id: int = field(default=0, init=False, repr=False)
+    _had_cancellation_callback: bool = field(
+        default=False,
+        init=False,
+        repr=False,
+    )
+    _completed: bool = field(default=False, init=False, repr=False)
 
     def cancel(self, reason_code: str) -> None:
-        self.cancellation_reason = reason_code
-        self.cancellation.set()
+        with self._callback_lock:
+            self.cancellation_reason = reason_code
+            self.cancellation.set()
+            callbacks = tuple(self._callbacks.values())
+            self._callbacks.clear()
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception:
+                pass
 
     def check(self) -> None:
         if self.cancellation.is_set():
             raise RuntimeToolError(self.cancellation_reason)
         if self.monotonic() >= self.deadline_monotonic:
             raise RuntimeToolError("agent_finalization_time_reserve_reached")
+
+    def add_cancellation_callback(self, callback: Callable[[], None]) -> None:
+        """Register cleanup that runs synchronously when this lease is fenced."""
+        call_now = False
+        with self._callback_lock:
+            self._had_cancellation_callback = True
+            if self.cancellation.is_set():
+                call_now = True
+            elif not self._completed:
+                callback_id = self._next_callback_id
+                self._next_callback_id += 1
+                self._callbacks[callback_id] = callback
+        if call_now:
+            callback()
+
+    def require_quiescence(self) -> None:
+        """Fence a cooperative surface even before it registers its cleanup."""
+        with self._callback_lock:
+            self._had_cancellation_callback = True
+
+    def run_if_active(self, action: Callable[[], object]) -> object:
+        """Cross one effect boundary atomically with respect to cancellation."""
+        with self._callback_lock:
+            self.check()
+            return action()
+
+    def complete(self) -> None:
+        """Release callbacks only after the authoritative ledger commit."""
+        with self._callback_lock:
+            self._completed = True
+            self._callbacks.clear()
+
+    @property
+    def requires_quiescence(self) -> bool:
+        with self._callback_lock:
+            return self._had_cancellation_callback
 
 
 class RuntimeToolOrchestrator:
@@ -501,6 +563,7 @@ class RuntimeToolOrchestrator:
                 arguments=arguments,
                 context=context,
                 idempotency_key=(executing.idempotency_key if descriptor.supports_idempotency else None),
+                control=control,
             )
             if control is not None:
                 control.check()
@@ -511,16 +574,9 @@ class RuntimeToolOrchestrator:
                 ).sources[0]
             else:
                 result = surface_result
-                resolver = self.catalog_builder.result_classification_resolver
-                classification = (
-                    join_classifications(
-                        (resolver(descriptor.handle, arguments, result, context),)
-                    ).sources[0]
-                    if resolver is not None
-                    else fail_closed_classification(
-                        provenance="tool_result",
-                        source_ref=descriptor.handle,
-                    )
+                classification = fail_closed_classification(
+                    provenance="tool_result",
+                    source_ref=descriptor.handle,
                 )
             # Validate the capability result before the shared CLI compactor
             # projects it into the bounded transport representation.  The
@@ -528,6 +584,32 @@ class RuntimeToolOrchestrator:
             # app-specific output schema verbatim.
             if descriptor.output_schema is not None:
                 validate_tool_arguments(descriptor.output_schema, result)
+            resolver = self.catalog_builder.result_classification_resolver
+            if resolver is not None:
+                try:
+                    resolved = resolver(
+                        descriptor.handle,
+                        arguments,
+                        result,
+                        context,
+                    )
+                except Exception:
+                    resolved = fail_closed_classification(
+                        provenance="tool_result",
+                        source_ref=descriptor.handle,
+                    )
+                if isinstance(resolved, RuntimeToolSurfaceResult):
+                    result = resolved.payload
+                    classification = join_classifications(
+                        (resolved.classification,)
+                    ).sources[0]
+                elif isinstance(resolved, CanonicalSourceClassification):
+                    classification = join_classifications((resolved,)).sources[0]
+                elif resolved is not None:
+                    classification = fail_closed_classification(
+                        provenance="tool_result",
+                        source_ref=descriptor.handle,
+                    )
             encoded_original = json.dumps(
                 result,
                 ensure_ascii=False,
@@ -575,7 +657,7 @@ class RuntimeToolOrchestrator:
             }
             if control is not None:
                 control.check()
-            return self._persist_execution_success(
+            succeeded = self._persist_execution_success(
                 executing,
                 encoded=encoded,
                 artifact_encoded=(
@@ -585,28 +667,38 @@ class RuntimeToolOrchestrator:
                 result_classification=classification,
                 control=control,
             )
+            return succeeded
         except RuntimeToolError as error:
+            if control is not None and control.requires_quiescence:
+                control.cancel(error.reason_code)
             state = (
                 "execution_unknown"
                 if crossed_effect_boundary and descriptor.effect_class != "read"
                 else "failed"
             )
-            return self._persist_execution_failure(
+            failed = self._persist_execution_failure(
                 executing,
                 state=state,
                 reason_code=error.reason_code,
             )
+            return failed
         except Exception:
+            if control is not None and control.requires_quiescence:
+                control.cancel("tool_execution_failed")
             state = (
                 "execution_unknown"
                 if crossed_effect_boundary and descriptor.effect_class != "read"
                 else "failed"
             )
-            return self._persist_execution_failure(
+            failed = self._persist_execution_failure(
                 executing,
                 state=state,
                 reason_code="tool_execution_failed",
             )
+            return failed
+        finally:
+            if control is not None:
+                control.complete()
 
     def _persist_execution_success(
         self,
@@ -791,6 +883,7 @@ class RuntimeToolOrchestrator:
         arguments: dict[str, object],
         context: RuntimeToolActorContext,
         idempotency_key: str | None,
+        control: RuntimeToolExecutionControl | None,
     ) -> dict[str, object] | RuntimeToolSurfaceResult:
         caller_kind = "sandbox_agent" if context.execution_mode == "sandbox" else "full_access_agent"
         if descriptor.surface_kind == "cli":
@@ -841,7 +934,11 @@ class RuntimeToolOrchestrator:
         )
         if surface is None:
             raise RuntimeToolError("tool_core_capability_unavailable")
-        return surface.handler(arguments, context, idempotency_key)
+        return surface.handler(
+            arguments,
+            replace(context, execution_control=control),
+            idempotency_key,
+        )
 
     @staticmethod
     def _requires_confirmation(

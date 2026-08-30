@@ -54,13 +54,13 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_FULL_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "6")
+                self.assertEqual(recipe.revision, "7")
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
                     "5",
                 )
-                self.assertEqual(recipe.tool_contract_revision, "codex-baseline-v7")
-                self.assertEqual(recipe.context_policy.revision, "p4-context-v3")
+                self.assertEqual(recipe.tool_contract_revision, "codex-baseline-v8")
+                self.assertEqual(recipe.context_policy.revision, "p4-context-v4")
         self.assertEqual(HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION, "3")
 
     def test_registry_resolves_only_the_exact_recipe_and_catalog_identity(self) -> None:

@@ -31,6 +31,11 @@ def developer_context_command_specs(*, start_path: Path | None = None) -> list[t
                 description=description,
                 owner_id="developer-context",
                 invocation_policy=WORKSPACE_SAFE,
+                agentic_result_data_class=(
+                    "public"
+                    if command_id == "developer-context.list"
+                    else None
+                ),
             ),
             handler,
         )

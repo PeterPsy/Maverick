@@ -47,6 +47,9 @@ from core.runtime.provider_private_state import ProviderPrivateStateService
 from core.runtime.provider_input_context import (
     RuntimeProviderInputClassificationResolver,
 )
+from core.runtime.provider_input_admission import (
+    build_runtime_provider_input_classification_resolver,
+)
 from core.runtime.tool_ledger import RuntimeToolLedger
 from core.runtime.tool_private_payloads import EncryptedRuntimeToolPrivatePayloadStore
 from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
@@ -280,7 +283,9 @@ def bootstrap_platform_state(
         provider_private_state_service=provider_private_state_service,
         agentic_egress_evaluator=agentic_egress_evaluator,
         runtime_input_classification_resolver=(
-            runtime_input_classification_resolver
+            build_runtime_provider_input_classification_resolver()
+            if runtime_input_classification_resolver is None
+            else runtime_input_classification_resolver
         ),
         runtime_app_reference_classification_resolver=(
             runtime_app_reference_classification_resolver

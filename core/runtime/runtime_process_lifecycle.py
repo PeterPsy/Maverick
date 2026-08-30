@@ -53,7 +53,7 @@ def release_idle_runtime_processes(
         )
     _cancel_scheduled_idle_runtime_process_reap(session_id)
     clear_cached_runtime_launch_context(session_id)
-    terminated = terminate_runtime_processes(session_id)
+    terminated = 0
     with suppress(Exception):
         session = state.runtime_store.get_session(session_id)
         engine = ResolvedRuntimeEngine(
@@ -73,6 +73,7 @@ def release_idle_runtime_processes(
             closed = engine.legacy_adapter.close_runtime(session_id)
             if isinstance(closed, int):
                 terminated += closed
+    terminated += terminate_runtime_processes(session_id)
     terminated += terminate_orphaned_runtime_processes_for_session(session_id)
     if terminated:
         record_runtime_event(

@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v13 also
+status, workspace binding, and upstream constraint. TCB manifest v14 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -150,7 +150,9 @@ recipe and digest, fine-grained provider-capability catalog digest, semantic
 compiler, tool contract, and context policy. The generic runtime registry must
 resolve that exact model/protocol/API/endpoint/upstream/reasoning composition.
 Context admission preserves an independent reserve; deterministic compaction
-retains authority/provenance evidence and current-turn tool pairing. Large
+retains authority/provenance evidence and current-turn tool pairing. Reserve
+validation covers the complete request and may force one recipe-bound
+compaction/rebuild below the ordinary private-state trigger. Large
 results become session-owned artifact references, attachments become explicit
 authorized workspace references, and hosted steering reports a safe-next-turn
 fallback when same-turn delivery is not certified. Recipe-specific endpoint
@@ -574,6 +576,15 @@ resource identity. The production resolver reads the same revisioned workspace
 classification store used by other resource observations. Absent evidence or
 any identity/version mismatch stays `unclassified`.
 
+Production bootstrap also installs the closed transient-input admission
+resolver used by the composer. Tool results do not receive a generic public
+fallback: exact resource observations and edit pre-images retain their taint;
+unclassified shell/process/CLI/MCP content is withheld behind bounded Core
+action metadata unless a Core-owned certified definition explicitly admits the
+full public result. App definitions cannot self-promote. Large artifact
+summaries carry a digest of their exact provider-visible bytes while retaining
+the original result class/trust/identity separately.
+
 The complete decision metadata is inserted first into the session-owned
 `egress_decisions.json`; only then may transformed bytes be used. Its audit
 projection contains domain-separated HMAC digests and decision metadata, never
@@ -638,6 +649,13 @@ before atomic replacement; Mongo evaluates it with server `$$NOW`. A worker
 paused after its last cooperative check therefore cannot become authoritative
 after expiry, and the paired final request can proceed. A non-read effect
 remains `execution_unknown` and fails closed.
+
+For synchronous shell and managed-process work, execution control terminates
+the complete process group, discards the COW overlay, and waits for worker
+quiescence before cancellation returns. `HostedAgenticEngineAdapter` owns the
+managed-process registry, so close and idle reap clear live handles, capture
+FDs, overlays,
+global registrations, and durable process status before the orphan fallback.
 
 Google and OpenRouter preserve every call, including later OpenRouter indices
 and calls decoded before a terminal stream error. Parallel execution remains

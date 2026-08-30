@@ -23,6 +23,15 @@ from core.runtime.tool_orchestrator import (
 
 
 _MAX_PAIRING_CLEANUP_SECONDS = 0.1
+_CANCELLATION_QUIESCENT_TOOL_HANDLES = frozenset(
+    {
+        "core-capability:shell.run",
+        "core-capability:process.start",
+        "core-capability:process.status",
+        "core-capability:process.input",
+        "core-capability:process.interrupt",
+    }
+)
 
 
 async def execute_hosted_authorized_tool(
@@ -52,6 +61,13 @@ async def execute_hosted_authorized_tool(
         cancellation=Event(),
         monotonic=budget.monotonic,
     )
+    if (
+        outcome.invocation.resolved_tool_handle
+        in _CANCELLATION_QUIESCENT_TOOL_HANDLES
+    ):
+        # Close the spawn-before-callback race: cancellation must await these
+        # cooperative surfaces even if their worker has not registered cleanup.
+        control.require_quiescence()
     started = tool_orchestrator.start_authorized(
         outcome.invocation,
         authority=authority,
@@ -82,12 +98,23 @@ async def execute_hosted_authorized_tool(
         await asyncio.wait((task,), timeout=min(poll_seconds, remaining))
     if failure_reason is None:
         return await task
-    control.cancel(failure_reason)
+    # Setting the lease event prevents a worker from committing its ledger
+    # result.  Registered Core surfaces synchronously terminate their process
+    # groups and discard COW state before cancellation is acknowledged.
+    await asyncio.to_thread(control.cancel, failure_reason)
     interrupted = tool_orchestrator.interrupt_started_execution(
         started.invocation,
         failure_reason=failure_reason,
     )
-    task.add_done_callback(_consume_background_result)
+    if control.requires_quiescence:
+        try:
+            await task
+        except Exception:
+            # Cancellation owns the public outcome; the ledger fence above is
+            # already authoritative, but worker quiescence remains mandatory.
+            pass
+    else:
+        task.add_done_callback(_consume_background_result)
     if failure_reason == "runtime_cancelled":
         raise HostedAgenticLoopError(failure_reason)
     return interrupted

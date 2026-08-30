@@ -688,6 +688,13 @@ digest are persisted in the provider-step journal. Provider codecs may render
 roles differently only through their certified deterministic projection; they
 may not omit a mandatory block or infer authority from instructions.
 
+Context-window admission evaluates the complete prepared request, not only the
+provider-private history. If history is below its ordinary trigger but the
+current user/tool/schema payload would consume the independent reserve, Core
+performs at most one forced, recipe-bound history compaction, rebuilds the
+request with new evidence, and validates it again. A second overflow fails
+closed before transport.
+
 Each hosted request reserves its conservative provider price ceiling before
 transport. When that request reports priced usage, Core replaces only the
 active reservation with the reported cost before considering the next step;
@@ -819,17 +826,28 @@ absolute paths are not exposed, system tooling is read-only, and the network
 namespace is disconnected. Synchronous output is drained under a hard byte
 ceiling. Long commands use session-owned process handles with bounded streaming
 output, stdin, interrupt, timeout, process-group cleanup, durable redacted
-records, and the common orphan reaper.
+records, and the common orphan reaper. Cancellation is carried into synchronous
+Core surfaces: shell and managed-process execution terminate complete process
+groups, discard private overlays, and reach worker quiescence before the
+cancelled turn is released. The hosted adapter owns its managed-process
+registry; session close and idle reap finalize live handles, output capture/FDs,
+overlays, the global process registry, and durable terminal process status
+together.
 
 Transient prompt, agent-instruction, and governed-context blocks are not public
-by provenance. The provider-input composer may attach a canonical data class
-only through a trusted server-side admission resolver bound to the exact
-workspace, session, turn, source identity, digest, and classification revision;
-missing or mismatched evidence remains `unclassified`. Resource-returning tools
-propagate the exact observed resource classification. CLI, MCP, shell, process,
-and every other non-resource result remain `unclassified` unless their concrete
-surface supplies an independently validated source classification; generic
-serialization or redaction cannot promote them.
+by provenance. Production bootstrap always installs a closed Core-owned
+admission resolver for the exact composer source ids; it binds workspace,
+session, turn, source identity, canonical digest, and classification revision.
+Unknown source ids and any mismatch remain `unclassified`. Resource-returning
+tools propagate the exact observed resource classification. Mutating edit/patch
+diffs inherit the exact pre-image taint rather than attempting to classify the
+new revision with a stale record. For Core-owned action surfaces whose raw
+output has no class, the result policy separates bounded action metadata from
+content: shell/process output and uncertified CLI/MCP payloads are withheld,
+while only the exact action acknowledgement is classified public. A Core-owned,
+TCB-certified CLI/MCP definition may explicitly admit a public result; app
+claims cannot do so. Generic serialization, hashing, or redaction never
+promotes raw content.
 
 Every semantic-envelope classification is additionally bound to the SHA-256 of
 the exact canonical bytes projected for that block. Composite sources use a
@@ -840,6 +858,12 @@ class. Skill blocks project the complete descriptor-read `SKILL.md` itself and
 do not mix unbound catalog/state metadata into its classification. A digest
 mismatch is downgraded to `unclassified` before egress. Attachment-only turns
 omit the semantically absent empty prompt block.
+
+When a large result is replaced at request time by an artifact reference, its
+semantic source digest is recomputed over the exact reference/summary bytes
+shown to the provider. Data class, trust, source identity, and classification
+revision continue to carry the original result taint separately; the original
+payload digest remains the immutable private artifact identity.
 
 Materialized app references have a separate resource-side classification. Core
 derives a stable app/entity identity and an exact revision/digest from the

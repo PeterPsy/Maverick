@@ -29,9 +29,9 @@ from core.runtime.full_workspace_contract import validate_full_workspace_contrac
 
 
 GOOGLE_CERTIFICATION_SUITE_ID = "maverick-google-interactions-agentic-contract"
-GOOGLE_CERTIFICATION_SUITE_VERSION = "23"
+GOOGLE_CERTIFICATION_SUITE_VERSION = "24"
 GOOGLE_CERTIFICATION_MATRIX_REVISION = (
-    "2026-08-29-r23-p4-cow-fidelity-closure-tcb13"
+    "2026-08-30-r24-p4-agentic-parity-closure-tcb14"
 )
 GOOGLE_CERTIFICATION_VALIDITY_DAYS = 45
 

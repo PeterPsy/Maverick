@@ -8,7 +8,6 @@ import unittest
 from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
-from core.egress.classification import validated_classification
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.hosted_agentic_factory import _tool_orchestrator
@@ -39,10 +38,8 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                 start_path=harness.root,
                 now=NOW,
                 install_builtin_apps=False,
-                runtime_input_classification_resolver=(
-                    self._classify_admitted_input
-                ),
             )
+        self.assertTrue(callable(state.runtime_input_classification_resolver))
         production_adapter = state.provider_registry.get_agentic_runtime_adapter(
             "maverick-tool-loop"
         )
@@ -94,9 +91,6 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                 start_path=harness.root,
                 now=NOW,
                 install_builtin_apps=False,
-                runtime_input_classification_resolver=(
-                    self._classify_admitted_input
-                ),
             )
         self.assertTrue(
             callable(state.runtime_app_reference_classification_resolver)
@@ -236,7 +230,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             identity_field="command_id",
             identity="developer-context.list",
         )
-        self.assertEqual(cli_entry["result_data_class"], "unclassified")
+        self.assertEqual(cli_entry["result_data_class"], "public")
         cli_result = surfaces["core-capability:cli.run"].handler(
             {
                 "command_id": "developer-context.list",
@@ -250,7 +244,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             cli_result.payload["command_id"],
             "developer-context.list",
         )
-        self.assertEqual(cli_result.classification.data_class, "unclassified")
+        self.assertEqual(cli_result.classification.data_class, "public")
 
         mcp_entry = self._discover(
             surfaces["core-capability:mcp.list"],
@@ -270,22 +264,9 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             None,
         )
         self.assertIn("items", mcp_result.payload)
-        self.assertEqual(mcp_result.classification.data_class, "unclassified")
-        self.assertIsNone(
+        self.assertEqual(mcp_result.classification.data_class, "public")
+        self.assertIsNotNone(
             orchestrator.catalog_builder.result_classification_resolver
-        )
-
-    @staticmethod
-    def _classify_admitted_input(observation, _content):
-        return validated_classification(
-            data_class="public",
-            provenance=observation.provenance,
-            trust_level="trusted_actor",
-            source_ref=observation.source_ref,
-            source_revision=observation.source_revision,
-            source_digest=observation.source_digest,
-            resource_identity=observation.resource_identity,
-            classification_revision=1,
         )
 
     def _discover(

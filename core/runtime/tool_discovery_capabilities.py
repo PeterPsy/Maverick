@@ -104,6 +104,8 @@ class RuntimeToolDiscoveryBroker:
                 ),
             )
         )
+        if isinstance(classification, RuntimeToolSurfaceResult):
+            return classification
         return RuntimeToolSurfaceResult(payload, classification)
 
     def run_cli(self, arguments, context, idempotency_key):
@@ -130,16 +132,16 @@ class RuntimeToolDiscoveryBroker:
             raise RuntimeToolError("cli_invocation_failed") from error
         if not isinstance(result, dict):
             raise RuntimeToolError("tool_result_invalid")
-        return RuntimeToolSurfaceResult(
+        classification = self._result_classification(
+            "core-capability:cli.run",
+            arguments,
             result,
-            self._result_classification(
-                "core-capability:cli.run",
-                arguments,
-                result,
-                context,
-                source_ref=f"cli:{command_id}",
-            ),
+            context,
+            source_ref=f"cli:{command_id}",
         )
+        if isinstance(classification, RuntimeToolSurfaceResult):
+            return classification
+        return RuntimeToolSurfaceResult(result, classification)
 
     def list_mcp(self, arguments, context, _idempotency_key):
         invocation_context = _mcp_context(context)
@@ -195,6 +197,8 @@ class RuntimeToolDiscoveryBroker:
                 ),
             )
         )
+        if isinstance(classification, RuntimeToolSurfaceResult):
+            return classification
         return RuntimeToolSurfaceResult(payload, classification)
 
     def call_mcp(self, arguments, context, idempotency_key):
@@ -220,16 +224,16 @@ class RuntimeToolDiscoveryBroker:
             raise RuntimeToolError("mcp_invocation_failed") from error
         if not isinstance(result, dict):
             raise RuntimeToolError("tool_result_invalid")
-        return RuntimeToolSurfaceResult(
+        classification = self._result_classification(
+            "core-capability:mcp.call",
+            arguments,
             result,
-            self._result_classification(
-                "core-capability:mcp.call",
-                arguments,
-                result,
-                context,
-                source_ref=f"mcp:{tool_name}",
-            ),
+            context,
+            source_ref=f"mcp:{tool_name}",
         )
+        if isinstance(classification, RuntimeToolSurfaceResult):
+            return classification
+        return RuntimeToolSurfaceResult(result, classification)
 
     def _result_classification(
         self,
@@ -241,12 +245,14 @@ class RuntimeToolDiscoveryBroker:
         source_ref,
     ):
         if self.result_classification_resolver is not None:
-            return self.result_classification_resolver(
+            resolved = self.result_classification_resolver(
                 handle,
                 arguments,
                 result,
                 context,
             )
+            if resolved is not None:
+                return resolved
         return fail_closed_classification(
             provenance="tool_result",
             source_ref=source_ref,

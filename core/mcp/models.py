@@ -12,6 +12,7 @@ McpOwnerKind = Literal["core", "app"]
 McpExposureScope = Literal["core_global", "workspace_enabled_app"]
 McpCallerKind = Literal["operator", "sandbox_agent", "full_access_agent"]
 McpEffectClass = Literal["read", "mutating", "destructive", "unclassified"]
+McpAgenticResultDataClass = Literal["public"]
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class McpToolDefinition:
     safe_to_retry: bool = False
     schema_public: bool = False
     certified_tcb_component: str | None = None
+    agentic_result_data_class: McpAgenticResultDataClass | None = None
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.mcp.models import McpInvocationPolicy, McpToolDefinition
+from core.mcp.models import (
+    McpAgenticResultDataClass,
+    McpInvocationPolicy,
+    McpToolDefinition,
+)
 from core.observability.service import record_platform_audit, record_platform_event
 
 
@@ -21,6 +25,7 @@ def core_mcp_tool(
     owner_id: str,
     invocation_policy: McpInvocationPolicy,
     input_schema: dict[str, Any] | None = None,
+    agentic_result_data_class: McpAgenticResultDataClass | None = None,
 ) -> McpToolDefinition:
     """Build one core-owned MCP tool definition."""
     return McpToolDefinition(
@@ -36,6 +41,7 @@ def core_mcp_tool(
         entrypoint_path=None,
         schema_public=True,
         certified_tcb_component="tool-schema-catalog",
+        agentic_result_data_class=agentic_result_data_class,
     )
 
 

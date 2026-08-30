@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.cli.models import CliCommandDefinition, CliInvocationPolicy
+from core.cli.models import (
+    CliAgenticResultDataClass,
+    CliCommandDefinition,
+    CliInvocationPolicy,
+)
 from core.observability.service import record_platform_audit, record_platform_event
 
 
@@ -23,6 +27,7 @@ def core_cli_command(
     owner_id: str,
     invocation_policy: CliInvocationPolicy,
     argument_schema: dict[str, Any] | None = None,
+    agentic_result_data_class: CliAgenticResultDataClass | None = None,
 ) -> CliCommandDefinition:
     """Build one core-owned CLI command definition."""
     return CliCommandDefinition(
@@ -38,6 +43,7 @@ def core_cli_command(
         entrypoint_path=None,
         schema_public=True,
         certified_tcb_component="tool-schema-catalog",
+        agentic_result_data_class=agentic_result_data_class,
     )
 
 

@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="13",
+    manifest_version="14",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -223,6 +223,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/app_reference_classification.py",
                 "core/runtime/attachment_projection.py",
                 "core/runtime/provider_input_context.py",
+                "core/runtime/provider_input_admission.py",
                 "core/runtime/semantic_context_blocks.py",
                 "core/runtime/semantic_envelope.py",
                 "core/runtime/semantic_envelope_models.py",
@@ -271,6 +272,9 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/hosted_workspace_effects.py",
                 "core/runtime/hosted_workspace_shell.py",
                 "core/runtime/hosted_agentic_loop.py",
+                "core/runtime/hosted_agentic_tool_execution.py",
+                "core/runtime/hosted_agentic_tool_results.py",
+                "core/runtime/hosted_tool_result_admission.py",
                 "core/runtime/provider_step_journal.py",
                 "core/runtime/tool_ledger.py",
                 "core/runtime/tool_catalog.py",
@@ -294,11 +298,13 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/providers/certificate_service.py",
                 "core/runtime/lifecycle_service.py",
                 "core/runtime/hosted_agentic_lifecycle.py",
+                "core/runtime/hosted_agentic_engine.py",
                 "core/runtime/hosted_agentic_recovery.py",
                 "core/runtime/provider_private_state.py",
                 "core/runtime/provider_step_journal.py",
                 "core/runtime/provider_step_models.py",
                 "core/runtime/provider_state_service.py",
+                "core/runtime/runtime_process_lifecycle.py",
                 "core/runtime/turn_submission.py",
                 "core/runtime/turn_submission_service_events.py",
                 "core/runtime/turn_submission_service_output_text.py",

@@ -99,6 +99,7 @@ def commit_text_change(
     evidence,
     mutation_guard,
     operation_count,
+    source_classification,
 ):
     if before == after:
         raise RuntimeToolError("filesystem_edit_no_change")
@@ -131,7 +132,11 @@ def commit_text_change(
         "diff": diff,
         "diff_bytes": len(diff.encode("utf-8")),
     }
-    return RuntimeToolSurfaceResult(payload, written.classification)
+    # The result contains a diff derived from the exact pre-image plus text the
+    # provider supplied in its own tool call.  Taint it from that pre-image;
+    # the newly written revision intentionally cannot match the old governance
+    # record until a classifier records the new version.
+    return RuntimeToolSurfaceResult(payload, source_classification)
 
 
 def prepare_mutation_instruction_guard(

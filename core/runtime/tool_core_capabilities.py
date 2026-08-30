@@ -224,6 +224,7 @@ def build_core_runtime_tool_capabilities(
             mutation_scopes=parse_hosted_workspace_mutation_scopes(
                 arguments.get("mutation_scopes")
             ),
+            execution_control=context.execution_control,
         )
 
     base = (

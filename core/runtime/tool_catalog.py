@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Protocol
 
 from core.cli.command_registry import CliCommandRegistry
@@ -30,6 +30,11 @@ class RuntimeToolActorContext:
     session_id: str
     execution_mode: Literal["sandbox", "full-access"]
     consumer_app_id: str | None = None
+    execution_control: object | None = field(
+        default=None,
+        compare=False,
+        repr=False,
+    )
 
 
 @dataclass(frozen=True)
@@ -94,7 +99,7 @@ RuntimeCoreCapabilityHandler = Callable[
 ]
 RuntimeToolResultClassificationResolver = Callable[
     [str, dict[str, object], dict[str, object], RuntimeToolActorContext],
-    CanonicalSourceClassification,
+    CanonicalSourceClassification | RuntimeToolSurfaceResult | None,
 ]
 
 

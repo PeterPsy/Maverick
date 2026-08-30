@@ -31,6 +31,11 @@ def developer_context_tool_specs(*, start_path: Path | None = None) -> list[tupl
                 owner_id="developer-context",
                 invocation_policy=WORKSPACE_SAFE,
                 input_schema=input_schema,
+                agentic_result_data_class=(
+                    "public"
+                    if tool_name == "developer-context.list"
+                    else None
+                ),
             ),
             handler,
         )

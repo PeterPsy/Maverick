@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import os
 from pathlib import Path
@@ -42,6 +42,7 @@ class _LiveHostedToolProcess:
     workspace_id: str
     effect_overlay: HostedWorkspaceEffectOverlay | None
     workspace_effects: dict[str, object] | None = None
+    lock: RLock = field(default_factory=RLock, repr=False)
 
 
 class HostedToolProcessRegistry:
@@ -205,41 +206,50 @@ class HostedToolProcessRegistry:
         workspace_id: str,
         output_offset: int,
         max_bytes: int,
+        execution_control=None,
     ) -> dict[str, object]:
         live = self._owned_live(process_id, session_id, workspace_id)
-        process = live.process
-        exit_code = process.poll()
-        if exit_code is not None:
-            try:
-                self._finish(process_id, live, exit_code=exit_code)
-            except RuntimeToolError:
+        with live.lock:
+            if execution_control is not None:
+                execution_control.check()
+            process = live.process
+            exit_code = process.poll()
+            if exit_code is not None:
+                try:
+                    self._finish(
+                        process_id,
+                        live,
+                        exit_code=exit_code,
+                        execution_control=execution_control,
+                    )
+                except RuntimeToolError:
+                    self._close_live(process_id, live)
+                    raise
+            size = os.fstat(live.output_fd).st_size
+            if output_offset < 0 or output_offset > size:
+                raise RuntimeToolError("process_output_offset_invalid")
+            requested = min(max_bytes, MAX_PROCESS_STATUS_BYTES)
+            output = os.pread(live.output_fd, requested, output_offset)
+            next_offset = output_offset + len(output)
+            record = self.store.get_process(process_id)
+            payload = {
+                "process_id": process_id,
+                "status": record.status,
+                "exit_code": record.exit_code,
+                "output": output.decode("utf-8", errors="replace"),
+                "output_offset": output_offset,
+                "next_output_offset": next_offset,
+                "output_pending": next_offset < size,
+                "stdin_open": record.stdin_open,
+                "failure_reason": record.failure_reason,
+                "output_truncated": (
+                    live.output_capture.limit_reason == "process_output_too_large"
+                ),
+                "workspace_effects": live.workspace_effects,
+            }
+            if record.status != "running" and not payload["output_pending"]:
                 self._close_live(process_id, live)
-                raise
-        size = os.fstat(live.output_fd).st_size
-        if output_offset < 0 or output_offset > size:
-            raise RuntimeToolError("process_output_offset_invalid")
-        requested = min(max_bytes, MAX_PROCESS_STATUS_BYTES)
-        output = os.pread(live.output_fd, requested, output_offset)
-        next_offset = output_offset + len(output)
-        record = self.store.get_process(process_id)
-        payload = {
-            "process_id": process_id,
-            "status": record.status,
-            "exit_code": record.exit_code,
-            "output": output.decode("utf-8", errors="replace"),
-            "output_offset": output_offset,
-            "next_output_offset": next_offset,
-            "output_pending": next_offset < size,
-            "stdin_open": record.stdin_open,
-            "failure_reason": record.failure_reason,
-            "output_truncated": (
-                live.output_capture.limit_reason == "process_output_too_large"
-            ),
-            "workspace_effects": live.workspace_effects,
-        }
-        if record.status != "running" and not payload["output_pending"]:
-            self._close_live(process_id, live)
-        return payload
+            return payload
 
     def write_input(
         self,
@@ -254,22 +264,23 @@ class HostedToolProcessRegistry:
         if len(payload) > MAX_PROCESS_INPUT_BYTES:
             raise RuntimeToolError("process_input_too_large")
         live = self._owned_live(process_id, session_id, workspace_id)
-        stream = live.process.stdin
-        if stream is None or stream.closed or live.process.poll() is not None:
-            raise RuntimeToolError("process_stdin_closed")
-        try:
-            if payload:
-                stream.write(payload)
-                stream.flush()
-            if close:
-                stream.close()
-        except (BrokenPipeError, OSError) as error:
-            raise RuntimeToolError("process_stdin_closed") from error
-        return {
-            "process_id": process_id,
-            "accepted_bytes": len(payload),
-            "stdin_open": not stream.closed,
-        }
+        with live.lock:
+            stream = live.process.stdin
+            if stream is None or stream.closed or live.process.poll() is not None:
+                raise RuntimeToolError("process_stdin_closed")
+            try:
+                if payload:
+                    stream.write(payload)
+                    stream.flush()
+                if close:
+                    stream.close()
+            except (BrokenPipeError, OSError) as error:
+                raise RuntimeToolError("process_stdin_closed") from error
+            return {
+                "process_id": process_id,
+                "accepted_bytes": len(payload),
+                "stdin_open": not stream.closed,
+            }
 
     def interrupt(
         self,
@@ -279,26 +290,40 @@ class HostedToolProcessRegistry:
         workspace_id: str,
     ) -> dict[str, object]:
         live = self._owned_live(process_id, session_id, workspace_id)
-        terminated = terminate_runtime_process(live.process)
-        if live.effect_overlay is not None:
-            live.workspace_effects = live.effect_overlay.discard()
-        unregister_runtime_process(session_id, live.process)
-        self._close_live(process_id, live)
-        record = self.store.get_process(process_id)
-        if record.status == "running":
-            record = transition_runtime_process(
-                self.store,
-                process_id=process_id,
-                target_status="terminated",
-                exit_code=live.process.returncode,
-                stdin_open=False,
-                stdout_open=False,
-            )
+        with live.lock:
+            terminated = self._terminate_live(process_id, live)
+            record = self.store.get_process(process_id)
         return {
             "process_id": process_id,
             "status": record.status,
             "terminated": terminated,
         }
+
+    def terminate_session(self, session_id: str) -> int:
+        """Terminate and fully finalize every live handle owned by a session."""
+        with self._lock:
+            owned = tuple(
+                (process_id, live)
+                for process_id, live in self._live.items()
+                if live.session_id == session_id
+            )
+            for process_id, _live in owned:
+                self._live.pop(process_id, None)
+        finalized = 0
+        for process_id, live in owned:
+            with live.lock:
+                self._terminate_live(process_id, live)
+                finalized += 1
+        return finalized
+
+    def live_process_count(self, *, session_id: str | None = None) -> int:
+        """Return the in-memory live-handle count for lifecycle assertions."""
+        with self._lock:
+            if session_id is None:
+                return len(self._live)
+            return sum(
+                live.session_id == session_id for live in self._live.values()
+            )
 
     def _owned_live(
         self,
@@ -330,6 +355,7 @@ class HostedToolProcessRegistry:
         live: _LiveHostedToolProcess,
         *,
         exit_code: int,
+        execution_control=None,
     ) -> None:
         if not live.output_capture.wait():
             raise RuntimeToolError("process_output_capture_failed")
@@ -340,7 +366,13 @@ class HostedToolProcessRegistry:
             if live.effect_overlay is not None:
                 if reason is None and exit_code == 0:
                     try:
-                        live.workspace_effects = live.effect_overlay.commit()
+                        live.workspace_effects = (
+                            execution_control.run_if_active(
+                                live.effect_overlay.commit
+                            )
+                            if execution_control is not None
+                            else live.effect_overlay.commit()
+                        )
                     except RuntimeToolError as error:
                         effect_failure = error.reason_code
                         live.workspace_effects = live.effect_overlay.discard()
@@ -379,14 +411,37 @@ class HostedToolProcessRegistry:
             self._live.pop(process_id, None)
         if live.process.stdin is not None and not live.process.stdin.closed:
             live.process.stdin.close()
-        if not live.output_capture.wait():
-            raise RuntimeToolError("process_output_capture_failed")
+        capture_finished = live.output_capture.wait()
         if live.effect_overlay is not None:
             live.effect_overlay.discard()
         try:
             os.close(live.output_fd)
         except OSError:
             pass
+        if not capture_finished:
+            raise RuntimeToolError("process_output_capture_failed")
+
+    def _terminate_live(
+        self,
+        process_id: str,
+        live: _LiveHostedToolProcess,
+    ) -> bool:
+        terminated = terminate_runtime_process(live.process)
+        if live.effect_overlay is not None:
+            live.workspace_effects = live.effect_overlay.discard()
+        unregister_runtime_process(live.session_id, live.process)
+        record = self.store.get_process(process_id)
+        if record.status in {"created", "running"}:
+            transition_runtime_process(
+                self.store,
+                process_id=process_id,
+                target_status="terminated",
+                exit_code=live.process.returncode,
+                stdin_open=False,
+                stdout_open=False,
+            )
+        self._close_live(process_id, live)
+        return terminated
 
 
 def hosted_process_environment(*, session_id: str) -> dict[str, str]:

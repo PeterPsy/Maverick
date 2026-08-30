@@ -39,7 +39,10 @@ def make_agentic_tool_result(
         )
     elif invocation is not None:
         source_metadata = AgenticSourceMetadata(
-            source_block_digest=invocation.result_source_digest,
+            # Request-time artifact projection changes the provider-visible
+            # bytes.  Bind semantic metadata to those exact bytes while the
+            # remaining fields preserve the original result taint/evidence.
+            source_block_digest=content_sha256(content),
             source_data_class=invocation.result_data_class,  # type: ignore[arg-type]
             source_trust_level=invocation.result_trust_level,
             provenance=invocation.result_provenance,

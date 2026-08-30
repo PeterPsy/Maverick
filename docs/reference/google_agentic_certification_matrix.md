@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-08-29
-Matrix revision: `2026-08-29-r23-p4-cow-fidelity-closure-tcb13`
+Status date: 2026-08-30
+Matrix revision: `2026-08-30-r24-p4-agentic-parity-closure-tcb14`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==19`
+Adapter: `maverick-hosted-tool-loop==20`
 
 ## Candidate combination
 
@@ -12,7 +12,7 @@ Adapter: `maverick-hosted-tool-loop==19`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `27` (revision `26` suspended) |
+| Immutable profile revision | `28` (revision `27` suspended) |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -27,7 +27,7 @@ Adapter: `maverick-hosted-tool-loop==19`
 | Final request | exact Core finalization instruction; `tools` omitted |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | complete `codex-baseline-v7` Full Workspace surface, including `artifact.read`, read-only-by-default shell/process isolation, metadata-faithful rollback-safe copy-on-write text effects, and explicit hardlink/metadata-effect rejection |
+| Tool handles | complete `codex-baseline-v8` Full Workspace surface, including `artifact.read`, safe action-result admission, cancellation-quiescent shell/process isolation, adapter-owned process cleanup, metadata-faithful rollback-safe copy-on-write text effects, and explicit hardlink/metadata-effect rejection |
 | Certificate lifetime after a successful signed run | 45 days |
 
 Google documents Gemini 3.6 Flash as a stable model with a 1,048,576-token
@@ -53,12 +53,12 @@ Primary references:
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@5`; exact byte-bound classifications, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, exact `SKILL.md` projection, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, and journal evidence | not certified |
-| Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent context reserve, semantic stateless-history compaction, bounded tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v13 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, app-reference classification, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
+| Certified execution TCB | manifest v14 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
-| Full Workspace contract implementation | atomic `codex-baseline-v7` claim validation; stable UTF-8/base64 reads, atomic direct mutations with mandatory instruction digests, networkless shell/process overlays, explicit scopes, complete retained-preimage metadata/xattr race rollback, exact file atime/mtime materialization, read-modify-write support, rejection of directory/root-only metadata and hardlink effects, mutating non-retry-safe terminal process polling, official discovery-first CLI/MCP, bounded artifacts, and orphan cleanup | implementation fixture only; revision 27 makes the full claim but remains uncertified and unavailable |
+| Full Workspace contract implementation | atomic `codex-baseline-v8` claim validation; stable UTF-8/base64 reads, pre-image-tainted diffs, safe action metadata with raw-output withholding, atomic direct mutations with mandatory instruction digests, networkless cancellation-quiescent shell/process overlays, explicit scopes, complete retained-preimage metadata/xattr race rollback, exact file atime/mtime materialization, read-modify-write support, rejection of directory/root-only metadata and hardlink effects, mutating non-retry-safe terminal process polling, official discovery-first CLI/MCP, bounded artifacts, and adapter-owned/orphan cleanup | implementation fixture only; revision 28 makes the full claim but remains uncertified and unavailable |
 | Live endpoint/model preflight | official current Interactions OpenAPI operation plus authenticated exact model record prove streaming, usage, function tools, reasoning controls, model identity, and input/output limits before completion transport | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
@@ -76,7 +76,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r23 |
+| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r24 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
@@ -271,3 +271,12 @@ new or existing hardlinks plus non-representable directory/root metadata. This
 candidate remains uncertified, unbound, and unavailable; no live probe,
 behavioral run, provider completion, certificate, canary, or remote activation
 has been performed.
+
+Revision 28 pins adapter 20, recipe 7, suite 24, matrix
+`2026-08-30-r24-p4-agentic-parity-closure-tcb14`, and TCB manifest v14.
+`codex-baseline-v8` installs production transient-input admission, safe
+action-result projection and pre-image taint, byte-correct artifact summaries,
+cancellation-quiescent copy-on-write execution, adapter-owned process cleanup,
+and a complete-request compaction retry. This candidate remains uncertified,
+unbound, and unavailable; no live probe, behavioral run, provider completion,
+certificate, canary, or remote activation has been performed.

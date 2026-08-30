@@ -32,6 +32,9 @@ from core.runtime.hosted_agentic_request import (
     HostedAgenticRequestBuilder,
 )
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
+from core.runtime.hosted_tool_result_admission import (
+    build_hosted_tool_result_admission_resolver,
+)
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
 from core.runtime.hosted_runtime_registry_builder import (
     build_hosted_provider_runtime_registry,
@@ -48,7 +51,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "19"
+HOSTED_AGENTIC_ADAPTER_VERSION = "20"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -155,6 +158,7 @@ def build_hosted_agentic_engine_adapter(
             build_hosted_agentic_engine_adapter,
             build_hosted_provider_runtime_registry,
         ),
+        process_registry=process_registry,
     )
     adapter_holder["adapter"] = adapter
     provider_registry.register_agentic_runtime_adapter(adapter)
@@ -229,6 +233,10 @@ def _tool_orchestrator(
         **common_registry_arguments,
         context=mcp_context,
     )
+    result_admission_resolver = build_hosted_tool_result_admission_resolver(
+        cli_registry=cli_registry,
+        mcp_registry=mcp_registry,
+    )
     return RuntimeToolOrchestrator(
         catalog_builder=RuntimeToolCatalogBuilder(
             cli_registry=cli_registry,
@@ -241,6 +249,7 @@ def _tool_orchestrator(
                 cli_registry=cli_registry,
                 mcp_registry=mcp_registry,
                 tool_ledger=ledger,
+                result_classification_resolver=result_admission_resolver,
                 resource_classification_resolver=lambda observation, provenance: (
                     resource_classification_for_observation(
                         workspace_store.get_resource_classification(
@@ -258,6 +267,7 @@ def _tool_orchestrator(
                     )
                 ),
             ),
+            result_classification_resolver=result_admission_resolver,
         ),
         ledger=ledger,
     )

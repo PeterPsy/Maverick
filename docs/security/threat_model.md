@@ -168,8 +168,11 @@ missing or mismatched resource classification `unclassified`. Transient prompt,
 agent-instruction, and governed-context content is likewise `unclassified`
 unless a trusted server admission resolver returns a canonical record matching
 the exact turn/source identity and digest. Non-resource CLI, MCP, shell, and
-process output has no generic public fallback; redaction and a content hash do
-not establish a data class.
+process output has no generic public-content fallback; redaction and a content
+hash do not establish a data class. Core withholds unclassified raw bytes and
+may admit only an allowlisted exact action acknowledgement. Full result
+admission requires a Core-owned TCB-certified definition; app claims are
+ignored, and edit/patch output retains its exact pre-image taint.
 
 Every semantic classification is bound to the digest of the exact projected
 bytes. Composite attachment blocks classify client metadata independently from
@@ -178,6 +181,9 @@ secret-bearing name or id. Skill projection uses the exact confined
 `SKILL.md`, without catalog/`state.json` metadata inheriting that file's class.
 A missing component or digest mismatch becomes `unclassified`, and an
 attachment-only turn does not synthesize an unclassified empty prompt.
+Request-time large-result projection hashes the exact artifact-reference bytes
+seen by the provider while preserving original class and trust as separate
+taint evidence.
 Server-materialized app references additionally require a workspace
 resource-classification record matching their stable app/entity identity and
 exact payload digest. Production bootstrap wires that resolver explicitly;
@@ -456,7 +462,12 @@ The live workspace is mounted read-only until Core validates the complete
 bounded diff against every declared mutable scope and the actual root-to-target
 instruction digest for each changed file. A nested-scope mismatch,
 instruction-file or unsupported effect, non-zero exit, timeout, or interrupt
-discards the overlay before it can affect workspace data. Newly-created
+discards the overlay before it can affect workspace data. Effects cannot appear
+later after a turn cancellation: the execution lease kills complete shell and
+managed-process groups and waits for bounded workers to quiesce before returning.
+Adapter-owned session cleanup also terminates managed processes, closes capture
+descriptors, discards their overlays, and persists a terminal record before the
+generic orphan scan. Newly-created
 directories and hardlinked file effects are explicitly unsupported rather than
 silently materialized with different semantics. Text creates/replacements
 commit as one retained-preimage transaction; each descriptor-pinned pre-image

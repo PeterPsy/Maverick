@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v13 records six maintained transitive dependency contracts. The
+- [x] Manifest v14 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v23 / matrix
-  `2026-08-29-r23-p4-cow-fidelity-closure-tcb13`
+- [x] Google and OpenRouter suite v24 / matrix
+  `2026-08-30-r24-p4-agentic-parity-closure-tcb14`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -369,7 +369,7 @@ completion claim.
 
 ## Phase 4C-D — context, interaction, provider, and review closure
 
-- [x] Immutable context policy `p4-context-v3` adds an independent request
+- [x] Immutable context policy `p4-context-v4` adds an independent request
   reserve, deterministic history threshold and size bounds, bounded summaries,
   attachment projection, tool-result projection, and steering-delivery mode.
   Compaction evidence binds source/compacted state, live authority, provenance,
@@ -381,10 +381,15 @@ completion claim.
   extractive summaries retain every semantic event when it fits, including
   middle constraints and canonical tool arguments; they never apply an item
   window or silently delete a middle event under byte pressure.
+  The complete prepared request is reserve-checked too; when current input
+  crosses the usable window below the ordinary state trigger, Core performs one
+  forced compaction, rebuilds, and validates once more.
   Final output, cancellation, and repeated recovery are covered after compaction.
 - [x] Large tool results retain an immutable session/workspace-owned original
   behind `artifact.read`; providers receive a bounded summary/reference and
   total-result accounting still charges the original serialized bytes.
+  Semantic metadata hashes the exact summary/reference bytes while preserving
+  the original result taint independently.
   Cross-session reads, invalid offsets, digest drift, and cleanup fail closed.
 - [x] Attachments are never silently flattened or discarded. They are distinct
   classified semantic blocks carrying an explicit workspace-relative reference
@@ -408,12 +413,14 @@ completion claim.
   and every translated endpoint parameter, then sends `tools: []` and
   `tool_choice: none` for finalization.
 - [x] Transient prompt, agent-instruction, and governed-context classification
-  is attached at input admission only by a trusted server resolver bound to the
-  exact source identity/digest. The generic classifier is fail-closed. Resource
-  tool results propagate their observed classification; CLI/MCP/shell/process
-  output without concrete source evidence remains `unclassified`. A production-
-  composed fixture proves admitted first dispatch and continuation through an
-  exactly classified workspace result without a generic public fallback.
+  is attached at input admission by the closed Core-owned resolver installed by
+  production bootstrap and bound to the exact source identity/digest. The
+  generic classifier is fail-closed. Resource results propagate their observed
+  classification and edit/patch diffs retain pre-image taint. Non-resource
+  CLI/MCP/shell/process bytes are either explicitly certified public or
+  withheld behind exact public action metadata; app declarations cannot
+  promote them. Production fixtures prove first dispatch, continuation, and
+  official discovery/invocation without a generic public-content fallback.
 - [x] Semantic classifications bind the exact canonical projected bytes.
   Attachment metadata and file observations are classified separately then
   restrictively joined; attachment-only turns omit the empty prompt. Skills
@@ -429,6 +436,11 @@ completion claim.
   an explicit set of mutable directory scopes, run in a private overlay, and
   validate every changed file against its actual instruction chain before a
   rollback-safe batch commit; invalid/failed/interrupted effects are discarded.
+- [x] Synchronous shell and managed-process cancellation reaches the complete
+  process group and COW overlay, then awaits worker quiescence before returning.
+  Session close and idle reap invoke adapter-owned process finalization,
+  closing capture descriptors, discarding overlays, clearing live handles, and
+  persisting a terminal process record.
 - [x] Shell/process replacement preserves and verifies existing mode,
   ownership, ACL/xattrs, keeps every pre-image descriptor open, and checks its
   complete metadata/xattr snapshot immediately before exchange plus all
@@ -441,11 +453,11 @@ completion claim.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 19, semantic compiler revision 5, Full Workspace contract
-  `codex-baseline-v7`, context-compaction schema 3, TCB manifest v13, suite 23,
-  and matrix `2026-08-29-r23-p4-cow-fidelity-closure-tcb13` create new immutable
-  Google revision 27 and OpenRouter revision 26 full-workspace candidates.
-  Historical revisions 26/25 are suspended, never promoted. No live
+- [x] Adapter 20, semantic compiler revision 5, Full Workspace contract
+  `codex-baseline-v8`, context-compaction schema 3, TCB manifest v14, suite 24,
+  and matrix `2026-08-30-r24-p4-agentic-parity-closure-tcb14` create new immutable
+  Google revision 28 and OpenRouter revision 27 full-workspace candidates.
+  Historical revisions 27/26 are suspended, never promoted. No live
   probe, signed certificate, binding, remote activation, or Codex
   profile/artifact change is part of Phase 4.
 

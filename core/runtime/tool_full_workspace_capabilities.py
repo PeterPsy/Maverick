@@ -149,6 +149,7 @@ def build_full_workspace_capabilities(
             evidence=guard.evidence,
             mutation_guard=guard,
             operation_count=actual_count,
+            source_classification=current.classification,
         )
 
     def patch(arguments, context, _idempotency_key):
@@ -215,6 +216,7 @@ def build_full_workspace_capabilities(
             evidence=guard.evidence,
             mutation_guard=guard,
             operation_count=changed,
+            source_classification=current.classification,
         )
 
     def move(arguments, context, _idempotency_key):

@@ -13,6 +13,7 @@ CliOwnerKind = Literal["core", "app"]
 CliExposureScope = Literal["core_global", "workspace_enabled_app"]
 CliCallerKind = Literal["operator", "sandbox_agent", "full_access_agent"]
 CliEffectClass = Literal["read", "mutating", "destructive", "unclassified"]
+CliAgenticResultDataClass = Literal["public"]
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ class CliCommandDefinition:
     safe_to_retry: bool = False
     schema_public: bool = False
     certified_tcb_component: str | None = None
+    agentic_result_data_class: CliAgenticResultDataClass | None = None
 
 
 @dataclass(frozen=True)

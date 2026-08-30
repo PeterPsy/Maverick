@@ -74,6 +74,7 @@ def manage_hosted_provider_context(
     context_policy: AgenticContextPolicy | None,
     compactor: HostedProviderStateCompactor | None,
     active_tool_result_ids: tuple[str, ...] = (),
+    force_compaction: bool = False,
 ) -> tuple[AgenticProviderPrivateState | None, HostedContextCompactionEvidence | None]:
     """Compact provider history at a deterministic pre-dispatch boundary."""
     if context_policy is None:
@@ -100,7 +101,10 @@ def manage_hosted_provider_context(
             for item in state.source_metadata
         ]
     )
-    if estimated_tokens < context_policy.compaction_trigger_tokens:
+    if (
+        estimated_tokens < context_policy.compaction_trigger_tokens
+        and not force_compaction
+    ):
         return state, HostedContextCompactionEvidence(
             schema_version=HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION,
             policy_revision=context_policy.revision,

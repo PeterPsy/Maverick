@@ -66,14 +66,14 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v13 makes the known transitive boundary executable through
+Manifest v14 makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 19 and Full Workspace `codex-baseline-v7` are bound by TCB
-manifest v13. The adapter places all provider-bound context in semantic-envelope
+Hosted adapter 20 and Full Workspace `codex-baseline-v8` are bound by TCB
+manifest v14. The adapter places all provider-bound context in semantic-envelope
 schema v1/compiler revision 5, materializes scoped instructions through the
 confined filesystem, requires commit-bound instruction digests for direct
 mutations, and uses rollback-safe batch COW overlays for shell/process effects.
@@ -82,16 +82,23 @@ ownership, ACL/xattrs and carry exact file atime/mtime. Every pre-image remains
 descriptor-pinned and is checked against its complete metadata/xattr snapshot,
 so a later metadata race causes full rollback without losing the concurrent
 change. Metadata-only directory/root effects and hardlinks are rejected rather
-than committed with altered semantics. Transient input requires
-exact server-owned admission classification and non-resource results remain
-unclassified without concrete taint evidence. Composite attachment metadata is
-classified separately and restrictively joined with the file observation;
+than committed with altered semantics. Production bootstrap installs exact
+server-owned transient-input admission. Non-resource raw output is never
+generically promoted: Core withholds it behind bounded action metadata unless a
+Core-owned certified definition explicitly admits public bytes. Composite
+attachment metadata is classified separately and restrictively joined with the
+file observation;
 skills export exact classified `SKILL.md` bytes, and every semantic class is
 bound to the exact projected digest. The runtime journals distinct
 source/projection evidence. Exact app-reference resource observations are
 resolved by production `PlatformState` through revisioned workspace
 classification records. This is a
 repository safety invariant, not certification or remote-release approval.
+Large artifact projections hash their own provider-visible bytes while retaining
+the original taint. Cancellation terminates shell process groups and discards
+COW state before returning; adapter close and idle reap finalize managed-process
+registries and durable records. Complete-request pressure can trigger one
+forced history compaction below the private-state-only threshold.
 
 The runtime now also separates actor-attributed CAS workspace attestation,
 exact resource classification, and per-block fail-closed egress decisions.
@@ -126,7 +133,9 @@ proves attachment-only admission, composite-taint denial,
 multi-file rollback after late instruction or metadata races,
 unsupported-directory/hardlink rejection, read-modify-write timestamp fidelity,
 production app-reference classification, and non-retry-safe terminal process
-commit. The operator
+commit. They also cover production bootstrap input, safe result withholding,
+exact artifact projection digests, late-effect cancellation, managed-process
+close, and below-trigger full-request compaction. The operator
 runbook documents canary,
 observation, incident
 recovery, and control-plane-first rollback. These controls do not close the

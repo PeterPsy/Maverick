@@ -47,12 +47,14 @@ class HostedAgenticEngineAdapter:
         adapter_version: str,
         loop: HostedAgenticLoop,
         composition_components: tuple[object, ...] = (),
+        process_registry=None,
     ) -> None:
         self.runtime_engine_id = runtime_engine_id
         self.adapter_id = adapter_id
         self.adapter_version = adapter_version
         self.loop = loop
         self.composition_components = composition_components
+        self.process_registry = process_registry
         self._cancellations: dict[str, tuple[str, Event]] = {}
         self._lock = RLock()
 
@@ -243,7 +245,15 @@ class HostedAgenticEngineAdapter:
                 if session_id == context.session.session_id:
                     cancellation.set()
                     cancelled += 1
-        return RuntimeCloseResult(closed=True, terminated_processes=cancelled)
+        terminated = (
+            self.process_registry.terminate_session(context.session.session_id)
+            if self.process_registry is not None
+            else 0
+        )
+        return RuntimeCloseResult(
+            closed=True,
+            terminated_processes=cancelled + terminated,
+        )
 
     async def health(self, context: RuntimeHealthContext) -> RuntimeHealth:
         return RuntimeHealth(status="healthy")

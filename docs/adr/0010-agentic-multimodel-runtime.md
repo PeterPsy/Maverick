@@ -487,7 +487,13 @@ and rechecks it immediately before atomic replacement; Mongo evaluates it with
 server `$$NOW`. A worker paused after its last cooperative check therefore
 cannot commit success after expiry even if the timeout CAS is delayed.
 Non-read effects that cross the boundary remain `execution_unknown` rather than
-being paired as safe completion.
+being paired as safe completion. Core shell/process surfaces register
+cancellation cleanup with the lease before returning: cancellation kills the
+full process group, discards the COW overlay, and waits for the bounded worker
+to quiesce, so effects cannot appear after the cancelled turn has returned. The
+adapter owns the managed-process registry and session close/idle reap finalize
+its live map,
+capture descriptors, overlays, global process registration, and durable status.
 
 An empty or whitespace-only provider final is an explicit invalid outcome, not
 a successful turn: its staged state is rolled back to the previous commit and
@@ -556,7 +562,7 @@ and provider/model/protocol/API/endpoint/upstream/reasoning composition. Shared
 loop construction selects this data-only recipe; it contains no Google or
 OpenRouter model branch.
 
-Context policy `p4-context-v3` reserves capacity independently of ordinary turn
+Context policy `p4-context-v4` reserves capacity independently of ordinary turn
 budgets. At a deterministic threshold, the exact recipe compactor replaces old
 provider history with a bounded extractive semantic summary of user constraints,
 assistant decisions, tool actions including canonical arguments, and tool
@@ -572,15 +578,23 @@ and replaces request-scoped system/developer authority with the current
 projection on every continuation.
 Compaction evidence and the endpoint snapshot digest enter the request-control
 digest and provider-step journal without exposing raw history.
+The reserve check uses the complete prepared request. When history alone is
+below the normal trigger but the current request would exceed the usable
+window, Core forces that same recipe compactor once, rebuilds the staged
+request, and validates once more; it never loops or transports an oversized
+candidate.
 
 Tool output that cannot safely remain inline is retained as an immutable,
 session/workspace-owned artifact. The provider receives only a bounded summary,
 digest, byte count, and `artifact.read` reference. The complete serialized
 projection, including adversarially long field names, is hard-capped by the
 profile's `tool_result_summary_bytes`; accounting charges the original result
-size. An explicit `artifact.read` response is already a bounded byte window and
-therefore bypasses generic result re-compaction, preventing recursive artifact
-references while retaining its independent 64-KiB chunk cap. Attachments
+size. The semantic digest is bound to the exact artifact-reference projection
+shown to the provider, while its class/trust/identity retain the original
+result taint. An explicit `artifact.read` response is already a bounded byte
+window and therefore bypasses generic result re-compaction, preventing
+recursive artifact references while retaining its independent 64-KiB chunk
+cap. Attachments
 likewise remain distinct classified blocks
 and are projected as explicit workspace-relative references that require live
 filesystem-read authority. The reference declares `utf-8` for textual MIME and
@@ -616,11 +630,17 @@ revision, and digest observed by Core. Transient prompt, agent-instruction, and
 governed-context blocks receive a canonical classification only from a trusted
 server-owned admission resolver bound to their exact workspace/session/turn,
 source identity and digest. Hashing the bytes does not determine their class.
-The generic classifier and every CLI/MCP/shell/process result without concrete
-source evidence remain `unclassified`; model/browser declarations and generic
-redaction cannot select, infer, or widen a class. A missing or incoherent source
-classification produces `unclassified`, and the restrictive join prevents an
-attestation or less-sensitive sibling block from promoting it.
+Production bootstrap installs a closed Core-owned resolver for the exact
+transient composer sources; unknown identities remain `unclassified`. For tool
+results, resource reads keep exact observed taint and edit/patch diffs inherit
+their pre-image taint. Core action-result policy may instead expose a bounded
+public acknowledgement after withholding unclassified shell/process or
+CLI/MCP content. Only a Core-owned TCB-certified CLI/MCP definition can opt its
+exact public result bytes into admission; an app declaration cannot. Model or
+browser declarations, generic hashing, and redaction cannot select, infer, or
+widen a class. A missing or incoherent source classification produces
+`unclassified`, and the restrictive join prevents an attestation or
+less-sensitive sibling block from promoting it.
 
 Unknown classification, provenance, trust, destination, or policy fails closed.
 `workspace_internal_fake` is eligible for evaluation only when the exact
@@ -644,16 +664,16 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 27
-and OpenRouter revision 26, both bound to
-`maverick-hosted-tool-loop==19`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 28
+and OpenRouter revision 27, both bound to
+`maverick-hosted-tool-loop==20`; older revisions are suspended rather than
 overwritten. Their certification manifests retain the distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
 These adversarial-review definitions are new full-workspace claims under
-`codex-baseline-v7`, not mutations of earlier candidates. Adapter 19, recipe
-revision 6, context-compaction schema 3, suite 23, and TCB manifest v13 retain
+`codex-baseline-v8`, not mutations of earlier candidates. Adapter 20, recipe
+revision 7, context-compaction schema 3, suite 24, and TCB manifest v14 retain
 the exact composite-classification and rollback-safe multi-file invariants.
 Every existing pre-image stays descriptor-pinned across exchange and is checked
 against its complete metadata/xattr snapshot, so a later-file metadata race
@@ -661,8 +681,10 @@ rolls back earlier writes without deleting the concurrent change. Content
 effects carry exact atime/mtime and therefore admit ordinary read-modify-write;
 directory/root-only metadata and hardlink effects that cannot be reproduced are
 rejected. The definitions retain production exact-resource app-reference
-classification, prior compaction, attachment, OpenRouter projection, and live
-Google-preflight closure. They
+classification, exact transient bootstrap admission, byte-correct artifact
+projection, cancellation-quiescent COW execution, adapter-owned managed-process
+cleanup, complete-request compaction retry, attachment, OpenRouter projection,
+and live Google-preflight closure. They
 remain uncertified, unbound, unavailable and independently blocked by Phase-0
 admission; implementation completion is not provider evidence or release
 approval.

@@ -403,6 +403,7 @@ class HostedAgenticLoop:
                 pairing_source=pairing_source,
                 existing_records=existing_turn_steps,
             )
+            forced_context_compaction = False
             while True:
                 step_plan = budget.plan_step(phase)
                 catalog = (
@@ -441,15 +442,42 @@ class HostedAgenticLoop:
                     ),
                 )
                 request = prepared_request.request
-                validate_hosted_request_context(
-                    request,
-                    context_policy=context_policy,
-                    endpoint_input_token_limit=(
-                        budget.policy.max_input_tokens
-                        if provider_runtime.recipe is None
-                        else provider_runtime.recipe.support_flags.input_token_limit
-                    ),
-                )
+                try:
+                    validate_hosted_request_context(
+                        request,
+                        context_policy=context_policy,
+                        endpoint_input_token_limit=(
+                            budget.policy.max_input_tokens
+                            if provider_runtime.recipe is None
+                            else provider_runtime.recipe.support_flags.input_token_limit
+                        ),
+                    )
+                except HostedAgenticLoopError as error:
+                    if (
+                        error.reason_code
+                        == "context_window_reserve_unavailable"
+                        and not forced_context_compaction
+                        and provider_private_state is not None
+                        and context_policy is not None
+                        and context_compaction is not None
+                        and not context_compaction.applied
+                    ):
+                        provider_private_state, context_compaction = (
+                            manage_hosted_provider_context(
+                                provider_private_state,
+                                context=effective_context,
+                                context_policy=context_policy,
+                                compactor=provider_runtime.context_compactor,
+                                active_tool_result_ids=tuple(
+                                    item.provider_tool_call_id
+                                    for item in tool_results
+                                ),
+                                force_compaction=True,
+                            )
+                        )
+                        forced_context_compaction = True
+                        continue
+                    raise
                 request_lineage_digest = hosted_request_lineage_digest(request)
                 self._validate_request_pairing(
                     request,

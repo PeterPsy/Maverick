@@ -70,6 +70,84 @@ FIXTURE_RECIPE = HostedHarnessRecipeManifest(
 
 
 class HostedContextLoopTest(unittest.TestCase):
+    def test_current_request_pressure_forces_compaction_below_state_trigger(
+        self,
+    ) -> None:
+        pressure_policy = replace(
+            CONTEXT_POLICY,
+            revision="fixture-request-pressure-v1",
+            max_request_input_tokens=8_192,
+            context_reserve_tokens=1_024,
+            compaction_trigger_tokens=6_000,
+        )
+        pressure_recipe = replace(
+            FIXTURE_RECIPE,
+            revision="request-pressure-1",
+            context_policy=pressure_policy,
+            support_flags=replace(
+                FIXTURE_RECIPE.support_flags,
+                input_token_limit=8_192,
+            ),
+        )
+        harness = HostedAgenticHarness(self, recipe=pressure_recipe)
+        metadata = AgenticSourceMetadata(
+            source_block_digest="c" * 64,
+            source_data_class="public",
+            source_trust_level="trusted_actor",
+            provenance="provider_state",
+        )
+        state_payload = b"s" * 22_000
+        self.assertLess(
+            len(state_payload) // 4,
+            pressure_policy.compaction_trigger_tokens,
+        )
+        harness.private_state_service.store_state(
+            session_id="session-hosted",
+            adapter_id=harness.binding.adapter_id,
+            adapter_version=harness.binding.adapter_version,
+            codec_id="fake-hosted-codec",
+            codec_version="1",
+            schema_version="1",
+            content_type="application/vnd.maverick.fake-private",
+            payload=state_payload,
+            expected_revision=0,
+            turn_generation="turn-before-pressure-compaction",
+            source_metadata=(metadata,),
+            provider_request_id="request-before-pressure-compaction",
+        )
+        compaction_calls = 0
+
+        def compact(state, policy, summary_base):
+            nonlocal compaction_calls
+            compaction_calls += 1
+            return _compact_fixture_state(state, policy, summary_base)
+
+        client = DeterministicFakeAgenticClient(final_text="pressure compacted")
+        adapter = harness.adapter(
+            client,
+            context_compactor=compact,
+            request_preflight=_fixture_preflight,
+        )
+
+        result = execute_runtime_turn(
+            session=harness.session,
+            provider=harness.provider,
+            input_text="u" * 10_000,
+            agentic_adapter=adapter,
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            correlation_id="turn-hosted",
+            effective_authority=harness.authority,
+        )
+
+        self.assertEqual(result.exit_code, 0, repr(result))
+        self.assertEqual(compaction_calls, 1)
+        self.assertEqual(len(client.requests), 1)
+        self.assertTrue(client.requests[0].context_compaction_applied)
+        self.assertEqual(
+            client.requests[0].provider_private_state.content,
+            b'{"compacted":true}',
+        )
+
     def test_final_output_and_recovery_remain_valid_after_compaction(self) -> None:
         harness = self._harness_with_large_state()
         client = DeterministicFakeAgenticClient(final_text="compacted final answer")

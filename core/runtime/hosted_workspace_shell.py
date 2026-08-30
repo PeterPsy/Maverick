@@ -124,8 +124,11 @@ def run_hosted_workspace_command(
     timeout_seconds: int,
     max_output_bytes: int,
     mutation_scopes: tuple[HostedWorkspaceMutationScope, ...] = (),
+    execution_control=None,
 ) -> dict[str, object]:
     """Run one bounded command and kill its complete process group on timeout."""
+    if execution_control is not None:
+        execution_control.check()
     prepared = prepare_hosted_workspace_command(
         filesystem,
         workspace_root=workspace_root,
@@ -147,16 +150,24 @@ def run_hosted_workspace_command(
             pass_fds=prepared.pass_fds,
             start_new_session=True,
         )
+        if execution_control is not None:
+            execution_control.add_cancellation_callback(
+                lambda: _cancel_workspace_command(process, prepared)
+            )
+            execution_control.check()
         try:
             output = _read_bounded_output(
                 process,
                 timeout_seconds=timeout_seconds,
                 max_output_bytes=max_output_bytes,
+                execution_control=execution_control,
             )
         finally:
             if process.stdout is not None:
                 process.stdout.close()
         prepared.filesystem.assert_shell_cwd(prepared.cwd_chain)  # type: ignore[arg-type]
+        if execution_control is not None:
+            execution_control.check()
         if prepared.effect_overlay is None:
             effect_evidence = {
                 "workspace_effects_committed": True,
@@ -165,7 +176,11 @@ def run_hosted_workspace_command(
                 "mutation_scope_count": 0,
             }
         elif process.returncode == 0:
-            effect_evidence = prepared.effect_overlay.commit()
+            effect_evidence = (
+                execution_control.run_if_active(prepared.effect_overlay.commit)
+                if execution_control is not None
+                else prepared.effect_overlay.commit()
+            )
         else:
             effect_evidence = prepared.effect_overlay.discard()
         return {
@@ -298,6 +313,7 @@ def _read_bounded_output(
     *,
     timeout_seconds: int,
     max_output_bytes: int,
+    execution_control=None,
 ) -> bytes:
     """Drain one pipe incrementally without ever buffering beyond the ceiling."""
     if process.stdout is None:
@@ -308,6 +324,12 @@ def _read_bounded_output(
     selector.register(process.stdout, selectors.EVENT_READ)
     try:
         while True:
+            if execution_control is not None:
+                try:
+                    execution_control.check()
+                except RuntimeToolError:
+                    _terminate_group(process)
+                    raise
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 _terminate_group(process)
@@ -356,3 +378,12 @@ def _terminate_group(process: subprocess.Popen[bytes]) -> None:
             process.wait(timeout=1.0)
         except subprocess.TimeoutExpired:
             pass
+
+
+def _cancel_workspace_command(
+    process: subprocess.Popen[bytes],
+    prepared: PreparedHostedWorkspaceCommand,
+) -> None:
+    _terminate_group(process)
+    if prepared.effect_overlay is not None:
+        prepared.effect_overlay.discard()

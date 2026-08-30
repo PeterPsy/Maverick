@@ -37,6 +37,18 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertFalse(contract["permissions"]["runtime"]["create_sessions"])
         self.assertFalse(contract["permissions"]["runtime"]["cleanup_sessions"])
         self.assertEqual(sidecar["model_access"], {"api": True, "cli": ["codex"], "required": False})
+        self.assertEqual(sidecar["data_mount"], {"subpath": "opendesign-native"})
+        self.assertEqual(
+            sidecar["host_prepare"],
+            {
+                "entrypoint": "hooks/sidecar_prepare.py",
+                "timeout_seconds": 30,
+                "environment_keys": [
+                    "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
+                ],
+            },
+        )
+        self.assertEqual(sidecar["env"]["MAVERICK_OPENDESIGN_DATA_DIR"], "${app.data_dir}")
         self.assertNotIn("root_filesystem", sidecar)
         self.assertGreaterEqual(sidecar["process_policy"]["limits"]["memory_bytes"], 32 * 1024**3)
         self.assertTrue(contract["permissions"]["providers"]["model_proxy"])

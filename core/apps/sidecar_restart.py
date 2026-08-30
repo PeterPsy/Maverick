@@ -103,6 +103,8 @@ def restart_workspace_app_sidecars(
             sidecars=sidecars,
             start_path=start_path,
             shutdown_controller=shutdown_controller,
+            binding=binding,
+            parsed=parsed,
         )
     except Exception as error:
         code = str(getattr(error, "code", "daemon_spawn_failed"))

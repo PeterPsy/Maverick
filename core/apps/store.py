@@ -42,10 +42,12 @@ from core.apps.models import (
     HttpSidecarBindSpec,
     HttpSidecarArtifactMountSpec,
     HttpSidecarBrowserOriginSpec,
+    HttpSidecarDataMountSpec,
     HttpSidecarDiagnosticsSpec,
     HttpSidecarEntrypointAccessSpec,
     HttpSidecarEntrypointSurfaceSpec,
     HttpSidecarHealthSpec,
+    HttpSidecarHostPrepareSpec,
     HttpSidecarLogSpec,
     HttpSidecarModelAccessSpec,
     HttpSidecarProcessPolicy,
@@ -479,6 +481,16 @@ def _app_services(payload: Any) -> AppServicesDeclaration:
                         subpath=str(sidecar["root_filesystem"]["subpath"]),
                     )
                     if isinstance(sidecar.get("root_filesystem"), dict)
+                    else None
+                ),
+                data_mount=(
+                    HttpSidecarDataMountSpec(**sidecar["data_mount"])
+                    if isinstance(sidecar.get("data_mount"), dict)
+                    else None
+                ),
+                host_prepare=(
+                    HttpSidecarHostPrepareSpec(**sidecar["host_prepare"])
+                    if isinstance(sidecar.get("host_prepare"), dict)
                     else None
                 ),
                 model_access=(

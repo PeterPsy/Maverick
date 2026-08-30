@@ -81,6 +81,11 @@ def read_release_selection(app_data_root: Path) -> OfficialReleaseSelection:
         raise OfficialReleaseError("official OpenDesign release selection is unreadable") from error
     if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
         raise OfficialReleaseError("official OpenDesign release selection is unsafe")
+    return validate_release_selection_payload(payload)
+
+
+def validate_release_selection_payload(payload: object) -> OfficialReleaseSelection:
+    """Validate a selection payload loaded from either live state or a backup."""
     if (
         not isinstance(payload, dict)
         or set(payload) != SELECTION_FIELDS
@@ -118,5 +123,6 @@ __all__ = [
     "descriptor_sha256",
     "ensure_release_selection",
     "read_release_selection",
+    "validate_release_selection_payload",
     "write_release_selection",
 ]

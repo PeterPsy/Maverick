@@ -132,7 +132,7 @@ def write_bridge_contracts(
     delegation: dict[str, Any],
 ) -> dict[str, Any]:
     root = real_directory(app_data_root, label="Design Studio data root", create=True)
-    normalized = _delegation_status(delegation)
+    normalized = validate_delegation_status(delegation)
     payload = {
         "schema_version": "1",
         "kind": "design-studio-official-bridge-contracts",
@@ -161,7 +161,7 @@ def read_delegation_contract(app_data_root: Path, release: OfficialRelease) -> d
             or not isinstance(payload.get("checked_at"), str)
         ):
             raise ValueError("bridge contract mismatch")
-        return _delegation_status(payload.get("delegation"))
+        return validate_delegation_status(payload.get("delegation"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
         return {"state": "degraded", "reason": "not_checked_for_selected_release"}
 
@@ -175,7 +175,8 @@ def bundled_delegation_contract() -> dict[str, Any]:
     }
 
 
-def _delegation_status(value: object) -> dict[str, Any]:
+def validate_delegation_status(value: object) -> dict[str, Any]:
+    """Validate one redaction-safe delegation status, including backup copies."""
     if not isinstance(value, dict) or value.get("state") not in {"ready", "degraded", "disabled"}:
         raise ValueError("delegation bridge contract status is invalid")
     allowed = {"state", "contract", "evidence", "reason"}
@@ -193,5 +194,6 @@ __all__ = [
     "bundled_delegation_contract",
     "probe_delegation_contract",
     "read_delegation_contract",
+    "validate_delegation_status",
     "write_bridge_contracts",
 ]

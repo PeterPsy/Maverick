@@ -20,6 +20,11 @@ settings, migrations, and update behavior. Its persistent data lives at:
 workspaces/<workspace_id>/data/design-studio/opendesign-native/
 ```
 
+Core exposes only that subtree as sidecar `/data` and uses the same subtree as
+the Model Access CLI scope. Release selection, quiescence, update journals,
+delegation metadata, and immutable backups remain sibling host-control data
+and are never mounted into OpenDesign or Codex.
+
 The Maverick frontend only obtains a one-shot isolated-browser ticket and hosts
 the native page in an iframe. Native HTTP routes pass through unchanged; no
 normal OpenDesign request is handled by Core.
@@ -73,9 +78,10 @@ home. It contains the loopback endpoint and non-secret local handle, but no
 provider credential or semantic content. Users can still configure additional
 providers through OpenDesign's own settings.
 
-Redaction-safe bridge readiness and endpoint metadata are written to
-`data/design-studio/bridge-capabilities.json`. Native operation remains
-available when that file reports a degraded or disabled bridge.
+The host-only launch preparation writes a redaction-safe bridge projection to
+`data/design-studio/bridge-capabilities.json`; the confined product does not
+write control-plane metadata. Native operation remains available when a bridge
+is degraded or disabled.
 
 ## Official updates
 
@@ -84,6 +90,8 @@ the workspace and applies it with the dedicated CLI surface:
 
 ```bash
 maverick app design-studio cli run design-studio-update --action status --json
+maverick app design-studio cli run design-studio-update \
+  --action recover --confirm true --json
 maverick app design-studio cli run design-studio-update \
   --action apply \
   --release-descriptor storage/uploaded/opendesign-release.json \
@@ -117,6 +125,15 @@ release-owned bundled Design Systems remain allowed. Identity loss or
 mutation/deletion of an existing user value fails before the active data or
 release selection changes. Only then does the updater atomically select the
 migrated data and release descriptor and prewarm the candidate.
+
+The per-workspace update lock remains held through prewarm and commit or
+rollback. A durable intent journal is fsynced before each directory rename.
+On the next managed launch, host preparation automatically restores the prior
+selection and full backup for any non-terminal journal; the explicit `recover`
+action performs the same operation and restarts the verified writer. Disposable
+migration, inventory, smoke, and delegation probes run without a network
+interface; their public API is reachable only through an authenticated local
+Unix relay inside that namespace.
 
 Failure to start restores the complete prior data and release selection. If
 that previous writer cannot itself be restarted—or its prewarm call raises—the

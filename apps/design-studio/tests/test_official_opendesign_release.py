@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -95,6 +96,7 @@ class OfficialOpenDesignReleaseTests(unittest.TestCase):
 
             rendered = " ".join(command)
             self.assertTrue(command[0].endswith("bwrap"))
+            self.assertIn("--unshare-net", command)
             self.assertIn(str(rootfs), command)
             self.assertIn("/sbin/tini -- node apps/daemon/dist/cli.js --no-open", rendered)
             self.assertEqual(env["OD_DATA_DIR"], "/app/.od")
@@ -103,6 +105,37 @@ class OfficialOpenDesignReleaseTests(unittest.TestCase):
             self.assertEqual(env["MAVERICK_OPENDESIGN_MODEL_BRIDGE"], "disabled")
             self.assertEqual(env["MAVERICK_OPENDESIGN_DELEGATION_BRIDGE"], "disabled")
             self.assertTrue(all("overlay" not in part.lower() and "patch" not in part.lower() for part in command))
+
+    def test_disposable_api_uses_only_an_authenticated_unix_relay_into_the_network_namespace(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            rootfs = root / "rootfs"
+            data = root / "data"
+            relay = root / "relay"
+            _write_minimal_rootfs(rootfs)
+            data.mkdir()
+            relay.mkdir(mode=0o700)
+            release = load_official_release(SERVICE_ROOT / "opendesign_official_release.json")
+            read_fd, write_fd = os.pipe()
+            os.close(write_fd)
+            self.addCleanup(os.close, read_fd)
+
+            command, _env = build_official_launch_command(
+                release,
+                rootfs=rootfs,
+                data_dir=data,
+                port=17456,
+                api_token="disposable-token",
+                relay_directory=relay,
+                relay_secret_fd=read_fd,
+            )
+
+            rendered = " ".join(command)
+            self.assertIn("--unshare-net", command)
+            self.assertIn("/run/maverick-relay/api.sock", command)
+            self.assertIn("maverick-sidecar-relay.py", rendered)
+            self.assertIn("--target-host 127.0.0.1", rendered)
+            self.assertIn("/sbin/tini -- node apps/daemon/dist/cli.js --no-open", rendered)
 
     def test_snapshot_digest_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

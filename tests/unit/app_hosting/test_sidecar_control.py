@@ -23,20 +23,53 @@ class _Shutdown:
 
 class SidecarControlTests(unittest.TestCase):
     def test_stop_revokes_browser_authority_before_stopping_the_app(self) -> None:
-        browser_sessions = Mock()
-        state = SimpleNamespace(sidecar_browser_sessions=browser_sessions)
-        request = {
-            "schema_version": "1",
-            "operation": "stop",
-            "workspace_id": "default",
-            "app_id": "design-studio",
-        }
-        with patch.object(sidecar_control, "stop_app_sidecars", return_value=1) as stop:
-            result = sidecar_control._dispatch(
-                request,
-                state=state,
-                shutdown_controller=None,
+        with tempfile.TemporaryDirectory() as temporary:
+            data_root = Path(temporary) / "data/design-studio"
+            data_root.mkdir(parents=True)
+            browser_sessions = Mock()
+            binding = SimpleNamespace(data_root=str(data_root), status="enabled")
+            app_store = Mock()
+            app_store.get_workspace_app_binding.return_value = binding
+            state = SimpleNamespace(
+                sidecar_browser_sessions=browser_sessions,
+                app_store=app_store,
+                repository_root=Path(temporary),
             )
+            request = {
+                "schema_version": "1",
+                "operation": "stop",
+                "workspace_id": "default",
+                "app_id": "design-studio",
+            }
+            sidecar = SimpleNamespace(service_id="opendesign")
+            parsed = SimpleNamespace(
+                contract=SimpleNamespace(
+                    services=SimpleNamespace(http_sidecars=[sidecar]),
+                )
+            )
+            with (
+                patch.object(
+                    sidecar_control,
+                    "resolve_workspace_app_surface",
+                    return_value=(Path(temporary) / "app", parsed),
+                ),
+                patch.object(
+                    sidecar_control,
+                    "app_sidecar_current_instance_id",
+                    side_effect=["instance-1", None],
+                ),
+                patch.object(
+                    sidecar_control,
+                    "app_sidecar_startup_status",
+                    return_value={"state": "stopped"},
+                ),
+                patch.object(sidecar_control, "stop_app_sidecars", return_value=1) as stop,
+            ):
+                result = sidecar_control._dispatch(
+                    request,
+                    state=state,
+                    shutdown_controller=None,
+                )
 
         browser_sessions.revoke_app.assert_called_once_with(
             workspace_id="default",
@@ -47,55 +80,102 @@ class SidecarControlTests(unittest.TestCase):
             result,
             {
                 "ready": False,
+                "workspace_id": "default",
+                "app_id": "design-studio",
+                "data_root": str(data_root.resolve()),
                 "browser_sessions_revoked": True,
+                "declared_service_count": 1,
                 "stopped_service_count": 1,
+                "verified_stopped_service_count": 1,
+                "services": [
+                    {
+                        "sidecar_id": "opendesign",
+                        "previous_instance_id": "instance-1",
+                        "live_instance_id": None,
+                        "state": "stopped",
+                    }
+                ],
             },
         )
 
-    def test_status_aggregates_the_live_manager_without_starting_a_sidecar(self) -> None:
-        binding = SimpleNamespace(data_root="/data/design-studio")
+    def test_stop_rejects_a_missing_workspace_binding_before_claiming_success(self) -> None:
         app_store = Mock()
-        app_store.get_workspace_app_binding.return_value = binding
-        state = SimpleNamespace(app_store=app_store, repository_root=Path("/repo"))
-        sidecar = SimpleNamespace(service_id="opendesign")
-        parsed = SimpleNamespace(
-            contract=SimpleNamespace(
-                services=SimpleNamespace(http_sidecars=[sidecar]),
-            ),
+        app_store.get_workspace_app_binding.side_effect = RuntimeError("missing")
+        state = SimpleNamespace(
+            sidecar_browser_sessions=Mock(),
+            app_store=app_store,
+            repository_root=Path("/repo"),
         )
-        with (
-            patch.object(
-                sidecar_control,
-                "resolve_workspace_app_surface",
-                return_value=(Path("/app"), parsed),
-            ),
-            patch.object(
-                sidecar_control,
-                "app_sidecar_startup_status",
-                return_value={
-                    "state": "ready",
-                    "phase": "health_recheck",
-                    "instance_id": "instance-1",
-                },
-            ) as startup_status,
-        ):
-            result = sidecar_control._dispatch(
+        with self.assertRaises(sidecar_control.SidecarControlError) as raised:
+            sidecar_control._dispatch(
                 {
                     "schema_version": "1",
-                    "operation": "status",
-                    "workspace_id": "default",
+                    "operation": "stop",
+                    "workspace_id": "missing",
                     "app_id": "design-studio",
                 },
                 state=state,
                 shutdown_controller=None,
             )
+        self.assertEqual(raised.exception.phase, "sidecar_stop_resolve")
+        state.sidecar_browser_sessions.revoke_app.assert_not_called()
+
+    def test_status_aggregates_the_live_manager_without_starting_a_sidecar(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            data_root = Path(temporary) / "data/design-studio"
+            data_root.mkdir(parents=True)
+            binding = SimpleNamespace(data_root=str(data_root), status="enabled")
+            app_store = Mock()
+            app_store.get_workspace_app_binding.return_value = binding
+            state = SimpleNamespace(app_store=app_store, repository_root=Path("/repo"))
+            sidecar = SimpleNamespace(service_id="opendesign")
+            parsed = SimpleNamespace(
+                contract=SimpleNamespace(
+                    services=SimpleNamespace(http_sidecars=[sidecar]),
+                ),
+            )
+            with (
+                patch.object(
+                    sidecar_control,
+                    "resolve_workspace_app_surface",
+                    return_value=(Path("/app"), parsed),
+                ),
+                patch.object(
+                    sidecar_control,
+                    "app_sidecar_startup_status",
+                    return_value={
+                        "state": "ready",
+                        "phase": "health_recheck",
+                        "instance_id": "instance-1",
+                    },
+                ) as startup_status,
+                patch.object(
+                    sidecar_control,
+                    "app_sidecar_current_instance_id",
+                    return_value="instance-1",
+                ),
+            ):
+                result = sidecar_control._dispatch(
+                    {
+                        "schema_version": "1",
+                        "operation": "status",
+                        "workspace_id": "default",
+                        "app_id": "design-studio",
+                    },
+                    state=state,
+                    shutdown_controller=None,
+                )
 
         self.assertEqual(result["services"][0]["state"], "ready")
+        self.assertEqual(result["data_root"], str(data_root.resolve()))
+        self.assertEqual(result["declared_service_count"], 1)
+        self.assertEqual(result["verified_stopped_service_count"], 0)
+        self.assertEqual(result["services"][0]["live_instance_id"], "instance-1")
         startup_status.assert_called_once_with(
             workspace_id="default",
             app_id="design-studio",
             sidecar_id="opendesign",
-            data_root="/data/design-studio",
+            data_root=str(data_root),
         )
 
     def test_quarantine_persists_before_revoking_every_live_capability(self) -> None:

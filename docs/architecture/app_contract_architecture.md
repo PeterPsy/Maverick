@@ -956,6 +956,33 @@ id and a canonical relative `subpath`; symlinked or escaping roots fail closed.
 This capability mounts an artifact unchanged and does not permit an app overlay
 or a host-root fallback.
 
+A sidecar that needs only one product-owned subtree may narrow its writable
+data capability explicitly:
+
+```json
+"data_mount": {
+  "subpath": "native-product-data"
+}
+```
+
+Core resolves the canonical subpath beneath the binding's app-data root and
+mounts that directory, rather than the binding root, as `/data`. The same
+resolved directory scopes any sidecar model-access lease. Sibling control
+metadata, update journals, immutable backups, and other app-owned products are
+therefore absent from both the sidecar filesystem and a delegated CLI sandbox.
+Absolute, parent, symlinked, or escaping selections fail closed.
+
+An app whose launch selection is host-owned may declare one bounded
+`host_prepare` entrypoint. Core runs it only for a fresh managed launch, after
+there is no live managed writer and before creating the sidecar or model-access
+capabilities. The declaration allowlists exact `MAVERICK_APP_*` output keys;
+the hook must return exactly those string values and cannot replace static or
+Core-owned environment fields. This is a control-plane projection, not a
+general secret channel: values are size-bounded, raw provider credentials are
+forbidden, and only trusted app source may declare the hook. The pattern lets a
+host transaction recover journals and project a digest-validated product
+selection without exposing the transaction root to the product process.
+
 A sidecar with `permissions.providers.model_proxy: true` may additionally
 request an optional private model transport:
 
@@ -973,7 +1000,8 @@ bridge and its absence cannot prevent the native sidecar product from
 starting. Core mounts one owner-only Unix socket at a fixed sandbox path and
 injects a short-lived, scope-bound technical capability. API credentials are
 resolved only inside Core. A requested CLI is launched by Core under a second
-filesystem/process boundary. Neither transport creates a Maverick runtime
+filesystem/process boundary over the same selected `data_mount` root. Neither
+transport creates a Maverick runtime
 session or grants access to Maverick memory, Chat history, prompts, personas,
 skills, or tools. The sidecar may receive the technical socket and capability,
 but never a raw provider credential.

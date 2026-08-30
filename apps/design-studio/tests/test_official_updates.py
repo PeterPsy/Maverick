@@ -6,6 +6,7 @@ import json
 from hashlib import sha256
 from pathlib import Path
 import shutil
+import subprocess
 from types import SimpleNamespace
 import sys
 import tempfile
@@ -16,7 +17,12 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 SERVICE_ROOT = APP_ROOT / "service"
 sys.path.insert(0, str(SERVICE_ROOT))
 
-from native_official_update import OfficialUpdateError, perform_official_update  # noqa: E402
+from native_official_update import (  # noqa: E402
+    OfficialUpdateError,
+    perform_official_update,
+    recover_interrupted_official_update,
+)
+from official_update_lock import official_update_lock  # noqa: E402
 from official_opendesign_release import (  # noqa: E402
     OfficialReleaseError,
     load_official_release,
@@ -172,6 +178,59 @@ class OfficialUpdateTests(unittest.TestCase):
         def verify(_path, *, expected_release):
             return self._installation(expected_release)
 
+        def verified_control(operation: str, workspace_id: str) -> dict:
+            response = control(operation, workspace_id)
+            if (
+                operation == "stop"
+                and isinstance(response, dict)
+                and response.get("ready") is False
+                and "data_root" not in response
+            ):
+                return {
+                    "workspace_id": workspace_id,
+                    "app_id": "design-studio",
+                    "data_root": str(self.data_root.resolve()),
+                    "ready": False,
+                    "browser_sessions_revoked": True,
+                    "declared_service_count": 1,
+                    "stopped_service_count": 1,
+                    "verified_stopped_service_count": 1,
+                    "services": [
+                        {
+                            "sidecar_id": "opendesign",
+                            "previous_instance_id": "unit-test-instance",
+                            "live_instance_id": None,
+                            "state": "stopped",
+                        }
+                    ],
+                }
+            if operation == "status" and isinstance(response, dict):
+                services = response.get("services")
+                if isinstance(services, list) and "data_root" not in response:
+                    normalized = []
+                    for service in services:
+                        item = dict(service)
+                        item.setdefault("sidecar_id", "opendesign")
+                        item.setdefault(
+                            "live_instance_id",
+                            None if item.get("state") in {"stopped", "not_started", "failed"} else "live",
+                        )
+                        normalized.append(item)
+                    verified = sum(
+                        item.get("live_instance_id") is None
+                        and item.get("state") in {"stopped", "not_started", "failed"}
+                        for item in normalized
+                    )
+                    return {
+                        "workspace_id": workspace_id,
+                        "app_id": "design-studio",
+                        "data_root": str(self.data_root.resolve()),
+                        "declared_service_count": len(normalized),
+                        "verified_stopped_service_count": verified,
+                        "services": normalized,
+                    }
+            return response
+
         return perform_official_update(
             self.data_root,
             self.artifacts,
@@ -189,8 +248,34 @@ class OfficialUpdateTests(unittest.TestCase):
                     "evidence": "unit-test",
                 }
             ),
-            sidecar_control=control,
+            sidecar_control=verified_control,
         )
+
+    def _verified_control(self, operation: str, workspace_id: str) -> dict:
+        if operation == "stop":
+            return {
+                "workspace_id": workspace_id,
+                "app_id": "design-studio",
+                "data_root": str(self.data_root.resolve()),
+                "ready": False,
+                "browser_sessions_revoked": True,
+                "declared_service_count": 1,
+                "stopped_service_count": 1,
+                "verified_stopped_service_count": 1,
+                "services": [
+                    {
+                        "sidecar_id": "opendesign",
+                        "previous_instance_id": "unit-test-instance",
+                        "live_instance_id": None,
+                        "state": "stopped",
+                    }
+                ],
+            }
+        if operation == "prewarm":
+            return {"ready": True}
+        if operation == "release_quarantine":
+            return {"ready": False, "quarantined": False, "released": True}
+        raise AssertionError(operation)
 
     def test_user_selected_official_release_is_generic_but_origin_locked(self) -> None:
         self.assertEqual(self.candidate.version, "0.17.0")
@@ -258,6 +343,86 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertEqual(read_release_selection(self.data_root).release.version, "0.16.1")
         self.assertFalse((self.native / "upstream-migration").exists())
         self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
+
+    def test_crash_after_native_retirement_is_recovered_from_durable_journal(self) -> None:
+        from unittest.mock import patch
+
+        real_replace = __import__("os").replace
+
+        def crash_after_replace(source, destination):
+            real_replace(source, destination)
+            if Path(source) == self.native:
+                raise SystemExit("simulated process death after native retirement")
+
+        with patch("native_official_update.os.replace", side_effect=crash_after_replace):
+            with self.assertRaisesRegex(SystemExit, "simulated process death"):
+                self._run(self._verified_control)
+
+        self.assertFalse(self.native.exists())
+        journal = json.loads(
+            (self.data_root / "official-update-cutover-journal.json").read_text()
+        )
+        self.assertEqual(journal["step"], "retire_native_intent")
+        self.assertEqual(
+            json.loads((self.data_root / "official-update.json").read_text())["phase"],
+            "activating",
+        )
+        # Legacy prepared backups predate the optional delegation evidence.
+        # Recovery must still restore canonical data and degrade only that bridge.
+        (
+            self.data_root
+            / "opendesign-update-backups/official-update-update_unit_test"
+            / "previous-delegation.json"
+        ).unlink()
+
+        environment = dict(__import__("os").environ)
+        environment["PYTHONPATH"] = str(APP_ROOT.parents[1])
+        prepared = subprocess.run(
+            [sys.executable, str(APP_ROOT / "hooks" / "sidecar_prepare.py")],
+            input=json.dumps(
+                {
+                    "app_id": "design-studio",
+                    "workspace_id": "default",
+                    "data_root": str(self.data_root),
+                    "sidecar_id": "opendesign",
+                    "managed_writer_stopped": True,
+                }
+            ),
+            text=True,
+            capture_output=True,
+            check=False,
+            env=environment,
+        )
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        projection = json.loads(prepared.stdout)
+        launch = json.loads(
+            projection["environment"][
+                "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
+            ]
+        )
+        self.assertEqual(launch["release"]["version"], "0.16.1")
+
+        recovered = json.loads((self.data_root / "official-update.json").read_text())
+        self.assertEqual(recovered["phase"], "rolled_back")
+        self.assertTrue(recovered["native_ready"])
+        self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
+        self.assertFalse((self.native / "upstream-migration").exists())
+        self.assertFalse((self.data_root / "official-update-cutover-journal.json").exists())
+        self.assertFalse((self.data_root / "native-cutover-quiesce.json").exists())
+
+        explicit = recover_interrupted_official_update(
+            self.data_root,
+            workspace_id="default",
+            sidecar_control=self._verified_control,
+        )
+        self.assertFalse(explicit["recovered"])
+        self.assertEqual(explicit["update"]["phase"], "rolled_back")
+
+    def test_update_lock_rejects_a_concurrent_transaction(self) -> None:
+        with official_update_lock(self.data_root) as acquired:
+            self.assertTrue(acquired)
+            with self.assertRaisesRegex(OfficialUpdateError, "transaction is active"):
+                self._run(self._verified_control)
 
     def test_destructive_candidate_migration_is_rejected_before_activation(self) -> None:
         calls: list[str] = []

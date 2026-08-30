@@ -8,17 +8,96 @@ from typing import Any
 from core.apps.contract_validation import (
     _expect_bool,
     _expect_mapping,
+    _expect_relative_contract_path,
     _expect_string,
     _expect_slug,
+    _expect_timeout,
     _reject_unexpected_fields,
 )
 from core.apps.errors import AppContractValidationError
 from core.apps.models import (
     HttpSidecarArtifactMountSpec,
+    HttpSidecarDataMountSpec,
     HttpSidecarDiagnosticsSpec,
+    HttpSidecarHostPrepareSpec,
     HttpSidecarPrewarmSpec,
     HttpSidecarRootFilesystemSpec,
 )
+
+
+def parse_sidecar_data_mount(
+    payload: dict[str, Any], *, label: str
+) -> HttpSidecarDataMountSpec:
+    """Parse one canonical app-data subtree exposed as the sandbox `/data`."""
+    mount_label = f"{label}.data_mount"
+    _reject_unexpected_fields(payload, {"subpath"}, label=mount_label)
+    value = _expect_string(payload, "subpath")
+    path = PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or not path.parts
+        or path.as_posix() != value
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or len(value) > 256
+    ):
+        raise AppContractValidationError(
+            f"`{mount_label}.subpath` must be a canonical path inside app data."
+        )
+    return HttpSidecarDataMountSpec(subpath=path.as_posix())
+
+
+def parse_sidecar_host_prepare(
+    source_root,
+    payload: dict[str, Any],
+    *,
+    label: str,
+) -> HttpSidecarHostPrepareSpec:
+    """Parse a bounded host-only prelaunch hook and its explicit output keys."""
+    prepare_label = f"{label}.host_prepare"
+    fields = {"entrypoint", "timeout_seconds", "environment_keys"}
+    _reject_unexpected_fields(payload, fields, label=prepare_label)
+    if set(payload) != fields:
+        raise AppContractValidationError(
+            f"`{prepare_label}` must declare entrypoint, timeout_seconds, and environment_keys."
+        )
+    entrypoint = _expect_relative_contract_path(
+        source_root,
+        _expect_string(payload, "entrypoint"),
+        label=f"{prepare_label}.entrypoint",
+    )
+    timeout_seconds = _expect_timeout(payload, "timeout_seconds", default=30)
+    raw_keys = payload.get("environment_keys")
+    if not isinstance(raw_keys, list) or not raw_keys or len(raw_keys) > 16:
+        raise AppContractValidationError(
+            f"`{prepare_label}.environment_keys` must be a non-empty bounded list."
+        )
+    keys: list[str] = []
+    platform_keys = {
+        "MAVERICK_APP_ID",
+        "MAVERICK_APP_DATA_ROOT",
+        "MAVERICK_APP_SOURCE_ROOT",
+    }
+    for key in raw_keys:
+        if (
+            not isinstance(key, str)
+            or not key.startswith("MAVERICK_APP_")
+            or key in platform_keys
+            or len(key) > 96
+            or any(character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for character in key)
+        ):
+            raise AppContractValidationError(
+                f"`{prepare_label}.environment_keys` contains an invalid app-owned key."
+            )
+        if key in keys:
+            raise AppContractValidationError(
+                f"`{prepare_label}.environment_keys` must not contain duplicates."
+            )
+        keys.append(key)
+    return HttpSidecarHostPrepareSpec(
+        entrypoint=entrypoint,
+        timeout_seconds=timeout_seconds,
+        environment_keys=keys,
+    )
 
 
 def parse_sidecar_diagnostics(payload: dict[str, Any], *, label: str) -> HttpSidecarDiagnosticsSpec:

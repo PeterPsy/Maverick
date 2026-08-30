@@ -171,10 +171,18 @@ def run_relay_worker(args: argparse.Namespace) -> int:
             daemon=True,
         )
         relay_thread.start()
+        child_environment = dict(os.environ)
+        for name in args.unset_child_env:
+            if not name or any(
+                character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
+                for character in name
+            ):
+                raise RuntimeError("invalid child environment removal")
+            child_environment.pop(name, None)
         child = subprocess.Popen(
             args.command,
             cwd=args.workdir,
-            env=dict(os.environ),
+            env=child_environment,
             stdin=subprocess.DEVNULL,
             close_fds=True,
         )
@@ -211,6 +219,7 @@ def _argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--memory-bytes", type=int, required=True)
     parser.add_argument("--open-files", type=int, required=True)
     parser.add_argument("--request-concurrency", type=int, required=True)
+    parser.add_argument("--unset-child-env", action="append", default=[])
     parser.add_argument("command", nargs=argparse.REMAINDER)
     return parser
 

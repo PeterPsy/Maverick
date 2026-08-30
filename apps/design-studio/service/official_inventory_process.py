@@ -5,10 +5,12 @@ from __future__ import annotations
 from contextlib import contextmanager
 import http.client
 import json
+import os
 from pathlib import Path
 import secrets
 import socket
 import subprocess
+import tempfile
 import time
 from typing import Any, Iterator
 
@@ -28,13 +30,30 @@ class OfficialApiClient:
     def __init__(
         self,
         *,
-        port: int,
+        port: int | None = None,
+        relay_socket: Path | None = None,
+        relay_capability: str | None = None,
+        target_port: int | None = None,
         token: str,
         request_timeout_seconds: float = 10.0,
     ) -> None:
         if not 0 < request_timeout_seconds <= 60:
             raise ValueError("official API request timeout is invalid")
+        if (port is None) == (relay_socket is None):
+            raise ValueError("official API client requires exactly one local transport")
+        if relay_socket is not None and not relay_capability:
+            raise ValueError("official API relay capability is required")
+        authority_port = port if port is not None else target_port
+        if (
+            isinstance(authority_port, bool)
+            or not isinstance(authority_port, int)
+            or not 1 <= authority_port <= 65535
+        ):
+            raise ValueError("official API target port is invalid")
         self._port = port
+        self._relay_socket = Path(relay_socket) if relay_socket is not None else None
+        self._relay_capability = relay_capability
+        self._host_header = f"127.0.0.1:{authority_port}"
         self._token = token
         self._request_timeout_seconds = request_timeout_seconds
 
@@ -78,14 +97,39 @@ class OfficialApiClient:
         headers: dict[str, str] | None = None,
     ) -> tuple[int, bytes]:
         """Issue one bounded authenticated request to the disposable daemon."""
+        status, _response_headers, response_body = self.request_details(
+            method,
+            path,
+            body=body,
+            headers=headers,
+        )
+        return status, response_body
+
+    def request_details(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, dict[str, str], bytes]:
+        """Issue one bounded request and retain redaction-safe response headers."""
         if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}:
             raise OfficialReleaseError("official API probe method is unsupported")
-        if not path.startswith("/api/") or "\x00" in path:
+        if (path != "/" and not path.startswith("/api/")) or "\x00" in path:
             raise OfficialReleaseError("official API probe path is unsafe")
-        connection = http.client.HTTPConnection(
-            "127.0.0.1",
-            self._port,
-            timeout=self._request_timeout_seconds,
+        connection = (
+            _RelayHTTPConnection(
+                self._relay_socket,
+                self._relay_capability or "",
+                timeout=self._request_timeout_seconds,
+            )
+            if self._relay_socket is not None
+            else http.client.HTTPConnection(
+                "127.0.0.1",
+                self._port,
+                timeout=self._request_timeout_seconds,
+            )
         )
         try:
             connection.request(
@@ -96,6 +140,7 @@ class OfficialApiClient:
                     "Authorization": f"Bearer {self._token}",
                     "Connection": "close",
                     **(headers or {}),
+                    "Host": self._host_header,
                 },
             )
             response = connection.getresponse()
@@ -108,7 +153,11 @@ class OfficialApiClient:
                 raise OfficialReleaseError(
                     f"official API route {path} exceeded the inventory limit"
                 )
-            return response.status, body
+            return (
+                response.status,
+                {key.lower(): value for key, value in response.getheaders()},
+                body,
+            )
         finally:
             connection.close()
 
@@ -125,25 +174,64 @@ def running_official_api(
     port = _unused_loopback_port()
     token = secrets.token_urlsafe(32)
     process: subprocess.Popen[bytes] | None = None
+    relay_secret_fd = -1
     data_dir.mkdir(parents=True, exist_ok=True)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("wb") as log:
+    with log_path.open("wb") as log, tempfile.TemporaryDirectory(
+        prefix="opendesign-disposable-relay-"
+    ) as relay_temporary:
+        relay_directory = Path(relay_temporary)
+        relay_capability = secrets.token_urlsafe(32)
         try:
+            relay_secret_fd = _pipe_secret(relay_capability)
             process = launch_disposable_official_release(
                 installation,
                 data_dir=data_dir,
                 port=port,
                 api_token=token,
                 bridge_mode="disabled",
+                relay_directory=relay_directory,
+                relay_secret_fd=relay_secret_fd,
                 stdout=log,
                 stderr=subprocess.STDOUT,
             )
-            client = OfficialApiClient(port=port, token=token)
+            os.close(relay_secret_fd)
+            relay_secret_fd = -1
+            client = OfficialApiClient(
+                relay_socket=relay_directory / "api.sock",
+                relay_capability=relay_capability,
+                target_port=port,
+                token=token,
+            )
             _wait_ready(process, client=client, timeout_seconds=timeout_seconds)
             yield client
         finally:
+            if relay_secret_fd >= 0:
+                os.close(relay_secret_fd)
             if process is not None:
                 _stop_process(process)
+
+
+class _RelayHTTPConnection(http.client.HTTPConnection):
+    """HTTP connection carried only over the authenticated local Unix relay."""
+
+    def __init__(self, relay_socket: Path, capability: str, *, timeout: float) -> None:
+        super().__init__("disposable-opendesign", timeout=timeout)
+        self._relay_socket = Path(relay_socket)
+        self._preamble = (
+            b"MAVERICK-SIDECAR-RELAY/1 " + capability.encode("ascii") + b"\n"
+        )
+
+    def connect(self) -> None:
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(self.timeout)
+        try:
+            client.connect(str(self._relay_socket))
+            client.sendall(self._preamble)
+        except OSError:
+            client.close()
+            raise
+        self.sock = client
 
 
 def _wait_ready(
@@ -175,6 +263,20 @@ def _unused_loopback_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+def _pipe_secret(capability: str) -> int:
+    read_fd, write_fd = os.pipe()
+    try:
+        payload = capability.encode("ascii") + b"\n"
+        if os.write(write_fd, payload) != len(payload):
+            raise OSError("short disposable relay secret write")
+    except Exception:
+        os.close(read_fd)
+        raise
+    finally:
+        os.close(write_fd)
+    return read_fd
 
 
 def _stop_process(process: subprocess.Popen[bytes]) -> None:

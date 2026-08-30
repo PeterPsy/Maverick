@@ -246,7 +246,7 @@
           "OD_REQUIRE_API_TOKEN_ON_LOOPBACK": "1",
           "DO_NOT_TRACK": "1",
           "NEXT_TELEMETRY_DISABLED": "1",
-          "MAVERICK_OPENDESIGN_DATA_DIR": "${app.data_dir}/opendesign-native",
+          "MAVERICK_OPENDESIGN_DATA_DIR": "${app.data_dir}",
           "MAVERICK_OPENDESIGN_STORE_ROOT": "${artifact.opendesign}",
           "MAVERICK_OPENDESIGN_MODEL_BRIDGE": "auto",
           "MAVERICK_OPENDESIGN_DELEGATION_BRIDGE": "disabled"
@@ -257,14 +257,21 @@
             "mount_path": "/artifacts/opendesign"
           }
         ],
+        "data_mount": {
+          "subpath": "opendesign-native"
+        },
+        "host_prepare": {
+          "entrypoint": "hooks/sidecar_prepare.py",
+          "timeout_seconds": 30,
+          "environment_keys": [
+            "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
+          ]
+        },
         "prewarm": {
           "on_core_start": true,
           "on_install": true,
           "on_activation": true,
           "keep_alive": true
-        },
-        "diagnostics": {
-          "status_file": "native-host-status.json"
         },
         "process_policy": {
           "inherit_host_env": false,

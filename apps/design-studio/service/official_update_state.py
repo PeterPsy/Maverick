@@ -308,7 +308,7 @@ def _validate_migration_guard(
     state = value.get("state")
     if state not in {"passed", "failed", "not_completed"}:
         raise OfficialUpdateError("official update migration guard is invalid")
-    if phase != "recovery_required" and state != "passed":
+    if phase in {"prepared", "activating", "committed"} and state != "passed":
         raise OfficialUpdateError("official update migration guard did not pass")
     if value.get("protected_categories") != list(INVENTORY_CATEGORIES):
         raise OfficialUpdateError("official update migration guard is invalid")

@@ -149,7 +149,7 @@
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["status", "apply"],
+            "enum": ["status", "apply", "recover"],
             "default": "status"
           },
           "release_descriptor": {
@@ -160,7 +160,7 @@
           },
           "confirm": {
             "type": "boolean",
-            "description": "Must be true to stop native OpenDesign briefly and apply the update."
+            "description": "Must be true to stop native OpenDesign for an apply or recovery action."
           }
         },
         "additionalProperties": false

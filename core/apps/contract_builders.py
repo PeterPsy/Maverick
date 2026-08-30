@@ -37,11 +37,13 @@ from core.apps.models import (
     AppVisibilityDeclaration,
     HttpSidecarBindSpec,
     HttpSidecarDiagnosticsSpec,
+    HttpSidecarDataMountSpec,
     HttpSidecarArtifactMountSpec,
     HttpSidecarBrowserOriginSpec,
     HttpSidecarEntrypointAccessSpec,
     HttpSidecarEntrypointSurfaceSpec,
     HttpSidecarHealthSpec,
+    HttpSidecarHostPrepareSpec,
     HttpSidecarLogSpec,
     HttpSidecarModelAccessSpec,
     HttpSidecarProcessPolicy,
@@ -369,6 +371,8 @@ def build_http_sidecar_spec(
     process_policy: HttpSidecarProcessPolicy | None = None,
     artifact_mounts: list[HttpSidecarArtifactMountSpec] | None = None,
     root_filesystem: HttpSidecarRootFilesystemSpec | None = None,
+    data_mount: HttpSidecarDataMountSpec | None = None,
+    host_prepare: HttpSidecarHostPrepareSpec | None = None,
     model_access: HttpSidecarModelAccessSpec | None = None,
     prewarm: HttpSidecarPrewarmSpec | None = None,
     diagnostics: HttpSidecarDiagnosticsSpec | None = None,
@@ -390,6 +394,8 @@ def build_http_sidecar_spec(
         process_policy=process_policy or build_http_sidecar_process_policy(),
         artifact_mounts=artifact_mounts or [],
         root_filesystem=root_filesystem,
+        data_mount=data_mount,
+        host_prepare=host_prepare,
         model_access=model_access,
         prewarm=prewarm,
         diagnostics=diagnostics,
@@ -415,6 +421,22 @@ def build_http_sidecar_root_filesystem(
 ) -> HttpSidecarRootFilesystemSpec:
     """Build one artifact-backed, read-only sidecar execution root."""
     return HttpSidecarRootFilesystemSpec(artifact_id=artifact_id, subpath=subpath)
+
+
+def build_http_sidecar_data_mount(*, subpath: str) -> HttpSidecarDataMountSpec:
+    """Build one sidecar-scoped writable app-data mount."""
+    return HttpSidecarDataMountSpec(subpath=subpath)
+
+
+def build_http_sidecar_host_prepare(
+    *, entrypoint: str, environment_keys: list[str], timeout_seconds: int = 30
+) -> HttpSidecarHostPrepareSpec:
+    """Build one bounded host-only sidecar preparation hook."""
+    return HttpSidecarHostPrepareSpec(
+        entrypoint=entrypoint,
+        timeout_seconds=timeout_seconds,
+        environment_keys=environment_keys,
+    )
 
 
 def build_http_sidecar_model_access(

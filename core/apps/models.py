@@ -414,6 +414,22 @@ class HttpSidecarRootFilesystemSpec:
 
 
 @dataclass(frozen=True)
+class HttpSidecarDataMountSpec:
+    """Select the only app-data subtree writable inside one sidecar."""
+
+    subpath: str
+
+
+@dataclass(frozen=True)
+class HttpSidecarHostPrepareSpec:
+    """Declare a bounded host hook run immediately before a fresh launch."""
+
+    entrypoint: str
+    timeout_seconds: int
+    environment_keys: list[str]
+
+
+@dataclass(frozen=True)
 class HttpSidecarModelAccessSpec:
     """Request an optional Core-owned naked-model transport for one sidecar."""
 
@@ -461,6 +477,8 @@ class HttpSidecarSpec:
     health: HttpSidecarHealthSpec
     proxy: HttpSidecarProxySpec | None
     logs: HttpSidecarLogSpec | None
+    data_mount: HttpSidecarDataMountSpec | None = None
+    host_prepare: HttpSidecarHostPrepareSpec | None = None
 
 
 @dataclass(frozen=True)

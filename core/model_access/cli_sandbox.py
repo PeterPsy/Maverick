@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import fcntl
 import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
+from uuid import uuid4
 
 from core.model_access.catalog import resolve_codex_source_home
 from core.model_access.models import ModelAccessScope
@@ -134,17 +137,30 @@ def prepare_codex_home(repository_root: Path, scope: ModelAccessScope) -> Path:
         / scope.app_id
         / "codex-home"
     )
-    target.mkdir(parents=True, exist_ok=True, mode=0o700)
-    target.chmod(0o700)
-    source_auth = resolve_codex_source_home() / "auth.json"
-    if not source_auth.is_file():
-        raise FileNotFoundError("Codex authentication is unavailable")
-    _atomic_private_copy(source_auth, target / "auth.json")
-    _atomic_private_write(
-        target / "config.toml",
-        b'[projects."/workspace"]\ntrust_level = "trusted"\n',
-    )
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with _codex_home_lock(target.parent / ".codex-home.lock"):
+        target.mkdir(parents=True, exist_ok=True, mode=0o700)
+        target.chmod(0o700)
+        source_auth = resolve_codex_source_home() / "auth.json"
+        if not source_auth.is_file():
+            raise FileNotFoundError("Codex authentication is unavailable")
+        _atomic_private_copy(source_auth, target / "auth.json")
+        _atomic_private_write(
+            target / "config.toml",
+            b'[projects."/workspace"]\ntrust_level = "trusted"\n',
+        )
     return target.resolve(strict=True)
+
+
+@contextmanager
+def codex_home_lock(cli_home: Path):
+    """Serialize a complete Codex invocation that shares mutable CLI home state."""
+    home = Path(cli_home).resolve(strict=True)
+    metadata = home.stat()
+    if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.geteuid():
+        raise PermissionError("Codex home is unsafe")
+    with _codex_home_lock(home.parent / ".codex-home.lock"):
+        yield
 
 
 def codex_sandbox_command(
@@ -229,15 +245,55 @@ def _atomic_private_copy(source: Path, destination: Path) -> None:
 
 
 def _atomic_private_write(destination: Path, body: bytes) -> None:
-    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.tmp")
+    temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     descriptor = os.open(temporary, flags, 0o600)
     try:
-        os.write(descriptor, body)
+        remaining = memoryview(body)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            if written <= 0:
+                raise OSError("private atomic write made no progress")
+            remaining = remaining[written:]
         os.fsync(descriptor)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     finally:
         os.close(descriptor)
-    os.replace(temporary, destination)
-    destination.chmod(0o600)
+    try:
+        os.replace(temporary, destination)
+        destination.chmod(0o600)
+        directory = os.open(destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+@contextmanager
+def _codex_home_lock(path: Path):
+    flags = os.O_RDWR | os.O_CREAT
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        metadata = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != os.geteuid()
+            or metadata.st_mode & 0o077
+        ):
+            raise PermissionError("Codex home lock is unsafe")
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)

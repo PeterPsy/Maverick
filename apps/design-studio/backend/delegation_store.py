@@ -25,6 +25,7 @@ from delegation_state_schema import (
 STATE_PATH = "delegations/state.json"
 MAX_RECORDS = 1000
 LEASE_SECONDS = 90
+TERMINAL_RETENTION_SECONDS = 30 * 24 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,7 @@ class DelegationStore:
             records = state["delegations"]
             record = records.get(identifier)
             if not isinstance(record, dict):
-                _prune_records(records)
+                _prune_records(records, reserve=1, now_epoch=now_epoch)
                 if len(records) >= MAX_RECORDS:
                     raise DelegationStoreError("Delegation metadata capacity is exhausted.")
                 now = utc_now()
@@ -89,7 +90,7 @@ class DelegationStore:
             record["updated_at"] = utc_now()
             acquired = True
             captured = deepcopy(record)
-            _prune_records(records)
+            _prune_records(records, now_epoch=now_epoch)
             state["updated_at"] = record["updated_at"]
             return state
 
@@ -177,14 +178,29 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _prune_records(records: dict[str, dict[str, Any]]) -> None:
-    if len(records) <= MAX_RECORDS:
-        return
+def _prune_records(
+    records: dict[str, dict[str, Any]],
+    *,
+    reserve: int = 0,
+    now_epoch: float | None = None,
+) -> None:
+    """Expire terminal metadata and make bounded room before a new claim."""
+    target = MAX_RECORDS - max(0, reserve)
+    current_epoch = time() if now_epoch is None else now_epoch
     terminal = sorted(
         (record for record in records.values() if record.get("status") in TERMINAL_STATUSES),
-        key=lambda item: str(item.get("updated_at") or ""),
+        key=lambda item: (_terminal_epoch(item), str(item.get("delegation_id") or "")),
     )
     for record in terminal:
-        if len(records) <= MAX_RECORDS:
+        expired = _terminal_epoch(record) <= current_epoch - TERMINAL_RETENTION_SECONDS
+        if not expired and len(records) <= target:
             break
         records.pop(str(record.get("delegation_id") or ""), None)
+
+
+def _terminal_epoch(record: dict[str, Any]) -> float:
+    value = str(record.get("completed_at") or record.get("updated_at") or "")
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except (OverflowError, ValueError):
+        return 0.0

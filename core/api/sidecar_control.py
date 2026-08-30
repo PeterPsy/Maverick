@@ -13,6 +13,7 @@ from typing import Any
 
 from core.api.sidecar_prewarm import prewarm_workspace_app_sidecars
 from core.api.sidecar_proxy import (
+    app_sidecar_current_instance_id,
     app_sidecar_startup_status,
     stop_app_sidecars,
 )
@@ -183,15 +184,86 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
             shutdown_controller=shutdown_controller,
         )
     if operation == "stop":
+        try:
+            binding = state.app_store.get_workspace_app_binding(
+                workspace_id=workspace_id,
+                app_id=app_id,
+            )
+        except Exception as error:
+            raise SidecarControlError(
+                "runtime_binding_invalid", "sidecar_stop_resolve"
+            ) from error
+        if getattr(binding, "status", None) != "enabled":
+            raise SidecarControlError("runtime_binding_invalid", "sidecar_stop_resolve")
+        try:
+            _source_root, parsed = resolve_workspace_app_surface(
+                state.app_store,
+                binding=binding,
+                start_path=state.repository_root,
+            )
+            declared = tuple(parsed.contract.services.http_sidecars)
+            data_root = _canonical_binding_data_root(binding.data_root)
+        except Exception as error:
+            raise SidecarControlError(
+                "runtime_binding_invalid", "sidecar_stop_resolve"
+            ) from error
+        if not declared:
+            raise SidecarControlError("runtime_binding_invalid", "sidecar_stop_resolve")
+        before = {
+            sidecar.service_id: app_sidecar_current_instance_id(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                sidecar_id=sidecar.service_id,
+                data_root=binding.data_root,
+            )
+            for sidecar in declared
+        }
         state.sidecar_browser_sessions.revoke_app(
             workspace_id=workspace_id,
             app_id=app_id,
         )
         stopped = stop_app_sidecars(workspace_id=workspace_id, app_id=app_id)
+        services: list[dict[str, Any]] = []
+        for sidecar in declared:
+            live_instance_id = app_sidecar_current_instance_id(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                sidecar_id=sidecar.service_id,
+                data_root=binding.data_root,
+            )
+            status = app_sidecar_startup_status(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                sidecar_id=sidecar.service_id,
+                data_root=binding.data_root,
+            )
+            state_name = str(status.get("state") or "")
+            if live_instance_id is not None or state_name not in {
+                "failed",
+                "not_started",
+                "stopped",
+            }:
+                raise SidecarControlError(
+                    "daemon_spawn_failed", "sidecar_stop_verify"
+                )
+            services.append(
+                {
+                    "sidecar_id": sidecar.service_id,
+                    "previous_instance_id": before[sidecar.service_id],
+                    "live_instance_id": None,
+                    "state": state_name,
+                }
+            )
         return {
+            "workspace_id": workspace_id,
+            "app_id": app_id,
+            "data_root": data_root,
             "ready": False,
             "browser_sessions_revoked": True,
+            "declared_service_count": len(declared),
             "stopped_service_count": stopped,
+            "verified_stopped_service_count": len(services),
+            "services": services,
         }
     if operation == "quarantine":
         return quarantine_workspace_app_sidecars(
@@ -210,6 +282,8 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
             workspace_id=workspace_id,
             app_id=app_id,
         )
+        if getattr(binding, "status", None) != "enabled":
+            raise SidecarControlError("runtime_binding_invalid", "sidecar_status_resolve")
         _source_root, parsed = resolve_workspace_app_surface(
             state.app_store,
             binding=binding,
@@ -220,25 +294,43 @@ def _dispatch(request: object, *, state, shutdown_controller) -> dict[str, Any]:
             workspace_id=workspace_id,
             app_id=app_id,
         )
+        data_root = _canonical_binding_data_root(binding.data_root)
+        services: list[dict[str, Any]] = []
+        verified_stopped = 0
+        for sidecar in parsed.contract.services.http_sidecars:
+            live_instance_id = app_sidecar_current_instance_id(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                sidecar_id=sidecar.service_id,
+                data_root=binding.data_root,
+            )
+            service = {
+                "sidecar_id": sidecar.service_id,
+                **app_sidecar_startup_status(
+                    workspace_id=workspace_id,
+                    app_id=app_id,
+                    sidecar_id=sidecar.service_id,
+                    data_root=binding.data_root,
+                ),
+                "live_instance_id": live_instance_id,
+            }
+            if (
+                live_instance_id is None
+                and service.get("state") in {"failed", "not_started", "stopped"}
+            ):
+                verified_stopped += 1
+            services.append(service)
         return {
             "workspace_id": workspace_id,
             "app_id": app_id,
+            "data_root": data_root,
             "quarantined": quarantine is not None,
             "quarantine_id": (
                 quarantine.quarantine_id if quarantine is not None else None
             ),
-            "services": [
-                {
-                    "sidecar_id": sidecar.service_id,
-                    **app_sidecar_startup_status(
-                        workspace_id=workspace_id,
-                        app_id=app_id,
-                        sidecar_id=sidecar.service_id,
-                        data_root=binding.data_root,
-                    ),
-                }
-                for sidecar in parsed.contract.services.http_sidecars
-            ],
+            "declared_service_count": len(services),
+            "verified_stopped_service_count": verified_stopped,
+            "services": services,
         }
     if operation == "restart":
         return restart_workspace_app_sidecars(
@@ -259,6 +351,20 @@ def _identifier(value: object) -> str:
     if not text or len(text) > 128 or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for character in text):
         raise SidecarControlError("runtime_binding_invalid", "sidecar_control_request")
     return text
+
+
+def _canonical_binding_data_root(value: object) -> str:
+    path = Path(str(value or ""))
+    try:
+        metadata = path.lstat()
+        resolved = path.resolve(strict=True)
+    except OSError as error:
+        raise SidecarControlError(
+            "runtime_binding_invalid", "sidecar_binding_resolve"
+        ) from error
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise SidecarControlError("runtime_binding_invalid", "sidecar_binding_resolve")
+    return str(resolved)
 
 
 def _receive_bounded(connection: socket.socket) -> bytes:

@@ -35,6 +35,7 @@ from core.apps.artifact_mounts import ResolvedArtifactMount, resolve_artifact_mo
 from core.apps.models import HttpSidecarSpec, ParsedAppContract, WorkspaceAppBindingRecord
 from core.apps.lifecycle import run_lifecycle_hook
 from core.apps.service_common import _build_workspace_hook_payload
+from core.apps.sidecar_host_prepare import run_sidecar_host_prepare
 from core.apps.sidecar_route_policy import (
     canonicalize_sidecar_path,
     route_policy_mode,
@@ -49,6 +50,7 @@ from core.apps.sidecar_execution import (
     MINIMAL_SIDECAR_ENV,
     prepare_confined_sidecar_launch,
     relay_preamble,
+    resolve_sidecar_data_root,
     sandbox_substitutions,
 )
 from core.authorization.errors import AuthorizationError
@@ -334,6 +336,7 @@ class HttpSidecarManager:
         start_path: Path,
         shutdown_controller: EntrypointShutdownController | None,
         verify_existing_health: bool = False,
+        host_prepare: Callable[[], dict[str, str]] | None = None,
     ) -> RunningSidecar:
         key = (workspace_id, app_id, sidecar.service_id, data_root)
         stale: RunningSidecar | None = None
@@ -383,6 +386,7 @@ class HttpSidecarManager:
                 shutdown_controller=shutdown_controller,
                 cancel_event=startup.cancel_event,
                 record_phase=record_phase,
+                host_prepare=host_prepare,
             )
             with self._lock:
                 if self._starting.get(key) is not startup or startup.cancel_event.is_set():
@@ -489,6 +493,7 @@ class HttpSidecarManager:
         shutdown_controller: EntrypointShutdownController | None,
         cancel_event: Event,
         record_phase: Callable[[str], None],
+        host_prepare: Callable[[], dict[str, str]] | None,
     ) -> RunningSidecar:
         _raise_if_startup_cancelled(cancel_event, phase="artifact_mount_resolve")
         record_phase("artifact_mount_resolve")
@@ -502,6 +507,17 @@ class HttpSidecarManager:
             app_id=app_id,
             declarations=sidecar.artifact_mounts,
         )
+        prepared_environment: dict[str, str] = {}
+        if host_prepare is not None:
+            _raise_if_startup_cancelled(cancel_event, phase="host_prepare")
+            record_phase("host_prepare")
+            prepared_environment = host_prepare()
+        sidecar_data_root = resolve_sidecar_data_root(
+            workspace_root=workspace.root,
+            app_id=app_id,
+            data_root=Path(data_root),
+            sidecar=sidecar,
+        )
         _raise_if_startup_cancelled(cancel_event, phase="sandbox_prepare")
         record_phase("sandbox_prepare")
         model_access_lease = None
@@ -512,7 +528,7 @@ class HttpSidecarManager:
                     workspace_id=workspace_id,
                     app_id=app_id,
                     sidecar_id=sidecar.service_id,
-                    data_root=Path(data_root),
+                    data_root=sidecar_data_root,
                     api=sidecar.model_access.api,
                     cli=sidecar.model_access.cli,
                 )
@@ -543,6 +559,7 @@ class HttpSidecarManager:
                 start_path=start_path,
                 artifact_mounts=artifact_mounts,
                 model_access_lease=model_access_lease,
+                host_environment=prepared_environment,
             )
             confined_launch = prepare_confined_sidecar_launch(
                 workspace_id=workspace_id,
@@ -806,6 +823,25 @@ def app_sidecar_startup_status(
     )
 
 
+def app_sidecar_current_instance_id(
+    *,
+    workspace_id: str,
+    app_id: str,
+    sidecar_id: str,
+    data_root: str,
+) -> str | None:
+    """Return one live manager instance identity without starting a sidecar."""
+    manager = _SIDECAR_MANAGER
+    if manager is None:
+        return None
+    return manager.current_instance_id(
+        workspace_id=workspace_id,
+        app_id=app_id,
+        sidecar_id=sidecar_id,
+        data_root=data_root,
+    )
+
+
 def sidecar_error_payload(error: AppHostingError, *, default_code: str) -> dict[str, object]:
     """Return a bounded startup diagnostic without leaking runtime inputs or paths."""
     if isinstance(error, SidecarStartupError):
@@ -827,6 +863,8 @@ def restart_declared_app_sidecars(
     sidecars: Iterable[HttpSidecarSpec],
     start_path: Path,
     shutdown_controller: EntrypointShutdownController | None = None,
+    binding: WorkspaceAppBindingRecord | None = None,
+    parsed: ParsedAppContract | None = None,
 ) -> dict[str, object]:
     """Restart exactly one app's declared sidecars and wait for declared health checks."""
     declared = tuple(sidecars)
@@ -837,15 +875,29 @@ def restart_declared_app_sidecars(
     started: list[dict[str, str]] = []
     try:
         for sidecar in declared:
-            running = manager.ensure_running(
-                workspace_id=workspace_id,
-                app_id=app_id,
-                source_root=source_root,
-                data_root=data_root,
-                sidecar=sidecar,
-                start_path=start_path,
-                shutdown_controller=shutdown_controller,
-            )
+            if sidecar.host_prepare is not None:
+                if binding is None or parsed is None:
+                    raise AppHostingError(
+                        "Sidecar host preparation requires its resolved workspace binding."
+                    )
+                running = ensure_sidecar_with_declared_auto_repair(
+                    binding=binding,
+                    source_root=source_root,
+                    parsed=parsed,
+                    sidecar=sidecar,
+                    start_path=start_path,
+                    shutdown_controller=shutdown_controller,
+                )
+            else:
+                running = manager.ensure_running(
+                    workspace_id=workspace_id,
+                    app_id=app_id,
+                    source_root=source_root,
+                    data_root=data_root,
+                    sidecar=sidecar,
+                    start_path=start_path,
+                    shutdown_controller=shutdown_controller,
+                )
             started.append(
                 {
                     "service_id": sidecar.service_id,
@@ -1214,6 +1266,12 @@ def ensure_sidecar_with_declared_auto_repair(
 ) -> RunningSidecar:
     """Start a sidecar and perform at most one declared, singleflight repair."""
     manager = _sidecar_manager()
+    host_prepare = _sidecar_host_prepare_callback(
+        binding=binding,
+        source_root=source_root,
+        sidecar=sidecar,
+        start_path=start_path,
+    )
     try:
         return manager.ensure_running(
             workspace_id=binding.workspace_id,
@@ -1224,6 +1282,7 @@ def ensure_sidecar_with_declared_auto_repair(
             start_path=start_path,
             shutdown_controller=shutdown_controller,
             verify_existing_health=verify_existing_health,
+            host_prepare=host_prepare,
         )
     except SidecarStartupError as error:
         if not error.auto_repairable or "artifact_repair" not in parsed.contract.entrypoints.hooks:
@@ -1245,6 +1304,7 @@ def ensure_sidecar_with_declared_auto_repair(
             start_path=start_path,
             shutdown_controller=shutdown_controller,
             verify_existing_health=verify_existing_health,
+            host_prepare=host_prepare,
         )
     except SidecarStartupError as error:
         _record_auto_repair_validation_failure(repair_key)
@@ -1258,6 +1318,38 @@ def ensure_sidecar_with_declared_auto_repair(
         ) from error
     _complete_auto_repair_validation(repair_key)
     return running
+
+
+def _sidecar_host_prepare_callback(
+    *,
+    binding: WorkspaceAppBindingRecord,
+    source_root: Path,
+    sidecar: HttpSidecarSpec,
+    start_path: Path,
+) -> Callable[[], dict[str, str]] | None:
+    declaration = sidecar.host_prepare
+    if declaration is None:
+        return None
+    payload = _build_workspace_hook_payload(
+        workspace_id=binding.workspace_id,
+        app_id=binding.app_id,
+        data_root=Path(binding.data_root),
+        source_kind=binding.source_kind,
+        source_record_id=binding.source_record_id,
+        hook_name="sidecar_host_prepare",
+        start_path=start_path,
+    )
+    payload.update(
+        {
+            "sidecar_id": sidecar.service_id,
+            "managed_writer_stopped": True,
+        }
+    )
+    return lambda: run_sidecar_host_prepare(
+        source_root,
+        declaration,
+        payload=payload,
+    )
 
 
 def _run_declared_artifact_repair_singleflight(
@@ -1839,12 +1931,17 @@ def _sidecar_env(
     start_path: Path,
     artifact_mounts: tuple[ResolvedArtifactMount, ...] = (),
     model_access_lease=None,
+    host_environment: dict[str, str] | None = None,
 ) -> dict[str, str]:
     del data_root, source_root, workspace_root, start_path
     env = dict(MINIMAL_SIDECAR_ENV)
     substitutions = sandbox_substitutions(port=port, token=token, artifact_mounts=artifact_mounts)
     for key, value in sidecar.env.items():
         env[key] = _replace_substitutions(value, substitutions)
+    prepared = host_environment or {}
+    if set(prepared) & set(env):
+        raise AppHostingError("Sidecar host preparation attempted to replace static environment.")
+    env.update(prepared)
     env["MAVERICK_APP_ID"] = app_id
     env["MAVERICK_WORKSPACE_ID"] = workspace_id
     env["MAVERICK_SIDECAR_ID"] = sidecar.service_id

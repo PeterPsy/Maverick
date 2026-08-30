@@ -12,9 +12,9 @@ from model_access_constants import MODEL_ACCESS_API_KEY, MODEL_ACCESS_BASE_URL
 
 
 PROFILE_PATH = Path("sandbox/agent-home/.maverick/model-access-agents.json")
-SANDBOX_PROFILE_PATH = Path("/data/opendesign-native") / PROFILE_PATH
+SANDBOX_PROFILE_PATH = Path("/data") / PROFILE_PATH
 API_CONFIG_PATH = Path("sandbox/agent-home/.maverick/model-access-opencode.json")
-SANDBOX_API_CONFIG_PATH = Path("/data/opendesign-native") / API_CONFIG_PATH
+SANDBOX_API_CONFIG_PATH = Path("/data") / API_CONFIG_PATH
 CODEX_WRAPPER = "maverick-codex"
 OPENCODE_WRAPPER = "maverick-opencode"
 API_PROFILE_ID = "installed-maverick-api"

@@ -15,7 +15,11 @@ from core.app_sdk.runtime import emit_json, read_entrypoint_payload
 from core.apps.artifact_mounts import create_artifact_namespace
 from core.shared.repository import discover_repository_root
 from delegation_errors import DelegationError
-from native_official_update import OfficialUpdateError, perform_official_update
+from native_official_update import (
+    OfficialUpdateError,
+    perform_official_update,
+    recover_interrupted_official_update,
+)
 from official_opendesign_release import OfficialReleaseError
 from official_release_selection import read_release_selection
 from official_update_state import read_update_state
@@ -69,6 +73,31 @@ def _official_update(payload) -> None:
                 "last_update": update,
             }
         )
+        return
+    if action == "recover":
+        if arguments.get("confirm") is not True:
+            emit_json(
+                {
+                    "ok": False,
+                    "error": "official_update_confirmation_required",
+                }
+            )
+            return
+        try:
+            result = recover_interrupted_official_update(
+                data_root,
+                workspace_id=str(payload.workspace_id or "default"),
+            )
+        except (OfficialReleaseError, OfficialUpdateError, OSError, ValueError) as error:
+            emit_json(
+                {
+                    "ok": False,
+                    "error": "official_update_recovery_failed",
+                    "detail": str(error),
+                }
+            )
+            return
+        emit_json({"ok": True, **result})
         return
     if action != "apply":
         emit_json({"ok": False, "error": "official_update_action_invalid"})

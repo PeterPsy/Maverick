@@ -14,7 +14,12 @@ import unittest
 from unittest.mock import patch
 
 from core.api.sidecar_proxy import HttpSidecarManager, RunningSidecar, UnixRelayHTTPConnection, _proxy_to_running_sidecar
-from core.apps.contracts import build_http_sidecar_process_policy, build_http_sidecar_spec
+from core.apps.contracts import (
+    build_http_sidecar_data_mount,
+    build_http_sidecar_model_access,
+    build_http_sidecar_process_policy,
+    build_http_sidecar_spec,
+)
 from core.apps.errors import AppHostingError
 from core.apps.models import HttpSidecarBindSpec, HttpSidecarHealthSpec
 from core.apps.sidecar_execution import MINIMAL_SIDECAR_ENV, prepare_confined_sidecar_launch, relay_preamble
@@ -30,10 +35,13 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
             workspace_root = repo_root / "workspaces" / "default"
             workspace_root.mkdir(parents=True)
             data_root = workspace_root / "data" / "probe"
+            native_data_root = data_root / "opendesign-native"
             operator_home = repo_root / "operator-home"
             other_workspace = repo_root / "workspaces" / "other" / "data" / "probe"
             operator_home.mkdir()
             other_workspace.mkdir(parents=True)
+            native_data_root.mkdir(parents=True)
+            (data_root / "official-update.json").write_text("host-control", encoding="utf-8")
             (operator_home / "secret").write_text("operator-secret", encoding="utf-8")
             (other_workspace / "secret").write_text("other-workspace-secret", encoding="utf-8")
 
@@ -63,6 +71,12 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
                     open_files=256,
                     request_concurrency=1,
                 ),
+                data_mount=build_http_sidecar_data_mount(subpath="opendesign-native"),
+                model_access=build_http_sidecar_model_access(
+                    api=True,
+                    cli=["codex"],
+                    required=False,
+                ),
                 bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
                 health=HttpSidecarHealthSpec(path="/health", timeout_ms=8000),
             )
@@ -70,17 +84,23 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
             shutdown = EntrypointShutdownController()
             self.addCleanup(shutdown.begin_shutdown)
 
-            with patch.dict(
-                os.environ,
-                {
-                    "MAVERICK_WP1_HOST_SENTINEL": "must-not-cross",
-                    "HOME": str(operator_home),
-                    "OPENAI_API_KEY": "provider-secret",
-                    "CODEX_HOME": "/operator-runtime-home",
-                    "MAVERICK_BOOTSTRAP_SECRET": "bootstrap-secret",
-                    "MAVERICK_RUNTIME_API_TOKEN": "runtime-secret",
-                    "MAVERICK_SESSION_COOKIE": "platform-cookie",
-                },
+            with (
+                patch.dict(
+                    os.environ,
+                    {
+                        "MAVERICK_WP1_HOST_SENTINEL": "must-not-cross",
+                        "HOME": str(operator_home),
+                        "OPENAI_API_KEY": "provider-secret",
+                        "CODEX_HOME": "/operator-runtime-home",
+                        "MAVERICK_BOOTSTRAP_SECRET": "bootstrap-secret",
+                        "MAVERICK_RUNTIME_API_TOKEN": "runtime-secret",
+                        "MAVERICK_SESSION_COOKIE": "platform-cookie",
+                    },
+                ),
+                patch(
+                    "core.api.sidecar_proxy.issue_model_access_lease",
+                    return_value=None,
+                ) as issue_model_access,
             ):
                 running = manager.ensure_running(
                     workspace_id="default",
@@ -91,6 +111,10 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
                     start_path=repo_root,
                     shutdown_controller=shutdown,
                 )
+            self.assertEqual(
+                issue_model_access.call_args.kwargs["data_root"],
+                native_data_root.resolve(),
+            )
 
             relay_path = running.confined_launch.relay_socket
             self.assertEqual(stat.S_IMODE(relay_path.parent.stat().st_mode), 0o700)
@@ -126,6 +150,7 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
                 "host_clis_absent",
                 "operator_home_absent",
                 "other_workspace_absent",
+                "control_metadata_absent",
                 "bundle_read_only",
                 "outside_write_denied",
                 "data_write_allowed",
@@ -139,7 +164,11 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
                 self.assertTrue(payload[key], key)
             self.assertEqual(payload["memory_limit"], 512 * 1024 * 1024)
             self.assertEqual(payload["open_files_limit"], 256)
-            self.assertEqual((data_root / "allowed.txt").read_text(encoding="utf-8"), "allowed")
+            self.assertEqual((native_data_root / "allowed.txt").read_text(encoding="utf-8"), "allowed")
+            self.assertEqual(
+                (data_root / "official-update.json").read_text(encoding="utf-8"),
+                "host-control",
+            )
 
             self.assertTrue(running.request_slots.acquire(blocking=False))
             try:
@@ -398,6 +427,7 @@ def _probe_server_source(*, operator_secret: Path, other_workspace_secret: Path,
             )),
             "operator_home_absent": not Path({str(operator_secret)!r}).exists(),
             "other_workspace_absent": not Path({str(other_workspace_secret)!r}).exists(),
+            "control_metadata_absent": not Path("/data/official-update.json").exists(),
             "technical_token_present": bool(os.environ.get("PROBE_TOKEN")),
             "memory_limit": resource.getrlimit(resource.RLIMIT_AS)[0],
             "open_files_limit": resource.getrlimit(resource.RLIMIT_NOFILE)[0],

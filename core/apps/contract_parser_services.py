@@ -27,7 +27,9 @@ from core.apps.models import (
 )
 from core.apps.contract_parser_sidecar_artifacts import (
     parse_sidecar_artifact_mounts,
+    parse_sidecar_data_mount,
     parse_sidecar_diagnostics,
+    parse_sidecar_host_prepare,
     parse_sidecar_prewarm,
     parse_sidecar_root_filesystem,
 )
@@ -99,6 +101,8 @@ def _parse_http_sidecar(
             "process_policy",
             "artifact_mounts",
             "root_filesystem",
+            "data_mount",
+            "host_prepare",
             "model_access",
             "prewarm",
             "diagnostics",
@@ -143,6 +147,25 @@ def _parse_http_sidecar(
             label=label,
         )
         if root_filesystem_payload is not None
+        else None
+    )
+    data_mount_payload = payload.get("data_mount")
+    data_mount = (
+        parse_sidecar_data_mount(
+            _expect_mapping(data_mount_payload, label=f"{label}.data_mount"),
+            label=label,
+        )
+        if data_mount_payload is not None
+        else None
+    )
+    host_prepare_payload = payload.get("host_prepare")
+    host_prepare = (
+        parse_sidecar_host_prepare(
+            source_root,
+            _expect_mapping(host_prepare_payload, label=f"{label}.host_prepare"),
+            label=label,
+        )
+        if host_prepare_payload is not None
         else None
     )
     model_access_payload = payload.get("model_access")
@@ -211,6 +234,8 @@ def _parse_http_sidecar(
         process_policy=process_policy,
         artifact_mounts=artifact_mounts,
         root_filesystem=root_filesystem,
+        data_mount=data_mount,
+        host_prepare=host_prepare,
         model_access=model_access,
         prewarm=prewarm,
         diagnostics=diagnostics,

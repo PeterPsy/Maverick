@@ -12,11 +12,17 @@ from typing import Any, Callable
 from native_cutover_files import (
     atomic_write_json,
     copy_verified_tree,
-    make_tree_private_writable,
+    fsync_directory,
+    fsync_tree,
     make_tree_read_only,
     real_directory,
 )
 from native_cutover_quiescence import quiesce_native_host, release_native_host
+from native_official_update_recovery import (
+    confirm_writer_stopped,
+    recover_official_update as _recover_official_update,
+    recover_official_update_locked,
+)
 from official_bridge_contracts import (
     probe_delegation_contract,
     read_delegation_contract,
@@ -47,13 +53,13 @@ from official_update_state import (
     utc_now,
     write_update_state,
 )
+from official_update_journal import clear_update_journal, write_update_journal
+from official_update_lock import official_update_lock
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 NATIVE_DATA_DIRECTORY = "opendesign-native"
-WRITER_STOP_ATTEMPTS = 3
 QUARANTINE_ATTEMPTS = 3
-STOPPED_SERVICE_STATES = {"failed", "not_started", "stopped"}
 
 
 def perform_official_update(
@@ -70,9 +76,49 @@ def perform_official_update(
     delegation_probe: Callable[..., dict[str, Any]] = probe_delegation_contract,
     sidecar_control: Callable[[str, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Migrate a stable copy, atomically select it, and recover on startup failure."""
+    """Hold the workspace transaction lock through commit or safe rollback."""
     if confirmed is not True:
         raise OfficialUpdateError("explicit official update confirmation is required")
+    root = real_directory(app_data_root, label="Design Studio data root")
+    control = sidecar_control or _sidecar_control
+    with official_update_lock(root) as acquired:
+        if not acquired:
+            raise OfficialUpdateError("another official update transaction is active")
+        recover_official_update_locked(
+            root,
+            workspace_id=workspace_id,
+            sidecar_control=control,
+            managed_writer_stopped=False,
+            resume_writer=True,
+        )
+        return _perform_official_update_locked(
+            root,
+            artifact_root,
+            release_descriptor,
+            workspace_id=workspace_id,
+            update_id=update_id,
+            install_runner=install_runner,
+            verify_runner=verify_runner,
+            inventory_runner=inventory_runner,
+            delegation_probe=delegation_probe,
+            control=control,
+        )
+
+
+def _perform_official_update_locked(
+    app_data_root: Path,
+    artifact_root: Path,
+    release_descriptor: Path,
+    *,
+    workspace_id: str,
+    update_id: str | None,
+    install_runner: Callable[..., OfficialInstallation],
+    verify_runner: Callable[..., OfficialInstallation],
+    inventory_runner: Callable[..., dict[str, Any]],
+    delegation_probe: Callable[..., dict[str, Any]],
+    control: Callable[[str, str], dict[str, Any]],
+) -> dict[str, Any]:
+    """Migrate a stable copy, atomically select it, and recover on startup failure."""
     root = real_directory(app_data_root, label="Design Studio data root")
     store = real_directory(artifact_root, label="official OpenDesign artifact store")
     native = real_directory(root / NATIVE_DATA_DIRECTORY, label="native OpenDesign data")
@@ -90,10 +136,10 @@ def perform_official_update(
         release=candidate,
     )
     identifier = update_id or new_update_id()
-    control = sidecar_control or _sidecar_control
     previous_delegation = read_delegation_contract(root, previous.release)
     quiesce_native_host(root, cutover_id=identifier)
-    activated = False
+    writer_stopped = False
+    activation_attempted = False
     backup: Path | None = None
     marker: dict[str, Any] | None = None
     baseline_categories = empty_inventory_categories()
@@ -101,13 +147,20 @@ def perform_official_update(
     migration_guard = incomplete_migration_guard()
     work = root / f".{identifier}.work"
     try:
-        _confirm_writer_stopped(
+        confirm_writer_stopped(
             root,
             identifier=identifier,
             workspace_id=workspace_id,
             control=control,
         )
-        backup = _prepare_backup(root, native, previous, identifier)
+        writer_stopped = True
+        backup = _prepare_backup(
+            root,
+            native,
+            previous,
+            previous_delegation,
+            identifier,
+        )
         work.mkdir(mode=0o700)
         baseline_data = work / "baseline-data"
         migrated_data = work / "migrated-data"
@@ -156,6 +209,7 @@ def perform_official_update(
             log_path=backup / "delegation-contract.log",
             delegation_probe=delegation_probe,
         )
+        fsync_tree(migrated_data)
         marker = _marker(
             identifier,
             previous=previous,
@@ -167,18 +221,38 @@ def perform_official_update(
         )
         write_update_state(root, marker)
         retired = work / "retired-data"
-        os.replace(native, retired)
-        activated = True
-        os.replace(migrated_data, native)
-        write_release_selection(root, candidate)
-        write_bridge_contracts(root, candidate, delegation=delegation)
+        activation_attempted = True
         marker.update({"phase": "activating", "updated_at": utc_now()})
         write_update_state(root, marker)
+        write_update_journal(
+            root,
+            update_id=identifier,
+            step="retire_native_intent",
+        )
+        os.replace(native, retired)
+        fsync_directory(root)
+        fsync_directory(work)
+        write_update_journal(root, update_id=identifier, step="native_retired")
+        write_update_journal(
+            root,
+            update_id=identifier,
+            step="activate_candidate_intent",
+        )
+        os.replace(migrated_data, native)
+        fsync_directory(work)
+        fsync_directory(root)
+        write_update_journal(root, update_id=identifier, step="candidate_activated")
+        write_release_selection(root, candidate)
+        write_bridge_contracts(root, candidate, delegation=delegation)
         release_native_host(root, cutover_id=identifier)
         readiness = control("prewarm", workspace_id)
         if readiness.get("ready") is not True:
             raise OfficialUpdateError("the selected official OpenDesign release did not become ready")
-        bridges = _live_bridge_results(root, delegation)
+        bridges = _live_bridge_results(
+            root,
+            delegation,
+            manifest_digest=candidate.manifest_digest,
+        )
         marker.update(
             {
                 "phase": "committed",
@@ -190,26 +264,68 @@ def perform_official_update(
         write_update_state(root, marker)
         _write_backup_evidence(backup, marker)
         make_tree_read_only(backup)
+        clear_update_journal(root, update_id=identifier)
         shutil.rmtree(work, ignore_errors=True)
+        fsync_directory(root)
         return {"update_applied": True, "update": marker}
     except Exception as error:
-        if activated and backup is not None:
-            recovered = _rollback_activated_update(
-                root,
-                native=native,
-                work=work,
-                backup=backup,
+        if marker is not None and backup is not None:
+            try:
+                recovered = recover_official_update_locked(
+                    root,
+                    workspace_id=workspace_id,
+                    sidecar_control=control,
+                    managed_writer_stopped=False,
+                    resume_writer=True,
+                )["update"]
+            except Exception as recovery_error:
+                try:
+                    recovery = _write_recovery_required(
+                        root,
+                        marker,
+                        identifier=identifier,
+                        workspace_id=workspace_id,
+                        control=control,
+                    )
+                except OfficialUpdateError as fence_error:
+                    raise OfficialUpdateError(
+                        "official OpenDesign update recovery requires operator intervention"
+                    ) from fence_error
+                with suppress(Exception):
+                    _write_backup_evidence(backup, recovery)
+                    make_tree_read_only(backup)
+                raise OfficialUpdateError(
+                    "official OpenDesign update recovery requires operator intervention"
+                ) from recovery_error
+            if activation_attempted:
+                return {
+                    "update_applied": False,
+                    "update": recovered,
+                    "error": "candidate_startup_failed",
+                }
+            if isinstance(error, (OfficialUpdateError, OfficialReleaseError)):
+                raise
+            raise OfficialUpdateError("official OpenDesign update failed safely") from error
+        if not writer_stopped:
+            recovery = _recovery_required_marker(
+                identifier,
                 previous=previous,
-                previous_delegation=previous_delegation,
+                candidate=candidate_installation,
+                baseline_inventory=baseline_categories,
+                migrated_inventory=migrated_categories,
+                migration_guard=migration_guard,
+            )
+            write_update_state(root, recovery)
+            _write_recovery_required(
+                root,
+                recovery,
                 identifier=identifier,
                 workspace_id=workspace_id,
                 control=control,
             )
-            return {
-                "update_applied": False,
-                "update": recovered,
-                "error": "candidate_startup_failed",
-            }
+            raise OfficialUpdateError(
+                "official OpenDesign update could not verify the managed writer stop"
+            ) from error
         try:
             _resume_previous_writer(
                 root,
@@ -244,16 +360,6 @@ def perform_official_update(
             raise OfficialUpdateError(
                 "official OpenDesign update recovery requires operator intervention"
             ) from recovery_error
-        if marker is not None:
-            marker.update(
-                {
-                    "phase": "rolled_back",
-                    "updated_at": utc_now(),
-                    "native_ready": True,
-                    "rolled_back": True,
-                }
-            )
-            write_update_state(root, marker)
         shutil.rmtree(work, ignore_errors=True)
         if backup is not None:
             with suppress(Exception):
@@ -269,6 +375,7 @@ def _prepare_backup(
     root: Path,
     native: Path,
     previous: OfficialReleaseSelection,
+    previous_delegation: dict[str, Any],
     identifier: str,
 ) -> Path:
     backups = root / UPDATE_BACKUPS
@@ -279,6 +386,7 @@ def _prepare_backup(
     backup.mkdir(mode=0o700)
     copy_verified_tree(native, backup / "native-data")
     atomic_write_json(backup / "previous-selection.json", previous.payload)
+    atomic_write_json(backup / "previous-delegation.json", previous_delegation)
     return backup
 
 
@@ -299,80 +407,6 @@ def _probe_delegation(
         )
     except Exception:
         return {"state": "degraded", "reason": "public_api_contract_incompatible"}
-
-
-def _rollback_activated_update(
-    root: Path,
-    *,
-    native: Path,
-    work: Path,
-    backup: Path,
-    previous: OfficialReleaseSelection,
-    previous_delegation: dict[str, Any],
-    identifier: str,
-    workspace_id: str,
-    control: Callable[[str, str], dict[str, Any]],
-) -> dict[str, Any]:
-    try:
-        _confirm_writer_stopped(
-            root,
-            identifier=identifier,
-            workspace_id=workspace_id,
-            control=control,
-        )
-        failed = work / "failed-candidate-data"
-        if failed.exists():
-            shutil.rmtree(failed)
-        if native.exists() and not native.is_symlink():
-            os.replace(native, failed)
-        copy_verified_tree(backup / "native-data", native)
-        make_tree_private_writable(native)
-        write_release_selection(root, previous.release, selected_at=previous.selected_at)
-        write_bridge_contracts(root, previous.release, delegation=previous_delegation)
-        release_native_host(root, cutover_id=identifier)
-        readiness = control("prewarm", workspace_id)
-        ready = isinstance(readiness, dict) and readiness.get("ready") is True
-        if not ready:
-            raise OfficialUpdateError(
-                "the previous native OpenDesign writer did not become ready"
-            )
-        state = _read_marker_for_recovery(root)
-        state.update(
-            {
-                "phase": "rolled_back",
-                "updated_at": utc_now(),
-                "native_ready": True,
-                "rolled_back": True,
-                "bridges": {
-                    "model_access": {"state": "unchecked"},
-                    "delegation": previous_delegation,
-                },
-            }
-        )
-        write_update_state(root, state)
-        _write_backup_evidence(backup, state)
-        make_tree_read_only(backup)
-        shutil.rmtree(work, ignore_errors=True)
-        return state
-    except Exception as recovery_error:
-        try:
-            state = _write_recovery_required(
-                root,
-                None,
-                identifier=identifier,
-                workspace_id=workspace_id,
-                control=control,
-                delegation=previous_delegation,
-            )
-        except OfficialUpdateError:
-            raise
-        with suppress(Exception):
-            _write_backup_evidence(backup, state)
-            make_tree_read_only(backup)
-        shutil.rmtree(work, ignore_errors=True)
-        raise OfficialUpdateError(
-            "official OpenDesign update recovery requires operator intervention"
-        ) from recovery_error
 
 
 def _marker(
@@ -444,58 +478,26 @@ def _recovery_required_marker(
     }
 
 
-def _live_bridge_results(root: Path, delegation: dict[str, Any]) -> dict[str, Any]:
+def _live_bridge_results(
+    root: Path,
+    delegation: dict[str, Any],
+    *,
+    manifest_digest: str,
+) -> dict[str, Any]:
     try:
         payload = json.loads((root / "bridge-capabilities.json").read_text(encoding="utf-8"))
-        model = payload.get("model_access") if isinstance(payload, dict) else None
-        if not isinstance(model, dict) or model.get("state") not in {"ready", "degraded", "disabled"}:
+        if not isinstance(payload, dict):
+            raise ValueError("bridge capability payload is invalid")
+        model = payload.get("model_access")
+        if (
+            payload.get("manifest_digest") != manifest_digest
+            or not isinstance(model, dict)
+            or model.get("state") not in {"ready", "degraded", "disabled"}
+        ):
             raise ValueError("model bridge status unavailable")
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
         model = {"state": "degraded", "reason": "post_update_handshake_unavailable"}
     return {"model_access": model, "delegation": delegation}
-
-
-def _confirm_writer_stopped(
-    root: Path,
-    *,
-    identifier: str,
-    workspace_id: str,
-    control: Callable[[str, str], dict[str, Any]],
-) -> None:
-    """Quiesce relaunches and obtain positive Core evidence that no writer runs."""
-    try:
-        quiesce_native_host(root, cutover_id=identifier)
-    except Exception as error:
-        raise OfficialUpdateError(
-            "official OpenDesign update recovery could not restore quiescence"
-        ) from error
-    for _attempt in range(WRITER_STOP_ATTEMPTS):
-        try:
-            response = control("stop", workspace_id)
-        except Exception:
-            continue
-        if isinstance(response, dict) and response.get("ready") is False:
-            return
-    try:
-        status = control("status", workspace_id)
-    except Exception as error:
-        raise OfficialUpdateError(
-            "official OpenDesign update recovery could not confirm the writer stop"
-        ) from error
-    services = status.get("services") if isinstance(status, dict) else None
-    if (
-        isinstance(services, list)
-        and services
-        and all(
-            isinstance(service, dict)
-            and service.get("state") in STOPPED_SERVICE_STATES
-            for service in services
-        )
-    ):
-        return
-    raise OfficialUpdateError(
-        "official OpenDesign update recovery could not confirm the writer stop"
-    )
 
 
 def _write_recovery_required(
@@ -510,7 +512,7 @@ def _write_recovery_required(
     """Persist recovery after either a confirmed stop or durable Core quarantine."""
     quarantine: dict[str, Any] | None = None
     try:
-        _confirm_writer_stopped(
+        confirm_writer_stopped(
             root,
             identifier=identifier,
             workspace_id=workspace_id,
@@ -632,4 +634,22 @@ def _sidecar_control(operation: str, workspace_id: str) -> dict[str, Any]:
     )
 
 
-__all__ = ["OfficialUpdateError", "perform_official_update"]
+def recover_interrupted_official_update(
+    app_data_root: Path,
+    *,
+    workspace_id: str,
+    sidecar_control: Callable[[str, str], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Run the explicit operator recovery action under the workspace lock."""
+    return _recover_official_update(
+        app_data_root,
+        workspace_id=workspace_id,
+        sidecar_control=sidecar_control or _sidecar_control,
+    )
+
+
+__all__ = [
+    "OfficialUpdateError",
+    "perform_official_update",
+    "recover_interrupted_official_update",
+]

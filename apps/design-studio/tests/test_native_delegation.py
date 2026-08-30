@@ -428,6 +428,84 @@ class NativeDelegationTests(unittest.TestCase):
             self.assertEqual(len(json.loads((Path(one) / "delegations/state.json").read_text())["delegations"]), 1)
             self.assertEqual(len(json.loads((Path(two) / "delegations/state.json").read_text())["delegations"]), 1)
 
+    def test_full_terminal_store_prunes_oldest_record_before_capacity_check(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            records = {}
+            for index in range(1000):
+                identifier = f"dlg_{index:032x}"
+                records[identifier] = {
+                    "delegation_id": identifier,
+                    "status": "succeeded",
+                    "created_at": "2999-01-01T00:00:00Z",
+                    "updated_at": f"2999-01-{1 + index // 100:02d}T00:00:00Z",
+                    "completed_at": f"2999-01-{1 + index // 100:02d}T00:00:00Z",
+                }
+            state_path = root / "delegations/state.json"
+            state_path.parent.mkdir(parents=True)
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "delegations": records,
+                        "view_state": {},
+                        "updated_at": "2999-01-10T00:00:00Z",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            new_id = "dlg_" + "f" * 32
+
+            claim = DelegationStore(str(root)).claim(new_id, {"status": "preparing"})
+            persisted = json.loads(state_path.read_text(encoding="utf-8"))["delegations"]
+
+            self.assertTrue(claim.acquired)
+            self.assertIn(new_id, persisted)
+            self.assertEqual(len(persisted), 1000)
+            self.assertNotIn("dlg_" + "0" * 32, persisted)
+
+    def test_terminal_metadata_expires_after_the_explicit_retention_window(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            old_id = "dlg_" + "a" * 32
+            recent_id = "dlg_" + "b" * 32
+            state_path = root / "delegations/state.json"
+            state_path.parent.mkdir(parents=True)
+            state_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "delegations": {
+                            old_id: {
+                                "delegation_id": old_id,
+                                "status": "succeeded",
+                                "created_at": "2020-01-01T00:00:00Z",
+                                "updated_at": "2020-01-01T00:00:00Z",
+                                "completed_at": "2020-01-01T00:00:00Z",
+                            },
+                            recent_id: {
+                                "delegation_id": recent_id,
+                                "status": "succeeded",
+                                "created_at": "2999-01-01T00:00:00Z",
+                                "updated_at": "2999-01-01T00:00:00Z",
+                                "completed_at": "2999-01-01T00:00:00Z",
+                            },
+                        },
+                        "view_state": {},
+                        "updated_at": "2999-01-01T00:00:00Z",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            new_id = "dlg_" + "c" * 32
+            DelegationStore(str(root)).claim(new_id, {"status": "preparing"})
+            persisted = json.loads(state_path.read_text(encoding="utf-8"))["delegations"]
+
+            self.assertNotIn(old_id, persisted)
+            self.assertIn(recent_id, persisted)
+            self.assertIn(new_id, persisted)
+
     def test_state_degrades_only_delegation_when_public_api_is_unavailable(self) -> None:
         class Unavailable:
             def list_projects(self):

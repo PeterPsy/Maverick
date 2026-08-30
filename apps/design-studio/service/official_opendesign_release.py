@@ -18,6 +18,8 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
+import sysconfig
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -387,6 +389,8 @@ def build_official_launch_command(
     port: int,
     api_token: str,
     bridge_mode: str = "disabled",
+    relay_directory: Path | None = None,
+    relay_secret_fd: int | None = None,
 ) -> tuple[list[str], dict[str, str]]:
     """Plan a disposable full-rootfs launch of the official OCI command."""
     root = _real_directory(rootfs, "official rootfs")
@@ -422,6 +426,7 @@ def build_official_launch_command(
         "--gid",
         "1001",
         "--unshare-pid",
+        "--unshare-net",
         "--unshare-ipc",
         "--unshare-uts",
         "--ro-bind",
@@ -437,9 +442,64 @@ def build_official_launch_command(
         "--tmpfs",
         "/tmp",
     ]
+    launch_command = [*release.entrypoint, *release.command]
+    if relay_directory is not None or relay_secret_fd is not None:
+        if relay_directory is None or relay_secret_fd is None or relay_secret_fd < 0:
+            raise OfficialReleaseError("disposable OpenDesign relay configuration is incomplete")
+        relay = _real_directory(relay_directory, "disposable API relay directory")
+        if stat.S_IMODE(relay.stat().st_mode) != 0o700:
+            raise OfficialReleaseError("disposable API relay directory must be private")
+        runtime_mounts, relay_python, relay_script = _disposable_relay_runtime()
+        command.extend(
+            [
+                "--tmpfs",
+                "/run",
+                "--dir",
+                "/run/maverick-python",
+                "--dir",
+                "/run/maverick-python/lib",
+                "--dir",
+                "/run/maverick-python/glibc",
+                "--dir",
+                "/run/maverick-relay",
+                *runtime_mounts,
+                "--bind",
+                str(relay),
+                "/run/maverick-relay",
+                "--ro-bind",
+                str(relay_script),
+                "/run/maverick-sidecar-relay.py",
+            ]
+        )
+        launch_command = [
+            *relay_python,
+            "/run/maverick-sidecar-relay.py",
+            "--relay-socket",
+            "/run/maverick-relay/api.sock",
+            "--secret-fd",
+            str(relay_secret_fd),
+            "--target-host",
+            "127.0.0.1",
+            "--target-port",
+            str(port),
+            "--workdir",
+            release.working_directory,
+            "--memory-bytes",
+            str(32 * 1024 * 1024 * 1024),
+            "--open-files",
+            "1024",
+            "--request-concurrency",
+            "16",
+            "--unset-child-env",
+            "PYTHONHOME",
+            "--",
+            *release.entrypoint,
+            *release.command,
+        ]
+        environment["PYTHONHOME"] = "/run/maverick-python"
     for key, value in environment.items():
         command.extend(["--setenv", key, value])
-    command.extend(["--chdir", release.working_directory, *release.entrypoint, *release.command])
+    command.extend(["--chdir", release.working_directory, *launch_command])
     return command, environment
 
 
@@ -450,6 +510,8 @@ def launch_disposable_official_release(
     port: int,
     api_token: str,
     bridge_mode: str = "disabled",
+    relay_directory: Path | None = None,
+    relay_secret_fd: int | None = None,
     stdout: Any = subprocess.DEVNULL,
     stderr: Any = subprocess.DEVNULL,
 ) -> subprocess.Popen[bytes]:
@@ -461,12 +523,55 @@ def launch_disposable_official_release(
         port=port,
         api_token=api_token,
         bridge_mode=bridge_mode,
+        relay_directory=relay_directory,
+        relay_secret_fd=relay_secret_fd,
     )
     host_env = {"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"), **environment}
     try:
-        return subprocess.Popen(command, env=host_env, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr)
+        return subprocess.Popen(
+            command,
+            env=host_env,
+            stdin=subprocess.DEVNULL,
+            stdout=stdout,
+            stderr=stderr,
+            pass_fds=((relay_secret_fd,) if relay_secret_fd is not None else ()),
+        )
     except OSError as error:
         raise OfficialReleaseError("official OpenDesign disposable process could not start") from error
+
+
+def _disposable_relay_runtime() -> tuple[list[str], list[str], Path]:
+    """Return the minimal host Python closure used only by the local API relay."""
+    python_binary = Path(sys.executable).resolve()
+    python_stdlib = Path(sysconfig.get_path("stdlib")).resolve()
+    multiarch = str(sysconfig.get_config_var("MULTIARCH") or "").strip()
+    shared_libraries = Path("/usr/lib") / multiarch
+    loader = Path("/usr/lib64/ld-linux-x86-64.so.2").resolve()
+    relay_script = Path(__file__).resolve().parents[3] / "core/apps/sidecar_relay.py"
+    required = (python_binary, python_stdlib, shared_libraries, loader, relay_script)
+    if any(not path.exists() for path in required):
+        raise OfficialReleaseError("disposable OpenDesign relay runtime is unavailable")
+    mounts = [
+        "--ro-bind",
+        str(loader),
+        "/run/maverick-python/ld.so",
+        "--ro-bind",
+        str(python_binary),
+        "/run/maverick-python/python3",
+        "--ro-bind",
+        str(python_stdlib),
+        f"/run/maverick-python/lib/{python_stdlib.name}",
+        "--ro-bind",
+        str(shared_libraries),
+        "/run/maverick-python/glibc",
+    ]
+    relay_python = [
+        "/run/maverick-python/ld.so",
+        "--library-path",
+        "/run/maverick-python/glibc",
+        "/run/maverick-python/python3",
+    ]
+    return mounts, relay_python, relay_script.resolve(strict=True)
 
 
 def _verify_pulled_identity(pulled: PulledRelease, release: OfficialRelease) -> None:

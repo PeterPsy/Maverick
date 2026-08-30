@@ -21,6 +21,7 @@ from native_cutover_state import (
 )
 from native_cutover_quiescence import quiesce_native_host, release_native_host
 from native_data_cutover import perform_native_data_cutover
+from managed_sidecar_stop import require_verified_writer_stop
 from official_opendesign_release import OfficialReleaseError, verify_official_installation
 
 
@@ -128,8 +129,16 @@ def _stop_managed_writer(
     except Exception:
         _require_core_inactive()
         return
-    if stopped.get("ready") is not False:
-        raise NativeDataCutoverError("Core did not confirm the OpenDesign writer stop")
+    try:
+        require_verified_writer_stop(
+            stopped,
+            workspace_id=workspace_id,
+            app_data_root=app_data_root,
+        )
+    except ValueError as error:
+        raise NativeDataCutoverError(
+            "Core did not confirm the OpenDesign writer stop"
+        ) from error
 
 
 def _require_core_inactive() -> None:

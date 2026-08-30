@@ -36,7 +36,24 @@ class NativeCutoverQuiescenceTests(unittest.TestCase):
             )
         with patch(
             "cutover_native_opendesign._request_sidecar_control",
-            return_value={"ready": False, "stopped_service_count": 1},
+            return_value={
+                "workspace_id": "default",
+                "app_id": "design-studio",
+                "data_root": str(self.root.resolve()),
+                "ready": False,
+                "browser_sessions_revoked": True,
+                "declared_service_count": 1,
+                "stopped_service_count": 1,
+                "verified_stopped_service_count": 1,
+                "services": [
+                    {
+                        "sidecar_id": "opendesign",
+                        "previous_instance_id": "instance-1",
+                        "live_instance_id": None,
+                        "state": "stopped",
+                    }
+                ],
+            },
         ) as control:
             _stop_managed_writer(
                 self.root,
@@ -45,6 +62,47 @@ class NativeCutoverQuiescenceTests(unittest.TestCase):
             )
         control.assert_called_once_with("stop", workspace_id="default")
         self.assertTrue((self.root / "native-cutover-quiesce.json").is_file())
+
+    def test_zero_or_wrong_workspace_stop_evidence_is_rejected(self) -> None:
+        invalid = (
+            {
+                "workspace_id": "wrong",
+                "app_id": "design-studio",
+                "data_root": str(self.root.resolve()),
+                "ready": False,
+                "browser_sessions_revoked": True,
+                "declared_service_count": 1,
+                "verified_stopped_service_count": 1,
+                "services": [
+                    {
+                        "sidecar_id": "opendesign",
+                        "live_instance_id": None,
+                        "state": "stopped",
+                    }
+                ],
+            },
+            {
+                "workspace_id": "default",
+                "app_id": "design-studio",
+                "data_root": str(self.root.resolve()),
+                "ready": False,
+                "browser_sessions_revoked": True,
+                "declared_service_count": 0,
+                "verified_stopped_service_count": 0,
+                "services": [],
+            },
+        )
+        for response in invalid:
+            with self.subTest(response=response), patch(
+                "cutover_native_opendesign._request_sidecar_control",
+                return_value=response,
+            ):
+                with self.assertRaisesRegex(NativeDataCutoverError, "did not confirm"):
+                    _stop_managed_writer(
+                        self.root,
+                        cutover_id="native_invalid_stop_test",
+                        confirmed=True,
+                    )
 
     def test_quiescence_blocks_relaunch_until_the_matching_cutover_releases_it(self) -> None:
         quiesce_native_host(self.root, cutover_id="native_quiesce_test")

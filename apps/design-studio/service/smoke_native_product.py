@@ -1293,7 +1293,7 @@ def _sandboxed_native_launch(
         sandbox_rootfs = Path("/artifacts/opendesign") / rootfs.relative_to(artifact_namespace)
     except ValueError as error:
         raise OfficialReleaseError("official installation escaped its artifact namespace") from error
-    sandbox_data = Path("/data/opendesign-native")
+    sandbox_data = Path("/data")
     translated_environment = {
         key: _translate_sandbox_path(
             value,
@@ -1366,8 +1366,6 @@ def _sandboxed_native_launch(
         str(sandbox_runtime),
         "--dir",
         "/data",
-        "--dir",
-        str(sandbox_data),
         "--bind",
         str(native.resolve()),
         str(sandbox_data),
@@ -1409,7 +1407,7 @@ def _translate_sandbox_path(
 def _assert_profile_contains_no_capability(native: Path, token: str) -> None:
     rendered = "\n".join(
         (native / relative).read_text(encoding="utf-8")
-        for relative in (SANDBOX_PROFILE_PATH.relative_to("/data/opendesign-native"), API_CONFIG_PATH)
+        for relative in (SANDBOX_PROFILE_PATH.relative_to("/data"), API_CONFIG_PATH)
     )
     if token in rendered:
         raise OfficialReleaseError("a model-access capability was persisted in native data")
@@ -1427,13 +1425,13 @@ def _scope_contains_cwd(scope: ModelAccessScope, cwd: str) -> bool:
     sidecar_path = PurePosixPath(cwd)
     if (
         not sidecar_path.is_absolute()
-        or sidecar_path.parts[:3] != ("/", "data", "opendesign-native")
+        or sidecar_path.parts[:2] != ("/", "data")
         or ".." in sidecar_path.parts
     ):
         return False
     root = scope.data_root.resolve(strict=True)
     try:
-        candidate = root.joinpath(*sidecar_path.parts[3:]).resolve(strict=True)
+        candidate = root.joinpath(*sidecar_path.parts[2:]).resolve(strict=True)
     except OSError:
         return False
     return candidate == root or root in candidate.parents

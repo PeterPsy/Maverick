@@ -225,6 +225,22 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                         else {}
                     ),
                     **(
+                        {"data_mount": {"subpath": sidecar.data_mount.subpath}}
+                        if sidecar.data_mount is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "host_prepare": {
+                                "entrypoint": sidecar.host_prepare.entrypoint,
+                                "timeout_seconds": sidecar.host_prepare.timeout_seconds,
+                                "environment_keys": sidecar.host_prepare.environment_keys,
+                            }
+                        }
+                        if sidecar.host_prepare is not None
+                        else {}
+                    ),
+                    **(
                         {
                             "model_access": {
                                 "api": sidecar.model_access.api,

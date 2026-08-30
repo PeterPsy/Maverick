@@ -189,6 +189,12 @@ def prepare_confined_sidecar_launch(
         sidecar,
         artifact_root=execution_root is not None,
     )
+    data = resolve_sidecar_data_root(
+        workspace_root=workspace,
+        app_id=app_id,
+        data_root=data_root,
+        sidecar=sidecar,
+    )
     app_data_path = workspace / "data" / app_id
     lexical_data = Path(os.path.abspath(data_root))
     try:
@@ -198,10 +204,9 @@ def prepare_confined_sidecar_launch(
     _reject_symlink_components(app_data_path, anchor=workspace, label="app-owned workspace data root")
     _reject_symlink_components(lexical_data, anchor=workspace, label="sidecar data root")
     app_data_root = app_data_path.resolve()
-    data = lexical_data.resolve()
-    if data != app_data_root and app_data_root not in data.parents:
+    binding_data = lexical_data.resolve()
+    if binding_data != app_data_root and app_data_root not in binding_data.parents:
         raise AppHostingError("Sidecar data root must stay within its app-owned workspace data root.")
-    _ensure_real_directory(data, label="sidecar data root", create=True)
     _reject_symlink_components(lexical_data, anchor=workspace, label="sidecar data root")
 
     app_source_root = _SANDBOX_ROOTFS_APP_SOURCE_ROOT if execution_root is not None else _SANDBOX_APP_ROOT
@@ -372,6 +377,50 @@ def prepare_confined_sidecar_launch(
         passwd_fd=passwd_fd,
         model_access_release=model_access_release,
     )
+
+
+def resolve_sidecar_data_root(
+    *,
+    workspace_root: Path,
+    app_id: str,
+    data_root: Path,
+    sidecar: HttpSidecarSpec,
+) -> Path:
+    """Resolve the sole app-data subtree exposed to a confined sidecar."""
+    workspace = _require_real_directory(workspace_root, label="workspace root")
+    app_data_path = workspace / "data" / app_id
+    lexical_binding = Path(os.path.abspath(data_root))
+    try:
+        lexical_binding.relative_to(app_data_path)
+    except ValueError as error:
+        raise AppHostingError(
+            "Sidecar data root must stay within its app-owned workspace data root."
+        ) from error
+    _reject_symlink_components(
+        app_data_path,
+        anchor=workspace,
+        label="app-owned workspace data root",
+    )
+    _reject_symlink_components(
+        lexical_binding,
+        anchor=workspace,
+        label="sidecar data root",
+    )
+    app_data_root = app_data_path.resolve()
+    binding = lexical_binding.resolve()
+    if binding != app_data_root and app_data_root not in binding.parents:
+        raise AppHostingError(
+            "Sidecar data root must stay within its app-owned workspace data root."
+        )
+    selected = lexical_binding
+    if sidecar.data_mount is not None:
+        selected = lexical_binding.joinpath(*sidecar.data_mount.subpath.split("/"))
+    _reject_symlink_components(selected, anchor=workspace, label="sidecar data mount")
+    resolved = _ensure_real_directory(selected, label="sidecar data mount", create=True)
+    if resolved != binding and binding not in resolved.parents:
+        raise AppHostingError("Sidecar data mount escapes its binding data root.")
+    _reject_symlink_components(selected, anchor=workspace, label="sidecar data mount")
+    return resolved
 
 
 def _require_model_access_directory(path: Path) -> Path:

@@ -12,16 +12,11 @@ from official_opendesign_release import (
     OfficialRelease,
     OfficialReleaseError,
     load_official_release,
+    load_official_release_payload,
     verify_official_installation,
 )
-from official_bridge_contracts import (
-    bundled_delegation_contract,
-    read_delegation_contract,
-    write_bridge_contracts,
-)
-from official_release_selection import ensure_release_selection
-from native_cutover_quiescence import reject_if_native_host_quiesced
-from native_cutover_state import NativeDataCutoverError
+from official_bridge_contracts import validate_delegation_status
+from official_oci_validation import reject_duplicate_pairs
 from model_access_client import ModelAccessClient, ModelAccessClientError, ModelAccessConfiguration
 from model_access_profiles import (
     SANDBOX_PROFILE_PATH,
@@ -38,7 +33,8 @@ from opencode_runtime import OpenCodeRuntimeError, RUNTIME_RELATIVE_PATH, verify
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 OFFICIAL_STORE_MOUNT = Path("/artifacts/opendesign")
-HOST_STATUS_FILE = "native-host-status.json"
+SIDECAR_DATA_MOUNT = Path("/data")
+LAUNCH_CONFIGURATION_ENV = "MAVERICK_APP_OPENDESIGN_LAUNCH_CONFIGURATION"
 
 
 def main() -> None:
@@ -54,40 +50,16 @@ def main() -> None:
     )
     data_dir = _required_directory(
         Path(_required_env("MAVERICK_OPENDESIGN_DATA_DIR")),
+        expected=SIDECAR_DATA_MOUNT,
         create=True,
         label="OpenDesign data directory",
     )
-    try:
-        reject_if_native_host_quiesced(data_dir.parent)
-    except NativeDataCutoverError as error:
-        raise OfficialReleaseError(str(error)) from error
-    bundled_release = load_official_release()
-    selection = ensure_release_selection(data_dir.parent, bundled_release)
-    release = selection.release
+    release, _delegation_status = _launch_configuration()
     installation_path = store_root / "official" / release.digest_key
     installation = verify_official_installation(installation_path, expected_release=release)
-    delegation_status = read_delegation_contract(data_dir.parent, release)
-    if (
-        delegation_status.get("state") == "degraded"
-        and release.manifest_digest == bundled_release.manifest_digest
-    ):
-        write_bridge_contracts(
-            data_dir.parent,
-            release,
-            delegation=bundled_delegation_contract(),
-        )
-        delegation_status = read_delegation_contract(data_dir.parent, release)
-    model_bridge, model_status, model_profile_path = _configure_model_access(
+    model_bridge, _model_status, model_profile_path = _configure_model_access(
         data_dir,
         artifact_root=store_root,
-    )
-    _write_bridge_capabilities(
-        data_dir.parent,
-        {
-            "schema_version": "1",
-            "model_access": model_status,
-            "delegation": delegation_status,
-        },
     )
     command, environment, cwd = build_native_launch(
         release=release,
@@ -98,26 +70,6 @@ def main() -> None:
         api_token=api_token,
         model_profile_path=model_profile_path,
     )
-    host_status = {
-        "schema_version": "1",
-        "mode": "official-native",
-        "image": release.image,
-        "version": release.version,
-        "manifest_digest": release.manifest_digest,
-        "rootfs_snapshot_sha256": installation.rootfs_snapshot_sha256,
-        "customizations": [],
-        "model_bridge": model_status,
-        "delegation_bridge": delegation_status,
-        "direct_delegation_bridge": "disabled",
-    }
-    _write_host_status(data_dir.parent, {**host_status, "state": "starting"})
-
-    def state_changed(state: str, exit_code: int | None) -> None:
-        payload = {**host_status, "state": state}
-        if exit_code is not None:
-            payload["process_exit_code"] = exit_code
-        _write_host_status(data_dir.parent, payload)
-
     try:
         os.chdir(cwd)
         supervise_official_process(
@@ -130,7 +82,7 @@ def main() -> None:
                 port=port,
                 api_token=api_token,
             ),
-            state_changed=state_changed,
+            state_changed=lambda _state, _exit_code: None,
         )
     except OSError as error:
         raise SystemExit(f"Official OpenDesign process could not start: {error}") from error
@@ -361,27 +313,36 @@ def _port(value: str) -> int:
     return port
 
 
-def _write_host_status(root: Path, payload: dict[str, Any]) -> None:
-    _write_private_json(root / HOST_STATUS_FILE, payload)
-
-
-def _write_bridge_capabilities(root: Path, payload: dict[str, Any]) -> None:
-    _write_private_json(root / "bridge-capabilities.json", payload)
-
-
-def _write_private_json(path: Path, payload: dict[str, Any]) -> None:
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    body = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8") + b"\n"
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    descriptor = os.open(temporary, flags, 0o600)
+def _launch_configuration() -> tuple[OfficialRelease, dict[str, Any]]:
+    raw = _required_env(LAUNCH_CONFIGURATION_ENV)
+    if len(raw.encode("utf-8")) > 64 * 1024:
+        raise OfficialReleaseError("official OpenDesign launch configuration is too large")
     try:
-        os.write(descriptor, body)
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-    os.replace(temporary, path)
+        payload = json.loads(raw, object_pairs_hook=reject_duplicate_pairs)
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
+        raise OfficialReleaseError(
+            "official OpenDesign launch configuration is unreadable"
+        ) from error
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"schema_version", "release", "delegation"}
+        or payload.get("schema_version") != "1"
+        or not isinstance(payload.get("release"), dict)
+    ):
+        raise OfficialReleaseError(
+            "official OpenDesign launch configuration schema is invalid"
+        )
+    release = load_official_release_payload(
+        payload["release"],
+        require_bundled_pin=False,
+    )
+    try:
+        delegation = validate_delegation_status(payload.get("delegation"))
+    except ValueError as error:
+        raise OfficialReleaseError(
+            "official OpenDesign launch delegation status is invalid"
+        ) from error
+    return release, delegation
 
 
 if __name__ == "__main__":

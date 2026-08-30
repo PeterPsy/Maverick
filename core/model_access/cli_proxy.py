@@ -20,6 +20,7 @@ from core.model_access.cancellation import (
     submission_fence,
 )
 from core.model_access.cli_sandbox import (
+    codex_home_lock as _codex_home_execution_lock,
     codex_sandbox_command as _codex_sandbox_command,
     is_opendesign_connection_probe as _is_opendesign_connection_probe,
     map_sidecar_path as _map_sidecar_path,
@@ -73,7 +74,7 @@ class CodexCliExecutor:
             workspace_context = tempfile.TemporaryDirectory(prefix="codex-", dir=probe_parent)
         else:
             workspace_context = _ExistingDirectory(scope.data_root)
-        with workspace_context as workspace:
+        with _codex_home_execution_lock(cli_home), workspace_context as workspace:
             raise_if_cancelled(cancellation)
             command = _codex_sandbox_command(
                 executable=executable,

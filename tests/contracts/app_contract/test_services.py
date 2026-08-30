@@ -179,6 +179,63 @@ class AppContractServiceTests(unittest.TestCase):
                 with self.assertRaisesRegex(AppContractValidationError, expected):
                     parse_app_contract_file(app_root)
 
+    def test_scoped_data_mount_and_host_prepare_round_trip(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = self._write_sidecar_app(Path(temp_dir))
+            (app_root / "hooks").mkdir()
+            (app_root / "hooks" / "prepare.py").write_text("print('{}')\n", encoding="utf-8")
+            payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+            sidecar = payload["services"]["http_sidecars"][0]
+            sidecar["data_mount"] = {"subpath": "opendesign-native"}
+            sidecar["host_prepare"] = {
+                "entrypoint": "hooks/prepare.py",
+                "timeout_seconds": 30,
+                "environment_keys": ["MAVERICK_APP_LAUNCH_CONFIGURATION"],
+            }
+            (app_root / "app_contract.json").write_text(
+                json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+            )
+
+            loaded = parse_app_contract_file(app_root)
+            parsed_sidecar = loaded.contract.services.http_sidecars[0]
+
+            self.assertEqual(parsed_sidecar.data_mount.subpath, "opendesign-native")
+            self.assertEqual(
+                parsed_sidecar.host_prepare.environment_keys,
+                ["MAVERICK_APP_LAUNCH_CONFIGURATION"],
+            )
+            self.assertEqual(
+                app_contract_payload(loaded)["services"]["http_sidecars"][0]["data_mount"],
+                sidecar["data_mount"],
+            )
+            restored = _contract_store()._app_contract(asdict(loaded.contract))
+            self.assertEqual(restored.services.http_sidecars[0].data_mount, parsed_sidecar.data_mount)
+            self.assertEqual(restored.services.http_sidecars[0].host_prepare, parsed_sidecar.host_prepare)
+
+    def test_scoped_data_mount_and_host_prepare_fail_closed(self) -> None:
+        mutations = (
+            ("data_mount", {"subpath": "../delegations"}, "canonical path"),
+            (
+                "host_prepare",
+                {
+                    "entrypoint": "service/server.py",
+                    "timeout_seconds": 30,
+                    "environment_keys": ["OD_API_TOKEN"],
+                },
+                "app-owned key",
+            ),
+        )
+        for field, value, expected in mutations:
+            with self.subTest(field=field), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                payload["services"]["http_sidecars"][0][field] = value
+                (app_root / "app_contract.json").write_text(
+                    json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(AppContractValidationError, expected):
+                    parse_app_contract_file(app_root)
+
     def test_parse_contract_rejects_unknown_provider_credential_source(self) -> None:
         with TemporaryDirectory() as temp_dir:
             app_root = self._write_sidecar_app(Path(temp_dir))

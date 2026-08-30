@@ -460,7 +460,7 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertEqual(prepared.returncode, 0, prepared.stderr)
         recovered = json.loads((self.data_root / "official-update.json").read_text())
         self.assertEqual(recovered["phase"], "rolled_back")
-        self.assertTrue(recovered["native_ready"])
+        self.assertFalse(recovered["native_ready"])
         self.assertFalse((self.data_root / "native-cutover-quiesce.json").exists())
 
     def test_crash_during_backup_build_ignores_partial_backup_on_startup_recovery(self) -> None:
@@ -514,7 +514,7 @@ class OfficialUpdateTests(unittest.TestCase):
         self.assertEqual(prepared.returncode, 0, prepared.stderr)
         recovered = json.loads((self.data_root / "official-update.json").read_text())
         self.assertEqual(recovered["phase"], "rolled_back")
-        self.assertTrue(recovered["native_ready"])
+        self.assertFalse(recovered["native_ready"])
         self.assertFalse(staging.exists())
         self.assertEqual(
             (self.native / "project.txt").read_text(encoding="utf-8"),
@@ -545,6 +545,71 @@ class OfficialUpdateTests(unittest.TestCase):
             (self.native / "post-prewarm-write.txt").read_text(encoding="utf-8"),
             "must-survive",
         )
+
+    def test_host_prepare_never_claims_post_spawn_readiness(self) -> None:
+        def unavailable(operation: str, _workspace_id: str) -> dict:
+            return {"ready": False}
+
+        result = self._run(unavailable)
+        self.assertEqual(result["update"]["phase"], "committed")
+        self.assertFalse(result["update"]["native_ready"])
+
+        environment = dict(__import__("os").environ)
+        environment["PYTHONPATH"] = str(APP_ROOT.parents[1])
+        prepared = subprocess.run(
+            [sys.executable, str(APP_ROOT / "hooks" / "sidecar_prepare.py")],
+            input=json.dumps(
+                {
+                    "app_id": "design-studio",
+                    "workspace_id": "default",
+                    "data_root": str(self.data_root),
+                    "sidecar_id": "opendesign",
+                    "managed_writer_stopped": True,
+                }
+            ),
+            text=True,
+            capture_output=True,
+            check=False,
+            env=environment,
+        )
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        after_prepare = json.loads(
+            (self.data_root / "official-update.json").read_text(encoding="utf-8")
+        )
+        self.assertFalse(after_prepare["native_ready"])
+        backup = self.data_root / result["update"]["backup_directory"]
+        self.assertFalse(backup.stat().st_mode & 0o222)
+
+        (self.data_root / "native-host-status.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "1",
+                    "mode": "official-native",
+                    "state": "ready",
+                    "manifest_digest": self.candidate.manifest_digest,
+                    "model_bridge": {
+                        "state": "ready",
+                        "semantic_enrichment": False,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        calls: list[str] = []
+
+        def verified(operation: str, workspace_id: str) -> dict:
+            calls.append(operation)
+            return self._verified_control(operation, workspace_id)
+
+        recovered = recover_interrupted_official_update(
+            self.data_root,
+            workspace_id="default",
+            sidecar_control=verified,
+        )
+
+        self.assertEqual(calls, ["prewarm"])
+        self.assertTrue(recovered["recovered"])
+        self.assertTrue(recovered["update"]["native_ready"])
 
     def test_crash_after_prewarm_preserves_candidate_writes_during_recovery(self) -> None:
         def control(operation: str, _workspace_id: str) -> dict:
@@ -637,7 +702,7 @@ class OfficialUpdateTests(unittest.TestCase):
 
         recovered = json.loads((self.data_root / "official-update.json").read_text())
         self.assertEqual(recovered["phase"], "rolled_back")
-        self.assertTrue(recovered["native_ready"])
+        self.assertFalse(recovered["native_ready"])
         self.assertEqual((self.native / "project.txt").read_text(), "semantic design content")
         self.assertFalse((self.native / "upstream-migration").exists())
         self.assertFalse((self.data_root / "official-update-cutover-journal.json").exists())
@@ -648,8 +713,9 @@ class OfficialUpdateTests(unittest.TestCase):
             workspace_id="default",
             sidecar_control=self._verified_control,
         )
-        self.assertFalse(explicit["recovered"])
+        self.assertTrue(explicit["recovered"])
         self.assertEqual(explicit["update"]["phase"], "rolled_back")
+        self.assertTrue(explicit["update"]["native_ready"])
 
     def test_update_lock_rejects_a_concurrent_transaction(self) -> None:
         with official_update_lock(self.data_root) as acquired:

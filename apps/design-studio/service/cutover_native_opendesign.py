@@ -23,6 +23,7 @@ from native_cutover_quiescence import quiesce_native_host, release_native_host
 from native_data_cutover import perform_native_data_cutover
 from managed_sidecar_evidence import (
     require_verified_writer_ready,
+    require_verified_writer_status,
     require_verified_writer_stop,
 )
 from official_opendesign_release import OfficialReleaseError, verify_official_installation
@@ -57,6 +58,10 @@ def main() -> None:
     if args.action == "activate":
         if not args.confirm_writers_stopped:
             raise NativeDataCutoverError("explicit writer-stop confirmation is required")
+        _require_managed_writer_binding(
+            args.data_root,
+            workspace_id=args.workspace_id,
+        )
         begin_native_writer_activation(args.data_root, cutover_id=args.cutover_id)
         release_native_host(args.data_root, cutover_id=args.cutover_id)
         try:
@@ -160,6 +165,25 @@ def _require_managed_writer_ready(
     except ValueError as error:
         raise NativeDataCutoverError(
             "Core did not confirm native OpenDesign readiness for the requested binding"
+        ) from error
+
+
+def _require_managed_writer_binding(
+    app_data_root: Path,
+    *,
+    workspace_id: str,
+) -> dict[str, Any]:
+    """Verify the stopped canonical binding before rollback becomes irreversible."""
+    status = _request_sidecar_control("status", workspace_id=workspace_id)
+    try:
+        return require_verified_writer_status(
+            status,
+            workspace_id=workspace_id,
+            app_data_root=app_data_root,
+        )
+    except ValueError as error:
+        raise NativeDataCutoverError(
+            "Core did not confirm the stopped native OpenDesign binding"
         ) from error
 
 

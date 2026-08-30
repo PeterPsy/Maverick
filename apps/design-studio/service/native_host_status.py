@@ -24,7 +24,7 @@ def read_live_model_bridge(
     unavailable_reason: str,
     wait_seconds: float = 0.0,
 ) -> dict[str, Any]:
-    """Read the matching ready-launch handshake, waiting only on `starting`."""
+    """Read a matching ready handshake through bounded in-place rewrite races."""
     deadline = time.monotonic() + max(0.0, wait_seconds)
     while True:
         payload = _read_host_status(Path(app_data_root) / HOST_STATUS_FILE)
@@ -34,10 +34,12 @@ def read_live_model_bridge(
         )
         if model is not None:
             return model
-        if not _is_matching_startup(payload, manifest_digest=manifest_digest):
-            break
         remaining = deadline - time.monotonic()
-        if remaining <= 0:
+        waitable = not payload or _is_matching_startup(
+            payload,
+            manifest_digest=manifest_digest,
+        )
+        if remaining <= 0 or not waitable:
             break
         time.sleep(min(0.05, remaining))
     return {

@@ -316,6 +316,10 @@ def _perform_official_update_locked(
             )
             with suppress(Exception):
                 write_update_state(root, marker)
+            if backup is not None:
+                with suppress(Exception):
+                    _write_backup_evidence(backup, marker)
+                    make_tree_read_only(backup)
             return {
                 "update_applied": True,
                 "update": marker,

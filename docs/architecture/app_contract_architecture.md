@@ -982,6 +982,10 @@ general secret channel: values are size-bounded, raw provider credentials are
 forbidden, and only trusted app source may declare the hook. The pattern lets a
 host transaction recover journals and project a digest-validated product
 selection without exposing the transaction root to the product process.
+Because this hook runs before sandbox preparation and process spawn, it may
+make a transaction launchable but must not persist process readiness. Only
+post-spawn evidence from the live manager may transition durable state to
+ready.
 
 When a narrowed sidecar also declares `diagnostics.status_file`, that path
 remains relative to the binding's app-data root but does not widen `/data`.
@@ -991,8 +995,10 @@ content before launch, and bind-mounts only its inode at the fixed
 release controls, journals, and backups remain absent. Core injects the fixed
 path itself; app static environment and `host_prepare` output cannot choose a
 host path. A launcher must update the bound file in place rather than replacing
-the mount inode. This surface is redaction-safe operational evidence, never an
-authorization or release-selection input.
+the mount inode. Readers that request a bounded live handshake must tolerate
+empty or incomplete reads while that in-place rewrite is in progress. This
+surface is redaction-safe operational evidence, never an authorization or
+release-selection input.
 
 A sidecar with `permissions.providers.model_proxy: true` may additionally
 request an optional private model transport:

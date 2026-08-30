@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import signal
 import sys
 import tempfile
+from threading import Event
+import time
 import unittest
 from unittest.mock import patch
 
@@ -188,6 +191,76 @@ class NativeThinHostTests(unittest.TestCase):
             self.assertEqual(payload["state"], "ready")
             self.assertEqual(payload["model_bridge"]["state"], "ready")
             self.assertFalse(payload["model_bridge"]["semantic_enrichment"])
+
+    def test_live_handshake_waits_through_an_in_place_status_rewrite(self) -> None:
+        import native_host_status
+        from opendesign_launcher import _write_bound_status
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            status_file = root / "native-host-status.json"
+            status_file.write_text('{"state":"starting"}\n', encoding="utf-8")
+            status_file.chmod(0o600)
+            manifest_digest = "f" * 64
+            payload = {
+                "schema_version": "1",
+                "mode": "official-native",
+                "state": "ready",
+                "manifest_digest": manifest_digest,
+                "model_bridge": {
+                    "state": "ready",
+                    "semantic_enrichment": False,
+                },
+            }
+            truncated = Event()
+            continue_write = Event()
+            read_started = Event()
+            real_truncate = __import__("os").ftruncate
+            real_read = native_host_status._read_host_status
+
+            def paused_truncate(descriptor: int, length: int) -> None:
+                real_truncate(descriptor, length)
+                truncated.set()
+                if not continue_write.wait(2):
+                    raise TimeoutError("test writer was not released")
+
+            def observed_read(path: Path) -> dict:
+                read_started.set()
+                return real_read(path)
+
+            with (
+                patch(
+                    "opendesign_launcher.os.ftruncate",
+                    side_effect=paused_truncate,
+                ),
+                patch(
+                    "native_host_status._read_host_status",
+                    side_effect=observed_read,
+                ),
+                ThreadPoolExecutor(max_workers=2) as pool,
+            ):
+                writer = pool.submit(_write_bound_status, status_file, payload)
+                self.assertTrue(truncated.wait(1))
+                reader = pool.submit(
+                    native_host_status.read_live_model_bridge,
+                    root,
+                    manifest_digest=manifest_digest,
+                    unavailable_reason="post_update_handshake_unavailable",
+                    wait_seconds=1,
+                )
+                try:
+                    self.assertTrue(read_started.wait(1))
+                    time.sleep(0.05)
+                    self.assertFalse(reader.done())
+                finally:
+                    continue_write.set()
+                writer.result(timeout=1)
+                result = reader.result(timeout=1)
+
+        self.assertEqual(
+            result,
+            {"state": "ready", "semantic_enrichment": False},
+        )
 
     def test_external_supervisor_marks_the_unchanged_official_process_ready(self) -> None:
         from official_process_supervisor import supervise_official_process

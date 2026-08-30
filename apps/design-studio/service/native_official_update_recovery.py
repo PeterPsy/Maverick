@@ -116,14 +116,25 @@ def recover_official_update_locked(
                 control=sidecar_control,
             )
             resumed = True
-        elif not resume_writer and not state["native_ready"]:
-            state.update({"native_ready": True, "updated_at": utc_now()})
-            write_update_state(root, state)
-            resumed = True
+        # `host_prepare` runs before sandbox preparation and process spawn. It
+        # may clear transaction residue, but it cannot claim runtime readiness.
         backup = _optional_backup(root, state)
         if backup is not None and resumed:
             _finalize_backup(backup, state)
-        return {"recovered": cleaned or resumed, "update": state}
+        prepared_backup = False
+        if (
+            backup is not None
+            and not resume_writer
+            and not state["native_ready"]
+            and not cleaned
+            and backup.stat().st_mode & 0o222
+        ):
+            _finalize_backup(backup, state)
+            prepared_backup = True
+        return {
+            "recovered": cleaned or resumed or prepared_backup,
+            "update": state,
+        }
 
     quiesce_native_host(root, cutover_id=identifier)
     if not managed_writer_stopped:
@@ -176,7 +187,7 @@ def recover_official_update_locked(
         {
             "phase": "rolled_back",
             "updated_at": utc_now(),
-            "native_ready": not resume_writer,
+            "native_ready": False,
             "rolled_back": True,
             "bridges": {
                 "model_access": {"state": "unchecked"},

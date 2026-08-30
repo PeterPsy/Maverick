@@ -138,8 +138,10 @@ expose candidate writes and later restore an older backup over them. The live,
 canonically bound prewarm then sets `native_ready: true` and records the real
 launcher handshake. On the next managed launch, host preparation automatically
 restores the prior selection and full backup for any pre-commit transaction, or
-resumes the committed candidate without rollback. The explicit `recover`
-action performs the same operation and restarts the verified writer. Disposable
+permits the committed candidate to resume without rollback. Because host
+preparation precedes process spawn, it always leaves `native_ready: false`;
+only a post-spawn, canonically bound prewarm may set it to true. The explicit
+`recover` action performs that verification and restarts the writer. Disposable
 migration, inventory, smoke, and delegation probes run without a network
 interface; their public API is reachable only through an authenticated local
 Unix relay inside that namespace.
@@ -228,10 +230,12 @@ python3 apps/design-studio/service/cutover_native_opendesign.py finalize \
   --cutover-id <reported-cutover-id> --ready
 ```
 
-`activate` closes rollback to the legacy writer before releasing quiescence and
-synchronously starting the native sidecar through Core. A failed native
-readiness check records `activation_failed` but never re-enables the legacy
-writer. Backups and certification records contain recovery bytes or
+`activate` first verifies through Core that the requested workspace resolves to
+the stopped sidecar bound to the exact canonical data root. Only after that
+preflight succeeds does it close rollback to the legacy writer, release
+quiescence, and synchronously start the native sidecar. A failed post-preflight
+native readiness check records `activation_failed` but never re-enables the
+legacy writer. Backups and certification records contain recovery bytes or
 category hashes as appropriate; the live Maverick marker contains no project,
 transcript, file, artifact, or settings bodies.
 

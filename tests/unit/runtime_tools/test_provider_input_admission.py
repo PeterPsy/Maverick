@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime
 import hashlib
 import os
@@ -9,14 +10,15 @@ from unittest.mock import patch
 from core.api.platform_state import bootstrap_platform_state
 from core.egress import AgenticEgressContentBlock, public_remote_egress_policy
 from core.egress.agentic_transforms import canonical_egress_content
+from core.runtime.provider_input_capture import (
+    RuntimeProviderInputCaptureSource,
+    capture_runtime_provider_input_classifications,
+)
 from core.runtime.provider_input_context import (
     RuntimeProviderInputObservation,
     runtime_provider_input_sources,
 )
-from core.runtime.provider_input_admission import (
-    GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND,
-)
-from core.workspaces.data_governance import WorkspaceResourceClassification
+from core.runtime.runtime_turns import RuntimeTurnRecord
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
 
@@ -24,18 +26,12 @@ NOW = datetime(2026, 8, 28, tzinfo=UTC)
 
 
 class RuntimeProviderInputAdmissionTest(unittest.TestCase):
-    def test_production_input_admission_never_promotes_unclassified_bytes(self) -> None:
-        harness = HostedAgenticHarness(self)
-        with patch.dict(
-            os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
-            clear=False,
-        ):
-            state = bootstrap_platform_state(
-                start_path=harness.root,
-                now=NOW,
-                install_builtin_apps=False,
-            )
+    def test_production_capture_classifies_sensitive_prompt_from_exact_bytes(
+        self,
+    ) -> None:
+        harness, state = self._state_with_turn(
+            input_text="customer SSN 123-45-6789",
+        )
 
         sources = runtime_provider_input_sources(
             state,
@@ -47,57 +43,32 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         )
 
         self.assertEqual(len(sources), 1)
-        self.assertEqual(sources[0].classification.data_class, "unclassified")
+        classification = sources[0].classification
         self.assertEqual(
-            sources[0].classification.trust_level,
-            "untrusted_external",
+            classification.data_class,
+            "regulated_or_customer_data",
         )
-        governed = {"tasks": [{"result_summary": "customer SSN 123-45-6789"}]}
-        digest = hashlib.sha256(canonical_egress_content(governed)).hexdigest()
-        governed_classification = state.runtime_input_classification_resolver(
-            RuntimeProviderInputObservation(
-                workspace_id=harness.session.workspace_id,
-                session_id=harness.session.session_id,
-                turn_id="turn-sensitive",
-                source_id="generalist-orchestration",
-                provenance="governed_context",
-                content_type="application/json",
-                source_ref=(
-                    "runtime-turn:turn-sensitive:generalist-orchestration"
-                ),
-                source_revision=digest,
-                source_digest=digest,
-                resource_identity=(
-                    f"runtime-input:{harness.session.workspace_id}:"
-                    f"{harness.session.session_id}:turn-sensitive:"
-                    f"generalist-orchestration:{digest}"
-                ),
-            ),
-            governed,
-        )
-        self.assertEqual(governed_classification.data_class, "unclassified")
-        self.assertEqual(
-            governed_classification.trust_level,
-            "untrusted_external",
+        self.assertEqual(classification.trust_level, "trusted_actor")
+        persisted = state.runtime_store.get_turn("turn-sensitive")
+        self.assertIsNotNone(
+            persisted.provider_input_classification_manifest
         )
         egress = state.agentic_egress_evaluator.evaluate(
             block=AgenticEgressContentBlock(
-                content_block_id="governed-context-sensitive",
+                content_block_id="sensitive-prompt",
                 session_id=harness.session.session_id,
                 turn_id="turn-sensitive",
                 workspace_id=harness.session.workspace_id,
-                data_class=governed_classification.data_class,
-                provenance="governed_context",
-                trust_level=governed_classification.trust_level,
-                content_type="application/json",
-                source_ref=governed_classification.source_ref,
-                source_revision=governed_classification.source_revision,
-                resource_identity=governed_classification.resource_identity,
-                classification_revision=(
-                    governed_classification.classification_revision
-                ),
+                data_class=classification.data_class,
+                provenance="user_input",
+                trust_level=classification.trust_level,
+                content_type="text/plain",
+                source_ref=classification.source_ref,
+                source_revision=classification.source_revision,
+                resource_identity=classification.resource_identity,
+                classification_revision=classification.classification_revision,
             ),
-            content=governed,
+            content="customer SSN 123-45-6789",
             destination_provider_id="google-ai-studio",
             destination_upstream_id=None,
             policy=public_remote_egress_policy(
@@ -108,18 +79,27 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         self.assertFalse(egress.decision.export_allowed)
         self.assertIsNone(egress.exported_content)
 
-    def test_governed_context_restrictively_joins_its_source_records(self) -> None:
-        harness = HostedAgenticHarness(self)
-        with patch.dict(
-            os.environ,
-            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
-            clear=False,
-        ):
-            state = bootstrap_platform_state(
-                start_path=harness.root,
-                now=NOW,
-                install_builtin_apps=False,
-            )
+    def test_normal_prompt_is_captured_without_test_seed(self) -> None:
+        harness, state = self._state_with_turn(
+            input_text="Summarize the public fixture.",
+        )
+
+        sources = runtime_provider_input_sources(
+            state,
+            session=harness.session,
+            turn_id="turn-sensitive",
+            input_text="Summarize the public fixture.",
+            app_references=None,
+            attachments=None,
+        )
+
+        self.assertEqual(sources[0].classification.data_class, "public")
+        self.assertEqual(sources[0].classification.classification_revision, 1)
+
+    def test_governed_context_restrictively_joins_captured_source_bytes(
+        self,
+    ) -> None:
+        harness, state = self._state_with_turn(input_text="Review the run.")
         governed = {
             "run_id": "run-sensitive",
             "status": "running",
@@ -134,78 +114,177 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
             ],
             "artifacts": [],
         }
-        chunks = (
-            (
-                "inter-agent-run:run-sensitive:control",
-                {
-                    "run_id": "run-sensitive",
-                    "status": "running",
-                    "progress": {"total_tasks": 1},
-                    "quality_gate": {"status": "pending"},
-                    "task_count": 1,
-                    "artifact_count": 0,
-                },
-                "public",
-            ),
-            (
-                "inter-agent-run:run-sensitive:summary",
-                {"summary": "fixture orchestration"},
-                "public",
-            ),
-            (
-                "inter-agent-run:run-sensitive:task:task-sensitive",
-                governed["tasks"][0],
-                "personal_data",
-            ),
+        sources = runtime_provider_input_sources(
+            state,
+            session=harness.session,
+            turn_id="turn-sensitive",
+            input_text="Review the run.",
+            app_references=None,
+            attachments=None,
+            orchestration=governed,
         )
-        for index, (resource_ref, content, data_class) in enumerate(chunks):
-            digest = hashlib.sha256(canonical_egress_content(content)).hexdigest()
-            state.workspace_store.save_resource_classification(
-                WorkspaceResourceClassification(
-                    classification_id=f"classification-governed-{index}",
-                    workspace_id=harness.session.workspace_id,
-                    resource_kind=GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND,
-                    resource_ref=resource_ref,
-                    resource_identity=(
-                        f"governed-context-source:{harness.session.workspace_id}:"
-                        f"{resource_ref}:{digest}"
-                    ),
-                    resource_revision=digest,
-                    resource_digest=digest,
-                    data_class=data_class,
-                    trust_level="untrusted_external",
-                    revision=1,
-                    classified_by_actor_id="fixture-classifier",
-                    classified_at=NOW,
-                    updated_at=NOW,
-                ),
-                expected_revision=0,
-            )
-        digest = hashlib.sha256(canonical_egress_content(governed)).hexdigest()
-        classification = state.runtime_input_classification_resolver(
-            RuntimeProviderInputObservation(
+        classification = next(
+            source.classification
+            for source in sources
+            if source.source_id == "generalist-orchestration"
+        )
+
+        self.assertEqual(
+            classification.data_class,
+            "regulated_or_customer_data",
+        )
+        self.assertEqual(classification.trust_level, "untrusted_external")
+
+    def test_missing_or_conflicting_capture_fails_closed(self) -> None:
+        harness, state = self._state_with_turn(input_text="Original prompt")
+        observation = self._observation(
+            harness,
+            source_id="turn-prompt",
+            provenance="user_input",
+            content_type="text/plain",
+            content="Original prompt",
+        )
+        unresolved = state.runtime_input_classification_resolver(
+            observation,
+            "Original prompt",
+        )
+        self.assertEqual(unresolved.data_class, "unclassified")
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "runtime_provider_input_capture_invalid",
+        ):
+            capture_runtime_provider_input_classifications(
+                state.runtime_store,
                 workspace_id=harness.session.workspace_id,
                 session_id=harness.session.session_id,
                 turn_id="turn-sensitive",
-                source_id="generalist-orchestration",
-                provenance="governed_context",
-                content_type="application/json",
-                source_ref=(
-                    "runtime-turn:turn-sensitive:generalist-orchestration"
+                sources=(
+                    RuntimeProviderInputCaptureSource(
+                        "turn-prompt",
+                        "user_input",
+                        "text/plain",
+                        "Different prompt",
+                    ),
                 ),
-                source_revision=digest,
-                source_digest=digest,
-                resource_identity=(
-                    f"runtime-input:{harness.session.workspace_id}:"
-                    f"{harness.session.session_id}:turn-sensitive:"
-                    f"generalist-orchestration:{digest}"
-                ),
-            ),
-            governed,
-        )
+            )
 
-        self.assertEqual(classification.data_class, "personal_data")
-        self.assertEqual(classification.trust_level, "untrusted_external")
+    def test_capture_writer_enforces_source_contract_and_immutable_manifest(
+        self,
+    ) -> None:
+        harness, state = self._state_with_turn(input_text="Original prompt")
+        invalid_source = RuntimeProviderInputCaptureSource(
+            "turn-prompt",
+            "governed_context",
+            "application/json",
+            "Original prompt",
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "runtime_provider_input_capture_invalid",
+        ):
+            capture_runtime_provider_input_classifications(
+                state.runtime_store,
+                workspace_id=harness.session.workspace_id,
+                session_id=harness.session.session_id,
+                turn_id="turn-sensitive",
+                sources=(invalid_source,),
+            )
+
+        valid_source = RuntimeProviderInputCaptureSource(
+            "turn-prompt",
+            "user_input",
+            "text/plain",
+            "Original prompt",
+        )
+        manifest = capture_runtime_provider_input_classifications(
+            state.runtime_store,
+            workspace_id=harness.session.workspace_id,
+            session_id=harness.session.session_id,
+            turn_id="turn-sensitive",
+            sources=(valid_source,),
+        )
+        self.assertEqual(
+            capture_runtime_provider_input_classifications(
+                state.runtime_store,
+                workspace_id=harness.session.workspace_id,
+                session_id=harness.session.session_id,
+                turn_id="turn-sensitive",
+                sources=(valid_source,),
+            ),
+            manifest,
+        )
+        conflicting = deepcopy(manifest)
+        source_ref = "runtime-turn:turn-sensitive:turn-prompt"
+        conflicting["sources"][source_ref]["data_class"] = "unclassified"
+        with self.assertRaisesRegex(
+            ValueError,
+            "runtime_provider_input_capture_conflict",
+        ):
+            state.runtime_store.capture_turn_provider_input_classification_manifest(
+                turn_id="turn-sensitive",
+                manifest=conflicting,
+            )
+
+    def _state_with_turn(
+        self,
+        *,
+        input_text: str,
+    ) -> tuple[HostedAgenticHarness, object]:
+        harness = HostedAgenticHarness(self)
+        with patch.dict(
+            os.environ,
+            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            clear=False,
+        ):
+            state = bootstrap_platform_state(
+                start_path=harness.root,
+                now=NOW,
+                install_builtin_apps=False,
+            )
+        state.runtime_store.insert_session(harness.session)
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-sensitive",
+                session_id=harness.session.session_id,
+                workspace_id=harness.session.workspace_id,
+                status="active",
+                input_text=input_text,
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=NOW,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        return harness, state
+
+    @staticmethod
+    def _observation(
+        harness,
+        *,
+        source_id: str,
+        provenance: str,
+        content_type: str,
+        content: object,
+    ) -> RuntimeProviderInputObservation:
+        digest = hashlib.sha256(canonical_egress_content(content)).hexdigest()
+        return RuntimeProviderInputObservation(
+            workspace_id=harness.session.workspace_id,
+            session_id=harness.session.session_id,
+            turn_id="turn-sensitive",
+            source_id=source_id,
+            provenance=provenance,
+            content_type=content_type,
+            source_ref=f"runtime-turn:turn-sensitive:{source_id}",
+            source_revision=digest,
+            source_digest=digest,
+            resource_identity=(
+                f"runtime-input:{harness.session.workspace_id}:"
+                f"{harness.session.session_id}:turn-sensitive:"
+                f"{source_id}:{digest}"
+            ),
+        )
 
 
 if __name__ == "__main__":

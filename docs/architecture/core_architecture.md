@@ -777,6 +777,12 @@ app references, confirmations, interrupt, and recovery capabilities. Profile,
 certificate, immutable execution binding, and every live authority refresh
 must retain the same contract revision. Losing one required live capability or
 handle makes the agent unavailable; Core does not materialize a partial agent.
+The claim also requires an executable result-policy gate plus successful
+certification-suite behavior coverage for complete execution, exact-byte
+classification, egress/error pairing, and pre-effect guarantees across read and
+mutating shell/process/CLI/MCP scenarios. A declared mode string or the mere
+presence of a handle is not evidence. Hosted candidates whose gate is
+incomplete must omit the Full Workspace revision; the current candidates do.
 
 Hosted filesystem mutations are descriptor-relative and version-fenced.
 Replacement uses Linux atomic exchange/no-replace primitives so a final-entry
@@ -836,22 +842,27 @@ durable terminal process status together.
 
 Transient prompt, agent-instruction, and governed-context blocks are not public
 by provenance. Production bootstrap always installs a closed Core-owned
-admission resolver for the exact composer source ids; source-id and digest
-validation prove integrity but never select a data class. Prompt, agent and
-reference-metadata bytes require a matching revisioned workspace resource
-classification. Governed orchestration context is classified only by a
-restrictive join over its exact control, summary, task/result, and artifact
-source records, and remains untrusted regardless of a less restrictive sibling.
-Unknown source ids, absent source records, and any mismatch remain
-`unclassified`. Resource-returning tools propagate the exact observed resource
-classification. Mutating edit/patch diffs inherit the exact pre-image taint
-rather than attempting to classify the new revision with a stale record.
-Shell/process streams and CLI/MCP discovery/results remain complete through the
-common result compactor. A Core-owned, TCB-certified definition may explicitly
-admit exact public bytes; otherwise the full result remains `unclassified` and
-egress blocks the agent instead of replacing content with a public
-acknowledgement. App commands/tools remain in discovery and cannot self-promote.
-Generic serialization, hashing, or redaction never promotes raw content.
+capture writer before provider dispatch. It content-classifies the exact prompt,
+agent instruction, reference metadata, and every governed-context control,
+summary, task/result, and artifact chunk, then stores the complete immutable
+manifest in the turn with one CAS. Source ids and digests prove integrity but
+never select or widen a class. Governed context restrictively joins those exact
+entries and remains untrusted; a missing manifest, unknown source, changed byte,
+or identity mismatch stays `unclassified`. Resource-returning tools propagate
+the exact observed resource classification, and edit/patch diffs retain their
+pre-image taint.
+
+Variable hosted tool output is also classified from its exact canonical bytes.
+Read-only shell/process streams and CLI/MCP discovery/read results retain the
+complete payload through the common compactor. If their derived class is not
+allowed remotely, Core keeps the private result and sends a public, call-id
+paired `tool_result_egress_denied` error on the next provider request; it never
+silently drops pairing or relabels the bytes. Shell/process operations with
+workspace mutation scopes and mutating/destructive CLI/MCP handlers are denied
+before execution while no pre-effect result guarantee exists. App declarations
+cannot self-promote. The hosted profiles therefore do not claim the Full
+Workspace contract until its live behavior probe covers every read and mutating
+scenario. Generic serialization, hashing, or redaction never promotes content.
 
 Every semantic-envelope classification is additionally bound to the SHA-256 of
 the exact canonical bytes projected for that block. Composite sources use a

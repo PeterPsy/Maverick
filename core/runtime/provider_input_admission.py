@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 
 from core.egress.agentic_transforms import canonical_egress_content
 from core.egress.classification import (
@@ -17,37 +16,31 @@ from core.runtime.provider_input_context import (
     RuntimeProviderInputClassificationResolver,
     RuntimeProviderInputObservation,
 )
-from core.workspaces.data_governance import (
-    resource_classification_for_observation,
+from core.runtime.provider_input_capture import (
+    GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND,
+    RUNTIME_PROVIDER_INPUT_CAPTURE_REVISION,
+    RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID,
+    RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION,
+    RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
+    runtime_provider_input_source_contract,
+)
+from core.runtime.provider_input_governed_sources import (
+    generalist_context_source_chunks,
 )
 
 
-RUNTIME_PROVIDER_INPUT_ADMISSION_REVISION = 2
-RUNTIME_PROVIDER_INPUT_RESOURCE_KIND = "runtime_input"
-GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND = "inter_agent_governed_context"
-_INDEXED_SOURCE = re.compile(r"^(app-reference|attachment):(\d+):metadata$")
-_FIXED_SOURCES = {
-    "agent-instruction": ("agent_instruction", "text/plain"),
-    "turn-prompt": ("user_input", "text/plain"),
-    "generalist-orchestration": ("governed_context", "application/json"),
-}
-_INDEXED_PROVENANCE = {
-    "app-reference": ("app_reference", "text/plain"),
-    "attachment": ("attachment", "application/json"),
-}
-
-
+RUNTIME_PROVIDER_INPUT_ADMISSION_REVISION = 3
 def build_runtime_provider_input_classification_resolver(
     *,
-    workspace_store,
+    runtime_store,
 ) -> RuntimeProviderInputClassificationResolver:
-    """Resolve exact transient resources through workspace classification."""
+    """Resolve exact transient resources through the atomic turn capture."""
 
     def resolve(observation, content):
         return classify_admitted_runtime_provider_input(
             observation,
             content,
-            workspace_store=workspace_store,
+            runtime_store=runtime_store,
         )
 
     return resolve
@@ -57,7 +50,7 @@ def classify_admitted_runtime_provider_input(
     observation: RuntimeProviderInputObservation,
     content: object,
     *,
-    workspace_store=None,
+    runtime_store=None,
 ) -> CanonicalSourceClassification:
     """Classify only exact transient sources materialized by Core for this turn.
 
@@ -93,7 +86,9 @@ def classify_admitted_runtime_provider_input(
         )
     ):
         return fallback
-    expected_source = _expected_source_contract(observation.source_id)
+    expected_source = runtime_provider_input_source_contract(
+        observation.source_id
+    )
     if expected_source is None:
         return fallback
     expected_provenance, expected_content_type = expected_source
@@ -125,33 +120,19 @@ def classify_admitted_runtime_provider_input(
         return _classify_generalist_orchestration(
             observation,
             content,
-            workspace_store=workspace_store,
+            runtime_store=runtime_store,
             fallback=fallback,
         )
-    get_classification = getattr(
-        workspace_store,
-        "get_resource_classification",
-        None,
-    )
-    if not callable(get_classification):
-        return fallback
-    try:
-        record = get_classification(
-            workspace_id=observation.workspace_id,
-            resource_kind=RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
-            resource_ref=source_ref,
-        )
-    except Exception:
-        return fallback
-    return resource_classification_for_observation(
-        record,
-        workspace_id=observation.workspace_id,
+    return _captured_source_classification(
+        runtime_store,
+        observation=observation,
         resource_kind=RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
         resource_ref=source_ref,
         resource_identity=identity,
         resource_revision=digest,
         resource_digest=digest,
         provenance=observation.provenance,
+        fallback=fallback,
     )
 
 
@@ -159,17 +140,12 @@ def _classify_generalist_orchestration(
     observation: RuntimeProviderInputObservation,
     content: object,
     *,
-    workspace_store,
+    runtime_store,
     fallback: CanonicalSourceClassification,
 ) -> CanonicalSourceClassification:
     """Join exact persisted context sources; never classify the aggregate by id."""
-    chunks = _generalist_context_source_chunks(content)
-    get_classification = getattr(
-        workspace_store,
-        "get_resource_classification",
-        None,
-    )
-    if chunks is None or not callable(get_classification):
+    chunks = generalist_context_source_chunks(content)
+    if chunks is None:
         return fallback
     sources: list[CanonicalSourceClassification] = []
     for resource_ref, chunk in chunks:
@@ -179,23 +155,19 @@ def _classify_generalist_orchestration(
                 f"governed-context-source:{observation.workspace_id}:"
                 f"{resource_ref}:{digest}"
             )
-            record = get_classification(
-                workspace_id=observation.workspace_id,
-                resource_kind=GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND,
-                resource_ref=resource_ref,
-            )
         except Exception:
             return fallback
         sources.append(
-            resource_classification_for_observation(
-                record,
-                workspace_id=observation.workspace_id,
+            _captured_source_classification(
+                runtime_store,
+                observation=observation,
                 resource_kind=GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND,
                 resource_ref=resource_ref,
                 resource_identity=identity,
                 resource_revision=digest,
                 resource_digest=digest,
                 provenance="governed_context",
+                fallback=fallback,
             )
         )
     joined = join_classifications(sources)
@@ -213,81 +185,69 @@ def _classify_generalist_orchestration(
         source_digest=observation.source_digest,
         resource_identity=observation.resource_identity,
         classification_revision=(
-            RUNTIME_PROVIDER_INPUT_ADMISSION_REVISION
+            RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION
             if proof_complete
             else None
         ),
     )
 
 
-def _generalist_context_source_chunks(
-    content: object,
-) -> tuple[tuple[str, object], ...] | None:
-    if not isinstance(content, dict):
-        return None
-    required = {
-        "run_id",
-        "status",
-        "summary",
-        "progress",
-        "quality_gate",
-        "tasks",
-        "artifacts",
-    }
-    if set(content) != required:
-        return None
-    run_id = content.get("run_id")
-    tasks = content.get("tasks")
-    artifacts = content.get("artifacts")
+def _captured_source_classification(
+    runtime_store,
+    *,
+    observation: RuntimeProviderInputObservation,
+    resource_kind: str,
+    resource_ref: str,
+    resource_identity: str,
+    resource_revision: str,
+    resource_digest: str,
+    provenance: str,
+    fallback: CanonicalSourceClassification,
+) -> CanonicalSourceClassification:
+    """Resolve only an exact entry from the immutable Core turn manifest."""
+    try:
+        turn = runtime_store.get_turn(observation.turn_id)
+        manifest = turn.provider_input_classification_manifest
+    except Exception:
+        return fallback
     if (
-        not isinstance(run_id, str)
-        or not run_id.strip()
-        or not isinstance(tasks, list)
-        or not isinstance(artifacts, list)
-        or any(not isinstance(item, dict) for item in (*tasks, *artifacts))
+        turn.workspace_id != observation.workspace_id
+        or turn.session_id != observation.session_id
+        or not isinstance(manifest, dict)
+        or manifest.get("schema_revision")
+        != RUNTIME_PROVIDER_INPUT_CAPTURE_REVISION
+        or manifest.get("classifier_id") != RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID
+        or manifest.get("classifier_revision")
+        != RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION
+        or manifest.get("workspace_id") != observation.workspace_id
+        or manifest.get("session_id") != observation.session_id
+        or manifest.get("turn_id") != observation.turn_id
+        or not isinstance(manifest.get("sources"), dict)
     ):
-        return None
-    base_ref = f"inter-agent-run:{run_id}"
-    chunks: list[tuple[str, object]] = [
-        (
-            f"{base_ref}:control",
-            {
-                "run_id": run_id,
-                "status": content["status"],
-                "progress": content["progress"],
-                "quality_gate": content["quality_gate"],
-                "task_count": len(tasks),
-                "artifact_count": len(artifacts),
-            },
-        ),
-        (f"{base_ref}:summary", {"summary": content["summary"]}),
-    ]
-    seen_task_ids: set[str] = set()
-    for item in tasks:
-        task_id = item.get("task_id")
-        if (
-            not isinstance(task_id, str)
-            or not task_id.strip()
-            or task_id in seen_task_ids
-        ):
-            return None
-        seen_task_ids.add(task_id)
-        chunks.append((f"{base_ref}:task:{task_id}", item))
-    chunks.extend(
-        (f"{base_ref}:artifact:{index}", item)
-        for index, item in enumerate(artifacts)
+        return fallback
+    entry = manifest["sources"].get(resource_ref)
+    if (
+        not isinstance(entry, dict)
+        or entry.get("resource_kind") != resource_kind
+        or entry.get("resource_ref") != resource_ref
+        or entry.get("resource_identity") != resource_identity
+        or entry.get("resource_revision") != resource_revision
+        or str(entry.get("resource_digest") or "").lower()
+        != resource_digest.lower()
+        or entry.get("classification_revision")
+        != RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION
+    ):
+        return fallback
+    return validated_classification(
+        data_class=str(entry.get("data_class") or ""),
+        provenance=provenance,
+        trust_level=str(entry.get("trust_level") or ""),
+        source_ref=resource_ref,
+        source_revision=resource_revision,
+        source_digest=resource_digest,
+        resource_identity=resource_identity,
+        classification_revision=RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION,
     )
-    return tuple(chunks)
-
-
-def _expected_source_contract(source_id: str) -> tuple[str, str] | None:
-    fixed = _FIXED_SOURCES.get(source_id)
-    if fixed is not None:
-        return fixed
-    indexed = _INDEXED_SOURCE.fullmatch(source_id)
-    if indexed is None:
-        return None
-    return _INDEXED_PROVENANCE[indexed.group(1)]
 
 
 __all__ = [

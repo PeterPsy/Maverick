@@ -66,44 +66,51 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v15 makes the known transitive boundary executable through
+Manifest v16 makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 21 and Full Workspace `codex-baseline-v9` are bound by TCB
-manifest v15. The adapter places all provider-bound context in semantic-envelope
-schema v1/compiler revision 5, materializes scoped instructions through the
-confined filesystem, requires commit-bound instruction digests for direct
-mutations, and uses rollback-safe batch COW overlays for shell/process effects.
-Terminal process polling is mutating/non-retry-safe. Content replacements preserve mode,
-ownership, ACL/xattrs and carry exact file atime/mtime. Every pre-image remains
-descriptor-pinned and is checked against its complete metadata/xattr snapshot,
-so a later metadata race causes full rollback without losing the concurrent
-change. Metadata-only directory/root effects and hardlinks are rejected rather
-than committed with altered semantics. Production bootstrap installs exact
-server-owned transient-input admission. The class comes from exact workspace
-source records rather than composer ids; governed context restrictively joins
-control, summary, task/result, and artifact records while retaining untrusted
-trust. Non-resource raw output is never generically promoted: complete
-shell/process and CLI/MCP results retain their original class and block egress
-unless a Core-owned certified definition explicitly admits public bytes. App
-discovery is not silently narrowed. Composite
-attachment metadata is classified separately and restrictively joined with the
-file observation;
-skills export exact classified `SKILL.md` bytes, and every semantic class is
-bound to the exact projected digest. The runtime journals distinct
-source/projection evidence. Exact app-reference resource observations are
-resolved by production `PlatformState` through revisioned workspace
-classification records. This is a
-repository safety invariant, not certification or remote-release approval.
-Large artifact projections hash their own provider-visible bytes while retaining
-the original taint. External cancellation and COW commit share one
-linearization gate, and the provider lifecycle honors requested quiescence.
-Adapter close, explicit session termination, and idle reap finalize
-managed-process registries and durable records. Complete-request pressure can trigger one
-forced history compaction below the private-state-only threshold.
+Hosted adapter 22 and the governed result contract
+`hosted-governed-result-v1` are bound by TCB manifest v16. The separate Full
+Workspace specification is `codex-baseline-v10`, but neither hosted profile
+claims it while the executable behavior gate reports incomplete mutating
+shell/process and app CLI/MCP result behavior. The adapter places all
+provider-bound context in semantic-envelope schema v1/compiler revision 5,
+materializes scoped instructions through the confined filesystem, requires
+commit-bound instruction digests for direct mutations, and uses rollback-safe
+batch COW overlays for shell/process effects. Terminal process polling is
+mutating/non-retry-safe. Content replacements preserve mode, ownership,
+ACL/xattrs, and exact file atime/mtime. Every pre-image remains descriptor-pinned
+and is checked against its complete metadata/xattr snapshot, so a later metadata
+race causes full rollback without losing the concurrent change. Metadata-only
+directory/root effects and hardlinks are rejected rather than committed with
+altered semantics.
+
+Production bootstrap installs a Core-owned content classifier and atomic
+turn-manifest writer for prompt, instruction, reference metadata, and each
+governed-context source chunk; composer ids cannot select a class. Non-resource
+raw output is never generically promoted: read-only shell/process and CLI/MCP
+results are classified from exact bytes, and denied bytes stay private behind a
+call-paired public error. Unguaranteed workspace-mutating shell/process and
+mutating/destructive CLI/MCP calls are denied before effect. App discovery is
+not silently narrowed. Composite attachment metadata is classified separately
+and restrictively joined with the file observation; skills export exact
+classified `SKILL.md` bytes, and every semantic class is bound to the exact
+projected digest. The runtime journals distinct source/projection evidence.
+Exact app-reference observations still resolve through revisioned workspace
+classification records.
+
+Large artifact projections hash their provider-visible bytes while retaining
+the original taint. External cancellation and COW commit share one linearization
+gate, and every synchronous CLI/MCP/Core worker belongs to requested hosted turn
+quiescence. Adapter close, explicit session termination, and idle reap finalize
+managed-process registries and durable records; termination keeps handles owned,
+signals known leaders, and repeatedly sweeps post-SIGTERM descendants before
+release. Complete-request pressure can trigger one forced history compaction
+below the private-state-only threshold. These are repository safety invariants,
+not certification or remote-release approval.
 
 The runtime now also separates actor-attributed CAS workspace attestation,
 exact resource classification, and per-block fail-closed egress decisions.

@@ -363,6 +363,9 @@ class HostedAgenticLoop:
                     ),
                     RuntimeToolInvocationOutcome(invocation),
                     context_policy=context_policy,
+                    allowed_remote_data_classes=(
+                        authority.allowed_remote_data_classes
+                    ),
                 )
                 tool_results.append(
                     make_agentic_tool_result(
@@ -974,6 +977,9 @@ class HostedAgenticLoop:
                     tool_orchestrator,
                     outcome,
                     context_policy=context_policy,
+                    allowed_remote_data_classes=(
+                        authority.allowed_remote_data_classes
+                    ),
                 )
                 tool_event_type = (
                     "runtime.tool_call.completed"

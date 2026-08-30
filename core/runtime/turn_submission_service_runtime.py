@@ -57,7 +57,7 @@ from core.runtime.plain_hosted_text import (
     runtime_session_is_plain_hosted_chat,
 )
 from core.runtime.execution import execute_runtime_turn
-from core.runtime.provider_input_context import generalist_orchestration_input_text, runtime_provider_input_sources, runtime_provider_input_text
+from core.runtime.provider_input_capture_context import capture_runtime_provider_input, generalist_orchestration_input_text
 from core.runtime.provider_start_handoff import (
     patch_runtime_session_metadata,
     provider_thread_recorder,
@@ -938,12 +938,7 @@ def submit_runtime_turn_async(
                     )
                     materialized_reference_count = len([item for item in execution_app_references or [] if isinstance(item, dict)])
                     provider_input_started_at = time.perf_counter()
-                    provider_input_text = runtime_provider_input_text(
-                        state, session=current_session, input_text=input_text,
-                        app_references=execution_app_references,
-                        attachments=attachments,
-                    )
-                    provider_input_sources = runtime_provider_input_sources(
+                    provider_input = capture_runtime_provider_input(
                         state,
                         session=current_session,
                         turn_id=turn.turn_id,
@@ -951,6 +946,8 @@ def submit_runtime_turn_async(
                         app_references=execution_app_references,
                         attachments=attachments,
                     )
+                    provider_input_text = provider_input.input_text
+                    provider_input_sources = provider_input.sources
                     provider_input_metadata = {
                         "provider_input_build_ms": (time.perf_counter() - provider_input_started_at) * 1000,
                         "app_reference_count": app_reference_count,

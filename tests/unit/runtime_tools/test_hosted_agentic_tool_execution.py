@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import unittest
 
 from core.cli.command_registry import CliCommandRegistry
+from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.mcp.tool_registry import McpToolRegistry
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
@@ -32,6 +33,144 @@ from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
 
 class HostedAgenticToolExecutionTest(unittest.TestCase):
+    def test_cancelled_mcp_worker_quiesces_before_turn_returns_even_if_declared_read(
+        self,
+    ) -> None:
+        harness = HostedAgenticHarness(self)
+        workspace = harness.root / "workspaces" / "default"
+        target = workspace / "mcp-after-cancel.txt"
+        entered = Event()
+        release = Event()
+        mcp_registry = McpToolRegistry()
+
+        def blocked_mutation(_arguments, _context):
+            entered.set()
+            release.wait(timeout=2)
+            target.write_text("completed", encoding="utf-8")
+            return {"completed": True}
+
+        mcp_registry.register_tool(
+            McpToolDefinition(
+                tool_name="fixture_blocked_mutation",
+                description="Blocked mutating fixture.",
+                input_schema={"type": "object", "additionalProperties": False},
+                output_schema={"type": "object"},
+                owner_kind="app",
+                owner_id="fixture",
+                workspace_id="default",
+                exposure_scope="workspace_enabled_app",
+                invocation_policy=McpInvocationPolicy(
+                    operator_only=False,
+                    sandbox_agent_allowed=True,
+                    requires_workspace_context=True,
+                    requires_full_access=False,
+                ),
+                entrypoint_path="apps/fixture/mcp.py",
+                # Cancellation lifetime must not rely on a partial handle list or
+                # an app's effect declaration: every active worker remains owned.
+                effect_class="read",
+            ),
+            blocked_mutation,
+        )
+        actor = RuntimeToolActorContext(
+            workspace_id="default",
+            actor_id="user-1",
+            agent_id="chat",
+            platform_role="admin",
+            workspace_role="owner",
+            session_id=harness.session.session_id,
+            execution_mode="full-access",
+        )
+        orchestrator = RuntimeToolOrchestrator(
+            catalog_builder=RuntimeToolCatalogBuilder(
+                cli_registry=CliCommandRegistry(),
+                mcp_registry=mcp_registry,
+            ),
+            ledger=harness.orchestrator.ledger,
+        )
+        authority = replace(
+            harness.authority,
+            allowed_capabilities=replace(
+                harness.authority.allowed_capabilities,
+                mcp=True,
+            ),
+            allowed_tool_handles=("mcp:fixture_blocked_mutation",),
+            authority_digest="",
+        )
+        authority = replace(
+            authority,
+            authority_digest=canonical_digest(authority),
+        )
+        policy = RuntimeToolConfirmationPolicy(
+            policy_revision="cancel-mcp:1",
+            require_confirmation_for_mutating=False,
+            require_confirmation_for_destructive=False,
+            max_tool_result_bytes=262_144,
+        )
+        catalog = orchestrator.materialize(authority=authority, context=actor)
+        observed = orchestrator.observe_provider_tool(
+            provider_tool_name=provider_tool_name("mcp:fixture_blocked_mutation"),
+            provider_tool_call_id="call-cancel-mcp",
+            arguments={},
+            provider_request_id="request-cancel-mcp",
+            provider_event_ordinal=0,
+            provider_call_index=0,
+            authority=authority,
+            context=actor,
+            turn_id="turn-hosted",
+            policy=policy,
+        )
+        authorized = orchestrator.prepare_observed_tool(
+            observed.invocation,
+            requested_catalog=catalog,
+            authority=authority,
+            context=actor,
+            policy=policy,
+        )
+        cancellation = RuntimeCancellationSignal()
+        deadline = time.monotonic() + 4
+        budget = SimpleNamespace(
+            finalization_policy=SimpleNamespace(
+                finalization_time_reserve_seconds_per_attempt=1.0,
+            ),
+            tool_execution_deadline=lambda *, cleanup_seconds: (
+                deadline - cleanup_seconds
+            ),
+            monotonic=time.monotonic,
+        )
+
+        async def cancel_and_release() -> None:
+            task = asyncio.create_task(
+                execute_hosted_authorized_tool(
+                    tool_orchestrator=orchestrator,
+                    outcome=authorized,
+                    authority=authority,
+                    context=actor,
+                    policy=policy,
+                    budget=budget,
+                    cancellation=cancellation,
+                    poll_seconds=0.01,
+                )
+            )
+            self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+            await asyncio.to_thread(cancellation.set)
+            await asyncio.sleep(0.05)
+            self.assertFalse(task.done())
+            self.assertFalse(target.exists())
+            release.set()
+            with self.assertRaisesRegex(
+                HostedAgenticLoopError,
+                "runtime_cancelled",
+            ):
+                await task
+
+        asyncio.run(cancel_and_release())
+        self.assertTrue(target.exists())
+        persisted = harness.store.get_tool_invocation(
+            authorized.invocation.invocation_id
+        )
+        self.assertEqual(persisted.state, "failed")
+
     def test_cancelled_shell_cannot_commit_a_late_workspace_effect(self) -> None:
         harness = HostedAgenticHarness(self)
         workspace = harness.root / "workspaces" / "default"

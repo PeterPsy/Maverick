@@ -22,6 +22,9 @@ from core.runtime.app_references import input_text_with_app_references
 from core.runtime.attachment_projection import attachment_read_encoding
 from core.runtime.attachments import input_text_with_attachment_links
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
+from core.runtime.provider_input_capture_manifest import (
+    persist_runtime_provider_input_capture,
+)
 from core.workspaces.data_governance import resource_classification_for_observation
 
 
@@ -60,6 +63,9 @@ RuntimeProviderInputClassificationResolver = Callable[
 ]
 
 
+_ORCHESTRATION_UNSET = object()
+
+
 def generalist_orchestration_input_text(state: Any, *, session: Any, input_text: str) -> str:
     """Attach root orchestration context without persisting it in the turn."""
     # Lazy import avoids the inter-agent service -> runtime submission cycle.
@@ -75,9 +81,24 @@ def runtime_provider_input_text(
     input_text: str,
     app_references: list[dict[str, object]] | None,
     attachments: list[dict[str, object]] | None,
+    orchestration: dict[str, object] | None | object = _ORCHESTRATION_UNSET,
 ) -> str:
     """Build agentic provider input from governed context and materialized references."""
-    governed_input = generalist_orchestration_input_text(state, session=session, input_text=input_text)
+    if orchestration is _ORCHESTRATION_UNSET:
+        governed_input = generalist_orchestration_input_text(
+            state,
+            session=session,
+            input_text=input_text,
+        )
+    else:
+        from core.inter_agent.generalist_context import (
+            input_text_with_generalist_orchestration_snapshot,
+        )
+
+        governed_input = input_text_with_generalist_orchestration_snapshot(
+            input_text=input_text,
+            context=orchestration,
+        )
     return input_text_with_attachment_links(
         input_text=input_text_with_app_references(input_text=governed_input, app_references=app_references),
         attachments=attachments,
@@ -93,10 +114,45 @@ def runtime_provider_input_sources(
     input_text: str,
     app_references: list[dict[str, object]] | None,
     attachments: list[dict[str, object]] | None,
+    orchestration: dict[str, object] | None | object = _ORCHESTRATION_UNSET,
 ) -> tuple[RuntimeProviderInputSource, ...]:
     """Keep prompt, orchestration, attachment, and app provenance separate."""
     sources: list[RuntimeProviderInputSource] = []
     agent_instruction = str(getattr(session, "system_prompt", "") or "")
+    resolved_orchestration = (
+        generalist_orchestration_source(state, session=session)
+        if orchestration is _ORCHESTRATION_UNSET
+        else orchestration
+    )
+    app_reference_entries: list[tuple[int, dict[str, object], str]] = []
+    for index, reference in enumerate(app_references or ()):
+        if isinstance(reference, dict):
+            app_reference_entries.append(
+                (
+                    index,
+                    reference,
+                    input_text_with_app_references(
+                        input_text="",
+                        app_references=[dict(reference)],
+                    ).strip(),
+                )
+            )
+    attachment_entries: list[
+        tuple[int, dict[str, object], dict[str, object], str]
+    ] = []
+    for index, attachment in enumerate(attachments or ()):
+        content, media_type, normalized = _attachment_input_metadata(attachment)
+        attachment_entries.append((index, normalized, content, media_type))
+    persist_runtime_provider_input_capture(
+        state,
+        session=session,
+        turn_id=turn_id,
+        input_text=input_text,
+        agent_instruction=agent_instruction,
+        orchestration=resolved_orchestration,
+        app_reference_entries=tuple(app_reference_entries),
+        attachment_entries=tuple(attachment_entries),
+    )
     if agent_instruction:
         sources.append(
             RuntimeProviderInputSource(
@@ -134,14 +190,13 @@ def runtime_provider_input_sources(
                 ),
             )
         )
-    orchestration = _generalist_orchestration_source(state, session=session)
-    if orchestration is not None:
+    if resolved_orchestration is not None:
         sources.append(
             RuntimeProviderInputSource(
                 source_id="generalist-orchestration",
                 provenance="governed_context",
                 content_type="application/json",
-                content=orchestration,
+                content=resolved_orchestration,
                 classification=_transient_input_classification(
                     state,
                     session=session,
@@ -149,52 +204,47 @@ def runtime_provider_input_sources(
                     source_id="generalist-orchestration",
                     provenance="governed_context",
                     content_type="application/json",
-                    content=orchestration,
+                    content=resolved_orchestration,
                 ),
             )
         )
-    for index, reference in enumerate(app_references or ()):
-        if isinstance(reference, dict):
-            content = input_text_with_app_references(
-                input_text="",
-                app_references=[dict(reference)],
-            ).strip()
-            metadata_classification = _transient_input_classification(
-                state,
-                session=session,
-                turn_id=turn_id,
-                source_id=f"app-reference:{index}:metadata",
+    for index, reference, content in app_reference_entries:
+        metadata_classification = _transient_input_classification(
+            state,
+            session=session,
+            turn_id=turn_id,
+            source_id=f"app-reference:{index}:metadata",
+            provenance="app_reference",
+            content_type="text/plain",
+            content=content,
+        )
+        resource_classification = _app_reference_classification(
+            state,
+            session=session,
+            reference=reference,
+        )
+        sources.append(
+            RuntimeProviderInputSource(
+                source_id=f"app-reference:{index}",
                 provenance="app_reference",
                 content_type="text/plain",
                 content=content,
-            )
-            resource_classification = _app_reference_classification(
-                state,
-                session=session,
-                reference=reference,
-            )
-            sources.append(
-                RuntimeProviderInputSource(
-                    source_id=f"app-reference:{index}",
+                classification=derive_content_classification(
+                    content=canonical_egress_content(content),
                     provenance="app_reference",
-                    content_type="text/plain",
-                    content=content,
-                    classification=derive_content_classification(
-                        content=canonical_egress_content(content),
-                        provenance="app_reference",
-                        source_ref=(
-                            f"runtime-turn:{turn_id}:app-reference:{index}"
-                        ),
-                        sources=(
-                            metadata_classification,
-                            resource_classification,
-                        ),
+                    source_ref=(
+                        f"runtime-turn:{turn_id}:app-reference:{index}"
                     ),
-                )
+                    sources=(
+                        metadata_classification,
+                        resource_classification,
+                    ),
+                ),
             )
+        )
     filesystem = _attachment_filesystem(state, session=session)
     try:
-        for index, attachment in enumerate(attachments or ()):
+        for index, attachment, content, media_type in attachment_entries:
             sources.append(
                 _attachment_input_source(
                     state,
@@ -203,6 +253,8 @@ def runtime_provider_input_sources(
                     filesystem=filesystem,
                     index=index,
                     attachment=attachment,
+                    content=content,
+                    media_type=media_type,
                 )
             )
     finally:
@@ -287,7 +339,34 @@ def _attachment_input_source(
     filesystem: ConfinedWorkspaceFilesystem | None,
     index: int,
     attachment: object,
+    content: dict[str, object] | None = None,
+    media_type: str | None = None,
 ) -> RuntimeProviderInputSource:
+    normalized_content, normalized_media_type, normalized_attachment = (
+        _attachment_input_metadata(attachment)
+        if content is None or media_type is None
+        else (content, media_type, attachment)
+    )
+    attachment = normalized_attachment
+    content = normalized_content
+    media_type = normalized_media_type
+    if not isinstance(attachment, dict):
+        raise ValueError("agentic_attachment_metadata_invalid")
+    return _classified_attachment_input_source(
+        state,
+        session=session,
+        turn_id=turn_id,
+        filesystem=filesystem,
+        index=index,
+        attachment=attachment,
+        content=content,
+        media_type=media_type,
+    )
+
+
+def _attachment_input_metadata(
+    attachment: object,
+) -> tuple[dict[str, object], str, dict[str, object]]:
     if not isinstance(attachment, dict):
         raise ValueError("agentic_attachment_metadata_invalid")
     for field_name in ("id", "name"):
@@ -318,7 +397,7 @@ def _attachment_input_source(
         or size_bytes < 0
     ):
         raise ValueError("agentic_attachment_metadata_invalid")
-    content = {
+    content: dict[str, object] = {
         "attachment_id": str(attachment.get("id") or ""),
         "name": str(attachment.get("name") or ""),
         "workspace_relative_path": relative_path,
@@ -330,6 +409,20 @@ def _attachment_input_source(
             "read_encoding": attachment_read_encoding(media_type),
         },
     }
+    return content, media_type, attachment
+
+
+def _classified_attachment_input_source(
+    state: Any,
+    *,
+    session: Any,
+    turn_id: str,
+    filesystem: ConfinedWorkspaceFilesystem | None,
+    index: int,
+    attachment: dict[str, object],
+    content: dict[str, object],
+    media_type: str,
+) -> RuntimeProviderInputSource:
     metadata_classification = _transient_input_classification(
         state,
         session=session,
@@ -377,7 +470,7 @@ def _validated_attachment_relative_path(value: object) -> str:
     return relative_path
 
 
-def _generalist_orchestration_source(state: Any, *, session: Any) -> dict[str, object] | None:
+def generalist_orchestration_source(state: Any, *, session: Any) -> dict[str, object] | None:
     store = getattr(state, "inter_agent_store", None)
     if store is None:
         return None

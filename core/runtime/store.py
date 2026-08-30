@@ -95,6 +95,7 @@ RUNTIME_TURN_IMMUTABLE_SUBMISSION_FIELDS = frozenset(
         "created_at",
         "runtime_mode",
         "invoked_skill_ids",
+        "provider_input_classification_manifest",
     }
 )
 
@@ -247,6 +248,14 @@ class RuntimeStore(Protocol):
         *,
         turn_id: str,
         invoked_skill_ids: list[str],
+    ) -> RuntimeTurnRecord:
+        ...
+
+    def capture_turn_provider_input_classification_manifest(
+        self,
+        *,
+        turn_id: str,
+        manifest: dict[str, object],
     ) -> RuntimeTurnRecord:
         ...
 
@@ -1432,6 +1441,45 @@ class RuntimeDocumentStore:
                 persisted = self.get_turn(turn_id)
                 self._remember_turn_partition(persisted)
                 return persisted
+
+    def capture_turn_provider_input_classification_manifest(
+        self,
+        *,
+        turn_id: str,
+        manifest: dict[str, object],
+    ) -> RuntimeTurnRecord:
+        """Persist one immutable Core input-classification capture atomically."""
+        if not isinstance(manifest, dict) or not manifest:
+            raise ValueError("runtime_provider_input_capture_invalid")
+        current = self.get_turn(turn_id)
+        existing = current.provider_input_classification_manifest
+        if existing is not None:
+            if existing == manifest:
+                return current
+            raise ValueError("runtime_provider_input_capture_conflict")
+        identity = {
+            "turn_id": current.turn_id,
+            "workspace_id": current.workspace_id,
+            "session_id": current.session_id,
+        }
+        applied = self.collections.turns.compare_and_set(
+            {
+                **identity,
+                "provider_input_classification_manifest": None,
+            },
+            {
+                "$set": {
+                    "provider_input_classification_manifest": manifest,
+                }
+            },
+        )
+        persisted = self.get_turn(turn_id)
+        if not applied:
+            if persisted.provider_input_classification_manifest == manifest:
+                return persisted
+            raise ValueError("runtime_provider_input_capture_conflict")
+        self._remember_turn_partition(persisted)
+        return persisted
 
     def save_turn_if_cancellation_absent(
         self,

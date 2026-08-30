@@ -10,6 +10,7 @@ from core.runtime.tool_orchestrator import (
     RuntimeToolInvocationOutcome,
 )
 from core.runtime.tool_result_artifacts import project_hosted_tool_result
+from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
 
 
 HOSTED_CORE_TOOL_HANDLES = FULL_WORKSPACE_CORE_TOOL_HANDLES
@@ -82,15 +83,24 @@ def normalized_tool_result(
     outcome,
     *,
     context_policy=None,
+    allowed_remote_data_classes: tuple[str, ...],
 ) -> tuple[dict[str, object], bool]:
     record = outcome.invocation
     if record.state == "succeeded":
         result = orchestrator.ledger.load_result(record)
-        return project_hosted_tool_result(
+        projected = project_hosted_tool_result(
             result,
             invocation=record,
             context_policy=context_policy,
-        ), False
+        )
+        # Preserve provider call/result pairing without exporting denied bytes.
+        # The original private result remains available only in the ledger.
+        return pairing_safe_tool_result(
+            projected,
+            is_error=False,
+            result_data_class=record.result_data_class,
+            allowed_remote_data_classes=allowed_remote_data_classes,
+        )
     if record.state in {"denied", "expired", "failed", "cancelled"}:
         if record.result_private_ref:
             return orchestrator.ledger.load_result(record), True

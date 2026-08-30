@@ -105,6 +105,20 @@ def input_text_with_generalist_orchestration_context(state: Any, *, session: Any
     )
     if context is None:
         return input_text
+    return input_text_with_generalist_orchestration_snapshot(
+        input_text=input_text,
+        context=context,
+    )
+
+
+def input_text_with_generalist_orchestration_snapshot(
+    *,
+    input_text: str,
+    context: dict[str, Any] | None,
+) -> str:
+    """Compose the exact snapshot already captured for provider admission."""
+    if context is None:
+        return input_text
     return f"{input_text.rstrip()}\n\n{_context_prompt(context)}".strip()
 
 

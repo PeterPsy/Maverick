@@ -23,16 +23,15 @@ from core.providers.openrouter_agentic_models import (
 )
 from core.providers.store import ProviderStore
 from core.runtime.full_workspace_contract import (
-    FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
 )
-from core.runtime.hosted_harness_recipes import OPENROUTER_FULL_WORKSPACE_RECIPE
+from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "28"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "29"
 OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28",
 )
 OPENROUTER_CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
 OPENROUTER_DEFAULT_REASONING_EFFORT = "high"
@@ -42,7 +41,7 @@ OPENROUTER_AGENTIC_CERTIFICATE_ID = (
 
 
 def openrouter_agentic_preview_policy() -> AgenticRuntimePolicy:
-    """Return the contained full-workspace candidate resource ceiling."""
+    """Return the contained governed-workspace preview resource ceiling."""
     return AgenticRuntimePolicy(
         max_steps_per_turn=32,
         max_tool_calls_per_turn=24,
@@ -90,35 +89,35 @@ def ensure_openrouter_agentic_preview_profile(
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
         revision=OPENROUTER_AGENTIC_PROFILE_REVISION,
-        display_name="OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · full-workspace candidate",
+        display_name="OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · governed-workspace candidate",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="openrouter",
         model_id=OPENROUTER_AGENTIC_MODEL_ID,
         provider_protocol="openrouter-chat-completions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==21",
+        adapter_version_constraint="==22",
         routing_constraint=openrouter_agentic_routing_constraint(),
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,
         created_at=timestamp,
         egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
-        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
+        full_workspace_contract_revision="",
         execution_family="maverick_agent",
-        harness_recipe_id=OPENROUTER_FULL_WORKSPACE_RECIPE.recipe_id,
-        harness_recipe_revision=OPENROUTER_FULL_WORKSPACE_RECIPE.revision,
-        harness_recipe_digest=OPENROUTER_FULL_WORKSPACE_RECIPE.recipe_digest,
+        harness_recipe_id=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.recipe_id,
+        harness_recipe_revision=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.revision,
+        harness_recipe_digest=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.recipe_digest,
         provider_capability_catalog_digest=(
-            OPENROUTER_FULL_WORKSPACE_RECIPE.capability_catalog_digest
+            OPENROUTER_GOVERNED_WORKSPACE_RECIPE.capability_catalog_digest
         ),
         semantic_projection_compiler_revision=(
-            OPENROUTER_FULL_WORKSPACE_RECIPE.semantic_projection_compiler_revision
+            OPENROUTER_GOVERNED_WORKSPACE_RECIPE.semantic_projection_compiler_revision
         ),
         tool_contract_revision=(
-            OPENROUTER_FULL_WORKSPACE_RECIPE.tool_contract_revision
+            OPENROUTER_GOVERNED_WORKSPACE_RECIPE.tool_contract_revision
         ),
-        context_policy=OPENROUTER_FULL_WORKSPACE_RECIPE.context_policy,
+        context_policy=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.context_policy,
     )
     try:
         stored = store.get_agentic_profile_definition(

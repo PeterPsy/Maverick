@@ -24,15 +24,6 @@ from core.runtime.tool_orchestrator import (
 
 
 _MAX_PAIRING_CLEANUP_SECONDS = 0.1
-_CANCELLATION_QUIESCENT_TOOL_HANDLES = frozenset(
-    {
-        "core-capability:shell.run",
-        "core-capability:process.start",
-        "core-capability:process.status",
-        "core-capability:process.input",
-        "core-capability:process.interrupt",
-    }
-)
 
 
 async def execute_hosted_authorized_tool(
@@ -67,12 +58,11 @@ async def execute_hosted_authorized_tool(
         lambda: control.cancel("runtime_cancelled")
     )
     try:
-        if (
-            outcome.invocation.resolved_tool_handle
-            in _CANCELLATION_QUIESCENT_TOOL_HANDLES
-        ):
-            # Close the spawn-before-callback race: cancellation must await these
-            # cooperative surfaces even if their worker has not registered cleanup.
+        # Effect class, rather than a partial handle allowlist, decides whether a
+        # worker may outlive an internal budget fence. External cancellation keeps
+        # every worker inside the hosted turn lifetime; a non-waiting caller may
+        # return early, but the adapter cannot report termination until it quiesces.
+        if outcome.invocation.effect_class != "read":
             control.require_quiescence()
         started = tool_orchestrator.start_authorized(
             outcome.invocation,
@@ -113,12 +103,12 @@ async def execute_hosted_authorized_tool(
             started.invocation,
             failure_reason=failure_reason,
         )
-        if control.requires_quiescence:
+        if failure_reason == "runtime_cancelled" or control.requires_quiescence:
             try:
                 await task
             except Exception:
                 # Cancellation owns the public outcome; the ledger fence above is
-                # already authoritative, but worker quiescence remains mandatory.
+                # authoritative, but worker quiescence remains mandatory.
                 pass
         else:
             task.add_done_callback(_consume_background_result)

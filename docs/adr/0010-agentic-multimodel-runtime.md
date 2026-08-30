@@ -632,17 +632,20 @@ governed-context blocks receive a canonical classification only from a trusted
 server-owned admission resolver bound to their exact workspace/session/turn,
 source identity and digest. Hashing the bytes and recognizing a Core composer
 id establish integrity, not a data class. Production bootstrap resolves prompt,
-agent-instruction, and reference-metadata classes from matching revisioned
-workspace resource records. Governed context cannot use one aggregate
-promotion: it restrictively joins exact control, summary, task/result, and
-artifact source records and forces untrusted trust. Unknown identities or
-missing source evidence remain `unclassified`. For tool results, resource reads
+agent-instruction, and reference-metadata classes through the Core content
+classifier and atomically persists their exact digest-bound entries in one
+immutable turn manifest. Governed context cannot use one aggregate promotion:
+the same writer classifies its exact control, summary, task/result, and artifact
+chunks, which are restrictively joined and forced to untrusted trust. Unknown
+identities or missing source evidence remain `unclassified`. For tool results, resource reads
 keep exact observed taint and edit/patch diffs inherit their pre-image taint.
 Shell/process streams and CLI/MCP discovery/results remain complete through the
-shared compactor. Only a Core-owned TCB-certified definition can opt exact
-public result bytes into admission; otherwise egress blocks the agent instead
-of replacing content with a public acknowledgement. App surfaces remain
-discoverable but app declarations cannot promote their result. Model or browser
+shared compactor and are classified from their exact bytes. A remotely denied
+private result remains in the ledger while a public call-paired error preserves
+the next request's tool protocol. Shell/process operations with workspace
+mutation scopes and mutating/destructive CLI/MCP definitions are denied before
+their handler while no pre-effect result guarantee exists. App surfaces remain
+discoverable, but app declarations cannot promote their result. Model or browser
 declarations, generic hashing, and redaction cannot select, infer, or widen a
 class. A missing or incoherent source classification produces `unclassified`,
 and the restrictive join prevents an attestation or less-sensitive sibling
@@ -670,28 +673,34 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 29
-and OpenRouter revision 28, both bound to
-`maverick-hosted-tool-loop==21`; older revisions are suspended rather than
-overwritten. Their certification manifests retain the distinct deterministic
+accepted as complete. The current contained definitions are Google revision 30
+and OpenRouter revision 29, both bound to
+`maverick-hosted-tool-loop==22`; older revisions are suspended rather than
+overwritten. Their certification manifests retain distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
-These adversarial-review definitions are new full-workspace claims under
-`codex-baseline-v9`, not mutations of earlier candidates. Adapter 21, recipe
-revision 8, context-compaction schema 3, suite 25, and TCB manifest v15 retain
-the exact composite-classification and rollback-safe multi-file invariants.
+These adversarial-review definitions are governed-workspace candidates, not
+Full Workspace claims. `codex-baseline-v10` now requires a live result behavior
+probe rather than a mode string; the current probe deliberately fails for
+mutating shell/process and app CLI/MCP scenarios. The profiles therefore pin
+`hosted-governed-result-v1` and leave `full_workspace_contract_revision` empty.
+Adapter 22, recipe revision 9, context-compaction schema 3, suite 26, and TCB
+manifest v16 retain the composite-classification and rollback-safe multi-file
+invariants.
+
 Every existing pre-image stays descriptor-pinned across exchange and is checked
 against its complete metadata/xattr snapshot, so a later-file metadata race
 rolls back earlier writes without deleting the concurrent change. Content
-effects carry exact atime/mtime and therefore admit ordinary read-modify-write;
-directory/root-only metadata and hardlink effects that cannot be reproduced are
-rejected. The definitions retain production exact-resource app-reference
-classification, exact transient bootstrap admission, byte-correct artifact
-projection, cancellation-quiescent COW execution, adapter-owned managed-process
-cleanup, complete-request compaction retry, attachment, OpenRouter projection,
-and live Google-preflight closure. They
-remain uncertified, unbound, unavailable and independently blocked by Phase-0
+effects carry exact atime/mtime; directory/root-only metadata and hardlink
+effects that cannot be reproduced are rejected. Production input capture
+content-classifies exact prompt/instruction/reference bytes and every governed
+source chunk into one immutable turn manifest. Read-only variable tool results
+are content-classified and remain provider-pairable; denied bytes stay private
+behind a public error, while unguaranteed mutations are denied before execution.
+Cancellation awaits all synchronous workers, and explicit process cleanup
+signals known leaders before bounded post-SIGTERM orphan sweeps. The definitions
+remain uncertified, unbound, unavailable, and independently blocked by Phase-0
 admission; implementation completion is not provider evidence or release
 approval.
 

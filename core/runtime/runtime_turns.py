@@ -55,3 +55,4 @@ class RuntimeTurnRecord:
     terminalization_event_persisted_at: datetime | None = None
     terminalization_thread_released_at: datetime | None = None
     terminalization_callback_delivered_at: datetime | None = None
+    provider_input_classification_manifest: dict[str, object] | None = None

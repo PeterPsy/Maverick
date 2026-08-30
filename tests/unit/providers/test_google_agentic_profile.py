@@ -30,11 +30,8 @@ from core.providers.google_agentic_profile import (
     ensure_google_agentic_preview_profile,
 )
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
-from core.runtime.full_workspace_contract import (
-    FULL_WORKSPACE_CONTRACT_REVISION,
-    FULL_WORKSPACE_CORE_TOOL_HANDLES,
-)
-from core.runtime.hosted_harness_recipes import GOOGLE_FULL_WORKSPACE_RECIPE
+from core.runtime.full_workspace_contract import FULL_WORKSPACE_CORE_TOOL_HANDLES
+from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 from core.runtime.hosted_agentic_factory import classify_hosted_content_fail_closed
 from tests.support.repo import make_temp_repo_root
 
@@ -43,7 +40,7 @@ NOW = datetime(2026, 8, 16, tzinfo=UTC)
 
 
 class GoogleAgenticProfileTest(unittest.TestCase):
-    def test_bootstrap_publishes_unbound_full_workspace_candidate(self) -> None:
+    def test_bootstrap_publishes_unbound_governed_workspace_candidate(self) -> None:
         root = make_temp_repo_root(self)
         with mock.patch.dict(
             os.environ,
@@ -78,8 +75,8 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "29")
-        self.assertEqual(profile.adapter_version_constraint, "==21")
+        self.assertEqual(profile.revision, "30")
+        self.assertEqual(profile.adapter_version_constraint, "==22")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.provider_api_version, "v1")
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
@@ -108,14 +105,11 @@ class GoogleAgenticProfileTest(unittest.TestCase):
                 )
         self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
         self.assertEqual(profile.egress_policy_revision, "2")
-        self.assertEqual(
-            profile.full_workspace_contract_revision,
-            FULL_WORKSPACE_CONTRACT_REVISION,
-        )
+        self.assertEqual(profile.full_workspace_contract_revision, "")
         self.assertEqual(profile.execution_family, "maverick_agent")
-        self.assertEqual(profile.harness_recipe_id, GOOGLE_FULL_WORKSPACE_RECIPE.recipe_id)
-        self.assertEqual(profile.harness_recipe_digest, GOOGLE_FULL_WORKSPACE_RECIPE.recipe_digest)
-        self.assertEqual(profile.context_policy, GOOGLE_FULL_WORKSPACE_RECIPE.context_policy)
+        self.assertEqual(profile.harness_recipe_id, GOOGLE_GOVERNED_WORKSPACE_RECIPE.recipe_id)
+        self.assertEqual(profile.harness_recipe_digest, GOOGLE_GOVERNED_WORKSPACE_RECIPE.recipe_digest)
+        self.assertEqual(profile.context_policy, GOOGLE_GOVERNED_WORKSPACE_RECIPE.context_policy)
         self.assertEqual(
             profile.policy_ceiling.allowed_tool_handles,
             FULL_WORKSPACE_CORE_TOOL_HANDLES,

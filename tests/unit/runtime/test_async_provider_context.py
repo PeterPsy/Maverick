@@ -106,8 +106,11 @@ class AsyncProviderContextTest(unittest.TestCase):
             patch("core.runtime.turn_submission_service_runtime.release_idle_runtime_processes"),
             patch("core.runtime.turn_submission_service_runtime.schedule_runtime_session_prewarm"),
             patch(
-                "core.runtime.turn_submission_service_runtime.runtime_provider_input_text",
-                return_value=provider_input,
+                "core.runtime.turn_submission_service_runtime.capture_runtime_provider_input",
+                return_value=SimpleNamespace(
+                    input_text=provider_input,
+                    sources=(),
+                ),
             ) as build_provider_input,
             patch(
                 "core.runtime.turn_submission_service_runtime.execute_runtime_turn",

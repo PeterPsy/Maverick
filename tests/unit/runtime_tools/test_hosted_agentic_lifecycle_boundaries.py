@@ -236,6 +236,67 @@ class HostedAgenticLifecycleBoundaryTest(unittest.TestCase):
         with self.assertRaises(OSError):
             os.fstat(output_fd)
 
+    def test_session_termination_reaps_descendant_spawned_by_sigterm_trap(
+        self,
+    ) -> None:
+        harness = HostedAgenticHarness(self)
+        workspace = harness.root / "workspaces" / "default"
+        registry = HostedToolProcessRegistry(store=harness.store)
+        capabilities = {
+            surface.definition.handle: surface
+            for surface in build_core_runtime_tool_capabilities(
+                workspace_id="default",
+                workspace_root=workspace,
+                runtime_root=workspace / "runtime",
+                process_registry=registry,
+            )
+        }
+        actor = RuntimeToolActorContext(
+            workspace_id="default",
+            actor_id="user-1",
+            agent_id="chat",
+            platform_role="admin",
+            workspace_role="owner",
+            session_id=harness.session.session_id,
+            execution_mode="full-access",
+        )
+        scope = capabilities[
+            "core-capability:workspace.instructions"
+        ].handler({"path": ".", "target_is_directory": True}, actor, None)
+        started = capabilities["core-capability:process.start"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    "trap 'setsid sleep 30 &' TERM; while :; do sleep 1; done",
+                ],
+                "mutation_scopes": [
+                    {
+                        "path": ".",
+                        "instruction_scope_digest": scope.payload[
+                            "scope_digest"
+                        ],
+                    }
+                ],
+            },
+            actor,
+            None,
+        )
+        process_id = str(started.payload["process_id"])
+        live = registry._live[process_id]
+        output_fd = live.output_fd
+        overlay_root = live.effect_overlay.root
+
+        terminated = registry.terminate_session(actor.session_id)
+
+        self.assertEqual(terminated, 1)
+        self.assertEqual(registry.live_process_count(session_id=actor.session_id), 0)
+        self.assertFalse(runtime_processes_alive_for_session(actor.session_id))
+        self.assertEqual(harness.store.get_process(process_id).status, "terminated")
+        self.assertFalse(overlay_root.exists())
+        with self.assertRaises(OSError):
+            os.fstat(output_fd)
+
 
 if __name__ == "__main__":
     unittest.main()

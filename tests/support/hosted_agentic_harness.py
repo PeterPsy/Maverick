@@ -415,6 +415,7 @@ class HostedAgenticHarness:
             ),
             execution_mode="full-access",
             egress_policy_id=self.binding.egress_policy_id,
+            allowed_remote_data_classes=("public",),
             policy_revision_set=("policy:test:1",),
             health_revision="health:test:1",
             authority_digest="",

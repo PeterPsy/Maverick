@@ -284,7 +284,7 @@ def bootstrap_platform_state(
         agentic_egress_evaluator=agentic_egress_evaluator,
         runtime_input_classification_resolver=(
             build_runtime_provider_input_classification_resolver(
-                workspace_store=workspace_store,
+                runtime_store=runtime_store,
             )
             if runtime_input_classification_resolver is None
             else runtime_input_classification_resolver

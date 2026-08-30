@@ -11,7 +11,7 @@ from core.providers.google_interactions_catalog import (
     validate_google_interactions_catalog,
 )
 from core.providers.google_interactions_models import GoogleInteractionsProtocolError
-from core.runtime.hosted_harness_recipes import GOOGLE_FULL_WORKSPACE_RECIPE
+from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 from tests.unit.providers.test_hosted_harness_recipes import _request
 
 
@@ -23,7 +23,7 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
             calls.append((url, credential is not None))
             return _endpoint_schema() if credential is None else _model_record()
 
-        request = _request(GOOGLE_FULL_WORKSPACE_RECIPE, final=False)
+        request = _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=False)
         with patch(
             "core.providers.google_interactions_catalog._fetch_catalog",
             side_effect=fetch,
@@ -48,7 +48,7 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
         self.assertEqual(len(snapshot.catalog_snapshot_digest), 64)
 
     def test_catalog_rejects_endpoint_model_and_limit_drift(self) -> None:
-        request = _request(GOOGLE_FULL_WORKSPACE_RECIPE, final=False)
+        request = _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=False)
         variants = []
         missing_stream = _endpoint_schema()
         del missing_stream["components"]["schemas"][

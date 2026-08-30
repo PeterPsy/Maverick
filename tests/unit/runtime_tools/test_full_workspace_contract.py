@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import replace
 import os
 from pathlib import Path
 import stat
 import tempfile
 import time
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.cli.command_registry import CliCommandRegistry
@@ -21,18 +19,6 @@ from core.mcp.models import (
     McpToolDefinition,
 )
 from core.mcp.tool_registry import McpToolRegistry
-from core.providers.agentic_models import codex_runtime_policy
-from core.providers.capability_models import RuntimeCapabilitySet
-from core.providers.errors import CapabilityCertificateError
-from core.runtime.full_workspace_contract import (
-    FULL_WORKSPACE_CONTRACT_REVISION,
-    FULL_WORKSPACE_CORE_TOOL_HANDLES,
-    inspect_full_workspace_contract,
-    validate_full_workspace_contract_claim,
-    validate_full_workspace_live_authority,
-)
-from core.runtime.hosted_tool_result_admission import HOSTED_TOOL_RESULT_MODES
-from core.runtime.hosted_harness_recipes import GOOGLE_FULL_WORKSPACE_RECIPE
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
 from core.runtime.process_control import runtime_processes_alive_for_session
 from core.runtime.tool_catalog import RuntimeToolActorContext
@@ -55,102 +41,6 @@ class FullWorkspaceContractTest(unittest.TestCase):
             session_id="session-hosted",
             execution_mode="full-access",
         )
-
-    def test_contract_rejects_every_partial_claim_and_accepts_exact_surface(self) -> None:
-        capabilities = RuntimeCapabilitySet(
-            streaming=True,
-            tool_orchestration=True,
-            cli=True,
-            mcp=True,
-            skill_catalog=True,
-            filesystem_list=True,
-            filesystem_read=True,
-            filesystem_write=True,
-            shell=True,
-            interrupt=True,
-            same_turn_steering=False,
-            recovery=True,
-            confirmation_resume=True,
-            provider_private_state=True,
-            attachment_modalities=("file",),
-            app_references=True,
-            confirmations=True,
-        )
-        policy = replace(
-            codex_runtime_policy(),
-            tool_handle_mode="exact",
-            allowed_tool_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES,
-            require_confirmation_for_mutating=True,
-            require_confirmation_for_destructive=True,
-        )
-        profile = SimpleNamespace(
-            full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
-            policy_ceiling=policy,
-            execution_family="maverick_agent",
-            harness_recipe_id=GOOGLE_FULL_WORKSPACE_RECIPE.recipe_id,
-            harness_recipe_revision=GOOGLE_FULL_WORKSPACE_RECIPE.revision,
-            harness_recipe_digest=GOOGLE_FULL_WORKSPACE_RECIPE.recipe_digest,
-            provider_capability_catalog_digest=(
-                GOOGLE_FULL_WORKSPACE_RECIPE.capability_catalog_digest
-            ),
-            semantic_projection_compiler_revision=(
-                GOOGLE_FULL_WORKSPACE_RECIPE.semantic_projection_compiler_revision
-            ),
-            tool_contract_revision=GOOGLE_FULL_WORKSPACE_RECIPE.tool_contract_revision,
-            context_policy=GOOGLE_FULL_WORKSPACE_RECIPE.context_policy,
-        )
-        certificate = SimpleNamespace(
-            full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
-            certified_capabilities=capabilities,
-        )
-
-        report = inspect_full_workspace_contract(
-            capabilities=capabilities,
-            policy=policy,
-            tool_result_modes=HOSTED_TOOL_RESULT_MODES,
-        )
-        self.assertTrue(report.complete)
-        validate_full_workspace_contract_claim(
-            profile=profile,
-            certificate=certificate,
-        )
-        with self.assertRaisesRegex(
-            CapabilityCertificateError,
-            "full_workspace_contract_live_authority_incomplete",
-        ):
-            validate_full_workspace_live_authority(
-                revision=FULL_WORKSPACE_CONTRACT_REVISION,
-                capabilities=capabilities,
-                policy=policy,
-                allowed_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES[:-1],
-            )
-        self.assertFalse(
-            inspect_full_workspace_contract(
-                capabilities=capabilities,
-                policy=replace(
-                    policy,
-                    require_confirmation_for_destructive=False,
-                ),
-            ).complete
-        )
-
-        for missing in ("cli", "filesystem_write", "confirmations"):
-            with self.subTest(missing=missing), self.assertRaisesRegex(
-                CapabilityCertificateError,
-                "full_workspace_contract_incomplete",
-            ):
-                validate_full_workspace_contract_claim(
-                    profile=profile,
-                    certificate=SimpleNamespace(
-                        full_workspace_contract_revision=(
-                            FULL_WORKSPACE_CONTRACT_REVISION
-                        ),
-                        certified_capabilities=replace(
-                            capabilities,
-                            **{missing: False},
-                        ),
-                    ),
-                )
 
     def test_filesystem_search_edit_patch_move_delete_and_scoped_instructions(self) -> None:
         nested = self.workspace / "project"

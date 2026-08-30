@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 from threading import RLock
+import time
 from uuid import uuid4
 
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
@@ -23,6 +24,7 @@ from core.runtime.lifecycle_service_turns import (
 )
 from core.runtime.process_control import (
     register_runtime_process,
+    runtime_processes_alive_for_session,
     terminate_orphaned_runtime_processes_for_session,
     terminate_runtime_process,
     unregister_runtime_process,
@@ -32,6 +34,9 @@ from core.runtime.tool_errors import RuntimeToolError
 
 MAX_PROCESS_STATUS_BYTES = 131_072
 MAX_PROCESS_INPUT_BYTES = 65_536
+_SESSION_TERMINATION_SWEEP_ATTEMPTS = 4
+_SESSION_TERMINATION_SWEEP_TIMEOUT_SECONDS = 0.25
+_SESSION_TERMINATION_SWEEP_PAUSE_SECONDS = 0.05
 
 
 @dataclass
@@ -308,18 +313,91 @@ class HostedToolProcessRegistry:
                 for process_id, live in self._live.items()
                 if live.session_id == session_id
             )
-            for process_id, _live in owned:
-                self._live.pop(process_id, None)
-        # Bubblewrap may outlive the Popen leader it forked from. Reap every
-        # marked process for the closing session before waiting on captures,
-        # including an orphan whose in-memory handle was already lost.
-        terminate_orphaned_runtime_processes_for_session(session_id)
-        finalized = 0
-        for process_id, live in owned:
-            with live.lock:
-                self._terminate_live(process_id, live)
-                finalized += 1
-        return finalized
+        finalized: set[str] = set()
+        first_error: RuntimeToolError | None = None
+        session_processes_alive = True
+
+        # Terminate known leaders first. A SIGTERM trap can create a detached
+        # descendant, so an orphan sweep before this phase is not sufficient.
+        try:
+            for process_id, live in owned:
+                try:
+                    with live.lock:
+                        self._terminate_live(
+                            process_id,
+                            live,
+                            release_handle=False,
+                        )
+                    finalized.add(process_id)
+                except RuntimeToolError as error:
+                    first_error = first_error or error
+                except Exception:
+                    first_error = first_error or RuntimeToolError(
+                        "process_session_termination_failed"
+                    )
+        finally:
+            # Always sweep after signalling the known leaders. Retry both the
+            # orphan scan and capture finalization within a fixed bound: a
+            # detached process may keep the output pipe open until this phase.
+            for attempt in range(_SESSION_TERMINATION_SWEEP_ATTEMPTS):
+                try:
+                    terminate_orphaned_runtime_processes_for_session(
+                        session_id,
+                        timeout_seconds=(
+                            _SESSION_TERMINATION_SWEEP_TIMEOUT_SECONDS
+                        ),
+                    )
+                except Exception:
+                    first_error = first_error or RuntimeToolError(
+                        "process_session_termination_failed"
+                    )
+                for process_id, live in owned:
+                    if process_id in finalized:
+                        continue
+                    try:
+                        with live.lock:
+                            self._terminate_live(
+                                process_id,
+                                live,
+                                release_handle=False,
+                            )
+                        finalized.add(process_id)
+                    except RuntimeToolError as error:
+                        first_error = first_error or error
+                    except Exception:
+                        first_error = first_error or RuntimeToolError(
+                            "process_session_termination_failed"
+                        )
+                try:
+                    session_processes_alive = (
+                        runtime_processes_alive_for_session(session_id)
+                    )
+                except Exception:
+                    session_processes_alive = True
+                    first_error = first_error or RuntimeToolError(
+                        "process_session_termination_failed"
+                    )
+                if len(finalized) == len(owned) and not session_processes_alive:
+                    break
+                if attempt + 1 < _SESSION_TERMINATION_SWEEP_ATTEMPTS:
+                    time.sleep(_SESSION_TERMINATION_SWEEP_PAUSE_SECONDS)
+
+        clean = (
+            len(finalized) == len(owned)
+            and not session_processes_alive
+        )
+        if clean:
+            with self._lock:
+                for process_id, live in owned:
+                    if self._live.get(process_id) is live:
+                        self._live.pop(process_id, None)
+            return len(finalized)
+        # Retain every known handle on failure, even if its local resources were
+        # already finalized, so a later session cleanup can retry and ownership is
+        # never silently lost while a marked descendant remains alive.
+        if first_error is not None:
+            raise first_error
+        raise RuntimeToolError("process_session_termination_incomplete")
 
     def live_process_count(self, *, session_id: str | None = None) -> int:
         """Return the in-memory live-handle count for lifecycle assertions."""
@@ -329,6 +407,24 @@ class HostedToolProcessRegistry:
             return sum(
                 live.session_id == session_id for live in self._live.values()
             )
+
+    def has_pending_workspace_effects(
+        self,
+        *,
+        process_id: str,
+        session_id: str,
+        workspace_id: str,
+    ) -> bool:
+        """Return whether status could cross an unclassified commit boundary."""
+        record = self.store.get_process(process_id)
+        if record.session_id != session_id or record.workspace_id != workspace_id:
+            raise RuntimeToolError("process_not_found")
+        with self._lock:
+            live = self._live.get(process_id)
+        if live is None:
+            raise RuntimeToolError("process_handle_unavailable")
+        with live.lock:
+            return live.effect_overlay is not None
 
     def _owned_live(
         self,
@@ -411,25 +507,31 @@ class HostedToolProcessRegistry:
         self,
         process_id: str,
         live: _LiveHostedToolProcess,
+        *,
+        release_handle: bool = True,
     ) -> None:
-        with self._lock:
-            self._live.pop(process_id, None)
         if live.process.stdin is not None and not live.process.stdin.closed:
             live.process.stdin.close()
         capture_finished = live.output_capture.wait()
         if live.effect_overlay is not None:
             live.effect_overlay.discard()
+        if not capture_finished:
+            raise RuntimeToolError("process_output_capture_failed")
         try:
             os.close(live.output_fd)
         except OSError:
             pass
-        if not capture_finished:
-            raise RuntimeToolError("process_output_capture_failed")
+        if release_handle:
+            with self._lock:
+                if self._live.get(process_id) is live:
+                    self._live.pop(process_id, None)
 
     def _terminate_live(
         self,
         process_id: str,
         live: _LiveHostedToolProcess,
+        *,
+        release_handle: bool = True,
     ) -> bool:
         terminated = terminate_runtime_process(live.process)
         if live.effect_overlay is not None:
@@ -445,7 +547,11 @@ class HostedToolProcessRegistry:
                 stdin_open=False,
                 stdout_open=False,
             )
-        self._close_live(process_id, live)
+        self._close_live(
+            process_id,
+            live,
+            release_handle=release_handle,
+        )
         return terminated
 
 

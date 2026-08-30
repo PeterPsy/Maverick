@@ -12,14 +12,13 @@ from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_MODEL_ID,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
 )
-from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
 from core.runtime.semantic_envelope_models import (
     HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION,
 )
 
 
 HOSTED_CONTEXT_POLICY_REVISION = "p4-context-v4"
-HOSTED_TOOL_CONTRACT_REVISION = FULL_WORKSPACE_CONTRACT_REVISION
+HOSTED_TOOL_CONTRACT_REVISION = "hosted-governed-result-v1"
 
 
 @dataclass(frozen=True)
@@ -103,9 +102,9 @@ def hosted_full_context_policy() -> AgenticContextPolicy:
     )
 
 
-GOOGLE_FULL_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
-    recipe_id="maverick-google-interactions-full-workspace",
-    revision="8",
+GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
+    recipe_id="maverick-google-interactions-governed-workspace",
+    revision="9",
     model_provider_id="google-ai-studio",
     model_id=GOOGLE_AGENTIC_MODEL_ID,
     provider_protocol="google-interactions",
@@ -136,9 +135,9 @@ GOOGLE_FULL_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 )
 
 
-OPENROUTER_FULL_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
-    recipe_id="maverick-openrouter-chat-full-workspace",
-    revision="8",
+OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
+    recipe_id="maverick-openrouter-chat-governed-workspace",
+    revision="9",
     model_provider_id="openrouter",
     model_id=OPENROUTER_AGENTIC_MODEL_ID,
     provider_protocol="openrouter-chat-completions",
@@ -182,11 +181,11 @@ def _digest(value: object) -> str:
 
 
 __all__ = [
-    "GOOGLE_FULL_WORKSPACE_RECIPE",
+    "GOOGLE_GOVERNED_WORKSPACE_RECIPE",
     "HOSTED_CONTEXT_POLICY_REVISION",
     "HOSTED_TOOL_CONTRACT_REVISION",
     "HostedHarnessRecipeManifest",
     "HostedProviderSupportFlags",
-    "OPENROUTER_FULL_WORKSPACE_RECIPE",
+    "OPENROUTER_GOVERNED_WORKSPACE_RECIPE",
     "hosted_full_context_policy",
 ]

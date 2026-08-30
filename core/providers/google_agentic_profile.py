@@ -18,17 +18,16 @@ from core.providers.agentic_workspace_policy import (
 )
 from core.providers.store import ProviderStore
 from core.runtime.full_workspace_contract import (
-    FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
 )
-from core.runtime.hosted_harness_recipes import GOOGLE_FULL_WORKSPACE_RECIPE
+from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "29"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "28"
+GOOGLE_AGENTIC_PROFILE_REVISION = "30"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "29"
 GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29",
 )
 GOOGLE_CERTIFIED_REASONING_EFFORTS = ("high",)
 GOOGLE_DEFAULT_REASONING_EFFORT = "high"
@@ -38,7 +37,7 @@ GOOGLE_AGENTIC_CERTIFICATE_ID = (
 
 
 def google_agentic_preview_policy() -> AgenticRuntimePolicy:
-    """Return the contained full-workspace candidate resource ceiling."""
+    """Return the contained governed-workspace preview resource ceiling."""
     return AgenticRuntimePolicy(
         max_steps_per_turn=32,
         max_tool_calls_per_turn=24,
@@ -85,33 +84,33 @@ def ensure_google_agentic_preview_profile(
     definition = AgenticProfileDefinition(
         definition_id=GOOGLE_AGENTIC_PROFILE_ID,
         revision=GOOGLE_AGENTIC_PROFILE_REVISION,
-        display_name="Google Gemini 3.6 Flash · full-workspace candidate",
+        display_name="Google Gemini 3.6 Flash · governed-workspace candidate",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="google-ai-studio",
         model_id="gemini-3.6-flash",
         provider_protocol="google-interactions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==21",
+        adapter_version_constraint="==22",
         routing_constraint=google_interactions_routing_constraint(),
         policy_ceiling=google_agentic_preview_policy(),
         capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,
         created_at=timestamp,
         egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
-        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
+        full_workspace_contract_revision="",
         execution_family="maverick_agent",
-        harness_recipe_id=GOOGLE_FULL_WORKSPACE_RECIPE.recipe_id,
-        harness_recipe_revision=GOOGLE_FULL_WORKSPACE_RECIPE.revision,
-        harness_recipe_digest=GOOGLE_FULL_WORKSPACE_RECIPE.recipe_digest,
+        harness_recipe_id=GOOGLE_GOVERNED_WORKSPACE_RECIPE.recipe_id,
+        harness_recipe_revision=GOOGLE_GOVERNED_WORKSPACE_RECIPE.revision,
+        harness_recipe_digest=GOOGLE_GOVERNED_WORKSPACE_RECIPE.recipe_digest,
         provider_capability_catalog_digest=(
-            GOOGLE_FULL_WORKSPACE_RECIPE.capability_catalog_digest
+            GOOGLE_GOVERNED_WORKSPACE_RECIPE.capability_catalog_digest
         ),
         semantic_projection_compiler_revision=(
-            GOOGLE_FULL_WORKSPACE_RECIPE.semantic_projection_compiler_revision
+            GOOGLE_GOVERNED_WORKSPACE_RECIPE.semantic_projection_compiler_revision
         ),
-        tool_contract_revision=GOOGLE_FULL_WORKSPACE_RECIPE.tool_contract_revision,
-        context_policy=GOOGLE_FULL_WORKSPACE_RECIPE.context_policy,
+        tool_contract_revision=GOOGLE_GOVERNED_WORKSPACE_RECIPE.tool_contract_revision,
+        context_policy=GOOGLE_GOVERNED_WORKSPACE_RECIPE.context_policy,
     )
     try:
         stored = store.get_agentic_profile_definition(

@@ -104,6 +104,20 @@ RuntimeToolResultClassificationResolver = Callable[
 
 
 @dataclass(frozen=True)
+class RuntimeToolResultPreflightDecision:
+    """Whether a variable-result tool may cross its effect boundary."""
+
+    admitted_before_effect: bool
+    guaranteed_data_class: str | None = None
+
+
+RuntimeToolResultPreflightResolver = Callable[
+    [str, dict[str, object], RuntimeToolActorContext],
+    RuntimeToolResultPreflightDecision | None,
+]
+
+
+@dataclass(frozen=True)
 class RuntimeCoreCapabilitySurface:
     """A Core capability with an execution-policy-owned implementation."""
 
@@ -164,12 +178,14 @@ class RuntimeToolCatalogBuilder:
         app_interface_resolver: RuntimeAppInterfaceResolver | None = None,
         core_capabilities: tuple[RuntimeCoreCapabilitySurface, ...] = (),
         result_classification_resolver: RuntimeToolResultClassificationResolver | None = None,
+        result_preflight_resolver: RuntimeToolResultPreflightResolver | None = None,
     ) -> None:
         self.cli_registry = cli_registry
         self.mcp_registry = mcp_registry
         self.app_interface_resolver = app_interface_resolver
         self.core_capabilities = core_capabilities
         self.result_classification_resolver = result_classification_resolver
+        self.result_preflight_resolver = result_preflight_resolver
 
     def build(
         self,

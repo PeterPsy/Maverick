@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v15 records six maintained transitive dependency contracts. The
+- [x] Manifest v16 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v25 / matrix
-  `2026-08-30-r25-p4-agentic-review-closure-tcb15`
+- [x] Google and OpenRouter suite v26 / matrix
+  `2026-08-30-r26-p4-agentic-review-closure-tcb16`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -412,15 +412,17 @@ completion claim.
   model and ZDR catalog records, `tool_choice:none`, context/completion limits
   and every translated endpoint parameter, then sends `tools: []` and
   `tool_choice: none` for finalization.
-- [x] Transient prompt and agent-instruction admission requires an exact
-  revisioned workspace classification record; composer identity/digest proves
-  integrity but cannot create `public`. Governed context restrictively joins
-  exact control, summary, task/result, and artifact source records and remains
-  untrusted. The generic classifier is fail-closed. Resource results propagate
+- [x] Transient prompt and agent-instruction admission requires the exact
+  content-derived entry from one immutable Core turn-capture manifest;
+  composer identity/digest proves integrity but cannot select a class.
+  Governed context restrictively joins exact control, summary, task/result, and
+  artifact capture entries and remains untrusted. The generic fallback remains
+  fail-closed. Resource results propagate
   observed classification and edit/patch diffs retain pre-image taint.
   Shell/process streams and CLI/MCP discovery/results remain complete and use
-  common compaction; absent admissible classification blocks egress instead of
-  returning a public acknowledgement. App declarations cannot promote output
+  common compaction; denied private bytes remain in the ledger while a public
+  call-paired error preserves protocol pairing. Unguaranteed mutating variants
+  are rejected before their handler. App declarations cannot promote output,
   and app entries are not silently filtered.
 - [x] Semantic classifications bind the exact canonical projected bytes.
   Attachment metadata and file observations are classified separately then
@@ -456,12 +458,18 @@ completion claim.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 21, semantic compiler revision 5, Full Workspace contract
-  `codex-baseline-v9`, context-compaction schema 3, TCB manifest v15, suite 25,
-  and matrix `2026-08-30-r25-p4-agentic-review-closure-tcb15` create new immutable
-  Google revision 29 and OpenRouter revision 28 full-workspace candidates.
-  Historical revisions 28/27 are suspended, never promoted. No live
-  probe, signed certificate, binding, remote activation, or Codex
+- [x] Adapter 22, semantic compiler revision 5, governed result contract
+  `hosted-governed-result-v1`, context-compaction schema 3, TCB manifest v16,
+  suite 26, and matrix
+  `2026-08-30-r26-p4-agentic-review-closure-tcb16` create immutable Google
+  revision 30 and OpenRouter revision 29 governed-workspace candidates.
+  Historical revisions 29/28 are suspended, never promoted. The candidates
+  intentionally leave `full_workspace_contract_revision` empty.
+- [ ] Admit a hosted Full Workspace `codex-baseline-v10` claim only after the
+  live behavior probe verifies complete execution, classification, egress,
+  pairing, and pre-effect guarantees for mutating shell/process and app
+  CLI/MCP. Until then those unguaranteed effects are denied before execution.
+  No live probe, signed certificate, binding, remote activation, or Codex
   profile/artifact change is part of Phase 4.
 
 ## Certification and release gates — still open

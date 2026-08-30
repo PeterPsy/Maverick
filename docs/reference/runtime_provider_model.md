@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v15 also
+status, workspace binding, and upstream constraint. TCB manifest v16 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -577,16 +577,22 @@ classification store used by other resource observations. Absent evidence or
 any identity/version mismatch stays `unclassified`.
 
 Production bootstrap also installs the closed transient-input admission
-resolver used by the composer. Integrity-bound source ids never imply
-`public`: ordinary transient inputs require exact workspace classification
-records, while governed orchestration context joins its independently
-classified control, summary, task/result, and artifact sources and retains
-untrusted provenance. Tool results do not receive a generic public fallback:
-exact resource observations and edit pre-images retain their taint; complete
-shell/process streams and CLI/MCP discovery/results remain available to the
-common compactor, but unclassified bytes block egress rather than becoming a
-public acknowledgement. App definitions remain discoverable and cannot
-self-promote. Large artifact
+resolver and its Core-owned production writer. Before dispatch, one turn CAS
+persists a revisioned content-derived manifest for the exact prompt, agent
+instruction, reference metadata, and each governed orchestration control,
+summary, task/result, and artifact chunk. Integrity-bound source ids never imply
+`public`; the resolver accepts only the matching turn manifest, and governed
+context restrictively joins its entries while retaining untrusted provenance.
+
+Tool results do not receive a generic public fallback. Exact resource
+observations and edit pre-images retain their taint; read-only shell/process
+streams and CLI/MCP discovery/read results are content-classified and remain
+complete through the common compactor. A denied private result becomes only a
+public call-paired error on the next request. Unguaranteed workspace-mutating
+shell/process and mutating/destructive CLI/MCP calls are rejected before their
+handler executes. App definitions remain discoverable and cannot self-promote,
+and current hosted profiles intentionally omit the Full Workspace contract
+claim. Large artifact
 summaries carry a digest of their exact provider-visible bytes while retaining
 the original result class/trust/identity separately.
 

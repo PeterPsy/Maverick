@@ -9,6 +9,22 @@ from core.providers.agentic_protocol import AgenticSourceMetadata, AgenticToolRe
 from core.runtime.tool_models import ToolInvocationRecord
 
 
+def pairing_safe_tool_result(
+    result: dict[str, object],
+    *,
+    is_error: bool,
+    result_data_class: str | None,
+    allowed_remote_data_classes: tuple[str, ...],
+) -> tuple[dict[str, object], bool]:
+    """Replace a denied private result with a pairable public Core error."""
+    if (
+        not is_error
+        and result_data_class not in allowed_remote_data_classes
+    ):
+        return {"error": "tool_result_egress_denied"}, True
+    return result, is_error
+
+
 def make_agentic_tool_result(
     *,
     provider_tool_call_id: str,
@@ -59,3 +75,6 @@ def make_agentic_tool_result(
         is_error=is_error,
         source_metadata=source_metadata,
     )
+
+
+__all__ = ["make_agentic_tool_result", "pairing_safe_tool_result"]

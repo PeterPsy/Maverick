@@ -34,8 +34,8 @@ from core.providers.openrouter_agentic_models import (
 from core.providers.openrouter_agentic_state import inspect_openrouter_chat_state
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
 from core.runtime.hosted_harness_recipes import (
-    GOOGLE_FULL_WORKSPACE_RECIPE,
-    OPENROUTER_FULL_WORKSPACE_RECIPE,
+    GOOGLE_GOVERNED_WORKSPACE_RECIPE,
+    OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
 )
 from core.runtime.hosted_provider_runtime import (
     GOOGLE_HOSTED_FINALIZATION_POLICY,
@@ -50,11 +50,11 @@ def build_hosted_provider_runtime_registry() -> HostedProviderRuntimeRegistry:
     registry = HostedProviderRuntimeRegistry()
     registry.register(
         HostedProviderRuntime(
-            model_provider_id=GOOGLE_FULL_WORKSPACE_RECIPE.model_provider_id,
-            provider_protocol=GOOGLE_FULL_WORKSPACE_RECIPE.provider_protocol,
-            provider_api_version=GOOGLE_FULL_WORKSPACE_RECIPE.provider_api_version,
+            model_provider_id=GOOGLE_GOVERNED_WORKSPACE_RECIPE.model_provider_id,
+            provider_protocol=GOOGLE_GOVERNED_WORKSPACE_RECIPE.provider_protocol,
+            provider_api_version=GOOGLE_GOVERNED_WORKSPACE_RECIPE.provider_api_version,
             client=GoogleInteractionsAgenticClient(
-                model_id=GOOGLE_FULL_WORKSPACE_RECIPE.model_id,
+                model_id=GOOGLE_GOVERNED_WORKSPACE_RECIPE.model_id,
                 state_mode="stateless",
             ),
             private_codec=HostedProviderPrivateCodec(
@@ -69,20 +69,20 @@ def build_hosted_provider_runtime_registry() -> HostedProviderRuntimeRegistry:
                 content,
                 mode="stateless",
             ),
-            recipe=GOOGLE_FULL_WORKSPACE_RECIPE,
+            recipe=GOOGLE_GOVERNED_WORKSPACE_RECIPE,
             context_compactor=compact_google_stateless_history,
             request_preflight=preflight_google_interactions_request,
         )
     )
     registry.register(
         HostedProviderRuntime(
-            model_provider_id=OPENROUTER_FULL_WORKSPACE_RECIPE.model_provider_id,
-            provider_protocol=OPENROUTER_FULL_WORKSPACE_RECIPE.provider_protocol,
+            model_provider_id=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.model_provider_id,
+            provider_protocol=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.provider_protocol,
             provider_api_version=(
-                OPENROUTER_FULL_WORKSPACE_RECIPE.provider_api_version
+                OPENROUTER_GOVERNED_WORKSPACE_RECIPE.provider_api_version
             ),
             client=OpenRouterAgenticClient(
-                model_id=OPENROUTER_FULL_WORKSPACE_RECIPE.model_id,
+                model_id=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.model_id,
             ),
             private_codec=HostedProviderPrivateCodec(
                 codec_id=OPENROUTER_AGENTIC_CODEC_ID,
@@ -95,7 +95,7 @@ def build_hosted_provider_runtime_registry() -> HostedProviderRuntimeRegistry:
             ),
             finalization_policy=OPENROUTER_HOSTED_FINALIZATION_POLICY,
             private_state_inspector=inspect_openrouter_chat_state,
-            recipe=OPENROUTER_FULL_WORKSPACE_RECIPE,
+            recipe=OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
             context_compactor=compact_openrouter_history,
             request_preflight=preflight_openrouter_completion_request,
         )

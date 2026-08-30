@@ -15,8 +15,12 @@ from core.mcp.tool_registry import McpToolRegistry
 from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_admission_resolver,
+    build_hosted_tool_result_preflight_resolver,
 )
-from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
+from core.runtime.hosted_agentic_tool_results import (
+    make_agentic_tool_result,
+    pairing_safe_tool_result,
+)
 from core.runtime.tool_catalog import (
     RuntimeToolActorContext,
     RuntimeToolSurfaceResult,
@@ -42,7 +46,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             mcp_registry=self.mcp,
         )
 
-    def test_shell_and_process_output_remain_complete_and_fail_closed(
+    def test_shell_and_process_output_are_complete_and_content_classified(
         self,
     ) -> None:
         shell = self.resolve(
@@ -50,7 +54,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             {"argv": ["fixture"]},
             {
                 "exit_code": 0,
-                "output": "customer secret must stay private",
+                "output": "customer SSN 123-45-6789 must stay private",
                 "output_bytes": 33,
                 "stream_complete": True,
                 "workspace_effects_committed": True,
@@ -60,7 +64,10 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             },
             self.actor,
         )
-        self.assertIsNone(shell)
+        self.assertIsInstance(shell, RuntimeToolSurfaceResult)
+        self.assertEqual(shell.classification.data_class, "regulated_or_customer_data")
+        self.assertIn("123-45-6789", shell.payload["output"])
+        self._assert_digest_matches(shell)
 
         status = self.resolve(
             "core-capability:process.status",
@@ -69,7 +76,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
                 "process_id": "agent-process-1",
                 "status": "running",
                 "exit_code": None,
-                "output": "another secret",
+                "output": "ordinary process output",
                 "output_offset": 0,
                 "next_output_offset": 14,
                 "output_pending": False,
@@ -80,7 +87,10 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             },
             self.actor,
         )
-        self.assertIsNone(status)
+        self.assertIsInstance(status, RuntimeToolSurfaceResult)
+        self.assertEqual(status.classification.data_class, "public")
+        self.assertEqual(status.payload["output"], "ordinary process output")
+        self._assert_digest_matches(status)
 
     def test_process_start_identifier_survives_as_bounded_action_metadata(
         self,
@@ -147,7 +157,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
         self.assertIn("-before", result.payload["diff"])
         self.assertIn("+after", result.payload["diff"])
 
-    def test_core_result_requires_an_explicit_certified_public_declaration(
+    def test_core_result_is_classified_from_bytes_not_ownership_declaration(
         self,
     ) -> None:
         self.cli.register_command(
@@ -182,7 +192,17 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             self.actor,
         )
 
-        self.assertIsNone(resolved)
+        self.assertIsInstance(resolved, RuntimeToolSurfaceResult)
+        self.assertEqual(resolved.classification.data_class, "credential_or_secret")
+        self.assertEqual(
+            pairing_safe_tool_result(
+                resolved.payload,
+                is_error=False,
+                result_data_class=resolved.classification.data_class,
+                allowed_remote_data_classes=("public",),
+            ),
+            ({"error": "tool_result_egress_denied"}, True),
+        )
 
     def test_app_result_claim_cannot_promote_untrusted_cli_bytes(self) -> None:
         self.cli.register_command(
@@ -218,7 +238,8 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             self.actor,
         )
 
-        self.assertIsNone(resolved)
+        self.assertIsInstance(resolved, RuntimeToolSurfaceResult)
+        self.assertEqual(resolved.classification.data_class, "credential_or_secret")
 
     def test_app_cli_and_mcp_discovery_is_never_silently_filtered(self) -> None:
         self.cli.register_command(
@@ -281,24 +302,71 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             "discovery_first": True,
         }
 
-        self.assertIsNone(
-            self.resolve(
-                "core-capability:cli.list",
-                {},
-                cli_payload,
-                self.actor,
-            )
+        cli_result = self.resolve(
+            "core-capability:cli.list",
+            {},
+            cli_payload,
+            self.actor,
         )
-        self.assertIsNone(
-            self.resolve(
-                "core-capability:mcp.list",
-                {},
-                mcp_payload,
-                self.actor,
-            )
+        mcp_result = self.resolve(
+            "core-capability:mcp.list",
+            {},
+            mcp_payload,
+            self.actor,
         )
+        self.assertIsInstance(cli_result, RuntimeToolSurfaceResult)
+        self.assertIsInstance(mcp_result, RuntimeToolSurfaceResult)
+        self.assertEqual(cli_result.payload, cli_payload)
+        self.assertEqual(mcp_result.payload, mcp_payload)
+        self.assertEqual(cli_result.classification.data_class, "public")
+        self.assertEqual(mcp_result.classification.data_class, "public")
         self.assertEqual(cli_payload["commands"][0]["command_id"], "app.visible")
         self.assertEqual(mcp_payload["tools"][0]["tool_name"], "app_visible")
+
+    def test_preflight_denies_unguaranteed_effects_before_execution(self) -> None:
+        self.cli.register_command(
+            CliCommandDefinition(
+                command_id="app.mutate",
+                path_segments=["app", "mutate"],
+                description="Mutating app command.",
+                argument_schema={"type": "object"},
+                owner_kind="app",
+                owner_id="fixture-app",
+                workspace_id="default",
+                exposure_scope="workspace_enabled_app",
+                invocation_policy=CliInvocationPolicy(False, None, True, True, False),
+                entrypoint_path="apps/fixture/cli.py",
+                effect_class="mutating",
+                schema_public=True,
+            ),
+            lambda _arguments, _context: {},
+        )
+        preflight = build_hosted_tool_result_preflight_resolver(
+            cli_registry=self.cli,
+            mcp_registry=self.mcp,
+        )
+
+        self.assertFalse(
+            preflight(
+                "core-capability:shell.run",
+                {"mutation_scopes": [{"path": "."}]},
+                self.actor,
+            ).admitted_before_effect
+        )
+        self.assertTrue(
+            preflight(
+                "core-capability:shell.run",
+                {"mutation_scopes": []},
+                self.actor,
+            ).admitted_before_effect
+        )
+        self.assertFalse(
+            preflight(
+                "core-capability:cli.run",
+                {"command_id": "app.mutate"},
+                self.actor,
+            ).admitted_before_effect
+        )
 
     def test_unknown_resource_result_keeps_its_existing_fail_closed_taint(self) -> None:
         self.assertIsNone(

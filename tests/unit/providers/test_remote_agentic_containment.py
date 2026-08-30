@@ -113,7 +113,7 @@ class RemoteAgenticContainmentTest(RemoteAgenticContainmentFixture, unittest.Tes
                 governance["display_name"],
                 self.remote_definition.display_name,
             )
-            self.assertIn("full-workspace candidate", governance["display_name"])
+            self.assertIn("governed-workspace candidate", governance["display_name"])
             self.assertEqual(governance["containment"]["status"], "NO-GO")
             self.assertEqual(
                 governance["data_destination"],

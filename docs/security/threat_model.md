@@ -167,15 +167,16 @@ sources retain distinct provenance/trust/classes, and a restrictive join keeps
 missing or mismatched resource classification `unclassified`. Transient prompt,
 agent-instruction, and governed-context content is likewise `unclassified`
 unless a trusted server admission resolver returns a canonical record matching
-the exact turn/source identity and digest. That resolver obtains the class from
-an exact workspace record, not the source id; governed context additionally
-joins every control, summary, task/result, and artifact source and keeps an
-untrusted trust level. Non-resource CLI, MCP, shell, and process output has no
-generic public-content fallback; redaction and a content hash do not establish
-a data class. Core retains complete output and denies egress when it lacks an
-admissible class instead of emitting a misleading public acknowledgement.
-Core-owned TCB-certified definitions may admit exact public results; app claims
-are ignored without removing the app surface, and edit/patch output retains its
+the exact turn/source identity and digest. A Core-owned writer content-classifies
+the exact bytes and atomically persists one immutable manifest on the turn;
+source ownership alone cannot select a class. Governed context joins every
+captured control, summary, task/result, and artifact entry and stays untrusted.
+Non-resource CLI, MCP, shell, and process output has no generic public-content
+fallback: exact result bytes are classified, and a denied result is retained
+privately while only a public call-paired error reaches the provider. Any
+variable-result operation able to create workspace/app effects is denied before
+execution unless its egress outcome can be guaranteed. App claims are ignored
+without removing read-only discovery/use, and edit/patch output retains its
 exact pre-image taint.
 
 Every semantic classification is bound to the digest of the exact projected

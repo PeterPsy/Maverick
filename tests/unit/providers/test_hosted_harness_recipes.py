@@ -36,8 +36,8 @@ from core.runtime.hosted_context_management import (
     HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION,
 )
 from core.runtime.hosted_harness_recipes import (
-    GOOGLE_FULL_WORKSPACE_RECIPE,
-    OPENROUTER_FULL_WORKSPACE_RECIPE,
+    GOOGLE_GOVERNED_WORKSPACE_RECIPE,
+    OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
 )
 from core.runtime.hosted_runtime_registry_builder import (
     build_hosted_provider_runtime_registry,
@@ -50,30 +50,33 @@ NOW = datetime(2026, 8, 28, tzinfo=UTC)
 class HostedHarnessRecipeTest(unittest.TestCase):
     def test_review_closure_publishes_new_immutable_recipe_identities(self) -> None:
         for recipe in (
-            GOOGLE_FULL_WORKSPACE_RECIPE,
-            OPENROUTER_FULL_WORKSPACE_RECIPE,
+            GOOGLE_GOVERNED_WORKSPACE_RECIPE,
+            OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "8")
+                self.assertEqual(recipe.revision, "9")
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
                     "5",
                 )
-                self.assertEqual(recipe.tool_contract_revision, "codex-baseline-v9")
+                self.assertEqual(
+                    recipe.tool_contract_revision,
+                    "hosted-governed-result-v1",
+                )
                 self.assertEqual(recipe.context_policy.revision, "p4-context-v4")
         self.assertEqual(HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION, "3")
 
     def test_registry_resolves_only_the_exact_recipe_and_catalog_identity(self) -> None:
         registry = build_hosted_provider_runtime_registry()
-        binding = _binding(GOOGLE_FULL_WORKSPACE_RECIPE)
+        binding = _binding(GOOGLE_GOVERNED_WORKSPACE_RECIPE)
 
         with patch(
             "core.runtime.hosted_provider_runtime.require_remote_agentic_dispatch"
         ):
             runtime = registry.resolve(binding)
 
-        self.assertEqual(runtime.recipe, GOOGLE_FULL_WORKSPACE_RECIPE)
-        self.assertEqual(runtime.client.model_id, GOOGLE_FULL_WORKSPACE_RECIPE.model_id)
+        self.assertEqual(runtime.recipe, GOOGLE_GOVERNED_WORKSPACE_RECIPE)
+        self.assertEqual(runtime.client.model_id, GOOGLE_GOVERNED_WORKSPACE_RECIPE.model_id)
         self.assertEqual(runtime.client.state_mode, "stateless")
         with self.assertRaisesRegex(
             HostedAgenticLoopError,
@@ -92,20 +95,20 @@ class HostedHarnessRecipeTest(unittest.TestCase):
 
     def test_catalog_digest_covers_fine_grained_endpoint_flags(self) -> None:
         changed = replace(
-            OPENROUTER_FULL_WORKSPACE_RECIPE,
+            OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
             support_flags=replace(
-                OPENROUTER_FULL_WORKSPACE_RECIPE.support_flags,
+                OPENROUTER_GOVERNED_WORKSPACE_RECIPE.support_flags,
                 supports_tool_choice_none=False,
             ),
         )
 
         self.assertNotEqual(
             changed.capability_catalog_digest,
-            OPENROUTER_FULL_WORKSPACE_RECIPE.capability_catalog_digest,
+            OPENROUTER_GOVERNED_WORKSPACE_RECIPE.capability_catalog_digest,
         )
         self.assertNotEqual(
             changed.recipe_digest,
-            OPENROUTER_FULL_WORKSPACE_RECIPE.recipe_digest,
+            OPENROUTER_GOVERNED_WORKSPACE_RECIPE.recipe_digest,
         )
 
     def test_google_final_preflight_omits_tools(self) -> None:
@@ -129,11 +132,11 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             return_value=catalog,
         ):
             exploration = preflight_google_interactions_request(
-                _request(GOOGLE_FULL_WORKSPACE_RECIPE, final=False),
+                _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=False),
                 EphemeralCredential("synthetic-google-key"),
             )
             final = preflight_google_interactions_request(
-                _request(GOOGLE_FULL_WORKSPACE_RECIPE, final=True),
+                _request(GOOGLE_GOVERNED_WORKSPACE_RECIPE, final=True),
                 EphemeralCredential("synthetic-google-key"),
             )
 
@@ -166,11 +169,11 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             return_value=catalog,
         ):
             exploration = preflight_openrouter_completion_request(
-                _request(OPENROUTER_FULL_WORKSPACE_RECIPE, final=False),
+                _request(OPENROUTER_GOVERNED_WORKSPACE_RECIPE, final=False),
                 EphemeralCredential("synthetic-openrouter-key"),
             )
             final = preflight_openrouter_completion_request(
-                _request(OPENROUTER_FULL_WORKSPACE_RECIPE, final=True),
+                _request(OPENROUTER_GOVERNED_WORKSPACE_RECIPE, final=True),
                 EphemeralCredential("synthetic-openrouter-key"),
             )
 
@@ -203,7 +206,7 @@ def _binding(recipe):
         certificate_evidence_digest="a" * 64,
         runtime_engine_id="maverick-tool-loop",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version="16",
+        adapter_version="22",
         adapter_artifact_digest="b" * 64,
         model_provider_id=recipe.model_provider_id,
         model_id=recipe.model_id,
@@ -220,7 +223,7 @@ def _binding(recipe):
         egress_policy_id="remote-agentic-contained",
         egress_policy_revision="2",
         created_at=NOW,
-        full_workspace_contract_revision=recipe.tool_contract_revision,
+        full_workspace_contract_revision="",
         execution_family="maverick_agent",
         harness_recipe_id=recipe.recipe_id,
         harness_recipe_revision=recipe.revision,

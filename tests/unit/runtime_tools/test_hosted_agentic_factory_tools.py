@@ -2,27 +2,27 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
-import hashlib
+import json
 import os
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
-from core.egress.agentic_transforms import canonical_egress_content
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.hosted_agentic_factory import _tool_orchestrator
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
+from core.runtime.hosted_tool_result_admission import (
+    build_hosted_tool_result_admission_resolver,
+)
 from core.runtime.app_reference_classification import (
     observe_runtime_app_reference,
 )
-from core.runtime.app_references import input_text_with_app_references
 from core.runtime.provider_input_context import runtime_provider_input_sources
-from core.runtime.provider_input_admission import (
-    RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
-)
 from core.runtime.tool_catalog import RuntimeToolActorContext
+from core.runtime.tool_orchestrator import RuntimeToolConfirmationPolicy
+from core.runtime.tool_schema import provider_tool_name
 from core.workspaces.data_governance import WorkspaceResourceClassification
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
@@ -33,6 +33,125 @@ NOW = datetime(2026, 8, 28, tzinfo=UTC)
 
 
 class HostedAgenticFactoryToolsTest(unittest.TestCase):
+    def test_production_preflight_denies_shell_mutation_before_effect(self) -> None:
+        harness = HostedAgenticHarness(self)
+        with patch.dict(
+            os.environ,
+            {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},
+            clear=False,
+        ):
+            state = bootstrap_platform_state(
+                start_path=harness.root,
+                now=NOW,
+                install_builtin_apps=False,
+            )
+        actor = RuntimeToolActorContext(
+            workspace_id="default",
+            actor_id="admin",
+            agent_id="chat",
+            platform_role="admin",
+            workspace_role="owner",
+            session_id="hosted-session",
+            execution_mode="full-access",
+        )
+        context = SimpleNamespace(session=harness.session)
+        orchestrator = _tool_orchestrator(
+            context,
+            actor=actor,
+            state=state,
+            ledger=state.runtime_tool_ledger,
+            workspace_store=state.workspace_store,
+            process_registry=HostedToolProcessRegistry(store=state.runtime_store),
+        )
+        authority = replace(
+            harness.authority,
+            allowed_capabilities=replace(
+                harness.authority.allowed_capabilities,
+                shell=True,
+            ),
+            allowed_tool_handles=("core-capability:shell.run",),
+            allowed_remote_data_classes=("public",),
+            authority_digest="",
+        )
+        authority = replace(
+            authority,
+            authority_digest=canonical_digest(authority),
+        )
+        target = harness.root / "workspaces" / "default" / "must-not-exist.txt"
+
+        outcome = orchestrator.invoke_provider_tool(
+            provider_tool_name=provider_tool_name("core-capability:shell.run"),
+            provider_tool_call_id="call-preflight-shell",
+            arguments={
+                "argv": ["/bin/sh", "-c", "printf escaped > must-not-exist.txt"],
+                "mutation_scopes": [
+                    {
+                        "path": ".",
+                        "instruction_scope_digest": "a" * 64,
+                    }
+                ],
+            },
+            authority=authority,
+            context=actor,
+            turn_id="turn-hosted",
+            policy=RuntimeToolConfirmationPolicy(
+                policy_revision="preflight-shell:1",
+                require_confirmation_for_mutating=False,
+                require_confirmation_for_destructive=False,
+                max_tool_result_bytes=262_144,
+            ),
+        )
+
+        self.assertEqual(outcome.invocation.state, "denied")
+        self.assertEqual(
+            outcome.invocation.failure_reason,
+            "tool_result_egress_not_guaranteed",
+        )
+        self.assertFalse(target.exists())
+
+    def test_denied_tool_bytes_are_paired_as_public_error_next_request(self) -> None:
+        harness = HostedAgenticHarness(self)
+        harness.read_result = {"result_summary": "customer SSN 123-45-6789"}
+        harness.orchestrator.catalog_builder.result_classification_resolver = (
+            build_hosted_tool_result_admission_resolver(
+                cli_registry=harness.orchestrator.catalog_builder.cli_registry,
+                mcp_registry=harness.orchestrator.catalog_builder.mcp_registry,
+            )
+        )
+        client = DeterministicFakeAgenticClient(
+            tool_name=harness.read_tool_name,
+        )
+
+        result = execute_runtime_turn(
+            session=harness.session,
+            provider=harness.provider,
+            input_text="Use the fixture and finish.",
+            agentic_adapter=harness.adapter(client),
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            correlation_id="turn-hosted",
+            effective_authority=harness.authority,
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(len(client.requests), 2)
+        paired = client.requests[1].tool_results[0]
+        self.assertTrue(paired.is_error)
+        self.assertEqual(
+            json.loads(paired.content),
+            {"error": "tool_result_egress_denied"},
+        )
+        self.assertNotIn(
+            "123-45-6789",
+            repr(client.requests),
+        )
+        invocation = harness.store.list_tool_invocations(
+            session_id="session-hosted"
+        )[0]
+        self.assertEqual(
+            invocation.result_data_class,
+            "regulated_or_customer_data",
+        )
+
     def test_production_composition_dispatches_and_continues_after_tool_result(self) -> None:
         harness = HostedAgenticHarness(self, filesystem_list=True)
         with patch.dict(
@@ -58,12 +177,11 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             tool_name=harness.filesystem_list_tool_name,
             tool_arguments={"path": ".", "max_depth": 1},
         )
-        self._classify_runtime_input(
+        self._install_runtime_capture_turn(
             state,
             session=harness.session,
-            turn_id="turn-hosted",
-            source_id="turn-prompt",
-            content="Use the public fixture tool and finish.",
+            harness=harness,
+            input_text="Use the public fixture tool and finish.",
         )
         input_sources = runtime_provider_input_sources(
             state,
@@ -138,22 +256,11 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             ),
             expected_revision=0,
         )
-        self._classify_runtime_input(
+        self._install_runtime_capture_turn(
             state,
             session=harness.session,
-            turn_id="turn-hosted",
-            source_id="turn-prompt",
-            content="Inspect the public record.",
-        )
-        self._classify_runtime_input(
-            state,
-            session=harness.session,
-            turn_id="turn-hosted",
-            source_id="app-reference:0:metadata",
-            content=input_text_with_app_references(
-                input_text="",
-                app_references=[reference],
-            ).strip(),
+            harness=harness,
+            input_text="Inspect the public record.",
         )
         sources = runtime_provider_input_sources(
             state,
@@ -260,7 +367,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             identity_field="command_id",
             identity="developer-context.list",
         )
-        self.assertEqual(cli_entry["result_data_class"], "unclassified")
+        self.assertEqual(cli_entry["result_data_class"], "public")
         cli_result = surfaces["core-capability:cli.run"].handler(
             {
                 "command_id": "developer-context.list",
@@ -300,38 +407,19 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
         )
 
     @staticmethod
-    def _classify_runtime_input(
+    def _install_runtime_capture_turn(
         state,
         *,
         session,
-        turn_id: str,
-        source_id: str,
-        content: object,
+        harness,
+        input_text: str,
     ) -> None:
-        digest = hashlib.sha256(canonical_egress_content(content)).hexdigest()
-        source_ref = f"runtime-turn:{turn_id}:{source_id}"
-        state.workspace_store.save_resource_classification(
-            WorkspaceResourceClassification(
-                classification_id=(
-                    f"classification-{session.session_id}-{turn_id}-{source_id}"
-                ),
-                workspace_id=session.workspace_id,
-                resource_kind=RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
-                resource_ref=source_ref,
-                resource_identity=(
-                    f"runtime-input:{session.workspace_id}:{session.session_id}:"
-                    f"{turn_id}:{source_id}:{digest}"
-                ),
-                resource_revision=digest,
-                resource_digest=digest,
-                data_class="public",
-                trust_level="trusted_actor",
-                revision=1,
-                classified_by_actor_id="fixture-classifier",
-                classified_at=NOW,
-                updated_at=NOW,
-            ),
-            expected_revision=0,
+        state.runtime_store.insert_session(session)
+        state.runtime_store.save_turn(
+            replace(
+                harness.store.get_turn("turn-hosted"),
+                input_text=input_text,
+            )
         )
 
     def _discover(

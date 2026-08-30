@@ -33,6 +33,7 @@ from core.runtime.hosted_agentic_request import (
 )
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
 from core.runtime.hosted_tool_result_admission import (
+    build_hosted_tool_result_preflight_resolver,
     build_hosted_tool_result_admission_resolver,
 )
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
@@ -51,7 +52,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "21"
+HOSTED_AGENTIC_ADAPTER_VERSION = "22"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -237,6 +238,11 @@ def _tool_orchestrator(
         cli_registry=cli_registry,
         mcp_registry=mcp_registry,
     )
+    result_preflight_resolver = build_hosted_tool_result_preflight_resolver(
+        cli_registry=cli_registry,
+        mcp_registry=mcp_registry,
+        process_registry=process_registry,
+    )
     return RuntimeToolOrchestrator(
         catalog_builder=RuntimeToolCatalogBuilder(
             cli_registry=cli_registry,
@@ -268,6 +274,7 @@ def _tool_orchestrator(
                 ),
             ),
             result_classification_resolver=result_admission_resolver,
+            result_preflight_resolver=result_preflight_resolver,
         ),
         ledger=ledger,
     )

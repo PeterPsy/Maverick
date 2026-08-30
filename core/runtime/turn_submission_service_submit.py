@@ -9,9 +9,8 @@ from core.providers.service import resolve_runtime_engine_for_session
 from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, assert_plain_hosted_chat_input_allowed, runtime_session_is_plain_hosted_chat
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.execution import execute_runtime_turn
-from core.runtime.provider_input_context import (
-    runtime_provider_input_sources,
-    runtime_provider_input_text,
+from core.runtime.provider_input_capture_context import (
+    capture_runtime_provider_input,
 )
 from core.runtime.authority_service import preflight_runtime_context_capabilities
 from core.runtime.resolved_runtime_engine import (
@@ -245,11 +244,7 @@ def submit_runtime_turn(
                 )
                 materialized_reference_count = len([item for item in execution_app_references or [] if isinstance(item, dict)])
                 provider_input_started_at = time.perf_counter()
-                provider_input_text = runtime_provider_input_text(
-                    state, session=session, input_text=input_text,
-                    app_references=execution_app_references, attachments=attachments,
-                )
-                provider_input_sources = runtime_provider_input_sources(
+                provider_input = capture_runtime_provider_input(
                     state,
                     session=session,
                     turn_id=turn.turn_id,
@@ -257,6 +252,8 @@ def submit_runtime_turn(
                     app_references=execution_app_references,
                     attachments=attachments,
                 )
+                provider_input_text = provider_input.input_text
+                provider_input_sources = provider_input.sources
                 provider_input_metadata = {
                     "provider_input_build_ms": (time.perf_counter() - provider_input_started_at) * 1000,
                     "app_reference_count": app_reference_count,

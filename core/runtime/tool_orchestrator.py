@@ -27,6 +27,7 @@ from core.runtime.tool_catalog import (
     RuntimeToolCatalog,
     RuntimeToolCatalogBuilder,
     RuntimeToolDescriptor,
+    RuntimeToolResultPreflightDecision,
     RuntimeToolSurfaceResult,
 )
 from core.runtime.tool_errors import (
@@ -337,6 +338,40 @@ class RuntimeToolOrchestrator:
                     resolution_status="schema_denied",
                     failure_reason=error.reason_code,
                 )
+            preflight = self.catalog_builder.result_preflight_resolver
+            if preflight is not None:
+                try:
+                    preflight_decision = preflight(
+                        descriptor.handle,
+                        arguments,
+                        context,
+                    )
+                except Exception:
+                    return self.deny_observed_tool(
+                        record,
+                        resolution_status="not_authorized",
+                        failure_reason="tool_result_egress_not_guaranteed",
+                    )
+                if (
+                    preflight_decision is not None
+                    and (
+                        not isinstance(
+                            preflight_decision,
+                            RuntimeToolResultPreflightDecision,
+                        )
+                        or not preflight_decision.admitted_before_effect
+                        or (
+                            preflight_decision.guaranteed_data_class is not None
+                            and preflight_decision.guaranteed_data_class
+                            not in authority.allowed_remote_data_classes
+                        )
+                    )
+                ):
+                    return self.deny_observed_tool(
+                        record,
+                        resolution_status="not_authorized",
+                        failure_reason="tool_result_egress_not_guaranteed",
+                    )
             record = self.ledger.transition(record, "validated")
         if record.state == "validated":
             if self._requires_confirmation(descriptor, policy):

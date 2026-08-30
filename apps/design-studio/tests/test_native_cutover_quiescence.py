@@ -38,6 +38,46 @@ class NativeCutoverQuiescenceTests(unittest.TestCase):
         self.root = Path(tempfile.mkdtemp(prefix="native-cutover-quiescence-test-"))
         self.addCleanup(shutil.rmtree, self.root, True)
 
+    def _prepare_activation(self, identifier: str) -> None:
+        digest = "a" * 64
+        marker = {
+            "schema_version": "1",
+            "kind": "design-studio-official-native-cutover",
+            "cutover_id": identifier,
+            "phase": "prepared",
+            "created_at": "2026-08-30T00:00:00Z",
+            "updated_at": "2026-08-30T00:00:00Z",
+            "backup_directory": f"{BACKUP_DIRECTORY}/official-native-{identifier}",
+            "source_generation": "generation-test",
+            "source_tree_sha256": digest,
+            "native_tree_sha256": digest,
+            "public_inventory_sha256": digest,
+            "inventory_categories": {
+                category: {"count": 0, "sha256": digest}
+                for category in INVENTORY_CATEGORIES
+            },
+            "legacy_read_only_files": [],
+            "legacy_source_read_only": True,
+            "legacy_writer_enabled": False,
+            "native_writer_started": False,
+            "native_ready": False,
+            "rollback_to_legacy_allowed": True,
+            "writer": "official-native-opendesign",
+            "semantic_content_copied_to_maverick_state": False,
+        }
+        (self.root / MARKER_FILE).write_text(
+            json.dumps(marker),
+            encoding="utf-8",
+        )
+        quiesce_native_host(self.root, cutover_id=identifier)
+
+    def _assert_activation_remains_reversible(self) -> None:
+        persisted = read_marker(self.root / MARKER_FILE)
+        self.assertEqual(persisted["phase"], "prepared")
+        self.assertFalse(persisted["native_writer_started"])
+        self.assertTrue(persisted["rollback_to_legacy_allowed"])
+        self.assertTrue((self.root / "native-cutover-quiesce.json").is_file())
+
     def test_operator_requires_confirmation_and_quiesces_before_managed_stop(self) -> None:
         with self.assertRaisesRegex(NativeDataCutoverError, "confirmation"):
             _stop_managed_writer(
@@ -143,37 +183,7 @@ class NativeCutoverQuiescenceTests(unittest.TestCase):
 
     def test_activate_rejects_wrong_binding_before_irreversible_activation(self) -> None:
         identifier = "native_binding_preflight"
-        digest = "a" * 64
-        marker = {
-            "schema_version": "1",
-            "kind": "design-studio-official-native-cutover",
-            "cutover_id": identifier,
-            "phase": "prepared",
-            "created_at": "2026-08-30T00:00:00Z",
-            "updated_at": "2026-08-30T00:00:00Z",
-            "backup_directory": f"{BACKUP_DIRECTORY}/official-native-{identifier}",
-            "source_generation": "generation-test",
-            "source_tree_sha256": digest,
-            "native_tree_sha256": digest,
-            "public_inventory_sha256": digest,
-            "inventory_categories": {
-                category: {"count": 0, "sha256": digest}
-                for category in INVENTORY_CATEGORIES
-            },
-            "legacy_read_only_files": [],
-            "legacy_source_read_only": True,
-            "legacy_writer_enabled": False,
-            "native_writer_started": False,
-            "native_ready": False,
-            "rollback_to_legacy_allowed": True,
-            "writer": "official-native-opendesign",
-            "semantic_content_copied_to_maverick_state": False,
-        }
-        (self.root / MARKER_FILE).write_text(
-            json.dumps(marker),
-            encoding="utf-8",
-        )
-        quiesce_native_host(self.root, cutover_id=identifier)
+        self._prepare_activation(identifier)
         unrelated_root = self.root / "unrelated-binding"
         unrelated_root.mkdir()
         response = {
@@ -215,15 +225,62 @@ class NativeCutoverQuiescenceTests(unittest.TestCase):
         ):
             cutover_main()
 
-        persisted = read_marker(self.root / MARKER_FILE)
-        self.assertEqual(persisted["phase"], "prepared")
-        self.assertFalse(persisted["native_writer_started"])
-        self.assertTrue(persisted["rollback_to_legacy_allowed"])
-        self.assertTrue((self.root / "native-cutover-quiesce.json").is_file())
+        self._assert_activation_remains_reversible()
         control.assert_called_once_with(
             "status",
             workspace_id="unrelated-workspace",
         )
+
+    def test_activate_requires_non_quarantined_binding_before_irreversible_activation(
+        self,
+    ) -> None:
+        identifier = "native_quarantine_preflight"
+        self._prepare_activation(identifier)
+        verified_status = {
+            "workspace_id": "default",
+            "app_id": "design-studio",
+            "data_root": str(self.root.resolve()),
+            "declared_service_count": 1,
+            "verified_stopped_service_count": 1,
+            "services": [
+                {
+                    "sidecar_id": "opendesign",
+                    "live_instance_id": None,
+                    "state": "stopped",
+                }
+            ],
+        }
+        for quarantine_state in ("active", "missing"):
+            with self.subTest(quarantine_state=quarantine_state):
+                response = dict(verified_status)
+                if quarantine_state == "active":
+                    response["quarantined"] = True
+                with (
+                    patch(
+                        "cutover_native_opendesign._request_sidecar_control",
+                        return_value=response,
+                    ) as control,
+                    patch.object(
+                        sys,
+                        "argv",
+                        [
+                            "cutover_native_opendesign.py",
+                            "activate",
+                            "--data-root",
+                            str(self.root),
+                            "--cutover-id",
+                            identifier,
+                            "--workspace-id",
+                            "default",
+                            "--confirm-writers-stopped",
+                        ],
+                    ),
+                    self.assertRaisesRegex(NativeDataCutoverError, "quarantined"),
+                ):
+                    cutover_main()
+
+                self._assert_activation_remains_reversible()
+                control.assert_called_once_with("status", workspace_id="default")
 
     def test_quiescence_blocks_relaunch_until_the_matching_cutover_releases_it(self) -> None:
         quiesce_native_host(self.root, cutover_id="native_quiesce_test")

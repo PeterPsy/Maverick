@@ -1136,7 +1136,10 @@ attempts browser, model, and relay/process revocation independently after the
 durable write, so one cleanup failure cannot skip another boundary. Its public
 evidence reports each observed result separately; proxy revocation is true
 only when every affected relay path is confirmed absent. Quarantine does not
-infer app migration state and release does not prewarm automatically.
+infer app migration state and release does not prewarm automatically. An
+app-owned maintenance preflight must require an explicit `quarantined: false`
+status before making an irreversible writer transition; a missing quarantine
+result is not evidence that activation is safe.
 
 App-owned backend, CLI, MCP, and reference entrypoints do not receive the
 sidecar listener, technical token, or sidecar filesystem. A sidecar may declare

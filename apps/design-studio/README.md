@@ -231,11 +231,12 @@ python3 apps/design-studio/service/cutover_native_opendesign.py finalize \
 ```
 
 `activate` first verifies through Core that the requested workspace resolves to
-the stopped sidecar bound to the exact canonical data root. Only after that
-preflight succeeds does it close rollback to the legacy writer, release
-quiescence, and synchronously start the native sidecar. A failed post-preflight
-native readiness check records `activation_failed` but never re-enables the
-legacy writer. Backups and certification records contain recovery bytes or
+the stopped, explicitly non-quarantined sidecar bound to the exact canonical
+data root. A missing quarantine result fails closed. Only after that preflight
+succeeds does it close rollback to the legacy writer, release quiescence, and
+synchronously start the native sidecar. A failed post-preflight native
+readiness check records `activation_failed` but never re-enables the legacy
+writer. Backups and certification records contain recovery bytes or
 category hashes as appropriate; the live Maverick marker contains no project,
 transcript, file, artifact, or settings bodies.
 

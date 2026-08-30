@@ -176,7 +176,7 @@ def _require_managed_writer_binding(
     """Verify the stopped canonical binding before rollback becomes irreversible."""
     status = _request_sidecar_control("status", workspace_id=workspace_id)
     try:
-        return require_verified_writer_status(
+        verified = require_verified_writer_status(
             status,
             workspace_id=workspace_id,
             app_data_root=app_data_root,
@@ -185,6 +185,11 @@ def _require_managed_writer_binding(
         raise NativeDataCutoverError(
             "Core did not confirm the stopped native OpenDesign binding"
         ) from error
+    if verified.get("quarantined") is not False:
+        raise NativeDataCutoverError(
+            "Core did not confirm that the native OpenDesign binding is not quarantined"
+        )
+    return verified
 
 
 def _require_core_inactive() -> None:

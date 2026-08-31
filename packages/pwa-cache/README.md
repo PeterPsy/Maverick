@@ -31,7 +31,8 @@ fallback when no cleanup is pending.
 The package never renders UI, reads `navigator.onLine`, calls
 `navigator.storage.persist()`, stores pending requests, or turns cached data
 into authority. See `docs/runbooks/pwa_data_cache_m3.md` for integration and
-recovery details.
+recovery details and `docs/runbooks/pwa_file_cache_m4.md` for the file-cache
+broker, failure drills, and rollout boundary.
 
 M4 adds a separate `maverick-pwa-file-v1` IndexedDB manifest and the owned
 `maverick-pwa-file-cache-v1` OPFS directory. File names are opaque, writes are
@@ -42,6 +43,13 @@ SHA-256 verification. An interrupted same-session transfer may resume with
 and LRU victims are removed without touching server files. Missing OPFS, an
 unknown quota estimate, quota pressure, or any local write error keeps the
 ordinary network result authoritative.
+
+The exported M4 frame protocol transfers a private `MessagePort`: an embedded
+Storage client submits only stable file id and source version, while Base Shell
+independently resolves classification, media URL, size, digest, and policy.
+The port supports RAM-only cancellation and returns either an ordinary Blob or
+an unavailable result that preserves the app's existing network path. It never
+exposes a cache host or browser-storage handle to the frame.
 
 Conservative M3 defaults are a 64 MiB structured-cache budget, 32 MiB per app,
 an app-declared resource budget, and a maximum 15-minute private access lease
@@ -58,7 +66,8 @@ the existing 85% quota-headroom check. Settings diagnostics and lifecycle clear
 aggregate the structured and file caches but never enumerate cached content.
 
 The current same-origin iframe sandbox is not a browser security boundary:
-embedded app code could address origin storage directly outside this SDK. The
-global data-cache rollout therefore remains disabled, and a private app cache
-must not be enabled until that app runs on an isolated origin or uses a genuine
-parent-owned storage broker from an opaque-origin frame.
+embedded app code could address origin storage directly outside this SDK. M4
+implements the genuine parent-owned broker, but Storage has not yet moved to an
+opaque or isolated origin. Both global cache rollouts therefore remain
+disabled, and a private app cache must not be enabled until that remaining
+browser boundary and its resource classification review are complete.

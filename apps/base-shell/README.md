@@ -19,6 +19,7 @@ Maverick product shell app that hosts enabled app frontends through the platform
 - `base-shell` intentionally does not declare an app-owned backend, lifecycle hooks, reference entities, or persisted `view_surfaces`.
 - CLI and MCP entrypoints are limited to shell-facing reference and operator support behavior.
 - The app stores shell preferences under `data/base-shell/preferences.json`.
+- M4 keeps Storage file bytes parent-mediated. The shell binds a private broker to the authenticated user, active workspace, and fixed `storage` scope; it accepts stable identity only from the mounted Storage frame over a transferred `MessagePort`, re-resolves the server-owned cache descriptor, and never exposes OPFS or IndexedDB handles to the frame. The default-off feature, unclassified-resource denial, and opaque/isolated-frame release gate are documented in `docs/runbooks/pwa_file_cache_m4.md`.
 
 ## SDK Flow
 

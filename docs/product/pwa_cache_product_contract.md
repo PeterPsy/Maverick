@@ -107,6 +107,17 @@ Cache API, IndexedDB, OPFS, and storage persistence requests are all
 feature-detected and best-effort. Failure, denial, quota pressure, corruption,
 or eviction must leave the server-first path functional.
 
+The M4 Storage adapter is automatic and invisible: an eligible valid file
+copy may satisfy the ordinary viewer, while a denied/missing copy follows the
+same loading and server path. It adds no residency label or management list.
+Settings may show only aggregate structured/file byte and entry counts plus a
+single bounded clear action. The adapter and its parent-owned broker are
+implemented behind `features.storage_file_cache`; the flag remains off and the
+server returns an ineligible descriptor for unclassified bytes. A future
+rollout must complete canonical per-resource classification and the
+opaque/isolated-frame boundary rather than interpreting the feature flag as a
+policy override.
+
 ## Authority and privacy
 
 Cached data is derivative and cannot authorize workspace access, capabilities,

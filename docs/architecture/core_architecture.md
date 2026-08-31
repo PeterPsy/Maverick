@@ -1248,6 +1248,52 @@ incomplete durable clear remains pending and blocks persistent cache access
 until the primary store confirms removal. The M3 release does not enable an
 app read model or the M4 OPFS file cache.
 
+M4 implements the automatic Storage file-cache mechanics behind the
+default-off `features.storage_file_cache` projection. Base Shell owns the
+top-level broker and binds it to the freshly authenticated user/workspace and
+the fixed `storage` app scope. A mounted Storage frame can request only a
+stable file id and source version over a private `MessageChannel`; it never
+receives OPFS, IndexedDB, host capability, classification, or scope authority.
+The broker independently resolves a server-owned
+`maverick.storage-file-cache-descriptor.v1`, rejects a cross-origin or
+identity-mismatched media URL, and applies the canonical local-persistence
+policy before opening bytes. It revalidates the exact no-store feature
+projection for each open so an already mounted shell cannot retain a stale
+positive kill-switch result. The current Storage descriptor is deliberately
+`unclassified` and ineligible unless a future reviewed canonical resource
+classification is available, so enabling the global flag alone cannot widen
+the persistence policy.
+
+The owned file manifest is `maverick-pwa-file-v1`, version 1, and the byte
+directory is `maverick-pwa-file-cache-v1` in OPFS. Keys bind user, workspace,
+app, stable file id, source version, policy revision, and schema version;
+opaque flat OPFS names reveal none of those values. A writer streams chunks to
+an unpublished path, records progress separately, and publishes `ready` only
+after exact size, strong ETag, source version, and SHA-256 verification.
+Interrupted bytes may resume only in the same browser session with `Range` and
+a strong `If-Range`; a changed validator or version discards the partial and
+starts a full request. Cache hits re-hash the complete Blob before use.
+
+File-cache defaults are 64 MiB per entry, 128 MiB per authenticated Storage
+scope, and 256 MiB across the origin, subordinate to the existing quota
+headroom check. Expired write leases, orphan paths, superseded versions, and
+least-recently used victims are removed without invoking a Storage server
+mutation. Missing OPFS, missing quota information, corruption, and local write
+failure degrade to the ordinary network result. Storage routes eligible
+image, PDF, text, and markdown preview reads through the broker while video
+and audio keep their normal streaming path. Both paths render the same viewer
+and loading state, with no cache-residency UI.
+
+Authentication failure, logout, user/workspace transition, and Settings
+**Clear cache** use the same durable cleanup barrier across structured entries,
+the file manifest, and owned OPFS bytes. Diagnostics expose only aggregate
+structured/file bytes and entry counts, quota, backend, OPFS availability, and
+pending cleanup. The broker is present before opaque-frame rollout, but the
+same-origin frame sandbox still permits direct origin-storage access; private
+file persistence therefore remains release-blocked until Storage uses an
+opaque-origin or isolated-origin boundary and completes physical-device and
+classification review.
+
 The RAM retry coordinator starts at one second, caps its exponential component
 at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval
 for early hints. Only transport/timeouts and `429/502/503/504` are retryable by

@@ -185,6 +185,38 @@ private app rollout additionally requires an isolated app origin or a genuine
 parent-mediated broker used from an opaque-origin frame. The default-off data
 gate is mandatory until that browser boundary exists.
 
+## M4 implementation profile
+
+M4 adds the automatic file-cache engine without changing the product UI or
+enabling its rollout gate. `maverick-pwa-file-v1` is the separate version-1
+IndexedDB manifest and `maverick-pwa-file-cache-v1` is the only owned OPFS
+directory. A ready identity contains the host-attested user/workspace/storage
+scope, stable file id, source version, current policy/schema revision, exact
+size, strong ETag, SHA-256 digest, and private access-lease bound. OPFS names
+are opaque and never contain a principal or file id.
+
+Base Shell owns a private-`MessageChannel` broker. The Storage frame supplies
+only file id and source version; Base Shell re-resolves a server-owned
+descriptor and media URL, enforces same-origin identity binding and the
+default 64 MiB entry bound, then applies local-persistence policy v2. A missing,
+malformed, stale, denied, or unclassified descriptor produces an ordinary
+network fallback rather than a cache error. The current server descriptor
+fails closed as `unclassified`, and `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE`
+remains off by default. This preserves the separate classification and
+opaque/isolated-frame release gates rather than treating the presence of a
+broker as approval to persist arbitrary Storage content.
+
+Writes stream best-effort to an unpublished OPFS path. Publication occurs
+only after size and digest verification; same-session partial state alone may
+request `Range` with strong `If-Range`. Changed or weak validators, corruption,
+interrupted publication, missing OPFS/quota information, and write failure
+cannot replace or damage the network result. Budgets are 128 MiB per Storage
+scope and 256 MiB origin-wide with least-recent eviction. Lifecycle cleanup
+and Settings aggregate clear include both the manifest and owned bytes, never
+server files or unrelated origin storage. Storage migrates eligible raw
+image/PDF/text/markdown previews through the broker while retaining direct
+video/audio streaming and the same ordinary loading/viewer components.
+
 ## Supersession boundary
 
 When ADR-0011 and this record conflict, this record is normative. Historical

@@ -127,7 +127,7 @@
       "max_scope_bytes": 0,
       "invalidation": "files data event or source-version mismatch",
       "data_event": "files",
-      "rollout": "M5"
+      "rollout": "M4 adapter implemented; persistence denied until classification"
     },
     {
       "app_ids": [
@@ -150,7 +150,7 @@
       "max_scope_bytes": 0,
       "invalidation": "If-None-Match/source-version revalidation, access revocation, logout",
       "data_event": "files",
-      "rollout": "M4 automatic bounded cache"
+      "rollout": "M4 engine and parent broker complete behind the default-off gate; opaque/isolated frame still required"
     },
     {
       "app_ids": [

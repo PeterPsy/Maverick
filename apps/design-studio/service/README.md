@@ -66,6 +66,17 @@ execution and checks it against the live workspace/app-scoped catalog before
 calling the CLI executor. Both paths
 operate without a Maverick runtime session, prompt, memory, persona, skill,
 tool catalog, or semantic rewrite.
+
+`native_profile_bootstrap.py` then runs after the unchanged daemon is ready and
+before sidecar readiness is published. Through OpenDesign's public app-config
+API it replaces only an unset or unusable `amr` cloud selection with
+the primary available generated profile, completes the otherwise blocking
+first-run route, and preserves every other preference. A user's explicit
+non-cloud selection is never overwritten.
+
+The declared 60-second health window covers OpenDesign 0.21's cold registration
+of the bundled plugin catalogue; warm starts normally complete much earlier.
+
 The official daemon finds the production wrappers on Core's `/app/service`
 mount, and both wrappers execute with `/usr/bin/python3`; `/maverick/python` is
 reserved for artifact-root sidecars and is not part of this contract.

@@ -490,7 +490,7 @@
         },
         "health": {
           "path": "/api/ready",
-          "timeout_ms": 20000
+          "timeout_ms": 60000
         },
         "proxy": {
           "mount": "/opendesign",

@@ -76,6 +76,14 @@ lease's workspace/app scope before the executor starts. It does not create a
 Maverick runtime session and does not add Maverick prompts, memory, Chat
 history, personas, skills, tools, planning, or model substitution.
 
+Before Core publishes native readiness, the launcher reads OpenDesign's
+supported `/api/app-config` surface. An unset selection, or
+the upstream `amr` cloud selection that cannot run inside the credential-free
+sidecar, is moved to the primary available Maverick native profile with
+`PUT /api/app-config`. Explicit non-cloud user selections are preserved. This
+prevents OpenDesign's cloud sign-in flow from hiding the locally integrated
+product without modifying the official root filesystem or frontend.
+
 Profile and provider metadata is written only below OpenDesign's sandbox agent
 home. It contains the loopback endpoint and non-secret local handle, but no
 provider credential or semantic content. Users can still configure additional

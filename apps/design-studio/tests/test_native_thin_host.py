@@ -42,6 +42,10 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertEqual(sidecar["model_access"], {"api": True, "cli": ["codex"], "required": False})
         self.assertEqual(sidecar["data_mount"], {"subpath": "opendesign-native"})
         self.assertEqual(
+            sidecar["health"],
+            {"path": "/api/ready", "timeout_ms": 60000},
+        )
+        self.assertEqual(
             sidecar["diagnostics"],
             {"status_file": "native-host-status.json"},
         )

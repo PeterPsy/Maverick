@@ -27,6 +27,8 @@ from model_access_constants import MODEL_ACCESS_API_KEY, MODEL_ACCESS_BASE_URL
 from model_access_server import (
     ModelAccessHttpBridge,
 )
+from native_profile_bootstrap import NativeProfileBootstrap, preferred_profile_id
+from official_inventory_process import OfficialApiClient
 from official_process_supervisor import official_api_ready, supervise_official_process
 from opencode_runtime import OpenCodeRuntimeError, RUNTIME_RELATIVE_PATH, verify_opencode_runtime
 
@@ -89,6 +91,22 @@ def main() -> None:
         api_token=api_token,
         model_profile_path=model_profile_path,
     )
+    profile_bootstrap = NativeProfileBootstrap(
+        OfficialApiClient(
+            port=port,
+            token=api_token,
+            request_timeout_seconds=5.0,
+        ),
+        preferred_profile_id=preferred_profile_id(model_status),
+    )
+
+    def native_ready() -> bool:
+        return official_api_ready(
+            host=host,
+            port=port,
+            api_token=api_token,
+        ) and profile_bootstrap.ensure()
+
     try:
         os.chdir(cwd)
         supervise_official_process(
@@ -96,11 +114,7 @@ def main() -> None:
             environment=environment,
             cwd=cwd,
             model_bridge=model_bridge,
-            ready_probe=lambda: official_api_ready(
-                host=host,
-                port=port,
-                api_token=api_token,
-            ),
+            ready_probe=native_ready,
             state_changed=report_status,
         )
     except OSError as error:

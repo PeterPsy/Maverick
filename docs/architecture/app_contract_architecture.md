@@ -1086,8 +1086,13 @@ body-only launch ticket with `POST /api/app-sidecars/browser-launch`, providing
 only its app id, declared sidecar id, and a clean root-relative landing path.
 Core resolves actor/workspace/install generation from the Maverick session,
 starts the already-authorized sidecar, and returns an origin plus form bootstrap
-instructions. Reusing a live process is not itself a readiness result: before
-issuing every new ticket, Core rechecks the declaration's health endpoint and
+instructions and a separate confirmation token that grants no sidecar access.
+The mounted app polls that launch's authenticated platform-origin confirmation
+endpoint. It may expose the sidecar frame only after Core has confirmed that
+the one-shot ticket became a validated host-bound session and the target frame
+has loaded; `iframe.onload` alone is never readiness because a browser error
+document can emit it. Reusing a live process is not itself a readiness result:
+before issuing every new ticket, Core rechecks the declaration's health endpoint and
 evicts the process if that check fails. A process that is alive but no longer
 ready therefore receives no new browser authority. The browser submits the
 ticket to `/.well-known/maverick-sidecar-bootstrap` on that origin; it never selects a

@@ -33,6 +33,7 @@ class SidecarBrowserSessionStoreTestCase(unittest.TestCase):
         issued = self.store.issue_ticket(self.binding)
 
         self.assertNotIn(issued.value, repr(self.store._tickets))
+        self.assertNotIn(issued.confirmation_value, repr(self.store._confirmations))
         wrong_host = self.store.consume_ticket(issued.value, host="sc-b.sidecars.localhost:8000")
         replay = self.store.consume_ticket(issued.value, host=self.binding.host)
 
@@ -42,6 +43,57 @@ class SidecarBrowserSessionStoreTestCase(unittest.TestCase):
         expired = self.store.issue_ticket(self.binding, ttl_seconds=1)
         self.now += 2
         self.assertIsNone(self.store.consume_ticket(expired.value, host=self.binding.host))
+
+    def test_bootstrap_confirmation_is_actor_bound_and_changes_only_after_validated_bootstrap(self) -> None:
+        ticket = self.store.issue_ticket(self.binding)
+
+        self.assertEqual(
+            self.store.bootstrap_confirmation_status(
+                ticket.confirmation_value,
+                actor_user_id="user-a",
+                workspace_id="workspace-a",
+                app_id="demo",
+                sidecar_id="web",
+                sidecar_instance_id="instance-a",
+            ),
+            "pending",
+        )
+        self.assertIsNone(
+            self.store.bootstrap_confirmation_status(
+                ticket.confirmation_value,
+                actor_user_id="user-b",
+                workspace_id="workspace-a",
+                app_id="demo",
+                sidecar_id="web",
+                sidecar_instance_id="instance-a",
+            )
+        )
+
+        issued = self.store.consume_ticket(ticket.value, host=self.binding.host)
+        assert issued is not None
+        self.assertEqual(
+            self.store.bootstrap_confirmation_status(
+                ticket.confirmation_value,
+                actor_user_id="user-a",
+                workspace_id="workspace-a",
+                app_id="demo",
+                sidecar_id="web",
+                sidecar_instance_id="instance-a",
+            ),
+            "pending",
+        )
+        self.assertTrue(self.store.confirm_bootstrap(issued.session))
+        self.assertEqual(
+            self.store.bootstrap_confirmation_status(
+                ticket.confirmation_value,
+                actor_user_id="user-a",
+                workspace_id="workspace-a",
+                app_id="demo",
+                sidecar_id="web",
+                sidecar_instance_id="instance-a",
+            ),
+            "ready",
+        )
 
     def test_live_session_touches_rotates_without_parallel_request_breakage_and_revokes(self) -> None:
         ticket = self.store.issue_ticket(self.binding)

@@ -14,22 +14,31 @@ const HARNESS_ROOT = path.join(APP_ROOT, "tests/native_deep_link_harness");
 const DESIGN_STUDIO_ENTRY = path.join(APP_ROOT, "frontend/src/main.tsx");
 const expectedPath = "/projects/e2e_project/conversations/e2e_conversation";
 const tickets = new Map();
+const confirmations = new Map();
+const nativePaths = new Set();
 const launchPaths = [];
 
 const nativeServer = http.createServer((request, response) => {
+  if (request.method === "GET" && nativePaths.has(request.url)) {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><main data-native-path="${escapeHtml(request.url)}">native</main>`);
+    return;
+  }
   if (request.method !== "POST" || request.url !== "/.well-known/maverick-sidecar-bootstrap") {
     response.writeHead(404).end();
     return;
   }
   collectBody(request).then((body) => {
     const ticket = new URLSearchParams(body).get("ticket") || "";
-    const nativePath = tickets.get(ticket);
-    if (!nativePath) {
+    const launch = tickets.get(ticket);
+    tickets.delete(ticket);
+    if (!launch) {
       response.writeHead(403).end();
       return;
     }
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    response.end(`<!doctype html><main data-native-path="${escapeHtml(nativePath)}">native</main>`);
+    confirmations.set(launch.confirmationToken, "ready");
+    nativePaths.add(launch.nativePath);
+    response.writeHead(303, { Location: launch.nativePath }).end();
   });
 });
 await listen(nativeServer);
@@ -55,8 +64,10 @@ const vite = await createServer({
             const body = JSON.parse(await collectBody(request));
             const nativePath = String(body.path || "");
             const ticket = `e2e_${tickets.size.toString().padStart(8, "0")}`;
+            const confirmationToken = `confirmation_${tickets.size.toString().padStart(8, "0")}`;
             launchPaths.push(nativePath);
-            tickets.set(ticket, nativePath);
+            tickets.set(ticket, { confirmationToken, nativePath });
+            confirmations.set(confirmationToken, "pending");
             response.writeHead(200, { "Content-Type": "application/json" });
             response.end(JSON.stringify({
               origin: nativeOrigin,
@@ -64,9 +75,22 @@ const vite = await createServer({
               method: "POST",
               ticket_field: "ticket",
               ticket,
+              confirmation_token: confirmationToken,
               expires_in_seconds: 30,
               sidecar_instance_id: "native_e2e_instance",
             }));
+            return;
+          }
+          if (request.method === "POST" && request.url === "/api/app-sidecars/browser-launch-status") {
+            const body = JSON.parse(await collectBody(request));
+            const status = confirmations.get(String(body.confirmation_token || ""));
+            response.writeHead(status ? 200 : 410, {
+              "Cache-Control": "no-store",
+              "Content-Type": "application/json",
+            });
+            response.end(JSON.stringify(status
+              ? { status }
+              : { error: "sidecar_bootstrap_confirmation_expired" }));
             return;
           }
           next();

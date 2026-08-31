@@ -44,18 +44,28 @@ does not fall through to the normal platform host. Unknown routes are denied.
 1. On the authenticated Maverick origin, the mounted app requests a one-shot
    ticket. Core binds its hash to actor, workspace, local app id, sidecar id,
    exact sidecar host, and active bundle/data generation. Ticket TTL is no more
-   than 30 seconds.
+   than 30 seconds. Core also returns a distinct confirmation token and stores
+   only its hash. That token can only query this launch's bootstrap state
+   through the authenticated platform origin; it grants no sidecar access.
 2. The app submits the ticket in an iframe-targeted form `POST` body to the
    reserved bootstrap endpoint on the sidecar origin. Tickets are never placed
    in a URL, fragment, browser storage, referrer, audit target, or log.
 3. The sidecar router atomically consumes the ticket, verifies every binding,
    creates a distinct random session, and responds `303` to a clean relative
    URL. It sets a host-only, `HttpOnly`, `SameSite=Strict` cookie with `Path=/`;
-   hosted mode also requires `Secure`. No `Domain` attribute is permitted.
-4. Session activity may rotate the cookie but cannot exceed a five-minute idle
+   hosted mode also requires `Secure`. No `Domain` attribute is permitted. Only
+   after the current target has been verified and the redirect is ready does
+   Core mark the associated confirmation as ready.
+4. The mounted app polls the authenticated platform confirmation endpoint and
+   treats the native frame as ready only after both confirmation and the target
+   frame load. An iframe `load` event alone is not evidence of success because
+   browsers also emit it for internal TLS/network error documents. Pending,
+   expired, actor-mismatched, workspace-mismatched, or instance-mismatched
+   confirmations never produce readiness.
+5. Session activity may rotate the cookie but cannot exceed a five-minute idle
    TTL or one-hour absolute lifetime. Ticket replay and a session presented to
    another host, actor, workspace, app, sidecar, or generation are denied.
-5. Logout, workspace switch, app disable/uninstall, sidecar restart, and active
+6. Logout, workspace switch, app disable/uninstall, sidecar restart, and active
    generation change revoke related sessions.
 
 The browser never receives the sidecar technical token. Maverick session
@@ -176,11 +186,18 @@ invalid, non-HTTPS, or request-mismatched configuration fails closed before a
 ticket is issued.
 
 The self-hosted installer exposes this boundary explicitly through
-`--hosted-sidecars`. Live preflight requires an externally provisioned DNS-01
-wildcard certificate, renders the three core environment values above, and
-adds a dedicated Nginx wildcard server without `X-Frame-Options`. The platform
-server may retain `X-Frame-Options: SAMEORIGIN`; that header must never be
-inherited by the distinct sidecar server.
+`--hosted-sidecars`. Live preflight parses the externally provisioned DNS-01
+certificate and unencrypted private key, requires a currently valid leaf SAN
+for the exact `*.sidecars.<installation-domain>` wildcard, and verifies that
+the public keys match. File existence or a certificate for one opaque hostname
+is not sufficient. The installer renders the three core environment values
+above and adds a dedicated Nginx wildcard server without `X-Frame-Options`.
+Post-apply health verification opens a reserved `sc-<opaque>` origin with the
+normal system trust store and requires Core's unauthenticated sidecar-session
+denial; this checks wildcard DNS, hostname validation, TLS termination, Nginx
+routing, and Core host recognition together. The platform server may retain
+`X-Frame-Options: SAMEORIGIN`; that header must never be inherited by the
+distinct sidecar server.
 
 ## Residual Risk And Closure
 

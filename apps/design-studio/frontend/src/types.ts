@@ -4,6 +4,7 @@ export type SidecarLaunch = {
   method: "POST";
   ticket_field: "ticket";
   ticket: string;
+  confirmation_token: string;
   expires_in_seconds: number;
   sidecar_instance_id: string;
 };

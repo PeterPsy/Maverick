@@ -39,6 +39,7 @@ from core.shared.entrypoints import EntrypointShutdownController
 AsgiReceive = Callable[[], Awaitable[dict[str, Any]]]
 AsgiSend = Callable[[dict[str, Any]], Awaitable[None]]
 BROWSER_LAUNCH_PATH = "/api/app-sidecars/browser-launch"
+BROWSER_LAUNCH_STATUS_PATH = "/api/app-sidecars/browser-launch-status"
 BROWSER_BOOTSTRAP_PATH = "/.well-known/maverick-sidecar-bootstrap"
 _MAX_BOOTSTRAP_BODY_BYTES = 4096
 _DOMAIN_PATTERN = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -54,15 +55,17 @@ def handle_sidecar_browser_launch(
     start_path: Path,
     shutdown_controller: EntrypointShutdownController | None,
 ) -> list[bytes] | None:
-    """Issue a one-shot form ticket on the authenticated platform origin."""
+    """Serve launch and bootstrap-confirmation APIs on the platform origin."""
     path = str(environ.get("PATH_INFO") or "/")
-    if path != BROWSER_LAUNCH_PATH:
+    if path not in {BROWSER_LAUNCH_PATH, BROWSER_LAUNCH_STATUS_PATH}:
         return None
     if str(environ.get("REQUEST_METHOD") or "GET").upper() != "POST":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     if context is None:
         return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
     body = read_json_body(environ)
+    if path == BROWSER_LAUNCH_STATUS_PATH:
+        return _handle_launch_status(state, context, body, start_response)
     if set(body) - {"app_id", "sidecar_id", "path"}:
         return json_response(start_response, {"error": "invalid_sidecar_launch_request"}, status="400 Bad Request")
     app_id = str(body.get("app_id") or "").strip()
@@ -179,9 +182,69 @@ def handle_sidecar_browser_launch(
             "method": "POST",
             "ticket_field": "ticket",
             "ticket": ticket.value,
+            "confirmation_token": ticket.confirmation_value,
             "expires_in_seconds": MAX_TICKET_TTL_SECONDS,
             "sidecar_instance_id": running.instance_id,
         },
+        headers=_platform_launch_headers(),
+    )
+
+
+def _handle_launch_status(
+    state: PlatformState,
+    context: RequestSession,
+    body: dict[str, Any],
+    start_response: StartResponse,
+) -> list[bytes]:
+    expected_fields = {
+        "app_id",
+        "sidecar_id",
+        "sidecar_instance_id",
+        "confirmation_token",
+    }
+    if set(body) != expected_fields:
+        return json_response(
+            start_response,
+            {"error": "invalid_sidecar_launch_status_request"},
+            status="400 Bad Request",
+            headers=_platform_launch_headers(),
+        )
+    app_id = str(body.get("app_id") or "").strip()
+    sidecar_id = str(body.get("sidecar_id") or "").strip()
+    sidecar_instance_id = str(body.get("sidecar_instance_id") or "").strip()
+    confirmation_token = str(body.get("confirmation_token") or "").strip()
+    if (
+        not app_id
+        or not sidecar_id
+        or not sidecar_instance_id
+        or not confirmation_token
+        or len(confirmation_token) > 512
+        or any(character.isspace() for character in confirmation_token)
+    ):
+        return json_response(
+            start_response,
+            {"error": "invalid_sidecar_launch_status_request"},
+            status="400 Bad Request",
+            headers=_platform_launch_headers(),
+        )
+    status = state.sidecar_browser_sessions.bootstrap_confirmation_status(
+        confirmation_token,
+        actor_user_id=context.user.user_id,
+        workspace_id=context.workspace_id,
+        app_id=app_id,
+        sidecar_id=sidecar_id,
+        sidecar_instance_id=sidecar_instance_id,
+    )
+    if status is None:
+        return json_response(
+            start_response,
+            {"error": "sidecar_bootstrap_confirmation_expired"},
+            status="410 Gone",
+            headers=_platform_launch_headers(),
+        )
+    return json_response(
+        start_response,
+        {"status": status},
         headers=_platform_launch_headers(),
     )
 
@@ -350,6 +413,21 @@ async def _handle_bootstrap(
             send,
             host=host,
             reason=current_error,
+            binding=issued.session.binding,
+            status=410,
+        )
+        return
+    if not state.sidecar_browser_sessions.confirm_bootstrap(issued.session):
+        state.sidecar_browser_sessions.revoke_sidecar(
+            workspace_id=issued.session.binding.workspace_id,
+            app_id=issued.session.binding.app_id,
+            sidecar_id=issued.session.binding.sidecar_id,
+        )
+        await _deny(
+            state,
+            send,
+            host=host,
+            reason="bootstrap_confirmation_unavailable",
             binding=issued.session.binding,
             status=410,
         )

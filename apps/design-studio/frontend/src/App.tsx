@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   currentDesignStudioAppId,
   nativeOpenDesignPath,
+  requestOpenDesignBootstrapStatus,
   requestOpenDesignLaunch,
   SidecarLaunchError,
 } from "./api";
@@ -10,13 +11,17 @@ import type { SidecarHostPhase, SidecarLaunch } from "./types";
 import "./styles/main.css";
 
 const LOADING_DELAY_MS = 300;
+const BOOTSTRAP_STATUS_POLL_MS = 200;
 
 export function App() {
   const appId = currentDesignStudioAppId();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const submittedFrameRef = useRef<HTMLIFrameElement | null>(null);
   const bootstrapLoadArmedRef = useRef(false);
+  const bootstrapLoadedRef = useRef(false);
+  const bootstrapConfirmedRef = useRef(false);
   const bootstrapArmTimerRef = useRef<number | null>(null);
+  const bootstrapPollTimerRef = useRef<number | null>(null);
   const [frameName, setFrameName] = useState(() => `opendesign-${crypto.randomUUID()}`);
   const [nativePath, setNativePath] = useState(() => nativeOpenDesignPath(window.location.search));
   const [launchRevision, setLaunchRevision] = useState(0);
@@ -53,7 +58,10 @@ export function App() {
     const abort = new AbortController();
     submittedFrameRef.current = null;
     bootstrapLoadArmedRef.current = false;
+    bootstrapLoadedRef.current = false;
+    bootstrapConfirmedRef.current = false;
     if (bootstrapArmTimerRef.current !== null) window.clearTimeout(bootstrapArmTimerRef.current);
+    if (bootstrapPollTimerRef.current !== null) window.clearTimeout(bootstrapPollTimerRef.current);
     setPhase("launching");
     setLoadingVisible(false);
     setErrorCode("");
@@ -73,6 +81,40 @@ export function App() {
           bootstrapLoadArmedRef.current = true;
           bootstrapArmTimerRef.current = null;
         }, 0);
+
+        const confirmationDeadline = Date.now() + launch.expires_in_seconds * 1000;
+        const pollConfirmation = () => {
+          void requestOpenDesignBootstrapStatus(appId, launch, abort.signal)
+            .then((status) => {
+              if (abort.signal.aborted) return;
+              if (status === "ready") {
+                bootstrapConfirmedRef.current = true;
+                if (bootstrapLoadedRef.current) {
+                  setPhase("ready");
+                  setLoadingVisible(false);
+                }
+                return;
+              }
+              if (Date.now() >= confirmationDeadline) {
+                throw new SidecarLaunchError("sidecar_bootstrap_unconfirmed", 408);
+              }
+              bootstrapPollTimerRef.current = window.setTimeout(
+                pollConfirmation,
+                BOOTSTRAP_STATUS_POLL_MS,
+              );
+            })
+            .catch((error: unknown) => {
+              if (abort.signal.aborted) return;
+              setErrorCode(
+                error instanceof SidecarLaunchError
+                  ? error.code
+                  : "sidecar_bootstrap_confirmation_failed",
+              );
+              setPhase("error");
+              setLoadingVisible(false);
+            });
+        };
+        pollConfirmation();
       })
       .catch((error: unknown) => {
         if (abort.signal.aborted) return;
@@ -87,13 +129,20 @@ export function App() {
       if (bootstrapArmTimerRef.current !== null) window.clearTimeout(bootstrapArmTimerRef.current);
       bootstrapArmTimerRef.current = null;
       bootstrapLoadArmedRef.current = false;
+      if (bootstrapPollTimerRef.current !== null) window.clearTimeout(bootstrapPollTimerRef.current);
+      bootstrapPollTimerRef.current = null;
+      bootstrapLoadedRef.current = false;
+      bootstrapConfirmedRef.current = false;
     };
   }, [appId, launchRevision, nativePath]);
 
   function markNativeLoaded() {
     if (!bootstrapLoadArmedRef.current || submittedFrameRef.current !== frameRef.current) return;
-    setPhase("ready");
-    setLoadingVisible(false);
+    bootstrapLoadedRef.current = true;
+    if (bootstrapConfirmedRef.current) {
+      setPhase("ready");
+      setLoadingVisible(false);
+    }
   }
 
   function markNativeLoadFailed() {
@@ -171,6 +220,10 @@ function diagnosticLabel(code: string): string {
     artifact_integrity_mismatch: "Il pacchetto ufficiale non supera la verifica di integrità.",
     browser_ticket_failed: "Non è stato possibile autorizzare l’origine isolata.",
     daemon_ready_timeout: "OpenDesign non ha raggiunto lo stato pronto.",
+    sidecar_bootstrap_confirmation_expired: "Core non ha confermato l’avvio dell’origine isolata.",
+    sidecar_bootstrap_confirmation_failed: "La verifica dell’avvio isolato non è riuscita.",
+    sidecar_bootstrap_confirmation_invalid: "Core ha restituito una conferma di avvio non valida.",
+    sidecar_bootstrap_unconfirmed: "L’origine isolata non ha completato l’avvio entro il tempo previsto.",
     sidecar_frame_load_failed: "L’applicazione nativa non è stata caricata.",
   };
   return labels[code] || `Diagnostica: ${code || "errore_sconosciuto"}.`;

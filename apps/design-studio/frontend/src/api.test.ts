@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   currentDesignStudioAppId,
   nativeOpenDesignPath,
+  requestOpenDesignBootstrapStatus,
   SidecarLaunchError,
   validateSidecarLaunch,
 } from "./api";
@@ -13,6 +14,7 @@ const VALID_LAUNCH = {
   method: "POST" as const,
   ticket_field: "ticket" as const,
   ticket: "one-shot-ticket",
+  confirmation_token: "bootstrap-confirmation-token",
   expires_in_seconds: 30,
   sidecar_instance_id: "instance_12345678",
 };
@@ -44,6 +46,8 @@ describe("native OpenDesign deep links", () => {
 });
 
 describe("isolated browser launch validation", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("accepts a one-shot cross-origin POST bootstrap", () => {
     expect(validateSidecarLaunch(VALID_LAUNCH, "https://maverick.example")).toEqual(VALID_LAUNCH);
     expect(VALID_LAUNCH.bootstrap_url).not.toContain(VALID_LAUNCH.ticket);
@@ -54,8 +58,35 @@ describe("isolated browser launch validation", () => {
       { ...VALID_LAUNCH, origin: "https://maverick.example", bootstrap_url: "https://maverick.example/.well-known/maverick-sidecar-bootstrap" },
       { ...VALID_LAUNCH, bootstrap_url: `${VALID_LAUNCH.bootstrap_url}?ticket=leaked` },
       { ...VALID_LAUNCH, ticket: "x".repeat(513) },
+      { ...VALID_LAUNCH, confirmation_token: undefined },
     ]) {
       expect(() => validateSidecarLaunch(candidate, "https://maverick.example")).toThrow(SidecarLaunchError);
     }
+  });
+
+  it("requires an authenticated Core confirmation for the redeemed bootstrap", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: "ready" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      requestOpenDesignBootstrapStatus("design-studio", VALID_LAUNCH),
+    ).resolves.toBe("ready");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/app-sidecars/browser-launch-status",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "same-origin",
+        body: JSON.stringify({
+          app_id: "design-studio",
+          sidecar_id: "opendesign",
+          sidecar_instance_id: VALID_LAUNCH.sidecar_instance_id,
+          confirmation_token: VALID_LAUNCH.confirmation_token,
+        }),
+      }),
+    );
   });
 });

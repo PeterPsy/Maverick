@@ -23,6 +23,11 @@ from core.secrets.key_material import secret_store_key_from_text
 from core.secrets.service import create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
 from core.shared.json_file_collection import JsonFileCollection
+from core.shared.installer_tls import (
+    hosted_sidecar_tls_errors,
+    sidecar_tls_origin_becomes_healthy,
+    sidecar_tls_probe_url,
+)
 from core.shared.node_runtime import node_runtime_diagnostic
 from core.shared.repository import installation_paths
 from core.workspaces.store import WorkspaceDocumentStore
@@ -407,19 +412,21 @@ def preflight_check(
     if request_tls and shutil.which("certbot") is None:
         errors.append("certbot not found in PATH")
     if config.hosted_sidecars:
-        if config.local_only or config.public_scheme != "https" or not config.hostname:
+        hosted_origin_valid = (
+            not config.local_only
+            and config.public_scheme == "https"
+            and bool(config.hostname)
+        )
+        if not hosted_origin_valid:
             errors.append("hosted sidecars require one public HTTPS hostname")
-        if live_apply:
-            for label, path in (
-                ("hosted sidecar TLS certificate", config.sidecar_tls_certificate_path),
-                ("hosted sidecar TLS private key", config.sidecar_tls_certificate_key_path),
-            ):
-                try:
-                    available = bool(path) and Path(path).is_file()
-                except OSError:
-                    available = False
-                if not available:
-                    errors.append(f"{label} not found: {path}")
+        elif live_apply:
+            errors.extend(
+                hosted_sidecar_tls_errors(
+                    hostname=str(config.hostname),
+                    certificate_path_value=config.sidecar_tls_certificate_path,
+                    private_key_path_value=config.sidecar_tls_certificate_key_path,
+                )
+            )
     if config.build_frontends:
         node_diagnostic = node_runtime_diagnostic()
         if node_diagnostic is not None:
@@ -502,7 +509,7 @@ def check_health(
     urls = [f"http://{config.bind_host}:{config.core_port}/health"]
     if not config.local_only and config.hostname:
         urls.append(f"{config.public_scheme}://{config.hostname}/health")
-    return {
+    results = {
         url: _url_becomes_healthy(
             url,
             timeout_seconds=timeout_seconds,
@@ -512,6 +519,16 @@ def check_health(
         )
         for url in urls
     }
+    if config.hosted_sidecars and config.hostname:
+        sidecar_url = sidecar_tls_probe_url(config.hostname)
+        results[sidecar_url] = sidecar_tls_origin_becomes_healthy(
+            sidecar_url,
+            timeout_seconds=timeout_seconds,
+            attempts=attempts,
+            delay_seconds=delay_seconds,
+            sleep_func=sleep_func,
+        )
+    return results
 
 
 def default_output_root(repository_root: Path) -> Path:

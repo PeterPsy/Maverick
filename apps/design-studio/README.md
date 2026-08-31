@@ -25,9 +25,12 @@ the Model Access CLI scope. Release selection, quiescence, update journals,
 delegation metadata, and immutable backups remain sibling host-control data
 and are never mounted into OpenDesign or Codex.
 
-The Maverick frontend only obtains a one-shot isolated-browser ticket and hosts
-the native page in an iframe. Native HTTP routes pass through unchanged; no
-normal OpenDesign request is handled by Core.
+The Maverick frontend obtains a one-shot isolated-browser ticket and a separate
+Core confirmation token, then hosts the native page in an iframe. It declares
+the native frame ready only after Core confirms that bootstrap produced the
+bound sidecar session; `iframe.onload` alone is intentionally insufficient
+because browsers also emit it for TLS/network error documents. Native HTTP
+routes pass through unchanged; no normal OpenDesign request is handled by Core.
 
 ## Optional naked-model bridge
 

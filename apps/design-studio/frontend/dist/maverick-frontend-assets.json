@@ -1,0 +1,25 @@
+{
+  "build_id": "10dc9c21ab19c7b0edd97192e894d4fc45a4fdb8cf82ee013381438a799590fb",
+  "entrypoints": [
+    "index.html"
+  ],
+  "immutable": [],
+  "revalidated": [
+    {
+      "path": "assets/app-DfuAJ075.css",
+      "sha256": "ff4a2a1fc952bfd2b987868ce2028e95b55ded1f5816ca5a26908d20ff3327df",
+      "size_bytes": 1104
+    },
+    {
+      "path": "assets/app-DqqdcGTV.js",
+      "sha256": "400a5966b07ef6f03f9b843c287798d109268c47acba332f8841c1aab5b17353",
+      "size_bytes": 199230
+    },
+    {
+      "path": "index.html",
+      "sha256": "0bf2fc929e1cd4a159b43e39bb2e737594a408de2ab6a79762f393434ab76fb7",
+      "size_bytes": 432
+    }
+  ],
+  "schema": "maverick.frontend-assets.v1"
+}

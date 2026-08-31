@@ -12,6 +12,7 @@ from typing import Callable
 
 SIDECAR_BROWSER_COOKIE_NAME = "maverick_sidecar_session"
 MAX_TICKET_TTL_SECONDS = 30
+BOOTSTRAP_CONFIRMATION_TTL_SECONDS = 30
 SESSION_IDLE_TTL_SECONDS = 5 * 60
 SESSION_ABSOLUTE_TTL_SECONDS = 60 * 60
 SESSION_ROTATION_SECONDS = 60
@@ -41,6 +42,7 @@ class IssuedSidecarBrowserTicket:
     """Raw one-shot value returned only to the authenticated launch caller."""
 
     value: str
+    confirmation_value: str
     expires_at: float
     binding: SidecarBrowserBinding
 
@@ -77,8 +79,17 @@ class ValidatedSidecarBrowserSession:
 @dataclass(frozen=True)
 class _TicketRecord:
     token_digest: str
+    confirmation_digest: str
     binding: SidecarBrowserBinding
     expires_at: float
+
+
+@dataclass(frozen=True)
+class _BootstrapConfirmationRecord:
+    token_digest: str
+    binding: SidecarBrowserBinding
+    expires_at: float
+    confirmed: bool
 
 
 class SidecarBrowserSessionStore:
@@ -88,7 +99,9 @@ class SidecarBrowserSessionStore:
         self._clock = clock
         self._lock = Lock()
         self._tickets: dict[str, _TicketRecord] = {}
+        self._confirmations: dict[str, _BootstrapConfirmationRecord] = {}
         self._sessions: dict[str, SidecarBrowserSession] = {}
+        self._session_confirmations: dict[str, str] = {}
         self._aliases: dict[str, tuple[str, float]] = {}
 
     def issue_ticket(
@@ -102,15 +115,29 @@ class SidecarBrowserSessionStore:
         now = self._clock()
         value = secrets.token_urlsafe(32)
         digest = _token_digest(value)
+        confirmation_value = secrets.token_urlsafe(32)
+        confirmation_digest = _token_digest(confirmation_value)
         expires_at = now + ttl_seconds
         with self._lock:
             self._prune(now)
             self._tickets[digest] = _TicketRecord(
                 token_digest=digest,
+                confirmation_digest=confirmation_digest,
                 binding=binding,
                 expires_at=expires_at,
             )
-        return IssuedSidecarBrowserTicket(value=value, expires_at=expires_at, binding=binding)
+            self._confirmations[confirmation_digest] = _BootstrapConfirmationRecord(
+                token_digest=confirmation_digest,
+                binding=binding,
+                expires_at=expires_at,
+                confirmed=False,
+            )
+        return IssuedSidecarBrowserTicket(
+            value=value,
+            confirmation_value=confirmation_value,
+            expires_at=expires_at,
+            binding=binding,
+        )
 
     def consume_ticket(self, value: str, *, host: str) -> IssuedSidecarBrowserSession | None:
         now = self._clock()
@@ -119,6 +146,8 @@ class SidecarBrowserSessionStore:
             self._prune(now)
             ticket = self._tickets.pop(digest, None)
             if ticket is None or ticket.expires_at < now or not secrets.compare_digest(ticket.binding.host, host):
+                if ticket is not None:
+                    self._confirmations.pop(ticket.confirmation_digest, None)
                 return None
             session_value = secrets.token_urlsafe(32)
             session_digest = _token_digest(session_value)
@@ -132,7 +161,54 @@ class SidecarBrowserSessionStore:
                 absolute_expires_at=now + SESSION_ABSOLUTE_TTL_SECONDS,
             )
             self._sessions[session_digest] = session
+            self._session_confirmations[session_digest] = ticket.confirmation_digest
             return IssuedSidecarBrowserSession(value=session_value, session=session)
+
+    def confirm_bootstrap(self, session: SidecarBrowserSession) -> bool:
+        """Confirm only a live session created by a successfully validated bootstrap."""
+        now = self._clock()
+        with self._lock:
+            self._prune(now)
+            current = self._sessions.get(session.token_digest)
+            confirmation_digest = self._session_confirmations.get(session.token_digest)
+            if current != session or confirmation_digest is None:
+                return False
+            confirmation = self._confirmations.get(confirmation_digest)
+            if confirmation is None or confirmation.binding != session.binding:
+                return False
+            self._confirmations[confirmation_digest] = replace(
+                confirmation,
+                confirmed=True,
+                expires_at=now + BOOTSTRAP_CONFIRMATION_TTL_SECONDS,
+            )
+            return True
+
+    def bootstrap_confirmation_status(
+        self,
+        value: str,
+        *,
+        actor_user_id: str,
+        workspace_id: str,
+        app_id: str,
+        sidecar_id: str,
+        sidecar_instance_id: str,
+    ) -> str | None:
+        """Return pending/ready only when the caller matches the full launch binding."""
+        now = self._clock()
+        digest = _token_digest(value)
+        with self._lock:
+            self._prune(now)
+            confirmation = self._confirmations.get(digest)
+            if confirmation is None or not _confirmation_matches(
+                confirmation.binding,
+                actor_user_id=actor_user_id,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                sidecar_id=sidecar_id,
+                sidecar_instance_id=sidecar_instance_id,
+            ):
+                return None
+            return "ready" if confirmation.confirmed else "pending"
 
     def validate_and_touch(self, value: str, *, host: str) -> ValidatedSidecarBrowserSession | None:
         now = self._clock()
@@ -152,6 +228,9 @@ class SidecarBrowserSessionStore:
                 touched = replace(touched, token_digest=rotated_digest, rotated_at=now)
                 self._sessions.pop(digest, None)
                 self._sessions[rotated_digest] = touched
+                confirmation_digest = self._session_confirmations.pop(digest, None)
+                if confirmation_digest is not None:
+                    self._session_confirmations[rotated_digest] = confirmation_digest
                 self._aliases[presented_digest] = (rotated_digest, now + SESSION_ROTATION_GRACE_SECONDS)
             else:
                 self._sessions[digest] = touched
@@ -185,7 +264,9 @@ class SidecarBrowserSessionStore:
     def revoke_all(self) -> None:
         with self._lock:
             self._tickets.clear()
+            self._confirmations.clear()
             self._sessions.clear()
+            self._session_confirmations.clear()
             self._aliases.clear()
 
     def _revoke(self, predicate: Callable[[SidecarBrowserBinding], bool]) -> None:
@@ -193,11 +274,21 @@ class SidecarBrowserSessionStore:
             self._tickets = {
                 digest: ticket for digest, ticket in self._tickets.items() if not predicate(ticket.binding)
             }
+            self._confirmations = {
+                digest: confirmation
+                for digest, confirmation in self._confirmations.items()
+                if not predicate(confirmation.binding)
+            }
             removed_digests = {
                 digest for digest, session in self._sessions.items() if predicate(session.binding)
             }
             self._sessions = {
                 digest: session for digest, session in self._sessions.items() if digest not in removed_digests
+            }
+            self._session_confirmations = {
+                digest: confirmation_digest
+                for digest, confirmation_digest in self._session_confirmations.items()
+                if digest not in removed_digests and confirmation_digest in self._confirmations
             }
             self._aliases = {
                 alias: target
@@ -219,6 +310,11 @@ class SidecarBrowserSessionStore:
         self._tickets = {
             digest: ticket for digest, ticket in self._tickets.items() if ticket.expires_at >= now
         }
+        self._confirmations = {
+            digest: confirmation
+            for digest, confirmation in self._confirmations.items()
+            if confirmation.expires_at >= now
+        }
         expired_sessions = {
             digest
             for digest, session in self._sessions.items()
@@ -226,6 +322,14 @@ class SidecarBrowserSessionStore:
         }
         for digest in expired_sessions:
             self._sessions.pop(digest, None)
+            confirmation_digest = self._session_confirmations.pop(digest, None)
+            if confirmation_digest is not None:
+                self._confirmations.pop(confirmation_digest, None)
+        self._session_confirmations = {
+            digest: confirmation_digest
+            for digest, confirmation_digest in self._session_confirmations.items()
+            if digest in self._sessions and confirmation_digest in self._confirmations
+        }
         self._aliases = {
             alias: target
             for alias, target in self._aliases.items()
@@ -235,3 +339,24 @@ class SidecarBrowserSessionStore:
 
 def _token_digest(value: str) -> str:
     return sha256(value.encode("utf-8")).hexdigest()
+
+
+def _confirmation_matches(
+    binding: SidecarBrowserBinding,
+    *,
+    actor_user_id: str,
+    workspace_id: str,
+    app_id: str,
+    sidecar_id: str,
+    sidecar_instance_id: str,
+) -> bool:
+    return all(
+        secrets.compare_digest(actual, expected)
+        for actual, expected in (
+            (binding.actor_user_id, actor_user_id),
+            (binding.workspace_id, workspace_id),
+            (binding.app_id, app_id),
+            (binding.sidecar_id, sidecar_id),
+            (binding.sidecar_instance_id, sidecar_instance_id),
+        )
+    )

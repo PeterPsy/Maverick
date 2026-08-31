@@ -81,6 +81,18 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             self.assertTrue(launch["origin"].endswith(".sidecars.maverick.localhost:8000"))
             self.assertEqual(launch["bootstrap_url"], launch["origin"] + BROWSER_BOOTSTRAP_PATH)
             self.assertNotIn(launch["ticket"], launch["bootstrap_url"])
+            self.assertNotIn(launch["confirmation_token"], launch["bootstrap_url"])
+
+            confirmation_status, confirmation, confirmation_headers = await self._launch_status(
+                app,
+                platform_cookie=platform_cookie,
+                host="maverick.localhost:8000",
+                origin=platform_origin,
+                launch=launch,
+            )
+            self.assertEqual(confirmation_status, 200)
+            self.assertEqual(confirmation, {"status": "pending"})
+            self.assertEqual(confirmation_headers["cache-control"], "no-store")
 
             sidecar_host = launch["origin"].removeprefix("http://")
             wrong_host = "sc-workspace-b.sidecars.maverick.localhost:8000"
@@ -123,6 +135,16 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             self.assertNotIn("Domain=", bootstrap_headers["set-cookie"])
             self.assertNotIn(ticket, bootstrap_headers["set-cookie"])
             sidecar_cookie = bootstrap_headers["set-cookie"].split(";", 1)[0]
+
+            confirmation_status, confirmation, _headers = await self._launch_status(
+                app,
+                platform_cookie=platform_cookie,
+                host="maverick.localhost:8000",
+                origin=platform_origin,
+                launch=launch,
+            )
+            self.assertEqual(confirmation_status, 200)
+            self.assertEqual(confirmation, {"status": "ready"})
 
             replay_status, _replay_body, _replay_headers = await self._invoke(
                 app,
@@ -293,6 +315,7 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             audits = state.observability_store.list_audit(source_domain="apps.sidecars.browser")
             serialized_audits = json.dumps([record.payload for record in audits])
             self.assertNotIn(ticket, serialized_audits)
+            self.assertNotIn(launch["confirmation_token"], serialized_audits)
             self.assertTrue(any(record.action == "sidecar.browser_ticket.issue" for record in audits))
             self.assertTrue(any(record.action == "sidecar.browser_session.bootstrap" for record in audits))
             proxy_audits = [record for record in audits if record.action == "sidecar.browser_request.proxy"]

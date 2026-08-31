@@ -73,21 +73,24 @@ python3.12 scripts/install_maverick.py \
 
 Wildcard certificates require a DNS-01 ACME flow and are intentionally not
 requested by the installer's single-host webroot flow. With
-`--hosted-sidecars`, live preflight fails until both wildcard TLS files exist.
+`--hosted-sidecars`, live preflight parses the leaf certificate and private key,
+requires a currently valid SAN for the exact
+`*.sidecars.<installation-domain>` wildcard, and verifies that the key matches.
+Text files, malformed PEM, an expired/not-yet-valid certificate, a mismatched
+key, or a certificate for only one opaque sidecar origin all fail before live
+files are changed.
 The rendered environment enables hosted mode and binds it to the exact platform
 origin. Nginx renders a separate wildcard virtual host that proxies to the same
 ASGI core, disables response buffering for SSE, and deliberately omits
 `X-Frame-Options`; core supplies the exact CSP `frame-ancestors` policy.
 
-For a controlled recovery of one already-known sidecar origin, an operator may
-temporarily use an HTTP-01 certificate whose SAN is that exact opaque hostname.
-The wildcard Nginx virtual host may serve that certificate, but TLS will be
-valid only for the named origin. This is sufficient to recover the current
-workspace and generation; it is not equivalent to wildcard provisioning.
-Before adding a workspace, rotating to a generation that changes the derived
-origin, or relying on unattended scale-out, replace it with the DNS-01 wildcard
-certificate. Keep the exact-host certificate under normal ACME renewal and
-repeat the hosted Chromium smoke after every renewal or origin change.
+After live apply, the mandatory health pass connects with the normal system
+trust store to a reserved `sc-<opaque>.sidecars.<installation-domain>` host and
+requires Core's expected unauthenticated sidecar-session response. This is a
+single gate for wildcard DNS, certificate hostname validation, Nginx routing,
+and Core host recognition. A certificate for one already-known opaque hostname
+is never an accepted recovery mode: a workspace or generation change produces
+a different hostname and would strand Design Studio again.
 
 Use `--render-only` to stop after rendering.
 

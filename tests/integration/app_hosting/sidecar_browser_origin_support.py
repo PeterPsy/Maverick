@@ -8,7 +8,7 @@ from pathlib import Path
 import textwrap
 
 from core.api.asgi_application import PlatformAsgiHost
-from core.api.sidecar_browser import BROWSER_LAUNCH_PATH
+from core.api.sidecar_browser import BROWSER_LAUNCH_PATH, BROWSER_LAUNCH_STATUS_PATH
 from core.apps.contracts import (
     build_app_contract,
     build_app_services,
@@ -55,6 +55,36 @@ class SidecarBrowserOriginTestSupport:
             method="POST",
             body=json.dumps(
                 {"app_id": "sidecar-browser-demo", "sidecar_id": "web", "path": "/api/projects"}
+            ).encode("utf-8"),
+            headers={
+                "content-type": "application/json",
+                "cookie": platform_cookie,
+                "origin": origin,
+            },
+        )
+        return status, json.loads(body.decode("utf-8")), headers
+
+    async def _launch_status(
+        self,
+        app: PlatformAsgiHost,
+        *,
+        platform_cookie: str,
+        host: str,
+        origin: str,
+        launch: dict,
+    ) -> tuple[int, dict, dict[str, str]]:
+        status, body, headers = await self._invoke(
+            app,
+            host=host,
+            path=BROWSER_LAUNCH_STATUS_PATH,
+            method="POST",
+            body=json.dumps(
+                {
+                    "app_id": "sidecar-browser-demo",
+                    "sidecar_id": "web",
+                    "sidecar_instance_id": launch["sidecar_instance_id"],
+                    "confirmation_token": launch["confirmation_token"],
+                }
             ).encode("utf-8"),
             headers={
                 "content-type": "application/json",

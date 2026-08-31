@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import json
 from dataclasses import replace
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 from core.shared.installer import (
     InstallerConfig,
@@ -172,6 +178,86 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertIn("hosted sidecar TLS certificate not found: /missing/sidecars-fullchain.pem", report.errors)
         self.assertIn("hosted sidecar TLS private key not found: /missing/sidecars-privkey.pem", report.errors)
 
+    def test_hosted_sidecars_fail_live_preflight_for_invalid_or_non_wildcard_tls(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory(prefix="maverick-sidecar-tls-") as temp_dir:
+            tls_root = Path(temp_dir)
+            certificate_path = tls_root / "fullchain.pem"
+            private_key_path = tls_root / "privkey.pem"
+            certificate_path.write_text("not a certificate\n", encoding="utf-8")
+            private_key_path.write_text("not a private key\n", encoding="utf-8")
+            config = replace(
+                self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+                hosted_sidecars=True,
+                sidecar_tls_cert_path=str(certificate_path),
+                sidecar_tls_key_path=str(private_key_path),
+            )
+
+            with patch("core.shared.installer.shutil.which", return_value="/usr/bin/tool"):
+                malformed = preflight_check(config, live_apply=True, request_tls=False)
+
+            self.assertIn(
+                f"hosted sidecar TLS certificate is not valid PEM: {certificate_path}",
+                malformed.errors,
+            )
+            self.assertIn(
+                f"hosted sidecar TLS private key is not valid unencrypted PEM: {private_key_path}",
+                malformed.errors,
+            )
+
+            _write_tls_pair(
+                certificate_path,
+                private_key_path,
+                dns_names=["sc-one.sidecars.maverick.example.test"],
+            )
+            with patch("core.shared.installer.shutil.which", return_value="/usr/bin/tool"):
+                exact_host = preflight_check(config, live_apply=True, request_tls=False)
+
+            self.assertIn(
+                "hosted sidecar TLS certificate SAN does not include required wildcard: "
+                "*.sidecars.maverick.example.test",
+                exact_host.errors,
+            )
+
+    def test_hosted_sidecars_accept_only_a_valid_wildcard_certificate_and_matching_key(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory(prefix="maverick-sidecar-tls-") as temp_dir:
+            tls_root = Path(temp_dir)
+            certificate_path = tls_root / "fullchain.pem"
+            private_key_path = tls_root / "privkey.pem"
+            _write_tls_pair(
+                certificate_path,
+                private_key_path,
+                dns_names=["*.sidecars.maverick.example.test"],
+            )
+            config = replace(
+                self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+                hosted_sidecars=True,
+                sidecar_tls_cert_path=str(certificate_path),
+                sidecar_tls_key_path=str(private_key_path),
+            )
+
+            with patch("core.shared.installer.shutil.which", return_value="/usr/bin/tool"):
+                valid = preflight_check(config, live_apply=True, request_tls=False)
+
+            self.assertEqual(valid.errors, [])
+
+            unrelated_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            private_key_path.write_bytes(
+                unrelated_key.private_bytes(
+                    serialization.Encoding.PEM,
+                    serialization.PrivateFormat.PKCS8,
+                    serialization.NoEncryption(),
+                )
+            )
+            with patch("core.shared.installer.shutil.which", return_value="/usr/bin/tool"):
+                mismatched = preflight_check(config, live_apply=True, request_tls=False)
+
+            self.assertIn(
+                "hosted sidecar TLS certificate and private key do not match",
+                mismatched.errors,
+            )
+
     def test_render_install_plan_skips_nginx_for_local_only_mode(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         config = self.make_config(repo_root, hostname=None, local_only=True)
@@ -201,6 +287,23 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertEqual(result["https://maverick.example.test/health"], True)
         self.assertEqual(mocked_probe.call_count, 4)
         self.assertEqual(sleeps, [0.25, 0.25])
+
+    def test_check_health_probes_one_real_hosted_sidecar_origin_shape(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = replace(
+            self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+            hosted_sidecars=True,
+        )
+
+        with patch("core.shared.installer._url_is_healthy", return_value=True), patch(
+            "core.shared.installer_tls.sidecar_tls_origin_is_healthy",
+            return_value=True,
+        ) as mocked_sidecar_probe:
+            result = check_health(config, attempts=1)
+
+        sidecar_url = "https://sc-000000000000000000000000.sidecars.maverick.example.test/"
+        self.assertEqual(result[sidecar_url], True)
+        mocked_sidecar_probe.assert_called_once_with(sidecar_url, timeout_seconds=5.0)
 
 
 class InstallerFlowTestCase(unittest.TestCase):
@@ -424,6 +527,34 @@ class InstallerFlowTestCase(unittest.TestCase):
                 )
 
         self.assertEqual(exit_code, 3)
+
+
+def _write_tls_pair(certificate_path: Path, private_key_path: Path, *, dns_names: list[str]) -> None:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    now = datetime.now(timezone.utc)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, dns_names[0])]))
+        .issuer_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, dns_names[0])]))
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=1))
+        .not_valid_after(now + timedelta(days=1))
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName(name) for name in dns_names]),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
+    certificate_path.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    private_key_path.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+
 
 if __name__ == "__main__":
     unittest.main()

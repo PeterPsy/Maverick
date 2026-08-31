@@ -2,6 +2,9 @@ import type { SidecarLaunch } from "./types";
 
 const IDENTIFIER = /^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/;
 const BOOTSTRAP_PATH = "/.well-known/maverick-sidecar-bootstrap";
+const BOOTSTRAP_STATUS_PATH = "/api/app-sidecars/browser-launch-status";
+
+export type SidecarBootstrapStatus = "pending" | "ready";
 
 export class SidecarLaunchError extends Error {
   readonly code: string;
@@ -89,6 +92,41 @@ export async function requestOpenDesignLaunch(
   return validateSidecarLaunch(payload, platformOrigin);
 }
 
+export async function requestOpenDesignBootstrapStatus(
+  appId: string,
+  launch: SidecarLaunch,
+  signal?: AbortSignal,
+): Promise<SidecarBootstrapStatus> {
+  const response = await fetch(BOOTSTRAP_STATUS_PATH, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      app_id: appId,
+      sidecar_id: "opendesign",
+      sidecar_instance_id: launch.sidecar_instance_id,
+      confirmation_token: launch.confirmation_token,
+    }),
+  });
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new SidecarLaunchError("sidecar_bootstrap_confirmation_invalid", response.status);
+  }
+  if (!response.ok) {
+    const code = isRecord(payload) && typeof payload.error === "string"
+      ? safeErrorCode(payload.error)
+      : "sidecar_bootstrap_confirmation_failed";
+    throw new SidecarLaunchError(code, response.status);
+  }
+  if (!isRecord(payload) || (payload.status !== "pending" && payload.status !== "ready")) {
+    throw new SidecarLaunchError("sidecar_bootstrap_confirmation_invalid", response.status);
+  }
+  return payload.status;
+}
+
 export function validateSidecarLaunch(payload: unknown, platformOrigin: string): SidecarLaunch {
   if (!isRecord(payload)) throw new SidecarLaunchError("sidecar_launch_response_invalid", 502);
   const candidate = payload as Partial<SidecarLaunch>;
@@ -101,6 +139,10 @@ export function validateSidecarLaunch(payload: unknown, platformOrigin: string):
     || !candidate.ticket
     || candidate.ticket.length > 512
     || /\s/.test(candidate.ticket)
+    || typeof candidate.confirmation_token !== "string"
+    || !candidate.confirmation_token
+    || candidate.confirmation_token.length > 512
+    || /\s/.test(candidate.confirmation_token)
     || !Number.isInteger(candidate.expires_in_seconds)
     || Number(candidate.expires_in_seconds) < 1
     || Number(candidate.expires_in_seconds) > 30

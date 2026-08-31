@@ -24,11 +24,15 @@ from core.egress.classification import (
     CanonicalSourceClassification,
     fail_closed_classification,
     join_classifications,
+    validated_classification,
 )
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.confined_filesystem_metadata import (
     ConfinedPathMetadata,
+    apply_preserved_file_metadata,
     capture_fd_metadata,
+    metadata_snapshot_matches,
+    preserved_metadata_matches,
 )
 from core.runtime.confined_filesystem_mutation_support import (
     rename_exchange,
@@ -84,6 +88,7 @@ class _DirectoryAnchor:
     name: str | None
     relative_path: str
     opened_stat: os.stat_result
+    created: bool = False
 
 
 @dataclass(frozen=True)
@@ -107,6 +112,29 @@ class _OpenChain:
                 os.close(anchor.fd)
             except OSError:
                 pass
+
+    def rollback_created_directories(self) -> bool:
+        """Remove only empty directories created while opening this chain."""
+        try:
+            for anchor in reversed(self.anchors):
+                if not anchor.created:
+                    continue
+                if anchor.parent_fd is None or anchor.name is None:
+                    return False
+                current = os.stat(
+                    anchor.name,
+                    dir_fd=anchor.parent_fd,
+                    follow_symlinks=False,
+                )
+                if not same_identity(current, anchor.opened_stat):
+                    return False
+                if os.listdir(anchor.fd):
+                    return False
+                os.rmdir(anchor.name, dir_fd=anchor.parent_fd)
+                os.fsync(anchor.parent_fd)
+            return True
+        except OSError:
+            return False
 
     def __enter__(self) -> "_OpenChain":
         return self
@@ -137,6 +165,10 @@ class ConfinedWorkspaceFilesystem:
         self.classification_resolver = classification_resolver
         self.cursor_key = bytes(cursor_key or _PROCESS_CURSOR_KEY)
         self.race_hook = race_hook
+        self._mutation_taints: dict[
+            tuple[str, str, str, str, str],
+            CanonicalSourceClassification,
+        ] = {}
         self._root_fd = -1
         self._root_stat: os.stat_result | None = None
         if not self.workspace_id or len(self.cursor_key) < 32:
@@ -503,13 +535,18 @@ class ConfinedWorkspaceFilesystem:
         chain = self._open_chain(components[:-1], create_missing=create_parents)
         temporary_name = f".maverick-write-{secrets.token_hex(16)}"
         temp_fd: int | None = None
+        previous_fd: int | None = None
         committed = False
+        completed = False
         committed_stat: os.stat_result | None = None
+        committed_metadata: ConfinedPathMetadata | None = None
         rollback_kind: str | None = None
         old_entry_retained = False
         preserve_temporary = False
         previous_stat: os.stat_result | None = None
+        previous_metadata: ConfinedPathMetadata | None = None
         previous_observation: FilesystemResourceObservation | None = None
+        previous_classification: CanonicalSourceClassification | None = None
         try:
             parent_fd = chain.leaf_fd
             try:
@@ -530,6 +567,22 @@ class ConfinedWorkspaceFilesystem:
                     self._relative(components),
                     previous_stat,
                 )
+                previous_fd = self._open_file(
+                    parent_fd,
+                    components[-1],
+                    write=False,
+                )
+                opened_previous = os.fstat(previous_fd)
+                self._assert_same_version(
+                    previous_stat,
+                    opened_previous,
+                    "filesystem_resource_changed",
+                )
+                previous_metadata = capture_fd_metadata(previous_fd)
+                previous_classification = self._classification(
+                    previous_observation,
+                    "tool_result",
+                )
             if replace_only and previous_stat is None:
                 raise RuntimeToolError("filesystem_path_not_found")
             if expected_resource_identity is not None:
@@ -548,6 +601,11 @@ class ConfinedWorkspaceFilesystem:
             )
             payload = content.encode("utf-8")
             _write_all(temp_fd, payload)
+            if previous_metadata is not None:
+                committed_metadata = apply_preserved_file_metadata(
+                    temp_fd,
+                    previous_metadata,
+                )
             os.fsync(temp_fd)
             self._hook("write_temporary_ready", relative_path)
             if mutation_guard is not None:
@@ -567,6 +625,20 @@ class ConfinedWorkspaceFilesystem:
                     current_stat,
                     "filesystem_resource_changed",
                 )
+                if (
+                    previous_fd is None
+                    or previous_metadata is None
+                    or not metadata_snapshot_matches(
+                        previous_metadata,
+                        capture_fd_metadata(previous_fd),
+                    )
+                    or self._classification(
+                        previous_observation,
+                        "tool_result",
+                    )
+                    != previous_classification
+                ):
+                    raise RuntimeToolError("filesystem_resource_changed")
             elif not create_only:
                 try:
                     os.stat(
@@ -647,6 +719,17 @@ class ConfinedWorkspaceFilesystem:
                 "filesystem_resource_changed",
             )
             committed_stat = committed_after_hook
+            if (
+                previous_metadata is not None
+                and (
+                    committed_metadata is None
+                    or not preserved_metadata_matches(
+                        previous_metadata,
+                        capture_fd_metadata(temp_fd),
+                    )
+                )
+            ):
+                raise RuntimeToolError("filesystem_metadata_preservation_failed")
             self._assert_final_link(parent_fd, components[-1], committed_stat)
             self._assert_chain(chain)
             if mutation_guard is not None:
@@ -654,11 +737,26 @@ class ConfinedWorkspaceFilesystem:
             observation = self._observation(
                 "filesystem_file", self._relative(components), committed_stat
             )
-            classification = self._classification(observation, "tool_result")
+            classification = (
+                self._classification_from_mutation_source(
+                    observation,
+                    "tool_result",
+                    previous_classification,
+                )
+                if previous_observation is not None
+                else self._classification(observation, "tool_result")
+            )
             if old_entry_retained:
                 os.unlink(temporary_name, dir_fd=parent_fd)
                 old_entry_retained = False
                 os.fsync(parent_fd)
+            if previous_observation is not None:
+                self._forget_mutation_taint(previous_observation)
+                self._remember_mutation_taint(
+                    observation,
+                    previous_classification,
+                )
+            completed = True
             return ConfinedFilesystemResult(
                 {
                     "path": observation.resource_ref,
@@ -713,6 +811,8 @@ class ConfinedWorkspaceFilesystem:
                     raise RuntimeToolError("tool_execution_unknown") from error
             raise RuntimeToolError("filesystem_write_failed") from error
         finally:
+            if previous_fd is not None:
+                os.close(previous_fd)
             if temp_fd is not None:
                 os.close(temp_fd)
             if not preserve_temporary:
@@ -720,7 +820,11 @@ class ConfinedWorkspaceFilesystem:
                     os.unlink(temporary_name, dir_fd=chain.leaf_fd)
                 except OSError:
                     pass
-            chain.close()
+            try:
+                if not completed and not chain.rollback_created_directories():
+                    raise RuntimeToolError("tool_execution_unknown")
+            finally:
+                chain.close()
 
     def search_text(
         self,
@@ -1026,6 +1130,7 @@ class ConfinedWorkspaceFilesystem:
         try:
             for index, name in enumerate(components):
                 parent_fd = anchors[-1].fd
+                created = False
                 try:
                     child_fd = os.open(
                         name,
@@ -1037,11 +1142,22 @@ class ConfinedWorkspaceFilesystem:
                         raise RuntimeToolError("filesystem_path_not_found")
                     try:
                         os.mkdir(name, 0o2770, dir_fd=parent_fd)
-                        child_fd = os.open(
-                            name,
-                            os.O_RDONLY | _DIRECTORY | _NOFOLLOW | _CLOEXEC,
-                            dir_fd=parent_fd,
-                        )
+                        created = True
+                        try:
+                            child_fd = os.open(
+                                name,
+                                os.O_RDONLY | _DIRECTORY | _NOFOLLOW | _CLOEXEC,
+                                dir_fd=parent_fd,
+                            )
+                        except OSError:
+                            try:
+                                os.rmdir(name, dir_fd=parent_fd)
+                                os.fsync(parent_fd)
+                            except OSError as cleanup_error:
+                                raise RuntimeToolError(
+                                    "tool_execution_unknown"
+                                ) from cleanup_error
+                            raise
                     except OSError as error:
                         raise RuntimeToolError("filesystem_write_failed") from error
                 except OSError as error:
@@ -1057,11 +1173,16 @@ class ConfinedWorkspaceFilesystem:
                         name,
                         self._relative(components[: index + 1]),
                         opened,
+                        created,
                     )
                 )
             return _OpenChain(anchors)
-        except Exception:
-            _OpenChain(anchors).close()
+        except Exception as error:
+            chain = _OpenChain(anchors)
+            rolled_back = chain.rollback_created_directories()
+            chain.close()
+            if not rolled_back:
+                raise RuntimeToolError("tool_execution_unknown") from error
             raise
 
     def _open_configured_root(self) -> int:
@@ -1194,7 +1315,16 @@ class ConfinedWorkspaceFilesystem:
         observation: FilesystemResourceObservation,
         provenance: str,
     ) -> CanonicalSourceClassification:
+        mutation_source = self._mutation_taints.get(
+            self._observation_key(observation)
+        )
         if self.classification_resolver is None:
+            if mutation_source is not None:
+                return self._classification_from_mutation_source(
+                    observation,
+                    provenance,
+                    mutation_source,
+                )
             return fail_closed_classification(
                 provenance=provenance,
                 source_ref=observation.resource_ref,
@@ -1221,7 +1351,85 @@ class ConfinedWorkspaceFilesystem:
                 source_digest=observation.resource_digest,
                 resource_identity=observation.resource_identity,
             )
+        if mutation_source is not None:
+            inherited = self._classification_from_mutation_source(
+                observation,
+                provenance,
+                mutation_source,
+            )
+            if normalized.classification_revision is None:
+                return inherited
+            joined = join_classifications((normalized, inherited))
+            revisions = tuple(
+                source.classification_revision for source in joined.sources
+            )
+            return validated_classification(
+                data_class=joined.effective_data_class,
+                provenance=provenance,
+                trust_level=joined.effective_trust_level,
+                source_ref=observation.resource_ref,
+                source_revision=observation.resource_revision,
+                source_digest=observation.resource_digest,
+                resource_identity=observation.resource_identity,
+                classification_revision=(
+                    max(revisions)
+                    if all(item is not None for item in revisions)
+                    else None
+                ),
+            )
         return normalized
+
+    @staticmethod
+    def _observation_key(
+        observation: FilesystemResourceObservation,
+    ) -> tuple[str, str, str, str, str]:
+        return (
+            observation.resource_kind,
+            observation.resource_ref,
+            observation.resource_identity,
+            observation.resource_revision,
+            observation.resource_digest,
+        )
+
+    def _classification_from_mutation_source(
+        self,
+        observation: FilesystemResourceObservation,
+        provenance: str,
+        source: CanonicalSourceClassification | None,
+    ) -> CanonicalSourceClassification:
+        """Rebind proven pre-image taint to an exact derived post-image."""
+        if source is None or source.classification_revision is None:
+            return fail_closed_classification(
+                provenance=provenance,
+                source_ref=observation.resource_ref,
+                source_revision=observation.resource_revision,
+                source_digest=observation.resource_digest,
+                resource_identity=observation.resource_identity,
+            )
+        return validated_classification(
+            data_class=source.data_class,
+            provenance=provenance,
+            trust_level=source.trust_level,
+            source_ref=observation.resource_ref,
+            source_revision=observation.resource_revision,
+            source_digest=observation.resource_digest,
+            resource_identity=observation.resource_identity,
+            classification_revision=source.classification_revision,
+        )
+
+    def _remember_mutation_taint(
+        self,
+        observation: FilesystemResourceObservation,
+        source: CanonicalSourceClassification | None,
+    ) -> None:
+        if source is not None and source.classification_revision is not None:
+            self._mutation_taints[self._observation_key(observation)] = source
+
+    def _forget_mutation_taint(
+        self,
+        observation: FilesystemResourceObservation,
+    ) -> None:
+        self._mutation_taints.pop(self._observation_key(observation), None)
 
     def _require_expected(
         self,

@@ -299,14 +299,11 @@ class SemanticContextMaterializer:
         workspace_root = Path(context.session.workspace_root).resolve(strict=True)
         for skill in skills:
             try:
-                source_root = Path(str(getattr(skill, "source_root", ""))).resolve(
-                    strict=True
+                source_root = Path(str(getattr(skill, "source_root", "")))
+                skill_path = _lexical_skill_path(
+                    workspace_root,
+                    source_root,
                 )
-                skill_path = (
-                    source_root.relative_to(workspace_root) / "SKILL.md"
-                ).as_posix()
-                if source_root.is_symlink() or (source_root / "SKILL.md").is_symlink():
-                    raise ValueError
                 result = read_complete_confined_text(
                     filesystem,
                     skill_path,
@@ -352,6 +349,19 @@ class SemanticContextMaterializer:
             sources=(classification,),
         )
         return canonical_classification(derived)
+
+
+def _lexical_skill_path(workspace_root: Path, source_root: Path) -> str:
+    """Retain the selected skill identity and reject every symlink component."""
+    if not source_root.is_absolute() or ".." in source_root.parts:
+        raise ValueError("skill source path is not canonical")
+    relative = source_root.relative_to(workspace_root)
+    current = workspace_root
+    for component in (*relative.parts, "SKILL.md"):
+        current /= component
+        if current.is_symlink():
+            raise ValueError("skill source path contains a symlink")
+    return (relative / "SKILL.md").as_posix()
 
 
 @dataclass(frozen=True)

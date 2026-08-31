@@ -259,7 +259,7 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v16 manifests contain both
+publication. Google and OpenRouter suite-v27 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
@@ -637,8 +637,10 @@ classifier and atomically persists their exact digest-bound entries in one
 immutable turn manifest. Governed context cannot use one aggregate promotion:
 the same writer classifies its exact control, summary, task/result, and artifact
 chunks, which are restrictively joined and forced to untrusted trust. Unknown
-identities or missing source evidence remain `unclassified`. For tool results, resource reads
-keep exact observed taint and edit/patch diffs inherit their pre-image taint.
+identities or missing source evidence remain `unclassified`. For tool results,
+resource reads keep exact observed taint and mutations persist their exact
+post-image lineage in the authenticated session tool ledger, so a rebuilt
+orchestrator can recover read-after-write taint without trusting path text.
 Shell/process streams and CLI/MCP discovery/results remain complete through the
 shared compactor and are classified from their exact bytes. A remotely denied
 private result remains in the ledger while a public call-paired error preserves
@@ -673,31 +675,46 @@ The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 30
-and OpenRouter revision 29, both bound to
-`maverick-hosted-tool-loop==22`; older revisions are suspended rather than
+accepted as complete. The current contained definitions are Google revision 31
+and OpenRouter revision 30, both bound to
+`maverick-hosted-tool-loop==23`; older revisions are suspended rather than
 overwritten. Their certification manifests retain distinct deterministic
 fixture and synthetic live steps. No live probe is run by ordinary repository
 checks, and no fixture-only result is certificate evidence.
 
 These adversarial-review definitions are governed-workspace candidates, not
-Full Workspace claims. `codex-baseline-v10` now requires a live result behavior
-probe rather than a mode string; the current probe deliberately fails for
-mutating shell/process and app CLI/MCP scenarios. The profiles therefore pin
-`hosted-governed-result-v1` and leave `full_workspace_contract_revision` empty.
-Adapter 22, recipe revision 9, context-compaction schema 3, suite 26, and TCB
-manifest v16 retain the composite-classification and rollback-safe multi-file
-invariants.
+Full Workspace claims. `codex-baseline-v11` requires executable create,
+replace, edit, patch, move, delete, read-after-write, shell/process, and
+CLI/MCP result behaviors rather than a mode string. The current probe proves
+the public-preimage replacement workflows and deliberately fails creation and
+variable-output workflows that have no authoritative source class. The
+profiles therefore pin `hosted-governed-result-v2`, use the distinct
+`maverick_agent_candidate` execution family, and leave
+`full_workspace_contract_revision` empty. The claim validator rejects the
+`maverick_agent` family unless profile and certificate atomically carry the
+complete contract. Adapter 23, recipe revision 10, context-compaction schema 3,
+suite 27, and TCB manifest v17 retain the composite-classification and
+rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked
 against its complete metadata/xattr snapshot, so a later-file metadata race
 rolls back earlier writes without deleting the concurrent change. Content
 effects carry exact atime/mtime; directory/root-only metadata and hardlink
-effects that cannot be reproduced are rejected. Production input capture
-content-classifies exact prompt/instruction/reference bytes and every governed
-source chunk into one immutable turn manifest. Read-only variable tool results
-are content-classified and remain provider-pairable; denied bytes stay private
-behind a public error, while unguaranteed mutations are denied before execution.
+effects that cannot be reproduced are rejected. Direct replacement also clones
+mode, ownership, ACL/xattrs, and propagates exact pre-image taint to the
+post-image and later version-bound reads; the authenticated same-session tool
+record makes that binding survive orchestrator reconstruction, and move
+rebinds the same taint. Failed
+`create_parents` calls remove their empty new directories, and move validates
+the source before creating a destination chain. Production input capture
+conservatively classifies exact prompt/instruction/reference bytes and every
+governed source chunk into one immutable turn manifest. Sensitive markers can
+only narrow the result; marker absence is `unclassified`, never inferred
+`public`. Read-only variable tool results follow the same rule and remain
+provider-pairable only with an authoritative eligible class; denied bytes stay
+private behind a public error, while unguaranteed mutations are denied before
+execution. Skill selection retains the lexical catalog identity and rejects
+symlinks both at publication and confined materialization.
 Cancellation awaits all synchronous workers, and explicit process cleanup
 signals known leaders before bounded post-SIGTERM orphan sweeps. The definitions
 remain uncertified, unbound, unavailable, and independently blocked by Phase-0

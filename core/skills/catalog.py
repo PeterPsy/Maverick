@@ -39,14 +39,27 @@ def list_workspace_skills(
     app_id: str = DEFAULT_SKILL_CATALOG_APP_ID,
 ) -> list[SkillDefinition]:
     """List enabled workspace-owned skills available to Codex runtimes."""
-    root = workspace_skills_root(workspace_id=workspace_id, start_path=start_path, app_id=app_id)
-    if not root.exists():
+    data_root = workspace_skills_data_root(
+        workspace_id=workspace_id,
+        start_path=start_path,
+        app_id=app_id,
+    )
+    root = data_root / "skills"
+    workspace_root = data_root.parent.parent
+    if not root.exists() or _contains_symlink(workspace_root, root):
         return []
     metadata = _workspace_skill_metadata(workspace_id=workspace_id, start_path=start_path, app_id=app_id)
     skills: list[SkillDefinition] = []
-    for skill_root in sorted((path for path in root.iterdir() if path.is_dir()), key=lambda item: item.name):
+    for skill_root in sorted(
+        (
+            path
+            for path in root.iterdir()
+            if not path.is_symlink() and path.is_dir()
+        ),
+        key=lambda item: item.name,
+    ):
         skill_file = skill_root / "SKILL.md"
-        if not skill_file.is_file():
+        if skill_file.is_symlink() or not skill_file.is_file():
             continue
         item_metadata = metadata.get(skill_root.name, {})
         if item_metadata and not bool(item_metadata.get("enabled", True)):
@@ -62,7 +75,10 @@ def list_workspace_skills(
                     or frontmatter.get("description")
                     or f"Workspace skill `{skill_root.name}`."
                 ),
-                source_root=str(skill_root.resolve()),
+                # Preserve the catalog entry identity.  Resolving here would
+                # turn an alias into its target and make later symlink checks
+                # incapable of proving what the caller selected.
+                source_root=str(skill_root.absolute()),
                 owner_kind="workspace",
                 owner_id=workspace_id,
                 workspace_id=workspace_id,
@@ -70,6 +86,20 @@ def list_workspace_skills(
             )
         )
     return skills
+
+
+def _contains_symlink(anchor: Path, path: Path) -> bool:
+    """Return true when any lexical component below ``anchor`` is a link."""
+    try:
+        relative = path.relative_to(anchor)
+    except ValueError:
+        return True
+    current = anchor
+    for component in relative.parts:
+        current /= component
+        if current.is_symlink():
+            return True
+    return False
 
 
 def resolve_workspace_skills(

@@ -8,7 +8,6 @@ from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.egress.classification import (
     content_sha256,
-    fail_closed_classification,
     validated_classification,
 )
 from core.mcp.tool_registry import McpToolRegistry
@@ -88,7 +87,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             self.actor,
         )
         self.assertIsInstance(status, RuntimeToolSurfaceResult)
-        self.assertEqual(status.classification.data_class, "public")
+        self.assertEqual(status.classification.data_class, "unclassified")
         self.assertEqual(status.payload["output"], "ordinary process output")
         self._assert_digest_matches(status)
 
@@ -115,7 +114,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
         self.assertNotIn("raw_output", started.payload)
         self._assert_digest_matches(started)
 
-    def test_edit_diff_retains_preimage_taint_not_new_revision_fallback(
+    def test_edit_diff_retains_exact_taint_rebound_to_postimage(
         self,
     ) -> None:
         source = validated_classification(
@@ -128,9 +127,15 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             resource_identity="workspace-file:fixture.txt",
             classification_revision=1,
         )
-        postimage = fail_closed_classification(
+        postimage = validated_classification(
+            data_class="public",
             provenance="tool_result",
-            source_ref="workspace:fixture.txt",
+            trust_level="untrusted_tool_output",
+            source_ref="fixture.txt",
+            source_revision="postimage-2",
+            source_digest="d" * 64,
+            resource_identity="workspace-file:fixture.txt",
+            classification_revision=1,
         )
         filesystem = SimpleNamespace(
             write_text=lambda *_args, **_kwargs: RuntimeToolSurfaceResult(
@@ -149,11 +154,14 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             evidence={"instruction_scope_digest": "d" * 64},
             mutation_guard=SimpleNamespace(),
             operation_count=1,
-            source_classification=source,
         )
 
-        self.assertIs(result.classification, source)
-        self.assertNotEqual(result.classification, postimage)
+        self.assertIs(result.classification, postimage)
+        self.assertEqual(result.classification.data_class, source.data_class)
+        self.assertNotEqual(
+            result.classification.source_revision,
+            source.source_revision,
+        )
         self.assertIn("-before", result.payload["diff"])
         self.assertIn("+after", result.payload["diff"])
 
@@ -318,8 +326,8 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
         self.assertIsInstance(mcp_result, RuntimeToolSurfaceResult)
         self.assertEqual(cli_result.payload, cli_payload)
         self.assertEqual(mcp_result.payload, mcp_payload)
-        self.assertEqual(cli_result.classification.data_class, "public")
-        self.assertEqual(mcp_result.classification.data_class, "public")
+        self.assertEqual(cli_result.classification.data_class, "unclassified")
+        self.assertEqual(mcp_result.classification.data_class, "unclassified")
         self.assertEqual(cli_payload["commands"][0]["command_id"], "app.visible")
         self.assertEqual(mcp_payload["tools"][0]["tool_name"], "app_visible")
 

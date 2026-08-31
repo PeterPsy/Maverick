@@ -51,6 +51,8 @@ def delete_confined_path(
     committed = False
     target_stat: os.stat_result | None = None
     quarantine_stat: os.stat_result | None = None
+    observation = None
+    classification = None
     try:
         target_stat = lstat_entry(chain.leaf_fd, components[-1])
         require_supported_type(target_stat)
@@ -64,6 +66,7 @@ def delete_confined_path(
             identity=expected_resource_identity,
             revision=expected_resource_revision,
         )
+        classification = filesystem._classification(observation, "tool_result")
         if stat.S_ISDIR(target_stat.st_mode):
             if not recursive:
                 _require_empty_directory(chain.leaf_fd, components[-1], target_stat)
@@ -78,6 +81,8 @@ def delete_confined_path(
         if mutation_guard is not None:
             mutation_guard.verify_before()
         revalidate_entry(filesystem, chain, components[-1], target_stat)
+        if filesystem._classification(observation, "tool_result") != classification:
+            raise RuntimeToolError("filesystem_resource_changed")
         trash_fd = _open_quarantine(filesystem)
         rename_noreplace(
             chain.leaf_fd,
@@ -111,6 +116,7 @@ def delete_confined_path(
             quarantine_stat,
             recursive=recursive,
         )
+        filesystem._forget_mutation_taint(observation)
         return ConfinedFilesystemResult(
             {
                 "path": observation.resource_ref,
@@ -123,7 +129,7 @@ def delete_confined_path(
                 "resource_revision": observation.resource_revision,
                 "resource_digest": observation.resource_digest,
             },
-            filesystem._classification(observation, "tool_result"),
+            classification,
         )
     except RuntimeToolError as error:
         if committed and trash_fd is not None and quarantine_stat is not None:

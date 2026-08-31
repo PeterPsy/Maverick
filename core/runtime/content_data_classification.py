@@ -49,7 +49,10 @@ def classify_runtime_content(
         return "regulated_or_customer_data"
     if _EMAIL_PATTERN.search(text) or _PHONE_PATTERN.search(text):
         return "personal_data"
-    return "public"
+    # Absence of a known sensitive marker is not authoritative evidence that
+    # arbitrary content is public.  Callers that need a public classification
+    # must resolve one from an explicit, version-bound source of authority.
+    return "unclassified"
 
 
 def _luhn_valid(value: str) -> bool:

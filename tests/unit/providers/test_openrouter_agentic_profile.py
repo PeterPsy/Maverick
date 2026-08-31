@@ -29,7 +29,10 @@ from core.providers.openrouter_agentic_profile import (
     ensure_openrouter_agentic_preview_profile,
 )
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
-from core.runtime.full_workspace_contract import FULL_WORKSPACE_CORE_TOOL_HANDLES
+from core.runtime.full_workspace_contract import (
+    FULL_WORKSPACE_CORE_TOOL_HANDLES,
+    MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
+)
 from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
 from tests.support.repo import make_temp_repo_root
 
@@ -64,8 +67,8 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "29")
-        self.assertEqual(profile.adapter_version_constraint, "==22")
+        self.assertEqual(profile.revision, "30")
+        self.assertEqual(profile.adapter_version_constraint, "==23")
         self.assertEqual(profile.model_provider_id, "openrouter")
         self.assertEqual(profile.model_id, "deepseek/deepseek-v4-flash")
         self.assertEqual(profile.provider_protocol, "openrouter-chat-completions")
@@ -80,7 +83,10 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
         self.assertEqual(profile.egress_policy_revision, "2")
         self.assertEqual(profile.full_workspace_contract_revision, "")
-        self.assertEqual(profile.execution_family, "maverick_agent")
+        self.assertEqual(
+            profile.execution_family,
+            MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
+        )
         self.assertEqual(
             profile.harness_recipe_id,
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE.recipe_id,

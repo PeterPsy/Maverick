@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 
 from core.runtime.confined_filesystem import (
     ConfinedFilesystemResult,
@@ -39,25 +40,35 @@ def move_confined_path(
     if source == destination:
         raise RuntimeToolError("filesystem_move_same_path")
     source_chain = filesystem._open_chain(source[:-1])
-    destination_chain = filesystem._open_chain(
-        destination[:-1],
-        create_missing=create_parents,
-    )
+    destination_chain = None
     committed = False
+    completed = False
     source_stat: os.stat_result | None = None
     destination_stat: os.stat_result | None = None
+    source_observation = None
+    source_classification = None
     try:
         source_stat = lstat_entry(source_chain.leaf_fd, source[-1])
         require_supported_type(source_stat)
-        observation = filesystem._observation(
+        if stat.S_ISDIR(source_stat.st_mode) and destination[: len(source)] == source:
+            raise RuntimeToolError("filesystem_move_destination_inside_source")
+        source_observation = filesystem._observation(
             resource_kind(source_stat),
             filesystem._relative(source),
             source_stat,
         )
         filesystem._require_expected(
-            observation,
+            source_observation,
             identity=expected_resource_identity,
             revision=expected_resource_revision,
+        )
+        source_classification = filesystem._classification(
+            source_observation,
+            "tool_result",
+        )
+        destination_chain = filesystem._open_chain(
+            destination[:-1],
+            create_missing=create_parents,
         )
         try:
             lstat_entry(destination_chain.leaf_fd, destination[-1])
@@ -70,6 +81,11 @@ def move_confined_path(
         if mutation_guard is not None:
             mutation_guard.verify_before()
         revalidate_entry(filesystem, source_chain, source[-1], source_stat)
+        if (
+            filesystem._classification(source_observation, "tool_result")
+            != source_classification
+        ):
+            raise RuntimeToolError("filesystem_resource_changed")
         filesystem._assert_chain(destination_chain)
         rename_noreplace(
             source_chain.leaf_fd,
@@ -104,19 +120,30 @@ def move_confined_path(
         if mutation_guard is not None:
             mutation_guard.verify_after()
         moved_observation = filesystem._observation(
-            observation.resource_kind,
+            source_observation.resource_kind,
             filesystem._relative(destination),
             destination_stat,
         )
+        classification = filesystem._classification_from_mutation_source(
+            moved_observation,
+            "tool_result",
+            source_classification,
+        )
+        filesystem._forget_mutation_taint(source_observation)
+        filesystem._remember_mutation_taint(
+            moved_observation,
+            source_classification,
+        )
+        completed = True
         return ConfinedFilesystemResult(
             {
-                "source_path": observation.resource_ref,
+                "source_path": source_observation.resource_ref,
                 "destination_path": moved_observation.resource_ref,
                 "resource_identity": moved_observation.resource_identity,
                 "resource_revision": moved_observation.resource_revision,
                 "resource_digest": moved_observation.resource_digest,
             },
-            filesystem._classification(moved_observation, "tool_result"),
+            classification,
         )
     except RuntimeToolError as error:
         if committed and destination_stat is not None:
@@ -140,5 +167,14 @@ def move_confined_path(
             raise RuntimeToolError("tool_execution_unknown") from error
         raise RuntimeToolError("filesystem_move_failed") from error
     finally:
-        destination_chain.close()
-        source_chain.close()
+        try:
+            if (
+                destination_chain is not None
+                and not completed
+                and not destination_chain.rollback_created_directories()
+            ):
+                raise RuntimeToolError("tool_execution_unknown")
+        finally:
+            if destination_chain is not None:
+                destination_chain.close()
+            source_chain.close()

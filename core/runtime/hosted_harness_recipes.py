@@ -18,7 +18,7 @@ from core.runtime.semantic_envelope_models import (
 
 
 HOSTED_CONTEXT_POLICY_REVISION = "p4-context-v4"
-HOSTED_TOOL_CONTRACT_REVISION = "hosted-governed-result-v1"
+HOSTED_TOOL_CONTRACT_REVISION = "hosted-governed-result-v2"
 
 
 @dataclass(frozen=True)
@@ -104,7 +104,7 @@ def hosted_full_context_policy() -> AgenticContextPolicy:
 
 GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-google-interactions-governed-workspace",
-    revision="9",
+    revision="10",
     model_provider_id="google-ai-studio",
     model_id=GOOGLE_AGENTIC_MODEL_ID,
     provider_protocol="google-interactions",
@@ -137,7 +137,7 @@ GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 
 OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-openrouter-chat-governed-workspace",
-    revision="9",
+    revision="10",
     model_provider_id="openrouter",
     model_id=OPENROUTER_AGENTIC_MODEL_ID,
     provider_protocol="openrouter-chat-completions",

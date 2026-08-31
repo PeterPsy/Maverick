@@ -14,8 +14,8 @@ from core.runtime.provider_input_governed_sources import (
 
 
 RUNTIME_PROVIDER_INPUT_CAPTURE_REVISION = 1
-RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION = 1
-RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID = "core-runtime-input-classifier-v1"
+RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION = 2
+RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID = "core-runtime-input-classifier-v2"
 RUNTIME_PROVIDER_INPUT_RESOURCE_KIND = "runtime_input"
 GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND = "inter_agent_governed_context"
 _INDEXED_SOURCE = re.compile(r"^(app-reference|attachment):(\d+):metadata$")

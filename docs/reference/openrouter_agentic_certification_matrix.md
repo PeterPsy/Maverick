@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-08-30
-Matrix revision: `2026-08-30-r26-p4-agentic-review-closure-tcb16`
+Status date: 2026-08-31
+Matrix revision: `2026-08-31-r27-p4-agentic-closure-tcb17`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==22`
+Adapter: `maverick-hosted-tool-loop==23`
 
 ## Candidate combination
 
@@ -12,7 +12,8 @@ Adapter: `maverick-hosted-tool-loop==22`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `29` (revision `28` suspended) |
+| Immutable profile revision | `30` (revision `29` suspended) |
+| Execution family | `maverick_agent_candidate`; `maverick_agent` requires an atomic complete Full Workspace claim |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -30,7 +31,7 @@ Adapter: `maverick-hosted-tool-loop==22`
 | Turn cost ceiling | 250,000 micro-USD; 70,000 remains protected for the two terminal attempts |
 | Final request | exact Core finalization instruction; `tools: []`; `tool_choice: none` |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | governed `hosted-governed-result-v1` surface: complete content-classified read-only shell/process and CLI/MCP results; public error pairing on denied bytes; pre-effect denial for unguaranteed mutations; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM process cleanup |
+| Tool handles | governed `hosted-governed-result-v2` surface: marker absence remains unclassified; public-preimage replace/edit/patch/move/delete/read-after-write taint is executable; creation and unauthoritatively classified variable results remain gated; denied bytes pair through a public error; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 30 days |
 
 The current OpenRouter model catalog lists `deepinfra/fp8` as active for
@@ -43,7 +44,7 @@ The certification probe fetches both official catalogs immediately before any
 completion request and fails unless this exact record is active, ZDR-listed,
 large enough for the requested completion budget, and supports every parameter
 the translated payload sends that participates in endpoint parameter routing.
-Suite 26 also requires `supports_tool_choice.none=true` in both exact records,
+Suite 27 also requires `supports_tool_choice.none=true` in both exact records,
 so the current DeepInfra record is an explicit certification blocker rather
 than a capability Maverick guesses or works around. A changed endpoint or
 upstream requires a new recipe/catalog digest and immutable profile revision.
@@ -88,8 +89,8 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
-| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@5`; exact byte-bound classifications, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, exact `SKILL.md` projection, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, and journal evidence | not certified |
-| Certified execution TCB | manifest v16 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@6`; exact byte-bound classifications, lexical no-symlink skill identity, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, and journal evidence | not certified |
+| Certified execution TCB | manifest v17 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, `tool_choice:none`, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -99,7 +100,7 @@ Primary references:
 | Multi-step continuation | deterministic fixtures for three sequential tool rounds followed by a final response at every reasoning effort | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, pairing-safe semantic history compaction, request-scoped authority replacement, bounded byte-correct tool-result artifacts, explicit attachment workspace references, and safe-next-turn steering fallback | not certified |
-| Full Workspace behavioral gate | `codex-baseline-v10` invokes the executable result-policy gate and requires certification-suite execution, classification, egress pairing, and pre-effect behavior instead of trusting declared mode strings | incomplete: mutating shell/process and app CLI/MCP scenarios are denied; revision 29 leaves the Full Workspace claim empty |
+| Full Workspace behavioral gate | `codex-baseline-v11` executes create, replace, edit, patch, move, delete, read-after-write, shell/process, and CLI/MCP result workflows instead of trusting declared mode strings | incomplete: creation and variable shell/process and CLI/MCP bytes lack an authoritative eligible class; revision 30 leaves the claim empty |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
 | Usage, generation id and price | success and decode-failure fixtures retain telemetry; active request reservations reconcile to reported micro-USD while missing usage remains worst-case | not certified |
@@ -115,7 +116,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r25 |
+| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r27 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the candidate profile and never manufactures a
@@ -319,6 +320,20 @@ sweeps. `codex-baseline-v10` reports the remaining mutating result scenarios as
 incomplete, so this profile does not claim Full Workspace. It remains
 uncertified, unbound, and unavailable; no live probe, behavioral run, provider
 completion, certificate, canary, or remote activation has been performed.
+
+Revision 30 pins adapter 23, governed recipe 10, suite 27, matrix
+`2026-08-31-r27-p4-agentic-closure-tcb17`, and TCB manifest v17. Content
+classification no longer promotes marker-free bytes to public; direct
+replace/edit/patch preserves mode and ACL/xattrs and carries exact pre-image
+taint through read-after-write; move rebinds it; failed parent creation is
+rolled back; and skill aliases fail closed. `codex-baseline-v11` names and
+executes every filesystem mutation workflow, while creation and variable
+shell/process and CLI/MCP results remain incomplete without authoritative
+classification. The definition is explicitly
+`maverick_agent_candidate`, not `maverick_agent`, and does not claim Full
+Workspace. It remains uncertified, unbound, and unavailable; no live probe,
+behavioral run, provider completion, certificate, canary, or remote activation
+has been performed.
 
 ## Fail-closed conditions
 

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from core.runtime.hosted_filesystem_result_behavior import (
+    FILESYSTEM_RESULT_BEHAVIOR_IDS,
+    inspect_hosted_filesystem_result_behavior,
+)
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
 from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_admission_resolver,
@@ -12,8 +16,9 @@ from core.runtime.hosted_tool_result_admission import (
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 
 
-HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 1
+HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 2
 HOSTED_REQUIRED_RESULT_BEHAVIOR_HANDLES = (
+    *FILESYSTEM_RESULT_BEHAVIOR_IDS,
     "core-capability:shell.run",
     "core-capability:process.status",
     "core-capability:cli.list",
@@ -86,7 +91,7 @@ def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
             {"tool_name": "fixture.mutate"},
         ),
     }
-    return tuple(
+    variable_results = tuple(
         handle
         for handle, scenario_arguments in scenarios.items()
         if all(
@@ -102,6 +107,7 @@ def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
             for arguments in scenario_arguments
         )
     )
+    return (*inspect_hosted_filesystem_result_behavior(), *variable_results)
 
 
 def _scenario_complete(

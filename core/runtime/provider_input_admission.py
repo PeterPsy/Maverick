@@ -29,7 +29,7 @@ from core.runtime.provider_input_governed_sources import (
 )
 
 
-RUNTIME_PROVIDER_INPUT_ADMISSION_REVISION = 3
+RUNTIME_PROVIDER_INPUT_ADMISSION_REVISION = 4
 def build_runtime_provider_input_classification_resolver(
     *,
     runtime_store,

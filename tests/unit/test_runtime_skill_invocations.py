@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from core.skills.catalog import list_workspace_skills
 from core.skills.models import SkillDefinition
 from core.skills.service import SkillInvocationError, resolve_invoked_runtime_skills
+from tests.support.repo import make_temp_repo_root
 
 
 class RuntimeSkillInvocationTestCase(unittest.TestCase):
@@ -51,6 +54,30 @@ class RuntimeSkillInvocationTestCase(unittest.TestCase):
 
         self.assertEqual([item.skill_id for item in result], ["two", "one"])
         self.assertEqual(resolver.call_args.kwargs["skill_ids"], ["two", "one"])
+
+    def test_catalog_never_publishes_directory_or_skill_file_symlinks(self) -> None:
+        root = make_temp_repo_root(self)
+        skills_root = (
+            root / "workspaces" / "default" / "data" / "skills" / "skills"
+        )
+        real = skills_root / "real-skill"
+        real.mkdir(parents=True)
+        (real / "SKILL.md").write_text("# Real\n", encoding="utf-8")
+        (skills_root / "alias-skill").symlink_to(
+            real,
+            target_is_directory=True,
+        )
+        linked_file = skills_root / "linked-file"
+        linked_file.mkdir()
+        (linked_file / "SKILL.md").symlink_to(real / "SKILL.md")
+
+        skills = list_workspace_skills(
+            workspace_id="default",
+            start_path=root,
+        )
+
+        self.assertEqual([item.skill_id for item in skills], ["real-skill"])
+        self.assertEqual(skills[0].source_root, str(Path(real).absolute()))
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from core.egress.agentic_transforms import canonical_egress_content
 from core.runtime.provider_input_capture import (
     RuntimeProviderInputCaptureSource,
     capture_runtime_provider_input_classifications,
+    classify_runtime_provider_input_content,
 )
 from core.runtime.provider_input_context import (
     RuntimeProviderInputObservation,
@@ -79,7 +80,7 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         self.assertFalse(egress.decision.export_allowed)
         self.assertIsNone(egress.exported_content)
 
-    def test_normal_prompt_is_captured_without_test_seed(self) -> None:
+    def test_unmarked_prompt_is_captured_as_unclassified(self) -> None:
         harness, state = self._state_with_turn(
             input_text="Summarize the public fixture.",
         )
@@ -93,8 +94,25 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
             attachments=None,
         )
 
-        self.assertEqual(sources[0].classification.data_class, "public")
-        self.assertEqual(sources[0].classification.classification_revision, 1)
+        self.assertEqual(sources[0].classification.data_class, "unclassified")
+        self.assertEqual(sources[0].classification.classification_revision, 2)
+
+    def test_content_scanning_never_promotes_benign_looking_text_to_public(
+        self,
+    ) -> None:
+        for content in (
+            "confidential account narrative",
+            "employee salary matrix",
+            "customer medical diagnosis: lymphoma",
+        ):
+            with self.subTest(content=content):
+                self.assertEqual(
+                    classify_runtime_provider_input_content(
+                        content,
+                        content_type="text/plain",
+                    ),
+                    "unclassified",
+                )
 
     def test_governed_context_restrictively_joins_captured_source_bytes(
         self,
@@ -129,10 +147,10 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
             if source.source_id == "generalist-orchestration"
         )
 
-        self.assertEqual(
-            classification.data_class,
-            "regulated_or_customer_data",
-        )
+        # The sensitive chunk is detected, but benign-looking sibling chunks
+        # remain unclassified and the restrictive aggregate cannot promote
+        # them merely because no marker was found.
+        self.assertEqual(classification.data_class, "unclassified")
         self.assertEqual(classification.trust_level, "untrusted_external")
 
     def test_missing_or_conflicting_capture_fails_closed(self) -> None:
@@ -216,7 +234,7 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         )
         conflicting = deepcopy(manifest)
         source_ref = "runtime-turn:turn-sensitive:turn-prompt"
-        conflicting["sources"][source_ref]["data_class"] = "unclassified"
+        conflicting["sources"][source_ref]["data_class"] = "public"
         with self.assertRaisesRegex(
             ValueError,
             "runtime_provider_input_capture_conflict",

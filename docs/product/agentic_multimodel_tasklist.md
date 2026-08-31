@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v16 records six maintained transitive dependency contracts. The
+- [x] Manifest v17 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v26 / matrix
-  `2026-08-30-r26-p4-agentic-review-closure-tcb16`
+- [x] Google and OpenRouter suite v27 / matrix
+  `2026-08-31-r27-p4-agentic-closure-tcb17`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -414,7 +414,9 @@ completion claim.
   `tool_choice: none` for finalization.
 - [x] Transient prompt and agent-instruction admission requires the exact
   content-derived entry from one immutable Core turn-capture manifest;
-  composer identity/digest proves integrity but cannot select a class.
+  composer identity/digest proves integrity but cannot select a class. Marker
+  scanning may only narrow a class: content with no detected sensitive marker
+  remains `unclassified` and never defaults to `public`.
   Governed context restrictively joins exact control, summary, task/result, and
   artifact capture entries and remains untrusted. The generic fallback remains
   fail-closed. Resource results propagate
@@ -424,6 +426,13 @@ completion claim.
   call-paired error preserves protocol pairing. Unguaranteed mutating variants
   are rejected before their handler. App declarations cannot promote output,
   and app entries are not silently filtered.
+- [x] Direct replacement/edit/patch preserves mode, owner, ACL/xattrs and
+  propagates exact pre-image taint to the post-image for version-bound
+  read-after-write. Successful exact post-images are retained in authenticated
+  same-session tool results, so the taint survives hosted orchestrator rebuilds.
+  Move rebinds the same taint to the destination; an out-of-band version change
+  invalidates it. New files remain unclassified without an authoritative
+  source class.
 - [x] Semantic classifications bind the exact canonical projected bytes.
   Attachment metadata and file observations are classified separately then
   restrictively joined; attachment-only turns omit the empty prompt. Skills
@@ -439,6 +448,10 @@ completion claim.
   an explicit set of mutable directory scopes, run in a private overlay, and
   validate every changed file against its actual instruction chain before a
   rollback-safe batch commit; invalid/failed/interrupted effects are discarded.
+- [x] Skill catalogs retain the lexical selected source and reject symlinked
+  catalog roots, skill directories, and `SKILL.md` files. Hosted semantic
+  materialization checks every lexical source component before the confined
+  no-follow read, so an alias cannot materialize its target under another id.
 - [x] Synchronous shell and managed-process cancellation reaches the complete
   process group and COW overlay, then awaits worker quiescence before returning.
   External cancellation and COW commit share one linearization gate, and
@@ -455,20 +468,28 @@ completion claim.
   read-modify-write and read-after-write commands. Metadata-only directory/root
   timestamps remain fail-closed, and new or existing hardlinks are rejected
   instead of being split into independent files.
+- [x] Direct writes roll back every empty parent created by `create_parents`
+  on failure. Move validates the exact source before opening or creating its
+  destination and removes newly created destination parents after rollback.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 22, semantic compiler revision 5, governed result contract
-  `hosted-governed-result-v1`, context-compaction schema 3, TCB manifest v16,
-  suite 26, and matrix
-  `2026-08-30-r26-p4-agentic-review-closure-tcb16` create immutable Google
-  revision 30 and OpenRouter revision 29 governed-workspace candidates.
-  Historical revisions 29/28 are suspended, never promoted. The candidates
-  intentionally leave `full_workspace_contract_revision` empty.
-- [ ] Admit a hosted Full Workspace `codex-baseline-v10` claim only after the
+- [x] Adapter 23, semantic compiler revision 6, governed result contract
+  `hosted-governed-result-v2`, context-compaction schema 3, TCB manifest v17,
+  suite 27, and matrix `2026-08-31-r27-p4-agentic-closure-tcb17` create
+  immutable Google revision 31 and OpenRouter revision 30 governed-workspace
+  candidates. Historical revisions 30/29 are suspended, never promoted. The
+  candidates use `execution_family=maverick_agent_candidate` and intentionally
+  leave `full_workspace_contract_revision` empty; the central claim validator
+  rejects `execution_family=maverick_agent` unless profile and certificate
+  atomically carry a complete Full Workspace contract.
+- [ ] Admit a hosted Full Workspace `codex-baseline-v11` claim only after the
   live behavior probe verifies complete execution, classification, egress,
-  pairing, and pre-effect guarantees for mutating shell/process and app
-  CLI/MCP. Until then those unguaranteed effects are denied before execution.
+  pairing, post-image/read-after-write, and pre-effect guarantees. The gate now
+  executes replace/edit/patch/move/delete/read-after-write workflows and names
+  create explicitly; create plus variable shell/process and CLI/MCP output
+  remain incomplete without an authoritative result class. Until then those
+  unguaranteed effects are denied before execution.
   No live probe, signed certificate, binding, remote activation, or Codex
   profile/artifact change is part of Phase 4.
 

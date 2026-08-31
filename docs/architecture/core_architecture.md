@@ -779,10 +779,13 @@ must retain the same contract revision. Losing one required live capability or
 handle makes the agent unavailable; Core does not materialize a partial agent.
 The claim also requires an executable result-policy gate plus successful
 certification-suite behavior coverage for complete execution, exact-byte
-classification, egress/error pairing, and pre-effect guarantees across read and
-mutating shell/process/CLI/MCP scenarios. A declared mode string or the mere
+classification, egress/error pairing, post-image/read-after-write behavior,
+and pre-effect guarantees across create, replace, edit, patch, move, delete,
+shell/process, and CLI/MCP scenarios. A declared mode string or the mere
 presence of a handle is not evidence. Hosted candidates whose gate is
-incomplete must omit the Full Workspace revision; the current candidates do.
+incomplete must omit the Full Workspace revision and use the distinct
+`maverick_agent_candidate` family; `maverick_agent` is invalid without the
+complete atomic contract.
 
 Hosted filesystem mutations are descriptor-relative and version-fenced.
 Replacement uses Linux atomic exchange/no-replace primitives so a final-entry
@@ -793,6 +796,19 @@ complete revalidated snapshot, query, scope, and pagination position. Every
 mutation re-resolves the applicable root-to-target `AGENTS.md` chain and can
 bind the caller-observed instruction-scope digest before crossing the effect
 boundary.
+
+Direct content replacement clones and verifies the pre-image mode, ownership,
+and bounded ACL/xattr set before exchange. A version-bound classification on
+the exact pre-image is monotonically rebound to the exact post-image and later
+read-after-write observation. The successful mutation's private session-ledger
+result carries the exact identity/revision/digest and reconstructs that lineage
+when the hosted loop builds its next filesystem orchestrator; move rebinds it
+to the destination. A created file remains unclassified without authoritative
+source taint, and any
+out-of-band version change invalidates the transient lineage. Failed writes
+remove only the empty, identity-matching parents they created. Move validates
+the exact source before opening or creating the destination chain and removes
+new destination parents after a successful rollback.
 
 Hosted shell commands mount the retained workspace root at the fixed
 `/workspace` sandbox identity. The live workspace is read-only. A caller that
@@ -842,17 +858,20 @@ durable terminal process status together.
 
 Transient prompt, agent-instruction, and governed-context blocks are not public
 by provenance. Production bootstrap always installs a closed Core-owned
-capture writer before provider dispatch. It content-classifies the exact prompt,
+capture writer before provider dispatch. It conservatively classifies the exact prompt,
 agent instruction, reference metadata, and every governed-context control,
 summary, task/result, and artifact chunk, then stores the complete immutable
-manifest in the turn with one CAS. Source ids and digests prove integrity but
-never select or widen a class. Governed context restrictively joins those exact
+manifest in the turn with one CAS. Detection of a sensitive marker may only
+narrow the result; absence of a marker remains `unclassified` and can never
+select `public`. Source ids and digests prove integrity but never select or
+widen a class. Governed context restrictively joins those exact
 entries and remains untrusted; a missing manifest, unknown source, changed byte,
 or identity mismatch stays `unclassified`. Resource-returning tools propagate
 the exact observed resource classification, and edit/patch diffs retain their
 pre-image taint.
 
-Variable hosted tool output is also classified from its exact canonical bytes.
+Variable hosted tool output is also conservatively classified from its exact
+canonical bytes; marker absence remains `unclassified`.
 Read-only shell/process streams and CLI/MCP discovery/read results retain the
 complete payload through the common compactor. If their derived class is not
 allowed remotely, Core keeps the private result and sends a public, call-id
@@ -869,8 +888,10 @@ the exact canonical bytes projected for that block. Composite sources use a
 restrictive join over every independently classified component. Attachment
 metadata is admitted separately from the referenced file and then joined;
 neither a client-controlled name nor other metadata can inherit the file's
-class. Skill blocks project the complete descriptor-read `SKILL.md` itself and
-do not mix unbound catalog/state metadata into its classification. A digest
+class. Skill catalogs preserve the lexical selected identity and reject a
+symlinked catalog component, skill directory, or `SKILL.md`. Skill blocks then
+project the complete descriptor-read `SKILL.md` itself and do not mix unbound
+catalog/state metadata into its classification. A digest
 mismatch is downgraded to `unclassified` before egress. Attachment-only turns
 omit the semantically absent empty prompt block.
 

@@ -54,14 +54,14 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "9")
+                self.assertEqual(recipe.revision, "10")
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
-                    "5",
+                    "6",
                 )
                 self.assertEqual(
                     recipe.tool_contract_revision,
-                    "hosted-governed-result-v1",
+                    "hosted-governed-result-v2",
                 )
                 self.assertEqual(recipe.context_policy.revision, "p4-context-v4")
         self.assertEqual(HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION, "3")
@@ -206,7 +206,7 @@ def _binding(recipe):
         certificate_evidence_digest="a" * 64,
         runtime_engine_id="maverick-tool-loop",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version="22",
+        adapter_version="23",
         adapter_artifact_digest="b" * 64,
         model_provider_id=recipe.model_provider_id,
         model_id=recipe.model_id,

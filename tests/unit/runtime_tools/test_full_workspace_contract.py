@@ -439,6 +439,67 @@ class FullWorkspaceContractTest(unittest.TestCase):
                     b"retained",
                 )
 
+    def test_edit_and_patch_preserve_existing_file_metadata(self) -> None:
+        (self.workspace / "AGENTS.md").write_text(
+            "Direct edit metadata rules.\n",
+            encoding="utf-8",
+        )
+        target = self.workspace / "editable-script.sh"
+        target.write_text("#!/bin/sh\necho old\n", encoding="utf-8")
+        target.chmod(0o755)
+        try:
+            os.setxattr(target, "user.maverick.fixture", b"retained")
+        except OSError as error:
+            self.skipTest(f"filesystem xattrs unavailable: {error}")
+        capabilities = self._capabilities()
+        scope_digest = self._scope_digest(capabilities, "editable-script.sh")
+        observed = capabilities["core-capability:filesystem.read"].handler(
+            {"path": "editable-script.sh"},
+            self.context,
+            None,
+        )
+
+        edited = capabilities["core-capability:filesystem.edit"].handler(
+            {
+                "path": "editable-script.sh",
+                "old_text": "old",
+                "new_text": "edited",
+                "expected_resource_identity": observed.payload[
+                    "resource_identity"
+                ],
+                "expected_resource_revision": observed.payload[
+                    "resource_revision"
+                ],
+                "instruction_scope_digest": scope_digest,
+            },
+            self.context,
+            None,
+        )
+        patched = capabilities["core-capability:filesystem.patch"].handler(
+            {
+                "path": "editable-script.sh",
+                "operations": [
+                    {"old_text": "edited", "new_text": "patched"},
+                ],
+                "expected_resource_identity": edited.payload[
+                    "resource_identity"
+                ],
+                "expected_resource_revision": edited.payload[
+                    "resource_revision"
+                ],
+                "instruction_scope_digest": scope_digest,
+            },
+            self.context,
+            None,
+        )
+
+        self.assertEqual(patched.payload["path"], "editable-script.sh")
+        self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o755)
+        self.assertEqual(
+            os.getxattr(target, "user.maverick.fixture"),
+            b"retained",
+        )
+
     def test_shell_overlay_supports_read_modify_write_and_read_after_write(self) -> None:
         (self.workspace / "AGENTS.md").write_text(
             "Read-modify-write rules.\n",

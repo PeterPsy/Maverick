@@ -17,6 +17,9 @@ from core.runtime.authority import (
     intersect_runtime_policies,
 )
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
+from core.runtime.filesystem_mutation_lineage import (
+    resolve_filesystem_mutation_lineage,
+)
 from core.runtime.hosted_agentic_engine import (
     HostedAgenticEngineAdapter,
     build_hosted_turn_status_callback,
@@ -52,7 +55,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "22"
+HOSTED_AGENTIC_ADAPTER_VERSION = "23"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -158,6 +161,7 @@ def build_hosted_agentic_engine_adapter(
         composition_components=(
             build_hosted_agentic_engine_adapter,
             build_hosted_provider_runtime_registry,
+            resolve_filesystem_mutation_lineage,
         ),
         process_registry=process_registry,
     )
@@ -243,6 +247,30 @@ def _tool_orchestrator(
         mcp_registry=mcp_registry,
         process_registry=process_registry,
     )
+
+    def classify_resource(observation, provenance):
+        authoritative = resource_classification_for_observation(
+            workspace_store.get_resource_classification(
+                workspace_id=observation.workspace_id,
+                resource_kind=observation.resource_kind,
+                resource_ref=observation.resource_ref,
+            ),
+            workspace_id=observation.workspace_id,
+            resource_kind=observation.resource_kind,
+            resource_ref=observation.resource_ref,
+            resource_identity=observation.resource_identity,
+            resource_revision=observation.resource_revision,
+            resource_digest=observation.resource_digest,
+            provenance=provenance,
+        )
+        return resolve_filesystem_mutation_lineage(
+            observation=observation,
+            provenance=provenance,
+            authoritative=authoritative,
+            ledger=ledger,
+            session_id=context.session.session_id,
+        )
+
     return RuntimeToolOrchestrator(
         catalog_builder=RuntimeToolCatalogBuilder(
             cli_registry=cli_registry,
@@ -256,22 +284,7 @@ def _tool_orchestrator(
                 mcp_registry=mcp_registry,
                 tool_ledger=ledger,
                 result_classification_resolver=result_admission_resolver,
-                resource_classification_resolver=lambda observation, provenance: (
-                    resource_classification_for_observation(
-                        workspace_store.get_resource_classification(
-                            workspace_id=observation.workspace_id,
-                            resource_kind=observation.resource_kind,
-                            resource_ref=observation.resource_ref,
-                        ),
-                        workspace_id=observation.workspace_id,
-                        resource_kind=observation.resource_kind,
-                        resource_ref=observation.resource_ref,
-                        resource_identity=observation.resource_identity,
-                        resource_revision=observation.resource_revision,
-                        resource_digest=observation.resource_digest,
-                        provenance=provenance,
-                    )
-                ),
+                resource_classification_resolver=classify_resource,
             ),
             result_classification_resolver=result_admission_resolver,
             result_preflight_resolver=result_preflight_resolver,

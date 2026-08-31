@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from core.providers.errors import CapabilityCertificateError
 
 
-FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v10"
+FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v11"
+MAVERICK_AGENT_EXECUTION_FAMILY = "maverick_agent"
+MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY = "maverick_agent_candidate"
 
 FULL_WORKSPACE_CORE_TOOL_HANDLES = (
     "core-capability:workspace.instructions",
@@ -31,6 +33,13 @@ FULL_WORKSPACE_CORE_TOOL_HANDLES = (
     "core-capability:artifact.read",
 )
 FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS = (
+    "core-capability:filesystem.write:create",
+    "core-capability:filesystem.write:replace",
+    "core-capability:filesystem.edit",
+    "core-capability:filesystem.patch",
+    "core-capability:filesystem.move",
+    "core-capability:filesystem.delete",
+    "core-capability:filesystem.read-after-write",
     "core-capability:shell.run",
     "core-capability:process.status",
     "core-capability:cli.list",
@@ -131,6 +140,26 @@ def validate_full_workspace_contract_claim(*, profile, certificate) -> None:
     certificate_revision = str(
         getattr(certificate, "full_workspace_contract_revision", "") or ""
     )
+    profile_family = str(getattr(profile, "execution_family", "") or "")
+    certificate_family = str(
+        getattr(certificate, "execution_family", "") or ""
+    )
+    if profile_family != certificate_family:
+        raise CapabilityCertificateError("full_workspace_execution_family_mismatch")
+    if (
+        profile_family == MAVERICK_AGENT_EXECUTION_FAMILY
+        and (not profile_revision or not certificate_revision)
+    ):
+        raise CapabilityCertificateError(
+            "full_workspace_execution_family_contract_required"
+        )
+    if (
+        profile_family == MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY
+        and (profile_revision or certificate_revision)
+    ):
+        raise CapabilityCertificateError(
+            "full_workspace_candidate_contract_forbidden"
+        )
     if not profile_revision and not certificate_revision:
         return
     if profile_revision != certificate_revision:
@@ -219,6 +248,8 @@ __all__ = [
     "FULL_WORKSPACE_CONTRACT_REVISION",
     "FULL_WORKSPACE_CORE_TOOL_HANDLES",
     "FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS",
+    "MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY",
+    "MAVERICK_AGENT_EXECUTION_FAMILY",
     "FullWorkspaceContractReport",
     "inspect_full_workspace_contract",
     "validate_full_workspace_binding",

@@ -9,6 +9,8 @@ import unittest
 from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
+from core.egress.agentic_transforms import canonical_egress_content
+from core.egress.classification import content_sha256, validated_classification
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.hosted_agentic_factory import _tool_orchestrator
@@ -165,6 +167,12 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                 install_builtin_apps=False,
             )
         self.assertTrue(callable(state.runtime_input_classification_resolver))
+        state = replace(
+            state,
+            runtime_input_classification_resolver=(
+                self._classify_synthetic_runtime_input
+            ),
+        )
         production_adapter = state.provider_registry.get_agentic_runtime_adapter(
             "maverick-tool-loop"
         )
@@ -225,6 +233,12 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             )
         self.assertTrue(
             callable(state.runtime_app_reference_classification_resolver)
+        )
+        state = replace(
+            state,
+            runtime_input_classification_resolver=(
+                self._classify_synthetic_runtime_input
+            ),
         )
         reference = {
             "type": "entity",
@@ -367,7 +381,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             identity_field="command_id",
             identity="developer-context.list",
         )
-        self.assertEqual(cli_entry["result_data_class"], "public")
+        self.assertEqual(cli_entry["result_data_class"], "unclassified")
         cli_result = surfaces["core-capability:cli.run"].handler(
             {
                 "command_id": "developer-context.list",
@@ -381,7 +395,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             cli_result.payload["command_id"],
             "developer-context.list",
         )
-        self.assertEqual(cli_result.classification.data_class, "public")
+        self.assertEqual(cli_result.classification.data_class, "unclassified")
 
         mcp_entry = self._discover(
             surfaces["core-capability:mcp.list"],
@@ -390,7 +404,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             identity_field="tool_name",
             identity="developer-context.list",
         )
-        self.assertEqual(mcp_entry["result_data_class"], "public")
+        self.assertEqual(mcp_entry["result_data_class"], "unclassified")
         mcp_result = surfaces["core-capability:mcp.call"].handler(
             {
                 "tool_name": "developer-context.list",
@@ -401,7 +415,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             None,
         )
         self.assertIn("items", mcp_result.payload)
-        self.assertEqual(mcp_result.classification.data_class, "public")
+        self.assertEqual(mcp_result.classification.data_class, "unclassified")
         self.assertIsNotNone(
             orchestrator.catalog_builder.result_classification_resolver
         )
@@ -420,6 +434,23 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                 harness.store.get_turn("turn-hosted"),
                 input_text=input_text,
             )
+        )
+
+    @staticmethod
+    def _classify_synthetic_runtime_input(observation, content):
+        """Supply explicit exact-byte authority only for synthetic fixtures."""
+        digest = content_sha256(canonical_egress_content(content))
+        if digest != observation.source_digest:
+            raise AssertionError("synthetic input observation digest mismatch")
+        return validated_classification(
+            data_class="public",
+            provenance=observation.provenance,
+            trust_level="trusted_actor",
+            source_ref=observation.source_ref,
+            source_revision=observation.source_revision,
+            source_digest=observation.source_digest,
+            resource_identity=observation.resource_identity,
+            classification_revision=1,
         )
 
     def _discover(

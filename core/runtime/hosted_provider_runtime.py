@@ -14,6 +14,7 @@ from core.runtime.hosted_agentic_models import (
     HostedProviderStateInspector,
 )
 from core.runtime.hosted_context_management import HostedProviderStateCompactor
+from core.runtime.full_workspace_contract import MAVERICK_AGENT_EXECUTION_FAMILY
 from core.runtime.hosted_harness_recipes import HostedHarnessRecipeManifest
 from core.runtime.remote_agentic_admission import require_remote_agentic_dispatch
 
@@ -177,7 +178,7 @@ class HostedProviderRuntimeRegistry:
             raise HostedAgenticLoopError(reason)
         if (
             str(getattr(binding, "execution_family", "") or "")
-            != "maverick_agent"
+            != MAVERICK_AGENT_EXECUTION_FAMILY
             or binding.model_provider_id != recipe.model_provider_id
             or binding.model_id != recipe.model_id
             or binding.provider_protocol != recipe.provider_protocol

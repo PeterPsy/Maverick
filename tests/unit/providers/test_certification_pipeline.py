@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "c0612bec308b5db570d45c2402e95c6f53a4e97cb26a7ceaf588806b889b9dbe"
+                "ece5d66c84a3ccaa682a27f024013b45a5f855c38d7a9791b581405d92e848ee"
             ),
             "openrouter": (
-                "c6e20331b651feba4b96634819705290bbd8628b27ef0295c4574e5820b2d7f6"
+                "d108d01aebe31a5d1725201c7b4ba3b53a46c64ab76f261b0dbb16e7deaeaacd"
             ),
         }
         for manifest in (
@@ -190,10 +190,10 @@ class CertificationPipelineTest(unittest.TestCase):
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "26")
+                self.assertEqual(manifest.suite_version, "27")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-08-30-r26-p4-agentic-review-closure-tcb16",
+                    "2026-08-31-r27-p4-agentic-closure-tcb17",
                 )
                 self.assertEqual(
                     manifest.digest,

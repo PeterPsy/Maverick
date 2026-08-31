@@ -417,7 +417,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
             second.provider_egress_projection_digest,
         )
         self.assertEqual(first.semantic_envelope_schema_version, "1")
-        self.assertEqual(first.semantic_projection_compiler_revision, "5")
+        self.assertEqual(first.semantic_projection_compiler_revision, "6")
         provenance = [block.provenance for block in first.content_blocks]
         self.assertEqual(
             provenance,
@@ -462,6 +462,48 @@ class SemanticEnvelopeTest(unittest.TestCase):
             first.semantic_source_snapshot_digest,
             changed.semantic_source_snapshot_digest,
         )
+
+    def test_skill_directory_symlink_fails_before_materialization(self) -> None:
+        harness = HostedAgenticHarness(self)
+        workspace = harness.root / "workspaces" / "default"
+        real = workspace / "data" / "skills" / "skills" / "real-skill"
+        real.mkdir(parents=True)
+        (real / "SKILL.md").write_text("# Real skill\n", encoding="utf-8")
+        alias = real.parent / "alias-skill"
+        alias.symlink_to(real, target_is_directory=True)
+        context = RuntimeTurnContext(
+            session=harness.session,
+            binding=harness.binding,
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            input_text="Use the selected skill.",
+            correlation_id="turn-hosted",
+            effective_authority=replace(
+                harness.authority,
+                allowed_capabilities=replace(
+                    harness.authority.allowed_capabilities,
+                    skill_catalog=True,
+                ),
+            ),
+            invoked_skills=(
+                SkillDefinition(
+                    skill_id="alias-skill",
+                    local_skill_id="alias-skill",
+                    name="Alias",
+                    description="Alias fixture.",
+                    source_root=str(alias),
+                    owner_kind="workspace",
+                    owner_id="default",
+                    workspace_id="default",
+                    status="available",
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            HostedAgenticLoopError,
+            "skill_materialization_failed",
+        ):
+            self._request(harness, context)
 
     def test_unknown_mandatory_source_fails_before_any_egress_decision(self) -> None:
         harness = HostedAgenticHarness(self)

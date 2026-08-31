@@ -12,6 +12,7 @@ from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
     FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS,
+    MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
     inspect_full_workspace_contract,
     validate_full_workspace_contract_claim,
     validate_full_workspace_live_authority,
@@ -77,6 +78,70 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
         )
         self.assertIn("core-capability:shell.run", report.missing_result_behaviors)
         self.assertIn("core-capability:cli.run", report.missing_result_behaviors)
+        self.assertIn(
+            "core-capability:filesystem.write:create",
+            report.missing_result_behaviors,
+        )
+        self.assertIn(
+            "core-capability:filesystem.read-after-write",
+            verified,
+        )
+
+    def test_result_gate_names_every_mutating_filesystem_workflow(self) -> None:
+        self.assertTrue(
+            {
+                "core-capability:filesystem.write:create",
+                "core-capability:filesystem.write:replace",
+                "core-capability:filesystem.edit",
+                "core-capability:filesystem.patch",
+                "core-capability:filesystem.move",
+                "core-capability:filesystem.delete",
+                "core-capability:filesystem.read-after-write",
+            }.issubset(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS)
+        )
+
+    def test_maverick_agent_family_requires_an_atomic_full_contract(self) -> None:
+        incomplete = SimpleNamespace(
+            full_workspace_contract_revision="",
+            execution_family="maverick_agent",
+        )
+        candidate = SimpleNamespace(
+            full_workspace_contract_revision="",
+            execution_family=MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
+        )
+
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "full_workspace_execution_family_contract_required",
+        ):
+            validate_full_workspace_contract_claim(
+                profile=incomplete,
+                certificate=incomplete,
+            )
+        validate_full_workspace_contract_claim(
+            profile=candidate,
+            certificate=candidate,
+        )
+        claimed_candidate = SimpleNamespace(
+            full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
+            execution_family=MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
+        )
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "full_workspace_candidate_contract_forbidden",
+        ):
+            validate_full_workspace_contract_claim(
+                profile=claimed_candidate,
+                certificate=claimed_candidate,
+            )
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "full_workspace_execution_family_mismatch",
+        ):
+            validate_full_workspace_contract_claim(
+                profile=candidate,
+                certificate=incomplete,
+            )
 
     def test_complete_requires_every_behavior_probe(self) -> None:
         with patch(
@@ -135,6 +200,7 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
         )
         certificate = SimpleNamespace(
             full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
+            execution_family="maverick_agent",
             certified_capabilities=capabilities,
         )
 
@@ -191,6 +257,7 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
                             full_workspace_contract_revision=(
                                 FULL_WORKSPACE_CONTRACT_REVISION
                             ),
+                            execution_family="maverick_agent",
                             certified_capabilities=replace(
                                 capabilities,
                                 **{missing: False},

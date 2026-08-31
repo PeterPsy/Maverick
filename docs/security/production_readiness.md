@@ -66,18 +66,18 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v16 makes the known transitive boundary executable through
+Manifest v17 makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 22 and the governed result contract
-`hosted-governed-result-v1` are bound by TCB manifest v16. The separate Full
-Workspace specification is `codex-baseline-v10`, but neither hosted profile
-claims it while the executable behavior gate reports incomplete mutating
-shell/process and app CLI/MCP result behavior. The adapter places all
-provider-bound context in semantic-envelope schema v1/compiler revision 5,
+Hosted adapter 23 and the governed result contract
+`hosted-governed-result-v2` are bound by TCB manifest v17. The separate Full
+Workspace specification is `codex-baseline-v11`, but neither hosted profile
+claims it while the executable behavior gate reports incomplete creation and
+variable shell/process and CLI/MCP result behavior. The adapter places all
+provider-bound context in semantic-envelope schema v1/compiler revision 6,
 materializes scoped instructions through the confined filesystem, requires
 commit-bound instruction digests for direct mutations, and uses rollback-safe
 batch COW overlays for shell/process effects. Terminal process polling is
@@ -88,12 +88,22 @@ race causes full rollback without losing the concurrent change. Metadata-only
 directory/root effects and hardlinks are rejected rather than committed with
 altered semantics.
 
+Direct replacement/edit/patch now clones the existing mode, ownership, and
+ACL/xattrs before exchange and propagates exact pre-image taint to the
+post-image for version-bound read-after-write. The authenticated same-session
+mutation result preserves the exact binding across hosted orchestrator rebuilds;
+move rebinds that taint to the destination. Failed writes remove empty parents
+they created, and move validates the exact source before it can create
+destination parents. Skill catalog and semantic materialization retain the
+lexical selection identity and reject every symlink component.
+
 Production bootstrap installs a Core-owned content classifier and atomic
 turn-manifest writer for prompt, instruction, reference metadata, and each
 governed-context source chunk; composer ids cannot select a class. Non-resource
-raw output is never generically promoted: read-only shell/process and CLI/MCP
-results are classified from exact bytes, and denied bytes stay private behind a
-call-paired public error. Unguaranteed workspace-mutating shell/process and
+raw output is never generically promoted: marker detection can narrow exact
+bytes but marker absence remains `unclassified`, never `public`; denied bytes
+stay private behind a call-paired public error. Unguaranteed
+workspace-mutating shell/process and
 mutating/destructive CLI/MCP calls are denied before effect. App discovery is
 not silently narrowed. Composite attachment metadata is classified separately
 and restrictively joined with the file observation; skills export exact

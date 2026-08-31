@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import base64
 from datetime import UTC, datetime
+import os
 from pathlib import Path
+import stat
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -100,6 +102,76 @@ class ConfinedWorkspaceFilesystemTest(unittest.TestCase):
                 if path.is_file()
             )
             self.assertEqual(contents, ["attacker", "intended", "original"])
+
+    def test_replace_preserves_mode_and_extended_attributes(self) -> None:
+        with tempfile.TemporaryDirectory() as root_dir:
+            root = Path(root_dir)
+            target = root / "script.sh"
+            target.write_text("#!/bin/sh\necho old\n", encoding="utf-8")
+            target.chmod(0o755)
+            try:
+                os.setxattr(target, "user.maverick.fixture", b"retained")
+            except OSError as error:
+                self.skipTest(f"filesystem xattrs unavailable: {error}")
+            filesystem = ConfinedWorkspaceFilesystem(
+                workspace_id="default",
+                workspace_root=root,
+            )
+            observed = filesystem.read_text("script.sh", max_bytes=128)
+
+            filesystem.write_text(
+                "script.sh",
+                content="#!/bin/sh\necho new\n",
+                create_only=False,
+                replace_only=True,
+                expected_resource_identity=str(
+                    observed.payload["resource_identity"]
+                ),
+                expected_resource_revision=str(
+                    observed.payload["resource_revision"]
+                ),
+            )
+
+            self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o755)
+            self.assertEqual(
+                os.getxattr(target, "user.maverick.fixture"),
+                b"retained",
+            )
+
+    def test_failed_mutations_remove_every_created_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as root_dir:
+            root = Path(root_dir)
+            filesystem = ConfinedWorkspaceFilesystem(
+                workspace_id="default",
+                workspace_root=root,
+            )
+
+            with self.assertRaisesRegex(
+                RuntimeToolError,
+                "filesystem_resource_changed",
+            ):
+                filesystem.write_text(
+                    "new/deep/file.txt",
+                    content="blocked",
+                    create_only=False,
+                    create_parents=True,
+                    expected_resource_identity="missing-identity",
+                    expected_resource_revision="missing-revision",
+                )
+            self.assertFalse((root / "new").exists())
+
+            with self.assertRaisesRegex(
+                RuntimeToolError,
+                "filesystem_path_not_found",
+            ):
+                filesystem.move_path(
+                    "missing.txt",
+                    "destination/deep/moved.txt",
+                    expected_resource_identity="missing-identity",
+                    expected_resource_revision="missing-revision",
+                    create_parents=True,
+                )
+            self.assertFalse((root / "destination").exists())
 
     def test_move_and_delete_rollback_an_inode_swapped_at_atomic_commit(self) -> None:
         for operation in ("move", "delete"):
@@ -517,6 +589,86 @@ class ConfinedWorkspaceFilesystemTest(unittest.TestCase):
                 provenance="attachment",
             )
             self.assertEqual(changed_attachment.data_class, "unclassified")
+
+    def test_mutation_taint_follows_public_preimage_through_read_after_write(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as root_dir:
+            root = Path(root_dir)
+            path = root / "fixture.txt"
+            path.write_text("public before", encoding="utf-8")
+            initial = ConfinedWorkspaceFilesystem(
+                workspace_id="default",
+                workspace_root=root,
+            ).read_text("fixture.txt", max_bytes=64)
+            record = WorkspaceResourceClassification(
+                classification_id="classification-postimage-1",
+                workspace_id="default",
+                resource_kind="filesystem_file",
+                resource_ref="fixture.txt",
+                resource_identity=str(initial.payload["resource_identity"]),
+                resource_revision=str(initial.payload["resource_revision"]),
+                resource_digest=str(initial.payload["resource_digest"]),
+                data_class="public",
+                trust_level="trusted_actor",
+                revision=1,
+                classified_by_actor_id="operator-1",
+                classified_at=NOW,
+                updated_at=NOW,
+            )
+
+            def resolve(observation: FilesystemResourceObservation, provenance: str):
+                return resource_classification_for_observation(
+                    record,
+                    workspace_id=observation.workspace_id,
+                    resource_kind=observation.resource_kind,
+                    resource_ref=observation.resource_ref,
+                    resource_identity=observation.resource_identity,
+                    resource_revision=observation.resource_revision,
+                    resource_digest=observation.resource_digest,
+                    provenance=provenance,
+                )
+
+            filesystem = ConfinedWorkspaceFilesystem(
+                workspace_id="default",
+                workspace_root=root,
+                classification_resolver=resolve,
+            )
+            before = filesystem.read_text("fixture.txt", max_bytes=64)
+            written = filesystem.write_text(
+                "fixture.txt",
+                content="public after",
+                create_only=False,
+                replace_only=True,
+                expected_resource_identity=str(
+                    before.payload["resource_identity"]
+                ),
+                expected_resource_revision=str(
+                    before.payload["resource_revision"]
+                ),
+            )
+            reread = filesystem.read_text("fixture.txt", max_bytes=64)
+            moved = filesystem.move_path(
+                "fixture.txt",
+                "moved.txt",
+                expected_resource_identity=str(
+                    reread.payload["resource_identity"]
+                ),
+                expected_resource_revision=str(
+                    reread.payload["resource_revision"]
+                ),
+                create_parents=False,
+            )
+            moved_read = filesystem.read_text("moved.txt", max_bytes=64)
+
+            self.assertEqual(written.classification.data_class, "public")
+            self.assertEqual(reread.classification.data_class, "public")
+            self.assertEqual(moved.classification.data_class, "public")
+            self.assertEqual(moved_read.classification.data_class, "public")
+
+            (root / "moved.txt").write_text("out-of-band", encoding="utf-8")
+            changed = filesystem.read_text("moved.txt", max_bytes=64)
+            self.assertEqual(changed.classification.data_class, "unclassified")
 
     def test_listing_classification_is_bound_to_the_exact_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as root_dir:

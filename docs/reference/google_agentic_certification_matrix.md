@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-08-30
-Matrix revision: `2026-08-30-r26-p4-agentic-review-closure-tcb16`
+Status date: 2026-08-31
+Matrix revision: `2026-08-31-r27-p4-agentic-closure-tcb17`
 Rollout: candidate preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==22`
+Adapter: `maverick-hosted-tool-loop==23`
 
 ## Candidate combination
 
@@ -12,7 +12,8 @@ Adapter: `maverick-hosted-tool-loop==22`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `30` (revision `29` suspended) |
+| Immutable profile revision | `31` (revision `30` suspended) |
+| Execution family | `maverick_agent_candidate`; `maverick_agent` requires an atomic complete Full Workspace claim |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -27,7 +28,7 @@ Adapter: `maverick-hosted-tool-loop==22`
 | Final request | exact Core finalization instruction; `tools` omitted |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | governed `hosted-governed-result-v1` surface: complete content-classified read-only shell/process and CLI/MCP results; public error pairing on denied bytes; pre-effect denial for unguaranteed mutations; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM process cleanup |
+| Tool handles | governed `hosted-governed-result-v2` surface: marker absence remains unclassified; public-preimage replace/edit/patch/move/delete/read-after-write taint is executable; creation and unauthoritatively classified variable results remain gated; denied bytes pair through a public error; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 45 days |
 
 Google documents Gemini 3.6 Flash as a stable model with a 1,048,576-token
@@ -52,13 +53,13 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Request translation | deterministic stateful/stateless fixtures | not certified |
-| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@5`; exact byte-bound classifications, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, exact `SKILL.md` projection, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, and journal evidence | not certified |
+| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@6`; exact byte-bound classifications, lexical no-symlink skill identity, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v16 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v17 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
-| Full Workspace behavioral gate | `codex-baseline-v10` invokes the executable result-policy gate and requires certification-suite execution, classification, egress pairing, and pre-effect behavior instead of trusting declared mode strings | incomplete: mutating shell/process and app CLI/MCP scenarios are denied; revision 30 leaves the Full Workspace claim empty |
+| Full Workspace behavioral gate | `codex-baseline-v11` executes create, replace, edit, patch, move, delete, read-after-write, shell/process, and CLI/MCP result workflows instead of trusting declared mode strings | incomplete: creation and variable shell/process and CLI/MCP bytes lack an authoritative eligible class; revision 31 leaves the claim empty |
 | Live endpoint/model preflight | official current Interactions OpenAPI operation plus authenticated exact model record prove streaming, usage, function tools, reasoning controls, model identity, and input/output limits before completion transport | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
@@ -76,7 +77,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r25 |
+| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r27 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the candidate profile and never manufactures a
@@ -291,3 +292,17 @@ sweeps. `codex-baseline-v10` reports the remaining mutating result scenarios as
 incomplete, so this profile does not claim Full Workspace. It remains
 uncertified, unbound, and unavailable; no live probe, behavioral run, provider
 completion, certificate, canary, or remote activation has been performed.
+
+Revision 31 pins adapter 23, governed recipe 10, suite 27, matrix
+`2026-08-31-r27-p4-agentic-closure-tcb17`, and TCB manifest v17. Content
+classification no longer promotes marker-free bytes to public; direct
+replace/edit/patch preserves mode and ACL/xattrs and carries exact pre-image
+taint through read-after-write; move rebinds it; failed parent creation is
+rolled back; and skill aliases fail closed. `codex-baseline-v11` names and
+executes every filesystem mutation workflow, while creation and variable
+shell/process and CLI/MCP results remain incomplete without authoritative
+classification. The definition is explicitly
+`maverick_agent_candidate`, not `maverick_agent`, and does not claim Full
+Workspace. It remains uncertified, unbound, and unavailable; no live probe,
+behavioral run, provider completion, certificate, canary, or remote activation
+has been performed.

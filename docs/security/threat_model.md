@@ -167,17 +167,20 @@ sources retain distinct provenance/trust/classes, and a restrictive join keeps
 missing or mismatched resource classification `unclassified`. Transient prompt,
 agent-instruction, and governed-context content is likewise `unclassified`
 unless a trusted server admission resolver returns a canonical record matching
-the exact turn/source identity and digest. A Core-owned writer content-classifies
-the exact bytes and atomically persists one immutable manifest on the turn;
-source ownership alone cannot select a class. Governed context joins every
+the exact turn/source identity and digest. A Core-owned writer conservatively
+classifies the exact bytes and atomically persists one immutable manifest on
+the turn; sensitive-marker detection may narrow, but marker absence remains
+`unclassified` and source ownership alone cannot select a class. Governed context joins every
 captured control, summary, task/result, and artifact entry and stays untrusted.
 Non-resource CLI, MCP, shell, and process output has no generic public-content
 fallback: exact result bytes are classified, and a denied result is retained
 privately while only a public call-paired error reaches the provider. Any
 variable-result operation able to create workspace/app effects is denied before
 execution unless its egress outcome can be guaranteed. App claims are ignored
-without removing read-only discovery/use, and edit/patch output retains its
-exact pre-image taint.
+without removing read-only discovery/use. Direct replace/edit/patch and move
+propagate exact version-bound pre-image taint to their post-image. Authenticated
+same-session mutation results bind the exact observation across orchestrator
+rebuilds; creation has no public fallback.
 
 Every semantic classification is bound to the digest of the exact projected
 bytes. Composite attachment blocks classify client metadata independently from
@@ -355,6 +358,8 @@ from the runtime session's selected enabled catalog, enforces the session
 allowlist, and the Codex adapter reconstructs `SKILL.md` only below the
 session-local `codex-home/skills` copy. Missing files, symlinks, non-files, and
 resolved paths outside that root fail closed before provider dispatch. Runtime
+hosted materialization also retains the lexical workspace catalog path and
+rejects every symlink component before its descriptor-confined read. Runtime
 paths are not included in public API or transcript event payloads. In
 `explicit` mode Maverick also neutralizes Codex `$skill-id` mention syntax in
 the provider-only text copy, while retaining the user's original text in the

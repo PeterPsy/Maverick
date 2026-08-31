@@ -1258,8 +1258,11 @@ The broker independently resolves a server-owned
 `maverick.storage-file-cache-descriptor.v1`, rejects a cross-origin or
 identity-mismatched media URL, and applies the canonical local-persistence
 policy before opening bytes. It revalidates the exact no-store feature
-projection for each open so an already mounted shell cannot retain a stale
-positive kill-switch result. The current Storage descriptor is deliberately
+projection for each open. Explicit disable, malformed success, or
+authentication rejection clears a positive decision; a transport failure may
+reuse only a positive result already confirmed in that authenticated in-memory
+broker, allowing a ready hit during network loss while a cold broker remains
+fail-closed. The current Storage descriptor is deliberately
 `unclassified` and ineligible unless a future reviewed canonical resource
 classification is available, so enabling the global flag alone cannot widen
 the persistence policy.

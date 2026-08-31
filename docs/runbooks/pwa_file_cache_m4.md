@@ -43,8 +43,15 @@ Before OPFS access, the broker calls the authenticated internal
 4. bounded size and valid content type/digest;
 5. exact local-persistence policy revision, canonical data class, attachment
    provenance, and applicable cache/privacy approvals; and
-6. on every open, `features.storage_file_cache: true` from an exact
+6. on every open, the tri-state decision from an exact no-store
    `maverick.pwa-config.v2` response.
+
+An explicit `false`, malformed successful response, or `401`/`403` disables
+the broker and an authentication rejection also clears private cache
+authority. A config transport failure is not an explicit disable: only a
+positive decision already confirmed by that authenticated in-memory broker may
+survive it, so a ready file can still satisfy the normal viewer. A cold broker
+with no confirmed decision remains fail-closed.
 
 Unknown or denied policy returns `unavailable` to the Storage adapter, which
 uses its ordinary network path. The current resource inventory classifies raw

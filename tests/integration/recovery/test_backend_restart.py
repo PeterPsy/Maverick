@@ -523,7 +523,7 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
         self.assertEqual(blocked[0].payload["blocked_reason"], "runtime_profile_upgrade_required")
         self.assertEqual(blocked[0].payload["detail_code"], "runtime_execution_binding_missing")
 
-    def test_interrupted_recovery_resume_is_closed_without_duplicate_message(self) -> None:
+    def test_interrupted_recovery_resume_is_retried_with_visible_failure(self) -> None:
         repo_root = make_temp_repo_root(self)
         state = bootstrap_platform_state(start_path=repo_root)
         session = create_runtime_session(
@@ -565,6 +565,123 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
             payload={"client_message_id": resume_turn.client_message_id},
             now=NOW,
         )
+        record_runtime_event(
+            state.runtime_store,
+            event_id="resume-recovery-event",
+            session_id=session.session_id,
+            turn_id=resume_turn.turn_id,
+            plane="runtime",
+            event_type="runtime.recovery.resume_queued",
+            payload={"reason": "backend_restart"},
+            now=NOW,
+        )
+        record_runtime_event(
+            state.runtime_store,
+            event_id="unrelated-old-resume",
+            session_id=session.session_id,
+            turn_id="unrelated-old-resume-turn",
+            plane="turn",
+            event_type="runtime.turn.queued",
+            payload={
+                "client_message_id": (
+                    f"{backend_restart.RESUME_CLIENT_MESSAGE_ID_PREFIX}{session.session_id}:unrelated-source"
+                )
+            },
+            now=NOW,
+        )
+
+        with (
+            patch.object(
+                backend_restart,
+                "admit_runtime_session",
+                return_value=SimpleNamespace(session=session),
+            ),
+            patch.object(backend_restart, "submit_runtime_turn_async") as submit,
+            patch.object(backend_restart, "set_thread_availability"),
+            patch.object(backend_restart, "dispatch_source_app_runtime_event"),
+            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
+            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
+        ):
+            result = backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
+
+        submit.assert_called_once()
+        self.assertEqual(result.queued_resume_turns, 1)
+        self.assertEqual(
+            state.runtime_store.get_turn(resume_turn.turn_id).status,
+            "failed",
+        )
+        terminal_event = state.runtime_store.find_turn_event(
+            turn_id=resume_turn.turn_id,
+            event_type="runtime.turn.failed",
+        )
+        self.assertEqual(terminal_event.payload["recovery_action"], "retry_resume_turn")
+        self.assertEqual(terminal_event.payload["resume_attempts"], 1)
+        self.assertEqual(
+            terminal_event.payload["max_resume_attempts"],
+            backend_restart.MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_CHAIN,
+        )
+        self.assertIn("recovery resume retry queued", terminal_event.payload["error"])
+        self.assertEqual(
+            submit.call_args.kwargs["client_message_id"],
+            (
+                f"{backend_restart.RESUME_CLIENT_MESSAGE_ID_PREFIX}{session.session_id}:"
+                f"{resume_turn.turn_id}:attempt-2"
+            ),
+        )
+        recovery_event = [
+            event
+            for event in state.runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.recovery.resume_queued"
+        ][-1]
+        self.assertEqual(recovery_event.payload["resume_attempt"], 2)
+        self.assertEqual(
+            recovery_event.payload["max_resume_attempts"],
+            backend_restart.MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_CHAIN,
+        )
+
+    def test_interrupted_recovery_resume_stops_with_visible_failure_at_retry_limit(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-resume-limit",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        transition_runtime_session(
+            state.runtime_store,
+            session_id=session.session_id,
+            target_status="running",
+        )
+        resume_turn = RuntimeTurnRecord(
+            turn_id="turn-resume-limit",
+            session_id=session.session_id,
+            workspace_id="default",
+            status="active",
+            input_text=backend_restart.BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
+            client_message_id=(
+                f"{backend_restart.RESUME_CLIENT_MESSAGE_ID_PREFIX}{session.session_id}:"
+                "turn-resume-limit-2:attempt-3"
+            ),
+            created_at=NOW,
+            updated_at=NOW,
+            started_at=NOW,
+            completed_at=None,
+            failure_reason=None,
+        )
+        state.runtime_store.save_turn(resume_turn)
+        record_runtime_event(
+            state.runtime_store,
+            event_id="resume-limit-queued-3",
+            session_id=session.session_id,
+            turn_id=resume_turn.turn_id,
+            plane="turn",
+            event_type="runtime.turn.queued",
+            payload={"client_message_id": resume_turn.client_message_id},
+            now=NOW,
+        )
 
         with (
             patch.object(backend_restart, "submit_runtime_turn_async") as submit,
@@ -577,15 +694,142 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
 
         submit.assert_not_called()
         self.assertEqual(result.queued_resume_turns, 0)
-        self.assertEqual(
-            state.runtime_store.get_turn(resume_turn.turn_id).status,
-            "cancelled",
-        )
+        self.assertEqual(state.runtime_store.get_turn(resume_turn.turn_id).status, "failed")
         terminal_event = state.runtime_store.find_turn_event(
             turn_id=resume_turn.turn_id,
-            event_type="runtime.turn.cancelled",
+            event_type="runtime.turn.failed",
         )
         self.assertEqual(terminal_event.payload["recovery_action"], "close_resume_turn")
+        self.assertIn("retry limit reached", terminal_event.payload["error"])
+        blocked = [
+            event
+            for event in state.runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.recovery.resume_blocked"
+        ]
+        self.assertEqual(len(blocked), 1)
+        self.assertEqual(blocked[0].payload["blocked_reason"], "resume_retry_limit_reached")
+
+    def test_nonzero_final_output_does_not_suppress_restart_resume(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-failed-final",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        transition_runtime_session(
+            state.runtime_store,
+            session_id=session.session_id,
+            target_status="running",
+        )
+        turn = RuntimeTurnRecord(
+            turn_id="turn-failed-final",
+            session_id=session.session_id,
+            workspace_id="default",
+            status="active",
+            input_text="finish the implementation",
+            created_at=NOW,
+            updated_at=NOW,
+            started_at=NOW,
+            completed_at=None,
+            failure_reason=None,
+        )
+        state.runtime_store.save_turn(turn)
+        record_runtime_event(
+            state.runtime_store,
+            event_id="failed-final-output",
+            session_id=session.session_id,
+            turn_id=turn.turn_id,
+            plane="turn",
+            event_type="runtime.output.final",
+            payload={"text": "partial progress", "complete_text": "partial progress", "exit_code": 1},
+            now=NOW,
+        )
+
+        with (
+            patch.object(
+                backend_restart,
+                "admit_runtime_session",
+                return_value=SimpleNamespace(session=session),
+            ),
+            patch.object(backend_restart, "submit_runtime_turn_async") as submit,
+            patch.object(backend_restart, "set_thread_availability"),
+            patch.object(backend_restart, "dispatch_source_app_runtime_event"),
+            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
+            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
+        ):
+            result = backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
+
+        submit.assert_called_once()
+        self.assertEqual(result.queued_resume_turns, 1)
+        self.assertEqual(state.runtime_store.get_turn(turn.turn_id).status, "failed")
+        event_types = [event.event_type for event in state.runtime_store.list_events(session.session_id)]
+        self.assertIn("runtime.turn.failed", event_types)
+        self.assertNotIn("runtime.turn.completed", event_types)
+        failed_event = state.runtime_store.find_turn_event(
+            turn_id=turn.turn_id,
+            event_type="runtime.turn.failed",
+        )
+        self.assertIn("automatic resume turn queued", failed_event.payload["error"])
+
+    def test_zero_exit_final_output_still_reconciles_completed_without_resume(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-successful-final",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        transition_runtime_session(
+            state.runtime_store,
+            session_id=session.session_id,
+            target_status="running",
+        )
+        turn = RuntimeTurnRecord(
+            turn_id="turn-successful-final",
+            session_id=session.session_id,
+            workspace_id="default",
+            status="active",
+            input_text="finish successfully",
+            created_at=NOW,
+            updated_at=NOW,
+            started_at=NOW,
+            completed_at=None,
+            failure_reason=None,
+        )
+        state.runtime_store.save_turn(turn)
+        record_runtime_event(
+            state.runtime_store,
+            event_id="successful-final-output",
+            session_id=session.session_id,
+            turn_id=turn.turn_id,
+            plane="turn",
+            event_type="runtime.output.final",
+            payload={"text": "done", "complete_text": "done", "exit_code": 0},
+            now=NOW,
+        )
+
+        with (
+            patch.object(backend_restart, "submit_runtime_turn_async") as submit,
+            patch.object(backend_restart, "set_thread_availability"),
+            patch.object(backend_restart, "dispatch_source_app_runtime_event"),
+            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
+            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
+        ):
+            result = backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
+
+        submit.assert_not_called()
+        self.assertEqual(result.queued_resume_turns, 0)
+        self.assertEqual(state.runtime_store.get_turn(turn.turn_id).status, "completed")
+        event_types = [event.event_type for event in state.runtime_store.list_events(session.session_id)]
+        self.assertIn("runtime.turn.completed", event_types)
+        self.assertNotIn("runtime.turn.failed", event_types)
 
     def test_backend_restart_reconciles_crashed_hosted_owner_and_allows_new_generation(self) -> None:
         repo_root = make_temp_repo_root(self)

@@ -37,24 +37,17 @@ BACKEND_RESTART_CONTINUATION_INPUT_TEXT = (
     "The backend restarted successfully. Continue from where you left off using the prior conversation and current workspace state."
 )
 RESUME_CLIENT_MESSAGE_ID_PREFIX = "backend-restart-resume:"
+MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_CHAIN = 3
 NON_TERMINAL_TURN_STATUSES = {"queued", "active"}
 NON_TERMINAL_TURN_EVENTS = {
     "runtime.turn.queued": "cancelled",
     "runtime.turn.started": "failed",
-}
-TERMINAL_TURN_EVENTS = {
-    "runtime.turn.cancelled",
-    "runtime.turn.completed",
-    "runtime.turn.failed",
-    "runtime.turn.timed-out",
-    "runtime.output.final",
 }
 TERMINAL_STATUS_BY_EVENT = {
     "runtime.turn.cancelled": "cancelled",
     "runtime.turn.completed": "completed",
     "runtime.turn.failed": "failed",
     "runtime.turn.timed-out": "timed-out",
-    "runtime.output.final": "completed",
 }
 
 
@@ -111,13 +104,18 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         should_queue_resume = False
         resume_source_turn: RuntimeTurnRecord | None = None
         resume_source_rank: tuple[int, datetime, str] | None = None
-        resume_attempts = _backend_restart_resume_attempt_count(session_events)
+        resume_source_attempts = 0
         has_app_stream = state.runtime_store.has_nonterminal_app_stream_for_session(
             workspace_id=session.workspace_id,
             session_id=session.session_id,
         )
         for turn in interrupted_turns:
             is_recovery_resume_turn = _is_backend_restart_resume_turn(turn, session_events)
+            resume_attempts = (
+                _backend_restart_resume_attempt_count(turn, session_events)
+                if is_recovery_resume_turn
+                else 0
+            )
             is_inter_agent_root_turn = _is_inter_agent_root_turn(turn, session_events)
             failure_reason = f"Interrupted by {reason}; automatic resume turn queued."
             recovery_action = "automatic_resume_turn"
@@ -132,9 +130,16 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 failure_reason = f"Interrupted by {reason}; the persisted inter-agent scheduler will retry the task."
                 recovery_action = "close_inter_agent_participant_turn"
             elif is_recovery_resume_turn:
-                failure_reason = f"Interrupted by {reason}; the idempotent recovery resume will not be duplicated."
-                recovery_action = "close_resume_turn"
-            if recovery_action == "automatic_resume_turn":
+                if resume_attempts >= MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_CHAIN:
+                    failure_reason = (
+                        f"Interrupted by {reason}; recovery resume retry limit reached. "
+                        "Send a new message to continue."
+                    )
+                    recovery_action = "close_resume_turn"
+                else:
+                    failure_reason = f"Interrupted by {reason}; recovery resume retry queued."
+                    recovery_action = "retry_resume_turn"
+            if recovery_action in {"automatic_resume_turn", "retry_resume_turn", "close_resume_turn"}:
                 target_status = "failed"
             updated = transition_runtime_turn(
                 state.runtime_store,
@@ -154,7 +159,14 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 "detail": terminal_detail,
                 "recovery_action": recovery_action,
                 "resume_attempts": resume_attempts if is_recovery_resume_turn else None,
+                "max_resume_attempts": (
+                    MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_CHAIN
+                    if is_recovery_resume_turn
+                    else None
+                ),
             }
+            if updated.status == "failed":
+                terminal_payload["error"] = terminal_detail
             if updated.status == "cancelled":
                 drain_runtime_turn_terminalization(
                     state.runtime_store,
@@ -192,18 +204,37 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                     failure_reason=terminal_detail,
                     runtime_event_id=event.event_id,
                 )
+            if recovery_action == "close_resume_turn":
+                record_runtime_event(
+                    state.runtime_store,
+                    event_id=str(uuid4()),
+                    session_id=session.session_id,
+                    turn_id=updated.turn_id,
+                    plane="runtime",
+                    event_type="runtime.recovery.resume_blocked",
+                    payload={
+                        "reason": "backend_restart",
+                        "blocked_reason": "resume_retry_limit_reached",
+                        "detail": terminal_detail,
+                        "resume_attempts": resume_attempts,
+                        "max_resume_attempts": MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_CHAIN,
+                    },
+                    event_bus=state.runtime_event_bus,
+                )
             should_queue_resume = should_queue_resume or (
                 updated.status == "failed"
-                and recovery_action == "automatic_resume_turn"
+                and recovery_action in {"automatic_resume_turn", "retry_resume_turn"}
             )
-            if updated.status == "failed" and recovery_action == "automatic_resume_turn":
+            if updated.status == "failed" and recovery_action in {"automatic_resume_turn", "retry_resume_turn"}:
                 candidate_rank = (1 if turn.status == "active" else 0, turn.updated_at, turn.turn_id)
                 if resume_source_rank is None or candidate_rank > resume_source_rank:
                     resume_source_turn = updated
                     resume_source_rank = candidate_rank
+                    resume_source_attempts = resume_attempts
         if not should_queue_resume:
             continue
         source_turn_id = resume_source_turn.turn_id if resume_source_turn is not None else session.session_id
+        next_resume_attempt = resume_source_attempts + 1
         try:
             admission = admit_runtime_session(
                 state,
@@ -214,7 +245,11 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 state,
                 session=resume_session,
                 input_text=BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
-                client_message_id=f"{RESUME_CLIENT_MESSAGE_ID_PREFIX}{session.session_id}:{source_turn_id}",
+                client_message_id=_resume_client_message_id(
+                    session_id=session.session_id,
+                    source_turn_id=source_turn_id,
+                    attempt=next_resume_attempt,
+                ),
                 invoked_skill_ids=list(resume_source_turn.invoked_skill_ids) if resume_source_turn is not None else [],
                 on_queued=lambda queued_turn, _events, session_id=resume_session.session_id: dispatch_source_app_runtime_event(
                     state,
@@ -262,6 +297,8 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 "predecessor_session_id": (
                     session.session_id if resume_session.session_id != session.session_id else None
                 ),
+                "resume_attempt": next_resume_attempt,
+                "max_resume_attempts": MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_CHAIN,
                 "invoked_skill_ids": list(resume_source_turn.invoked_skill_ids) if resume_source_turn is not None else [],
             },
             event_bus=state.runtime_event_bus,
@@ -381,7 +418,7 @@ def _close_orphan_non_terminal_turn_events(state: "PlatformState", *, session_id
     terminal_turn_ids = {
         event.turn_id
         for event in events
-        if event.turn_id and event.event_type in TERMINAL_TURN_EVENTS
+        if event.turn_id and _terminal_status_for_event(event) is not None
     }
     orphan_status_by_turn_id: dict[str, str] = {}
     for event in events:
@@ -427,7 +464,7 @@ def _close_non_terminal_turns_with_terminal_events(state: "PlatformState", *, se
         terminal_event = terminal_event_by_turn_id.get(turn.turn_id)
         if terminal_event is None:
             continue
-        target_status = TERMINAL_STATUS_BY_EVENT.get(terminal_event.event_type)
+        target_status = _terminal_status_for_event(terminal_event)
         if target_status is None:
             continue
         updated = _transition_turn_to_terminal_status(
@@ -477,9 +514,22 @@ def _latest_terminal_event_by_turn_id(events: list) -> dict[str, object]:
     terminal_event_by_turn_id: dict[str, object] = {}
     ordered_events = sorted(events, key=lambda event: (event.created_at, event.event_id))
     for event in ordered_events:
-        if event.turn_id and event.event_type in TERMINAL_STATUS_BY_EVENT:
+        if event.turn_id and _terminal_status_for_event(event) is not None:
             terminal_event_by_turn_id[event.turn_id] = event
     return terminal_event_by_turn_id
+
+
+def _terminal_status_for_event(event) -> str | None:
+    if event.event_type != "runtime.output.final":
+        return TERMINAL_STATUS_BY_EVENT.get(event.event_type)
+    if not isinstance(event.payload, dict):
+        return None
+    exit_code = event.payload.get("exit_code")
+    if exit_code is None:
+        return "completed"
+    if type(exit_code) is int and exit_code == 0:
+        return "completed"
+    return None
 
 
 def _output_text_for_turn(events: list, turn_id: str) -> str:
@@ -533,6 +583,11 @@ def _failure_reason_from_terminal_event(event) -> str | None:
 def _is_backend_restart_resume_turn(turn, events: list) -> bool:
     if turn.input_text != BACKEND_RESTART_CONTINUATION_INPUT_TEXT:
         return False
+    if (
+        isinstance(turn.client_message_id, str)
+        and turn.client_message_id.startswith(RESUME_CLIENT_MESSAGE_ID_PREFIX)
+    ):
+        return True
     for event in events:
         if event.turn_id != turn.turn_id or event.event_type != "runtime.turn.queued":
             continue
@@ -551,18 +606,60 @@ def _is_inter_agent_root_turn(turn, events: list) -> bool:
     return False
 
 
-def _backend_restart_resume_attempt_count(events: list) -> int:
-    count = 0
+def _backend_restart_resume_attempt_count(turn, events: list) -> int:
+    client_message_ids_by_turn_id: dict[str, set[str]] = {}
     for event in events:
-        if event.event_type == "runtime.recovery.resume_queued":
-            count += 1
-            continue
-        if event.event_type != "runtime.turn.queued":
+        if event.event_type != "runtime.turn.queued" or not event.turn_id:
             continue
         client_message_id = event.payload.get("client_message_id")
         if isinstance(client_message_id, str) and client_message_id.startswith(RESUME_CLIENT_MESSAGE_ID_PREFIX):
-            count += 1
-    return count
+            client_message_ids_by_turn_id.setdefault(event.turn_id, set()).add(client_message_id)
+    if (
+        isinstance(turn.client_message_id, str)
+        and turn.client_message_id.startswith(RESUME_CLIENT_MESSAGE_ID_PREFIX)
+    ):
+        client_message_ids_by_turn_id.setdefault(turn.turn_id, set()).add(turn.client_message_id)
+
+    current_attempts: list[int] = []
+    for client_message_id in client_message_ids_by_turn_id.get(turn.turn_id, set()):
+        _predecessor_turn_id, attempt = _resume_client_message_metadata(client_message_id)
+        if attempt is not None:
+            current_attempts.append(attempt)
+    if current_attempts:
+        return max(current_attempts)
+
+    attempt_count = 0
+    pending_turn_ids = [turn.turn_id]
+    visited_turn_ids: set[str] = set()
+    while pending_turn_ids:
+        turn_id = pending_turn_ids.pop()
+        if turn_id in visited_turn_ids:
+            continue
+        visited_turn_ids.add(turn_id)
+        client_message_ids = client_message_ids_by_turn_id.get(turn_id, set())
+        attempt_count += len(client_message_ids)
+        for client_message_id in client_message_ids:
+            predecessor_turn_id, _attempt = _resume_client_message_metadata(client_message_id)
+            if predecessor_turn_id in client_message_ids_by_turn_id:
+                pending_turn_ids.append(predecessor_turn_id)
+    return attempt_count
+
+
+def _resume_client_message_id(*, session_id: str, source_turn_id: str, attempt: int) -> str:
+    return f"{RESUME_CLIENT_MESSAGE_ID_PREFIX}{session_id}:{source_turn_id}:attempt-{attempt}"
+
+
+def _resume_client_message_metadata(client_message_id: str) -> tuple[str, int | None]:
+    tail = client_message_id[len(RESUME_CLIENT_MESSAGE_ID_PREFIX):]
+    parts = tail.rsplit(":", 2)
+    if len(parts) == 3 and parts[-1].startswith("attempt-"):
+        try:
+            attempt = int(parts[-1].removeprefix("attempt-"))
+        except ValueError:
+            attempt = None
+        if attempt is not None and attempt > 0:
+            return parts[-2], attempt
+    return tail.rsplit(":", 1)[-1], None
 
 
 def _recovery_action_for_updated_status(*, updated_status: str, planned_action: str) -> str:

@@ -202,9 +202,12 @@ admission/authorization/confirmation after reconnect.
   a key available to the same JavaScript is not treated as an XSS solution.
 - Browser eviction is recoverable because all cached content is derivative.
 
-## Normative companions
+## Historical companions
 
-- `docs/product/pwa_offline_capabilities.md`
+The original product contract was removed by M2R rather than retained as a
+compatibility surface. Its current replacement is
+`docs/product/pwa_cache_product_contract.md`.
+
 - `docs/product/pwa_cache_resource_inventory.v1.json`
 - `docs/runbooks/pwa_cache_baseline.md`
 - `docs/runbooks/pwa_shell_v2.md`

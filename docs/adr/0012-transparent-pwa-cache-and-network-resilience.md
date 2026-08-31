@@ -146,3 +146,7 @@ When ADR-0011 and this record conflict, this record is normative. Historical
 test results and checkpoint dates must not be rewritten, but current
 architecture, product contracts, runbooks, security guidance, generated
 artifacts, and tests must describe this decision.
+
+## Normative product companion
+
+- `docs/product/pwa_cache_product_contract.md`

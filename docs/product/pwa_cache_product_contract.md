@@ -1,99 +1,143 @@
-# Maverick PWA Offline-Aware Product Contract
+# Maverick PWA Transparent Cache Product Contract
 
-Status: approved for M0 and implemented for the M2 shell checkpoint on
-2026-08-26. Physical Safari and Home Screen evidence remains a release gate as
-defined in `docs/runbooks/pwa_shell_v2.md`. This document controls product copy
-and the global connection-state UI used by Base Shell.
+Status: approved for the M2R corrective gate on 2026-08-31. This document is
+the normative product and UI contract for browser caching and transport
+resilience. It replaces the M0-M2 network-absence product contract without
+rewriting that checkpoint history.
 
-## Approved positioning
+## Product invariant
 
-Use this sentence in Italian product surfaces:
+Maverick is an online application with transparent, best-effort caches. Cache
+reuse may improve speed and allow a function that already has every required
+valid byte to continue, but it never creates a second application mode.
 
-> Maverick è offline-aware e supporta consultazione e preparazione locale
-> selettiva; l'esecuzione agentica richiede la rete.
+The shell and every mounted app keep their normal layout, controls, navigation,
+and component tree when transport is slow, intermittent, or unavailable. A
+browser connectivity hint does not hide an iframe, disable the entire UI,
+replace an app icon, or select a different route.
 
-English equivalent:
+## Observable behavior
 
-> Maverick is offline-aware and supports selective local review and
-> preparation; agentic execution requires a network connection.
+| Situation | Required product behavior |
+|---|---|
+| Verified shell build already cached | Render the same standard shell entrypoint. |
+| Fresh read model in an approved cache | Render the ordinary component immediately; revalidate according to resource policy. |
+| Stale but still renderable read model | Render the ordinary component and revalidate single-flight. |
+| Expired or missing read model | Keep that function's ordinary loading state until the server responds. |
+| Valid versioned file bytes already cached | Open them through the ordinary Storage viewer without a special badge or action. |
+| File bytes missing or invalid | Keep the ordinary open/loading state while waiting for the server. |
+| Prompt, model, agent, provider, tool, or authority dependency cannot reach the server | Keep the owning operation pending only where its normal contract allows; do not report success. |
+| Server returns `401` or `403` | Run the normal authentication/authorization and applicable cleanup flow; never substitute stale data. |
+| Server returns validation or conflict response | Show the function's normal terminal outcome; do not classify it as a transport wait. |
+| Useful transport returns | Retry or revalidate internally without a banner, toast, route change, or icon change. |
+| First visit without network or verified shell | Allow the browser's normal navigation failure; do not synthesize a Maverick product page. |
 
-Do not describe Maverick as generally “offline capable”, “fully offline”, or
-able to run models, agents, providers, or tools offline.
+Equivalent cached and server responses must be visually indistinguishable
+apart from existing domain metadata, such as a timestamp that the feature
+already owns.
 
-## Capability matrix
+## Loading contract
 
-| Capability | M2 | Later opt-in milestones | Never authorized by local cache |
-|---|---:|---:|---:|
-| Reopen branding and Base Shell | yes | yes | — |
-| Inspect local-content status and last sync | yes | yes | — |
-| Open an app frame without network | explicit unavailable state | static app shell where verified | — |
-| Read a private read model after cold offline restart | no | only reviewed, scoped resources | — |
-| Open a Storage file selected as Available Offline | no | M4 | — |
-| Prepare a local draft | no | selected later resources | — |
-| Submit a prompt or remote mutation | no | only after reconnect and server checks | yes |
-| Run a model, agent, provider, tool, or egress | no | no | yes |
-| Decide capability, admission, authority, confirmation, or revocation | no | no | yes |
-
-## Single global indicator
-
-There is exactly one global Offline indicator. It occupies the slot that would
-otherwise show the current app icon in the top-left sidebar.
-
-Expanded state:
-
-```text
-┌──────────────────────────────────┐
-│ [cloud_off  Offline]  Workspace  │  <- current-app icon slot
-│ Ultima sincronizzazione: 14:32   │
-│                                  │
-│ Contenuti sul dispositivo        │
-└──────────────────────────────────┘
-```
-
-Rail-only state:
+The public UI state machine is:
 
 ```text
-┌──────┐
-│  !   │  accessible name: “Offline — apri contenuti sul dispositivo”
-├──────┤
-│ app  │
-│ app  │
-└──────┘
+idle
+  -> loading
+      -> valid cache hit              -> success + internal revalidation
+      -> successful server response   -> success
+      -> transient transport failure  -> still rendered as loading
+      -> terminal HTTP response       -> normal error/authentication outcome
+      -> unmount or scope change      -> cancelled
 ```
 
-The indicator cannot rely on color alone. In the expanded state it says
-**Offline**. In the compressed state it has an icon plus an accessible name and
-tooltip. Activating either state opens the same local-content management view.
+Waiting and retry are internal transport substates. They are not product copy,
+badges, ARIA announcements, global status, or persisted UI state. A feature
+must not reveal expired data merely because transport is unavailable.
 
-No second global banner may appear above an iframe, in an app header, in the
-main work area, or as a persistent toast. An app may show an inline explanation
-beside content or an action that specifically needs the network.
+## Retry and recovery contract
 
-## Connection state
+- Browser `online`, focus, and visibility events are hints, not authority.
+- A Maverick response confirms that transport is useful again.
+- Idempotent reads may retry with one in-flight attempt per stable request key.
+- Backoff is exponential, jittered, and capped; hidden UI suspends
+  non-essential attempts.
+- Pending attempts live only in RAM and accept cancellation.
+- Logout, unmount, user/workspace change, and scope revision cancel pending
+  attempts and prevent late results from updating the new scope.
+- `401`, `403`, `409`, and `422` are terminal for this classification.
+- A `429` or selected `502`/`503`/`504` response is retryable only where an
+  explicit resource policy permits it and honors `Retry-After` when present.
 
-The shell may move to Offline immediately after a browser `offline` event or a
-failed bounded Maverick probe. A browser `online` event means only “checking”.
-The app icon returns after a fresh same-origin Maverick request succeeds.
+## Mutation contract
 
-The component exposes:
+No action is complete until the server confirms it. This rollout introduces no
+persistent mutation queue, background replay, durable draft, or generic retry
+of `POST` requests.
 
-- current state (`Offline` or update state);
-- last successful Maverick synchronization time;
-- source (`Rete` or `Dispositivo`);
-- freshness (`Aggiornato`, `Non verificato`, or `Scaduto`);
-- sync state (`Inattivo`, `Aggiornamento`, `Offline`, or `Errore`).
+A mutation may retry in the current RAM session only when it carries a stable
+idempotency key and the server provides deduplication. Otherwise the feature
+uses its ordinary terminal/pending contract and never invents local success.
 
-## Online-only actions
+## Prohibited product surfaces
 
-While Offline, Base Shell prevents interaction with mounted app frames unless a
-later app explicitly implements an approved offline surface. The contextual
-state explains that remote actions require a connection and directs the user
-to local-content management. This ensures that a prompt, model, agent, tool, or
-mutation does not merely look actionable and then fail ambiguously.
+The product must not contain:
 
-## Private content rule for M2
+- a route, page, shell, dialog, banner, toast, badge, or status dedicated to
+  network absence;
+- global Online/Offline copy or an app-icon connectivity replacement;
+- a “contents on this device” management experience;
+- “Available offline”, pin, download-for-later, or equivalent controls;
+- state labels such as `Offline`, `To download`, or `Pinned` for cache
+  residency;
+- global control disabling based on `navigator.onLine`;
+- iframe unmounting driven by transport state;
+- a persistent outbox or delayed-send promise.
 
-M2 persists no private app read model. A cold offline launch displays only the
-static shell, public branding, connection status, and local-content management
-surface. It does not infer authorization from an old iframe, app registry
-snapshot, session cookie, local preference, or cached control-plane response.
+Connectivity-related words may appear in developer diagnostics and test
+scenario names, but not as a user-facing application mode.
+
+## Allowed technical surface
+
+Settings may expose a cache-size estimate and a bounded **Clear cache** action.
+That surface describes disposable storage, does not enumerate supposedly
+available content, and does not promise persistence. Existing loading
+indicators, terminal server errors, and domain timestamps remain allowed.
+
+Cache API, IndexedDB, OPFS, and storage persistence requests are all
+feature-detected and best-effort. Failure, denial, quota pressure, corruption,
+or eviction must leave the server-first path functional.
+
+## Authority and privacy
+
+Cached data is derivative and cannot authorize workspace access, capabilities,
+provider/model admission, tools, egress, confirmation, revocation, or a
+mutation. Tokens, credentials, signed URLs, Browser sessions, Speech audio,
+temporary archives, and agentic control-plane state never enter persistent PWA
+stores.
+
+Private read models require a complete user/workspace/app/resource scope,
+canonical classification, stable revision, bounded TTL and byte budget,
+sanitization, invalidation, cleanup, and any required privacy approval. A
+missing or expired condition is a cache miss.
+
+## Acceptance contract
+
+Automated and physical-device checks must prove:
+
+1. the standard shell and mounted app frames remain present across transport
+   changes;
+2. a valid cache hit renders the ordinary feature component;
+3. a miss plus transient failure remains in ordinary loading;
+4. recovery resolves or revalidates without global connectivity UI;
+5. terminal HTTP outcomes are not hidden as loading;
+6. retries are bounded, single-flight, and cancelled at lifecycle/scope
+   boundaries;
+7. worker update, corruption recovery, and kill-switch cleanup affect only
+   owned static-cache namespaces;
+8. no cached control-plane value is used as authority;
+9. the same behavior holds in supported Safari and installed Home Screen/Dock
+   containers, assessed separately.
+
+The release record contains only device/browser/build/time and pass/fail or
+redaction-safe performance counters. It contains no workspace, user, content,
+file, token, or record identifiers.

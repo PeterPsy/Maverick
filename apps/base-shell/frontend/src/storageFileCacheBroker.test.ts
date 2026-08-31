@@ -220,6 +220,12 @@ describe("Base Shell Storage file-cache broker", () => {
     await disabledAccepted;
     await expect(nextPortMessage(disabledChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
 
+    const stillDisabledChannel = new MessageChannel();
+    const stillDisabledAccepted = nextPortMessage(stillDisabledChannel.port1);
+    broker.handleWindowMessage(requestEvent(stillDisabledChannel, { request_id: "request-four" }), storageWindow);
+    await stillDisabledAccepted;
+    await expect(nextPortMessage(stillDisabledChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
+
     expect(featureEnabled).toHaveBeenCalledTimes(4);
     expect(resolveDescriptor).toHaveBeenCalledTimes(1);
     expect(openFile).toHaveBeenCalledTimes(2);

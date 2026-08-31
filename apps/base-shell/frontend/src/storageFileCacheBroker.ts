@@ -56,6 +56,7 @@ export class StorageFileCacheBroker {
   private readonly active = new Map<string, { controller: AbortController; port: MessagePort }>();
   private readonly cache: PwaFileCache | null;
   private readonly featureEnabled: NonNullable<StorageFileCacheBrokerOptions["featureEnabled"]>;
+  private featureWasExplicitlyDisabled = false;
   private featureWasConfirmedEnabled = false;
   private readonly hostOrigin: string;
   private readonly openFile: NonNullable<StorageFileCacheBrokerOptions["openFile"]>;
@@ -135,13 +136,16 @@ export class StorageFileCacheBroker {
 
   private async process(request: ParentFileCacheOpenMessage, signal: AbortSignal): Promise<void> {
     try {
-      const featureDecision = await this.featureEnabled(signal).catch(() => null);
+      const featureDecision = this.featureWasExplicitlyDisabled
+        ? false
+        : await this.featureEnabled(signal).catch(() => null);
       if (signal.aborted) {
         this.finish(request.request_id);
         return;
       }
       if (featureDecision === true) this.featureWasConfirmedEnabled = true;
       else if (featureDecision === false) {
+        this.featureWasExplicitlyDisabled = true;
         this.featureWasConfirmedEnabled = false;
         this.resolvedFiles.clear();
       }
@@ -198,6 +202,7 @@ export class StorageFileCacheBroker {
     } catch (error) {
       if ((error instanceof MaverickFileHttpError || error instanceof MaverickHttpError)
           && (error.status === 401 || error.status === 403)) {
+        this.featureWasExplicitlyDisabled = true;
         this.featureWasConfirmedEnabled = false;
         this.resolvedFiles.clear();
         await shellCacheLifecycle.authorizationFailure().catch(() => undefined);

@@ -1341,6 +1341,7 @@ def _media_stream_payload(
     download = _bool_value(body.get("download"))
     if record.get("provider") == GOOGLE_DRIVE_PROVIDER:
         provider = None
+        cache_verification_requested = str(body.get("_pwa_file_cache") or "") == "1"
         app_secrets = body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {}
         if app_secrets:
             connection_id, drive_file_id = _drive_locator_from_body(
@@ -1350,10 +1351,16 @@ def _media_stream_payload(
                 {**body, "stable_storage_file_id": _storage_file_id(record)},
             )
             provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
-            if str(record.get("connection_id") or "").strip() != connection_id:
+            if cache_verification_requested or str(record.get("connection_id") or "").strip() != connection_id:
                 record = provider.metadata(drive_file_id=drive_file_id)
                 persisted = upsert_remote_file_records(data_root=data_root, records=[record])
                 record = persisted[0] if persisted else record
+        if cache_verification_requested and provider is None:
+            raise StorageValidationError(
+                "Drive file cache verification requires current provider metadata.",
+                operation="file.media_stream",
+                expected_fields=["_app_secrets"],
+            )
         request_headers = body.get("_request_headers") if isinstance(body.get("_request_headers"), dict) else {}
         return drive_media_stream_response(
             data_root=data_root,

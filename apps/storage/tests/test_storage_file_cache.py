@@ -16,8 +16,9 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = APP_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from google_drive_provider import stable_storage_file_id  # noqa: E402
+from drive_connection_store import replace_connection  # noqa: E402
 from file_cache_policy import stable_source_version  # noqa: E402
+from google_drive_provider import stable_storage_file_id  # noqa: E402
 from inventory import upsert_remote_file_records  # noqa: E402
 from service import handle_action  # noqa: E402
 
@@ -173,6 +174,77 @@ class StorageFileCacheContractTest(unittest.TestCase):
             }),
             "",
         )
+
+    def test_drive_cache_stream_revalidates_provider_revision_before_serving(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            file_id = stable_storage_file_id("drive_conn_abc", "file-1")
+            replace_connection(data_root, {
+                "id": "drive_conn_abc",
+                "provider": "google_drive",
+                "status": "connected",
+                "access_mode": "full_rw",
+                "created_at": "2026-08-31T00:00:00+00:00",
+            })
+            upsert_remote_file_records(
+                data_root=data_root,
+                records=[{
+                    "id": file_id,
+                    "file_id": file_id,
+                    "provider": "google_drive",
+                    "connection_id": "drive_conn_abc",
+                    "drive_file_id": "file-1",
+                    "remote_locator": {"drive_file_id": "file-1"},
+                    "name": "Photo.jpg",
+                    "extension": ".jpg",
+                    "size_bytes": 123,
+                    "modified_at": "2026-08-31T00:00:00Z",
+                    "content_type": "image/jpeg",
+                    "preview_kind": "image",
+                    "etag_or_version": "revision-8",
+                    "source_version": "revision-8",
+                    "status": "active",
+                }],
+            )
+
+            with self.assertRaisesRegex(Exception, "source_version is stale"):
+                handle_action(
+                    data_root,
+                    root / "storage" / "uploaded",
+                    root / "storage" / "generated",
+                    {
+                        "action": "file.media_stream",
+                        "stable_storage_file_id": file_id,
+                        "source_version": "revision-8",
+                        "_pwa_file_cache": "1",
+                        "_app_secrets": {
+                            "google-drive-oauth-client-id": "client-id",
+                            "google-drive-oauth-client-secret": "client-secret",
+                            "google-drive-refresh-token": "refresh-token",
+                        },
+                    },
+                    drive_transport=_DriveRevisionTransport(),
+                    media_route=True,
+                    streaming_response_supported=True,
+                )
+
+
+class _DriveRevisionTransport:
+    def __call__(self, method: str, url: str, request: dict[str, object]):
+        if url == "https://oauth2.googleapis.com/token":
+            return 200, {"access_token": "access-token"}
+        if method == "GET" and urlparse(url).path == "/drive/v3/files/file-1":
+            return 200, {
+                "id": "file-1",
+                "name": "Photo.jpg",
+                "mimeType": "image/jpeg",
+                "size": "123",
+                "modifiedTime": "2026-08-31T00:01:00Z",
+                "version": "revision-9",
+                "capabilities": {"canDownload": True},
+            }
+        raise AssertionError(f"Unexpected Drive request: {method} {url}")
 
 
 if __name__ == "__main__":

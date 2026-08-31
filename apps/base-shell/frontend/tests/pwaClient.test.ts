@@ -77,10 +77,12 @@ describe("PWA client recovery", () => {
         schema: "maverick.pwa-config.v2",
         features: { storage_file_cache: "true" },
       }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockRejectedValueOnce(new TypeError("transport unavailable"));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(storageFileCacheFeatureEnabled()).resolves.toBe(true);
+    await expect(storageFileCacheFeatureEnabled()).resolves.toBe(false);
     await expect(storageFileCacheFeatureEnabled()).resolves.toBe(false);
     await expect(storageFileCacheFeatureEnabled()).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledWith("/api/pwa/config", expect.objectContaining({

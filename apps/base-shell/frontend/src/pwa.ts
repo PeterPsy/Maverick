@@ -11,6 +11,7 @@ export type ShellPwaUpdateState = {
 const CONFIG_TIMEOUT_MS = 4_000;
 const STATIC_CACHE_PREFIX = "maverick-static-v2:";
 const KNOWN_STATIC_CACHES = new Set(["maverick-app-static-v2", "maverick-base-shell-v3"]);
+const TRANSIENT_CONFIG_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const listeners = new Set<() => void>();
 let waitingRegistration: ServiceWorkerRegistration | null = null;
 let reloadOnControllerChange = false;
@@ -108,7 +109,7 @@ export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Prom
         await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
         return false;
       }
-      return null;
+      return TRANSIENT_CONFIG_STATUSES.has(response.status) ? null : false;
     }
     const payload = (await response.json()) as {
       features?: { storage_file_cache?: unknown };

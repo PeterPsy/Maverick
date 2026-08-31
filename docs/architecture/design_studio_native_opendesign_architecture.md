@@ -26,7 +26,51 @@ In the implemented architecture:
 - OpenDesign remains authoritative for the design conversation and its outputs.
 
 The checked-in Design Studio implementation follows this architecture. The
-rollout phases below are retained as an implementation and verification record.
+rollout steps below are retained as an implementation and verification record.
+
+## Non-Negotiable Zero-Modification Boundary
+
+The OpenDesign package launched by Design Studio must be an official upstream
+distribution and must remain unchanged. "Inside Maverick" means that Maverick
+starts and hosts that distribution; it does not mean that Maverick changes the
+product.
+
+Maverick may:
+
+- select, verify, install, start, stop, and update an official OpenDesign
+  package;
+- give it a workspace-scoped data directory and an isolated browser origin;
+- authenticate the user at the outer hosting boundary;
+- configure standard provider endpoints or native CLI profiles;
+- call supported public OpenDesign APIs from the external Delegation Bridge;
+- return native OpenDesign deep links to the user.
+
+Maverick must not:
+
+- patch OpenDesign source, binaries, web assets, styles, or runtime code;
+- build or overlay a custom OpenDesign UI;
+- hide, unmount, replace, or reproduce native OpenDesign features;
+- intercept or replace native OpenDesign chat, run, model, project,
+  conversation, settings, or update behavior;
+- inject Maverick code into the OpenDesign browser application;
+- read or write OpenDesign's private database directly; or
+- require a Maverick-specific OpenDesign fork.
+
+There are exactly two external integration boundaries:
+
+1. **Model Access Bridge:** a technical catalog and transport that makes
+   Maverick-configured API and CLI models available to OpenDesign without any
+   Maverick prompt, memory, persona, skill, tool, Chat history, or agent
+   runtime.
+2. **Delegation Bridge:** an external client that inserts one explicit,
+   visibly attributed brief and authorized attachments into a native
+   OpenDesign conversation through a supported public API.
+
+Only the Delegation Bridge carries Maverick-authored semantic content, and that
+content is limited to the delegated visible brief and authorized attachments.
+Hosting metadata, authentication, credentials, process control, streaming,
+cancellation, model catalog entries, and correlation ids are technical data,
+not additional model context.
 
 ## Relationship to the Retired Implementation
 
@@ -50,6 +94,24 @@ This implementation superseded the following product decisions:
 
 Hosting, workspace isolation, artifact integrity, and app-data rules remain
 applicable. Historical implementation details are not active architecture.
+
+## Implementation Mapping (2026-08-28)
+
+The checked-in implementation respects the zero-modification boundary:
+
+- `opendesign_official_release.json` pins and verifies the unchanged official
+  OpenDesign OCI release;
+- `opendesign_launcher.py` and the Design Studio frontend provide only process,
+  isolated-origin, lifecycle, and native-route hosting;
+- the Model Access Bridge registers configured API and CLI models through
+  supported native agent profiles without Maverick semantic enrichment;
+- the external Delegation Bridge uses supported project, conversation,
+  message, file, and run APIs and retains only bounded correlation metadata;
+- the one-time cutover and official update flow use public-API inventories,
+  immutable backups, migration preservation guards, and fail-closed recovery;
+  and
+- the derived runtime, patch series, web overlay, native-route interception,
+  replacement composer, and legacy writer have been removed.
 
 ## Decision Summary
 
@@ -231,16 +293,15 @@ The installation must preserve:
 - upstream data migrations;
 - upstream feature evolution.
 
-Integration should prefer official configuration, provider, plugin, and
-application APIs. If an upstream extension point is missing, the preferred
-order is:
+Integration must use official configuration and supported public provider,
+CLI, and application APIs. A content-preserving adapter may exist outside the
+OpenDesign process, but the installed OpenDesign package remains unchanged.
 
-1. contribute or adopt a stable upstream interface;
-2. place a small external adapter at the application boundary;
-3. maintain a minimal, isolated compatibility patch only as a last resort.
-
-A compatibility patch must never become a second implementation of the
-OpenDesign UI or chat.
+If an official release does not expose an interface required by a Maverick
+bridge, that bridge is reported as unavailable for that release. Maverick must
+not solve the incompatibility with a private patch, injected browser code,
+browser automation, direct database access, or a fork. Native OpenDesign must
+still start and remain directly usable.
 
 Desktop-only capabilities that require host access must use an explicit
 Maverick capability or user grant when running inside a workspace. They should
@@ -582,76 +643,219 @@ append the same brief or start the same work twice.
 ### Update incompatibility
 
 A bridge compatibility problem must degrade only that bridge. It must not
-corrupt OpenDesign data or make native OpenDesign dependent on an older
-Maverick UI patch.
+corrupt OpenDesign data or make native OpenDesign dependent on a custom
+Maverick OpenDesign build.
 
-## Implementation Record
+## Implemented Rollout
 
-Migration was completed incrementally and remained reversible until the direct
-and delegated flows were proven. The phases below are retained as the rollout
-and verification record.
+The implementation uses no custom OpenDesign build. It removed the former
+customization and connects two external bridges to an official, unchanged
+OpenDesign installation.
 
-### Phase 1: upstream installation proof
+### What happens to the current `app_id: design-studio`
 
-- Launch an unmodified upstream OpenDesign installation through Design Studio.
-- Preserve its native UI and chat.
-- Bind its data to a test workspace without migrating production workspace
-  data.
-- Confirm that the hosted experience matches the normal upstream product.
+The `design-studio` app identity remains so existing Maverick navigation,
+workspace binding, authorization, and data location do not need a second app or
+a parallel migration target. Its current implementation is replaced in place;
+it is not retained as an alternative mode.
 
-### Phase 2: naked model access
+| Keep | Remove |
+|---|---|
+| `app_id: design-studio` and its shell registration | The Maverick-derived OpenDesign package, patch series, and web overlay |
+| Canonical OpenDesign workspace data | Native-chat suppression and duplicate project/settings/tools UI |
+| Thin launch, authentication, isolation, lifecycle, and data-volume mechanics | `/api/runs` interception and normal-turn Maverick runtime execution |
+| Official artifact verification | Writable Maverick OpenDesign app-config and conversation/runtime bindings |
+| Explicit Storage references where still useful | The Design Studio replacement composer and special runtime controls in global Chat |
 
-- Expose the Maverick model catalog to the native OpenDesign selector.
-- Implement one API model and one CLI model end to end.
-- Prove that direct calls contain OpenDesign context but no Maverick prompt,
-  memory, agent, skill, or tool enrichment.
-- Verify streaming, cancellation, media, tools, and error behavior supported by
-  each transport.
+The first cutover should replace the customized installation with the
+**unchanged official release matching the currently pinned OpenDesign version**.
+For the audited implementation, that means official OpenDesign `0.16.1` first.
+Do not combine this replacement with an OpenDesign version upgrade. Keeping the
+version constant isolates hosting and integration changes from upstream data
+schema changes.
 
-### Phase 3: direct native product acceptance
+The in-place replacement sequence is:
 
-- Verify native chat, projects, Design Systems, tools, history, import/export,
-  and settings.
-- Remove the need for Maverick-owned duplicate controls inside Design Studio.
-- Confirm that OpenDesign remains usable without a Maverick agent session.
+1. run the official same-version package against a copy of the workspace data;
+2. verify the canonical OpenDesign projects, conversations, messages, Design
+   Systems, files, artifacts, settings, and runs;
+3. stop legacy Chat/runtime writers and create the final backup;
+4. point the existing `design-studio` launch and data binding to the official
+   package and enable native OpenDesign as the only writer; and
+5. after the verification/recovery window, delete the legacy implementation
+   listed in the Remove column.
 
-### Phase 4: delegation bridge
+The old implementation and the new installation may coexist only in isolated
+development or restored test workspaces. They must never both write the same
+real workspace. Official version updates begin only after this same-version
+replacement has passed.
 
-- Add a typed Maverick Chat delegation capability.
-- Create/select projects and conversations through supported OpenDesign APIs.
-- Insert a visible brief and authorized attachments.
-- Observe progress, cancellation, results, and deep links.
-- Prove idempotency and workspace isolation.
+The work was completed in the following order. Step 1 was deliberately a
+bounded vertical slice completed in a disposable workspace before any real
+data or legacy writer changed.
 
-### Phase 5: workspace data migration
+### Step 1: run official OpenDesign unchanged
 
-- Inventory current canonical OpenDesign data and Maverick-only correlation
-  state.
-- Use upstream OpenDesign migrations and APIs rather than direct database
-  rewriting.
-- Preserve project, conversation, file, and Design System identities whenever
-  upstream supports it.
-- Seal or remove obsolete duplicate Maverick state only after verification.
+- Use the official Linux package or OCI image already referenced by Design
+  Studio.
+- Do not apply the current runtime, web-build, or React patches.
+- Do not build or overlay OpenDesign web assets.
+- Start it with a disposable workspace-scoped data directory.
+- Open the native root/Home route and verify native chat, projects,
+  conversations, tools, Design Systems, settings, history, import, and export.
+- Repeat the proof with both Maverick bridges disabled.
 
-### Phase 6: retire the custom integration
+**Done when:** the running package digest matches the official artifact, the
+complete native UI is visible, and OpenDesign works directly without Maverick
+Chat or a Maverick runtime session.
 
-- Restore native OpenDesign chat as the Design Studio chat.
-- Remove the floating Maverick Chat replacement from inside Design Studio.
-- Remove custom UI patches that hide or recreate upstream features.
-- Remove the normal-turn Maverick runtime translation path.
-- Keep only the Design Studio host, Model Access Bridge, and Delegation Bridge.
+### Step 2: make Design Studio a thin host
+
+Keep only these host responsibilities:
+
+- official package selection and process start/stop;
+- workspace-scoped persistent OpenDesign data;
+- outer Maverick authentication and isolated browser origin;
+- lifecycle/readiness reporting; and
+- native OpenDesign deep-link launch.
+
+All OpenDesign application traffic, including native chat, runs, model
+selection, projects, conversations, settings, and updates, goes to OpenDesign.
+Maverick must not intercept those operations or rewrite their requests or
+responses.
+
+Remove the alternative Maverick project catalog, create-project controls,
+native-chat suppression, settings/tools commands, and injected UI behavior.
+Host authentication and lifecycle UI may surround OpenDesign but must not be
+inserted into its application.
+
+**Done when:** a browser/network trace shows the official OpenDesign UI talking
+to its own native endpoints, with no Maverick handler replacing a normal
+OpenDesign operation.
+
+### Step 3: expose Maverick models as naked transports
+
+Connect the Model Access Bridge through standard provider endpoints and native
+CLI profiles supported by OpenDesign.
+
+For API models, Maverick may resolve credentials, forward the exact
+OpenDesign-authored semantic request, stream the provider response, cancel it,
+and return technical errors.
+
+For CLI models such as Codex, Maverick may make the configured executable and
+its technical environment available to OpenDesign and supervise the process.
+OpenDesign supplies the prompt, conversation, project directory, tools, files,
+and Design System through its normal native adapter.
+
+Neither path may create a Maverick runtime session or add Maverick system
+prompts, memory, Chat history, personas, skills, tools, planning, or hidden
+model substitution. The model remains specialized by OpenDesign and naked only
+relative to Maverick.
+
+**Done when:** at least one API model and one CLI model appear in the native
+OpenDesign selector and pass streaming, cancellation, and semantic-transparency
+tests without creating Maverick agent/runtime state.
+
+### Step 4: add external delegation from Maverick Chat
+
+Implement the Delegation Bridge as an external client of supported public
+OpenDesign APIs. It performs only this flow:
+
+1. receive an explicit brief and authorized attachments from a Maverick agent;
+2. select or create the native OpenDesign project;
+3. select or create the native OpenDesign conversation;
+4. append one ordinary visible message stating that it was delegated by
+   Maverick;
+5. start the normal native OpenDesign run;
+6. observe status, progress, cancellation, and result references; and
+7. return preview metadata and a deep link to that exact native conversation.
+
+The Maverick agent, not the bridge, decides which authorized memory is relevant
+and writes it into the brief. The bridge does not have general access to
+Maverick memory and does not enrich the message silently.
+
+Maverick stores only delegation id, status, canonical OpenDesign ids, event
+cursor, result references, and deep link. It does not copy the OpenDesign
+transcript, project, Design System, files, artifact bodies, or model request.
+Retries use an idempotency key so they cannot append the brief or start the run
+twice.
+
+If the installed official OpenDesign release does not provide a required public
+API, delegation is shown as unavailable for that release. Maverick must not use
+a patch, injected script, browser automation, or direct database access as a
+fallback.
+
+**Done when:** an agent can delegate once, cancel or follow the native run,
+open the returned deep link, and continue in the same native OpenDesign
+conversation. The delegated visible brief must be the only Maverick cognitive
+content present there.
+
+### Step 5: cut over existing data once
+
+- Back up the canonical OpenDesign data directory and the legacy Maverick
+  correlation/config files.
+- Restore the backup into a disposable workspace and run only official
+  OpenDesign migrations.
+- Compare projects, conversations, ordered messages, Design Systems, files,
+  artifacts, settings, and run references through supported APIs.
+- Stop all legacy `chat.submit_turn` and Maverick runtime-bridge writers before
+  enabling the native writer for a real workspace.
+- Keep existing Maverick runtime threads only as read-only historical Chat
+  records; do not import or merge them into OpenDesign.
+- Stop writing the Maverick OpenDesign app-config projection and old
+  conversation/runtime bindings.
+
+The old and new paths must never write concurrently. Before the first native
+write against migrated data, rollback may restore the full backup. After that
+point, the old runtime writer is not a valid fallback; OpenDesign remains the
+writer even when either optional bridge is disabled.
+
+**Done when:** the before/after canonical inventory matches, legacy state is
+read-only, and exactly one writer—native OpenDesign—is active.
+
+### Step 6: enable official updates and remove the legacy integration
+
+The user selects an official OpenDesign update. Maverick verifies and installs
+that official package, backs up the data, runs the supported upstream
+migration, restarts OpenDesign, and checks the two external bridge contracts.
+A bridge incompatibility disables only that bridge; it must not prevent native
+OpenDesign from starting.
+
+After the cutover is verified, remove:
+
+- the OpenDesign patch series, custom web overlay, and derived build path;
+- `/api/runs` interception, Maverick runtime system prompts, terminal callbacks,
+  and `runtime_bridge.py` normal-turn state;
+- the writable OpenDesign app-config projection;
+- the Design Studio-specific replacement composer and controls in global Chat;
+- duplicate project/sidebar widgets and OpenDesign settings/tools UI commands;
+  and
+- permissions used only to create Maverick runtime sessions for normal
+  OpenDesign turns.
+
+Keep only the official package host, persistent workspace data, Model Access
+Bridge, Delegation Bridge, and explicit Storage/reference operations.
+Mark `docs/architecture/design_studio_runtime_bridge.md` as historical after the
+last legacy writer is removed.
+
+**Done when:** the user can update to another official release without a
+Maverick OpenDesign rebuild, direct native use remains available with both
+bridges disabled, and no active code path modifies or replaces OpenDesign.
 
 ## Acceptance Criteria
 
-The implementation remains accepted only while all of the following are true.
+The target architecture is complete only when all of the following are true.
 
 ### Native product
 
+- `app_id: design-studio` launches a verified official OpenDesign artifact
+  without patches, overlays, or injected code.
 - Design Studio presents the complete native OpenDesign UI and chat.
 - Projects, conversations, tools, Design Systems, history, and settings are
   OpenDesign-native.
 - No Maverick component reproduces those controls as an alternative source of
   truth.
+- No legacy Design Studio runtime writer remains active after cutover.
 
 ### Naked models
 
@@ -716,8 +920,9 @@ The minimum focused proofs are:
    OpenDesign data remains intact and directly accessible.
 
 Full release testing remains appropriate for changes to installation,
-migration, isolation, credential delivery, or data recovery. UI-only bridge
-changes should use the smallest affected OpenDesign and Design Studio tests.
+migration, isolation, credential delivery, or data recovery. Chat-side bridge
+presentation changes should use the smallest affected Chat and Design Studio
+tests.
 
 ## Alternatives Rejected
 

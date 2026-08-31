@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type { AppRegistryItem } from "../api";
 import { useSidebarRailReorder, type ActiveRailReorder } from "../hooks/useSidebarRailReorder";
 import { reorderByTargetIndex } from "../lib/sidebarRailReorder";
@@ -17,7 +17,6 @@ export function SidebarAppRail({
   onReorderPinnedApps,
   onReorderActiveChange,
   settingsApp,
-  statusSlot = null,
 }: {
   activeAppId: string | null;
   appsToRender: AppRegistryItem[];
@@ -29,7 +28,6 @@ export function SidebarAppRail({
   onReorderActiveChange?: (active: boolean) => void;
   onReorderPinnedApps: (appIds: string[]) => void;
   settingsApp: AppRegistryItem | null;
-  statusSlot?: ReactNode;
 }) {
   const reorderableRailAppIds = appsToRender.filter((app) => isDesktopRailReorderableApp(app.app_id)).map((app) => app.app_id);
   const canReorder = enableReorder && reorderableRailAppIds.length > 1;
@@ -54,7 +52,6 @@ export function SidebarAppRail({
   const renderedApps = canReorder ? reorderedRailAppsForRender(appsToRender, activeRailReorder) : appsToRender;
   const renderedReorderableIds = renderedApps.filter((app) => isDesktopRailReorderableApp(app.app_id)).map((app) => app.app_id);
   const isReorderActive = Boolean(activeRailReorder);
-  const replacesActiveApp = Boolean(statusSlot && activeAppId && renderedApps.some((app) => app.app_id === activeAppId));
 
   function handleOpenApp(appId: string, event?: ReactMouseEvent<HTMLButtonElement>) {
     if (suppressClickIfNeeded(appId, event)) {
@@ -83,15 +80,11 @@ export function SidebarAppRail({
   return (
     <>
       <div className={appListClassName} ref={canReorder ? railAppsContainerRef : undefined} role="list" aria-label="Pinned apps">
-        {statusSlot && !replacesActiveApp ? <div className="bs-sidebar__rail-item bs-sidebar__rail-item--status" role="listitem">{statusSlot}</div> : null}
         {renderedApps.map((app) => {
           const reorderableIndex = renderedReorderableIds.indexOf(app.app_id);
           const isReorderable = canReorder && reorderableIndex >= 0;
           const isDragging = activeRailReorder?.appId === app.app_id;
           const isDropTarget = isReorderable && activeRailReorder?.targetIndex === reorderableIndex;
-          if (statusSlot && app.app_id === activeAppId) {
-            return <div className="bs-sidebar__rail-item bs-sidebar__rail-item--status" key={app.app_id} role="listitem">{statusSlot}</div>;
-          }
           return (
             <div
               className={sidebarRailItemClassName({ isDragging, isDropTarget })}

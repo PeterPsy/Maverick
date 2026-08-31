@@ -7,13 +7,11 @@ export default defineConfig({
   plugins: [
     react(),
     maverickFrontendAssets({
-      offlinePath: "offline.html",
       serviceWorkerPath: "sw.js",
       precache: {
         immutable: true,
         routes: [
           { url: "/", path: "index.html" },
-          { url: "/offline.html", path: "offline.html" },
           { url: "/favicon.ico", path: "favicon.ico" },
           { url: "/manifest.webmanifest", path: "manifest.webmanifest" },
           { url: "/material-symbols-rounded.woff2", path: "material-symbols-rounded.woff2" },
@@ -44,10 +42,7 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     rollupOptions: {
-      input: {
-        index: "frontend/index.html",
-        offline: "frontend/offline.html",
-      },
+      input: { index: "frontend/index.html" },
     },
   },
   root: "frontend",

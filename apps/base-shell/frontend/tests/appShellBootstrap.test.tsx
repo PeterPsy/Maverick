@@ -133,6 +133,26 @@ describe("AppShell bootstrap", () => {
     expect(api.listWorkspaces).toHaveBeenCalledOnce();
   });
 
+  it("keeps the normal shell tree mounted after a transport failure hint", async () => {
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const view = container.querySelector("[data-testid='workspace-view']");
+    const sidebar = container.querySelector("[data-testid='sidebar']");
+
+    await act(async () => {
+      recordMaverickNetworkFailure();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("[data-testid='workspace-view']")).toBe(view);
+    expect(container.querySelector("[data-testid='sidebar']")).toBe(sidebar);
+    expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
+  });
+
   it("bootstraps authenticated shell state after a confirmed cold-offline reconnection", async () => {
     recordMaverickNetworkFailure();
     api.getSession.mockRejectedValueOnce(new TypeError("Failed to fetch"));

@@ -35,17 +35,13 @@ import { applyShellThemeToDocument, createShellThemeState, readSystemColorScheme
 import type { ShellEffectiveTheme, ShellThemeMode } from "./theme";
 import { markStartupMetric, measureStartupMetric } from "./startupMetrics";
 import { getInitialMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
-import { useMaverickConnectivity, verifyMaverickConnection } from "./connectivity";
-import { applyShellServiceWorkerUpdate, recoverShellStaticCache, useShellPwaUpdate } from "./pwa";
+import { useMaverickConnectivity } from "./connectivity";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
 import { MobileShellHeader } from "./components/MobileShellHeader";
 import { MobilePinnedAppsPanel } from "./components/MobilePinnedAppsPanel";
 import { Sidebar } from "./components/Sidebar";
-import { LocalContentDialog } from "./components/LocalContentDialog";
-import { OfflineIndicator } from "./components/OfflineIndicator";
-import { OfflineWorkspaceShell } from "./components/OfflineWorkspaceShell";
 import { ProviderSetupDialog } from "./components/ProviderSetupDialog";
 import { ShellPendingIndicator } from "./components/ShellPendingIndicator";
 import { WorkspaceView } from "./components/WorkspaceView";
@@ -92,7 +88,6 @@ export function AppShell() {
   const [isLoading, setIsLoading] = useState(true);
   const [isWorkspacesLoading, setIsWorkspacesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isLocalContentOpen, setIsLocalContentOpen] = useState(() => new URLSearchParams(window.location.search).get("maverick_local_content") === "1");
   const [mobilePrimaryAction, setMobilePrimaryAction] = useState<WidgetPrimaryActionState>({
     available: false,
     label: "",
@@ -101,8 +96,6 @@ export function AppShell() {
   const [mobilePrimaryActionRequestId, setMobilePrimaryActionRequestId] = useState(0);
   const isMobileLayout = useMobileLayout();
   const connectivity = useMaverickConnectivity();
-  const pwaUpdate = useShellPwaUpdate();
-  const showConnectivityStatus = connectivity.onlineActionsBlocked || pwaUpdate.available;
   const isSidebarPinned = sidebarMode === "fixed" && !isMobileLayout;
   const isChatAppActive = activeAppId === CHAT_APP_ID;
   const isFloatingChatFixed = floatingChatMode === "fixed-right" && !isMobileLayout && !isChatAppActive;
@@ -677,28 +670,6 @@ export function AppShell() {
     }
   }
 
-  if (connectivity.onlineActionsBlocked) {
-    return (
-      <>
-        <OfflineWorkspaceShell
-          connectivity={connectivity}
-          onOpenLocalContent={() => setIsLocalContentOpen(true)}
-          sidebarMode={sidebarMode}
-          update={pwaUpdate}
-        />
-        <LocalContentDialog
-          connectivity={connectivity}
-          onApplyUpdate={() => { void applyShellServiceWorkerUpdate(); }}
-          onClose={() => setIsLocalContentOpen(false)}
-          onRecover={() => { recoverShellStaticCache(); }}
-          onRetry={() => { void verifyMaverickConnection(); }}
-          open={isLocalContentOpen}
-          update={pwaUpdate}
-        />
-      </>
-    );
-  }
-
   if (isLoading && session === null) {
     return (
       <main className="bs-shell">
@@ -742,14 +713,6 @@ export function AppShell() {
           onPrimaryAction={invokeMobilePrimaryAction}
           primaryActionLabel={mobilePrimaryAction.label}
           shellTheme={shellTheme}
-          statusIndicator={showConnectivityStatus && !(isSidebarOpen || isSidebarPinned) ? (
-            <OfflineIndicator
-              connectivity={connectivity}
-              mode="compact"
-              onOpen={() => setIsLocalContentOpen(true)}
-              updateAvailable={pwaUpdate.available}
-            />
-          ) : null}
         />
       ) : null}
       {isMobileLayout ? (
@@ -780,7 +743,6 @@ export function AppShell() {
         activeAppId={activeApp?.app_id ?? activeAppId}
         activeAppParams={activeAppParams}
         activeWorkspaceId={activeWorkspaceId}
-        connectivity={connectivity}
         apps={apps}
         isLoading={isLoading}
         isWorkspacesLoading={isWorkspacesLoading}
@@ -791,7 +753,6 @@ export function AppShell() {
         mobilePrimaryActionRequestId={mobilePrimaryActionRequestId}
         onClose={closeSidebar}
         onModeChange={handleSidebarModeChange}
-        onOpenLocalContent={() => setIsLocalContentOpen(true)}
         onOpenApp={openApp}
         onOpenSidebar={openSidebar}
         onPrimaryActionStateChange={setMobilePrimaryAction}
@@ -801,10 +762,8 @@ export function AppShell() {
         pinnedAppIds={pinnedAppIds}
         railMetrics={shellSidebarMetrics}
         sidebarDetailsWidthPx={sidebarDetailsWidthPx}
-        showConnectivityStatus={showConnectivityStatus}
         shellTheme={shellTheme}
         themeMode={themeMode}
-        updateAvailable={pwaUpdate.available}
         onThemeModeChange={setThemeMode}
         onSidebarDetailsWidthChange={setSidebarDetailsWidthPx}
         onSidebarResizeActiveChange={setIsSidebarResizing}
@@ -838,15 +797,6 @@ export function AppShell() {
         onConfigure={handleInitialProviderConfigured}
         open={needsProviderSetup}
         settings={settings}
-      />
-      <LocalContentDialog
-        connectivity={connectivity}
-        onApplyUpdate={() => { void applyShellServiceWorkerUpdate(); }}
-        onClose={() => setIsLocalContentOpen(false)}
-        onRecover={() => { recoverShellStaticCache(); }}
-        onRetry={() => { void verifyMaverickConnection(); }}
-        open={isLocalContentOpen}
-        update={pwaUpdate}
       />
     </main>
   );

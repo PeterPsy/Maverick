@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import type { AppRegistryItem } from "../api";
 import { DEFAULT_SHELL_THEME_STATE, type ShellThemeState } from "../theme";
 import { AppLogo } from "./AppLogo";
@@ -20,7 +19,6 @@ export function MobileShellHeader({
   onPrimaryAction,
   primaryActionLabel,
   shellTheme = DEFAULT_SHELL_THEME_STATE,
-  statusIndicator = null,
 }: {
   activeApp: AppRegistryItem | null;
   chatApp: AppRegistryItem | null;
@@ -37,7 +35,6 @@ export function MobileShellHeader({
   onPrimaryAction: () => void;
   primaryActionLabel: string;
   shellTheme?: ShellThemeState;
-  statusIndicator?: ReactNode;
 }) {
   const actionLabel = primaryActionLabel || "Azione principale";
   const logoSrc = sidebarLogoSrc(shellTheme);
@@ -57,23 +54,21 @@ export function MobileShellHeader({
             <span />
           </span>
         </button>
-        {statusIndicator || (
-          <button
-            aria-label={isPinnedAppsOpen ? "Chiudi applicazioni pinnate" : "Apri applicazioni pinnate"}
-            aria-expanded={isPinnedAppsOpen}
-            className="bs-mobile-shell-header__button bs-mobile-shell-header__app"
-            onClick={onTogglePinnedApps}
-            type="button"
-          >
-            {activeApp ? (
-              <AppLogo app={activeApp} className="bs-app-logo--rail bs-mobile-shell-header__app-logo" />
-            ) : (
-              <span aria-hidden="true" className="bs-app-logo is-glyph bs-app-logo--rail bs-mobile-shell-header__app-placeholder">
-                <span className="material-symbols-rounded">apps</span>
-              </span>
-            )}
-          </button>
-        )}
+        <button
+          aria-label={isPinnedAppsOpen ? "Chiudi applicazioni pinnate" : "Apri applicazioni pinnate"}
+          aria-expanded={isPinnedAppsOpen}
+          className="bs-mobile-shell-header__button bs-mobile-shell-header__app"
+          onClick={onTogglePinnedApps}
+          type="button"
+        >
+          {activeApp ? (
+            <AppLogo app={activeApp} className="bs-app-logo--rail bs-mobile-shell-header__app-logo" />
+          ) : (
+            <span aria-hidden="true" className="bs-app-logo is-glyph bs-app-logo--rail bs-mobile-shell-header__app-placeholder">
+              <span className="material-symbols-rounded">apps</span>
+            </span>
+          )}
+        </button>
       </div>
       <button
         aria-label="Nuova chat"

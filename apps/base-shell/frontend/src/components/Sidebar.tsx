@@ -8,7 +8,6 @@ import type {
   TouchEvent as ReactTouchEvent,
 } from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
-import { DEFAULT_MAVERICK_CONNECTIVITY_STATE, type MaverickConnectivityState } from "../connectivity";
 import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from "../lib/sidebarSwipe";
 import { CHAT_APP_ID, SETTINGS_APP_ID, shellAppRailApps, shellVisibleApps } from "../navigation";
 import { clampSidebarDetailsWidth, DEFAULT_SIDEBAR_DETAILS_WIDTH_PX } from "../session";
@@ -17,7 +16,6 @@ import type { ShellThemeMode, ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_MODE, DEFAULT_SHELL_THEME_STATE } from "../theme";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
-import { OfflineIndicator } from "./OfflineIndicator";
 import { SidebarAppRail } from "./SidebarAppRail";
 import { sidebarLogoSrc } from "./sidebarLogo";
 import { WidgetSlot } from "./WidgetSlot";
@@ -33,7 +31,6 @@ export function Sidebar({
   activeAppParams,
   apps,
   activeWorkspaceId,
-  connectivity = DEFAULT_MAVERICK_CONNECTIVITY_STATE,
   isLoading = false,
   isWorkspacesLoading = false,
   isOpen,
@@ -43,7 +40,6 @@ export function Sidebar({
   mobilePrimaryActionRequestId,
   onClose,
   onModeChange,
-  onOpenLocalContent = () => undefined,
   onOpenApp,
   onOpenSidebar,
   onPrimaryActionStateChange,
@@ -56,10 +52,8 @@ export function Sidebar({
   pinnedAppIds,
   railMetrics,
   sidebarDetailsWidthPx,
-  showConnectivityStatus = false,
   shellTheme = DEFAULT_SHELL_THEME_STATE,
   themeMode = DEFAULT_SHELL_THEME_MODE,
-  updateAvailable = false,
   user,
   workspaces,
 }: {
@@ -67,7 +61,6 @@ export function Sidebar({
   activeAppParams: Record<string, string | boolean | null>;
   apps: AppRegistryItem[];
   activeWorkspaceId: string;
-  connectivity?: MaverickConnectivityState;
   isOpen: boolean;
   isLoading?: boolean;
   isWorkspacesLoading?: boolean;
@@ -77,7 +70,6 @@ export function Sidebar({
   mobilePrimaryActionRequestId: number;
   onClose: () => void;
   onModeChange: (mode: SidebarMode) => void;
-  onOpenLocalContent?: () => void;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
   onOpenSidebar: () => void;
   onPrimaryActionStateChange: (state: WidgetPrimaryActionState) => void;
@@ -90,10 +82,8 @@ export function Sidebar({
   pinnedAppIds: string[];
   railMetrics: CSSProperties;
   sidebarDetailsWidthPx: number;
-  showConnectivityStatus?: boolean;
   shellTheme?: ShellThemeState;
   themeMode?: ShellThemeMode;
-  updateAvailable?: boolean;
   user: SessionUser | null;
   workspaces: WorkspaceItem[];
 }) {
@@ -330,9 +320,6 @@ export function Sidebar({
             onReorderActiveChange={setIsRailReordering}
             onReorderPinnedApps={onReorderPinnedApps}
             settingsApp={settingsApp}
-            statusSlot={showConnectivityStatus && !isDetailLayerOpen ? (
-              <OfflineIndicator connectivity={connectivity} mode="compact" onOpen={onOpenLocalContent} updateAvailable={updateAvailable} />
-            ) : null}
           />
         </div>
       ) : null}
@@ -340,9 +327,7 @@ export function Sidebar({
       <div className="bs-sidebar__details" aria-hidden={!isDetailLayerOpen}>
         <div className="bs-sidebar__top-overlay">
           <div className="bs-sidebar__header">
-            {showConnectivityStatus && isDetailLayerOpen ? (
-              <OfflineIndicator connectivity={connectivity} mode="expanded" onOpen={onOpenLocalContent} updateAvailable={updateAvailable} />
-            ) : activeApp ? (
+            {activeApp ? (
               <AppLogo app={activeApp} className="bs-sidebar__brand-mark" />
             ) : isLoading ? (
               <span className="bs-sidebar__brand-mark bs-sidebar__brand-mark-skeleton" aria-hidden="true" />

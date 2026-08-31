@@ -3,7 +3,7 @@
 Framework-neutral browser primitives for Maverick's transparent PWA data
 cache. The package owns mechanics only: mandatory scope keys, IndexedDB
 migrations, TTL/LRU/accounting, quota checks, invalidation, lifecycle cleanup,
-cross-client coordination, and bounded RAM retry.
+cross-client coordination, OPFS file-cache publication, and bounded RAM retry.
 
 The API mints a client only through a capability constructed in a top-level
 window; Base Shell owns that capability by contract. The host binds the
@@ -33,6 +33,16 @@ The package never renders UI, reads `navigator.onLine`, calls
 into authority. See `docs/runbooks/pwa_data_cache_m3.md` for integration and
 recovery details.
 
+M4 adds a separate `maverick-pwa-file-v1` IndexedDB manifest and the owned
+`maverick-pwa-file-cache-v1` OPFS directory. File names are opaque, writes are
+streamed into a temporary path, and only a final manifest transaction publishes
+a `ready` record after exact size, strong ETag, source-version, and incremental
+SHA-256 verification. An interrupted same-session transfer may resume with
+`Range` plus strong `If-Range`; abandoned partials, orphans, superseded versions,
+and LRU victims are removed without touching server files. Missing OPFS, an
+unknown quota estimate, quota pressure, or any local write error keeps the
+ordinary network result authoritative.
+
 Conservative M3 defaults are a 64 MiB structured-cache budget, 32 MiB per app,
 an app-declared resource budget, and a maximum 15-minute private access lease
 that fresh server authentication may renew independently of the original cache
@@ -41,6 +51,11 @@ affecting the network result. The RAM retry coordinator pauses for document and
 Maverick frame visibility, uses a 1–30 second jittered backoff, and never
 replays an unsafe request without the explicit idempotency contract, including
 a canonical `sha256:<64 lowercase hex>` request fingerprint.
+
+Conservative M4 file-cache defaults are 64 MiB per entry, 128 MiB per
+authenticated Storage scope, and 256 MiB across the origin, all subordinate to
+the existing 85% quota-headroom check. Settings diagnostics and lifecycle clear
+aggregate the structured and file caches but never enumerate cached content.
 
 The current same-origin iframe sandbox is not a browser security boundary:
 embedded app code could address origin storage directly outside this SDK. The

@@ -1,4 +1,5 @@
 import { CacheBus } from "./cacheBus";
+import { createBrowserFileCacheMaintenance } from "./fileCacheMaintenance";
 import { BrowserStorageQuotaAdapter } from "./quota";
 import { ResilientCacheBackend } from "./resilientBackend";
 import { validatePrincipal } from "./scope";
@@ -13,6 +14,7 @@ import type {
   CachePrincipal,
   StorageQuotaAdapter,
 } from "./types";
+import type { FileCacheFilter, FileCacheMaintenance } from "./fileCacheTypes";
 import type { RetryCoordinator } from "./retry";
 
 export type CacheLifecyclePrincipal = CachePrincipal & { accessLease?: AccessLease };
@@ -20,6 +22,7 @@ export type CacheLifecyclePrincipal = CachePrincipal & { accessLease?: AccessLea
 export type CacheLifecycleControllerOptions = {
   backend?: CacheBackend;
   bus?: CacheBus;
+  fileCacheMaintenance?: FileCacheMaintenance;
   now?: () => number;
   quotaAdapter?: StorageQuotaAdapter;
   retryCoordinator?: RetryCoordinator;
@@ -28,6 +31,7 @@ export type CacheLifecycleControllerOptions = {
 export class CacheLifecycleController {
   private readonly backend: CacheBackend;
   private readonly bus: CacheBus;
+  private readonly fileCache: FileCacheMaintenance;
   private readonly now: () => number;
   private readonly quotaAdapter: StorageQuotaAdapter;
   private readonly retryCoordinator?: RetryCoordinator;
@@ -38,13 +42,14 @@ export class CacheLifecycleController {
       ? options.backend
       : new ResilientCacheBackend(options.backend);
     this.bus = options.bus ?? new CacheBus();
+    this.fileCache = options.fileCacheMaintenance ?? createBrowserFileCacheMaintenance();
     this.now = options.now ?? Date.now;
     this.quotaAdapter = options.quotaAdapter ?? new BrowserStorageQuotaAdapter();
     this.retryCoordinator = options.retryCoordinator;
   }
 
   async initialize(): Promise<void> {
-    await this.backend.initialize();
+    await Promise.all([this.backend.initialize(), this.fileCache.initialize()]);
   }
 
   async transition(next: CacheLifecyclePrincipal): Promise<CacheCleanupResult> {
@@ -57,7 +62,14 @@ export class CacheLifecycleController {
     this.current = principal;
     this.retryCoordinator?.setScope(scopeKey(principal));
     if (principal.accessLease) {
-      await this.renewAccessLease(principal).catch(() => undefined);
+      await Promise.all([
+        this.renewAccessLease(principal).catch(() => undefined),
+        this.fileCache.renewAccessLease({
+          appId: "storage",
+          userId: principal.userId,
+          workspaceId: principal.workspaceId,
+        }, principal.accessLease).catch(() => undefined),
+      ]);
     }
     return cleanup;
   }
@@ -123,18 +135,25 @@ export class CacheLifecycleController {
 
   async diagnostics(): Promise<CacheDiagnostics> {
     await this.backend.initialize();
-    const [entries, pendingCleanupCount, storage] = await Promise.all([
+    const [entries, pendingCleanupCount, storage, fileCache] = await Promise.all([
       this.backend.list(),
       this.backend.pendingCleanupCount(),
       this.quotaAdapter.estimate(),
+      this.fileCache.diagnostics(),
     ]);
+    const structuredCacheBytes = entries.reduce((total, entry) => total + entry.sizeBytes, 0);
     return {
       backend: this.backend.mode(),
-      cacheBytes: entries.reduce((total, entry) => total + entry.sizeBytes, 0),
-      entryCount: entries.length,
+      cacheBytes: structuredCacheBytes + fileCache.bytes,
+      entryCount: entries.length + fileCache.entryCount,
+      fileCacheAvailable: fileCache.available,
+      fileCacheBytes: fileCache.bytes,
+      fileCacheEntryCount: fileCache.entryCount,
       originQuotaBytes: storage.quota,
       originUsageBytes: storage.usage,
-      pendingCleanupCount,
+      pendingCleanupCount: pendingCleanupCount + fileCache.pendingCleanupCount,
+      structuredCacheBytes,
+      structuredEntryCount: entries.length,
     };
   }
 
@@ -162,11 +181,17 @@ export class CacheLifecycleController {
     } catch {
       failed = true;
     }
-    const pendingCleanupCount = await this.backend.pendingCleanupCount().catch(() => failed ? 1 : 0);
+    const fileCleanup = await this.fileCache.clear(fileFilter(filter)).catch(() => ({
+      pendingCleanupCount: 1,
+      removed: 0,
+      status: "pending" as const,
+    }));
+    const structuredPendingCount = await this.backend.pendingCleanupCount().catch(() => failed ? 1 : 0);
+    const pendingCleanupCount = structuredPendingCount + fileCleanup.pendingCleanupCount;
     return {
       pendingCleanupCount: Math.max(failed ? 1 : 0, pendingCleanupCount),
-      removed,
-      status: failed || pendingCleanupCount > 0 ? "pending" : "complete",
+      removed: removed + fileCleanup.removed,
+      status: failed || fileCleanup.status === "pending" || pendingCleanupCount > 0 ? "pending" : "complete",
     };
   }
 
@@ -212,4 +237,13 @@ function normalizeLease(lease: AccessLease | undefined, now: number): AccessLeas
 
 function completeCleanup(): CacheCleanupResult {
   return { pendingCleanupCount: 0, removed: 0, status: "complete" };
+}
+
+function fileFilter(filter: CacheFilter): FileCacheFilter {
+  return {
+    ...(filter.userId ? { userId: filter.userId } : {}),
+    ...(filter.workspaceId ? { workspaceId: filter.workspaceId } : {}),
+    ...(filter.appId ? { appId: filter.appId } : {}),
+    ...(filter.entityId ? { fileId: filter.entityId } : {}),
+  };
 }

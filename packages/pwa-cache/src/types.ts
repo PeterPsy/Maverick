@@ -176,9 +176,14 @@ export type CacheDiagnostics = {
   backend: BackendMode;
   cacheBytes: number;
   entryCount: number;
+  fileCacheAvailable: boolean;
+  fileCacheBytes: number;
+  fileCacheEntryCount: number;
   originQuotaBytes: number | null;
   originUsageBytes: number | null;
   pendingCleanupCount: number;
+  structuredCacheBytes: number;
+  structuredEntryCount: number;
 };
 
 export type PwaCacheClientOptions = {

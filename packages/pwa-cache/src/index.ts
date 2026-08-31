@@ -7,6 +7,16 @@ export {
 } from "./client";
 export { clearPwaDataCache, readPwaCacheDiagnostics } from "./diagnostics";
 export {
+  PwaFileCache,
+  PwaFileCacheHost,
+  createPwaFileCacheHost,
+} from "./fileCache";
+export { MaverickFileHttpError } from "./fileCacheNetwork";
+export {
+  BrowserFileCacheMaintenance,
+  createBrowserFileCacheMaintenance,
+} from "./fileCacheMaintenance";
+export {
   CacheLifecycleController,
   createCacheLifecycleController,
   type CacheLifecycleControllerOptions,
@@ -62,3 +72,24 @@ export {
   type StorageQuotaAdapter,
   type StoredCacheEntry,
 } from "./types";
+export {
+  DEFAULT_PWA_FILE_CACHE_GLOBAL_BUDGET_BYTES,
+  DEFAULT_PWA_FILE_CACHE_MAX_ENTRY_BYTES,
+  DEFAULT_PWA_FILE_CACHE_SCOPE_BUDGET_BYTES,
+  PWA_FILE_CACHE_POLICY_REVISION,
+  PWA_FILE_CACHE_SCHEMA_VERSION,
+  type FileCacheByteStore,
+  type FileCacheByteWriter,
+  type FileCacheCleanupMarker,
+  type FileCacheDescriptor,
+  type FileCacheDiagnostics,
+  type FileCacheFilter,
+  type FileCacheMaintenance,
+  type FileCacheManifestStore,
+  type FileCacheOpenRequest,
+  type FileCacheOpenResult,
+  type FileCacheRecord,
+  type FileCacheState,
+  type FileCacheTelemetryEvent,
+  type PwaFileCacheOptions,
+} from "./fileCacheTypes";

@@ -6,6 +6,7 @@ import {
   PWA_CACHE_ENTRY_SCHEMA_VERSION,
   RetryCoordinator,
   type CacheEntryMetadata,
+  type FileCacheMaintenance,
 } from "../src";
 import { CacheBus, MemoryCacheBackend, ResilientCacheBackend, cacheEntryKey } from "../src/testing";
 
@@ -111,12 +112,46 @@ describe("cache lifecycle", () => {
       backend: "memory",
       cacheBytes: 12,
       entryCount: 1,
+      fileCacheAvailable: false,
+      fileCacheBytes: 0,
+      fileCacheEntryCount: 0,
       originQuotaBytes: 1_000,
       originUsageBytes: 200,
       pendingCleanupCount: 0,
+      structuredCacheBytes: 12,
+      structuredEntryCount: 1,
     });
     expect(await controller.clearAll()).toMatchObject({ removed: 1, status: "complete" });
     expect(await backend.list()).toEqual([]);
+  });
+
+  it("coordinates Storage OPFS cleanup and lease renewal with the authenticated lifecycle", async () => {
+    const clear = vi.fn(async () => ({ pendingCleanupCount: 0, removed: 2, status: "complete" as const }));
+    const renewAccessLease = vi.fn(async () => undefined);
+    const fileCache: FileCacheMaintenance = {
+      clear,
+      diagnostics: async () => ({ available: true, bytes: 80, entryCount: 2, pendingCleanupCount: 0 }),
+      initialize: async () => undefined,
+      renewAccessLease,
+    };
+    const controller = new CacheLifecycleController({
+      backend: new MemoryCacheBackend(),
+      bus: new CacheBus(null),
+      fileCacheMaintenance: fileCache,
+      now: () => 1_000,
+    });
+    const lease = { issuedAt: 1_000, expiresAt: 5_000 };
+    await controller.transition({ accessLease: lease, appId: "base-shell", userId: "user-a", workspaceId: "default" });
+    expect(renewAccessLease).toHaveBeenCalledWith({ appId: "storage", userId: "user-a", workspaceId: "default" }, lease);
+    expect(await controller.diagnostics()).toMatchObject({
+      cacheBytes: 80,
+      entryCount: 2,
+      fileCacheAvailable: true,
+      fileCacheBytes: 80,
+      fileCacheEntryCount: 2,
+    });
+    await expect(controller.endSession()).resolves.toMatchObject({ removed: 2, status: "complete" });
+    expect(clear).toHaveBeenLastCalledWith({ userId: "user-a" });
   });
 
   it("falls back to RAM after injected IndexedDB-style failures", async () => {

@@ -1365,7 +1365,7 @@ def _write_asset_manifest(root: Path, *, immutable_paths: list[str]) -> None:
         return {"path": relative, "sha256": hashlib.sha256(body).hexdigest(), "size_bytes": len(body)}
 
     payload = {
-        "schema": "maverick.frontend-assets.v1",
+        "schema": "maverick.frontend-assets.v2",
         "build_id": "a" * 64,
         "entrypoints": ["index.html"],
         "immutable": [record(path) for path in immutable_paths],

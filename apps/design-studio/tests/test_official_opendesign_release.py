@@ -12,6 +12,7 @@ import unittest
 
 
 SERVICE_ROOT = Path(__file__).resolve().parents[1] / "service"
+CLI_ROOT = Path(__file__).resolve().parents[1] / "cli"
 sys.path.insert(0, str(SERVICE_ROOT))
 
 from official_opendesign_release import (  # noqa: E402
@@ -41,6 +42,11 @@ def _write_minimal_rootfs(rootfs: Path) -> None:
 
 
 class OfficialOpenDesignReleaseTests(unittest.TestCase):
+    def test_update_command_timeout_fits_the_core_execution_limit(self) -> None:
+        schemas = json.loads((CLI_ROOT / "command_schemas.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(schemas["commands"]["design-studio-update"]["timeout_seconds"], 900)
+
     def test_release_descriptor_is_the_pinned_official_0_16_1_oci(self) -> None:
         release = load_official_release(SERVICE_ROOT / "opendesign_official_release.json")
 
@@ -60,6 +66,57 @@ class OfficialOpenDesignReleaseTests(unittest.TestCase):
             path.write_text(json.dumps(payload), encoding="utf-8")
 
             with self.assertRaisesRegex(OfficialReleaseError, "customizations"):
+                load_official_release(path)
+
+    def test_release_descriptor_accepts_canonical_empty_attestation_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            payload = json.loads((SERVICE_ROOT / "opendesign_official_release.json").read_text())
+            payload["oci"]["attestation"]["config"] = {
+                "media_type": "application/vnd.oci.empty.v1+json",
+                "digest": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+                "size_bytes": 2,
+            }
+            path = Path(temporary) / "release.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+            release = load_official_release(path)
+
+            self.assertEqual(release.version, "0.16.1")
+
+    def test_release_descriptor_rejects_noncanonical_empty_attestation_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            payload = json.loads((SERVICE_ROOT / "opendesign_official_release.json").read_text())
+            payload["oci"]["attestation"]["config"] = {
+                "media_type": "application/vnd.oci.empty.v1+json",
+                "digest": "sha256:" + "0" * 64,
+                "size_bytes": 2,
+            }
+            path = Path(temporary) / "release.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(OfficialReleaseError, "not canonical"):
+                load_official_release(path)
+
+    def test_release_descriptor_accepts_a_large_layer_only_within_its_pinned_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            payload = json.loads((SERVICE_ROOT / "opendesign_official_release.json").read_text())
+            payload["oci"]["layers"][0]["size_bytes"] = 346_544_896
+            payload["oci"]["max_blob_size_bytes"] = 346_544_896
+            path = Path(temporary) / "release.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+            release = load_official_release(path)
+
+            self.assertEqual(release.oci_lock["max_blob_size_bytes"], 346_544_896)
+
+    def test_release_descriptor_rejects_a_blob_limit_above_the_hard_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            payload = json.loads((SERVICE_ROOT / "opendesign_official_release.json").read_text())
+            payload["oci"]["max_blob_size_bytes"] = 512 * 1024 * 1024 + 1
+            path = Path(temporary) / "release.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(OfficialReleaseError, "blob limit"):
                 load_official_release(path)
 
     def test_rootfs_snapshot_proves_bytes_and_links_are_unchanged(self) -> None:

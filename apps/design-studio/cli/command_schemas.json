@@ -170,7 +170,7 @@
       "effect_class": "mutating",
       "supports_idempotency": false,
       "safe_to_retry": false,
-      "timeout_seconds": 1800
+      "timeout_seconds": 900
     }
   }
 }

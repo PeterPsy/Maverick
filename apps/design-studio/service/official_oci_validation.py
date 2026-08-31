@@ -10,6 +10,10 @@ OFFICIAL_REGISTRY = "ghcr.io"
 OFFICIAL_REPOSITORY = "nexu-io/od"
 OFFICIAL_REDIRECT_HOSTS = ["ghcr.io", "pkg-containers.githubusercontent.com"]
 OFFICIAL_PLATFORM = {"os": "linux", "architecture": "amd64"}
+OCI_IMAGE_CONFIG_MEDIA_TYPE = "application/vnd.oci.image.config.v1+json"
+OCI_EMPTY_CONFIG_MEDIA_TYPE = "application/vnd.oci.empty.v1+json"
+OCI_EMPTY_CONFIG_DIGEST = "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+MAX_OCI_BLOB_SIZE_BYTES = 512 * 1024 * 1024
 
 
 class OfficialOciValidationError(RuntimeError):
@@ -65,7 +69,7 @@ def validate_oci_distribution(manifest: dict[str, Any]) -> dict[str, Any]:
         raise OfficialOciValidationError("OpenDesign OCI redirect policy changed")
     max_blob_size = distribution.get("max_blob_size_bytes")
     minimum_memory = distribution.get("minimum_mem_available_bytes")
-    if not _positive_integer(max_blob_size) or max_blob_size > 128 * 1024 * 1024:
+    if not _positive_integer(max_blob_size) or max_blob_size > MAX_OCI_BLOB_SIZE_BYTES:
         raise OfficialOciValidationError("OpenDesign OCI blob limit is invalid")
     if not _positive_integer(minimum_memory) or minimum_memory < 3 * 1024 * 1024 * 1024:
         raise OfficialOciValidationError("OpenDesign OCI memory floor is invalid")
@@ -111,11 +115,24 @@ def validate_oci_distribution(manifest: dict[str, Any]) -> dict[str, Any]:
         media_type="application/vnd.oci.image.manifest.v1+json",
         label="attestation manifest",
     )
-    _descriptor(
-        _mapping(attestation, "config"),
-        media_type="application/vnd.oci.image.config.v1+json",
-        label="attestation config",
-    )
+    attestation_config = _mapping(attestation, "config")
+    attestation_config_media_type = attestation_config.get("media_type")
+    if attestation_config_media_type == OCI_IMAGE_CONFIG_MEDIA_TYPE:
+        _descriptor(
+            attestation_config,
+            media_type=OCI_IMAGE_CONFIG_MEDIA_TYPE,
+            label="attestation config",
+        )
+    elif attestation_config_media_type == OCI_EMPTY_CONFIG_MEDIA_TYPE:
+        empty_config = _descriptor(
+            attestation_config,
+            media_type=OCI_EMPTY_CONFIG_MEDIA_TYPE,
+            label="attestation config",
+        )
+        if empty_config["digest"] != OCI_EMPTY_CONFIG_DIGEST or empty_config["size_bytes"] != 2:
+            raise OfficialOciValidationError("OpenDesign OCI empty attestation config is not canonical")
+    else:
+        raise OfficialOciValidationError("OpenDesign OCI attestation config media type changed")
     statement = _mapping(attestation, "statement")
     if set(statement) != {"media_type", "predicate_type", "digest", "size_bytes"}:
         raise OfficialOciValidationError("OpenDesign OCI attestation statement descriptor is invalid")

@@ -183,6 +183,93 @@ class OfficialPublicInventoryTests(unittest.TestCase):
         rendered = str(content)
         self.assertNotIn("Secret transcript", rendered)
 
+    def test_adjacent_plain_text_event_chunks_are_semantically_equivalent(self) -> None:
+        baseline = FakePublicApi()
+        baseline_get_json = baseline.get_json
+
+        def chunked_message(path: str) -> dict:
+            payload = baseline_get_json(path)
+            if path.endswith("/messages"):
+                payload["messages"][0]["events"] = [
+                    {"kind": "text", "text": "Secret "},
+                    {"kind": "text", "text": "transcript"},
+                ]
+            return payload
+
+        baseline.get_json = chunked_message  # type: ignore[method-assign]
+        migrated = FakePublicApi()
+        migrated_get_json = migrated.get_json
+
+        def coalesced_message(path: str) -> dict:
+            payload = migrated_get_json(path)
+            if path.endswith("/messages"):
+                payload["messages"][0]["events"] = [
+                    {"kind": "text", "text": "Secret transcript"},
+                ]
+            return payload
+
+        migrated.get_json = coalesced_message  # type: ignore[method-assign]
+        baseline_categories, baseline_identities, baseline_content = (
+            _inventory_with_preservation_sets(baseline)
+        )
+        migrated_categories, migrated_identities, migrated_content = (
+            _inventory_with_preservation_sets(migrated)
+        )
+        guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(migrated_categories, migrated_identities, migrated_content),
+        )
+
+        self.assertNotEqual(
+            baseline_categories["ordered_messages"],
+            migrated_categories["ordered_messages"],
+        )
+        self.assertEqual(
+            baseline_content["ordered_messages"],
+            migrated_content["ordered_messages"],
+        )
+        self.assertEqual(guard["state"], "passed")
+
+    def test_text_event_content_or_metadata_loss_remains_protected(self) -> None:
+        baseline = FakePublicApi()
+        baseline_get_json = baseline.get_json
+
+        def message_with_metadata(path: str) -> dict:
+            payload = baseline_get_json(path)
+            if path.endswith("/messages"):
+                payload["messages"][0]["events"] = [
+                    {"kind": "text", "text": "Secret ", "sequence": 1},
+                    {"kind": "text", "text": "transcript", "sequence": 2},
+                ]
+            return payload
+
+        baseline.get_json = message_with_metadata  # type: ignore[method-assign]
+        migrated = FakePublicApi()
+        migrated_get_json = migrated.get_json
+
+        def lossy_message(path: str) -> dict:
+            payload = migrated_get_json(path)
+            if path.endswith("/messages"):
+                payload["messages"][0]["events"] = [
+                    {"kind": "text", "text": "Secret changed", "sequence": 1},
+                ]
+            return payload
+
+        migrated.get_json = lossy_message  # type: ignore[method-assign]
+        baseline_categories, baseline_identities, baseline_content = (
+            _inventory_with_preservation_sets(baseline)
+        )
+        migrated_categories, migrated_identities, migrated_content = (
+            _inventory_with_preservation_sets(migrated)
+        )
+        guard = migration_preservation_guard(
+            _inventory_payload(baseline_categories, baseline_identities, baseline_content),
+            _inventory_payload(migrated_categories, migrated_identities, migrated_content),
+        )
+
+        self.assertEqual(guard["state"], "failed")
+        self.assertGreater(guard["lost_content_counts"]["ordered_messages"], 0)
+
     def test_project_functional_metadata_loss_fails_content_guard(self) -> None:
         baseline = FakePublicApi()
         baseline_get_json = baseline.get_json

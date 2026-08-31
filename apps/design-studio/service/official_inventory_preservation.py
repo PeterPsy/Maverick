@@ -82,16 +82,8 @@ def _protected_projection(
                 "message_id": message.get("id"),
                 "order": record.get("order"),
             },
-            _without(
+            _stable_message_content(
                 message,
-                {
-                    "id",
-                    "runId",
-                    "runStatus",
-                    "lastRunEventId",
-                    "status",
-                    *SERVER_OWNED_RECORD_FIELDS,
-                },
             ),
         )
     if category == "design_systems":
@@ -148,6 +140,48 @@ def _without(value: dict[str, Any], excluded: set[str]) -> dict[str, Any]:
         for key, item in value.items()
         if key not in excluded
     }
+
+
+def _stable_message_content(message: dict[str, Any]) -> dict[str, Any]:
+    content = _without(
+        message,
+        {
+            "id",
+            "runId",
+            "runStatus",
+            "lastRunEventId",
+            "status",
+            *SERVER_OWNED_RECORD_FIELDS,
+        },
+    )
+    events = content.get("events")
+    if isinstance(events, list):
+        content["events"] = _coalesce_adjacent_text_events(events)
+    return content
+
+
+def _coalesce_adjacent_text_events(events: list[Any]) -> list[Any]:
+    """Ignore transport chunk boundaries while preserving the exact text stream."""
+    normalized: list[Any] = []
+    for event in events:
+        if _plain_text_event(event) and normalized and _plain_text_event(normalized[-1]):
+            previous = normalized[-1]
+            normalized[-1] = {
+                "kind": "text",
+                "text": previous["text"] + event["text"],
+            }
+        else:
+            normalized.append(event)
+    return normalized
+
+
+def _plain_text_event(value: object) -> bool:
+    return (
+        isinstance(value, dict)
+        and set(value) == {"kind", "text"}
+        and value.get("kind") == "text"
+        and isinstance(value.get("text"), str)
+    )
 
 
 def _clean(value: Any) -> Any:

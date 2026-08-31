@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getActiveProvider, getPlatformStatus, getSession, isRetryableReadError, listApps, listPinnedApps, MaverickHttpError, MaverickTransportError, normalizeAppRegistryPayload, retryAfterMs, savePinnedApps } from "../src/api";
 import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
-import { shellCacheLifecycle } from "../src/pwaCacheRuntime";
+import { runShellRead, shellCacheLifecycle } from "../src/pwaCacheRuntime";
 
 describe("base-shell api normalization", () => {
   afterEach(() => {
@@ -89,11 +89,34 @@ describe("base-shell api normalization", () => {
   });
 
   it("cleans browser data scopes on authorization responses", async () => {
-    const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockResolvedValue();
+    const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockResolvedValue({
+      pendingCleanupCount: 0,
+      removed: 0,
+      status: "complete",
+    });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }));
 
     await expect(getSession()).rejects.toMatchObject({ status: 401 });
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it.each([401, 403])("preserves a real %i through request, lifecycle cleanup, and retry coordination", async (status) => {
+    await shellCacheLifecycle.transition({
+      appId: "base-shell",
+      userId: "auth-regression-user",
+      workspaceId: "default",
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status }));
+    const controller = new AbortController();
+
+    const pending = runShellRead(
+      "base-shell:test-auth-terminal",
+      (signal) => getSession(signal),
+      controller.signal,
+    );
+
+    await expect(pending).rejects.toBeInstanceOf(MaverickHttpError);
+    await expect(pending).rejects.toMatchObject({ status });
   });
 
   it("reads and saves ordered pinned apps through the App Store backend", async () => {
@@ -120,13 +143,46 @@ describe("base-shell api normalization", () => {
       body: JSON.stringify({ action: "pinned_apps.list" }),
       signal: expect.any(AbortSignal),
     });
-    expect(fetch).toHaveBeenNthCalledWith(2, "/api/apps/app-store/backend", {
+    const saveInit = vi.mocked(fetch).mock.calls[1]?.[1];
+    const saveBody = JSON.parse(String(saveInit?.body)) as Record<string, unknown>;
+    expect(saveInit).toMatchObject({
       credentials: "same-origin",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      headers: expect.objectContaining({
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "Idempotency-Key": saveBody.idempotency_key,
+      }),
       method: "POST",
-      body: JSON.stringify({ action: "pinned_apps.set", app_ids: ["agents", "chat"] }),
       signal: expect.any(AbortSignal),
     });
+    expect(saveBody).toMatchObject({
+      action: "pinned_apps.set",
+      app_ids: ["agents", "chat"],
+      request_fingerprint: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+    });
+  });
+
+  it("retries the real pinned-app mutation with one stable server deduplication contract", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("transport interrupted after send"))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ state: { pinned_apps: ["chat", "agents"] } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+
+    const pending = savePinnedApps(["chat", "agents"]);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(pending).resolves.toEqual({ pinned_apps: ["chat", "agents"] });
+
+    const attempts = vi.mocked(fetch).mock.calls;
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]?.[1]?.body).toBe(attempts[1]?.[1]?.body);
+    expect((attempts[0]?.[1]?.headers as Record<string, string>)["Idempotency-Key"])
+      .toBe((attempts[1]?.[1]?.headers as Record<string, string>)["Idempotency-Key"]);
   });
 
   it("normalizes platform status app records", async () => {

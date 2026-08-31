@@ -1432,6 +1432,90 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
         self.assertEqual(ordered["state"]["pinned_apps"], ["agents", "chat"])
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
+    def test_pinned_apps_set_deduplicates_retried_mutations_by_exact_fingerprint(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+        idempotency_key = "pinned-apps:retry-contract-0001"
+        requested_app_ids = ["agents", "chat"]
+        serialized = json.dumps(
+            {"action": "pinned_apps.set", "app_ids": requested_app_ids},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        fingerprint = f"sha256:{hashlib.sha256(serialized).hexdigest()}"
+        request = {
+            "action": "pinned_apps.set",
+            "app_ids": requested_app_ids,
+            "idempotency_key": idempotency_key,
+            "request_fingerprint": fingerprint,
+        }
+        app_events = state.app_event_bus.subscribe()
+        self.addCleanup(lambda: state.app_event_bus.unsubscribe(app_events))
+
+        first_status, first, _first_headers = self.invoke(
+            app, path="/api/apps/app-store/backend", method="POST", body=request, cookie=cookie
+        )
+        first_event = app_events.get_nowait()
+        ordinary_status, _ordinary, _ordinary_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.set", "app_ids": ["chat"]},
+            cookie=cookie,
+        )
+        ordinary_event = app_events.get_nowait()
+        replay_status, replay, _replay_headers = self.invoke(
+            app, path="/api/apps/app-store/backend", method="POST", body=request, cookie=cookie
+        )
+        current_status, current, _current_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.list"},
+            cookie=cookie,
+        )
+
+        conflicting_ids = ["chat"]
+        conflicting_serialized = json.dumps(
+            {"action": "pinned_apps.set", "app_ids": conflicting_ids},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        conflict_status, conflict, _conflict_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={
+                "action": "pinned_apps.set",
+                "app_ids": conflicting_ids,
+                "idempotency_key": idempotency_key,
+                "request_fingerprint": f"sha256:{hashlib.sha256(conflicting_serialized).hexdigest()}",
+            },
+            cookie=cookie,
+        )
+
+        self.assertEqual(first_status, 200)
+        self.assertEqual(first["state"]["pinned_apps"], requested_app_ids)
+        self.assertEqual(ordinary_status, 200)
+        self.assertEqual(replay_status, 200)
+        self.assertEqual(replay["state"]["pinned_apps"], requested_app_ids)
+        self.assertEqual(current_status, 200)
+        self.assertEqual(current["pinned_apps"], ["chat"])
+        self.assertEqual(conflict_status, 400)
+        self.assertIn("already bound", conflict["detail"])
+        expected_event = {
+            "type": "maverick.app.data-changed",
+            "workspace_id": "default",
+            "owner_app_id": "app-store",
+            "resource": "state",
+        }
+        self.assertEqual(first_event, expected_event)
+        self.assertEqual(ordinary_event, expected_event)
+        self.assertTrue(app_events.empty())
+
+    @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_app_store_backend_rejects_non_launchable_pin_but_removes_stale_pin(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)

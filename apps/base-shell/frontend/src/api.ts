@@ -1,3 +1,9 @@
+import {
+  createIdempotencyKey,
+  createRequestFingerprint,
+  idempotencyHeaders,
+  type MutationRetryContract,
+} from "@maverick/pwa-cache";
 import { shellCacheLifecycle, shellRetryCoordinator } from "./pwaCacheRuntime";
 
 export type AppLogo = {
@@ -500,13 +506,31 @@ export function listPinnedApps(signal?: AbortSignal): Promise<PinnedAppsPayload>
   }).then(normalizePinnedAppsPayload);
 }
 
-export function savePinnedApps(appIds: string[]): Promise<PinnedAppsPayload> {
-  return requestJson<unknown>("/api/apps/app-store/backend", {
+export async function savePinnedApps(appIds: string[]): Promise<PinnedAppsPayload> {
+  const semantics = {
+    action: "pinned_apps.set",
+    app_ids: appIds.map((appId) => appId.trim()).filter(Boolean),
+  } as const;
+  const serializedSemantics = JSON.stringify(semantics);
+  const mutation: MutationRetryContract = {
+    idempotencyKey: createIdempotencyKey("pinned-apps"),
+    requestFingerprint: await createRequestFingerprint(serializedSemantics),
+    serverDeduplicates: true,
+  };
+  const body = JSON.stringify({
+    ...semantics,
+    idempotency_key: mutation.idempotencyKey,
+    request_fingerprint: mutation.requestFingerprint,
+  });
+  return shellRetryCoordinator.run({
+    key: "base-shell:pinned-apps.set",
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      action: "pinned_apps.set",
-      app_ids: appIds.map((appId) => appId.trim()).filter(Boolean),
+    mutation,
+    operation: ({ signal }) => requestJson<unknown>("/api/apps/app-store/backend", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...idempotencyHeaders(mutation) },
+      body,
+      signal,
     }),
   }).then(normalizePinnedAppsPayload);
 }

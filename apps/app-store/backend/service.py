@@ -7,7 +7,19 @@ from pathlib import Path
 from uuid import UUID
 from typing import Any
 
-from store import clear_custom_view, load_state, pinned_apps, remember_install, set_custom_view, set_pinned_apps, set_view_filter, toggle_pinned_app, view_filter_state
+from store import (
+    clear_custom_view,
+    load_state,
+    pinned_apps,
+    public_state,
+    remember_install,
+    set_custom_view,
+    set_pinned_apps,
+    set_pinned_apps_idempotent,
+    set_view_filter,
+    toggle_pinned_app,
+    view_filter_state,
+)
 
 REFERENCE_MANIFEST = {
     "app_id": "app-store",
@@ -22,6 +34,7 @@ VIEW_STATE_ACTIONS = {"view_filter", "set_view_filter", "set_custom_view", "clea
 PUBLIC_STORE_METADATA_KEY = "public_store"
 PUBLIC_APP_UUID_KEY = "public_app_uuid"
 APP_EVENTS_RESULT_KEY = "_app_events"
+MUTATION_REPLAYED_RESULT_KEY = "_mutation_replayed"
 STATE_CHANGED_EVENT = {"type": "maverick.app.data-changed", "resource": "state"}
 
 
@@ -29,9 +42,13 @@ class AppStoreValidationError(ValueError):
     """Raised when an app-store request payload is invalid."""
 
 
-def app_events_for_action(action: str, result: dict[str, Any] | None = None) -> list[dict]:
+def app_events_for_action(
+    action: str,
+    result: dict[str, Any] | None = None,
+) -> list[dict]:
     events: list[dict] = []
-    if action in DATA_CHANGED_ACTIONS:
+    replayed = isinstance(result, dict) and result.get(MUTATION_REPLAYED_RESULT_KEY) is True
+    if action in DATA_CHANGED_ACTIONS and not replayed:
         events.append(STATE_CHANGED_EVENT)
     if action in VIEW_STATE_ACTIONS:
         events.append({"type": "maverick.app.data-changed", "resource": "view-state"})
@@ -44,6 +61,7 @@ def app_events_for_action(action: str, result: dict[str, Any] | None = None) -> 
 
 def strip_internal_result_fields(result: dict[str, Any]) -> dict[str, Any]:
     result.pop(APP_EVENTS_RESULT_KEY, None)
+    result.pop(MUTATION_REPLAYED_RESULT_KEY, None)
     return result
 
 
@@ -56,7 +74,7 @@ def handle_action(
 ) -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "catalog")
     if action == "state":
-        return 200, {"state": load_state(data_root), "core_catalog_endpoint": "/api/app-store/apps"}
+        return 200, {"state": public_state(load_state(data_root)), "core_catalog_endpoint": "/api/app-store/apps"}
     if action == "catalog":
         raise AppStoreValidationError("Catalog data is served only by the core `/api/app-store/apps` API.")
     if action == "public_store.url":
@@ -107,6 +125,25 @@ def handle_action(
             raise AppStoreValidationError("Pinned app mutations require workspace app registry context.")
         raw_app_ids = body.get("app_ids")
         app_ids = [str(item).strip() for item in raw_app_ids] if isinstance(raw_app_ids, list) else []
+        idempotency_key = str(body.get("idempotency_key") or "").strip()
+        request_fingerprint = str(body.get("request_fingerprint") or "").strip()
+        if bool(idempotency_key) != bool(request_fingerprint):
+            raise AppStoreValidationError("idempotency_key and request_fingerprint must be provided together.")
+        if idempotency_key:
+            try:
+                state, replayed = set_pinned_apps_idempotent(
+                    data_root,
+                    requested_app_ids=app_ids,
+                    stored_app_ids=_launchable_pinned_app_ids(app_ids, launchable_app_ids),
+                    idempotency_key=idempotency_key,
+                    request_fingerprint=request_fingerprint,
+                )
+            except ValueError as error:
+                raise AppStoreValidationError(str(error)) from error
+            return 200, {
+                "state": state,
+                **({MUTATION_REPLAYED_RESULT_KEY: True} if replayed else {}),
+            }
         return 200, {"state": set_pinned_apps(data_root, _launchable_pinned_app_ids(app_ids, launchable_app_ids))}
     if action == "pinned_apps.toggle":
         if launchable_app_ids is None:

@@ -1088,11 +1088,13 @@ The platform host owns generic HTTP correctness, verified frontend-artifact
 metadata, and a public fail-closed PWA rollout projection. It does not own app
 read-model schemas or place app business payloads in browser storage.
 
-The Base Shell owns the root service worker, offline shell, update lifecycle,
-single global connectivity indicator, and coordinated cleanup protocol. Each
-app remains responsible for the classification, sanitization, revision, TTL,
-size budget, and invalidation of its own read models. Storage separately owns
-the opt-in file-availability experience. Shared browser mechanics may live in a
+The Base Shell owns the root service worker, verified static-cache lifecycle,
+update coordination, its bootstrap loading/retry behavior, and the coordinated
+cleanup protocol. It does not own a product mode or global UI for transport
+reachability. Each app remains responsible for the classification,
+sanitization, revision, TTL, size budget, invalidation, and ordinary loading
+behavior of its own read models. Storage separately owns stable file identity
+and an automatic bounded file cache. Shared browser mechanics may live in a
 platform package, but that package must not import app models or permit one app
 to address another app's scope.
 
@@ -1100,9 +1102,9 @@ Cache API, IndexedDB, and OPFS hold derived copies only. They cannot become a
 source of platform authority or satisfy capability, certificate, provider
 binding, admission, egress, recovery, confirmation, or revocation decisions.
 Unknown classification and unavailable policy fail closed to network-only. The
-normative mapping, rollout switches, private cold-offline rule, and product
-contract are recorded in
-`docs/adr/0011-pwa-cache-and-offline-boundaries.md`.
+normative policy mapping, rollout switches, transparent-cache behavior, and
+transport recovery boundaries are recorded in
+`docs/adr/0012-transparent-pwa-cache-and-network-resilience.md`.
 
 The hosted binary-response contract has three private policies. Mutable files
 use `private, no-cache` with a strong ETag and byte ranges. Explicit immutable
@@ -1117,13 +1119,15 @@ its strong ETag matches the current representation. JSON responses default
 to `private, no-store` unless
 their owner opts into a narrower explicit revalidation contract.
 
-Base Shell's M2 production build extends the verified frontend manifest with
-an `offline` entry and `precache` records containing the public URL, artifact
-path, SHA-256 digest, and exact decoded byte length. Its build identity covers
-the Rollup graph, the service-worker template, and the selected precache map;
-the worker is then generated from that identity. Core refuses undeclared,
-mismatched, ambiguous, traversal, API, WebSocket, backend, sidecar, and worker
-precache URLs before hosting the app.
+Base Shell's M2R production build uses the verified
+`maverick.frontend-assets.v2` manifest. Its `navigation_fallback` names the
+normal HTML entrypoint, and each `precache` record contains the public URL,
+artifact path, SHA-256 digest, and exact decoded byte length. Its build identity
+covers the Rollup graph, service-worker template, navigation fallback, and
+selected precache map; the worker is then generated from that identity. Core
+refuses undeclared, mismatched, ambiguous, traversal, API, WebSocket, backend,
+sidecar, and worker precache URLs before hosting the app. There is no manifest
+alias for the superseded fallback-document field.
 
 The root worker owns only these Cache API namespaces:
 
@@ -1132,17 +1136,19 @@ The root worker owns only these Cache API namespaces:
   with the verified `public, max-age=31536000, immutable` contract;
 - the exact legacy `maverick-base-shell-v3` name for bounded migration cleanup.
 
-Navigation is network-first with a bounded timeout. `/` and `/app/...` fall
-back to the verified Base Shell document; other uncached navigations fall back
-to the localized public offline document. Generated immutable shell assets are
-cache-first only after digest and size verification. Other precached public
-assets are revalidated and fall back only to matching verified bytes. API,
-SSE, WebSocket, backend, sidecar, service-worker, non-GET, cross-origin, and
-range requests are never answered by the worker.
+Navigation is network-first with a bounded timeout. Only `/`, `/app`, and
+`/app/...` may fall back to the verified normal Base Shell entrypoint. Other
+navigations keep ordinary browser/network behavior and receive no alternative
+product document or synthetic response from the worker. Generated immutable
+shell assets are cache-first only after digest and size verification. Other
+pre-cached public assets are revalidated and fall back only to matching
+verified bytes. API, SSE, WebSocket, backend, sidecar, service-worker, non-GET,
+cross-origin, and range requests are never answered by the worker.
 
 Install failure deletes only the incomplete cache for the candidate build and
-leaves the active build untouched. Updates wait for explicit acceptance;
-controller change reloads every tab already controlled by the M2 client so an
+leaves the active build untouched. A waiting worker activates through its
+normal lifecycle or an explicit release action that is independent from
+transport state; controller change reloads already controlled clients so an
 old shell does not continue under an incompatible worker. Activation removes
 only obsolete known shell-cache names, never the app static runtime cache,
 IndexedDB, OPFS, or unrelated Cache API entries. Kill-switch cleanup adds the
@@ -1150,14 +1156,15 @@ known app static cache and unregisters the root worker, while recovery repairs
 missing or corrupt entries in place without discarding entries that still
 verify.
 
-Connectivity is a Base Shell external store. Browser `offline` or a bounded
-Maverick transport failure blocks remote UI immediately. A browser `online`
-event enters a still-blocked checking state; only a fresh successful Maverick
-response restores the current app icon and online actions. M2 persists only a
-non-sensitive last-success timestamp. Its offline render unmounts app frames
-and exposes exactly one accessible indicator in the current-app sidebar slot,
-plus the local-content management dialog; it persists no private app read
-model.
+Transport recovery is an internal RAM-only mechanism, not a render authority.
+Browser `online`, focus, and visibility events are retry hints; a Maverick
+response confirms useful transport. Idempotent reads may retry with
+single-flight execution, cancellable exponential backoff, jitter, and a
+frequency cap. A transient bootstrap failure keeps the normal pending UI,
+while terminal HTTP outcomes follow their authentication or error flows.
+Mounted app frames and shell controls are not removed or replaced because of a
+connectivity event. Pending retries are cancelled on unmount, logout, user or
+workspace change, and scope revision, and they are never persisted.
 
 ## Everything Above The Core Is An App
 

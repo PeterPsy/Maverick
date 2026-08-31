@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getActiveProvider, getPlatformStatus, getSession, isRetryableReadError, listApps, listPinnedApps, MaverickHttpError, MaverickTransportError, normalizeAppRegistryPayload, retryAfterMs, savePinnedApps } from "../src/api";
 import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
+import { shellCacheLifecycle } from "../src/pwaCacheRuntime";
 
 describe("base-shell api normalization", () => {
   afterEach(() => {
@@ -85,6 +86,14 @@ describe("base-shell api normalization", () => {
     expect(retryAfterMs(unavailable)).toBe(2_000);
     expect(isRetryableReadError(forbidden)).toBe(false);
     expect(isRetryableReadError(unauthenticated)).toBe(false);
+  });
+
+  it("cleans browser data scopes on authorization responses", async () => {
+    const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockResolvedValue();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }));
+
+    await expect(getSession()).rejects.toMatchObject({ status: 401 });
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it("reads and saves ordered pinned apps through the App Store backend", async () => {

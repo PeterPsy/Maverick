@@ -1,4 +1,4 @@
-import { recordMaverickTransportFailure, recordMaverickTransportResponse } from "./transportRecovery";
+import { shellCacheLifecycle, shellRetryCoordinator } from "./pwaCacheRuntime";
 
 export type AppLogo = {
   kind: "glyph" | "image";
@@ -312,14 +312,15 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     });
     receivedResponse = true;
     if (!response.ok) {
-      throw new MaverickHttpError(path, response);
+      const responseError = new MaverickHttpError(path, response);
+      if (responseError.status === 401 || responseError.status === 403) {
+        await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
+      }
+      throw responseError;
     }
-    recordMaverickTransportResponse();
+    shellRetryCoordinator.confirmUsefulTransport();
     return (await response.json()) as T;
   } catch (requestError) {
-    if (!receivedResponse && !init.signal?.aborted) {
-      recordMaverickTransportFailure();
-    }
     if (didTimeout) {
       throw new MaverickTransportError(`Request timed out after ${REQUEST_TIMEOUT_MS} ms: ${path}`, { cause: requestError });
     }

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MaverickHttpError, MaverickTransportError } from "../src/api";
 import type { AppRegistryItem, PlatformSettings, SessionPayload, WorkspaceItem } from "../src/api";
 import { AppShell } from "../src/AppShell";
-import { recordMaverickTransportFailure, recordMaverickTransportResponse } from "../src/transportRecovery";
+import { shellRetryCoordinator } from "../src/pwaCacheRuntime";
 
 const api = vi.hoisted(() => ({
   configureActiveProvider: vi.fn(),
@@ -51,10 +51,12 @@ vi.mock("../src/components/Sidebar", () => ({
   Sidebar: ({
     isLoading,
     isWorkspacesLoading,
+    onWorkspaceChanged,
     workspaces,
   }: {
     isLoading: boolean;
     isWorkspacesLoading: boolean;
+    onWorkspaceChanged: () => Promise<void>;
     workspaces: WorkspaceItem[];
   }) => (
     <aside
@@ -62,7 +64,9 @@ vi.mock("../src/components/Sidebar", () => ({
       data-testid="sidebar"
       data-workspace-count={String(workspaces.length)}
       data-workspaces-loading={String(isWorkspacesLoading)}
-    />
+    >
+      <button data-testid="revalidate-workspace" onClick={() => void onWorkspaceChanged()} type="button" />
+    </aside>
   ),
 }));
 vi.mock("../src/components/FloatingChatHost", () => ({
@@ -85,7 +89,7 @@ describe("AppShell bootstrap", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
-    recordMaverickTransportResponse();
+    shellRetryCoordinator.cancelAll("test reset");
     api.getSession.mockResolvedValue(sessionPayload());
     api.listApps.mockResolvedValue({ items: [app("chat")] });
     api.listPinnedApps.mockResolvedValue({ pinned_apps: ["chat"] });
@@ -98,6 +102,7 @@ describe("AppShell bootstrap", () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    vi.useRealTimers();
   });
 
   it("shows the shell from session workspace without waiting for platform status", async () => {
@@ -148,7 +153,7 @@ describe("AppShell bootstrap", () => {
     const appFrame = container.querySelector("[data-testid='mounted-app-frame']");
 
     await act(async () => {
-      recordMaverickTransportFailure();
+      shellRetryCoordinator.hint();
       await Promise.resolve();
     });
 
@@ -159,7 +164,7 @@ describe("AppShell bootstrap", () => {
   });
 
   it("bootstraps authenticated shell state after confirmed transport recovery", async () => {
-    recordMaverickTransportFailure();
+    vi.useFakeTimers();
     api.getSession.mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/session"));
 
     await act(async () => {
@@ -174,10 +179,8 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
 
     await act(async () => {
-      recordMaverickTransportResponse();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      shellRetryCoordinator.confirmUsefulTransport();
+      await vi.advanceTimersByTimeAsync(250);
     });
 
     expect(api.getSession).toHaveBeenCalledTimes(2);
@@ -186,6 +189,7 @@ describe("AppShell bootstrap", () => {
   });
 
   it("keeps deferred workspace state loading and retries it after transport recovery", async () => {
+    vi.useFakeTimers();
     api.listWorkspaces
       .mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/workspaces"))
       .mockResolvedValueOnce({ items: [workspace("recovered")] });
@@ -201,11 +205,8 @@ describe("AppShell bootstrap", () => {
     expect(api.listWorkspaces).toHaveBeenCalledOnce();
 
     await act(async () => {
-      recordMaverickTransportFailure();
-      recordMaverickTransportResponse();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      shellRetryCoordinator.confirmUsefulTransport();
+      await vi.advanceTimersByTimeAsync(250);
     });
 
     expect(api.listWorkspaces).toHaveBeenCalledTimes(2);
@@ -214,6 +215,7 @@ describe("AppShell bootstrap", () => {
   });
 
   it("revalidates shell state when transport recovery signals are coalesced", async () => {
+    vi.useFakeTimers();
     api.getSession.mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/session"));
 
     await act(async () => {
@@ -226,11 +228,9 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
 
     await act(async () => {
-      recordMaverickTransportFailure();
-      recordMaverickTransportResponse();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      shellRetryCoordinator.confirmUsefulTransport();
+      shellRetryCoordinator.confirmUsefulTransport();
+      await vi.advanceTimersByTimeAsync(250);
     });
 
     expect(api.getSession).toHaveBeenCalledTimes(2);
@@ -252,7 +252,7 @@ describe("AppShell bootstrap", () => {
     expect(api.getSession).toHaveBeenCalledOnce();
   });
 
-  it("keeps the mounted shell while transport recovery revalidates its session", async () => {
+  it("keeps the mounted shell without rebootstrap on a generic transport confirmation", async () => {
     await act(async () => {
       root.render(<AppShell />);
       await Promise.resolve();
@@ -260,30 +260,17 @@ describe("AppShell bootstrap", () => {
     });
     expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
 
-    let resolveSession: ((value: SessionPayload) => void) | undefined;
-    api.getSession.mockReturnValueOnce(new Promise((resolve) => { resolveSession = resolve; }));
-
     await act(async () => {
-      recordMaverickTransportFailure();
-      recordMaverickTransportResponse();
+      shellRetryCoordinator.confirmUsefulTransport();
       await Promise.resolve();
     });
 
-    expect(api.getSession).toHaveBeenCalledTimes(2);
+    expect(api.getSession).toHaveBeenCalledOnce();
     expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
-
-    await act(async () => {
-      resolveSession?.({ authenticated: false });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
-    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
   });
 
-  it("ends mounted shell loading when session revalidation returns an authorization response", async () => {
+  it("ends mounted shell loading when explicit revalidation returns an authorization response", async () => {
     await act(async () => {
       root.render(<AppShell />);
       await Promise.resolve();
@@ -295,8 +282,7 @@ describe("AppShell bootstrap", () => {
       new MaverickHttpError("/api/session", new Response("unauthenticated", { status: 401 })),
     );
     await act(async () => {
-      recordMaverickTransportFailure();
-      recordMaverickTransportResponse();
+      container.querySelector<HTMLButtonElement>("[data-testid='revalidate-workspace']")?.click();
       await Promise.resolve();
       await Promise.resolve();
     });

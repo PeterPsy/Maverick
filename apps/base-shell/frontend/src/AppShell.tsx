@@ -5,14 +5,12 @@ import {
   configureActiveProvider,
   getProviderSetupSettings,
   getSession,
-  isRetryableReadError,
   listApps,
   listPinnedApps,
   listWorkspaces,
   logout,
   MaverickHttpError,
   ProviderSetupSettings,
-  retryAfterMs,
   savePinnedApps,
   SessionPayload,
   switchWorkspace,
@@ -38,7 +36,12 @@ import { applyShellThemeToDocument, createShellThemeState, readSystemColorScheme
 import type { ShellEffectiveTheme, ShellThemeMode } from "./theme";
 import { markStartupMetric, measureStartupMetric } from "./startupMetrics";
 import { getInitialMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
-import { resetTransportRecoveryScope, useTransportRecoverySignal } from "./transportRecovery";
+import {
+  runShellRead,
+  shellCacheLifecycle,
+  shellCachePrincipal,
+  shellRetryCoordinator,
+} from "./pwaCacheRuntime";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
@@ -52,8 +55,6 @@ import type { WidgetPrimaryActionState } from "./components/WidgetSlot";
 
 const MOBILE_SIDEBAR_TRANSITION_MS = 220;
 const MOBILE_CHAT_TRANSITION_MS = 240;
-const SHELL_RETRY_BASE_MS = 1_000;
-const SHELL_RETRY_CAP_MS = 30_000;
 
 export function AppShell() {
   const initialSession = useMemo(() => readShellSession(), []);
@@ -100,7 +101,6 @@ export function AppShell() {
   });
   const [mobilePrimaryActionRequestId, setMobilePrimaryActionRequestId] = useState(0);
   const isMobileLayout = useMobileLayout();
-  const transportRecovery = useTransportRecoverySignal();
   const isSidebarPinned = sidebarMode === "fixed" && !isMobileLayout;
   const isChatAppActive = activeAppId === CHAT_APP_ID;
   const isFloatingChatFixed = floatingChatMode === "fixed-right" && !isMobileLayout && !isChatAppActive;
@@ -113,10 +113,6 @@ export function AppShell() {
   const shellLoadVersionRef = useRef(0);
   const shellLoadAbortRef = useRef<AbortController | null>(null);
   const shellLoadInFlightRef = useRef(false);
-  const shellRetryAttemptRef = useRef(0);
-  const shellRetryTimerRef = useRef<number | null>(null);
-  const shellWaitingForRetryRef = useRef(false);
-  const handledRecoveryRevisionRef = useRef(transportRecovery.revision);
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;
   const hasSettingsShortcut = Boolean(settingsShortcutApp);
@@ -231,32 +227,19 @@ export function AppShell() {
     );
   }
 
-  function clearShellRetryTimer() {
-    if (shellRetryTimerRef.current !== null) {
-      window.clearTimeout(shellRetryTimerRef.current);
-      shellRetryTimerRef.current = null;
-    }
-  }
-
   function cancelShellLoading({ resetRecovery = false } = {}) {
-    clearShellRetryTimer();
     shellLoadAbortRef.current?.abort();
     shellLoadAbortRef.current = null;
     shellLoadInFlightRef.current = false;
-    shellRetryAttemptRef.current = 0;
-    shellWaitingForRetryRef.current = false;
     shellLoadVersionRef.current += 1;
     if (resetRecovery) {
-      resetTransportRecoveryScope();
+      shellRetryCoordinator.cancelAll("Base Shell scope reset.");
     }
   }
 
-  function clearShellAfterAuthorizationFailure(controller: AbortController) {
+  async function clearShellAfterAuthorizationFailure(controller: AbortController) {
     controller.abort();
-    clearShellRetryTimer();
-    shellRetryAttemptRef.current = 0;
-    shellWaitingForRetryRef.current = false;
-    resetTransportRecoveryScope();
+    await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
     setSession({ authenticated: false });
     setApps([]);
     setWorkspaces([]);
@@ -265,30 +248,11 @@ export function AppShell() {
     setIsWorkspacesLoading(false);
   }
 
-  function scheduleShellRetry(loadError: unknown) {
-    clearShellRetryTimer();
-    shellWaitingForRetryRef.current = true;
-    const attempt = shellRetryAttemptRef.current;
-    shellRetryAttemptRef.current += 1;
-    if (document.visibilityState === "hidden") {
-      return;
-    }
-    const exponential = Math.min(SHELL_RETRY_CAP_MS, SHELL_RETRY_BASE_MS * (2 ** Math.min(attempt, 5)));
-    const jittered = Math.round(exponential * (0.75 + Math.random() * 0.5));
-    const delay = Math.max(jittered, retryAfterMs(loadError) ?? 0);
-    shellRetryTimerRef.current = window.setTimeout(() => {
-      shellRetryTimerRef.current = null;
-      void loadShellState();
-    }, delay);
-  }
-
   async function loadShellState() {
     if (shellLoadInFlightRef.current) {
       return;
     }
-    clearShellRetryTimer();
     shellLoadAbortRef.current?.abort();
-    shellWaitingForRetryRef.current = false;
     const controller = new AbortController();
     shellLoadAbortRef.current = controller;
     shellLoadInFlightRef.current = true;
@@ -296,42 +260,47 @@ export function AppShell() {
     const loadVersion = shellLoadVersionRef.current + 1;
     shellLoadVersionRef.current = loadVersion;
     const loadStartedAt = performance.now();
-    let keepLoading = false;
     markStartupMetric("shell.bootstrap.start");
     setIsLoading(true);
     setIsWorkspacesLoading(true);
     try {
       const sessionStartedAt = performance.now();
-      const currentSession = await getSession(controller.signal);
+      const currentSession = await runShellRead(
+        "base-shell:session",
+        (signal) => getSession(signal),
+        controller.signal,
+      );
       measureStartupMetric("shell.bootstrap.session", sessionStartedAt, { authenticated: currentSession.authenticated });
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
       setSession(currentSession);
       if (!currentSession.authenticated) {
+        await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
         setApps([]);
         setWorkspaces([]);
         setSettings(null);
         setError(null);
         setIsWorkspacesLoading(false);
-        shellRetryAttemptRef.current = 0;
-        shellWaitingForRetryRef.current = false;
         measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: false });
         return;
       }
+      await shellCacheLifecycle.transition(shellCachePrincipal(currentSession));
       deferredLoads.push(
         loadWorkspaceState(loadVersion, controller.signal),
         loadProviderSetupState(loadVersion, controller.signal),
       );
       const blockingStartedAt = performance.now();
-      const registry = await listApps(controller.signal);
+      const registry = await runShellRead(
+        "base-shell:app-registry",
+        (signal) => listApps(signal),
+        controller.signal,
+      );
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
       setApps(registry.items);
       setError(null);
-      shellRetryAttemptRef.current = 0;
-      shellWaitingForRetryRef.current = false;
       measureStartupMetric("shell.bootstrap.blocking_payloads", blockingStartedAt, {
         app_count: registry.items.length,
       });
@@ -344,21 +313,10 @@ export function AppShell() {
       if (controller.signal.aborted) {
         return;
       }
-      if (isRetryableReadError(loadError)) {
-        keepLoading = true;
-        setError(null);
-        scheduleShellRetry(loadError);
-        measureStartupMetric("shell.bootstrap.waiting", loadStartedAt, {
-          attempt: shellRetryAttemptRef.current,
-        });
-        return;
-      }
       if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
-        clearShellAfterAuthorizationFailure(controller);
+        await clearShellAfterAuthorizationFailure(controller);
         return;
       }
-      shellRetryAttemptRef.current = 0;
-      shellWaitingForRetryRef.current = false;
       setError(loadError instanceof Error ? loadError.message : "Errore sconosciuto.");
       measureStartupMetric("shell.bootstrap.error", loadStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
@@ -377,7 +335,7 @@ export function AppShell() {
       } else {
         releaseController();
       }
-      if (shellLoadVersionRef.current === loadVersion && !keepLoading) {
+      if (shellLoadVersionRef.current === loadVersion) {
         setIsLoading(false);
       }
     }
@@ -385,9 +343,10 @@ export function AppShell() {
 
   async function loadWorkspaceState(loadVersion: number, signal?: AbortSignal) {
     const deferredStartedAt = performance.now();
-    let keepLoading = false;
     try {
-      const workspacePayload = await listWorkspaces(signal);
+      const workspacePayload = signal
+        ? await runShellRead("base-shell:workspaces", (retrySignal) => listWorkspaces(retrySignal), signal)
+        : await listWorkspaces();
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
@@ -400,16 +359,12 @@ export function AppShell() {
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
-      if (isRetryableReadError(loadError)) {
-        keepLoading = true;
-        scheduleShellRetry(loadError);
-      }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
         resource: "workspaces",
       });
     } finally {
-      if (shellLoadVersionRef.current === loadVersion && !keepLoading) {
+      if (shellLoadVersionRef.current === loadVersion) {
         setIsWorkspacesLoading(false);
       }
     }
@@ -418,7 +373,9 @@ export function AppShell() {
   async function loadProviderSetupState(loadVersion: number, signal?: AbortSignal) {
     const deferredStartedAt = performance.now();
     try {
-      const providerSetupSettings = await getProviderSetupSettings(signal);
+      const providerSetupSettings = signal
+        ? await runShellRead("base-shell:provider-setup", (retrySignal) => getProviderSetupSettings(retrySignal), signal)
+        : await getProviderSetupSettings();
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
@@ -429,9 +386,6 @@ export function AppShell() {
     } catch (loadError) {
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
-      }
-      if (isRetryableReadError(loadError)) {
-        scheduleShellRetry(loadError);
       }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
@@ -444,7 +398,9 @@ export function AppShell() {
     const deferredStartedAt = performance.now();
     const pinnedStateVersion = pinnedAppsSaveVersionRef.current;
     try {
-      const pinnedApps = await listPinnedApps(signal);
+      const pinnedApps = signal
+        ? await runShellRead("base-shell:pinned-apps", (retrySignal) => listPinnedApps(retrySignal), signal)
+        : await listPinnedApps();
       if (
         signal?.aborted
         || shellLoadVersionRef.current !== loadVersion
@@ -461,9 +417,6 @@ export function AppShell() {
       if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
-      if (isRetryableReadError(loadError)) {
-        scheduleShellRetry(loadError);
-      }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
         resource: "pinned_apps",
@@ -475,18 +428,6 @@ export function AppShell() {
     void loadShellState();
     return () => cancelShellLoading({ resetRecovery: true });
   }, []);
-
-  useEffect(() => {
-    if (transportRecovery.revision <= handledRecoveryRevisionRef.current) {
-      return;
-    }
-    handledRecoveryRevisionRef.current = transportRecovery.revision;
-    if (!shellWaitingForRetryRef.current && transportRecovery.kind !== "confirmed") {
-      return;
-    }
-    clearShellRetryTimer();
-    void loadShellState();
-  }, [transportRecovery.revision]);
 
   useEffect(() => {
     applyShellThemeToDocument(shellTheme);
@@ -543,11 +484,19 @@ export function AppShell() {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
         return;
       }
-      const payload = event.data as { owner_app_id?: string; resource?: string; type?: string };
-      if (payload.type !== "maverick.app.data-changed" || payload.owner_app_id !== "app-store") {
+      const payload = event.data as { entity_id?: string; owner_app_id?: string; resource?: string; type?: string };
+      if (payload.type !== "maverick.app.data-changed") {
         return;
       }
-      if (payload.resource && payload.resource !== "pinned-apps" && payload.resource !== "state") {
+      if (payload.owner_app_id && payload.resource) {
+        void shellCacheLifecycle.handleDataChanged({
+          ...(payload.entity_id ? { entityId: payload.entity_id } : {}),
+          ownerAppId: payload.owner_app_id,
+          resource: payload.resource,
+        });
+      }
+      if (payload.owner_app_id !== "app-store"
+          || (payload.resource && payload.resource !== "pinned-apps" && payload.resource !== "state")) {
         return;
       }
       listPinnedApps()
@@ -725,8 +674,12 @@ export function AppShell() {
   }
 
   async function handleLogout() {
-    await logout();
-    cancelShellLoading({ resetRecovery: true });
+    try {
+      await logout();
+    } finally {
+      cancelShellLoading({ resetRecovery: true });
+      await shellCacheLifecycle.endSession().catch(() => undefined);
+    }
     await loadShellState();
   }
 
@@ -816,7 +769,11 @@ export function AppShell() {
   if (!session?.authenticated) {
     return <LoginScreen onAuthenticated={(authenticatedSession) => {
       setSession(authenticatedSession);
-      resetTransportRecoveryScope();
+      shellRetryCoordinator.setScope(JSON.stringify([
+        authenticatedSession.user.user_id,
+        authenticatedSession.workspace_id,
+        "base-shell",
+      ]));
       void loadShellState();
     }} />;
   }

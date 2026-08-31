@@ -14,6 +14,7 @@
     "test:service-worker": "node --test tests/service-worker-v2.test.mjs tests/frontend-precache-build.test.mjs"
   },
   "dependencies": {
+    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
     "@paper-design/shaders-react": "^0.0.76",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"

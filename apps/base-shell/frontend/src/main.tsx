@@ -1,13 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AppShell } from "./AppShell";
-import { startTransportRecoveryMonitoring } from "./transportRecovery";
 import { registerShellServiceWorker } from "./pwa";
+import { initializeShellPwaCacheRuntime } from "./pwaCacheRuntime";
 import { applyInitialShellTheme } from "./theme";
 import "./styles/main.css";
 
 applyInitialShellTheme();
-startTransportRecoveryMonitoring();
+initializeShellPwaCacheRuntime();
 registerShellServiceWorker();
 
 createRoot(document.getElementById("root") as HTMLElement).render(

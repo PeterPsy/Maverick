@@ -8,26 +8,29 @@ import {
 
 export const PRIVATE_ACCESS_LEASE_MAX_MS = 15 * 60 * 1_000;
 
-const CONTROL_PLANE_TERMS = [
-  "admission",
-  "authority",
-  "capability",
-  "capabilities",
-  "certificate",
-  "certificates",
-  "confirmation",
-  "egress",
-  "pending-tool-call",
-  "preflight",
-  "provider-binding",
-  "provider-profile",
-  "provider-state",
-  "proposal",
-  "recovery-required",
-  "revocation",
-  "revocations",
-  "secret-grant",
-];
+const AGENTIC_CONTROL_PLANE_APP_IDS = new Set([
+  "agents",
+  "core-control-plane",
+  "models",
+  "providers",
+]);
+
+const AGENTIC_CONTROL_PLANE_PROVENANCE = new Set([
+  "platform_instruction",
+  "runtime_context",
+  "runtime_capabilities",
+  "workspace_instruction",
+  "agent_instruction",
+  "skill_fragment",
+  "finalization_instruction",
+  "prompt",
+  "orchestration_context",
+  "governed_context",
+  "skill",
+  "tool_schema",
+  "tool_result",
+  "provider_state",
+]);
 
 const KNOWN_PROVENANCE = new Set([
   "platform_instruction",
@@ -54,7 +57,8 @@ export function deriveLocalPersistencePolicy<T>(
   resource: string,
   policy: ResourceCachePolicy<T>,
 ): LocalPersistencePolicy {
-  if (policy.policyRevision !== LOCAL_PERSISTENCE_POLICY_REVISION || isAgenticControlPlaneResource(appId, resource)) {
+  if (policy.policyRevision !== LOCAL_PERSISTENCE_POLICY_REVISION
+      || isAgenticControlPlaneResource(appId, resource, policy.provenance)) {
     return "deny";
   }
   if (!KNOWN_PROVENANCE.has(policy.provenance) || !validPolicyBounds(policy)) {
@@ -78,18 +82,14 @@ export function deriveLocalPersistencePolicy<T>(
   }
 }
 
-export function isAgenticControlPlaneResource(appId: string, resource: string): boolean {
+export function isAgenticControlPlaneResource(
+  appId: string,
+  _resource: string,
+  provenance?: ResourceCachePolicy<unknown>["provenance"],
+): boolean {
   const normalizedApp = normalizePolicyName(appId);
-  if (normalizedApp === "core-control-plane") {
-    return true;
-  }
-  const normalizedResource = normalizePolicyName(resource);
-  return CONTROL_PLANE_TERMS.some((term) =>
-    normalizedResource === term
-    || normalizedResource.startsWith(`${term}-`)
-    || normalizedResource.endsWith(`-${term}`)
-    || normalizedResource.includes(`-${term}-`),
-  );
+  return AGENTIC_CONTROL_PLANE_APP_IDS.has(normalizedApp)
+    || (typeof provenance === "string" && AGENTIC_CONTROL_PLANE_PROVENANCE.has(provenance));
 }
 
 export function hasValidAccessLease(
@@ -117,15 +117,17 @@ export function clampPrivateAccessLease(sessionExpiresAt: number, now = Date.now
 }
 
 function validPolicyBounds<T>(policy: ResourceCachePolicy<T>): boolean {
-  return Number.isFinite(policy.freshTtlMs)
+  return Number.isSafeInteger(policy.freshTtlMs)
     && policy.freshTtlMs >= 0
-    && Number.isFinite(policy.expiryTtlMs)
+    && Number.isSafeInteger(policy.expiryTtlMs)
     && policy.expiryTtlMs > 0
     && policy.expiryTtlMs >= policy.freshTtlMs
-    && Number.isFinite(policy.maxEntryBytes)
+    && Number.isSafeInteger(policy.maxEntryBytes)
     && policy.maxEntryBytes > 0
-    && Number.isFinite(policy.maxScopeBytes)
+    && Number.isSafeInteger(policy.maxScopeBytes)
     && policy.maxScopeBytes >= policy.maxEntryBytes
+    && typeof policy.schemaRevision === "string"
+    && policy.schemaRevision.trim().length > 0
     && typeof policy.sanitize === "function";
 }
 

@@ -19,6 +19,7 @@ function policy(dataClass: MaverickDataClass, overrides: Partial<ResourceCachePo
     maxScopeBytes: 8_192,
     policyRevision: LOCAL_PERSISTENCE_POLICY_REVISION,
     provenance: "app_reference",
+    schemaRevision: "records.v1",
     sanitize: (value) => value,
     ...overrides,
   };
@@ -33,6 +34,7 @@ describe("PWA cache scope and policy", () => {
       appId: "docs",
       resource: "",
       policyRevision: LOCAL_PERSISTENCE_POLICY_REVISION,
+      schemaRevision: "records.v1",
     }, "one")).toThrow(/resource/);
   });
 
@@ -43,6 +45,7 @@ describe("PWA cache scope and policy", () => {
       appId: "docs",
       resource: "records",
       policyRevision: LOCAL_PERSISTENCE_POLICY_REVISION,
+      schemaRevision: "records.v1",
     };
     const keys = new Set([
       cacheEntryKey(base, "one"),
@@ -50,9 +53,10 @@ describe("PWA cache scope and policy", () => {
       cacheEntryKey({ ...base, workspaceId: "other" }, "one"),
       cacheEntryKey({ ...base, appId: "mail" }, "one"),
       cacheEntryKey({ ...base, resource: "other" }, "one"),
-      cacheEntryKey(base, "one", 3),
+      cacheEntryKey({ ...base, schemaRevision: "records.v2" }, "one"),
+      cacheEntryKey(base, "one", 4),
     ]);
-    expect(keys.size).toBe(6);
+    expect(keys.size).toBe(7);
   });
 
   it("derives only deny, session, or cache from the canonical mapping", () => {
@@ -91,6 +95,17 @@ describe("PWA cache scope and policy", () => {
     expect(deriveLocalPersistencePolicy("core-control-plane", "anything", policy("public"))).toBe("deny");
   });
 
+  it("uses canonical app and provenance decisions instead of resource-name heuristics", () => {
+    for (const resource of ["models", "configuration", "tool-results", "provider-catalog"]) {
+      expect(isAgenticControlPlaneResource("agents", resource, "app_reference")).toBe(true);
+      expect(deriveLocalPersistencePolicy("agents", resource, policy("public", { cacheApproved: true }))).toBe("deny");
+    }
+    expect(isAgenticControlPlaneResource("docs", "harmless-name", "tool_result")).toBe(true);
+    expect(deriveLocalPersistencePolicy("docs", "harmless-name", policy("public", {
+      provenance: "tool_result",
+    }))).toBe("deny");
+  });
+
   it("bounds private access leases to fifteen minutes", () => {
     const now = 10_000;
     expect(clampPrivateAccessLease(now + 60 * 60_000, now)).toEqual({ issuedAt: now, expiresAt: now + 15 * 60_000 });
@@ -112,6 +127,8 @@ describe("persistent payload guard", () => {
 
   it("rejects secrets, signed URLs, object URLs, and non-plain objects", () => {
     expect(() => validatedPayloadSize({ access_token: "secret" })).toThrow(/credential-like/);
+    expect(() => validatedPayloadSize({ github_token: "secret" })).toThrow(/credential-like/);
+    expect(() => validatedPayloadSize({ href: "https://example.test/callback?access_token=secret" })).toThrow(/signed URL|credential/i);
     expect(() => validatedPayloadSize({ href: "https://files.test/a?X-Amz-Signature=secret" })).toThrow(/signed URL/);
     expect(() => validatedPayloadSize({ href: "blob:https://maverick.test/id" })).toThrow(/object or signed URL/);
     expect(() => validatedPayloadSize({ when: new Date() })).toThrow(/plain objects/);

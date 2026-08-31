@@ -1,8 +1,9 @@
 export {
   DEFAULT_PWA_CACHE_APP_BUDGET_BYTES,
   DEFAULT_PWA_CACHE_GLOBAL_BUDGET_BYTES,
+  PwaCacheHost,
   PwaCacheClient,
-  createPwaCacheClient,
+  createPwaCacheHost,
 } from "./client";
 export { clearPwaDataCache, readPwaCacheDiagnostics } from "./diagnostics";
 export {
@@ -19,11 +20,13 @@ export {
   isAgenticControlPlaneResource,
 } from "./policy";
 export { BrowserStorageQuotaAdapter } from "./quota";
+export { DurableCacheCleanupError } from "./resilientBackend";
 export {
   RetryCancelledError,
   RetryCoordinator,
   classifyRetryError,
   createIdempotencyKey,
+  createRequestFingerprint,
   idempotencyHeaders,
   type MutationRetryContract,
   type RetryClassification,
@@ -38,6 +41,7 @@ export {
   type AccessLease,
   type BackendMode,
   type CacheBackend,
+  type CacheCleanupResult,
   type CacheDiagnostics,
   type CacheEntryMetadata,
   type CacheFilter,

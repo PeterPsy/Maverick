@@ -21,21 +21,44 @@ export async function initializeResourceBackends(options: {
     appId: scope.appId,
     resource: scope.resource,
   };
-  await clearResourceBackend(
-    persistentBackend,
-    persistencePolicy === "cache"
-      ? { ...resourceFilter, excludePolicyRevision: scope.policyRevision }
-      : resourceFilter,
-    telemetry,
-    true,
-  );
-  await clearResourceBackend(
-    memoryBackend,
-    persistencePolicy === "deny"
-      ? resourceFilter
-      : { ...resourceFilter, excludePolicyRevision: scope.policyRevision },
-    telemetry,
-  );
+  if (persistencePolicy === "cache") {
+    await clearResourceBackend(
+      persistentBackend,
+      { ...resourceFilter, excludePolicyRevision: scope.policyRevision },
+      telemetry,
+      true,
+    );
+    await clearResourceBackend(
+      persistentBackend,
+      {
+        ...resourceFilter,
+        policyRevision: scope.policyRevision,
+        excludeSchemaRevision: scope.schemaRevision,
+      },
+      telemetry,
+      true,
+    );
+  } else {
+    await clearResourceBackend(persistentBackend, resourceFilter, telemetry, true);
+  }
+  if (persistencePolicy === "deny") {
+    await clearResourceBackend(memoryBackend, resourceFilter, telemetry);
+  } else {
+    await clearResourceBackend(
+      memoryBackend,
+      { ...resourceFilter, excludePolicyRevision: scope.policyRevision },
+      telemetry,
+    );
+    await clearResourceBackend(
+      memoryBackend,
+      {
+        ...resourceFilter,
+        policyRevision: scope.policyRevision,
+        excludeSchemaRevision: scope.schemaRevision,
+      },
+      telemetry,
+    );
+  }
 }
 
 export async function clearResourceBackend(
@@ -48,6 +71,9 @@ export async function clearResourceBackend(
     return await backend.clear(filter, durable ? { durable: true } : undefined);
   } catch (error) {
     telemetry({ kind: "error", reason: error instanceof Error ? error.name : "unknown" });
+    if (durable) {
+      throw error;
+    }
     return 0;
   }
 }

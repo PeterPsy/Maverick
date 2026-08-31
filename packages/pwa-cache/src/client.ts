@@ -7,6 +7,8 @@ import { validatePrincipal } from "./scope";
 import type {
   AccessLease,
   CacheBackend,
+  CacheCleanupResult,
+  CachePrincipal,
   PwaCacheClientOptions,
   ResourceCachePolicy,
 } from "./types";
@@ -15,6 +17,18 @@ export const DEFAULT_PWA_CACHE_GLOBAL_BUDGET_BYTES = 64 * 1024 * 1024;
 export const DEFAULT_PWA_CACHE_APP_BUDGET_BYTES = 32 * 1024 * 1024;
 
 type InvalidatableResource = { invalidate(entityId?: string): Promise<number> };
+const TRUSTED_CACHE_HOSTS = new WeakMap<PwaCacheHost, CachePrincipal>();
+
+export class PwaCacheHost {
+  constructor(principal: CachePrincipal) {
+    assertTopLevelHostContext();
+    TRUSTED_CACHE_HOSTS.set(this, validatePrincipal(principal));
+  }
+
+  createClient(options: PwaCacheClientOptions = {}, bus = new CacheBus()): PwaCacheClient {
+    return new PwaCacheClient(options, this, bus);
+  }
+}
 
 export class PwaCacheClient {
   readonly appId: string;
@@ -32,8 +46,11 @@ export class PwaCacheClient {
   private readonly resources = new Map<string, InvalidatableResource>();
   private readonly unsubscribeBus: () => void;
 
-  constructor(options: PwaCacheClientOptions, bus = new CacheBus()) {
-    const principal = validatePrincipal(options);
+  constructor(options: PwaCacheClientOptions, host: PwaCacheHost, bus = new CacheBus()) {
+    const principal = TRUSTED_CACHE_HOSTS.get(host);
+    if (!principal) {
+      throw new TypeError("PWA cache clients require a host-attested scope.");
+    }
     this.userId = principal.userId;
     this.workspaceId = principal.workspaceId;
     this.appId = principal.appId;
@@ -76,6 +93,7 @@ export class PwaCacheClient {
         appId: this.appId,
         resource,
         policyRevision: policy.policyRevision,
+        schemaRevision: policy.schemaRevision,
       },
       telemetry: this.options.telemetry ?? (() => undefined),
     });
@@ -104,14 +122,23 @@ export class PwaCacheClient {
     return () => target.removeEventListener("message", listener);
   }
 
-  async clear(): Promise<number> {
+  async clear(): Promise<CacheCleanupResult> {
     const filter = { userId: this.userId, workspaceId: this.workspaceId, appId: this.appId };
-    const [persistent, session] = await Promise.all([
-      this.backend.clear(filter, { durable: true }).catch(() => 0),
-      this.memoryBackend.clear(filter),
-    ]);
+    const session = await this.memoryBackend.clear(filter);
+    let persistent = 0;
+    let status: CacheCleanupResult["status"] = "complete";
+    try {
+      persistent = await this.backend.clear(filter, { durable: true });
+    } catch {
+      status = "pending";
+    }
     this.bus.publish({ appId: this.appId, type: "scope-cleared", userId: this.userId, workspaceId: this.workspaceId });
-    return persistent + session;
+    const pendingCleanupCount = await this.backend.pendingCleanupCount().catch(() => status === "pending" ? 1 : 0);
+    return {
+      pendingCleanupCount: Math.max(status === "pending" ? 1 : 0, pendingCleanupCount),
+      removed: persistent + session,
+      status: status === "pending" || pendingCleanupCount > 0 ? "pending" : "complete",
+    };
   }
 
   dispose(): void {
@@ -155,10 +182,22 @@ export class PwaCacheClient {
   }
 }
 
-export function createPwaCacheClient(options: PwaCacheClientOptions): PwaCacheClient {
-  return new PwaCacheClient(options);
+export function createPwaCacheHost(principal: CachePrincipal): PwaCacheHost {
+  return new PwaCacheHost(principal);
 }
 
 function positiveBudget(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function assertTopLevelHostContext(): void {
+  if (typeof window !== "undefined") {
+    if (window.top !== window) {
+      throw new Error("The PWA data cache is parent-mediated and cannot be hosted by an embedded app frame.");
+    }
+    return;
+  }
+  if (typeof globalThis.indexedDB !== "undefined") {
+    throw new Error("The PWA data cache host is unavailable in browser worker contexts.");
+  }
 }

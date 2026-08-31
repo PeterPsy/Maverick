@@ -8,13 +8,19 @@ import type {
 } from "./types";
 
 export class MemoryCacheBackend implements CacheBackend {
+  private static nextId = 0;
   private readonly entries = new Map<string, StoredCacheEntry>();
   private readonly cleanupMarkers = new Map<string, CleanupMarker>();
+  private readonly instanceId = ++MemoryCacheBackend.nextId;
 
   async initialize(): Promise<void> {}
 
   mode(): "memory" {
     return "memory";
+  }
+
+  durabilityKey(): string {
+    return `memory:${this.instanceId}`;
   }
 
   async get<T>(key: string): Promise<StoredCacheEntry<T> | null> {

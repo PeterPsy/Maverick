@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   LOCAL_PERSISTENCE_POLICY_REVISION,
   PwaCacheClient,
+  createPwaCacheHost,
   type ResourceCachePolicy,
   type StorageQuotaAdapter,
 } from "../src";
-import { CacheBus, MemoryCacheBackend } from "../src/testing";
+import { CacheBus, MemoryCacheBackend, ResilientCacheBackend, validatedPayloadSize } from "../src/testing";
 
 const quota: StorageQuotaAdapter = {
   canWrite: async () => true,
@@ -23,6 +24,7 @@ function publicPolicy(overrides: Partial<ResourceCachePolicy<{ value: string }>>
     policyRevision: LOCAL_PERSISTENCE_POLICY_REVISION,
     provenance: "app_reference",
     revalidateOnRead: "stale",
+    schemaRevision: "records.v1",
     sanitize: (payload) => {
       const value = (payload as { value?: unknown })?.value;
       return typeof value === "string" ? { value } : null;
@@ -39,18 +41,85 @@ function client(options: {
   userId?: string;
   workspaceId?: string;
 } = {}): PwaCacheClient {
-  return new PwaCacheClient({
+  return createPwaCacheHost({
     appId: options.appId ?? "docs",
+    userId: options.userId ?? "user-a",
+    workspaceId: options.workspaceId ?? "default",
+  }).createClient({
     backend: options.backend ?? new MemoryCacheBackend(),
     enabled: options.enabled ?? true,
     now: options.now,
     quotaAdapter: quota,
-    userId: options.userId ?? "user-a",
-    workspaceId: options.workspaceId ?? "default",
   }, new CacheBus(null));
 }
 
 describe("PWA cache resource", () => {
+  it("rejects clients whose scope was not attested by the top-level host", () => {
+    expect(() => new PwaCacheClient({
+      backend: new MemoryCacheBackend(),
+      enabled: true,
+      quotaAdapter: quota,
+    } as never, {} as never, new CacheBus(null))).toThrow(/host-attested/i);
+  });
+
+  it("binds user, workspace, and app identity to the host capability", () => {
+    const scoped = createPwaCacheHost({
+      appId: "victim-app",
+      userId: "victim-user",
+      workspaceId: "victim-workspace",
+    }).createClient({
+      appId: "attacker-app",
+      userId: "attacker-user",
+      workspaceId: "attacker-workspace",
+    } as never, new CacheBus(null));
+
+    expect(scoped).toMatchObject({
+      appId: "victim-app",
+      userId: "victim-user",
+      workspaceId: "victim-workspace",
+    });
+  });
+
+  it("does not let an embedded app frame mint its own cache host", () => {
+    vi.stubGlobal("window", { top: {} });
+    try {
+      expect(() => createPwaCacheHost({
+        appId: "docs",
+        userId: "user-a",
+        workspaceId: "default",
+      })).toThrow(/parent-mediated/i);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports client cleanup as pending instead of claiming fallback success", async () => {
+    class FailingClearBackend extends MemoryCacheBackend {
+      failClear = true;
+
+      override async clear(...args: Parameters<MemoryCacheBackend["clear"]>): Promise<number> {
+        if (this.failClear && args[1]?.durable) {
+          throw new Error("injected durable cleanup failure");
+        }
+        return super.clear(...args);
+      }
+    }
+
+    const primary = new FailingClearBackend();
+    const scoped = createPwaCacheHost({
+      appId: "docs",
+      userId: "user-a",
+      workspaceId: "default",
+    }).createClient({ backend: new ResilientCacheBackend(primary), enabled: true }, new CacheBus(null));
+
+    await expect(scoped.clear()).resolves.toMatchObject({
+      pendingCleanupCount: expect.any(Number),
+      status: "pending",
+    });
+    primary.failClear = false;
+    await expect(scoped.clear()).resolves.toMatchObject({ pendingCleanupCount: 0, status: "complete" });
+  });
+
   it("isolates identical entity ids across user, workspace, and app scopes", async () => {
     const backend = new MemoryCacheBackend();
     const variants = [
@@ -103,6 +172,65 @@ describe("PWA cache resource", () => {
     expect((await resource.get("one"))?.payload.value).toBe("new");
   });
 
+  it("does not expose stale data through get when the resource forbids stale rendering", async () => {
+    let now = 1_000;
+    const resource = client({ now: () => now }).resource("records", publicPolicy({ allowStale: false }));
+    await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "old" }, revision: "r1" }));
+    now = 2_500;
+
+    expect(await resource.get("one")).toBeNull();
+  });
+
+  it("revalidates cached payload shape and byte accounting before returning it", async () => {
+    const backend = new MemoryCacheBackend();
+    const resource = client({ backend, now: () => 1_000 }).resource("records", publicPolicy());
+    await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "safe" }, revision: "r1" }));
+    const [metadata] = await backend.list();
+    await backend.put({
+      metadata: { ...metadata, sizeBytes: validatedPayloadSize({ unexpected: "<script>poison</script>" }) },
+      payload: { unexpected: "<script>poison</script>" },
+    });
+
+    expect(await resource.get("one")).toBeNull();
+    expect(await backend.list()).toEqual([]);
+  });
+
+  it("rejects a payload-size mismatch before rendering", async () => {
+    const backend = new MemoryCacheBackend();
+    const resource = client({ backend, now: () => 1_000 }).resource("records", publicPolicy());
+    await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "safe" }, revision: "r1" }));
+    const [metadata] = await backend.list();
+    await backend.put({
+      metadata: { ...metadata, sizeBytes: metadata.sizeBytes + 1 },
+      payload: { value: "safe" },
+    });
+
+    expect(await resource.get("one")).toBeNull();
+  });
+
+  it("rejects timestamps that exceed the resource TTL contract before rendering", async () => {
+    const backend = new MemoryCacheBackend();
+    const resource = client({ backend, now: () => 1_000 }).resource("records", publicPolicy());
+    await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "safe" }, revision: "r1" }));
+    const [metadata] = await backend.list();
+    await backend.put({
+      metadata: { ...metadata, expiresAt: 1_000_000, staleAt: 999_000 },
+      payload: { value: "safe" },
+    });
+
+    expect(await resource.get("one")).toBeNull();
+  });
+
+  it("invalidates entries from an older app-owned resource schema revision", async () => {
+    const backend = new MemoryCacheBackend();
+    const first = client({ backend }).resource("records", publicPolicy({ schemaRevision: "records.v1" }));
+    await first.readThrough("one", async () => ({ kind: "value", payload: { value: "old-shape" }, revision: "r1" }));
+
+    const upgraded = client({ backend }).resource("records", publicPolicy({ schemaRevision: "records.v2" }));
+    expect(await upgraded.get("one")).toBeNull();
+    expect(await backend.list()).toEqual([]);
+  });
+
   it("treats expired data as a miss in every transport condition", async () => {
     let now = 1_000;
     const resource = client({ now: () => now }).resource("records", publicPolicy({ expiryTtlMs: 2_000 }));
@@ -145,13 +273,14 @@ describe("PWA cache resource", () => {
       canWrite: async () => { throw new Error("quota failed"); },
       estimate: quota.estimate,
     };
-    const resource = new PwaCacheClient({
+    const resource = createPwaCacheHost({
       appId: "docs",
+      userId: "user-a",
+      workspaceId: "default",
+    }).createClient({
       backend: new MemoryCacheBackend(),
       enabled: true,
       quotaAdapter: deniedQuota,
-      userId: "user-a",
-      workspaceId: "default",
     }, new CacheBus(null)).resource("records", publicPolicy());
 
     const result = await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "network" }, revision: "r1" }));
@@ -181,15 +310,16 @@ describe("PWA cache resource", () => {
 
   it("durably removes prior persistent entries when a resource becomes session-only", async () => {
     const backend = new MemoryCacheBackend();
-    const cachedClient = new PwaCacheClient({
-      accessLease: { issuedAt: 1_000, expiresAt: 5_000 },
+    const cachedClient = createPwaCacheHost({
       appId: "docs",
+      userId: "user-a",
+      workspaceId: "default",
+    }).createClient({
+      accessLease: { issuedAt: 1_000, expiresAt: 5_000 },
       backend,
       enabled: true,
       now: () => 1_000,
       quotaAdapter: quota,
-      userId: "user-a",
-      workspaceId: "default",
     }, new CacheBus(null));
     await cachedClient.resource("records", publicPolicy({
       cacheApproved: true,
@@ -218,15 +348,16 @@ describe("PWA cache resource", () => {
   it("invalidates persistent private data even after its access lease expires", async () => {
     let now = 1_000;
     const backend = new MemoryCacheBackend();
-    const cachedClient = new PwaCacheClient({
-      accessLease: { issuedAt: now, expiresAt: 2_000 },
+    const cachedClient = createPwaCacheHost({
       appId: "docs",
+      userId: "user-a",
+      workspaceId: "default",
+    }).createClient({
+      accessLease: { issuedAt: now, expiresAt: 2_000 },
       backend,
       enabled: true,
       now: () => now,
       quotaAdapter: quota,
-      userId: "user-a",
-      workspaceId: "default",
     }, new CacheBus(null));
     const resource = cachedClient.resource("records", publicPolicy({
       cacheApproved: true,

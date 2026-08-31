@@ -1,5 +1,5 @@
 import { createCacheLifecycleController } from "./lifecycle";
-import type { CacheDiagnostics } from "./types";
+import type { CacheCleanupResult, CacheDiagnostics } from "./types";
 
 export async function readPwaCacheDiagnostics(): Promise<CacheDiagnostics> {
   const controller = createCacheLifecycleController();
@@ -10,7 +10,7 @@ export async function readPwaCacheDiagnostics(): Promise<CacheDiagnostics> {
   }
 }
 
-export async function clearPwaDataCache(): Promise<number> {
+export async function clearPwaDataCache(): Promise<CacheCleanupResult> {
   const controller = createCacheLifecycleController();
   try {
     return await controller.clearAll();

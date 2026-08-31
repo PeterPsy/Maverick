@@ -21,6 +21,7 @@ export {
   RetryCancelledError,
   classifyRetryError,
   createIdempotencyKey,
+  createRequestFingerprint,
   idempotencyHeaders,
 } from "./retryPolicy";
 export type {
@@ -168,13 +169,17 @@ export class RetryCoordinator {
       }
       try {
         const result = await options.operation({ attempt, signal: flight.controller.signal });
+        throwIfAborted(flight.controller.signal);
         this.telemetry({ attempt, keyHash, kind: "resolved" });
         return result;
       } catch (error) {
+        const classification = (options.classify ?? classifyRetryError)(error);
+        if (classification.disposition === "terminal") {
+          throw error;
+        }
         if (flight.controller.signal.aborted) {
           throw cancellationFromSignal(flight.controller.signal);
         }
-        const classification = (options.classify ?? classifyRetryError)(error);
         if (classification.disposition === "cancelled") {
           throw new RetryCancelledError();
         }

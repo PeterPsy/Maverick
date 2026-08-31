@@ -6,8 +6,10 @@ import { PRIVATE_ACCESS_LEASE_MAX_MS } from "./policy";
 import type {
   AccessLease,
   CacheBackend,
+  CacheCleanupResult,
   CacheDiagnostics,
   CacheEntryMetadata,
+  CacheFilter,
   CachePrincipal,
   StorageQuotaAdapter,
 } from "./types";
@@ -45,49 +47,50 @@ export class CacheLifecycleController {
     await this.backend.initialize();
   }
 
-  async transition(next: CacheLifecyclePrincipal): Promise<void> {
+  async transition(next: CacheLifecyclePrincipal): Promise<CacheCleanupResult> {
     const principal = { ...validatePrincipal(next), accessLease: normalizeLease(next.accessLease, this.now()) };
     const previous = this.current;
+    let cleanup = completeCleanup();
     if (previous && !samePrincipal(previous, principal)) {
-      await this.clearPrevious(previous, principal);
+      cleanup = await this.clearPrevious(previous, principal);
     }
     this.current = principal;
     this.retryCoordinator?.setScope(scopeKey(principal));
     if (principal.accessLease) {
       await this.renewAccessLease(principal).catch(() => undefined);
     }
+    return cleanup;
   }
 
-  async endSession(): Promise<void> {
+  async endSession(): Promise<CacheCleanupResult> {
     const previous = this.current;
     this.current = null;
     this.retryCoordinator?.setScope("anonymous");
     if (!previous) {
-      await this.clearAll().catch(() => 0);
-      return;
+      return this.clearAll();
     }
-    await this.clearFilter({ userId: previous.userId });
+    return this.clearFilter({ userId: previous.userId });
   }
 
-  async authorizationFailure(principal = this.current): Promise<void> {
+  async authorizationFailure(principal = this.current): Promise<CacheCleanupResult> {
     this.retryCoordinator?.setScope("anonymous");
     if (!principal) {
-      await this.clearAll().catch(() => 0);
-      return;
+      return this.clearAll();
     }
-    await this.clearFilter({ userId: principal.userId, workspaceId: principal.workspaceId });
+    const cleanup = await this.clearFilter({ userId: principal.userId, workspaceId: principal.workspaceId });
     if (this.current && samePrincipal(this.current, principal)) {
       this.current = null;
     }
+    return cleanup;
   }
 
   async handleDataChanged(payload: {
     entityId?: string;
     ownerAppId: string;
     resource: string;
-  }): Promise<number> {
+  }): Promise<CacheCleanupResult> {
     if (!this.current) {
-      return 0;
+      return completeCleanup();
     }
     const filter = {
       userId: this.current.userId,
@@ -96,7 +99,7 @@ export class CacheLifecycleController {
       resource: payload.resource,
       ...(payload.entityId ? { entityId: payload.entityId } : {}),
     };
-    const removed = await this.backend.clear(filter, { durable: true }).catch(() => 0);
+    const cleanup = await this.clearWithStatus(filter);
     this.bus.publish({
       appId: payload.ownerAppId,
       ...(payload.entityId ? { entityId: payload.entityId } : {}),
@@ -105,13 +108,13 @@ export class CacheLifecycleController {
       userId: this.current.userId,
       workspaceId: this.current.workspaceId,
     });
-    return removed;
+    return cleanup;
   }
 
-  async clearAll(): Promise<number> {
-    const removed = await this.backend.clear({}, { durable: true });
+  async clearAll(): Promise<CacheCleanupResult> {
+    const cleanup = await this.clearWithStatus({});
     this.bus.publish({ type: "all-cleared" });
-    return removed;
+    return cleanup;
   }
 
   dispose(): void {
@@ -135,16 +138,36 @@ export class CacheLifecycleController {
     };
   }
 
-  private async clearPrevious(previous: CacheLifecyclePrincipal, next: CacheLifecyclePrincipal): Promise<void> {
+  private async clearPrevious(
+    previous: CacheLifecyclePrincipal,
+    next: CacheLifecyclePrincipal,
+  ): Promise<CacheCleanupResult> {
     const filter = previous.userId !== next.userId
       ? { userId: previous.userId }
       : { userId: previous.userId, workspaceId: previous.workspaceId };
-    await this.clearFilter(filter);
+    return this.clearFilter(filter);
   }
 
-  private async clearFilter(filter: { userId: string; workspaceId?: string }): Promise<void> {
-    await this.backend.clear(filter, { durable: true }).catch(() => 0);
+  private async clearFilter(filter: { userId: string; workspaceId?: string }): Promise<CacheCleanupResult> {
+    const cleanup = await this.clearWithStatus(filter);
     this.bus.publish({ type: "scope-cleared", ...filter });
+    return cleanup;
+  }
+
+  private async clearWithStatus(filter: CacheFilter): Promise<CacheCleanupResult> {
+    let removed = 0;
+    let failed = false;
+    try {
+      removed = await this.backend.clear(filter, { durable: true });
+    } catch {
+      failed = true;
+    }
+    const pendingCleanupCount = await this.backend.pendingCleanupCount().catch(() => failed ? 1 : 0);
+    return {
+      pendingCleanupCount: Math.max(failed ? 1 : 0, pendingCleanupCount),
+      removed,
+      status: failed || pendingCleanupCount > 0 ? "pending" : "complete",
+    };
   }
 
   private async renewAccessLease(principal: CacheLifecyclePrincipal): Promise<void> {
@@ -185,4 +208,8 @@ function normalizeLease(lease: AccessLease | undefined, now: number): AccessLeas
     return undefined;
   }
   return lease;
+}
+
+function completeCleanup(): CacheCleanupResult {
+  return { pendingCleanupCount: 0, removed: 0, status: "complete" };
 }

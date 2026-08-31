@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CacheLifecycleController,
+  DurableCacheCleanupError,
   LOCAL_PERSISTENCE_POLICY_REVISION,
+  PWA_CACHE_ENTRY_SCHEMA_VERSION,
   RetryCoordinator,
   type CacheEntryMetadata,
 } from "../src";
@@ -9,12 +11,12 @@ import { CacheBus, MemoryCacheBackend, ResilientCacheBackend, cacheEntryKey } fr
 
 function entry(overrides: Partial<CacheEntryMetadata> = {}): CacheEntryMetadata {
   const scope = {
-    appId: "docs",
-    policyRevision: LOCAL_PERSISTENCE_POLICY_REVISION,
-    resource: "records",
-    userId: "user-a",
-    workspaceId: "default",
-    ...overrides,
+    appId: overrides.appId ?? "docs",
+    policyRevision: overrides.policyRevision ?? LOCAL_PERSISTENCE_POLICY_REVISION,
+    resource: overrides.resource ?? "records",
+    schemaRevision: overrides.schemaRevision ?? "records.v1",
+    userId: overrides.userId ?? "user-a",
+    workspaceId: overrides.workspaceId ?? "default",
   };
   return {
     accessLeaseExpiresAt: 2_000,
@@ -27,11 +29,12 @@ function entry(overrides: Partial<CacheEntryMetadata> = {}): CacheEntryMetadata 
     policy: "cache",
     provenance: "app_reference",
     revision: "r1",
-    schemaVersion: 2,
+    schemaVersion: PWA_CACHE_ENTRY_SCHEMA_VERSION,
     sizeBytes: 12,
     staleAt: 2_000,
     ...scope,
     ...overrides,
+    schemaRevision: overrides.schemaRevision ?? scope.schemaRevision,
   };
 }
 
@@ -86,7 +89,10 @@ describe("cache lifecycle", () => {
     await backend.put({ metadata: entry({ appId: "mail", resource: "threads" }), payload: { value: "mail" } });
     const controller = new CacheLifecycleController({ backend, bus: new CacheBus(null) });
     await controller.transition({ appId: "base-shell", userId: "user-a", workspaceId: "default" });
-    expect(await controller.handleDataChanged({ ownerAppId: "docs", resource: "records" })).toBe(1);
+    expect(await controller.handleDataChanged({ ownerAppId: "docs", resource: "records" })).toMatchObject({
+      removed: 1,
+      status: "complete",
+    });
     expect((await backend.list()).map((item) => item.appId)).toEqual(["mail"]);
   });
 
@@ -109,7 +115,7 @@ describe("cache lifecycle", () => {
       originUsageBytes: 200,
       pendingCleanupCount: 0,
     });
-    expect(await controller.clearAll()).toBe(1);
+    expect(await controller.clearAll()).toMatchObject({ removed: 1, status: "complete" });
     expect(await backend.list()).toEqual([]);
   });
 
@@ -122,5 +128,38 @@ describe("cache lifecycle", () => {
     expect(resilient.mode()).toBe("memory");
     await resilient.put({ metadata: entry(), payload: { value: "safe fallback" } });
     expect((await resilient.get(entry().key))?.payload).toEqual({ value: "safe fallback" });
+  });
+
+  it("reports durable cleanup as pending and blocks cache reuse when persistent deletion fails", async () => {
+    class FailingClearBackend extends MemoryCacheBackend {
+      failClear = true;
+
+      override async clear(...args: Parameters<MemoryCacheBackend["clear"]>): Promise<number> {
+        if (this.failClear && args[1]?.durable) {
+          throw new Error("injected durable cleanup failure");
+        }
+        return super.clear(...args);
+      }
+    }
+
+    const primary = new FailingClearBackend();
+    await primary.put({ metadata: entry(), payload: { value: "must-not-reappear" } });
+    const resilient = new ResilientCacheBackend(primary);
+    const controller = new CacheLifecycleController({ backend: resilient, bus: new CacheBus(null) });
+
+    await expect(resilient.clear({ userId: "user-a" }, { durable: true })).rejects.toBeInstanceOf(DurableCacheCleanupError);
+    expect(resilient.mode()).toBe("memory");
+    expect(await primary.list()).toHaveLength(1);
+    expect(await resilient.get(entry().key)).toBeNull();
+    expect(await resilient.pendingCleanupCount()).toBeGreaterThan(0);
+
+    const pending = await controller.clearAll();
+    expect(pending).toMatchObject({ status: "pending" });
+
+    primary.failClear = false;
+    const completed = await controller.clearAll();
+    expect(completed).toMatchObject({ status: "complete" });
+    expect(await primary.list()).toEqual([]);
+    expect(await resilient.pendingCleanupCount()).toBe(0);
   });
 });

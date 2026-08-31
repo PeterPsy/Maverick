@@ -3,6 +3,7 @@ import {
   RetryCancelledError,
   RetryCoordinator,
   createIdempotencyKey,
+  createRequestFingerprint,
   idempotencyHeaders,
 } from "../src";
 
@@ -41,6 +42,20 @@ describe("RAM retry coordinator", () => {
     }
   });
 
+  it("preserves a terminal HTTP error when its cleanup changes retry scope", async () => {
+    const coordinator = new RetryCoordinator();
+    const error = Object.assign(new Error("unauthorized"), { status: 401 });
+    const pending = coordinator.run({
+      key: "read:authorization-cleanup",
+      operation: async () => {
+        coordinator.setScope("anonymous");
+        throw error;
+      },
+    });
+
+    await expect(pending).rejects.toBe(error);
+  });
+
   it("honors Retry-After for 429 and retryable gateway responses", async () => {
     vi.useFakeTimers();
     const coordinator = new RetryCoordinator({ random: () => 0.5 });
@@ -76,6 +91,16 @@ describe("RAM retry coordinator", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await expect(pending).resolves.toBe("created");
     expect(operation).toHaveBeenCalledTimes(2);
+  });
+
+  it("derives a stable SHA-256 fingerprint from exact mutation semantics", async () => {
+    const serialized = JSON.stringify({ action: "set", values: ["one", "two"] });
+    const first = await createRequestFingerprint(serialized);
+    const second = await createRequestFingerprint(serialized);
+
+    expect(first).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(second).toBe(first);
+    expect(await createRequestFingerprint(`${serialized} `)).not.toBe(first);
   });
 
   it("single-flights an idempotent mutation by server key, not caller label", async () => {

@@ -1,5 +1,5 @@
 export const LOCAL_PERSISTENCE_POLICY_REVISION = "maverick.local-persistence-policy.v2";
-export const PWA_CACHE_ENTRY_SCHEMA_VERSION = 2;
+export const PWA_CACHE_ENTRY_SCHEMA_VERSION = 3;
 
 export type MaverickDataClass =
   | "public"
@@ -41,6 +41,7 @@ export type CachePrincipal = {
 export type CacheScope = CachePrincipal & {
   resource: string;
   policyRevision: string;
+  schemaRevision: string;
 };
 
 export type AccessLease = {
@@ -61,6 +62,7 @@ export type ResourceCachePolicy<T> = {
   provenance: MaverickProvenance;
   regulatedAllowlisted?: boolean;
   revalidateOnRead?: "always" | "stale" | "never";
+  schemaRevision: string;
   sanitize: (payload: unknown) => T | null;
 };
 
@@ -87,9 +89,10 @@ export type StoredCacheEntry<T = unknown> = {
 };
 
 export type CacheFilter = Partial<Pick<CacheEntryMetadata,
-  "userId" | "workspaceId" | "appId" | "resource" | "entityId" | "policyRevision"
+  "userId" | "workspaceId" | "appId" | "resource" | "entityId" | "policyRevision" | "schemaRevision"
 >> & {
   excludePolicyRevision?: string;
+  excludeSchemaRevision?: string;
 };
 
 export type CleanupMarker = {
@@ -101,9 +104,16 @@ export type CleanupMarker = {
 
 export type BackendMode = "indexeddb" | "memory";
 
+export type CacheCleanupResult = {
+  pendingCleanupCount: number;
+  removed: number;
+  status: "complete" | "pending";
+};
+
 export interface CacheBackend {
   clear(filter?: CacheFilter, options?: { durable?: boolean }): Promise<number>;
   delete(key: string): Promise<boolean>;
+  durabilityKey(): string;
   get<T>(key: string): Promise<StoredCacheEntry<T> | null>;
   initialize(): Promise<void>;
   list(filter?: CacheFilter): Promise<CacheEntryMetadata[]>;
@@ -171,7 +181,7 @@ export type CacheDiagnostics = {
   pendingCleanupCount: number;
 };
 
-export type PwaCacheClientOptions = CachePrincipal & {
+export type PwaCacheClientOptions = {
   accessLease?: AccessLease;
   backend?: CacheBackend;
   enabled?: boolean;

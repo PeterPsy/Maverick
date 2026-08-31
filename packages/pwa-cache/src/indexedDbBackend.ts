@@ -1,4 +1,5 @@
 import { matchesFilter } from "./scope";
+import { PWA_CACHE_ENTRY_SCHEMA_VERSION } from "./types";
 import type {
   CacheBackend,
   CacheEntryMetadata,
@@ -8,14 +9,14 @@ import type {
 } from "./types";
 
 export const PWA_CACHE_DATABASE_NAME = "maverick-pwa-data-v1";
-export const PWA_CACHE_DATABASE_VERSION = 2;
+export const PWA_CACHE_DATABASE_VERSION = 3;
 
 const ENTRY_STORE = "entries";
 const PAYLOAD_STORE = "payloads";
 const METADATA_STORE = "metadata";
 
 type PayloadRecord = { key: string; payload: unknown };
-type MigrationStep = "create-v1" | "split-payloads-v2" | "create-indices-v2";
+type MigrationStep = "create-v1" | "split-payloads-v2" | "create-indices-v2" | "resource-schema-v3";
 
 export type IndexedDbCacheBackendOptions = {
   databaseName?: string;
@@ -45,6 +46,10 @@ export class IndexedDbCacheBackend implements CacheBackend {
 
   mode(): "indexeddb" {
     return "indexeddb";
+  }
+
+  durabilityKey(): string {
+    return `indexeddb:${this.databaseName}`;
   }
 
   async initialize(): Promise<void> {
@@ -204,6 +209,27 @@ export class IndexedDbCacheBackend implements CacheBackend {
       createIndex(entries, "scope", ["userId", "workspaceId", "appId", "resource"]);
       createIndex(entries, "expiresAt", "expiresAt");
       createIndex(entries, "lastAccessedAt", "lastAccessedAt");
+    }
+    if (oldVersion < 3) {
+      this.migrationHook?.("resource-schema-v3");
+      const payloads = transaction.objectStore(PAYLOAD_STORE);
+      const cursorRequest = entries.openCursor();
+      cursorRequest.onsuccess = () => {
+        const cursor = cursorRequest.result;
+        if (!cursor) {
+          return;
+        }
+        const metadata = cursor.value as Partial<CacheEntryMetadata>;
+        if (metadata.schemaVersion !== PWA_CACHE_ENTRY_SCHEMA_VERSION
+            || typeof metadata.schemaRevision !== "string"
+            || !metadata.schemaRevision.trim()) {
+          if (typeof metadata.key === "string") {
+            payloads.delete(metadata.key);
+          }
+          cursor.delete();
+        }
+        cursor.continue();
+      };
     }
   }
 

@@ -74,6 +74,17 @@ export function createIdempotencyKey(prefix = "mvr"): string {
   return `${normalizedPrefix}:${random}`;
 }
 
+export async function createRequestFingerprint(serializedRequest: string): Promise<string> {
+  if (typeof serializedRequest !== "string" || !serializedRequest.length) {
+    throw new TypeError("Mutation retry request fingerprint input is required.");
+  }
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("SHA-256 is unavailable; this mutation cannot be retried safely.");
+  }
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(serializedRequest));
+  return `sha256:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
 export function idempotencyHeaders(contract: MutationRetryContract): Record<string, string> {
   validateMutationContract("POST", contract);
   return { "Idempotency-Key": contract.idempotencyKey };

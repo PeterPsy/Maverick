@@ -12,6 +12,7 @@ function metadata(entityId = "one"): CacheEntryMetadata {
     appId: "docs",
     policyRevision: LOCAL_PERSISTENCE_POLICY_REVISION,
     resource: "records",
+    schemaRevision: "records.v1",
     userId: "user-a",
     workspaceId: "default",
   };
@@ -42,7 +43,7 @@ describe("IndexedDB cache schema", () => {
     await backend.initialize();
 
     expect(await backend.get(metadata().key)).toEqual({ metadata: metadata(), payload: { value: "legacy" } });
-    expect((await openDatabase(factory, name)).version).toBe(2);
+    expect((await openDatabase(factory, name)).version).toBe(3);
   });
 
   it("leaves the prior v1 store intact when the upgrade transaction is interrupted", async () => {
@@ -63,6 +64,22 @@ describe("IndexedDB cache schema", () => {
     expect(database.version).toBe(1);
     const transaction = database.transaction("entries", "readonly");
     expect(await requestValue(transaction.objectStore("entries").get(metadata().key))).toEqual(legacy);
+  });
+
+  it("drops v2 entries that predate mandatory app-owned schema revisions", async () => {
+    const factory = new IDBFactory();
+    const name = "resource-schema-v3";
+    await createV2Database(factory, name, {
+      ...metadata(),
+      schemaVersion: 2,
+      schemaRevision: undefined,
+    }, { value: "obsolete" });
+
+    const backend = new IndexedDbCacheBackend({ databaseName: name, factory });
+    await backend.initialize();
+
+    expect(await backend.list()).toEqual([]);
+    expect((await openDatabase(factory, name)).version).toBe(3);
   });
 
   it("resumes a durable cleanup marker on the next bootstrap", async () => {
@@ -107,6 +124,22 @@ async function createV1Database(factory: IDBFactory, name: string, record: unkno
   const database = await requestValue(request);
   const transaction = database.transaction("entries", "readwrite");
   transaction.objectStore("entries").put(record);
+  await transactionDone(transaction);
+  database.close();
+}
+
+async function createV2Database(factory: IDBFactory, name: string, metadataRecord: unknown, payload: unknown): Promise<void> {
+  const request = factory.open(name, 2);
+  request.onupgradeneeded = () => {
+    const database = request.result;
+    database.createObjectStore("entries", { keyPath: "key" });
+    database.createObjectStore("payloads", { keyPath: "key" });
+    database.createObjectStore("metadata", { keyPath: "id" });
+  };
+  const database = await requestValue(request);
+  const transaction = database.transaction(["entries", "payloads"], "readwrite");
+  transaction.objectStore("entries").put(metadataRecord);
+  transaction.objectStore("payloads").put({ key: (metadataRecord as { key: string }).key, payload });
   await transactionDone(transaction);
   database.close();
 }

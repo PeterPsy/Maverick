@@ -47,12 +47,15 @@ export function createCacheDiagnosticsController(context: {
     error = '';
     context.render();
     try {
-      const removed = await clearPwaDataCache();
+      const cleanup = await clearPwaDataCache();
+      if (cleanup.status !== 'complete' || cleanup.pendingCleanupCount > 0) {
+        throw new Error('Cache cleanup is still pending. Persistent cache reads remain blocked; retry Clear cache.');
+      }
       confirmClear = false;
       diagnostics = await readPwaCacheDiagnostics();
       context.setNotice({
         tone: 'success',
-        message: removed === 1 ? '1 cached entry removed.' : `${removed} cached entries removed.`
+        message: cleanup.removed === 1 ? '1 cached entry removed.' : `${cleanup.removed} cached entries removed.`
       });
     } catch (clearError) {
       error = errorMessage(clearError, 'Unable to clear this browser cache.');

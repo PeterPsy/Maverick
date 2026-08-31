@@ -17,6 +17,7 @@ export function validateScope(scope: CacheScope): CacheScope {
     ...validatePrincipal(scope),
     resource: validateScopePart("resource", scope.resource),
     policyRevision: validateScopePart("policyRevision", scope.policyRevision),
+    schemaRevision: validateScopePart("schemaRevision", scope.schemaRevision),
   };
 }
 
@@ -40,22 +41,31 @@ export function cacheEntryKey(
     valid.resource,
     validateEntityId(entityId),
     valid.policyRevision,
+    valid.schemaRevision,
     schemaVersion,
   ]);
 }
 
 export function matchesFilter(metadata: CacheEntryMetadata, filter: CacheFilter = {}): boolean {
-  for (const field of ["userId", "workspaceId", "appId", "resource", "entityId", "policyRevision"] as const) {
+  for (const field of ["userId", "workspaceId", "appId", "resource", "entityId", "policyRevision", "schemaRevision"] as const) {
     if (filter[field] !== undefined && metadata[field] !== filter[field]) {
       return false;
     }
   }
-  return filter.excludePolicyRevision === undefined || metadata.policyRevision !== filter.excludePolicyRevision;
+  return (filter.excludePolicyRevision === undefined || metadata.policyRevision !== filter.excludePolicyRevision)
+    && (filter.excludeSchemaRevision === undefined || metadata.schemaRevision !== filter.excludeSchemaRevision);
 }
 
 export function scopeIdentity(scope: CacheScope): string {
   const valid = validateScope(scope);
-  return JSON.stringify([valid.userId, valid.workspaceId, valid.appId, valid.resource, valid.policyRevision]);
+  return JSON.stringify([
+    valid.userId,
+    valid.workspaceId,
+    valid.appId,
+    valid.resource,
+    valid.policyRevision,
+    valid.schemaRevision,
+  ]);
 }
 
 function validateScopePart(name: string, value: string): string {

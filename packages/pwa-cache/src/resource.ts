@@ -68,7 +68,13 @@ export class PwaCacheResource<T> {
 
   async get(entityId: string): Promise<CacheReadResult<T> | null> {
     const hit = await this.cacheHit(validateEntityId(entityId));
-    return hit ? resultFromCacheHit(hit) : null;
+    if (!hit || (hit.freshness === "stale" && this.policy.allowStale !== true)) {
+      if (hit) {
+        this.telemetry({ kind: "miss", reason: "stale-not-renderable" });
+      }
+      return null;
+    }
+    return resultFromCacheHit(hit);
   }
 
   async readThrough(entityId: string, loader: CacheLoader<T>, signal?: AbortSignal): Promise<CacheReadResult<T>> {
@@ -109,7 +115,7 @@ export class PwaCacheResource<T> {
       ...(entityId ? { entityId: validateEntityId(entityId) } : {}),
     };
     const removed = await Promise.all([
-      clearResourceBackend(this.persistentBackend, filter, this.telemetry),
+      clearResourceBackend(this.persistentBackend, filter, this.telemetry, true),
       clearResourceBackend(this.memoryBackend, filter, this.telemetry),
     ]);
     return removed[0] + removed[1];
@@ -151,6 +157,12 @@ export class PwaCacheResource<T> {
         this.telemetry({ kind: "miss", reason: "invalid" });
         return null;
       }
+      const sanitized = safeSanitize(this.policy.sanitize, entry.payload);
+      if (sanitized === null || !this.validStoredPayload(sanitized, entry.metadata.sizeBytes)) {
+        await backend.delete(key).catch(() => false);
+        this.telemetry({ kind: "miss", reason: "invalid-payload" });
+        return null;
+      }
       if (entry.metadata.expiresAt <= now) {
         await backend.delete(key).catch(() => false);
         this.telemetry({ bytes: entry.metadata.sizeBytes, kind: "expired" });
@@ -159,7 +171,7 @@ export class PwaCacheResource<T> {
       const freshness = entry.metadata.staleAt <= now ? "stale" : "fresh";
       await backend.touch(key, { lastAccessedAt: now }).catch(() => false);
       this.telemetry({ bytes: entry.metadata.sizeBytes, kind: freshness === "stale" ? "stale" : "hit" });
-      return { ...entry, freshness };
+      return { ...entry, payload: sanitized, freshness };
     } catch (error) {
       this.telemetry({ kind: "error", reason: errorName(error) });
       return null;
@@ -282,6 +294,15 @@ export class PwaCacheResource<T> {
 
   private revalidationMode(): "always" | "stale" | "never" {
     return this.policy.revalidateOnRead ?? "stale";
+  }
+
+  private validStoredPayload(payload: T, recordedSize: number): boolean {
+    try {
+      const actualSize = validatedPayloadSize(payload);
+      return actualSize === recordedSize && actualSize <= this.policy.maxEntryBytes;
+    } catch {
+      return false;
+    }
   }
 }
 

@@ -1,4 +1,5 @@
 import { cacheEntryKey } from "./scope";
+import { PRIVATE_ACCESS_LEASE_MAX_MS } from "./policy";
 import {
   PWA_CACHE_ENTRY_SCHEMA_VERSION,
   type AccessLease,
@@ -62,12 +63,38 @@ export function isValidEntry<T>(options: {
     && metadata.resource === scope.resource
     && metadata.entityId === entityId
     && metadata.policyRevision === scope.policyRevision
+    && metadata.schemaRevision === scope.schemaRevision
     && metadata.dataClass === policy.dataClass
     && metadata.provenance === policy.provenance
+    && metadata.key === cacheEntryKey(scope, entityId)
+    && typeof metadata.revision === "string"
     && metadata.revision.trim().length > 0
+    && validEntryBounds(metadata, policy, now)
     && (policy.dataClass === "public"
       || persistencePolicy === "session"
-      || (metadata.accessLeaseExpiresAt ?? 0) > now);
+      || validPrivateAccessLease(metadata, now));
+}
+
+function validEntryBounds<T>(metadata: CacheEntryMetadata, policy: ResourceCachePolicy<T>, now: number): boolean {
+  return Number.isSafeInteger(metadata.cachedAt)
+    && metadata.cachedAt >= 0
+    && metadata.cachedAt <= now
+    && Number.isSafeInteger(metadata.lastAccessedAt)
+    && metadata.lastAccessedAt >= metadata.cachedAt
+    && metadata.lastAccessedAt <= now
+    && Number.isSafeInteger(metadata.staleAt)
+    && metadata.staleAt === metadata.cachedAt + policy.freshTtlMs
+    && Number.isSafeInteger(metadata.expiresAt)
+    && metadata.expiresAt === metadata.cachedAt + policy.expiryTtlMs
+    && Number.isSafeInteger(metadata.sizeBytes)
+    && metadata.sizeBytes > 0
+    && metadata.sizeBytes <= policy.maxEntryBytes;
+}
+
+function validPrivateAccessLease(metadata: CacheEntryMetadata, now: number): boolean {
+  return Number.isSafeInteger(metadata.accessLeaseExpiresAt)
+    && (metadata.accessLeaseExpiresAt ?? 0) > now
+    && (metadata.accessLeaseExpiresAt ?? 0) <= metadata.cachedAt + PRIVATE_ACCESS_LEASE_MAX_MS;
 }
 
 export function resultFromCacheHit<T>(hit: CacheHit<T>): CacheReadResult<T> {

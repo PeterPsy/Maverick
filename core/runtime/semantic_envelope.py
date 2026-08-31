@@ -46,8 +46,10 @@ class HostedSemanticEnvelopeCompiler:
         classifier: HostedContentClassifier,
         platform_instruction: str,
         resource_classification_resolver: ResourceClassificationResolver | None = None,
+        classification_revalidator=None,
     ) -> None:
         self.classifier = classifier
+        self.classification_revalidator = classification_revalidator
         self._materializer = SemanticContextMaterializer(
             classifier=classifier,
             platform_instruction=platform_instruction,
@@ -110,6 +112,7 @@ class HostedSemanticEnvelopeCompiler:
                 tool_results=tool_results,
                 provider_private_state=provider_private_state,
                 classifier=self.classifier,
+                classification_revalidator=self.classification_revalidator,
             )
         except HostedAgenticLoopError:
             raise

@@ -6,6 +6,12 @@ import json
 import re
 
 from core.egress.agentic_transforms import canonical_egress_content
+from core.egress.classification import (
+    CanonicalSourceClassification,
+    join_classifications,
+    join_data_classes,
+    validated_classification,
+)
 from core.runtime.output_compaction.redaction import redact_payload, redact_text
 
 
@@ -55,6 +61,44 @@ def classify_runtime_content(
     return "unclassified"
 
 
+def narrow_runtime_content_classification(
+    classification: CanonicalSourceClassification,
+    content: object,
+    *,
+    content_type: str,
+) -> CanonicalSourceClassification:
+    """Apply exact-byte marker detection without ever promoting source authority."""
+    normalized = join_classifications((classification,)).sources[0]
+    detected = classify_runtime_content(content, content_type=content_type)
+    if detected == "unclassified":
+        return normalized
+    return validated_classification(
+        data_class=join_data_classes((normalized.data_class, detected)),
+        provenance=normalized.provenance,
+        trust_level=normalized.trust_level,
+        source_ref=normalized.source_ref,
+        source_revision=normalized.source_revision,
+        source_digest=normalized.source_digest,
+        resource_identity=normalized.resource_identity,
+        classification_revision=normalized.classification_revision,
+        classification_authority_id=normalized.classification_authority_id,
+        classification_authority_kind=normalized.classification_authority_kind,
+        classification_authority_ref=normalized.classification_authority_ref,
+        classification_authority_revision=(
+            normalized.classification_authority_revision
+        ),
+        classification_authority_digest=(
+            normalized.classification_authority_digest
+        ),
+        classification_authority_policy_revision=(
+            normalized.classification_authority_policy_revision
+        ),
+        classification_authority_bound=(
+            normalized.classification_authority_bound
+        ),
+    )
+
+
 def _luhn_valid(value: str) -> bool:
     digits = [int(character) for character in value if character.isdigit()]
     if not 13 <= len(digits) <= 19 or len(set(digits)) == 1:
@@ -70,4 +114,7 @@ def _luhn_valid(value: str) -> bool:
     return checksum % 10 == 0
 
 
-__all__ = ["classify_runtime_content"]
+__all__ = [
+    "classify_runtime_content",
+    "narrow_runtime_content_classification",
+]

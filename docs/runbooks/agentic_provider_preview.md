@@ -145,7 +145,7 @@ binding:
    selected policy allow that class and destination. Attestation may only narrow
    policy; no client declaration or policy id is accepted.
 5. The workspace policy is at least as restrictive as the profile and retains
-   the complete `codex-baseline-v11` handle set atomically, bounded
+   the complete `codex-baseline-v12` handle set atomically, bounded
    steps/tokens/cost, and confirmation for mutating/destructive classes. A
    partial read-only binding is not a Maverick Agent fallback.
 6. The complete certification manifest passes on the deployed source in the

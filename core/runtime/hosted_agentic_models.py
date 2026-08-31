@@ -27,6 +27,13 @@ class HostedContentClassification:
     resource_identity: str = ""
     classification_revision: int | None = None
     content_digest: str = ""
+    classification_authority_id: str = ""
+    classification_authority_kind: str = ""
+    classification_authority_ref: str = ""
+    classification_authority_revision: int | None = None
+    classification_authority_digest: str = ""
+    classification_authority_policy_revision: str = ""
+    classification_authority_bound: bool | None = False
 
 
 @dataclass(frozen=True)

@@ -793,6 +793,43 @@ def _provider_private_envelope(
     )
     if not complete_metadata:
         source_block_digests = ()
+    authority_ids = tuple(
+        metadata.classification_authority_id for metadata in source_metadata
+    ) if complete_metadata else ()
+    authority_kinds = tuple(
+        metadata.classification_authority_kind for metadata in source_metadata
+    ) if complete_metadata else ()
+    authority_refs = tuple(
+        metadata.classification_authority_ref for metadata in source_metadata
+    ) if complete_metadata else ()
+    authority_revisions = tuple(
+        metadata.classification_authority_revision for metadata in source_metadata
+    ) if complete_metadata else ()
+    authority_digests = tuple(
+        metadata.classification_authority_digest for metadata in source_metadata
+    ) if complete_metadata else ()
+    authority_policy_revisions = tuple(
+        metadata.classification_authority_policy_revision
+        for metadata in source_metadata
+    ) if complete_metadata else ()
+    authority_bounds = tuple(
+        metadata.classification_authority_bound for metadata in source_metadata
+    ) if complete_metadata else ()
+    source_provenances = tuple(
+        metadata.provenance for metadata in source_metadata
+    ) if complete_metadata else ()
+    source_refs = tuple(
+        metadata.source_ref for metadata in source_metadata
+    ) if complete_metadata else ()
+    source_revisions = tuple(
+        metadata.source_revision for metadata in source_metadata
+    ) if complete_metadata else ()
+    source_resource_identities = tuple(
+        metadata.resource_identity for metadata in source_metadata
+    ) if complete_metadata else ()
+    source_classification_revisions = tuple(
+        metadata.classification_revision for metadata in source_metadata
+    ) if complete_metadata else ()
     return ProviderPrivateEnvelope(
         schema_version=schema_version,
         codec_id=codec_id,
@@ -806,6 +843,20 @@ def _provider_private_envelope(
         source_block_digests=source_block_digests,
         source_data_classes=source_data_classes,
         source_trust_levels=source_trust_levels,
+        source_provenances=source_provenances,
+        source_refs=source_refs,
+        source_revisions=source_revisions,
+        source_resource_identities=source_resource_identities,
+        source_classification_revisions=source_classification_revisions,
+        source_classification_authority_ids=authority_ids,
+        source_classification_authority_kinds=authority_kinds,
+        source_classification_authority_refs=authority_refs,
+        source_classification_authority_revisions=authority_revisions,
+        source_classification_authority_digests=authority_digests,
+        source_classification_authority_policy_revisions=(
+            authority_policy_revisions
+        ),
+        source_classification_authority_bounds=authority_bounds,
         effective_data_class=join_data_classes(source_data_classes),
         effective_trust_level=join_trust_levels(source_trust_levels),
         codec_identity=":".join((codec_id, codec_version, schema_version)),

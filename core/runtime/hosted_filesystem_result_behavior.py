@@ -293,6 +293,27 @@ def _lineage_resolver(authoritative_resolver, context, handle, result):
         result_classification_revision=(
             result.classification.classification_revision
         ),
+        result_classification_authority_id=(
+            result.classification.classification_authority_id
+        ),
+        result_classification_authority_kind=(
+            result.classification.classification_authority_kind
+        ),
+        result_classification_authority_ref=(
+            result.classification.classification_authority_ref
+        ),
+        result_classification_authority_revision=(
+            result.classification.classification_authority_revision
+        ),
+        result_classification_authority_digest=(
+            result.classification.classification_authority_digest
+        ),
+        result_classification_authority_policy_revision=(
+            result.classification.classification_authority_policy_revision
+        ),
+        result_classification_authority_bound=(
+            result.classification.classification_authority_bound
+        ),
         result_source_revision=result_digest,
         result_source_digest=result_digest,
         result_artifact_private_ref=None,

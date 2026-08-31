@@ -87,6 +87,15 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
             }.issubset(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS)
         )
 
+    def test_result_gate_executes_revocation_and_marker_negative_probes(self) -> None:
+        self.assertTrue(
+            {
+                "security:filesystem.marker-narrowing",
+                "security:filesystem.revoke-rebuild",
+                "security:tool-result.revoke-egress",
+            }.issubset(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS)
+        )
+
     def test_maverick_agent_family_requires_an_atomic_full_contract(self) -> None:
         incomplete = SimpleNamespace(
             full_workspace_contract_revision="",

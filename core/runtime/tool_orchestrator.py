@@ -22,6 +22,12 @@ from core.cli.runner import CliRunner
 from core.mcp.models import McpInvocationContext
 from core.mcp.runner import McpRunner
 from core.runtime.authority import EffectiveRuntimeAuthority
+from core.runtime.classification_authority import (
+    revalidate_canonical_classification,
+)
+from core.runtime.content_data_classification import (
+    narrow_runtime_content_classification,
+)
 from core.runtime.tool_catalog import (
     RuntimeToolActorContext,
     RuntimeToolCatalog,
@@ -172,11 +178,58 @@ class RuntimeToolOrchestrator:
         *,
         catalog_builder: RuntimeToolCatalogBuilder,
         ledger: RuntimeToolLedger,
+        classification_authority_store=None,
     ) -> None:
         self.catalog_builder = catalog_builder
         self.ledger = ledger
+        self.classification_authority_store = classification_authority_store
         self.cli_runner = CliRunner(catalog_builder.cli_registry)
         self.mcp_runner = McpRunner(catalog_builder.mcp_registry)
+
+    def persisted_result_classification(
+        self,
+        record: ToolInvocationRecord,
+    ) -> CanonicalSourceClassification:
+        """Rebuild and live-check the authority pinned to one durable result."""
+        classification = CanonicalSourceClassification(
+            data_class=record.result_data_class,  # type: ignore[arg-type]
+            provenance=record.result_provenance,  # type: ignore[arg-type]
+            trust_level=record.result_trust_level,  # type: ignore[arg-type]
+            source_ref=record.result_source_ref,
+            source_revision=record.result_source_revision,
+            source_digest=record.result_source_digest,
+            resource_identity=record.result_resource_identity,
+            classification_revision=record.result_classification_revision,
+            classification_authority_id=(
+                record.result_classification_authority_id
+            ),
+            classification_authority_kind=(
+                record.result_classification_authority_kind
+            ),
+            classification_authority_ref=(
+                record.result_classification_authority_ref
+            ),
+            classification_authority_revision=(
+                record.result_classification_authority_revision
+            ),
+            classification_authority_digest=(
+                record.result_classification_authority_digest
+            ),
+            classification_authority_policy_revision=(
+                record.result_classification_authority_policy_revision
+            ),
+            classification_authority_bound=(
+                record.result_classification_authority_bound
+            ),
+        )
+        if self.classification_authority_store is None:
+            return join_classifications((classification,)).sources[0]
+        return revalidate_canonical_classification(
+            self.classification_authority_store,
+            workspace_id=record.workspace_id,
+            classification=classification,
+        )
+
     def materialize(
         self, *, authority: EffectiveRuntimeAuthority, context: RuntimeToolActorContext
     ) -> RuntimeToolCatalog:
@@ -672,6 +725,11 @@ class RuntimeToolOrchestrator:
                 separators=(",", ":"),
                 sort_keys=True,
             ).encode("utf-8")
+            classification = narrow_runtime_content_classification(
+                classification,
+                encoded_original,
+                content_type="application/json",
+            )
             if len(encoded_original) > policy.max_tool_result_bytes:
                 raise RuntimeToolError("tool_result_too_large")
             if descriptor.handle == TOOL_RESULT_ARTIFACT_READ_HANDLE:
@@ -692,6 +750,11 @@ class RuntimeToolOrchestrator:
                 separators=(",", ":"),
                 sort_keys=True,
             ).encode("utf-8")
+            classification = narrow_runtime_content_classification(
+                classification,
+                encoded,
+                content_type="application/json",
+            )
             classification = derive_content_classification(
                 content=encoded,
                 provenance="tool_result",

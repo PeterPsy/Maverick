@@ -785,9 +785,10 @@ shell/process, and CLI/MCP scenarios. A declared mode string or the mere
 presence of a handle is not evidence. Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 32 and OpenRouter
-revision 31 definitions make that atomic claim only because the executable
-gate returns all 13 required result behaviors; they remain uncertified,
+complete atomic contract. The current Google revision 33 and OpenRouter
+revision 32 definitions make that atomic claim only because the executable
+gate returns all 16 required result behaviors, including marker narrowing,
+revoke-then-rebuild, and delayed-egress-after-revocation probes; they remain uncertified,
 unbound, contained previews rather than a release authorization.
 
 Hosted filesystem mutations are descriptor-relative and version-fenced.
@@ -812,6 +813,18 @@ out-of-band version change invalidates the transient lineage. Failed writes
 remove only the empty, identity-matching parents they created. Move validates
 the exact source before opening or creating the destination chain and removes
 new destination parents after a successful rollback.
+
+Mutable classification authority is carried as an exact id/kind/ref/revision/
+digest/policy tuple on canonical sources, durable tool records, semantic
+metadata, and encrypted provider-state envelopes. Original and projected
+filesystem, instruction, search, shell, process, CLI, and MCP result bytes are
+scanned before persistence, and marker detection may only make the class more
+restrictive. Reconstructed filesystem lineage, delayed tool pairing, semantic
+reuse, provider continuation, and final egress all revalidate the exact current
+authority tuple. Legacy, partial, changed, or revoked lineage becomes
+`unclassified`. A runtime-public issue/revoke record is authoritative only when
+its deterministic audit evidence is present, so an audit write failure cannot
+publish the mutation.
 
 Hosted shell commands mount the retained workspace root at the fixed
 `/workspace` sandbox identity. The live workspace is read-only. A caller that

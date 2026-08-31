@@ -7,7 +7,10 @@ from types import SimpleNamespace
 import unittest
 
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
-from core.providers.agentic_protocol import AgenticSourceMetadata
+from core.providers.agentic_protocol import (
+    AgenticProviderPrivateState,
+    AgenticSourceMetadata,
+)
 from core.runtime.execution_binding import build_runtime_execution_binding
 from core.runtime.hosted_agentic_models import HostedProviderPrivateCodec
 from core.runtime.hosted_agentic_state import HostedAgenticStateBridge
@@ -348,6 +351,100 @@ class ProviderPrivateStateServiceTest(unittest.TestCase):
         )
         self.assertEqual(continuation.provider_request_id, "provider-request-7")
         self.assertEqual(continuation.turn_generation, "turn-generation-7")
+
+    def test_continuation_carries_transitive_mutable_authority_lineage(self) -> None:
+        historical = AgenticSourceMetadata(
+            source_block_digest="1" * 64,
+            source_data_class="public",
+            source_trust_level="untrusted_tool_output",
+            provenance="tool_result",
+            source_ref="historical-result",
+            source_revision="2" * 64,
+            resource_identity="historical-result:1",
+            classification_revision=1,
+            classification_authority_id="runtime-public-authority-1",
+            classification_authority_kind="runtime_public_content_authority",
+            classification_authority_ref="hosted-full-workspace",
+            classification_authority_revision=1,
+            classification_authority_digest="3" * 64,
+            classification_authority_policy_revision=(
+                "core-hosted-public-workspace-v2"
+            ),
+            classification_authority_bound=True,
+        )
+        self.service.store_state(
+            session_id=self.session.session_id,
+            adapter_id=self.binding.adapter_id,
+            adapter_version=self.binding.adapter_version,
+            codec_id="fake-thought-codec",
+            codec_version="2",
+            schema_version="1",
+            content_type="application/vnd.fake.private-state",
+            payload=b"historical-provider-continuation",
+            expected_revision=0,
+            turn_generation="turn-generation-7",
+            source_metadata=(historical,),
+            provider_request_id="provider-request-7",
+            now=NOW,
+        )
+        bridge = HostedAgenticStateBridge(
+            service=self._service(),
+            codec=HostedProviderPrivateCodec(
+                codec_id="fake-thought-codec",
+                codec_version="2",
+                schema_version="1",
+                content_type="application/vnd.fake.private-state",
+            ),
+        )
+        context = SimpleNamespace(
+            session=self.session,
+            binding=self.binding,
+            correlation_id="turn-generation-8",
+        )
+        authority = SimpleNamespace(
+            allowed_capabilities=SimpleNamespace(provider_private_state=True)
+        )
+        self.assertIsNotNone(bridge.read(context, authority))
+        current = AgenticSourceMetadata(
+            source_block_digest="4" * 64,
+            source_data_class="public",
+            source_trust_level="trusted_platform",
+            provenance="tool_schema",
+        )
+        bridge.persist_request_identity(
+            context,
+            SimpleNamespace(
+                request_id="provider-request-8",
+                source_metadata=(current,),
+            ),
+        )
+
+        staged = bridge.store(
+            context,
+            authority,
+            SimpleNamespace(
+                provider_private_state=AgenticProviderPrivateState(
+                    codec_id="fake-thought-codec",
+                    codec_version="2",
+                    schema_version="1",
+                    content_type="application/vnd.fake.private-state",
+                    content=b"next-provider-continuation",
+                )
+            ),
+        )
+
+        self.assertEqual(
+            staged.source_classification_authority_ids,
+            ("", "runtime-public-authority-1"),
+        )
+        self.assertEqual(
+            staged.source_classification_authority_revisions,
+            (None, 1),
+        )
+        self.assertEqual(
+            staged.source_classification_authority_digests,
+            ("", "3" * 64),
+        )
 
     def test_missing_or_invalid_taint_metadata_serializes_fail_closed(self) -> None:
         state = self.service.store_state(

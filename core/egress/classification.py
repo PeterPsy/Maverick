@@ -85,6 +85,13 @@ class CanonicalSourceClassification:
     source_digest: str
     resource_identity: str
     classification_revision: int | None = None
+    classification_authority_id: str = ""
+    classification_authority_kind: str = ""
+    classification_authority_ref: str = ""
+    classification_authority_revision: int | None = None
+    classification_authority_digest: str = ""
+    classification_authority_policy_revision: str = ""
+    classification_authority_bound: bool | None = False
 
 
 @dataclass(frozen=True)
@@ -130,6 +137,13 @@ def validated_classification(
     source_digest: str,
     resource_identity: str,
     classification_revision: int | None,
+    classification_authority_id: str = "",
+    classification_authority_kind: str = "",
+    classification_authority_ref: str = "",
+    classification_authority_revision: int | None = None,
+    classification_authority_digest: str = "",
+    classification_authority_policy_revision: str = "",
+    classification_authority_bound: bool | None = False,
 ) -> CanonicalSourceClassification:
     """Build a canonical record, failing closed when any authority field is bad."""
     fallback = fail_closed_classification(
@@ -138,6 +152,25 @@ def validated_classification(
         source_revision=source_revision,
         source_digest=source_digest,
         resource_identity=resource_identity,
+    )
+    authority_fields_valid = (
+        classification_authority_bound is False
+        and not classification_authority_id
+        and not classification_authority_kind
+        and not classification_authority_ref
+        and classification_authority_revision is None
+        and not classification_authority_digest
+        and not classification_authority_policy_revision
+    ) or (
+        classification_authority_bound is True
+        and bool(str(classification_authority_id or "").strip())
+        and bool(str(classification_authority_kind or "").strip())
+        and bool(str(classification_authority_ref or "").strip())
+        and isinstance(classification_authority_revision, int)
+        and not isinstance(classification_authority_revision, bool)
+        and classification_authority_revision >= 1
+        and _is_sha256(classification_authority_digest)
+        and bool(str(classification_authority_policy_revision or "").strip())
     )
     if (
         data_class not in KNOWN_DATA_CLASSES
@@ -149,6 +182,7 @@ def validated_classification(
         or not _is_sha256(source_digest)
         or not isinstance(classification_revision, int)
         or classification_revision < 1
+        or not authority_fields_valid
     ):
         return fallback
     return CanonicalSourceClassification(
@@ -160,6 +194,17 @@ def validated_classification(
         source_digest=source_digest.lower(),
         resource_identity=resource_identity.strip(),
         classification_revision=classification_revision,
+        classification_authority_id=str(classification_authority_id).strip(),
+        classification_authority_kind=str(classification_authority_kind).strip(),
+        classification_authority_ref=str(classification_authority_ref).strip(),
+        classification_authority_revision=classification_authority_revision,
+        classification_authority_digest=str(
+            classification_authority_digest
+        ).lower(),
+        classification_authority_policy_revision=str(
+            classification_authority_policy_revision
+        ).strip(),
+        classification_authority_bound=classification_authority_bound,
     )
 
 
@@ -217,6 +262,7 @@ def derive_content_classification(
     provenance: str,
     source_ref: str,
     sources: Iterable[CanonicalSourceClassification],
+    authority_source: CanonicalSourceClassification | None = None,
 ) -> CanonicalSourceClassification:
     """Join source taints and bind the result to the exact composed bytes.
 
@@ -236,6 +282,21 @@ def derive_content_classification(
             "source_digest": source.source_digest,
             "resource_identity": source.resource_identity,
             "classification_revision": source.classification_revision,
+            "classification_authority_id": source.classification_authority_id,
+            "classification_authority_kind": source.classification_authority_kind,
+            "classification_authority_ref": source.classification_authority_ref,
+            "classification_authority_revision": (
+                source.classification_authority_revision
+            ),
+            "classification_authority_digest": (
+                source.classification_authority_digest
+            ),
+            "classification_authority_policy_revision": (
+                source.classification_authority_policy_revision
+            ),
+            "classification_authority_bound": (
+                source.classification_authority_bound
+            ),
         }
         for source in joined.sources
     ]
@@ -251,6 +312,15 @@ def derive_content_classification(
     proof_complete = bool(joined.sources) and all(
         source.classification_revision is not None for source in joined.sources
     )
+    if authority_source is None:
+        authority = joined_classification_authority(joined.sources)
+    else:
+        selected_authority = join_classifications((authority_source,)).sources[0]
+        authority = (
+            _classification_authority_tuple(selected_authority)
+            if selected_authority in joined.sources
+            else ("", "", "", None, "", "", None)
+        )
     return validated_classification(
         data_class=joined.effective_data_class,
         provenance=provenance,
@@ -260,6 +330,13 @@ def derive_content_classification(
         source_digest=digest,
         resource_identity=f"derived-content:{evidence_digest}",
         classification_revision=1 if proof_complete else None,
+        classification_authority_id=authority[0],
+        classification_authority_kind=authority[1],
+        classification_authority_ref=authority[2],
+        classification_authority_revision=authority[3],
+        classification_authority_digest=authority[4],
+        classification_authority_policy_revision=authority[5],
+        classification_authority_bound=authority[6],
     )
 
 
@@ -275,10 +352,61 @@ def _normalize_source(
         source_digest=source.source_digest,
         resource_identity=source.resource_identity,
         classification_revision=source.classification_revision,
+        classification_authority_id=source.classification_authority_id,
+        classification_authority_kind=source.classification_authority_kind,
+        classification_authority_ref=source.classification_authority_ref,
+        classification_authority_revision=(
+            source.classification_authority_revision
+        ),
+        classification_authority_digest=source.classification_authority_digest,
+        classification_authority_policy_revision=(
+            source.classification_authority_policy_revision
+        ),
+        classification_authority_bound=source.classification_authority_bound,
     )
     if validated.data_class == "unclassified" and source.data_class != "unclassified":
         return replace(validated, provenance=source.provenance)
     return validated
+
+
+def joined_classification_authority(
+    sources: tuple[CanonicalSourceClassification, ...],
+) -> tuple[str, str, str, int | None, str, str, bool | None]:
+    """Preserve one exact mutable authority or make an ambiguous join invalid."""
+    if any(source.classification_authority_bound is None for source in sources):
+        return ("", "", "", None, "", "", None)
+    authorities = {
+        (
+            source.classification_authority_id,
+            source.classification_authority_kind,
+            source.classification_authority_ref,
+            source.classification_authority_revision,
+            source.classification_authority_digest,
+            source.classification_authority_policy_revision,
+        )
+        for source in sources
+        if source.classification_authority_bound is True
+    }
+    if not authorities:
+        return ("", "", "", None, "", "", False)
+    if len(authorities) != 1:
+        return ("", "", "", None, "", "", None)
+    authority = next(iter(authorities))
+    return (*authority, True)
+
+
+def _classification_authority_tuple(
+    source: CanonicalSourceClassification,
+) -> tuple[str, str, str, int | None, str, str, bool | None]:
+    return (
+        source.classification_authority_id,
+        source.classification_authority_kind,
+        source.classification_authority_ref,
+        source.classification_authority_revision,
+        source.classification_authority_digest,
+        source.classification_authority_policy_revision,
+        source.classification_authority_bound,
+    )
 
 
 def _is_sha256(value: object) -> bool:

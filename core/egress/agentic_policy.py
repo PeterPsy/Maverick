@@ -161,6 +161,22 @@ class AgenticEgressEvaluator:
                         policy.policy_id,
                         policy.revision,
                         str(block.classification_revision or "unverified"),
+                        block.classification_authority_id or "no-authority",
+                        block.classification_authority_kind or "no-authority-kind",
+                        block.classification_authority_ref or "no-authority-ref",
+                        str(
+                            block.classification_authority_revision
+                            or "no-authority-revision"
+                        ),
+                        (
+                            block.classification_authority_digest
+                            or "no-authority-digest"
+                        ),
+                        (
+                            block.classification_authority_policy_revision
+                            or "no-authority-policy"
+                        ),
+                        str(block.classification_authority_bound),
                         attestation_id or "no-attestation",
                         str(attestation_revision or "no-revision"),
                         (
@@ -195,6 +211,21 @@ class AgenticEgressEvaluator:
             classification_revision=block.classification_revision,
             attestation_id=attestation_id,
             attestation_revision=attestation_revision,
+            classification_authority_id=block.classification_authority_id,
+            classification_authority_kind=block.classification_authority_kind,
+            classification_authority_ref=block.classification_authority_ref,
+            classification_authority_revision=(
+                block.classification_authority_revision
+            ),
+            classification_authority_digest=(
+                block.classification_authority_digest
+            ),
+            classification_authority_policy_revision=(
+                block.classification_authority_policy_revision
+            ),
+            classification_authority_bound=(
+                block.classification_authority_bound
+            ),
         )
         if persist:
             decision = self.commit_decision(

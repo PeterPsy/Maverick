@@ -259,7 +259,7 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v28 manifests contain both
+publication. Google and OpenRouter suite-v29 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
@@ -675,28 +675,33 @@ The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 32
-and OpenRouter revision 31, both bound to
-`maverick-hosted-tool-loop==24`; older revisions are suspended rather than
-overwritten. Their suite-28 certification manifests retain distinct
+accepted as complete. The current contained definitions are Google revision 33
+and OpenRouter revision 32, both bound to
+`maverick-hosted-tool-loop==25`; older revisions are suspended rather than
+overwritten. Their suite-29 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
-`codex-baseline-v11` requires executable create, replace, edit, patch, move,
+`codex-baseline-v12` requires executable create, replace, edit, patch, move,
 delete, read-after-write, shell/process, and CLI/MCP result behaviors rather
-than a mode string. The executable repository gate now proves all 13 required
-behaviors. A reserved operator-owned, CAS-revisioned runtime-public
+than a mode string. The executable repository gate now proves all 16 required
+behaviors: the 13 positive result workflows plus sensitive-marker narrowing,
+revoke-then-orchestrator-rebuild, and revoke-before-delayed-egress probes. A
+reserved operator-owned, CAS-revisioned runtime-public
 classification policy lets Core classify an exact prompt/result identity,
 revision, and canonical-byte digest; the current authority record and its
-self-digest are revalidated at admission, and marker detection can only narrow
-the result. Certified Core CLI/MCP result contracts are a second explicit
+self-digest and deterministic audit evidence are revalidated at admission.
+Exact authority id/revision/digest lineage survives tool records and
+provider-private continuations and is revalidated again before every reuse and
+egress; marker detection over original and projected bytes can only narrow the
+result. Certified Core CLI/MCP result contracts are a second explicit
 authority but app declarations cannot grant it. Shell/process mutations
 classify the exact private-overlay result before committing and discard the
-overlay on denial. The profiles therefore pin `codex-baseline-v11` as both the
+overlay on denial. The profiles therefore pin `codex-baseline-v12` as both the
 tool and Full Workspace contract and atomically use the `maverick_agent`
 execution family. The claim validator still rejects the family unless profile,
-certificate, and executable behavior gate are complete. Adapter 24, recipe
-revision 11, context-compaction schema 3, suite 28, and TCB manifest v18 retain
+certificate, and executable behavior gate are complete. Adapter 25, recipe
+revision 12, context-compaction schema 3, suite 29, and TCB manifest v19 retain
 the composite-classification and rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked

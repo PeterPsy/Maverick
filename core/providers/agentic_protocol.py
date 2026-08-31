@@ -45,6 +45,13 @@ class AgenticSourceMetadata:
     source_revision: str = ""
     resource_identity: str = ""
     classification_revision: int | None = None
+    classification_authority_id: str = ""
+    classification_authority_kind: str = ""
+    classification_authority_ref: str = ""
+    classification_authority_revision: int | None = None
+    classification_authority_digest: str = ""
+    classification_authority_policy_revision: str = ""
+    classification_authority_bound: bool | None = False
     semantic_block_id: str = ""
     semantic_block_schema_version: str = ""
     semantic_source_digest: str = ""

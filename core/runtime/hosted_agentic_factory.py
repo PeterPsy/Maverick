@@ -8,6 +8,7 @@ from pathlib import Path
 from core.authorization.errors import AuthorizationError
 from core.cli.models import CliInvocationContext
 from core.egress.agentic_transforms import canonical_egress_content
+from core.egress.classification import CanonicalSourceClassification
 from core.mcp.models import McpInvocationContext
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.errors import CapabilityCertificateError, ProviderError
@@ -19,6 +20,9 @@ from core.runtime.authority import (
 from core.runtime.authority_service import resolve_runtime_authority_snapshot
 from core.runtime.filesystem_mutation_lineage import (
     resolve_filesystem_mutation_lineage,
+)
+from core.runtime.classification_authority import (
+    revalidate_canonical_classification,
 )
 from core.runtime.hosted_agentic_engine import (
     HostedAgenticEngineAdapter,
@@ -51,6 +55,7 @@ from core.runtime.hosted_runtime_registry_builder import (
 )
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.semantic_envelope import HostedSemanticEnvelopeCompiler
+from core.runtime.semantic_envelope_models import canonical_classification
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolCatalogBuilder
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
@@ -61,7 +66,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "24"
+HOSTED_AGENTIC_ADAPTER_VERSION = "25"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -115,6 +120,51 @@ def build_hosted_agentic_engine_adapter(
     # deliberately fail-closed and cannot promote bytes based on provenance.
     content_classifier = classifier or classify_hosted_content_fail_closed
 
+    def revalidate_content_classification(context, classification):
+        workspace_id = str(
+            getattr(getattr(context, "session", None), "workspace_id", "")
+            or getattr(context, "workspace_id", "")
+            or ""
+        )
+        canonical = CanonicalSourceClassification(
+            data_class=classification.data_class,
+            provenance=str(getattr(classification, "provenance", "tool_result")),
+            trust_level=classification.trust_level,  # type: ignore[arg-type]
+            source_ref=classification.source_ref,
+            source_revision=classification.source_revision,
+            source_digest=classification.content_digest,
+            resource_identity=classification.resource_identity,
+            classification_revision=classification.classification_revision,
+            classification_authority_id=(
+                classification.classification_authority_id
+            ),
+            classification_authority_kind=(
+                classification.classification_authority_kind
+            ),
+            classification_authority_ref=(
+                classification.classification_authority_ref
+            ),
+            classification_authority_revision=(
+                classification.classification_authority_revision
+            ),
+            classification_authority_digest=(
+                classification.classification_authority_digest
+            ),
+            classification_authority_policy_revision=(
+                classification.classification_authority_policy_revision
+            ),
+            classification_authority_bound=(
+                classification.classification_authority_bound
+            ),
+        )
+        return canonical_classification(
+            revalidate_canonical_classification(
+                state.workspace_store,
+                workspace_id=workspace_id,
+                classification=canonical,
+            )
+        )
+
     def classify_resource(observation, provenance):
         authoritative = resource_classification_for_observation(
             state.workspace_store.get_resource_classification(
@@ -147,7 +197,9 @@ def build_hosted_agentic_engine_adapter(
                 classifier=content_classifier,
                 platform_instruction=HOSTED_TOOL_USE_INSTRUCTION,
                 resource_classification_resolver=classify_resource,
+                classification_revalidator=revalidate_content_classification,
             ),
+            classification_revalidator=revalidate_content_classification,
         ),
         tool_orchestrator_resolver=lambda context, actor: _tool_orchestrator(
             context,
@@ -299,6 +351,7 @@ def _tool_orchestrator(
             authoritative=authoritative,
             ledger=ledger,
             session_id=context.session.session_id,
+            authority_store=workspace_store,
         )
 
     return RuntimeToolOrchestrator(
@@ -320,6 +373,7 @@ def _tool_orchestrator(
             result_preflight_resolver=result_preflight_resolver,
         ),
         ledger=ledger,
+        classification_authority_store=workspace_store,
     )
 
 

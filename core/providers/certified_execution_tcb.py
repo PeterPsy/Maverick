@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="18",
+    manifest_version="19",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -141,6 +141,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/filesystem_mutation_lineage.py",
                 "core/runtime/full_workspace_contract.py",
                 "core/runtime/hosted_filesystem_result_behavior.py",
+                "core/runtime/hosted_result_security_behavior.py",
                 "core/runtime/hosted_process_output.py",
                 "core/runtime/hosted_tool_process_registry.py",
                 "core/runtime/hosted_workspace_effect_support.py",
@@ -232,6 +233,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/semantic_tool_blocks.py",
                 "core/runtime/workspace_instructions.py",
                 "core/runtime/hosted_agentic_request.py",
+                "core/runtime/classification_authority.py",
                 "core/runtime/hosted_context_management.py",
                 "core/runtime/hosted_harness_recipes.py",
                 "core/runtime/hosted_provider_runtime.py",
@@ -268,6 +270,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/confined_filesystem_mutations.py",
                 "core/runtime/confined_filesystem_search.py",
                 "core/runtime/full_workspace_contract.py",
+                "core/runtime/hosted_result_security_behavior.py",
                 "core/runtime/hosted_process_output.py",
                 "core/runtime/hosted_tool_process_registry.py",
                 "core/runtime/hosted_workspace_effect_support.py",

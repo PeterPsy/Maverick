@@ -66,19 +66,25 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v18 makes the known transitive boundary executable through
+Manifest v19 makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 24 and the Full Workspace result contract
-`codex-baseline-v11` are bound by TCB manifest v18. Google revision 32 and
-OpenRouter revision 31 atomically claim that contract and the `maverick_agent`
-family because the executable result gate reports all 13 required behaviors.
+Hosted adapter 25 and the Full Workspace result contract
+`codex-baseline-v12` are bound by TCB manifest v19. Google revision 33 and
+OpenRouter revision 32 atomically claim that contract and the `maverick_agent`
+family because the executable result gate reports all 16 required behaviors.
+The final three behaviors are negative security probes for sensitive filesystem
+marker narrowing, revoke-then-rebuild filesystem lineage, and delayed tool
+result egress after revocation. Tool records and provider-state generations
+retain exact mutable-authority id/revision/digest lineage, and Core revalidates
+it immediately before reuse, continuation, and egress. Runtime-public
+issue/revoke state is accepted only with matching deterministic audit evidence.
 Those definitions remain uncertified, unbound, contained previews; the local
 claim is not live-provider evidence or launch authorization. The adapter places
-all provider-bound context in semantic-envelope schema v1/compiler revision 6,
+all provider-bound context in semantic-envelope schema v1/compiler revision 7,
 materializes scoped instructions through the confined filesystem, requires
 commit-bound instruction digests for direct mutations, and uses rollback-safe
 batch COW overlays for shell/process effects. Terminal process polling is

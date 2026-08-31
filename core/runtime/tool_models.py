@@ -74,6 +74,13 @@ class ToolInvocationRecord:
     result_source_digest: str = ""
     result_resource_identity: str = ""
     result_classification_revision: int | None = None
+    result_classification_authority_id: str = ""
+    result_classification_authority_kind: str = ""
+    result_classification_authority_ref: str = ""
+    result_classification_authority_revision: int | None = None
+    result_classification_authority_digest: str = ""
+    result_classification_authority_policy_revision: str = ""
+    result_classification_authority_bound: bool | None = None
     proposal_id: str = ""
     provider_safe_name: str = ""
     provider_request_id: str = ""

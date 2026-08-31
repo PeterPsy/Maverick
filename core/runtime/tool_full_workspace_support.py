@@ -9,6 +9,7 @@ from pathlib import PurePosixPath
 from core.egress.classification import (
     CanonicalSourceClassification,
     join_classifications,
+    joined_classification_authority,
 )
 from core.runtime.tool_catalog import (
     RuntimeCoreCapabilitySurface,
@@ -243,6 +244,7 @@ def instruction_classification(chain, digest_value):
         )
     joined = join_classifications(item.classification for item in chain)
     revisions = tuple(item.classification_revision for item in joined.sources)
+    authority = joined_classification_authority(joined.sources)
     return CanonicalSourceClassification(
         data_class=joined.effective_data_class,
         provenance="tool_result",
@@ -254,6 +256,13 @@ def instruction_classification(chain, digest_value):
         classification_revision=(
             max(revisions) if all(item is not None for item in revisions) else None
         ),
+        classification_authority_id=authority[0],
+        classification_authority_kind=authority[1],
+        classification_authority_ref=authority[2],
+        classification_authority_revision=authority[3],
+        classification_authority_digest=authority[4],
+        classification_authority_policy_revision=authority[5],
+        classification_authority_bound=authority[6],
     )
 
 

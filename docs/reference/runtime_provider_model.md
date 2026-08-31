@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v18 also
+status, workspace binding, and upstream constraint. TCB manifest v19 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -598,13 +598,17 @@ runs classify their exact private-overlay result before commit and discard the
 overlay on denial. Mutating/destructive app CLI/MCP calls without the same
 pre-effect guarantee remain rejected; app definitions cannot self-promote.
 Current Google/OpenRouter definitions use `maverick_agent` and pin
-`codex-baseline-v11` only because the executable 13-behavior gate is complete;
+`codex-baseline-v12` only because the executable 16-behavior gate is complete;
 they are still uncertified, unbound, contained previews. Direct replacement
-and move propagate
-exact version-bound pre-image taint for read-after-write through authenticated
-same-session mutation records, even when the next tool step rebuilds its
-orchestrator, while creation remains unclassified without authoritative source
-taint. Large artifact
+and move propagate exact version-bound pre-image taint for read-after-write
+through authenticated same-session mutation records, even when the next tool
+step rebuilds its orchestrator, while creation remains unclassified without
+authoritative source taint. Mutable classification authority is stored as the
+exact id, kind, ref, revision, digest, and policy revision on tool and
+provider-state lineage, then checked against the current audit-backed authority
+before result reuse, continuation, and egress. Sensitive markers in original
+or projected filesystem/instruction/search result bytes can only narrow the
+class. Large artifact
 summaries carry a digest of their exact provider-visible bytes while retaining
 the original result class/trust/identity separately.
 

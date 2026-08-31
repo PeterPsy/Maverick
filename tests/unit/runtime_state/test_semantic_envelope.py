@@ -8,8 +8,15 @@ from unittest.mock import patch
 
 from core.egress.classification import validated_classification
 from core.providers.agentic_adapter import RuntimeTurnContext
+from core.providers.agentic_protocol import (
+    AgenticProviderPrivateState,
+    AgenticSourceMetadata,
+)
 from core.runtime.execution import execute_runtime_turn
-from core.runtime.hosted_agentic_models import HostedAgenticLoopError
+from core.runtime.hosted_agentic_models import (
+    HostedAgenticLoopError,
+    HostedContentClassification,
+)
 from core.runtime.hosted_agentic_policy import hosted_egress_policy
 from core.runtime.provider_input_context import (
     RuntimeProviderInputSource,
@@ -417,7 +424,7 @@ class SemanticEnvelopeTest(unittest.TestCase):
             second.provider_egress_projection_digest,
         )
         self.assertEqual(first.semantic_envelope_schema_version, "1")
-        self.assertEqual(first.semantic_projection_compiler_revision, "6")
+        self.assertEqual(first.semantic_projection_compiler_revision, "7")
         provenance = [block.provenance for block in first.content_blocks]
         self.assertEqual(
             provenance,
@@ -535,6 +542,85 @@ class SemanticEnvelopeTest(unittest.TestCase):
             harness.store.list_egress_decisions(session_id="session-hosted"),
             before,
         )
+
+    def test_revoked_transitive_provider_state_fails_before_continuation_egress(
+        self,
+    ) -> None:
+        harness = HostedAgenticHarness(self)
+        context = RuntimeTurnContext(
+            session=harness.session,
+            binding=harness.binding,
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            input_text="Continue the fixture.",
+            correlation_id="turn-hosted",
+            effective_authority=harness.authority,
+        )
+
+        def revalidate(_context, classification):
+            if classification.classification_authority_bound is not True:
+                return classification
+            return HostedContentClassification(
+                "unclassified",
+                "untrusted_external",
+                source_ref=classification.source_ref,
+                source_revision=classification.source_revision,
+                resource_identity=classification.resource_identity,
+                classification_revision=None,
+                content_digest=classification.content_digest,
+                classification_authority_bound=None,
+            )
+
+        harness.request_builder.classification_revalidator = revalidate
+        harness.request_builder.semantic_compiler.classification_revalidator = (
+            revalidate
+        )
+        stale = AgenticSourceMetadata(
+            source_block_digest="1" * 64,
+            source_data_class="public",
+            source_trust_level="untrusted_tool_output",
+            provenance="tool_result",
+            source_ref="historical-result",
+            source_revision="2" * 64,
+            resource_identity="historical-result:1",
+            classification_revision=1,
+            classification_authority_id="runtime-public-authority-1",
+            classification_authority_kind="runtime_public_content_authority",
+            classification_authority_ref="hosted-full-workspace",
+            classification_authority_revision=1,
+            classification_authority_digest="3" * 64,
+            classification_authority_policy_revision=(
+                "core-hosted-public-workspace-v2"
+            ),
+            classification_authority_bound=True,
+        )
+        private_state = AgenticProviderPrivateState(
+            codec_id="fake-private-codec",
+            codec_version="1",
+            schema_version="1",
+            content_type="application/octet-stream",
+            content=b"private-continuation",
+            source_metadata=(stale,),
+            effective_data_class="public",
+            effective_trust_level="untrusted_tool_output",
+            provider_request_id="provider-request-1",
+            turn_generation="turn-generation-1",
+        )
+
+        with self.assertRaisesRegex(
+            HostedAgenticLoopError,
+            "egress_data_class_denied",
+        ):
+            harness.request_builder.build(
+                context=context,
+                step=0,
+                input_text=context.input_text,
+                catalog=RuntimeToolCatalog(()),
+                tool_results=(),
+                provider_private_state=private_state,
+                egress_policy=hosted_egress_policy(context, harness.policy),
+                destination_upstream_id=None,
+                max_output_tokens=32,
+            )
 
     def test_persists_source_and_projection_evidence_in_provider_journal(self) -> None:
         harness = HostedAgenticHarness(self)

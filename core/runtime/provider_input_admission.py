@@ -9,6 +9,7 @@ from core.egress.classification import (
     CanonicalSourceClassification,
     fail_closed_classification,
     join_classifications,
+    joined_classification_authority,
     join_trust_levels,
     validated_classification,
 )
@@ -28,14 +29,16 @@ from core.runtime.provider_input_governed_sources import (
     generalist_context_source_chunks,
 )
 from core.runtime.public_content_authority import (
+    RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND,
     RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
+    RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF,
 )
 from core.runtime.public_content_authority_store import (
     runtime_public_content_authority_for_workspace,
 )
 
 
-RUNTIME_PROVIDER_INPUT_ADMISSION_REVISION = 5
+RUNTIME_PROVIDER_INPUT_ADMISSION_REVISION = 6
 
 
 def build_runtime_provider_input_classification_resolver(
@@ -189,6 +192,7 @@ def _classify_generalist_orchestration(
     proof_complete = bool(sources) and all(
         source.classification_revision is not None for source in sources
     )
+    authority = joined_classification_authority(tuple(sources))
     return validated_classification(
         data_class=joined.effective_data_class,
         provenance="governed_context",
@@ -204,6 +208,13 @@ def _classify_generalist_orchestration(
             if proof_complete
             else None
         ),
+        classification_authority_id=authority[0],
+        classification_authority_kind=authority[1],
+        classification_authority_ref=authority[2],
+        classification_authority_revision=authority[3],
+        classification_authority_digest=authority[4],
+        classification_authority_policy_revision=authority[5],
+        classification_authority_bound=authority[6],
     )
 
 
@@ -282,6 +293,29 @@ def _captured_source_classification(
         source_digest=resource_digest,
         resource_identity=resource_identity,
         classification_revision=RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION,
+        classification_authority_id=(str(authority_id) if authority_id else ""),
+        classification_authority_kind=(
+            RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND if authority_id else ""
+        ),
+        classification_authority_ref=(
+            RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF if authority_id else ""
+        ),
+        classification_authority_revision=(
+            entry.get("classification_authority_revision")
+            if authority_id
+            else None
+        ),
+        classification_authority_digest=(
+            str(entry.get("classification_authority_digest") or "")
+            if authority_id
+            else ""
+        ),
+        classification_authority_policy_revision=(
+            str(entry.get("classification_authority_policy_revision") or "")
+            if authority_id
+            else ""
+        ),
+        classification_authority_bound=bool(authority_id),
     )
 
 

@@ -191,6 +191,27 @@ def _artifact_classification(invocation) -> CanonicalSourceClassification:
         source_digest=invocation.result_source_digest,
         resource_identity=invocation.result_resource_identity,
         classification_revision=invocation.result_classification_revision,
+        classification_authority_id=(
+            invocation.result_classification_authority_id
+        ),
+        classification_authority_kind=(
+            invocation.result_classification_authority_kind
+        ),
+        classification_authority_ref=(
+            invocation.result_classification_authority_ref
+        ),
+        classification_authority_revision=(
+            invocation.result_classification_authority_revision
+        ),
+        classification_authority_digest=(
+            invocation.result_classification_authority_digest
+        ),
+        classification_authority_policy_revision=(
+            invocation.result_classification_authority_policy_revision
+        ),
+        classification_authority_bound=(
+            invocation.result_classification_authority_bound
+        ),
     )
 
 

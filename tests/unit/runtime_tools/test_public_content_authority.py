@@ -4,11 +4,14 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from core.egress.classification import fail_closed_classification
+from core.runtime import public_content_authority as public_authority_module
 from core.runtime.public_content_authority import (
     RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND,
     RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF,
+    build_runtime_public_content_authority_record,
 )
 from core.runtime.public_content_classification import (
     classification_from_runtime_public_content_authority,
@@ -204,6 +207,104 @@ class RuntimePublicContentAuthorityTest(unittest.TestCase):
         )
 
         self.assertEqual(resolved, exact_public)
+
+    def test_issue_is_not_visible_when_audit_persistence_fails(self) -> None:
+        with patch.object(
+            self.store,
+            "append_data_governance_audit",
+            side_effect=RuntimeError("audit unavailable"),
+        ), self.assertRaisesRegex(RuntimeError, "audit unavailable"):
+            issue_runtime_public_content_authority(
+                self.store,
+                workspace_id="workspace-1",
+                actor_id="operator-1",
+                expected_revision=0,
+                now=NOW,
+            )
+
+        self.assertIsNone(
+            self.store.get_resource_classification(
+                workspace_id="workspace-1",
+                resource_kind=RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND,
+                resource_ref=RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF,
+            )
+        )
+        self.assertIsNone(
+            runtime_public_content_authority_for_workspace(
+                self.store,
+                "workspace-1",
+            )
+        )
+
+    def test_issue_migrates_a_legacy_authority_to_the_new_policy_revision(
+        self,
+    ) -> None:
+        legacy = build_runtime_public_content_authority_record(
+            workspace_id="workspace-1",
+            actor_id="operator-legacy",
+            active=True,
+            expected_revision=0,
+            now=NOW,
+        )
+        legacy_digest = public_authority_module._record_digest(
+            legacy,
+            policy_revision="core-hosted-public-workspace-v1",
+        )
+        legacy = replace(
+            legacy,
+            resource_revision=legacy_digest,
+            resource_digest=legacy_digest,
+        )
+        self.store.save_resource_classification(
+            legacy,
+            expected_revision=0,
+        )
+
+        migrated = issue_runtime_public_content_authority(
+            self.store,
+            workspace_id="workspace-1",
+            actor_id="operator-current",
+            expected_revision=1,
+            now=NOW,
+        )
+
+        self.assertEqual(migrated.revision, 2)
+        self.assertEqual(migrated.classification_id, legacy.classification_id)
+        self.assertEqual(
+            runtime_public_content_authority_for_workspace(
+                self.store,
+                "workspace-1",
+            ),
+            migrated,
+        )
+
+    def test_prepared_audit_does_not_create_authority_when_cas_fails(self) -> None:
+        with patch.object(
+            self.store,
+            "save_resource_classification",
+            side_effect=RuntimeError("classification unavailable"),
+        ), self.assertRaisesRegex(RuntimeError, "classification unavailable"):
+            issue_runtime_public_content_authority(
+                self.store,
+                workspace_id="workspace-1",
+                actor_id="operator-1",
+                expected_revision=0,
+                now=NOW,
+            )
+
+        self.assertIsNone(
+            self.store.get_resource_classification(
+                workspace_id="workspace-1",
+                resource_kind=RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND,
+                resource_ref=RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF,
+            )
+        )
+        self.assertIsNone(
+            runtime_public_content_authority_for_workspace(
+                self.store,
+                "workspace-1",
+            )
+        )
 
 
 if __name__ == "__main__":

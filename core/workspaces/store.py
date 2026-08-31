@@ -136,6 +136,12 @@ class WorkspaceStore(Protocol):
     ) -> WorkspaceDataGovernanceAudit:
         ...
 
+    def get_data_governance_audit(
+        self,
+        audit_id: str,
+    ) -> WorkspaceDataGovernanceAudit | None:
+        ...
+
 
 @dataclass(frozen=True)
 class WorkspaceCollections:
@@ -358,6 +364,18 @@ class WorkspaceDocumentStore:
         if not created:
             raise WorkspaceDataGovernanceError("data_governance_audit_conflict")
         return record
+
+    def get_data_governance_audit(
+        self,
+        audit_id: str,
+    ) -> WorkspaceDataGovernanceAudit | None:
+        collection = self._data_governance_collection("data_governance_audits")
+        document = collection.find_one({"audit_id": audit_id})
+        return (
+            None
+            if document is None
+            else WorkspaceDataGovernanceAudit(**document)
+        )
 
     def list_data_governance_audits(
         self,

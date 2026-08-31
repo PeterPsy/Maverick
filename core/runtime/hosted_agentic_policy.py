@@ -87,6 +87,7 @@ def normalized_tool_result(
 ) -> tuple[dict[str, object], bool]:
     record = outcome.invocation
     if record.state == "succeeded":
+        classification = orchestrator.persisted_result_classification(record)
         result = orchestrator.ledger.load_result(record)
         projected = project_hosted_tool_result(
             result,
@@ -98,7 +99,7 @@ def normalized_tool_result(
         return pairing_safe_tool_result(
             projected,
             is_error=False,
-            result_data_class=record.result_data_class,
+            result_data_class=classification.data_class,
             allowed_remote_data_classes=allowed_remote_data_classes,
         )
     if record.state in {"denied", "expired", "failed", "cancelled"}:

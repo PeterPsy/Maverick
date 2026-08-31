@@ -148,13 +148,20 @@ class HostedAgenticRequestBuilder:
         ]
         | None = None,
         semantic_compiler: HostedSemanticEnvelopeCompiler | None = None,
+        classification_revalidator: Callable[
+            [object, HostedContentClassification],
+            HostedContentClassification,
+        ]
+        | None = None,
     ) -> None:
         self.egress_evaluator = egress_evaluator
         self.classifier = classifier
         self.attestation_resolver = attestation_resolver
+        self.classification_revalidator = classification_revalidator
         self.semantic_compiler = semantic_compiler or HostedSemanticEnvelopeCompiler(
             classifier=classifier,
             platform_instruction=HOSTED_TOOL_USE_INSTRUCTION,
+            classification_revalidator=classification_revalidator,
         )
 
     def build(
@@ -633,6 +640,11 @@ class HostedAgenticRequestBuilder:
         if semantic_block is None:
             raise HostedAgenticLoopError("semantic_envelope_incomplete")
         classification = _semantic_classification(semantic_block)
+        classification = self._revalidate_provider_state_sources(
+            context,
+            state,
+            classification,
+        )
         exported, metadata = self._evaluate(
             context=context,
             content_block_id=f"{request_id}:provider-state",
@@ -677,6 +689,16 @@ class HostedAgenticRequestBuilder:
             "agentic_egress_enforcement_disabled",
         )
         classification = classification or self.classifier(context, provenance, content)
+        if self.classification_revalidator is not None:
+            try:
+                classification = self.classification_revalidator(
+                    context,
+                    classification,
+                )
+            except Exception as error:
+                raise HostedAgenticLoopError(
+                    "classification_authority_unavailable"
+                ) from error
         data_attestation = None
         if classification.data_class == "workspace_internal_fake":
             if self.attestation_resolver is not None:
@@ -709,6 +731,56 @@ class HostedAgenticRequestBuilder:
                     classification,
                     "classification_revision",
                     None,
+                ),
+                classification_authority_id=str(
+                    getattr(
+                        classification,
+                        "classification_authority_id",
+                        "",
+                    )
+                    or ""
+                ),
+                classification_authority_kind=str(
+                    getattr(
+                        classification,
+                        "classification_authority_kind",
+                        "",
+                    )
+                    or ""
+                ),
+                classification_authority_ref=str(
+                    getattr(
+                        classification,
+                        "classification_authority_ref",
+                        "",
+                    )
+                    or ""
+                ),
+                classification_authority_revision=getattr(
+                    classification,
+                    "classification_authority_revision",
+                    None,
+                ),
+                classification_authority_digest=str(
+                    getattr(
+                        classification,
+                        "classification_authority_digest",
+                        "",
+                    )
+                    or ""
+                ),
+                classification_authority_policy_revision=str(
+                    getattr(
+                        classification,
+                        "classification_authority_policy_revision",
+                        "",
+                    )
+                    or ""
+                ),
+                classification_authority_bound=getattr(
+                    classification,
+                    "classification_authority_bound",
+                    False,
                 ),
             ),
             content=content,
@@ -744,6 +816,37 @@ class HostedAgenticRequestBuilder:
             source_revision=source_revision,
             resource_identity=resource_identity,
             classification_revision=getattr(classification, "classification_revision", None),
+            classification_authority_id=str(
+                getattr(classification, "classification_authority_id", "") or ""
+            ),
+            classification_authority_kind=str(
+                getattr(classification, "classification_authority_kind", "") or ""
+            ),
+            classification_authority_ref=str(
+                getattr(classification, "classification_authority_ref", "") or ""
+            ),
+            classification_authority_revision=getattr(
+                classification,
+                "classification_authority_revision",
+                None,
+            ),
+            classification_authority_digest=str(
+                getattr(classification, "classification_authority_digest", "")
+                or ""
+            ),
+            classification_authority_policy_revision=str(
+                getattr(
+                    classification,
+                    "classification_authority_policy_revision",
+                    "",
+                )
+                or ""
+            ),
+            classification_authority_bound=getattr(
+                classification,
+                "classification_authority_bound",
+                False,
+            ),
             semantic_block_id=(
                 "" if semantic_block is None else semantic_block.block_id
             ),
@@ -758,6 +861,46 @@ class HostedAgenticRequestBuilder:
             exported_digest=str(result.decision.exported_digest or ""),
         )
 
+    def _revalidate_provider_state_sources(
+        self,
+        context,
+        state: AgenticProviderPrivateState,
+        classification: HostedContentClassification,
+    ) -> HostedContentClassification:
+        if self.classification_revalidator is None:
+            return classification
+        if not state.source_metadata:
+            return HostedContentClassification(
+                "unclassified",
+                "untrusted_external",
+                source_ref=classification.source_ref,
+                source_revision=classification.source_revision,
+                resource_identity=classification.resource_identity,
+                classification_revision=None,
+                content_digest=classification.content_digest,
+                classification_authority_bound=None,
+            )
+        for metadata in state.source_metadata:
+            source = _metadata_classification(metadata)
+            try:
+                live = self.classification_revalidator(context, source)
+            except Exception as error:
+                raise HostedAgenticLoopError(
+                    "classification_authority_unavailable"
+                ) from error
+            if live.data_class == "unclassified":
+                return HostedContentClassification(
+                    "unclassified",
+                    "untrusted_external",
+                    source_ref=classification.source_ref,
+                    source_revision=classification.source_revision,
+                    resource_identity=classification.resource_identity,
+                    classification_revision=None,
+                    content_digest=classification.content_digest,
+                    classification_authority_bound=None,
+                )
+        return classification
+
 
 def _semantic_classification(
     block: SemanticEnvelopeBlock,
@@ -770,4 +913,44 @@ def _semantic_classification(
         resource_identity=block.resource_identity,
         classification_revision=block.classification_revision,
         content_digest=block.source_digest,
+        classification_authority_id=block.classification_authority_id,
+        classification_authority_kind=block.classification_authority_kind,
+        classification_authority_ref=block.classification_authority_ref,
+        classification_authority_revision=(
+            block.classification_authority_revision
+        ),
+        classification_authority_digest=block.classification_authority_digest,
+        classification_authority_policy_revision=(
+            block.classification_authority_policy_revision
+        ),
+        classification_authority_bound=block.classification_authority_bound,
+    )
+
+
+def _metadata_classification(
+    metadata: AgenticSourceMetadata,
+) -> HostedContentClassification:
+    return HostedContentClassification(
+        metadata.source_data_class,
+        metadata.source_trust_level,
+        source_ref=metadata.source_ref,
+        source_revision=metadata.source_revision,
+        resource_identity=metadata.resource_identity,
+        classification_revision=metadata.classification_revision,
+        content_digest=metadata.source_block_digest,
+        classification_authority_id=metadata.classification_authority_id,
+        classification_authority_kind=metadata.classification_authority_kind,
+        classification_authority_ref=metadata.classification_authority_ref,
+        classification_authority_revision=(
+            metadata.classification_authority_revision
+        ),
+        classification_authority_digest=(
+            metadata.classification_authority_digest
+        ),
+        classification_authority_policy_revision=(
+            metadata.classification_authority_policy_revision
+        ),
+        classification_authority_bound=(
+            metadata.classification_authority_bound
+        ),
     )

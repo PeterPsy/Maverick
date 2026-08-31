@@ -23,6 +23,9 @@ from core.workspaces.errors import WorkspaceDataGovernanceError
 RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND = "runtime_public_content_authority"
 RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF = "hosted-full-workspace"
 RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION = (
+    "core-hosted-public-workspace-v2"
+)
+_LEGACY_RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION = (
     "core-hosted-public-workspace-v1"
 )
 
@@ -49,9 +52,18 @@ def build_runtime_public_content_authority_record(
         raise WorkspaceDataGovernanceError(
             "runtime_public_content_authority_revision_conflict"
         )
-    if prior is not None and not runtime_public_content_authority_is_valid(
-        prior,
-        workspace_id=workspace_id,
+    if prior is not None and not (
+        runtime_public_content_authority_is_valid(
+            prior,
+            workspace_id=workspace_id,
+        )
+        or _runtime_public_content_authority_is_valid_for_policy(
+            prior,
+            workspace_id=workspace_id,
+            policy_revision=(
+                _LEGACY_RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION
+            ),
+        )
     ):
         raise WorkspaceDataGovernanceError(
             "runtime_public_content_authority_invalid"
@@ -114,6 +126,19 @@ def runtime_public_content_authority_is_valid(
     workspace_id: str,
 ) -> bool:
     """Validate the reserved record and its self-authenticating revision digest."""
+    return _runtime_public_content_authority_is_valid_for_policy(
+        record,
+        workspace_id=workspace_id,
+        policy_revision=RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
+    )
+
+
+def _runtime_public_content_authority_is_valid_for_policy(
+    record: WorkspaceResourceClassification,
+    *,
+    workspace_id: str,
+    policy_revision: str,
+) -> bool:
     if (
         not isinstance(record, WorkspaceResourceClassification)
         or not resource_classification_is_well_formed(record)
@@ -131,13 +156,17 @@ def runtime_public_content_authority_is_valid(
         )
     ):
         return False
-    digest = _record_digest(record)
+    digest = _record_digest(record, policy_revision=policy_revision)
     return record.resource_revision == digest and record.resource_digest == digest
 
 
-def _record_digest(record: WorkspaceResourceClassification) -> str:
+def _record_digest(
+    record: WorkspaceResourceClassification,
+    *,
+    policy_revision: str = RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
+) -> str:
     payload = {
-        "policy_revision": RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
+        "policy_revision": policy_revision,
         "classification_id": record.classification_id,
         "workspace_id": record.workspace_id,
         "resource_kind": record.resource_kind,

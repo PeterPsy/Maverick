@@ -5,10 +5,12 @@ from __future__ import annotations
 from core.egress.classification import (
     CanonicalSourceClassification,
     fail_closed_classification,
-    join_classifications,
     validated_classification,
 )
 from core.runtime.public_content_authority import (
+    RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND,
+    RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
+    RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF,
     runtime_public_content_authority_is_active,
 )
 from core.runtime.public_content_authority_store import (
@@ -56,6 +58,15 @@ def classification_from_runtime_public_content_authority(
         source_digest=source_digest,
         resource_identity=resource_identity,
         classification_revision=record.revision,
+        classification_authority_id=record.classification_id,
+        classification_authority_kind=RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND,
+        classification_authority_ref=RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF,
+        classification_authority_revision=record.revision,
+        classification_authority_digest=record.resource_digest,
+        classification_authority_policy_revision=(
+            RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION
+        ),
+        classification_authority_bound=True,
     )
 
 
@@ -83,27 +94,13 @@ def resolve_runtime_public_resource_classification(
             getattr(observation, "resource_identity", "") or ""
         ),
     )
-    if authoritative.classification_revision is None:
-        return public
-    if public.classification_revision is None:
-        return authoritative
-    joined = join_classifications((authoritative, public))
-    return validated_classification(
-        data_class=joined.effective_data_class,
-        provenance=provenance,
-        trust_level=joined.effective_trust_level,
-        source_ref=str(getattr(observation, "resource_ref", "") or ""),
-        source_revision=str(
-            getattr(observation, "resource_revision", "") or ""
-        ),
-        source_digest=str(getattr(observation, "resource_digest", "") or ""),
-        resource_identity=str(
-            getattr(observation, "resource_identity", "") or ""
-        ),
-        classification_revision=max(
-            authoritative.classification_revision,
-            record.revision if record is not None else 1,
-        ),
+    # An exact resource record is the narrower authority even when it says
+    # ``public``.  The workspace-wide authority is only a fallback when no
+    # exact version-bound decision exists.
+    return (
+        authoritative
+        if authoritative.classification_revision is not None
+        else public
     )
 
 

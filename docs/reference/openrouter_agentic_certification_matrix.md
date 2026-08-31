@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
 Status date: 2026-08-31
-Matrix revision: `2026-08-31-r28-p4-full-workspace-tcb18`
+Matrix revision: `2026-08-31-r29-p4-authority-revalidation-tcb19`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==24`
+Adapter: `maverick-hosted-tool-loop==25`
 
 ## Preview combination
 
@@ -12,8 +12,8 @@ Adapter: `maverick-hosted-tool-loop==24`
 | --- | --- |
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
-| Immutable profile revision | `31` (candidate revision `30` suspended) |
-| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v11` |
+| Immutable profile revision | `32` (revision `31` suspended) |
+| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v12` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -31,7 +31,7 @@ Adapter: `maverick-hosted-tool-loop==24`
 | Turn cost ceiling | 250,000 micro-USD; 70,000 remains protected for the two terminal attempts |
 | Final request | exact Core finalization instruction; `tools: []`; `tool_choice: none` |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | Full Workspace `codex-baseline-v11` surface: all 13 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result contract; denied bytes pair through a public error; shell/process effects remain private until exact-result admission; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
+| Tool handles | Full Workspace `codex-baseline-v12` surface: all 16 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result contract; denied bytes pair through a public error; shell/process effects remain private until exact-result admission; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 30 days |
 
 The current OpenRouter model catalog lists `deepinfra/fp8` as active for
@@ -44,7 +44,7 @@ The certification probe fetches both official catalogs immediately before any
 completion request and fails unless this exact record is active, ZDR-listed,
 large enough for the requested completion budget, and supports every parameter
 the translated payload sends that participates in endpoint parameter routing.
-Suite 28 also requires `supports_tool_choice.none=true` in both exact records,
+Suite 29 also requires `supports_tool_choice.none=true` in both exact records,
 so the current DeepInfra record is an explicit certification blocker rather
 than a capability Maverick guesses or works around. A changed endpoint or
 upstream requires a new recipe/catalog digest and immutable profile revision.
@@ -89,8 +89,8 @@ Primary references:
 | Contract | Required evidence | Current certification result |
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
-| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@6`; exact byte-bound classifications, lexical no-symlink skill identity, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, and journal evidence | not certified |
-| Certified execution TCB | manifest v18 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@7`; exact byte-bound classifications, lexical no-symlink skill identity, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, and journal evidence | not certified |
+| Certified execution TCB | manifest v19 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, `tool_choice:none`, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -100,7 +100,7 @@ Primary references:
 | Multi-step continuation | deterministic fixtures for three sequential tool rounds followed by a final response at every reasoning effort | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, pairing-safe semantic history compaction, request-scoped authority replacement, bounded byte-correct tool-result artifacts, explicit attachment workspace references, and safe-next-turn steering fallback | not certified |
-| Full Workspace behavioral gate | `codex-baseline-v11` executes create, replace, edit, patch, move, delete, read-after-write, shell/process, and CLI/MCP result workflows instead of trusting declared mode strings | repository gate complete: 13/13 behaviors; signed provider certification not run |
+| Full Workspace behavioral gate | `codex-baseline-v12` executes 13 positive result workflows plus marker narrowing, revoke-then-rebuild, and delayed-egress-after-revocation probes instead of trusting declared mode strings | repository gate complete: 16/16 behaviors; signed provider certification not run |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
 | Usage, generation id and price | success and decode-failure fixtures retain telemetry; active request reservations reconcile to reported micro-USD while missing usage remains worst-case | not certified |
@@ -116,7 +116,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r28 |
+| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r29 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -326,7 +326,7 @@ Revision 30 pins adapter 23, governed recipe 10, suite 27, matrix
 classification no longer promotes marker-free bytes to public; direct
 replace/edit/patch preserves mode and ACL/xattrs and carries exact pre-image
 taint through read-after-write; move rebinds it; failed parent creation is
-rolled back; and skill aliases fail closed. `codex-baseline-v11` names and
+rolled back; and skill aliases fail closed. `codex-baseline-v12` names and
 executes every filesystem mutation workflow, while creation and variable
 shell/process and CLI/MCP results remain incomplete without authoritative
 classification. The definition is explicitly
@@ -335,15 +335,16 @@ Workspace. It remains uncertified, unbound, and unavailable; no live probe,
 behavioral run, provider completion, certificate, canary, or remote activation
 has been performed.
 
-Revision 31 pins adapter 24, governed recipe 11, suite 28, matrix
-`2026-08-31-r28-p4-full-workspace-tcb18`, and TCB manifest v18. The
+Revision 32 pins adapter 25, governed recipe 12, suite 29, matrix
+`2026-08-31-r29-p4-authority-revalidation-tcb19`, and TCB manifest v19. The
 operator-owned runtime-public classification policy supplies explicit,
 revocable server authority for exact prompt/result identities and canonical
 digests; certified Core result contracts cover schema-owned results; and
 shell/process mutations admit the exact private-overlay result before commit.
-The executable `codex-baseline-v11` gate returns all 13 required behaviors,
-including create/read-after-create across orchestrator rebuild and CLI/MCP
-list/run/call. The immutable definition therefore atomically pins
+The executable `codex-baseline-v12` gate returns all 16 required behaviors,
+including create/read-after-create across orchestrator rebuild, CLI/MCP
+list/run/call, sensitive-marker narrowing, revoke-then-rebuild denial, and
+delayed-egress denial after revocation. The immutable definition therefore atomically pins
 `execution_family=maverick_agent` and the Full Workspace contract. It remains
 uncertified, unbound, contained, and unavailable; no live probe, signed run,
 provider completion, certificate, canary, or remote activation has been

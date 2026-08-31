@@ -24,6 +24,7 @@ from core.egress.classification import (
     CanonicalSourceClassification,
     fail_closed_classification,
     join_classifications,
+    joined_classification_authority,
     validated_classification,
 )
 from core.runtime.tool_errors import RuntimeToolError
@@ -1363,6 +1364,7 @@ class ConfinedWorkspaceFilesystem:
             revisions = tuple(
                 source.classification_revision for source in joined.sources
             )
+            authority = joined_classification_authority(joined.sources)
             return validated_classification(
                 data_class=joined.effective_data_class,
                 provenance=provenance,
@@ -1376,6 +1378,13 @@ class ConfinedWorkspaceFilesystem:
                     if all(item is not None for item in revisions)
                     else None
                 ),
+                classification_authority_id=authority[0],
+                classification_authority_kind=authority[1],
+                classification_authority_ref=authority[2],
+                classification_authority_revision=authority[3],
+                classification_authority_digest=authority[4],
+                classification_authority_policy_revision=authority[5],
+                classification_authority_bound=authority[6],
             )
         return normalized
 
@@ -1415,6 +1424,21 @@ class ConfinedWorkspaceFilesystem:
             source_digest=observation.resource_digest,
             resource_identity=observation.resource_identity,
             classification_revision=source.classification_revision,
+            classification_authority_id=source.classification_authority_id,
+            classification_authority_kind=source.classification_authority_kind,
+            classification_authority_ref=source.classification_authority_ref,
+            classification_authority_revision=(
+                source.classification_authority_revision
+            ),
+            classification_authority_digest=(
+                source.classification_authority_digest
+            ),
+            classification_authority_policy_revision=(
+                source.classification_authority_policy_revision
+            ),
+            classification_authority_bound=(
+                source.classification_authority_bound
+            ),
         )
 
     def _remember_mutation_taint(

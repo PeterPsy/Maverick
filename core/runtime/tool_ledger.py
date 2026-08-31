@@ -444,6 +444,41 @@ class RuntimeToolLedger:
                 if result_classification is not None
                 else record.result_classification_revision
             ),
+            result_classification_authority_id=(
+                result_classification.classification_authority_id
+                if result_classification is not None
+                else record.result_classification_authority_id
+            ),
+            result_classification_authority_kind=(
+                result_classification.classification_authority_kind
+                if result_classification is not None
+                else record.result_classification_authority_kind
+            ),
+            result_classification_authority_ref=(
+                result_classification.classification_authority_ref
+                if result_classification is not None
+                else record.result_classification_authority_ref
+            ),
+            result_classification_authority_revision=(
+                result_classification.classification_authority_revision
+                if result_classification is not None
+                else record.result_classification_authority_revision
+            ),
+            result_classification_authority_digest=(
+                result_classification.classification_authority_digest
+                if result_classification is not None
+                else record.result_classification_authority_digest
+            ),
+            result_classification_authority_policy_revision=(
+                result_classification.classification_authority_policy_revision
+                if result_classification is not None
+                else record.result_classification_authority_policy_revision
+            ),
+            result_classification_authority_bound=(
+                result_classification.classification_authority_bound
+                if result_classification is not None
+                else record.result_classification_authority_bound
+            ),
             resolution_status=effective_resolution,
             disposition_id=disposition_id,
             effect_boundary_at=(

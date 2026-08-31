@@ -8,7 +8,11 @@ import hmac
 import json
 import os
 
-from core.egress.classification import CanonicalSourceClassification, join_classifications
+from core.egress.classification import (
+    CanonicalSourceClassification,
+    join_classifications,
+    joined_classification_authority,
+)
 from core.runtime.confined_filesystem import (
     _CURSOR_DOMAIN,
     _snapshot_digest,
@@ -253,6 +257,7 @@ def _aggregate_classification(
     revisions = tuple(
         item.classification_revision for item in joined.sources
     )
+    authority = joined_classification_authority(joined.sources)
     return CanonicalSourceClassification(
         data_class=joined.effective_data_class,
         provenance="tool_result",
@@ -264,6 +269,13 @@ def _aggregate_classification(
         classification_revision=(
             max(revisions) if revisions and all(item is not None for item in revisions) else None
         ),
+        classification_authority_id=authority[0],
+        classification_authority_kind=authority[1],
+        classification_authority_ref=authority[2],
+        classification_authority_revision=authority[3],
+        classification_authority_digest=authority[4],
+        classification_authority_policy_revision=authority[5],
+        classification_authority_bound=authority[6],
     )
 
 

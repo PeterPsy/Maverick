@@ -1092,6 +1092,27 @@ class RuntimeDocumentStore:
             result_source_digest=record.result_source_digest,
             result_resource_identity=record.result_resource_identity,
             result_classification_revision=record.result_classification_revision,
+            result_classification_authority_id=(
+                record.result_classification_authority_id
+            ),
+            result_classification_authority_kind=(
+                record.result_classification_authority_kind
+            ),
+            result_classification_authority_ref=(
+                record.result_classification_authority_ref
+            ),
+            result_classification_authority_revision=(
+                record.result_classification_authority_revision
+            ),
+            result_classification_authority_digest=(
+                record.result_classification_authority_digest
+            ),
+            result_classification_authority_policy_revision=(
+                record.result_classification_authority_policy_revision
+            ),
+            result_classification_authority_bound=(
+                record.result_classification_authority_bound
+            ),
             resolution_status=record.resolution_status,
             disposition_id=record.disposition_id,
             safe_to_retry=record.safe_to_retry,

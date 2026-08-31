@@ -19,7 +19,7 @@ from core.runtime.hosted_agentic_models import (
 
 SEMANTIC_ENVELOPE_SCHEMA_VERSION = "1"
 HOSTED_SEMANTIC_PROJECTION_COMPILER_ID = "maverick-hosted-semantic-projection"
-HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION = "6"
+HOSTED_SEMANTIC_PROJECTION_COMPILER_REVISION = "7"
 
 SemanticBlockKind = Literal[
     "content",
@@ -47,6 +47,13 @@ class SemanticEnvelopeBlock:
     source_digest: str
     resource_identity: str
     classification_revision: int | None
+    classification_authority_id: str = ""
+    classification_authority_kind: str = ""
+    classification_authority_ref: str = ""
+    classification_authority_revision: int | None = None
+    classification_authority_digest: str = ""
+    classification_authority_policy_revision: str = ""
+    classification_authority_bound: bool | None = False
     required: bool = True
 
 
@@ -93,6 +100,7 @@ def make_semantic_block(
             resource_identity=classification.resource_identity,
             classification_revision=None,
             content_digest=content_digest,
+            classification_authority_bound=None,
         )
     block_id = f"semantic:{context.correlation_id}:{len(blocks)}"
     resolved_ref = source_ref or classification.source_ref or block_id
@@ -116,6 +124,23 @@ def make_semantic_block(
             resource_identity or classification.resource_identity or block_id
         ),
         classification_revision=classification.classification_revision,
+        classification_authority_id=classification.classification_authority_id,
+        classification_authority_kind=(
+            classification.classification_authority_kind
+        ),
+        classification_authority_ref=classification.classification_authority_ref,
+        classification_authority_revision=(
+            classification.classification_authority_revision
+        ),
+        classification_authority_digest=(
+            classification.classification_authority_digest
+        ),
+        classification_authority_policy_revision=(
+            classification.classification_authority_policy_revision
+        ),
+        classification_authority_bound=(
+            classification.classification_authority_bound
+        ),
     )
 
 
@@ -223,6 +248,17 @@ def canonical_classification(
         resource_identity=value.resource_identity,
         classification_revision=value.classification_revision,
         content_digest=value.source_digest,
+        classification_authority_id=value.classification_authority_id,
+        classification_authority_kind=value.classification_authority_kind,
+        classification_authority_ref=value.classification_authority_ref,
+        classification_authority_revision=(
+            value.classification_authority_revision
+        ),
+        classification_authority_digest=value.classification_authority_digest,
+        classification_authority_policy_revision=(
+            value.classification_authority_policy_revision
+        ),
+        classification_authority_bound=value.classification_authority_bound,
     )
 
 
@@ -237,6 +273,17 @@ def semantic_block_classification(
         resource_identity=block.resource_identity,
         classification_revision=block.classification_revision,
         content_digest=block.source_digest,
+        classification_authority_id=block.classification_authority_id,
+        classification_authority_kind=block.classification_authority_kind,
+        classification_authority_ref=block.classification_authority_ref,
+        classification_authority_revision=(
+            block.classification_authority_revision
+        ),
+        classification_authority_digest=block.classification_authority_digest,
+        classification_authority_policy_revision=(
+            block.classification_authority_policy_revision
+        ),
+        classification_authority_bound=block.classification_authority_bound,
     )
 
 

@@ -66,6 +66,39 @@ def make_agentic_tool_result(
             source_revision=invocation.result_source_revision,
             resource_identity=invocation.result_resource_identity,
             classification_revision=invocation.result_classification_revision,
+            classification_authority_id=(
+                getattr(invocation, "result_classification_authority_id", "")
+            ),
+            classification_authority_kind=(
+                getattr(invocation, "result_classification_authority_kind", "")
+            ),
+            classification_authority_ref=(
+                getattr(invocation, "result_classification_authority_ref", "")
+            ),
+            classification_authority_revision=(
+                getattr(
+                    invocation,
+                    "result_classification_authority_revision",
+                    None,
+                )
+            ),
+            classification_authority_digest=(
+                getattr(invocation, "result_classification_authority_digest", "")
+            ),
+            classification_authority_policy_revision=(
+                getattr(
+                    invocation,
+                    "result_classification_authority_policy_revision",
+                    "",
+                )
+            ),
+            classification_authority_bound=(
+                getattr(
+                    invocation,
+                    "result_classification_authority_bound",
+                    None,
+                )
+            ),
         )
     return AgenticToolResult(
         provider_tool_call_id=provider_tool_call_id,

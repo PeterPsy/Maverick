@@ -9,6 +9,7 @@ from datetime import datetime
 from core.runtime.private_payload_models import PRIVATE_PAYLOAD_ENCRYPTION_PROFILE
 from core.egress.classification import (
     KNOWN_DATA_CLASSES,
+    KNOWN_PROVENANCE,
     KNOWN_TRUST_LEVELS,
     join_data_classes,
     join_trust_levels,
@@ -31,6 +32,18 @@ class ProviderPrivateEnvelope:
     source_block_digests: tuple[str, ...] = ()
     source_data_classes: tuple[str, ...] = ("unclassified",)
     source_trust_levels: tuple[str, ...] = ("untrusted_external",)
+    source_provenances: tuple[str, ...] = ()
+    source_refs: tuple[str, ...] = ()
+    source_revisions: tuple[str, ...] = ()
+    source_resource_identities: tuple[str, ...] = ()
+    source_classification_revisions: tuple[int | None, ...] = ()
+    source_classification_authority_ids: tuple[str, ...] = ()
+    source_classification_authority_kinds: tuple[str, ...] = ()
+    source_classification_authority_refs: tuple[str, ...] = ()
+    source_classification_authority_revisions: tuple[int | None, ...] = ()
+    source_classification_authority_digests: tuple[str, ...] = ()
+    source_classification_authority_policy_revisions: tuple[str, ...] = ()
+    source_classification_authority_bounds: tuple[bool | None, ...] = ()
     effective_data_class: str = "unclassified"
     effective_trust_level: str = "untrusted_external"
     codec_identity: str = ""
@@ -70,6 +83,52 @@ def provider_private_envelope_from_document(
         payload.get("source_trust_levels", ("untrusted_external",))
         or ("untrusted_external",)
     )
+    source_count = len(payload["source_block_digests"])
+    payload["source_provenances"] = tuple(
+        payload.get("source_provenances", ("provider_state",) * source_count)
+    )
+    payload["source_refs"] = tuple(
+        payload.get("source_refs", ("",) * source_count)
+    )
+    payload["source_revisions"] = tuple(
+        payload.get("source_revisions", ("",) * source_count)
+    )
+    payload["source_resource_identities"] = tuple(
+        payload.get("source_resource_identities", ("",) * source_count)
+    )
+    payload["source_classification_revisions"] = tuple(
+        payload.get("source_classification_revisions", (None,) * source_count)
+    )
+    payload["source_classification_authority_ids"] = tuple(
+        payload.get("source_classification_authority_ids", ("",) * source_count)
+    )
+    payload["source_classification_authority_kinds"] = tuple(
+        payload.get("source_classification_authority_kinds", ("",) * source_count)
+    )
+    payload["source_classification_authority_refs"] = tuple(
+        payload.get("source_classification_authority_refs", ("",) * source_count)
+    )
+    payload["source_classification_authority_revisions"] = tuple(
+        payload.get(
+            "source_classification_authority_revisions",
+            (None,) * source_count,
+        )
+    )
+    payload["source_classification_authority_digests"] = tuple(
+        payload.get("source_classification_authority_digests", ("",) * source_count)
+    )
+    payload["source_classification_authority_policy_revisions"] = tuple(
+        payload.get(
+            "source_classification_authority_policy_revisions",
+            ("",) * source_count,
+        )
+    )
+    payload["source_classification_authority_bounds"] = tuple(
+        payload.get(
+            "source_classification_authority_bounds",
+            (None,) * source_count,
+        )
+    )
     payload.setdefault("effective_data_class", "unclassified")
     payload.setdefault("effective_trust_level", "untrusted_external")
     payload.setdefault("codec_identity", "")
@@ -94,6 +153,46 @@ def provider_private_envelope_from_document(
         raise ValueError("Provider private envelope source data class is invalid.")
     if any(value not in KNOWN_TRUST_LEVELS for value in envelope.source_trust_levels):
         raise ValueError("Provider private envelope source trust is invalid.")
+    source_identity_columns = (
+        envelope.source_provenances,
+        envelope.source_refs,
+        envelope.source_revisions,
+        envelope.source_resource_identities,
+        envelope.source_classification_revisions,
+    )
+    if any(
+        len(column) != len(envelope.source_block_digests)
+        for column in source_identity_columns
+    ):
+        raise ValueError("Provider private envelope source lineage is incomplete.")
+    if any(value not in KNOWN_PROVENANCE for value in envelope.source_provenances):
+        raise ValueError("Provider private envelope source provenance is invalid.")
+    authority_columns = (
+        envelope.source_classification_authority_ids,
+        envelope.source_classification_authority_kinds,
+        envelope.source_classification_authority_refs,
+        envelope.source_classification_authority_revisions,
+        envelope.source_classification_authority_digests,
+        envelope.source_classification_authority_policy_revisions,
+        envelope.source_classification_authority_bounds,
+    )
+    if any(len(column) != len(envelope.source_block_digests) for column in authority_columns):
+        raise ValueError("Provider private envelope authority lineage is incomplete.")
+    for index, bound in enumerate(envelope.source_classification_authority_bounds):
+        lineage = (
+            envelope.source_classification_authority_ids[index],
+            envelope.source_classification_authority_kinds[index],
+            envelope.source_classification_authority_refs[index],
+            envelope.source_classification_authority_revisions[index],
+            envelope.source_classification_authority_digests[index],
+            envelope.source_classification_authority_policy_revisions[index],
+        )
+        if bound is False and lineage != ("", "", "", None, "", ""):
+            raise ValueError("Provider private envelope authority lineage is invalid.")
+        if bound is True and not _authority_lineage_is_well_formed(lineage):
+            raise ValueError("Provider private envelope authority lineage is invalid.")
+        if bound is not True and bound is not False and bound is not None:
+            raise ValueError("Provider private envelope authority lineage is invalid.")
     if envelope.effective_data_class != join_data_classes(envelope.source_data_classes):
         raise ValueError("Provider private envelope effective data class is invalid.")
     if envelope.effective_trust_level != join_trust_levels(envelope.source_trust_levels):
@@ -120,3 +219,17 @@ def runtime_provider_state_from_document(document: Mapping[str, object]) -> Runt
 def _is_sha256(value: object) -> bool:
     text = str(value or "")
     return len(text) == 64 and all(character in "0123456789abcdefABCDEF" for character in text)
+
+
+def _authority_lineage_is_well_formed(lineage) -> bool:
+    authority_id, kind, ref, revision, digest, policy_revision = lineage
+    return bool(
+        str(authority_id).strip()
+        and str(kind).strip()
+        and str(ref).strip()
+        and isinstance(revision, int)
+        and not isinstance(revision, bool)
+        and revision >= 1
+        and _is_sha256(digest)
+        and str(policy_revision).strip()
+    )

@@ -15,7 +15,7 @@ from core.runtime.public_content_classification import (
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 
 
-HOSTED_TOOL_RESULT_ADMISSION_REVISION = 5
+HOSTED_TOOL_RESULT_ADMISSION_REVISION = 6
 _CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
 
 
@@ -60,6 +60,7 @@ def _content_derived_surface(
     data_class = detected
     classification_revision = HOSTED_TOOL_RESULT_ADMISSION_REVISION
     authority_ref = ""
+    classification_authority = None
     if authority.classification_revision is not None:
         data_class = authority.data_class
         classification_revision = authority.classification_revision
@@ -68,6 +69,7 @@ def _content_derived_surface(
             f"{public_content_authority.revision}:"
             f"{public_content_authority.resource_digest}"
         )
+        classification_authority = authority
     elif detected == "unclassified" and declared_public:
         data_class = "public"
         authority_ref = ":core-result-contract"
@@ -79,6 +81,7 @@ def _content_derived_surface(
         trust_level="untrusted_tool_output",
         classification_revision=classification_revision,
         authority_ref=authority_ref,
+        classification_authority=classification_authority,
     )
 
 
@@ -111,6 +114,7 @@ def _admitted_surface(
     trust_level: str,
     classification_revision: int = HOSTED_TOOL_RESULT_ADMISSION_REVISION,
     authority_ref: str = "",
+    classification_authority=None,
 ) -> RuntimeToolSurfaceResult:
     digest = _payload_digest(payload)
     return RuntimeToolSurfaceResult(
@@ -130,6 +134,54 @@ def _admitted_surface(
                 f"{source_handle}:{digest}"
             ),
             classification_revision=classification_revision,
+            classification_authority_id=str(
+                getattr(
+                    classification_authority,
+                    "classification_authority_id",
+                    "",
+                )
+                or ""
+            ),
+            classification_authority_kind=str(
+                getattr(
+                    classification_authority,
+                    "classification_authority_kind",
+                    "",
+                )
+                or ""
+            ),
+            classification_authority_ref=str(
+                getattr(
+                    classification_authority,
+                    "classification_authority_ref",
+                    "",
+                )
+                or ""
+            ),
+            classification_authority_revision=getattr(
+                classification_authority,
+                "classification_authority_revision",
+                None,
+            ),
+            classification_authority_digest=str(
+                getattr(
+                    classification_authority,
+                    "classification_authority_digest",
+                    "",
+                )
+                or ""
+            ),
+            classification_authority_policy_revision=str(
+                getattr(
+                    classification_authority,
+                    "classification_authority_policy_revision",
+                    "",
+                )
+                or ""
+            ),
+            classification_authority_bound=(
+                classification_authority is not None
+            ),
         ),
     )
 

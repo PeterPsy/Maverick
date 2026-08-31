@@ -8,6 +8,10 @@ from core.runtime.hosted_filesystem_result_behavior import (
     FILESYSTEM_RESULT_BEHAVIOR_IDS,
     inspect_hosted_filesystem_result_behavior,
 )
+from core.runtime.hosted_result_security_behavior import (
+    HOSTED_RESULT_SECURITY_BEHAVIOR_IDS,
+    inspect_hosted_result_security_behavior,
+)
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
 from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_admission_resolver,
@@ -19,7 +23,7 @@ from core.runtime.public_content_authority import (
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 
 
-HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 2
+HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 3
 HOSTED_REQUIRED_RESULT_BEHAVIOR_HANDLES = (
     *FILESYSTEM_RESULT_BEHAVIOR_IDS,
     "core-capability:shell.run",
@@ -28,6 +32,7 @@ HOSTED_REQUIRED_RESULT_BEHAVIOR_HANDLES = (
     "core-capability:cli.run",
     "core-capability:mcp.list",
     "core-capability:mcp.call",
+    *HOSTED_RESULT_SECURITY_BEHAVIOR_IDS,
 )
 
 
@@ -132,7 +137,11 @@ def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
             for arguments in scenario_arguments
         )
     )
-    return (*inspect_hosted_filesystem_result_behavior(), *variable_results)
+    return (
+        *inspect_hosted_filesystem_result_behavior(),
+        *variable_results,
+        *inspect_hosted_result_security_behavior(),
+    )
 
 
 def _scenario_complete(

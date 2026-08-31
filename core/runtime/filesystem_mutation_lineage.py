@@ -15,9 +15,13 @@ from core.egress.classification import (
     CanonicalSourceClassification,
     fail_closed_classification,
     join_classifications,
+    joined_classification_authority,
     validated_classification,
 )
 from core.runtime.confined_filesystem import FilesystemResourceObservation
+from core.runtime.classification_authority import (
+    revalidate_canonical_classification,
+)
 from core.runtime.tool_private_payloads import (
     canonical_tool_arguments,
     decode_tool_arguments,
@@ -39,6 +43,7 @@ def resolve_filesystem_mutation_lineage(
     authoritative: CanonicalSourceClassification,
     ledger,
     session_id: str,
+    authority_store=None,
 ) -> CanonicalSourceClassification:
     """Join exact authoritative data with successful same-session mutations.
 
@@ -122,6 +127,46 @@ def resolve_filesystem_mutation_lineage(
             source_digest=observation.resource_digest,
             resource_identity=observation.resource_identity,
             classification_revision=classification_revision,
+            classification_authority_id=str(
+                getattr(record, "result_classification_authority_id", "") or ""
+            ),
+            classification_authority_kind=str(
+                getattr(record, "result_classification_authority_kind", "") or ""
+            ),
+            classification_authority_ref=str(
+                getattr(record, "result_classification_authority_ref", "") or ""
+            ),
+            classification_authority_revision=getattr(
+                record,
+                "result_classification_authority_revision",
+                None,
+            ),
+            classification_authority_digest=str(
+                getattr(record, "result_classification_authority_digest", "")
+                or ""
+            ),
+            classification_authority_policy_revision=str(
+                getattr(
+                    record,
+                    "result_classification_authority_policy_revision",
+                    "",
+                )
+                or ""
+            ),
+            classification_authority_bound=getattr(
+                record,
+                "result_classification_authority_bound",
+                None,
+            ),
+        )
+        rebound = (
+            revalidate_canonical_classification(
+                authority_store,
+                workspace_id=observation.workspace_id,
+                classification=rebound,
+            )
+            if authority_store is not None
+            else rebound
         )
         if rebound.classification_revision is None:
             if classification_revision is not None:
@@ -139,6 +184,7 @@ def resolve_filesystem_mutation_lineage(
 
     joined = join_classifications(sources)
     revisions = tuple(source.classification_revision for source in joined.sources)
+    lineage_authority = joined_classification_authority(joined.sources)
     return validated_classification(
         data_class=joined.effective_data_class,
         provenance=provenance,
@@ -150,6 +196,13 @@ def resolve_filesystem_mutation_lineage(
         classification_revision=(
             max(revisions) if all(item is not None for item in revisions) else None
         ),
+        classification_authority_id=lineage_authority[0],
+        classification_authority_kind=lineage_authority[1],
+        classification_authority_ref=lineage_authority[2],
+        classification_authority_revision=lineage_authority[3],
+        classification_authority_digest=lineage_authority[4],
+        classification_authority_policy_revision=lineage_authority[5],
+        classification_authority_bound=lineage_authority[6],
     )
 
 

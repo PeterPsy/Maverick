@@ -239,6 +239,7 @@ def runtime_provider_input_sources(
                         metadata_classification,
                         resource_classification,
                     ),
+                    authority_source=resource_classification,
                 ),
             )
         )
@@ -441,6 +442,7 @@ def _classified_attachment_input_source(
         provenance="attachment",
         source_ref=f"runtime-turn:{turn_id}:attachment:{index}",
         sources=(metadata_classification, file_classification),
+        authority_source=file_classification,
     )
     return RuntimeProviderInputSource(
         source_id=f"attachment:{index}",

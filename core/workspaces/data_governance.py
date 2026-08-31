@@ -22,6 +22,9 @@ from core.workspaces.errors import WorkspaceDataGovernanceError
 
 
 WorkspaceAttestationStatus = Literal["active", "revoked"]
+WORKSPACE_RESOURCE_CLASSIFICATION_POLICY_REVISION = (
+    "core-workspace-resource-classification-v1"
+)
 
 
 @dataclass(frozen=True)
@@ -388,6 +391,15 @@ def resource_classification_for_observation(
         source_digest=record.resource_digest,
         resource_identity=record.resource_identity,
         classification_revision=record.revision,
+        classification_authority_id=record.classification_id,
+        classification_authority_kind=record.resource_kind,
+        classification_authority_ref=record.resource_ref,
+        classification_authority_revision=record.revision,
+        classification_authority_digest=record.resource_digest,
+        classification_authority_policy_revision=(
+            WORKSPACE_RESOURCE_CLASSIFICATION_POLICY_REVISION
+        ),
+        classification_authority_bound=True,
     )
 
 

@@ -111,10 +111,15 @@ export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Prom
       }
       return TRANSIENT_CONFIG_STATUSES.has(response.status) ? null : false;
     }
-    const payload = (await response.json()) as {
+    let payload: {
       features?: { storage_file_cache?: unknown };
       schema?: unknown;
     };
+    try {
+      payload = (await response.json()) as typeof payload;
+    } catch {
+      return false;
+    }
     return payload.schema === "maverick.pwa-config.v2"
       && payload.features?.storage_file_cache === true;
   } catch {

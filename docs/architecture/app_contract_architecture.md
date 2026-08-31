@@ -1017,7 +1017,13 @@ bridge and its absence cannot prevent the native sidecar product from
 starting. Core mounts one owner-only Unix socket at a fixed sandbox path and
 injects a short-lived, scope-bound technical capability. API credentials are
 resolved only inside Core. A requested CLI is launched by Core under a second
-filesystem/process boundary over the same selected `data_mount` root. Neither
+filesystem/process boundary over the same selected `data_mount` root. Its
+working directory remains confined to that writable root. An approved native
+adapter `--add-dir` may also select an existing canonical directory beneath a
+read-only `artifact_mounts` namespace already declared for that sidecar. Core
+resolves the host path from the lease rather than from sidecar input and mounts
+only the exact requested directory read-only; undeclared namespaces, missing
+paths, traversal, symlink escapes, and arbitrary host paths fail closed. Neither
 transport creates a Maverick runtime
 session or grants access to Maverick memory, Chat history, prompts, personas,
 skills, or tools. The sidecar may receive the technical socket and capability,

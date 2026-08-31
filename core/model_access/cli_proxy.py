@@ -25,7 +25,7 @@ from core.model_access.cli_sandbox import (
     is_opendesign_connection_probe as _is_opendesign_connection_probe,
     map_sidecar_path as _map_sidecar_path,
     prepare_codex_home as _prepare_codex_home,
-    validated_codex_argv as _validated_codex_argv,
+    validated_codex_invocation as _validated_codex_invocation,
 )
 from core.model_access.models import CliFrame, ModelAccessScope
 
@@ -57,11 +57,12 @@ class CodexCliExecutor:
             raise FileNotFoundError("Codex CLI is unavailable")
         isolated_probe = argv in {("--version",), ("debug", "models"), ("login", "status")}
         connection_probe = _is_opendesign_connection_probe(argv, cwd)
-        translated = _validated_codex_argv(
+        invocation = _validated_codex_invocation(
             argv,
             data_root=scope.data_root,
             sidecar_cwd=cwd,
             allow_connection_probe=connection_probe,
+            read_only_mounts=scope.read_only_mounts,
         )
         if isolated_probe or connection_probe:
             inner_cwd = "/workspace"
@@ -88,7 +89,9 @@ class CodexCliExecutor:
                 data_root=Path(workspace),
                 inner_cwd=inner_cwd,
                 cli_home=cli_home,
-                argv=translated,
+                argv=invocation.argv,
+                read_only_mounts=invocation.read_only_mounts,
+                authorized_read_only_mounts=scope.read_only_mounts,
             )
             process: subprocess.Popen[bytes] | None = None
             writer: Thread | None = None

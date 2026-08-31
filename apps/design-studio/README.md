@@ -21,9 +21,12 @@ workspaces/<workspace_id>/data/design-studio/opendesign-native/
 ```
 
 Core exposes only that subtree as sidecar `/data` and uses the same subtree as
-the Model Access CLI scope. Release selection, quiescence, update journals,
-delegation metadata, and immutable backups remain sibling host-control data
-and are never mounted into OpenDesign or Codex.
+the writable Model Access CLI scope. A native Codex `--add-dir` may additionally
+name an existing directory below the sidecar's declared `opendesign` artifact
+namespace; Core bind-mounts only each exact requested directory read-only.
+Release selection, quiescence, update journals, delegation metadata, and
+immutable backups remain sibling host-control data and are never mounted into
+OpenDesign or Codex.
 
 The Maverick frontend obtains a one-shot isolated-browser ticket and a separate
 Core confirmation token, then hosts the native page in an iframe. It declares
@@ -87,7 +90,11 @@ OpenDesign 0.21 also supplies a fixed Codex shell-environment policy block on
 every native run. Core admits only that exact certified block, including its
 closed `include_only` key list; an added key or altered value remains denied.
 These argv overrides govern the already bounded executor environment and do
-not create a general sidecar environment-delivery channel.
+not create a general sidecar environment-delivery channel. The same release
+passes its bundled `skills` and `design-systems` directories through
+`--add-dir`; Core resolves those paths only beneath the declared, verified
+artifact namespace and mounts the two requested directories read-only. Missing,
+undeclared, non-directory, traversal, and symlink-escape paths fail closed.
 
 Before Core publishes native readiness, the launcher reads OpenDesign's
 supported `/api/app-config` surface. An unset selection, or
@@ -301,7 +308,9 @@ python3 -m unittest \
   apps.design-studio.tests.test_native_cutover_quiescence \
   apps.design-studio.tests.test_official_public_inventory \
   apps.design-studio.tests.test_official_updates \
-  tests.unit.app_hosting.test_model_access_broker
+  tests.unit.app_hosting.test_model_access_broker \
+  tests.unit.app_hosting.test_model_access_cli_sandbox \
+  tests.integration.app_hosting.test_sidecar_execution
 ```
 
 Maintained aggregate gates (quick, affected, migration, hosted, and release)

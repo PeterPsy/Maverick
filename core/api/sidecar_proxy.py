@@ -59,6 +59,7 @@ from core.identity.models import UserRecord
 from core.shared.entrypoints import EntrypointShutdownController
 from core.shared.repository import discover_repository_root
 from core.model_access.broker import issue_model_access_lease
+from core.model_access.models import ModelAccessReadOnlyMount
 from core.workspaces.paths import workspace_paths
 
 
@@ -531,6 +532,13 @@ class HttpSidecarManager:
                     data_root=sidecar_data_root,
                     api=sidecar.model_access.api,
                     cli=sidecar.model_access.cli,
+                    read_only_mounts=tuple(
+                        ModelAccessReadOnlyMount(
+                            source=mount.source,
+                            target=mount.target,
+                        )
+                        for mount in artifact_mounts
+                    ),
                 )
                 if model_access_lease is None and sidecar.model_access.required:
                     raise AppHostingError("Required model access is unavailable.")

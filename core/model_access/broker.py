@@ -14,11 +14,13 @@ from core.apps.sidecar_quarantine import require_sidecar_not_quarantined
 from core.model_access.api_proxy import ModelApiProxy
 from core.model_access.catalog import build_model_access_catalog
 from core.model_access.cancellation import CancellationSignal
+from core.model_access.cli_sandbox import validate_model_access_read_only_mounts
 from core.model_access.cli_proxy import CodexCliExecutor
 from core.model_access.http_server import ThreadingUnixModelAccessServer
 from core.model_access.models import (
     ModelAccessCatalog,
     ModelAccessLease,
+    ModelAccessReadOnlyMount,
     ModelAccessScope,
     ModelApiTransport,
     ModelCliExecutor,
@@ -91,6 +93,7 @@ class ModelAccessBroker:
         data_root: Path,
         api: bool,
         cli: Iterable[str],
+        read_only_mounts: Iterable[ModelAccessReadOnlyMount] = (),
     ) -> ModelAccessLease:
         if self._stopped or self._server is None:
             raise RuntimeError("model-access broker is unavailable")
@@ -107,6 +110,9 @@ class ModelAccessBroker:
             data_root=Path(data_root).resolve(strict=True),
             api=bool(api),
             cli=tuple(cli),
+            read_only_mounts=validate_model_access_read_only_mounts(
+                read_only_mounts
+            ),
         )
         with self._lock:
             self._leases[token] = _LeaseRecord(scope=scope)
@@ -251,6 +257,7 @@ def issue_model_access_lease(
     data_root: Path,
     api: bool,
     cli: Iterable[str],
+    read_only_mounts: Iterable[ModelAccessReadOnlyMount] = (),
 ) -> ModelAccessLease | None:
     """Return an optional lease; absence degrades only the bridge."""
     root = Path(repository_root).resolve(strict=True)
@@ -265,6 +272,7 @@ def issue_model_access_lease(
         data_root=data_root,
         api=api,
         cli=cli,
+        read_only_mounts=read_only_mounts,
     )
 
 

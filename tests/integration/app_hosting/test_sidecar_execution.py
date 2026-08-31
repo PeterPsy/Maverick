@@ -14,7 +14,9 @@ import unittest
 from unittest.mock import patch
 
 from core.api.sidecar_proxy import HttpSidecarManager, RunningSidecar, UnixRelayHTTPConnection, _proxy_to_running_sidecar
+from core.apps.artifact_mounts import create_artifact_namespace
 from core.apps.contracts import (
+    build_http_sidecar_artifact_mount,
     build_http_sidecar_data_mount,
     build_http_sidecar_diagnostics,
     build_http_sidecar_model_access,
@@ -42,6 +44,11 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
             operator_home.mkdir()
             other_workspace.mkdir(parents=True)
             native_data_root.mkdir(parents=True)
+            artifact_namespace = create_artifact_namespace(
+                repository_root=repo_root,
+                app_id="probe",
+                artifact_id="resources",
+            )
             (data_root / "official-update.json").write_text("host-control", encoding="utf-8")
             (operator_home / "secret").write_text("operator-secret", encoding="utf-8")
             (other_workspace / "secret").write_text("other-workspace-secret", encoding="utf-8")
@@ -72,6 +79,9 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
                     open_files=256,
                     request_concurrency=1,
                 ),
+                artifact_mounts=[
+                    build_http_sidecar_artifact_mount(artifact_id="resources")
+                ],
                 data_mount=build_http_sidecar_data_mount(subpath="opendesign-native"),
                 diagnostics=build_http_sidecar_diagnostics(
                     status_file="native-host-status.json"
@@ -118,6 +128,15 @@ class ConfinedSidecarExecutionIntegrationTests(unittest.TestCase):
             self.assertEqual(
                 issue_model_access.call_args.kwargs["data_root"],
                 native_data_root.resolve(),
+            )
+            read_only_mounts = issue_model_access.call_args.kwargs[
+                "read_only_mounts"
+            ]
+            self.assertEqual(len(read_only_mounts), 1)
+            self.assertEqual(read_only_mounts[0].source, artifact_namespace)
+            self.assertEqual(
+                read_only_mounts[0].target,
+                Path("/artifacts/resources"),
             )
 
             relay_path = running.confined_launch.relay_socket

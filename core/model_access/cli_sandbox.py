@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 import fcntl
 import os
 from pathlib import Path, PurePosixPath
@@ -10,16 +11,18 @@ import re
 import shutil
 import stat
 import time
+from typing import Iterable
 from uuid import uuid4
 
 from core.model_access.catalog import resolve_codex_source_home
 from core.model_access.cancellation import CancellationSignal, raise_if_cancelled
-from core.model_access.models import ModelAccessScope
+from core.model_access.models import ModelAccessReadOnlyMount, ModelAccessScope
 
 
 _SAFE_MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$")
 _SAFE_SESSION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{7,127}$")
 _SAFE_CONNECTION_PROBE_CWD = re.compile(r"^/tmp/od-conn-test-[A-Za-z0-9_-]{1,96}$")
+_SAFE_ARTIFACT_ID = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 _SAFE_CONFIG = (
     re.compile(r'^model_reasoning_effort="(?:none|minimal|low|medium|high|xhigh|max)"$'),
     re.compile(r'^sandbox_mode="(?:workspace-write|danger-full-access)"$'),
@@ -67,19 +70,32 @@ _SAFE_STATIC_CONFIG = frozenset(
 )
 
 
-def validated_codex_argv(
+@dataclass(frozen=True)
+class ValidatedCodexInvocation:
+    """A translated argv plus the exact read-only directories it needs."""
+
+    argv: tuple[str, ...]
+    read_only_mounts: tuple[ModelAccessReadOnlyMount, ...]
+
+
+def validated_codex_invocation(
     argv: tuple[str, ...],
     *,
     data_root: Path,
     sidecar_cwd: str,
     allow_connection_probe: bool = False,
-) -> tuple[str, ...]:
+    read_only_mounts: Iterable[ModelAccessReadOnlyMount] = (),
+) -> ValidatedCodexInvocation:
     """Allow only the native OpenDesign Codex adapter grammar."""
     if argv in {("--version",), ("debug", "models"), ("login", "status")}:
-        return argv
+        return ValidatedCodexInvocation(argv=argv, read_only_mounts=())
     if not argv or argv[0] != "exec" or len(argv) > 96:
         raise ValueError("Codex invocation is not an approved native adapter command")
+    authorized_read_only_mounts = validate_model_access_read_only_mounts(
+        read_only_mounts
+    )
     output: list[str] = []
+    requested_read_only_mounts: list[ModelAccessReadOnlyMount] = []
     index = 0
     while index < len(argv):
         argument = argv[index]
@@ -129,6 +145,14 @@ def validated_codex_argv(
                 and is_opendesign_connection_probe(argv, sidecar_cwd)
             ):
                 inner = "/workspace"
+            elif argument == "--add-dir":
+                _host, inner, requested_mount = map_codex_add_directory(
+                    data_root,
+                    authorized_read_only_mounts,
+                    raw_path,
+                )
+                if requested_mount is not None:
+                    requested_read_only_mounts.append(requested_mount)
             else:
                 _host, inner = map_sidecar_path(data_root, raw_path)
             output.extend((argument, inner))
@@ -141,7 +165,28 @@ def validated_codex_argv(
         raise ValueError("Codex argument is not approved")
     if "-C" in argv and sidecar_cwd not in argv:
         raise ValueError("Codex working directory differs from the native adapter cwd")
-    return tuple(output)
+    return ValidatedCodexInvocation(
+        argv=tuple(output),
+        read_only_mounts=_minimal_read_only_mounts(requested_read_only_mounts),
+    )
+
+
+def validated_codex_argv(
+    argv: tuple[str, ...],
+    *,
+    data_root: Path,
+    sidecar_cwd: str,
+    allow_connection_probe: bool = False,
+    read_only_mounts: Iterable[ModelAccessReadOnlyMount] = (),
+) -> tuple[str, ...]:
+    """Return only the translated argv for validation-only callers."""
+    return validated_codex_invocation(
+        argv,
+        data_root=data_root,
+        sidecar_cwd=sidecar_cwd,
+        allow_connection_probe=allow_connection_probe,
+        read_only_mounts=read_only_mounts,
+    ).argv
 
 
 def is_opendesign_connection_probe(argv: tuple[str, ...], sidecar_cwd: str) -> bool:
@@ -169,6 +214,106 @@ def map_sidecar_path(data_root: Path, raw: str) -> tuple[Path, str]:
     if candidate != root and root not in candidate.parents:
         raise ValueError("CLI path escapes app data")
     return candidate, PurePosixPath("/workspace").joinpath(*relative.parts).as_posix()
+
+
+def validate_model_access_read_only_mounts(
+    mounts: Iterable[ModelAccessReadOnlyMount],
+) -> tuple[ModelAccessReadOnlyMount, ...]:
+    """Normalize only protected platform artifact namespace roots."""
+    normalized: list[ModelAccessReadOnlyMount] = []
+    seen_sources: set[Path] = set()
+    seen_targets: set[PurePosixPath] = set()
+    for mount in mounts:
+        source = Path(mount.source)
+        try:
+            metadata = source.lstat()
+            resolved_source = source.resolve(strict=True)
+        except OSError as error:
+            raise ValueError("Model-access read-only artifact is unavailable") from error
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_mode & 0o022
+        ):
+            raise PermissionError("Model-access read-only artifact is unsafe")
+        target = PurePosixPath(Path(mount.target).as_posix())
+        if (
+            not target.is_absolute()
+            or len(target.parts) != 3
+            or target.parts[1] != "artifacts"
+            or not _SAFE_ARTIFACT_ID.fullmatch(target.parts[2])
+            or resolved_source.name != target.parts[2]
+        ):
+            raise ValueError("Model-access read-only artifact target is invalid")
+        if resolved_source in seen_sources or target in seen_targets:
+            raise ValueError("Model-access read-only artifact mount is duplicated")
+        seen_sources.add(resolved_source)
+        seen_targets.add(target)
+        normalized.append(
+            ModelAccessReadOnlyMount(
+                source=resolved_source,
+                target=Path(target.as_posix()),
+            )
+        )
+    return tuple(normalized)
+
+
+def map_codex_add_directory(
+    data_root: Path,
+    read_only_mounts: tuple[ModelAccessReadOnlyMount, ...],
+    raw: str,
+) -> tuple[Path, str, ModelAccessReadOnlyMount | None]:
+    """Map one writable-data or declared read-only Codex add-directory."""
+    sidecar_path = PurePosixPath(raw)
+    if sidecar_path.is_absolute() and sidecar_path.parts[1:2] == ("data",):
+        host, inner = map_sidecar_path(data_root, raw)
+        return host, inner, None
+    host, inner = map_sidecar_read_only_path(read_only_mounts, raw)
+    return host, inner, ModelAccessReadOnlyMount(source=host, target=Path(inner))
+
+
+def map_sidecar_read_only_path(
+    mounts: tuple[ModelAccessReadOnlyMount, ...],
+    raw: str,
+) -> tuple[Path, str]:
+    """Resolve a sidecar artifact path beneath one declared namespace."""
+    sidecar_path = PurePosixPath(raw)
+    if not sidecar_path.is_absolute() or ".." in sidecar_path.parts:
+        raise ValueError("CLI path must stay in a declared read-only artifact")
+    for mount in mounts:
+        target = PurePosixPath(mount.target.as_posix())
+        try:
+            relative = sidecar_path.relative_to(target)
+        except ValueError:
+            continue
+        root = mount.source.resolve(strict=True)
+        try:
+            candidate = root.joinpath(*relative.parts).resolve(strict=True)
+        except OSError as error:
+            raise ValueError("CLI read-only artifact path is unavailable") from error
+        if candidate != root and root not in candidate.parents:
+            raise ValueError("CLI path escapes declared read-only artifact")
+        if not candidate.is_dir():
+            raise ValueError("CLI read-only artifact path must be a directory")
+        return candidate, sidecar_path.as_posix()
+    raise ValueError("CLI path must stay in a declared read-only artifact")
+
+
+def _minimal_read_only_mounts(
+    mounts: Iterable[ModelAccessReadOnlyMount],
+) -> tuple[ModelAccessReadOnlyMount, ...]:
+    minimal: list[ModelAccessReadOnlyMount] = []
+    for mount in mounts:
+        target = PurePosixPath(mount.target.as_posix())
+        if any(target.is_relative_to(existing.target.as_posix()) for existing in minimal):
+            continue
+        minimal = [
+            existing
+            for existing in minimal
+            if not PurePosixPath(existing.target.as_posix()).is_relative_to(target)
+        ]
+        minimal.append(mount)
+    return tuple(minimal)
 
 
 def prepare_codex_home(
@@ -224,7 +369,14 @@ def codex_home_lock(
 
 
 def codex_sandbox_command(
-    *, executable: Path, data_root: Path, inner_cwd: str, cli_home: Path, argv: tuple[str, ...]
+    *,
+    executable: Path,
+    data_root: Path,
+    inner_cwd: str,
+    cli_home: Path,
+    argv: tuple[str, ...],
+    read_only_mounts: tuple[ModelAccessReadOnlyMount, ...] = (),
+    authorized_read_only_mounts: tuple[ModelAccessReadOnlyMount, ...] = (),
 ) -> list[str]:
     """Build the outer capability sandbox around the standalone CLI."""
     bwrap = shutil.which("bwrap")
@@ -256,6 +408,8 @@ def codex_sandbox_command(
         "/home/codex",
         "--dir",
         "/etc",
+        "--dir",
+        "/artifacts",
         "--ro-bind",
         "/usr",
         "/usr",
@@ -275,6 +429,28 @@ def codex_sandbox_command(
         str(cli_home),
         "/codex-home",
     ]
+    created_directories = {PurePosixPath("/artifacts")}
+    sandbox_mounts = _validated_sandbox_read_only_mounts(
+        read_only_mounts,
+        authorized_mounts=validate_model_access_read_only_mounts(
+            authorized_read_only_mounts
+        ),
+    )
+    for mount in sandbox_mounts:
+        current = PurePosixPath("/")
+        for component in PurePosixPath(mount.target.as_posix()).parts[1:]:
+            current /= component
+            if current not in created_directories:
+                command.extend(("--dir", current.as_posix()))
+                created_directories.add(current)
+    for mount in sandbox_mounts:
+        command.extend(
+            (
+                "--ro-bind",
+                mount.source.as_posix(),
+                mount.target.as_posix(),
+            )
+        )
     for path in ("/etc/ssl", "/etc/resolv.conf", "/etc/hosts", "/etc/nsswitch.conf"):
         if Path(path).exists():
             command.extend(("--ro-bind", path, path))
@@ -294,6 +470,69 @@ def codex_sandbox_command(
         )
     )
     return command
+
+
+def _validated_sandbox_read_only_mounts(
+    mounts: tuple[ModelAccessReadOnlyMount, ...],
+    *,
+    authorized_mounts: tuple[ModelAccessReadOnlyMount, ...],
+) -> tuple[ModelAccessReadOnlyMount, ...]:
+    normalized: list[ModelAccessReadOnlyMount] = []
+    seen_targets: set[PurePosixPath] = set()
+    for mount in mounts:
+        try:
+            source = Path(mount.source).resolve(strict=True)
+        except OSError as error:
+            raise ValueError("Codex read-only directory is unavailable") from error
+        if not source.is_dir():
+            raise ValueError("Codex read-only mount source must be a directory")
+        target = PurePosixPath(Path(mount.target).as_posix())
+        if (
+            not target.is_absolute()
+            or len(target.parts) < 3
+            or target.parts[1] != "artifacts"
+            or not _SAFE_ARTIFACT_ID.fullmatch(target.parts[2])
+            or ".." in target.parts
+            or target in seen_targets
+        ):
+            raise ValueError("Codex read-only mount target is invalid")
+        if not _read_only_mount_is_authorized(
+            source=source,
+            target=target,
+            authorized_mounts=authorized_mounts,
+        ):
+            raise PermissionError("Codex read-only mount is not lease-authorized")
+        seen_targets.add(target)
+        normalized.append(
+            ModelAccessReadOnlyMount(source=source, target=Path(target.as_posix()))
+        )
+    return tuple(normalized)
+
+
+def _read_only_mount_is_authorized(
+    *,
+    source: Path,
+    target: PurePosixPath,
+    authorized_mounts: tuple[ModelAccessReadOnlyMount, ...],
+) -> bool:
+    for authorized in authorized_mounts:
+        authorized_target = PurePosixPath(authorized.target.as_posix())
+        try:
+            relative = target.relative_to(authorized_target)
+            expected_source = authorized.source.joinpath(*relative.parts).resolve(
+                strict=True
+            )
+        except (ValueError, OSError):
+            continue
+        if (
+            expected_source == source
+            and (
+                expected_source == authorized.source
+                or authorized.source in expected_source.parents
+            )
+        ):
+            return True
+    return False
 
 
 def _atomic_private_copy(source: Path, destination: Path) -> None:

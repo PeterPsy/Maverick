@@ -16,9 +16,16 @@ from unittest.mock import patch
 
 from core.model_access.broker import ModelAccessBroker
 from core.model_access.catalog import resolve_codex_source_home
-from core.model_access.cli_proxy import _validated_codex_argv
-from core.model_access.cli_sandbox import is_opendesign_connection_probe
-from core.model_access.models import CliFrame, ProviderHttpResponse
+from core.model_access.cli_sandbox import (
+    is_opendesign_connection_probe,
+    validated_codex_argv as _validated_codex_argv,
+    validated_codex_invocation,
+)
+from core.model_access.models import (
+    CliFrame,
+    ModelAccessReadOnlyMount,
+    ProviderHttpResponse,
+)
 
 
 class _ForbiddenRuntimeStore:
@@ -170,6 +177,17 @@ class ModelAccessBrokerTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.data_root = self.root / "workspaces" / "default" / "data" / "design-studio"
         (self.data_root / "opendesign-native" / "project").mkdir(parents=True)
+        self.artifact_root = self.root / "artifacts" / "opendesign"
+        self.skills_root = self.artifact_root / "official" / "release" / "rootfs" / "app" / "skills"
+        self.design_systems_root = (
+            self.artifact_root / "official" / "release" / "rootfs" / "app" / "design-systems"
+        )
+        self.skills_root.mkdir(parents=True)
+        self.design_systems_root.mkdir()
+        self.read_only_mount = ModelAccessReadOnlyMount(
+            source=self.artifact_root,
+            target=Path("/artifacts/opendesign"),
+        )
         codex_executable = self.root / "codex"
         codex_executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         codex_executable.chmod(0o555)
@@ -379,19 +397,42 @@ class ModelAccessBrokerTests(unittest.TestCase):
             include_only,
             "-C",
             "/data/opendesign-native/project",
+            "--add-dir",
+            "/artifacts/opendesign/official/release/rootfs/app/skills",
+            "--add-dir",
+            "/artifacts/opendesign/official/release/rootfs/app/design-systems",
             "--model",
             "gpt-test",
         )
 
-        translated = _validated_codex_argv(
+        invocation = validated_codex_invocation(
             argv,
             data_root=self.data_root,
             sidecar_cwd="/data/opendesign-native/project",
+            read_only_mounts=(self.read_only_mount,),
         )
+        translated = invocation.argv
 
         self.assertEqual(
             translated[translated.index("-C") + 1],
             "/workspace/opendesign-native/project",
+        )
+        self.assertEqual(
+            invocation.read_only_mounts,
+            (
+                ModelAccessReadOnlyMount(
+                    source=self.skills_root.resolve(),
+                    target=Path(
+                        "/artifacts/opendesign/official/release/rootfs/app/skills"
+                    ),
+                ),
+                ModelAccessReadOnlyMount(
+                    source=self.design_systems_root.resolve(),
+                    target=Path(
+                        "/artifacts/opendesign/official/release/rootfs/app/design-systems"
+                    ),
+                ),
+            ),
         )
         with self.assertRaisesRegex(ValueError, "config option is not approved"):
             _validated_codex_argv(
@@ -406,6 +447,85 @@ class ModelAccessBrokerTests(unittest.TestCase):
                 ),
                 data_root=self.data_root,
                 sidecar_cwd="/data/opendesign-native/project",
+                read_only_mounts=(self.read_only_mount,),
+            )
+
+    def test_codex_adapter_rejects_undeclared_or_escaping_artifact_directories(self) -> None:
+        argv = (
+            "exec",
+            "--json",
+            "--skip-git-repo-check",
+            "-C",
+            "/data/opendesign-native/project",
+            "--add-dir",
+            "/artifacts/opendesign/official/release/rootfs/app/skills",
+            "--model",
+            "gpt-test",
+        )
+
+        with self.assertRaisesRegex(ValueError, "declared read-only artifact"):
+            _validated_codex_argv(
+                argv,
+                data_root=self.data_root,
+                sidecar_cwd="/data/opendesign-native/project",
+            )
+
+        outside = self.root / "outside"
+        outside.mkdir()
+        (self.artifact_root / "escape").symlink_to(outside, target_is_directory=True)
+        escaping = tuple(
+            "/artifacts/opendesign/escape" if argument.endswith("/skills") else argument
+            for argument in argv
+        )
+        with self.assertRaisesRegex(ValueError, "escapes declared read-only artifact"):
+            _validated_codex_argv(
+                escaping,
+                data_root=self.data_root,
+                sidecar_cwd="/data/opendesign-native/project",
+                read_only_mounts=(self.read_only_mount,),
+            )
+
+    def test_broker_lease_carries_only_validated_artifact_namespace_roots(self) -> None:
+        executor = _RecordingCliExecutor()
+        broker, lease = self._start_broker(
+            cli_executor=executor,
+            read_only_mounts=(self.read_only_mount,),
+        )
+
+        _request(
+            broker.socket_path,
+            method="POST",
+            path="/maverick/v1/cli/codex/exec",
+            token=lease.token,
+            extra_headers={
+                "X-Maverick-Cli-Argv": _encoded_header('["--version"]'),
+                "X-Maverick-Cli-Cwd": _encoded_header("/app"),
+            },
+        )
+
+        self.assertEqual(
+            executor.requests[0]["scope"].read_only_mounts,
+            (
+                ModelAccessReadOnlyMount(
+                    source=self.artifact_root.resolve(),
+                    target=Path("/artifacts/opendesign"),
+                ),
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "target is invalid"):
+            broker.issue(
+                workspace_id="default",
+                app_id="design-studio",
+                sidecar_id="opendesign",
+                data_root=self.data_root,
+                api=True,
+                cli=("codex",),
+                read_only_mounts=(
+                    ModelAccessReadOnlyMount(
+                        source=self.artifact_root,
+                        target=Path("/etc"),
+                    ),
+                ),
             )
 
     def test_official_connection_probe_uses_an_isolated_workspace_mapping(self) -> None:
@@ -482,7 +602,13 @@ class ModelAccessBrokerTests(unittest.TestCase):
 
         self.assertTrue(executor.cancelled.wait(2))
 
-    def _start_broker(self, *, api_transport=None, cli_executor=None):
+    def _start_broker(
+        self,
+        *,
+        api_transport=None,
+        cli_executor=None,
+        read_only_mounts=(),
+    ):
         broker = ModelAccessBroker(
             self.state,
             socket_path=self.root / "broker" / "broker.sock",
@@ -498,6 +624,7 @@ class ModelAccessBrokerTests(unittest.TestCase):
             data_root=self.data_root,
             api=True,
             cli=("codex",),
+            read_only_mounts=read_only_mounts,
         )
         self.addCleanup(lease.release)
         return broker, lease

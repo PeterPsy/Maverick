@@ -10,6 +10,14 @@ from core.model_access.cancellation import CancellationSignal
 
 
 @dataclass(frozen=True)
+class ModelAccessReadOnlyMount:
+    """One host directory exposed at a fixed read-only sandbox path."""
+
+    source: Path
+    target: Path
+
+
+@dataclass(frozen=True)
 class ModelAccessScope:
     """Authority carried by one private sidecar lease."""
 
@@ -19,6 +27,7 @@ class ModelAccessScope:
     data_root: Path
     api: bool
     cli: tuple[str, ...]
+    read_only_mounts: tuple[ModelAccessReadOnlyMount, ...] = ()
 
 
 @dataclass(frozen=True)

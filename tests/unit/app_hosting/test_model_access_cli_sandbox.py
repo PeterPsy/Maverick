@@ -16,10 +16,79 @@ from core.model_access.cancellation import (
     ModelAccessCancellation,
     ModelAccessRequestCancelled,
 )
-from core.model_access.models import ModelAccessScope
+from core.model_access.models import ModelAccessReadOnlyMount, ModelAccessScope
 
 
 class ModelAccessCliSandboxTests(unittest.TestCase):
+    def test_sandbox_binds_only_requested_artifact_directories_read_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            executable = root / "codex"
+            executable.write_text("#!/bin/sh\n", encoding="utf-8")
+            executable.chmod(0o555)
+            bwrap = root / "bwrap"
+            bwrap.write_text("#!/bin/sh\n", encoding="utf-8")
+            bwrap.chmod(0o555)
+            data_root = root / "data"
+            cli_home = root / "codex-home"
+            artifact_root = root / "opendesign"
+            skills_root = (
+                artifact_root / "official" / "release" / "rootfs" / "app" / "skills"
+            )
+            data_root.mkdir()
+            cli_home.mkdir()
+            skills_root.mkdir(parents=True)
+            target = Path(
+                "/artifacts/opendesign/official/release/rootfs/app/skills"
+            )
+
+            with patch.object(cli_sandbox.shutil, "which", return_value=str(bwrap)):
+                command = cli_sandbox.codex_sandbox_command(
+                    executable=executable,
+                    data_root=data_root,
+                    inner_cwd="/workspace",
+                    cli_home=cli_home,
+                    argv=("--version",),
+                    read_only_mounts=(
+                        ModelAccessReadOnlyMount(
+                            source=skills_root,
+                            target=target,
+                        ),
+                    ),
+                    authorized_read_only_mounts=(
+                        ModelAccessReadOnlyMount(
+                            source=artifact_root,
+                            target=Path("/artifacts/opendesign"),
+                        ),
+                    ),
+                )
+
+            self.assertIn("/artifacts", command)
+            self.assertIn(target.as_posix(), command)
+            bind_index = command.index(skills_root.resolve().as_posix())
+            self.assertEqual(
+                command[bind_index - 1 : bind_index + 2],
+                ["--ro-bind", skills_root.resolve().as_posix(), target.as_posix()],
+            )
+            self.assertNotIn(artifact_root.as_posix(), command)
+            with (
+                patch.object(cli_sandbox.shutil, "which", return_value=str(bwrap)),
+                self.assertRaisesRegex(PermissionError, "lease-authorized"),
+            ):
+                cli_sandbox.codex_sandbox_command(
+                    executable=executable,
+                    data_root=data_root,
+                    inner_cwd="/workspace",
+                    cli_home=cli_home,
+                    argv=("--version",),
+                    read_only_mounts=(
+                        ModelAccessReadOnlyMount(
+                            source=skills_root,
+                            target=target,
+                        ),
+                    ),
+                )
+
     def test_concurrent_home_preparation_uses_unique_temps_under_one_home_lock(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

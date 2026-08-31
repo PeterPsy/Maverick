@@ -21,7 +21,14 @@ The implementation chain reviewed here includes:
 - `037296e4`, `4994e45b` — transport recovery renamed and bootstrap retry kept
   internal to normal loading;
 - `8aec9e99` — manifest/config v2, standard-shell worker fallback, cache-centric
-  flags, generated artifacts, and negative routing tests.
+  flags, generated artifacts, and negative routing tests;
+- `02b8a206` — deferred reads retain their own loading state and pending
+  controllers are cancelled across reload/scope changes;
+- `85288833` — current probes, runbooks, security text, and this M2R evidence
+  replace the superseded acceptance model without rewriting M2 history;
+- `c40fe500` — the remaining hosting test fixture uses manifest v2;
+- `5e489388`, `1e8b6027` — authorization revalidation is terminal and the
+  mounted-frame preservation assertion is explicit.
 
 ## Built artifact
 
@@ -50,6 +57,13 @@ v2 frontend manifests and every declared byte in their current artifacts.
 | PWA feature flags | 4 tests passed |
 | Public PWA config API | 2 tests passed |
 | Root-shell PWA asset host | focused slow test passed |
+
+The complete API unit directory subsequently passed **305 tests**. The default
+fast repository suite was also executed. Its M2R-related manifest fixture
+failures were corrected and re-run green; the aggregate remains non-green for
+unrelated existing repository-budget, legacy cross-app fixture, and Senses
+provider-selection failures outside this change. Those failures are not
+reclassified as M2R evidence.
 
 The worker harness verifies:
 

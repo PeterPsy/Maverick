@@ -24,6 +24,12 @@ PUBLIC_TOOL_ERROR = (
 
 
 class StructuredRuntimeFailureTest(unittest.TestCase):
+    def test_provider_overload_has_actionable_public_message(self) -> None:
+        public_message = runtime_failure_public_message("provider_overloaded")
+
+        self.assertIn("temporarily overloaded", public_message)
+        self.assertIn("completed actions are preserved", public_message)
+
     def test_profile_upgrade_failures_have_actionable_public_messages(self) -> None:
         self.assertIn(
             "older runtime profile",

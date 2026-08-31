@@ -6,6 +6,7 @@ import subprocess
 import time
 from typing import Callable
 
+from core.providers.codex_app_server_runtime_errors import terminal_completion_wait
 from core.providers.codex_skill_inputs import codex_provider_input_text, codex_skill_input_items
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.execution_events import RuntimeExecutionEventSink
@@ -18,6 +19,7 @@ class CodexAppServerTurnResult:
     output_text: str
     exit_code: int
     provider_thread_id: str
+    failure_reason_code: str | None = None
 
 
 def prewarm_codex_app_server_runtime(
@@ -30,8 +32,6 @@ def prewarm_codex_app_server_runtime(
     runtime = _ensure_runtime(session=session, launch_spec=launch_spec, command_runner=command_runner)
     _remove_generated_system_skills_if_needed(runtime=runtime, launch_spec=launch_spec, session=session)
     return _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec, on_provider_thread_id=None)
-
-
 
 def execute_codex_app_server_turn(
     *,
@@ -105,6 +105,8 @@ def execute_codex_app_server_turn(
         runtime.pending_agent_json_chunks = {}
         runtime.emitted_structured_keys = set()
         runtime.current_error_text = None
+        runtime.current_failure_reason_code = None
+        runtime.current_terminal_error_at = None
         runtime.current_completion_received = False
         runtime.completion_queue = queue.Queue(maxsize=1)
     with runtime.skill_rehydration_lock:
@@ -212,7 +214,10 @@ def execute_codex_app_server_turn(
             now = time.monotonic()
             if deadline is not None and now >= deadline:
                 raise RuntimeError("Codex app-server turn timed out before completion.")
-            wait_timeout = 1.0
+            terminal_completion_due, wait_timeout = terminal_completion_wait(runtime, now=now)
+            if terminal_completion_due:
+                completion = {"status": "failed"}
+                break
             if deadline is not None:
                 wait_timeout = max(0.01, min(wait_timeout, deadline - now))
             try:
@@ -249,11 +254,14 @@ def execute_codex_app_server_turn(
             runtime.current_event_sink = None
             chunks = list(runtime.current_chunks)
             error_text = runtime.current_error_text
+            failure_reason_code = runtime.current_failure_reason_code
             runtime.current_chunks = []
             runtime.streamed_agent_item_ids = set()
             runtime.pending_agent_json_chunks = {}
             runtime.emitted_structured_keys = set()
             runtime.current_error_text = None
+            runtime.current_failure_reason_code = None
+            runtime.current_terminal_error_at = None
             runtime.current_completion_received = False
         with runtime.skill_rehydration_lock:
             runtime.current_invoked_skills = ()
@@ -282,8 +290,10 @@ def execute_codex_app_server_turn(
             "process_returncode": runtime.process.poll(),
         },
     )
+    exit_code = 0 if status in {"completed", "success", "succeeded"} else 1
     return CodexAppServerTurnResult(
         output_text=output or fallback_output,
-        exit_code=0 if status in {"completed", "success", "succeeded"} else 1,
+        exit_code=exit_code,
         provider_thread_id=provider_thread_id,
+        failure_reason_code=failure_reason_code if exit_code != 0 else None,
     )

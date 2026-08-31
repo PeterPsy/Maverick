@@ -678,6 +678,7 @@ export type ChatMessage = {
   content: string;
   createdAt: string;
   status?: "pending" | "failed" | "complete";
+  failureReasonCode?: string;
   attachments?: ChatMessageAttachment[];
   appReferences?: AppReference[];
   structuredContent?: StructuredContent;

@@ -137,11 +137,17 @@ def execute_runtime_turn(
         result = runtime_adapter.execute_turn(**execution_kwargs)
     finally:
         coalesced_sink.flush()
+    failure_reason_code = getattr(result, "failure_reason_code", None)
+    public_error_message = getattr(result, "public_error_message", None)
+    if failure_reason_code and not public_error_message:
+        from core.runtime.failure_messages import runtime_failure_public_message
+
+        public_error_message = runtime_failure_public_message(failure_reason_code)
     return RuntimeExecutionResult(
         output_text=result.output_text,
         exit_code=result.exit_code,
-        failure_reason_code=getattr(result, "failure_reason_code", None),
-        public_error_message=getattr(result, "public_error_message", None),
+        failure_reason_code=failure_reason_code,
+        public_error_message=public_error_message,
         diagnostic_reference=getattr(result, "diagnostic_reference", None),
     )
 

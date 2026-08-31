@@ -28,6 +28,8 @@ import { interAgentComposerBudgetLabel } from "./useMessageSubmission";
 
 const EVENT_PROJECTION_MIN_LIMIT = 500;
 const EVENT_PROJECTION_EVENTS_PER_VISIBLE_MESSAGE = 80;
+export const PROVIDER_OVERLOAD_CONTINUATION_PROMPT =
+  "Continue from exactly where you stopped. Inspect the current state first, and do not repeat tool calls or actions that already completed.";
 
 type UseChatControllerPresentationParams = {
   activeProviderId: string;
@@ -63,7 +65,7 @@ type UseChatControllerPresentationParams = {
   handleSelectAgent: (agentTypeId: string) => void;
   handleSelectProvider: (providerId: string) => void;
   handleReasoningEffortChange: (effort: string) => void;
-  handleSend: () => void;
+  handleSend: (inputOverride?: string) => void;
   handleStopTurn: () => void;
   hasLoadedHistory: boolean;
   isBootstrapping: boolean;
@@ -203,6 +205,14 @@ export function useChatControllerPresentation({
     queuedMessageCount: queuedMessages.length,
   });
   const isCriticalBootstrapping = isBootstrapping && !composerReady;
+  const canContinueFromProviderOverload =
+    Boolean(activeThread?.runtime_session_id) &&
+    !historicalReadOnlyReason &&
+    !runtimeAdmissionBlocked &&
+    !isThreadLoading &&
+    !isRuntimeBusy &&
+    !isSending &&
+    queuedMessages.length === 0;
   const loadingLabel = useMemo(
     () =>
       runtimeActivityLabel({
@@ -287,6 +297,9 @@ export function useChatControllerPresentation({
       mentionItems,
       messages,
       onCloseInterAgentGraph,
+      onContinueFromProviderOverload: canContinueFromProviderOverload
+        ? () => handleSend(PROVIDER_OVERLOAD_CONTINUATION_PROMPT)
+        : undefined,
       onOpenInterAgentGraph: handleOpenInterAgentGraph,
       onResolveInterAgentApproval: handleResolveInterAgentApproval,
       onLoadOlderMessages: hasHiddenMessages ? onRevealOlderMessages : onLoadOlderHistory,

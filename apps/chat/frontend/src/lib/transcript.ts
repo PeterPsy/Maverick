@@ -12,6 +12,8 @@ import { isNoisyRuntimeLabel, isNonChatFacingProviderEvent, runtimeStepLabel } f
 const transcriptProjectionCache = new WeakMap<RuntimeEvent[], ChatMessage[]>();
 const transcriptProjectionCacheByLastEvent = new Map<string, ChatMessage[]>();
 const TRANSCRIPT_PROJECTION_CACHE_LIMIT = 80;
+const PROVIDER_OVERLOADED_MESSAGE =
+  "The model provider is temporarily overloaded. This chat and completed actions are preserved; continue shortly.";
 
 export function clearTranscriptProjectionCache(): void {
   transcriptProjectionCacheByLastEvent.clear();
@@ -203,6 +205,37 @@ function readableSystemText(value: unknown, fallback: string): string {
   return text.replace(/_/g, " ");
 }
 
+function safeFailureReasonCode(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  return /^[a-z][a-z0-9_]{0,63}$/.test(normalized) ? normalized : undefined;
+}
+
+function persistedTerminalProviderFailureCode(event: RuntimeEvent): string | null {
+  if (
+    event.event_type !== "runtime.step.updated" ||
+    event.payload.label !== "Codex app-server error"
+  ) {
+    return null;
+  }
+  const raw =
+    event.payload.raw && typeof event.payload.raw === "object"
+      ? (event.payload.raw as Record<string, unknown>)
+      : null;
+  if (!raw || raw.willRetry !== false) {
+    return null;
+  }
+  const error =
+    raw.error && typeof raw.error === "object"
+      ? (raw.error as Record<string, unknown>)
+      : null;
+  return error?.codexErrorInfo === "serverOverloaded"
+    ? "provider_overloaded"
+    : "provider_execution_failed";
+}
+
 function appReferencesPayload(value: unknown): AppReference[] {
   if (!Array.isArray(value)) {
     return [];
@@ -289,6 +322,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   const nextToolSegmentIndexByTurn = new Map<string, number>();
   const renderedStructuredOutput = new Set<string>();
   const activeGoalMessages = new Map<string, OrderedMessage>();
+  const persistedTerminalFailureCodesByTurn = new Map<string, string>();
 
   function pushMessage(message: ChatMessage, order: number): OrderedMessage {
     const entry = { order, sequence: messageSequence, message };
@@ -394,6 +428,11 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   for (const [eventIndex, event] of events.entries()) {
     const turnId = messageTurnId(event);
     const sourceFields = sourceFieldsForEvent(event);
+    const persistedTerminalFailureCode = persistedTerminalProviderFailureCode(event);
+    if (persistedTerminalFailureCode) {
+      persistedTerminalFailureCodesByTurn.set(turnId, persistedTerminalFailureCode);
+      continue;
+    }
     if (event.event_type === "runtime.turn.queued" || event.event_type === "runtime.message.steered") {
       const input = event.payload.input_text;
       const clientMessageId = event.payload.client_message_id;
@@ -579,13 +618,26 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     if (event.event_type === "runtime.turn.failed") {
       flushToolSegment(turnId, true);
       flushOutputSegment(turnId, true);
-      const error = readableSystemText(event.payload.error, "Runtime turn failed.");
+      const eventFailureReasonCode = safeFailureReasonCode(
+        event.payload.failure_reason_code,
+      );
+      const persistedFailureReasonCode = persistedTerminalFailureCodesByTurn.get(turnId);
+      const usesPersistedOverloadClassification =
+        persistedFailureReasonCode === "provider_overloaded" &&
+        (!eventFailureReasonCode || eventFailureReasonCode === "provider_execution_failed");
+      const failureReasonCode = usesPersistedOverloadClassification
+        ? persistedFailureReasonCode
+        : eventFailureReasonCode;
+      const error = usesPersistedOverloadClassification
+        ? PROVIDER_OVERLOADED_MESSAGE
+        : readableSystemText(event.payload.error, "Runtime turn failed.");
       pushMessage({
         id: `${turnId}:failed`,
         role: "system",
         content: error,
         createdAt: event.created_at,
         status: "failed",
+        ...(failureReasonCode ? { failureReasonCode } : {}),
         ...sourceFields,
       }, eventIndex);
     }

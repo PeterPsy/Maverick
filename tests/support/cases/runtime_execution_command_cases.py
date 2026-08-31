@@ -228,6 +228,34 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn("401 Unauthorized", result.output_text)
 
+    def test_codex_overload_is_structured_and_does_not_publish_raw_error_step(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        session = _session("sandbox", root=temp_dir.name, session_id="session-overloaded")
+        emitted = []
+
+        result = execute_runtime_turn(
+            session=session,
+            provider=build_codex_definition(),
+            input_text="continue the implementation",
+            launch_spec=_launch_spec(session),
+            runtime_adapter=_codex_adapter(),
+            event_sink=emitted.append,
+            command_runner=FakeCodexOverloadedProcess,
+            timeout_seconds=2,
+        )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(result.output_text, "work already completed")
+        self.assertEqual(result.failure_reason_code, "provider_overloaded")
+        self.assertIn("completed actions are preserved", result.public_error_message)
+        self.assertEqual(
+            [event.event_type for event in emitted],
+            ["runtime.output.delta"],
+        )
+        self.assertNotIn("Codex app-server error", repr(emitted))
+        self.assertNotIn("serverOverloaded", repr(emitted))
+
     def test_codex_process_exit_before_turn_completed_unblocks_execution(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
@@ -668,6 +696,73 @@ class FakeCodexTerminalErrorProcess(FakeCodexProcess):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.stdin = FakeCodexTerminalErrorStdin(self.stdout)
+
+
+class FakeCodexOverloadedStdin(FakeStdin):
+    def write(self, raw: str) -> None:
+        payload = json.loads(raw)
+        method = payload["method"]
+        request_id = payload["id"]
+        if method == "initialize":
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {}})
+        elif method == "thread/start":
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {"thread": {"id": "thread-overloaded"}},
+                }
+            )
+        elif method == "turn/start":
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {"turn": {"id": "turn-overloaded"}},
+                }
+            )
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "item/agentMessage/delta",
+                    "params": {
+                        "itemId": "item-overloaded",
+                        "delta": "work already completed",
+                    },
+                }
+            )
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "error",
+                    "params": {
+                        "error": {
+                            "message": "Selected model is at capacity. Please try a different model.",
+                            "codexErrorInfo": "serverOverloaded",
+                            "additionalDetails": None,
+                        },
+                        "willRetry": False,
+                    },
+                }
+            )
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "turn/completed",
+                    "params": {
+                        "turn": {
+                            "id": "turn-overloaded",
+                            "status": "failed",
+                        }
+                    },
+                }
+            )
+
+
+class FakeCodexOverloadedProcess(FakeCodexProcess):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.stdin = FakeCodexOverloadedStdin(self.stdout)
 
 
 class FakeCodexDiesBeforeCompletionStdin(FakeStdin):

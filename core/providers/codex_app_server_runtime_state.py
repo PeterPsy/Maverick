@@ -38,6 +38,8 @@ class _CodexAppServerRuntime:
     pending_agent_json_chunks: dict[str, list[str]] = field(default_factory=dict)
     emitted_structured_keys: set[str] = field(default_factory=set)
     current_error_text: str | None = None
+    current_failure_reason_code: str | None = None
+    current_terminal_error_at: float | None = None
     current_completion_received: bool = False
     completion_queue: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=1))
     reader_thread: threading.Thread | None = None

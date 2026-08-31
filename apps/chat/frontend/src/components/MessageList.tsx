@@ -13,6 +13,7 @@ export function MessageList({
   messages,
   onActiveSpeechMessageChange,
   onCopyMessage,
+  onContinueFromProviderOverload,
   onOpenInterAgentGraph,
   onToggleExpanded,
   speakingMessageId,
@@ -29,6 +30,7 @@ export function MessageList({
   messages: ChatMessage[];
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
   onCopyMessage: CopyMessageHandler;
+  onContinueFromProviderOverload?: () => void;
   onOpenInterAgentGraph?: (runId: string) => void;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
@@ -38,6 +40,13 @@ export function MessageList({
   speechProviderQualityProfile: string;
   speechProviderStreamingSupported: boolean;
 }) {
+  const latestMessage = messages.at(-1);
+  const recoverableFailureMessageId =
+    latestMessage?.role === "system" &&
+    latestMessage.failureReasonCode === "provider_overloaded"
+      ? latestMessage.id
+      : null;
+
   return (
     <>
       {messages.map((message) => (
@@ -50,6 +59,11 @@ export function MessageList({
           message={message}
           onActiveSpeechMessageChange={onActiveSpeechMessageChange}
           onCopyMessage={onCopyMessage}
+          onContinueFromProviderOverload={
+            message.id === recoverableFailureMessageId
+              ? onContinueFromProviderOverload
+              : undefined
+          }
           onOpenInterAgentGraph={onOpenInterAgentGraph}
           onToggleExpanded={onToggleExpanded}
           speakingMessageId={speakingMessageId}

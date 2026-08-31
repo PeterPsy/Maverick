@@ -443,7 +443,7 @@ class CodexLaunchMixin:
             on_provider_accepted=on_provider_accepted,
             command_runner=command_runner,
         )
-        return RuntimeExecutionResult(output_text=result.output_text, exit_code=result.exit_code)
+        return RuntimeExecutionResult(output_text=result.output_text, exit_code=result.exit_code, failure_reason_code=result.failure_reason_code)
 
 
 

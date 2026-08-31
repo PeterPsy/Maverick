@@ -119,10 +119,16 @@ class LegacyRuntimeBackendAgenticBridge(AgenticRuntimeEngineAdapter):
                     on_provider_turn_start_sent=lambda metadata: publish("provider.request.sent", metadata),
                     on_provider_accepted=lambda metadata: publish("provider.accepted", metadata),
                 )
-                publish(
-                    "provider.execution.completed",
-                    {"output_text": result.output_text, "exit_code": result.exit_code},
-                )
+                completion_payload: dict[str, object] = {
+                    "output_text": result.output_text,
+                    "exit_code": result.exit_code,
+                }
+                failure_reason_code = str(
+                    getattr(result, "failure_reason_code", None) or ""
+                ).strip()
+                if failure_reason_code:
+                    completion_payload["reason_code"] = failure_reason_code
+                publish("provider.execution.completed", completion_payload)
             except Exception as error:
                 publish(
                     "runtime.error",

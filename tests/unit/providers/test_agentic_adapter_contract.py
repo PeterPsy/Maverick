@@ -11,11 +11,13 @@ from core.providers.agentic_adapter import (
     RuntimeCloseContext,
     RuntimeProviderEvent,
     RuntimeRecoveryContext,
+    RuntimeTurnContext,
 )
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.certificate_service import runtime_adapter_artifact_digest
 from core.providers.errors import ProviderLaunchError, ProviderNotFoundError
 from core.providers.models import RuntimeBackendLaunchSpec
+from core.providers.provider_legacy_agentic_bridge import LegacyRuntimeBackendAgenticBridge
 from core.providers.service import builtin_provider_registry
 from core.runtime.agentic_execution import _validate_event
 from core.runtime.execution import execute_runtime_turn
@@ -295,12 +297,38 @@ class AgenticAdapterContractTest(unittest.TestCase):
         self.assertEqual(result.failure_reason_code, "provider_thread_missing")
         self.assertIn("provider conversation", result.public_error_message)
 
+    def test_legacy_bridge_preserves_failure_code_returned_by_adapter_result(self) -> None:
+        legacy = _LegacyAdapter(
+            self.definition,
+            result_failure_reason_code="provider_overloaded",
+        )
+        bridge = LegacyRuntimeBackendAgenticBridge(legacy)
+        context = RuntimeTurnContext(
+            session=self.session,
+            binding=self.binding,
+            provider_state=self.provider_state,
+            input_text="continue",
+            correlation_id="turn-overloaded",
+            prepared_handle=_launch_spec(self.session),
+        )
+
+        events = asyncio.run(self._bridge_events(bridge, context))
+
+        completion = next(
+            event for event in events if event.event_type == "provider.execution.completed"
+        )
+        self.assertEqual(completion.payload["exit_code"], 1)
+        self.assertEqual(completion.payload["reason_code"], "provider_overloaded")
+
     async def _lifecycle(self, cancel, recovery, close):
         return (
             await self.adapter.cancel(cancel),
             await self.adapter.recover(recovery),
             await self.adapter.close(close),
         )
+
+    async def _bridge_events(self, bridge, context):
+        return [event async for event in bridge.execute(context)]
 
 
 class _LegacyAdapter:
@@ -310,10 +338,12 @@ class _LegacyAdapter:
         *,
         tool_output: str | None = None,
         execution_error: Exception | None = None,
+        result_failure_reason_code: str | None = None,
     ) -> None:
         self.definition = definition
         self.tool_output = tool_output
         self.execution_error = execution_error
+        self.result_failure_reason_code = result_failure_reason_code
 
     def provider_definition(self):
         return self.definition
@@ -345,7 +375,15 @@ class _LegacyAdapter:
             )
         kwargs["on_provider_thread_id"]("legacy-thread")
         kwargs["on_provider_accepted"]({"request_id": "legacy-request"})
-        return type("Result", (), {"output_text": "legacy answer", "exit_code": 0})()
+        return type(
+            "Result",
+            (),
+            {
+                "output_text": "" if self.result_failure_reason_code else "legacy answer",
+                "exit_code": 1 if self.result_failure_reason_code else 0,
+                "failure_reason_code": self.result_failure_reason_code,
+            },
+        )()
 
     def interrupt_turn(self, _session_id: str) -> bool:
         return True

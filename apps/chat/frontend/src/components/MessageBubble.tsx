@@ -24,6 +24,7 @@ export function MessageBubble({
   message,
   onActiveSpeechMessageChange,
   onCopyMessage,
+  onContinueFromProviderOverload,
   onOpenInterAgentGraph,
   onToggleExpanded,
   speakingMessageId,
@@ -40,6 +41,7 @@ export function MessageBubble({
   message: ChatMessage;
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
   onCopyMessage: CopyMessageHandler;
+  onContinueFromProviderOverload?: () => void;
   onOpenInterAgentGraph?: (runId: string) => void;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
@@ -71,6 +73,17 @@ export function MessageBubble({
             <span className="material-symbols-rounded">{message.status === "failed" ? "error" : "info"}</span>
           </span>
           <span className="chatapp-system-update__label">{message.content}</span>
+          {onContinueFromProviderOverload ? (
+            <button
+              aria-label="Continue this chat without repeating completed actions"
+              className="chatapp-system-update__action"
+              onClick={onContinueFromProviderOverload}
+              title="Inspect current state, then continue without repeating completed actions"
+              type="button"
+            >
+              Continue
+            </button>
+          ) : null}
         </div>
       ) : isToolMessage ? (
         <ToolCallInlineMessage createdAt={message.createdAt} defaultExpanded={message.id === latestToolMessageId} toolCalls={toolCalls} />

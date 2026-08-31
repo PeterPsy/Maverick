@@ -1181,7 +1181,12 @@ export function useMessageSubmission({
     }
   }
 
-  async function submitMessage(message: QueuedMessage, target: SubmissionTarget, abortController: AbortController) {
+  async function submitMessage(
+    message: QueuedMessage,
+    target: SubmissionTarget,
+    abortController: AbortController,
+    restoreComposerOnFailure = true,
+  ) {
     const conversationKey = target.conversationKey;
     const targetThread = target.thread;
     const targetDraftChat = target.draftChat;
@@ -1478,8 +1483,10 @@ export function useMessageSubmission({
         addFailedMessage(conversationKey, message);
         if (isConversationStillActive(conversationKey)) {
           setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
-          setComposer(message.content);
-          setSelectedReferences(message.appReferences);
+          if (restoreComposerOnFailure) {
+            setComposer(message.content);
+            setSelectedReferences(message.appReferences);
+          }
         }
       }
     } finally {
@@ -1493,9 +1500,11 @@ export function useMessageSubmission({
     }
   }
 
-  async function handleSend() {
-    const input = composer.trim();
-    const targetAttachments = [...attachments];
+  async function handleSend(inputOverride?: unknown) {
+    const explicitInput = typeof inputOverride === "string" ? inputOverride : undefined;
+    const isComposerSubmission = explicitInput === undefined;
+    const input = (explicitInput ?? composer).trim();
+    const targetAttachments = isComposerSubmission ? [...attachments] : [];
     if ((!input && !targetAttachments.length) || hasInvalidAttachments(targetAttachments)) {
       return;
     }
@@ -1511,6 +1520,7 @@ export function useMessageSubmission({
     const clientSubmissionStartedAt = new Date().toISOString();
     const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
     const invokedSkillIds = skillIdsFromText(input, composerMentionItems);
+    const targetMultiAgentMode = isComposerSubmission ? multiAgentMode : "off";
     const clientSubmissionMetrics: RuntimeTurnClientMetrics = {};
     const localMessage: QueuedMessage = {
       clientMessageId,
@@ -1520,13 +1530,18 @@ export function useMessageSubmission({
       attachments: targetAttachments.map(attachmentToMessageAttachment),
       appReferences,
       invokedSkillIds,
-      multiAgentMode,
+      multiAgentMode: targetMultiAgentMode,
     };
     const shouldQueue = Boolean(sendingByConversationKeyRef.current[target.conversationKey]);
+    if (shouldQueue && !isComposerSubmission) {
+      return;
+    }
     setComposerError(null);
-    setComposer("");
-    setSelectedReferences([]);
-    clearAttachments();
+    if (isComposerSubmission) {
+      setComposer("");
+      setSelectedReferences([]);
+      clearAttachments();
+    }
     if (shouldQueue) {
       let messageAttachments: QueuedMessage["attachments"];
       try {
@@ -1560,7 +1575,7 @@ export function useMessageSubmission({
         attachments: messageAttachments,
         appReferences,
         invokedSkillIds,
-        multiAgentMode,
+        multiAgentMode: targetMultiAgentMode,
       };
       const immediateTarget = currentSubmissionTarget(queueConversationKey);
       if (immediateTarget && !sendingByConversationKeyRef.current[queueConversationKey]) {
@@ -1594,15 +1609,22 @@ export function useMessageSubmission({
         clientSubmissionMetrics: { ...clientSubmissionMetrics },
       };
       replacePendingMessage(target.conversationKey, message);
-      await submitMessage(message, target, abortController);
+      await submitMessage(
+        message,
+        target,
+        abortController,
+        isComposerSubmission,
+      );
     } catch (uploadError) {
       clearSubmission(target, clientMessageId);
       if (!isAbortError(uploadError)) {
         addFailedMessage(target.conversationKey, localMessage);
         if (isConversationStillActive(target.conversationKey)) {
           setComposerError(uploadError instanceof Error ? uploadError.message : "Unable to upload attachments.");
-          setComposer(input);
-          setSelectedReferences(appReferences);
+          if (isComposerSubmission) {
+            setComposer(input);
+            setSelectedReferences(appReferences);
+          }
         }
       }
     }

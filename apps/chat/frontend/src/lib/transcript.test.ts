@@ -1323,4 +1323,59 @@ describe("runtime event transcript projection", () => {
       { role: "system", content: "Runtime turn failed.", status: "failed" },
     ]);
   });
+
+  it("projects structured overload failures for safe continuation", () => {
+    const messages = eventsToMessages([
+      event({
+        event_type: "runtime.turn.failed",
+        payload: {
+          error: "The model provider is temporarily overloaded. This chat and completed actions are preserved; continue shortly.",
+          failure_reason_code: "provider_overloaded",
+        },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      {
+        role: "system",
+        status: "failed",
+        failureReasonCode: "provider_overloaded",
+      },
+    ]);
+  });
+
+  it("normalizes persisted Codex overload noise without duplicating the error", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "legacy-overload-step",
+        event_type: "runtime.step.updated",
+        payload: {
+          label: "Codex app-server error",
+          raw: {
+            error: {
+              message: "Selected model is at capacity. Please try a different model.",
+              codexErrorInfo: "serverOverloaded",
+            },
+            willRetry: false,
+          },
+        },
+      }),
+      event({
+        event_id: "legacy-overload-failure",
+        event_type: "runtime.turn.failed",
+        payload: {
+          error: "The model runtime could not complete the request.",
+          failure_reason_code: "provider_execution_failed",
+        },
+      }),
+    ]);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: "system",
+      status: "failed",
+      failureReasonCode: "provider_overloaded",
+      content: expect.stringContaining("completed actions are preserved"),
+    });
+  });
 });

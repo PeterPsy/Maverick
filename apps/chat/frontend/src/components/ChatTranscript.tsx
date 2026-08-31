@@ -27,6 +27,7 @@ export type ChatTranscriptProps = {
   messages: ChatMessage[];
   hasMoreOlderMessages?: boolean;
   onCloseInterAgentGraph?: () => void;
+  onContinueFromProviderOverload?: () => void;
   onLoadOlderMessages?: () => void;
   onOpenInterAgentGraph?: (runId: string) => void;
   onResolveInterAgentApproval?: (approvalId: string, approved: boolean) => Promise<void>;
@@ -51,6 +52,7 @@ export function ChatTranscript({
   messages,
   hasMoreOlderMessages = false,
   onLoadOlderMessages,
+  onContinueFromProviderOverload,
   onOpenInterAgentGraph = () => undefined,
   onResolveInterAgentApproval = async () => undefined,
   speechMaxTextChars = 0,
@@ -246,6 +248,7 @@ export function ChatTranscript({
           messages={primaryMessages}
           onActiveSpeechMessageChange={setSpeakingMessageId}
           onCopyMessage={copyMessage}
+          onContinueFromProviderOverload={onContinueFromProviderOverload}
           onOpenInterAgentGraph={openInterAgentGraph}
           onToggleExpanded={toggleExpanded}
           speakingMessageId={speakingMessageId}

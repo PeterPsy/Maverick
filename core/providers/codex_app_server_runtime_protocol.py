@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any
 
+from core.providers.codex_app_server_runtime_errors import (
+    codex_error_info,
+    codex_terminal_failure_reason_code,
+)
 from core.providers.codex_app_server_skill_rehydration import schedule_codex_skill_rehydration
 from core.providers.codex_app_server_runtime_usage import codex_usage_event as _codex_usage_event
 from core.providers.codex_prompt_budget import final_prompt_budget_payload
@@ -110,23 +115,41 @@ def _handle_notification(runtime: _CodexAppServerRuntime, payload: dict[str, Any
         return
     if method == "error":
         error_text = _extract_error_text(params)
+        will_retry = bool(params.get("willRetry"))
+        error_info = codex_error_info(params)
+        failure_reason_code = (
+            None if will_retry else codex_terminal_failure_reason_code(error_info)
+        )
         with runtime.event_lock:
             runtime.current_error_text = error_text
+            if failure_reason_code is not None:
+                runtime.current_failure_reason_code = failure_reason_code
+                runtime.current_terminal_error_at = time.monotonic()
         _debug_log(
             runtime,
             "Codex app-server debug: error notification",
             {
                 "phase": "notification_error",
                 "provider_turn_id": runtime.current_provider_turn_id,
-                "will_retry": bool(params.get("willRetry")),
+                "will_retry": will_retry,
+                "codex_error_info": error_info,
+                "failure_reason_code": failure_reason_code,
                 "has_error_text": bool(error_text),
                 "process_pid": runtime.process.pid,
                 "process_returncode": runtime.process.poll(),
             },
         )
-        _emit(runtime, RuntimeExecutionEvent(event_type="runtime.step.updated", payload={"label": "Codex app-server error", "raw": params}))
-        if not bool(params.get("willRetry")):
-            _put_completion(runtime, {"status": "failed"})
+        if will_retry:
+            _emit(
+                runtime,
+                RuntimeExecutionEvent(
+                    event_type="runtime.step.updated",
+                    payload={
+                        "label": "Model provider retrying",
+                        "will_retry": True,
+                    },
+                ),
+            )
         return
     _handle_generic_notification(runtime, method=method, params=params)
 

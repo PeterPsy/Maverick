@@ -4,7 +4,7 @@
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fallbackMatchesForAppReference } from "../lib/messageReferenceMatches";
 import type { AppReference, ChatMessage } from "../api/client";
 import { ChatTranscript } from "./ChatTranscript";
@@ -215,5 +215,50 @@ describe("chat transcript scroll state", () => {
         delete (HTMLElement.prototype as { scrollHeight?: unknown }).scrollHeight;
       }
     }
+  });
+});
+
+describe("chat transcript provider overload recovery", () => {
+  it("offers continuation only for the latest recoverable failure", async () => {
+    const onContinue = vi.fn();
+    const overload: ChatMessage = {
+      id: "overload",
+      role: "system",
+      content: "The model provider is temporarily overloaded.",
+      createdAt: "2026-08-31T09:00:00Z",
+      status: "failed",
+      failureReasonCode: "provider_overloaded",
+    };
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        createElement(ChatTranscript, {
+          ...transcriptProps("thread:overloaded", [overload]),
+          onContinueFromProviderOverload: onContinue,
+        }),
+      );
+    });
+    const button = container.querySelector(
+      ".chatapp-system-update__action",
+    ) as HTMLButtonElement | null;
+    expect(button?.textContent).toContain("Continue");
+
+    await act(async () => {
+      button?.click();
+    });
+    expect(onContinue).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      root?.render(
+        createElement(ChatTranscript, {
+          ...transcriptProps("thread:overloaded", [overload, message("answer", "Recovered")]),
+          onContinueFromProviderOverload: onContinue,
+        }),
+      );
+    });
+    expect(container.querySelector(".chatapp-system-update__action")).toBeNull();
   });
 });

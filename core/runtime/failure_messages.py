@@ -160,6 +160,10 @@ _PUBLIC_MESSAGES = {
     "provider_execution_failed": "The model runtime could not complete the request.",
     "provider_mixed_text_and_tool_call": "The provider returned an incompatible text and tool-call sequence.",
     "provider_no_eligible_endpoint": "No certified provider endpoint is currently available for this model.",
+    "provider_overloaded": (
+        "The model provider is temporarily overloaded. This chat and completed actions are preserved; "
+        "continue shortly."
+    ),
     "provider_output_incomplete": "The model provider exhausted the output budget before completing the response.",
     "provider_thread_missing": (
         "The provider conversation needed to continue this chat is no longer available."

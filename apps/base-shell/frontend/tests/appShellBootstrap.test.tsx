@@ -278,6 +278,29 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
     expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
   });
+
+  it("ends mounted shell loading when session revalidation returns an authorization response", async () => {
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
+
+    api.getSession.mockRejectedValueOnce(
+      new MaverickHttpError("/api/session", new Response("unauthenticated", { status: 401 })),
+    );
+    await act(async () => {
+      recordMaverickTransportFailure();
+      recordMaverickTransportResponse();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("[aria-label='Loading workspace']")).toBeNull();
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+  });
 });
 
 function sessionPayload(): Extract<SessionPayload, { authenticated: true }> {

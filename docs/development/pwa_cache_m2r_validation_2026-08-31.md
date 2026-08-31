@@ -26,7 +26,7 @@ The implementation chain reviewed here includes:
 ## Built artifact
 
 The reviewed Base Shell build has id
-`d5dfb5a22eadcc114cb3a5c30d2b3fc28b56391ae3903338e52bc159a878f452`
+`bd942620ec5380adf200623b970137dd741ac87562eb7204bbf940712f488a07`
 and contains:
 
 - schema `maverick.frontend-assets.v2`;
@@ -44,7 +44,7 @@ v2 frontend manifests and every declared byte in their current artifacts.
 
 | Surface | Result |
 |---|---|
-| Base Shell frontend | 28 files, 126 tests passed |
+| Base Shell frontend | 28 files, 127 tests passed |
 | Worker/build harness | 13 tests passed |
 | Frontend manifest loader | 10 tests passed |
 | PWA feature flags | 4 tests passed |

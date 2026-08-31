@@ -10,6 +10,7 @@ import {
   listPinnedApps,
   listWorkspaces,
   logout,
+  MaverickHttpError,
   ProviderSetupSettings,
   retryAfterMs,
   savePinnedApps,
@@ -250,6 +251,20 @@ export function AppShell() {
     }
   }
 
+  function clearShellAfterAuthorizationFailure(controller: AbortController) {
+    controller.abort();
+    clearShellRetryTimer();
+    shellRetryAttemptRef.current = 0;
+    shellWaitingForRetryRef.current = false;
+    resetTransportRecoveryScope();
+    setSession({ authenticated: false });
+    setApps([]);
+    setWorkspaces([]);
+    setSettings(null);
+    setError(null);
+    setIsWorkspacesLoading(false);
+  }
+
   function scheduleShellRetry(loadError: unknown) {
     clearShellRetryTimer();
     shellWaitingForRetryRef.current = true;
@@ -338,6 +353,10 @@ export function AppShell() {
         });
         return;
       }
+      if (loadError instanceof MaverickHttpError && [401, 403].includes(loadError.status)) {
+        clearShellAfterAuthorizationFailure(controller);
+        return;
+      }
       shellRetryAttemptRef.current = 0;
       shellWaitingForRetryRef.current = false;
       setError(loadError instanceof Error ? loadError.message : "Errore sconosciuto.");
@@ -369,7 +388,7 @@ export function AppShell() {
     let keepLoading = false;
     try {
       const workspacePayload = await listWorkspaces(signal);
-      if (shellLoadVersionRef.current !== loadVersion) {
+      if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
       setWorkspaces(workspacePayload.items);
@@ -400,7 +419,7 @@ export function AppShell() {
     const deferredStartedAt = performance.now();
     try {
       const providerSetupSettings = await getProviderSetupSettings(signal);
-      if (shellLoadVersionRef.current !== loadVersion) {
+      if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
         return;
       }
       setSettings(providerSetupSettings);
@@ -427,7 +446,8 @@ export function AppShell() {
     try {
       const pinnedApps = await listPinnedApps(signal);
       if (
-        shellLoadVersionRef.current !== loadVersion
+        signal?.aborted
+        || shellLoadVersionRef.current !== loadVersion
         || pinnedAppsSaveVersionRef.current !== pinnedStateVersion
       ) {
         return;

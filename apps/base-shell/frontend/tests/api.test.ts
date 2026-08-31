@@ -78,11 +78,13 @@ describe("base-shell api normalization", () => {
       headers: { "Retry-After": "2" },
     }));
     const forbidden = new MaverickHttpError("/api/session", new Response(null, { status: 403 }));
+    const unauthenticated = new MaverickHttpError("/api/session", new Response(null, { status: 401 }));
 
     expect(isRetryableReadError(transport)).toBe(true);
     expect(isRetryableReadError(unavailable)).toBe(true);
     expect(retryAfterMs(unavailable)).toBe(2_000);
     expect(isRetryableReadError(forbidden)).toBe(false);
+    expect(isRetryableReadError(unauthenticated)).toBe(false);
   });
 
   it("reads and saves ordered pinned apps through the App Store backend", async () => {

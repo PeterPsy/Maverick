@@ -263,23 +263,21 @@ export function AppShell() {
     const delay = Math.max(jittered, retryAfterMs(loadError) ?? 0);
     shellRetryTimerRef.current = window.setTimeout(() => {
       shellRetryTimerRef.current = null;
-      void loadShellState({ supersede: false });
+      void loadShellState();
     }, delay);
   }
 
-  async function loadShellState({ supersede = true }: { supersede?: boolean } = {}) {
-    if (shellLoadInFlightRef.current && !supersede) {
+  async function loadShellState() {
+    if (shellLoadInFlightRef.current) {
       return;
     }
-    if (supersede) {
-      clearShellRetryTimer();
-      shellLoadAbortRef.current?.abort();
-      shellLoadInFlightRef.current = false;
-      shellWaitingForRetryRef.current = false;
-    }
+    clearShellRetryTimer();
+    shellLoadAbortRef.current?.abort();
+    shellWaitingForRetryRef.current = false;
     const controller = new AbortController();
     shellLoadAbortRef.current = controller;
     shellLoadInFlightRef.current = true;
+    const deferredLoads: Promise<void>[] = [];
     const loadVersion = shellLoadVersionRef.current + 1;
     shellLoadVersionRef.current = loadVersion;
     const loadStartedAt = performance.now();
@@ -306,8 +304,10 @@ export function AppShell() {
         measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: false });
         return;
       }
-      void loadWorkspaceState(loadVersion, controller.signal);
-      void loadProviderSetupState(loadVersion, controller.signal);
+      deferredLoads.push(
+        loadWorkspaceState(loadVersion, controller.signal),
+        loadProviderSetupState(loadVersion, controller.signal),
+      );
       const blockingStartedAt = performance.now();
       const registry = await listApps(controller.signal);
       if (shellLoadVersionRef.current !== loadVersion) {
@@ -321,7 +321,7 @@ export function AppShell() {
         app_count: registry.items.length,
       });
       measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: true });
-      void loadPinnedAppsState(loadVersion, controller.signal);
+      deferredLoads.push(loadPinnedAppsState(loadVersion, controller.signal));
     } catch (loadError) {
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
@@ -346,8 +346,17 @@ export function AppShell() {
       });
     } finally {
       if (shellLoadAbortRef.current === controller) {
-        shellLoadAbortRef.current = null;
         shellLoadInFlightRef.current = false;
+      }
+      const releaseController = () => {
+        if (shellLoadAbortRef.current === controller) {
+          shellLoadAbortRef.current = null;
+        }
+      };
+      if (deferredLoads.length > 0) {
+        void Promise.allSettled(deferredLoads).then(releaseController);
+      } else {
+        releaseController();
       }
       if (shellLoadVersionRef.current === loadVersion && !keepLoading) {
         setIsLoading(false);
@@ -357,6 +366,7 @@ export function AppShell() {
 
   async function loadWorkspaceState(loadVersion: number, signal?: AbortSignal) {
     const deferredStartedAt = performance.now();
+    let keepLoading = false;
     try {
       const workspacePayload = await listWorkspaces(signal);
       if (shellLoadVersionRef.current !== loadVersion) {
@@ -368,12 +378,19 @@ export function AppShell() {
         workspace_count: workspacePayload.items.length,
       });
     } catch (loadError) {
+      if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+      if (isRetryableReadError(loadError)) {
+        keepLoading = true;
+        scheduleShellRetry(loadError);
+      }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
         resource: "workspaces",
       });
     } finally {
-      if (shellLoadVersionRef.current === loadVersion) {
+      if (shellLoadVersionRef.current === loadVersion && !keepLoading) {
         setIsWorkspacesLoading(false);
       }
     }
@@ -391,6 +408,12 @@ export function AppShell() {
         resource: "provider_setup",
       });
     } catch (loadError) {
+      if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+      if (isRetryableReadError(loadError)) {
+        scheduleShellRetry(loadError);
+      }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
         resource: "provider_setup",
@@ -415,6 +438,12 @@ export function AppShell() {
         resource: "pinned_apps",
       });
     } catch (loadError) {
+      if (signal?.aborted || shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+      if (isRetryableReadError(loadError)) {
+        scheduleShellRetry(loadError);
+      }
       measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
         resource: "pinned_apps",
@@ -436,7 +465,7 @@ export function AppShell() {
       return;
     }
     clearShellRetryTimer();
-    void loadShellState({ supersede: false });
+    void loadShellState();
   }, [transportRecovery.revision]);
 
   useEffect(() => {

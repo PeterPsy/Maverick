@@ -181,6 +181,34 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
 
+  it("keeps deferred workspace state loading and retries it after transport recovery", async () => {
+    api.listWorkspaces
+      .mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/workspaces"))
+      .mockResolvedValueOnce({ items: [workspace("recovered")] });
+
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-workspaces-loading")).toBe("true");
+    expect(api.listWorkspaces).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      recordMaverickTransportFailure();
+      recordMaverickTransportResponse();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.listWorkspaces).toHaveBeenCalledTimes(2);
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-workspaces-loading")).toBe("false");
+    expect(container.querySelector("[data-testid='sidebar']")?.getAttribute("data-workspace-count")).toBe("1");
+  });
+
   it("revalidates shell state when transport recovery signals are coalesced", async () => {
     api.getSession.mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/session"));
 

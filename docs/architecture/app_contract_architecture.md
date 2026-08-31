@@ -1076,7 +1076,8 @@ host configuration:
     "csp_profile": "self_hosted_web_app",
     "frame_ancestors": ["platform"],
     "connect_src": ["self"],
-    "immutable_asset_prefixes": ["/_next/static/"]
+    "immutable_asset_prefixes": ["/_next/static/"],
+    "sandboxed_frame_resource_prefixes": ["/api/plugins/", "/api/asset-cache"]
   }
 }
 ```
@@ -1105,6 +1106,24 @@ directory prefixes outside `/api` and `/.well-known`. Successful GET/HEAD
 responses under a declared prefix receive a private immutable browser-cache
 policy. The app is responsible for using content-addressed filenames there;
 all other responses, including errors under that tree, remain `no-store`.
+
+`sandboxed_frame_resource_prefixes` is optional and limited to eight canonical
+literal absolute paths or directory prefixes. It exists only for native apps
+whose upstream UI intentionally omits `allow-same-origin` from an iframe
+sandbox: resources loaded by that opaque-origin document otherwise fail the
+default `Cross-Origin-Resource-Policy: same-origin` check. Core emits
+`Cross-Origin-Resource-Policy: cross-origin` only for a matching authenticated
+response. A trailing slash declares a directory tree; a value without one is
+an exact path. The reserved bootstrap namespace, a blanket `/api` declaration,
+escaping, dynamic segments, and duplicates are rejected. This does not add a
+route or enable CORS. Because an opaque sandbox withholds `SameSite=Strict`,
+the declaration also issues a separate host-only, `HttpOnly`, `SameSite=None`,
+`Secure` resource cookie while preserving the main `SameSite=Strict` cookie.
+Core accepts the resource cookie only for `GET`/`HEAD` on a matching declared
+path. Actor, workspace, app, sidecar, generation, TTL, and revocation checks
+remain mandatory, and CORS remains disabled. A cross-site page can cause those
+explicitly embeddable requests while the resource session is live, so contracts
+must never declare user-private APIs or media under this capability.
 
 The core-owned lifecycle command `app.<local_app_id>.sidecars.restart` is the
 only general hot-restart surface. It resolves the enabled binding and declared

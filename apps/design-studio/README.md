@@ -31,6 +31,13 @@ the native frame ready only after Core confirms that bootstrap produced the
 bound sidecar session; `iframe.onload` alone is intentionally insufficient
 because browsers also emit it for TLS/network error documents. Native HTTP
 routes pass through unchanged; no normal OpenDesign request is handled by Core.
+OpenDesign's native preview surface deliberately uses opaque-origin sandboxed
+iframes. The app contract therefore opts only its plugin-asset tree and exact
+asset-cache route into Core's sandbox-resource response policy, allowing those
+authenticated images to render without changing the official OpenDesign
+frontend. Core keeps the main session `SameSite=Strict` and accepts a separate
+host-only resource cookie only for those declared preview-media `GET`/`HEAD`
+routes; other sidecar responses retain the stricter resource policy.
 
 ## Optional naked-model bridge
 

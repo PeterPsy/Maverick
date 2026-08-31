@@ -48,6 +48,7 @@ _FORBIDDEN_ENV_NAMES = {
 _DEFAULT_MEMORY_BYTES = 4 * 1024 * 1024 * 1024
 _DEFAULT_OPEN_FILES = 1024
 _DEFAULT_REQUEST_CONCURRENCY = 32
+_RESOURCE_PATH_SEGMENT = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._~-]*$")
 
 
 def parse_process_policy(payload: dict[str, Any], *, label: str) -> HttpSidecarProcessPolicy:
@@ -137,7 +138,14 @@ def parse_browser_origin(payload: dict[str, Any], *, label: str) -> HttpSidecarB
     origin_label = f"{label}.browser_origin"
     _reject_unexpected_fields(
         payload,
-        {"mode", "csp_profile", "frame_ancestors", "connect_src", "immutable_asset_prefixes"},
+        {
+            "mode",
+            "csp_profile",
+            "frame_ancestors",
+            "connect_src",
+            "immutable_asset_prefixes",
+            "sandboxed_frame_resource_prefixes",
+        },
         label=origin_label,
     )
     mode = _expect_string(payload, "mode")
@@ -166,12 +174,31 @@ def parse_browser_origin(payload: dict[str, Any], *, label: str) -> HttpSidecarB
             )
     if len(set(immutable_asset_prefixes)) != len(immutable_asset_prefixes):
         raise AppContractValidationError(f"`{origin_label}.immutable_asset_prefixes` must not contain duplicates.")
+    sandboxed_frame_resource_prefixes = (
+        _expect_string_list(payload, "sandboxed_frame_resource_prefixes")
+        if "sandboxed_frame_resource_prefixes" in payload
+        else []
+    )
+    if len(sandboxed_frame_resource_prefixes) > 8:
+        raise AppContractValidationError(
+            f"`{origin_label}.sandboxed_frame_resource_prefixes` may contain at most 8 values."
+        )
+    for prefix in sandboxed_frame_resource_prefixes:
+        if not _valid_sandboxed_frame_resource_prefix(prefix):
+            raise AppContractValidationError(
+                f"`{origin_label}.sandboxed_frame_resource_prefixes` values must be canonical absolute literal paths or directory prefixes."
+            )
+    if len(set(sandboxed_frame_resource_prefixes)) != len(sandboxed_frame_resource_prefixes):
+        raise AppContractValidationError(
+            f"`{origin_label}.sandboxed_frame_resource_prefixes` must not contain duplicates."
+        )
     return HttpSidecarBrowserOriginSpec(
         mode="isolated",
         csp_profile="self_hosted_web_app",
         frame_ancestors=frame_ancestors,
         connect_src=connect_src,
         immutable_asset_prefixes=immutable_asset_prefixes,
+        sandboxed_frame_resource_prefixes=sandboxed_frame_resource_prefixes,
     )
 
 
@@ -183,6 +210,19 @@ def _valid_immutable_asset_prefix(value: str) -> bool:
     if "//" in value or "\\" in value or "%" in value or "?" in value or "#" in value:
         return False
     return all(segment not in {"", ".", ".."} for segment in value[1:-1].split("/"))
+
+
+def _valid_sandboxed_frame_resource_prefix(value: str) -> bool:
+    if not value.startswith("/") or value == "/":
+        return False
+    path = value[:-1] if value.endswith("/") else value
+    if path in {"/api", "/.well-known"} or path.startswith("/.well-known/"):
+        return False
+    if "//" in value or "\\" in value or "%" in value or "?" in value or "#" in value:
+        return False
+    if any(ord(character) < 32 for character in value):
+        return False
+    return all(_RESOURCE_PATH_SEGMENT.fullmatch(segment) for segment in path[1:].split("/"))
 
 
 def parse_sidecar_env(

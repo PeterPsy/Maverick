@@ -29,8 +29,8 @@ is not a credential. In local mode Maverick itself must use a named loopback
 host such as `maverick.localhost`; the label is placed beneath
 `sidecars.maverick.localhost` and uses the core listener's port. Keeping the
 platform and sidecar hosts under the same named `.localhost` site preserves the
-required `SameSite=Strict` bootstrap cookie across the `303`. Bare `localhost`
-and IP-literal platform hosts fail closed. Hosted installations
+`SameSite=Strict` main-session boundary. Bare `localhost` and IP-literal
+platform hosts fail closed. Hosted installations
 must provision wildcard DNS and TLS for `*.sidecars.<installation-domain>`.
 Core fails closed when the declared isolated origin cannot be constructed or
 served securely.
@@ -52,19 +52,28 @@ does not fall through to the normal platform host. Unknown routes are denied.
    in a URL, fragment, browser storage, referrer, audit target, or log.
 3. The sidecar router atomically consumes the ticket, verifies every binding,
    creates a distinct random session, and responds `303` to a clean relative
-   URL. It sets a host-only, `HttpOnly`, `SameSite=Strict` cookie with `Path=/`;
-   hosted mode also requires `Secure`. No `Domain` attribute is permitted. Only
-   after the current target has been verified and the redirect is ready does
-   Core mark the associated confirmation as ready.
+   URL. It sets a host-only, `HttpOnly`, `SameSite=Strict` main cookie with
+   `Path=/`; hosted mode also requires `Secure`. If and only if the app declares
+   sandboxed-frame resources, Core sets a second host-only
+   `__Host-maverick_sidecar_resource_session` cookie with `HttpOnly`,
+   `SameSite=None`, `Secure`, and `Path=/`. An opaque-origin child can send that
+   second cookie, but Core accepts it only for `GET` or `HEAD` on an exactly
+   declared resource path. It cannot authorize undeclared documents or
+   arbitrary sidecar APIs. Both names carry the same random host-bound session
+   value and have no `Domain` attribute. Only after the current target has been
+   verified and the redirect is ready does Core mark the associated
+   confirmation as ready.
 4. The mounted app polls the authenticated platform confirmation endpoint and
    treats the native frame as ready only after both confirmation and the target
    frame load. An iframe `load` event alone is not evidence of success because
    browsers also emit it for internal TLS/network error documents. Pending,
    expired, actor-mismatched, workspace-mismatched, or instance-mismatched
    confirmations never produce readiness.
-5. Session activity may rotate the cookie but cannot exceed a five-minute idle
-   TTL or one-hour absolute lifetime. Ticket replay and a session presented to
-   another host, actor, workspace, app, sidecar, or generation are denied.
+5. Default session activity may rotate the cookie. A dual-cookie
+   sandbox-resource session keeps one value so its two browser cookie names
+   cannot diverge; Core still enforces a five-minute idle TTL and one-hour
+   absolute lifetime. Ticket replay and a session presented to another host,
+   actor, workspace, app, sidecar, or generation are denied.
 6. Logout, workspace switch, app disable/uninstall, sidecar restart, and active
    generation change revoke related sessions.
 
@@ -96,10 +105,33 @@ immutable browser cache; errors, API responses, bootstrap responses, and every
 undeclared path remain `no-store`. `private` is mandatory so a shared proxy
 cannot bypass the sidecar session boundary. The opaque origin includes the app
 binding generation, and apps must use content-addressed filenames below an
-immutable prefix. CSP is derived from contract data, defaults to
+immutable prefix.
+
+Responses also default to `Cross-Origin-Resource-Policy: same-origin`. Native
+applications may render untrusted documents in an iframe sandbox that omits
+`allow-same-origin`; those documents have an opaque origin, so the browser
+cannot load even same-host images while that default applies. Such an app may
+declare at most eight canonical literal paths or directory prefixes as
+`sandboxed_frame_resource_prefixes`. Core changes only matching authenticated
+responses to `Cross-Origin-Resource-Policy: cross-origin`. A value ending in
+`/` matches that directory tree; any other value is an exact-path match.
+`/.well-known`, the whole `/api` namespace, encoded or dynamic paths, and
+duplicates are invalid. The declaration adds the separate resource cookie
+because an opaque sandbox does not send the main `SameSite=Strict` cookie. Core
+never accepts that second cookie outside matching `GET`/`HEAD` routes, does not
+enable CORS, and retains actor, workspace, app, sidecar, generation, TTL, and
+revocation checks. Because a cross-site document can cause the browser to send
+a `SameSite=None` cookie, declared routes must contain only non-sensitive bytes
+that are safe to embed cross-origin; user-private APIs and media are forbidden.
+
+CSP is derived from contract data, defaults to
 `default-src 'self'`, permits `connect-src` only to the same sidecar origin and
-declared brokers, and sets `frame-ancestors` to the expected Maverick origin.
-Wildcard frame parents and arbitrary outbound origins are invalid.
+declared brokers, and sets `frame-ancestors` to the same isolated origin plus
+the expected Maverick origin. The same-origin entry is required because the
+policy is attached to every proxied document, including native application
+previews embedded below the sidecar's top-level page. The exact Maverick origin
+remains the only permitted external frame parent; wildcard frame parents and
+arbitrary outbound origins are invalid.
 
 ## Ownership
 

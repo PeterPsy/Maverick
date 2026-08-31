@@ -116,6 +116,23 @@ class SidecarBrowserSessionStoreTestCase(unittest.TestCase):
         self.store.revoke_app(workspace_id="workspace-a", app_id="demo")
         self.assertIsNone(self.store.validate_and_touch(rotated.rotated_value, host=self.binding.host))
 
+    def test_dual_cookie_session_can_touch_without_rotating(self) -> None:
+        ticket = self.store.issue_ticket(self.binding)
+        issued = self.store.consume_ticket(ticket.value, host=self.binding.host)
+        assert issued is not None
+
+        self.now += 61
+        validated = self.store.validate_and_touch(
+            issued.value,
+            host=self.binding.host,
+            rotate=False,
+        )
+
+        self.assertIsNotNone(validated)
+        assert validated is not None
+        self.assertIsNone(validated.rotated_value)
+        self.assertIsNotNone(self.store.validate(issued.value, host=self.binding.host))
+
     def test_idle_and_absolute_expiry_fail_closed(self) -> None:
         ticket = self.store.issue_ticket(self.binding)
         issued = self.store.consume_ticket(ticket.value, host=self.binding.host)

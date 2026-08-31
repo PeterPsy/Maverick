@@ -294,6 +294,14 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                                     if sidecar.browser_origin.immutable_asset_prefixes
                                     else {}
                                 ),
+                                **(
+                                    {
+                                        "sandboxed_frame_resource_prefixes":
+                                            sidecar.browser_origin.sandboxed_frame_resource_prefixes
+                                    }
+                                    if sidecar.browser_origin.sandboxed_frame_resource_prefixes
+                                    else {}
+                                ),
                             }
                         }
                         if sidecar.browser_origin is not None

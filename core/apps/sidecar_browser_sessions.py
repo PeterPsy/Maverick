@@ -11,6 +11,7 @@ from typing import Callable
 
 
 SIDECAR_BROWSER_COOKIE_NAME = "maverick_sidecar_session"
+SIDECAR_BROWSER_RESOURCE_COOKIE_NAME = "__Host-maverick_sidecar_resource_session"
 MAX_TICKET_TTL_SECONDS = 30
 BOOTSTRAP_CONFIRMATION_TTL_SECONDS = 30
 SESSION_IDLE_TTL_SECONDS = 5 * 60
@@ -210,7 +211,13 @@ class SidecarBrowserSessionStore:
                 return None
             return "ready" if confirmation.confirmed else "pending"
 
-    def validate_and_touch(self, value: str, *, host: str) -> ValidatedSidecarBrowserSession | None:
+    def validate_and_touch(
+        self,
+        value: str,
+        *,
+        host: str,
+        rotate: bool = True,
+    ) -> ValidatedSidecarBrowserSession | None:
         now = self._clock()
         presented_digest = _token_digest(value)
         with self._lock:
@@ -222,7 +229,7 @@ class SidecarBrowserSessionStore:
             idle_expires_at = min(now + SESSION_IDLE_TTL_SECONDS, session.absolute_expires_at)
             touched = replace(session, last_seen_at=now, idle_expires_at=idle_expires_at)
             rotated_value: str | None = None
-            if now - session.rotated_at >= SESSION_ROTATION_SECONDS:
+            if rotate and now - session.rotated_at >= SESSION_ROTATION_SECONDS:
                 rotated_value = secrets.token_urlsafe(32)
                 rotated_digest = _token_digest(rotated_value)
                 touched = replace(touched, token_digest=rotated_digest, rotated_at=now)

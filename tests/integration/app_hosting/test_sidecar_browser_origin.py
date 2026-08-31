@@ -10,12 +10,28 @@ import time
 import unittest
 from unittest.mock import patch
 from core.api.asgi_application import PlatformAsgiHost
-from core.api.sidecar_browser import BROWSER_BOOTSTRAP_PATH
+from core.api.sidecar_browser import BROWSER_BOOTSTRAP_PATH, _resource_session_cookie, _session_cookie
 from core.api.sidecar_proxy import stop_app_sidecars
-from core.apps.sidecar_browser_sessions import SESSION_IDLE_TTL_SECONDS
+from core.apps.sidecar_browser_sessions import (
+    SESSION_IDLE_TTL_SECONDS,
+    SIDECAR_BROWSER_RESOURCE_COOKIE_NAME,
+)
 from core.shared.entrypoints import EntrypointShutdownController
 from tests.integration.app_hosting.sidecar_browser_origin_support import SidecarBrowserOriginTestSupport
 class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unittest.TestCase):
+    def test_sandbox_resource_cookie_is_separate_and_scoped(self) -> None:
+        strict = _session_cookie("strict-token", secure=True)
+        stable = _session_cookie("stable-token", secure=True, stable=True)
+        resource = _resource_session_cookie("resource-token")
+
+        self.assertIn("SameSite=Strict", strict)
+        self.assertIn("Max-Age=3600", stable)
+        self.assertIn(f"{SIDECAR_BROWSER_RESOURCE_COOKIE_NAME}=", resource)
+        self.assertIn("SameSite=None", resource)
+        self.assertIn("Secure", resource)
+        self.assertNotIn("Partitioned", resource)
+        self.assertIn("Max-Age=3600", resource)
+
     def test_post_bootstrap_cookie_csrf_headers_isolation_and_unbuffered_sse(self) -> None:
         asyncio.run(self._assert_browser_origin_contract())
     async def _assert_browser_origin_contract(self) -> None:
@@ -130,11 +146,20 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             self.assertEqual(bootstrap_headers["location"], "/api/projects")
             self.assertNotIn(ticket, bootstrap_headers["location"])
             self.assertIn("maverick_sidecar_session=", bootstrap_headers["set-cookie"])
+            self.assertIn(f"{SIDECAR_BROWSER_RESOURCE_COOKIE_NAME}=", bootstrap_headers["set-cookie"])
             self.assertIn("HttpOnly", bootstrap_headers["set-cookie"])
             self.assertIn("SameSite=Strict", bootstrap_headers["set-cookie"])
+            self.assertIn("SameSite=None", bootstrap_headers["set-cookie"])
+            self.assertIn("Secure", bootstrap_headers["set-cookie"])
+            self.assertNotIn("Partitioned", bootstrap_headers["set-cookie"])
             self.assertNotIn("Domain=", bootstrap_headers["set-cookie"])
             self.assertNotIn(ticket, bootstrap_headers["set-cookie"])
             sidecar_cookie = bootstrap_headers["set-cookie"].split(";", 1)[0]
+            resource_cookie = next(
+                line.split(";", 1)[0]
+                for line in bootstrap_headers["set-cookie"].splitlines()
+                if line.startswith(f"{SIDECAR_BROWSER_RESOURCE_COOKIE_NAME}=")
+            )
 
             confirmation_status, confirmation, _headers = await self._launch_status(
                 app,
@@ -173,8 +198,58 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             self.assertEqual(projects_headers["cache-control"], "no-store")
             csp = projects_headers["content-security-policy"]
             self.assertIn("connect-src 'self'", csp)
-            self.assertIn(f"frame-ancestors {platform_origin}", csp)
+            self.assertIn(f"frame-ancestors 'self' {platform_origin}", csp)
             self.assertNotIn("frame-ancestors *", csp)
+            self.assertEqual(projects_headers["cross-origin-resource-policy"], "same-origin")
+
+            sandboxed_asset_status, sandboxed_asset_body, sandboxed_asset_headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/_sandbox/preview.png",
+                headers={"cookie": resource_cookie},
+            )
+            self.assertEqual(sandboxed_asset_status, 200)
+            self.assertEqual(sandboxed_asset_body, b"sandboxed-preview-image")
+            self.assertEqual(
+                sandboxed_asset_headers["cross-origin-resource-policy"],
+                "cross-origin",
+            )
+            self.assertEqual(sandboxed_asset_headers["cache-control"], "no-store")
+
+            resource_scope_status, _resource_scope_body, _resource_scope_headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/projects",
+                headers={"cookie": resource_cookie},
+            )
+            self.assertEqual(resource_scope_status, 403)
+
+            exact_asset_status, _exact_asset_body, exact_asset_headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/asset-cache",
+                headers={"cookie": resource_cookie},
+            )
+            self.assertEqual(exact_asset_status, 200)
+            self.assertEqual(exact_asset_headers["cross-origin-resource-policy"], "cross-origin")
+
+            resource_method_status, _resource_method_body, _resource_method_headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/asset-cache",
+                method="POST",
+                headers={"cookie": resource_cookie},
+            )
+            self.assertEqual(resource_method_status, 403)
+
+            collision_status, _collision_body, collision_headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/asset-cache-extra",
+                headers={"cookie": sidecar_cookie},
+            )
+            self.assertEqual(collision_status, 200)
+            self.assertEqual(collision_headers["cross-origin-resource-policy"], "same-origin")
 
             asset_status, asset_body, asset_headers = await self._invoke(
                 app,

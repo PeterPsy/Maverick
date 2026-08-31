@@ -118,7 +118,7 @@ class _ProofHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; connect-src 'self'; frame-ancestors http://localhost",
+            "default-src 'self'; connect-src 'self'; frame-ancestors 'self' http://localhost",
         )
 
     def log_message(self, format: str, *args: object) -> None:
@@ -158,7 +158,7 @@ class SidecarBrowserOriginDecisionProof(unittest.TestCase):
         self.assertEqual(bootstrap[1]["location"], "/")
         self.assertEqual(bootstrap[1]["cache-control"], "no-store")
         self.assertEqual(bootstrap[1]["referrer-policy"], "no-referrer")
-        self.assertIn("frame-ancestors http://localhost", bootstrap[1]["content-security-policy"])
+        self.assertIn("frame-ancestors 'self' http://localhost", bootstrap[1]["content-security-policy"])
         self.assertNotIn(ticket, json.dumps(bootstrap[1]))
         self.assertNotIn(ticket, "\n".join(state.audit_paths))
         cookie = bootstrap[1]["set-cookie"]

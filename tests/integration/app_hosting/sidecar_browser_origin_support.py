@@ -121,9 +121,14 @@ class SidecarBrowserOriginTestSupport:
         response_body = b"".join(
             message.get("body", b"") for message in messages if message["type"] == "http.response.body"
         )
-        response_headers = {
-            name.decode("latin1").lower(): value.decode("latin1") for name, value in start.get("headers", [])
-        }
+        response_headers: dict[str, str] = {}
+        for name, value in start.get("headers", []):
+            header_name = name.decode("latin1").lower()
+            header_value = value.decode("latin1")
+            if header_name == "set-cookie" and header_name in response_headers:
+                response_headers[header_name] += f"\n{header_value}"
+            else:
+                response_headers[header_name] = header_value
         return int(start["status"]), response_body, response_headers
 
     async def _invoke_streaming(
@@ -220,6 +225,10 @@ class SidecarBrowserOriginTestSupport:
                             },
                             browser_origin=build_http_sidecar_browser_origin(
                                 immutable_asset_prefixes=["/_next/static/"],
+                                sandboxed_frame_resource_prefixes=[
+                                    "/_sandbox/",
+                                    "/api/asset-cache",
+                                ],
                             ),
                             bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
                             health=HttpSidecarHealthSpec(
@@ -235,9 +244,19 @@ class SidecarBrowserOriginTestSupport:
                                         build_http_sidecar_route_rule(method="GET", path_template="/api/projects"),
                                         build_http_sidecar_route_rule(method="POST", path_template="/api/projects"),
                                         build_http_sidecar_route_rule(method="GET", path_template="/api/events"),
+                                        build_http_sidecar_route_rule(method="GET", path_template="/api/asset-cache"),
+                                        build_http_sidecar_route_rule(
+                                            method="GET",
+                                            path_template="/api/asset-cache-extra",
+                                        ),
                                         build_http_sidecar_route_rule(
                                             method="GET",
                                             path_template="/_next",
+                                            static_tree=True,
+                                        ),
+                                        build_http_sidecar_route_rule(
+                                            method="GET",
+                                            path_template="/_sandbox",
                                             static_tree=True,
                                         ),
                                     ],
@@ -311,6 +330,22 @@ BROWSER_SIDECAR_SERVER = textwrap.dedent(
                 self.send_header("Content-Type", "text/javascript")
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Cache-Control", "public, max-age=5")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if self.path == "/_sandbox/preview.png":
+                body = b"sandboxed-preview-image"
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if self.path in {"/api/asset-cache", "/api/asset-cache-extra"}:
+                body = self.path.encode("ascii")
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
                 return

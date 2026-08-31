@@ -25,8 +25,10 @@ from core.api.sidecar_proxy import (
 from core.apps.errors import AppHostingError
 from core.apps.sidecar_browser_sessions import (
     MAX_TICKET_TTL_SECONDS,
+    SESSION_ABSOLUTE_TTL_SECONDS,
     SESSION_IDLE_TTL_SECONDS,
     SIDECAR_BROWSER_COOKIE_NAME,
+    SIDECAR_BROWSER_RESOURCE_COOKIE_NAME,
     SidecarBrowserBinding,
     SidecarBrowserSession,
 )
@@ -288,8 +290,15 @@ async def handle_sidecar_browser_origin(
     if len(cookies) > 1:
         await _deny(state, send, host=host, reason="ambiguous_cookie")
         return
-    token = _cookie_value(cookies[0] if cookies else "", SIDECAR_BROWSER_COOKIE_NAME)
+    cookie_header = cookies[0] if cookies else ""
+    token = _cookie_value(cookie_header, SIDECAR_BROWSER_COOKIE_NAME)
+    resource_token = _cookie_value(cookie_header, SIDECAR_BROWSER_RESOURCE_COOKIE_NAME)
     session = state.sidecar_browser_sessions.validate(token, host=host) if token else None
+    resource_authority = False
+    if session is None and resource_token:
+        token = resource_token
+        session = state.sidecar_browser_sessions.validate(token, host=host)
+        resource_authority = session is not None
     if session is None:
         await _deny(state, send, host=host, reason="session_required")
         return
@@ -309,6 +318,21 @@ async def handle_sidecar_browser_origin(
             status=401,
         )
         return
+    browser_origin = current.sidecar.browser_origin
+    sandboxed_frame_resource = _matches_sandboxed_frame_resource(
+        path,
+        browser_origin.sandboxed_frame_resource_prefixes,
+    )
+    if resource_authority and (method not in {"GET", "HEAD"} or not sandboxed_frame_resource):
+        await _deny(
+            state,
+            send,
+            host=host,
+            reason="resource_session_scope_required",
+            binding=session.binding,
+            status=403,
+        )
+        return
     if method not in _SAFE_METHODS:
         origin_values = _header_values(scope, b"origin")
         fetch_site_values = _header_values(scope, b"sec-fetch-site")
@@ -322,13 +346,29 @@ async def handle_sidecar_browser_origin(
                 status=403,
             )
             return
-    validated = state.sidecar_browser_sessions.validate_and_touch(token, host=host)
+    sandboxed_resource_session = bool(browser_origin.sandboxed_frame_resource_prefixes)
+    validated = state.sidecar_browser_sessions.validate_and_touch(
+        token,
+        host=host,
+        rotate=not sandboxed_resource_session,
+    )
     if validated is None:
         await _deny(state, send, host=host, reason="session_expired")
         return
-    headers = _security_headers(validated.session.binding)
+    headers = _security_headers(
+        validated.session.binding,
+        sandboxed_frame_resource=sandboxed_frame_resource,
+    )
     if validated.rotated_value is not None:
-        headers.append(("Set-Cookie", _session_cookie(validated.rotated_value, secure=session.binding.secure)))
+        headers.append(
+            (
+                "Set-Cookie",
+                _session_cookie(
+                    validated.rotated_value,
+                    secure=session.binding.secure,
+                ),
+            )
+        )
     response_status: int | None = None
 
     async def audited_send(message: dict[str, Any]) -> None:
@@ -433,13 +473,25 @@ async def _handle_bootstrap(
         )
         return
     binding = issued.session.binding
+    sandboxed_resource_session = bool(
+        current.sidecar.browser_origin.sandboxed_frame_resource_prefixes
+    )
     headers = _security_headers(binding)
     headers.extend(
         [
             ("Location", binding.clean_path),
-            ("Set-Cookie", _session_cookie(issued.value, secure=binding.secure)),
+            (
+                "Set-Cookie",
+                _session_cookie(
+                    issued.value,
+                    secure=binding.secure,
+                    stable=sandboxed_resource_session,
+                ),
+            ),
         ]
     )
+    if sandboxed_resource_session:
+        headers.append(("Set-Cookie", _resource_session_cookie(issued.value)))
     record_platform_audit(
         state.observability_store,
         action="sidecar.browser_session.bootstrap",
@@ -507,7 +559,7 @@ def _resolve_origin_configuration(
         platform_hostname = str(parsed.hostname or "").lower()
         if not platform_hostname.endswith(".localhost"):
             raise AppHostingError(
-                "Local sidecar origins require a named .localhost platform host so SameSite=Strict remains effective."
+                "Local sidecar origins require a named .localhost platform host for a stable site boundary."
             )
         suffix = f":{parsed.port}" if parsed.port is not None else ""
         host = f"{_opaque_label(target)}.sidecars.{platform_hostname}{suffix}"
@@ -569,6 +621,10 @@ def _generation_id(target: AuthorizedSidecarTarget) -> str:
 
 
 def _content_security_policy(platform_origin: str) -> str:
+    # Core stamps this policy onto every proxied response, including documents
+    # that the hosted application embeds from its own isolated origin. Allow
+    # that exact same origin for native nested frames while keeping the
+    # platform origin as the only permitted external ancestor.
     return "; ".join(
         (
             "default-src 'self'",
@@ -580,20 +636,35 @@ def _content_security_policy(platform_origin: str) -> str:
             "font-src 'self' data:",
             "connect-src 'self'",
             "worker-src 'self' blob:",
-            f"frame-ancestors {platform_origin}",
+            f"frame-ancestors 'self' {platform_origin}",
             "form-action 'self'",
         )
     )
 
 
-def _security_headers(binding: SidecarBrowserBinding) -> list[tuple[str, str]]:
+def _security_headers(
+    binding: SidecarBrowserBinding,
+    *,
+    sandboxed_frame_resource: bool = False,
+) -> list[tuple[str, str]]:
     return [
         ("Cache-Control", "no-store"),
         ("Referrer-Policy", "no-referrer"),
         ("Content-Security-Policy", binding.content_security_policy),
-        ("Cross-Origin-Resource-Policy", "same-origin"),
+        (
+            "Cross-Origin-Resource-Policy",
+            "cross-origin" if sandboxed_frame_resource else "same-origin",
+        ),
         ("X-Content-Type-Options", "nosniff"),
     ]
+
+
+def _matches_sandboxed_frame_resource(path: str, prefixes: list[str]) -> bool:
+    """Match only the literal resource routes declared for opaque sandbox frames."""
+    return any(
+        path.startswith(prefix) if prefix.endswith("/") else path == prefix
+        for prefix in prefixes
+    )
 
 
 def _apply_browser_cache_policy(
@@ -637,11 +708,19 @@ def _denial_headers() -> list[tuple[str, str]]:
     ]
 
 
-def _session_cookie(value: str, *, secure: bool) -> str:
+def _session_cookie(value: str, *, secure: bool, stable: bool = False) -> str:
     secure_attribute = "; Secure" if secure else ""
+    max_age = SESSION_ABSOLUTE_TTL_SECONDS if stable else SESSION_IDLE_TTL_SECONDS
     return (
         f"{SIDECAR_BROWSER_COOKIE_NAME}={value}; Path=/; HttpOnly; SameSite=Strict; "
-        f"Max-Age={SESSION_IDLE_TTL_SECONDS}{secure_attribute}"
+        f"Max-Age={max_age}{secure_attribute}"
+    )
+
+
+def _resource_session_cookie(value: str) -> str:
+    return (
+        f"{SIDECAR_BROWSER_RESOURCE_COOKIE_NAME}={value}; Path=/; HttpOnly; "
+        f"SameSite=None; Secure; Max-Age={SESSION_ABSOLUTE_TTL_SECONDS}"
     )
 
 

@@ -73,6 +73,10 @@ class AppContractServiceTests(unittest.TestCase):
                 loaded.contract.services.http_sidecars[0].browser_origin.immutable_asset_prefixes,
                 ["/_next/static/"],
             )
+            self.assertEqual(
+                loaded.contract.services.http_sidecars[0].browser_origin.sandboxed_frame_resource_prefixes,
+                ["/api/plugins/", "/api/asset-cache"],
+            )
             self.assertEqual(loaded.contract.services.http_sidecars[0].entrypoint_access.ttl_seconds, 30)
             self.assertEqual(
                 [surface.surface for surface in loaded.contract.services.http_sidecars[0].entrypoint_access.surfaces],
@@ -96,6 +100,10 @@ class AppContractServiceTests(unittest.TestCase):
                 "/api/projects/{id}",
             )
             self.assertEqual(restored_sidecar.root_filesystem.subpath, "official/release/rootfs")
+            self.assertEqual(
+                restored_sidecar.browser_origin.sandboxed_frame_resource_prefixes,
+                ["/api/plugins/", "/api/asset-cache"],
+            )
 
     def test_artifact_root_filesystem_is_bounded_to_a_declared_namespace(self) -> None:
         mutations = (
@@ -379,6 +387,30 @@ class AppContractServiceTests(unittest.TestCase):
                 with self.assertRaisesRegex(AppContractValidationError, "immutable_asset_prefixes"):
                     parse_app_contract_file(app_root)
 
+    def test_parse_contract_rejects_unsafe_sandboxed_frame_resource_prefixes(self) -> None:
+        invalid_values = (
+            ["/"],
+            ["api/plugins/"],
+            ["/api/"],
+            ["/.well-known/"],
+            ["/api/plugins//"],
+            ["/api/%2e%2e/"],
+            ["/api/plugins/{id}"],
+            ["/api/plugins/", "/api/plugins/"],
+            [f"/asset-{index}" for index in range(9)],
+        )
+        for value in invalid_values:
+            with self.subTest(value=value), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                payload["services"]["http_sidecars"][0]["browser_origin"][
+                    "sandboxed_frame_resource_prefixes"
+                ] = value
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(AppContractValidationError, "sandboxed_frame_resource_prefixes"):
+                    parse_app_contract_file(app_root)
+
     def test_parse_contract_rejects_non_loopback_sandbox_sidecar(self) -> None:
         with TemporaryDirectory() as temp_dir:
             app_root = self._write_sidecar_app(Path(temp_dir))
@@ -470,6 +502,10 @@ class AppContractServiceTests(unittest.TestCase):
                             ),
                             browser_origin=build_http_sidecar_browser_origin(
                                 immutable_asset_prefixes=["/_next/static/"],
+                                sandboxed_frame_resource_prefixes=[
+                                    "/api/plugins/",
+                                    "/api/asset-cache",
+                                ],
                             ),
                             entrypoint_access=build_http_sidecar_entrypoint_access(
                                 ttl_seconds=30,

@@ -556,6 +556,11 @@ def _app_sidecar_browser_origin(payload: Any) -> HttpSidecarBrowserOriginSpec | 
             for value in payload.get("immutable_asset_prefixes", [])
             if isinstance(value, str)
         ],
+        sandboxed_frame_resource_prefixes=[
+            str(value)
+            for value in payload.get("sandboxed_frame_resource_prefixes", [])
+            if isinstance(value, str)
+        ],
     )
 
 

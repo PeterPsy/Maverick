@@ -301,6 +301,10 @@
           ],
           "immutable_asset_prefixes": [
             "/_next/static/"
+          ],
+          "sandboxed_frame_resource_prefixes": [
+            "/api/plugins/",
+            "/api/asset-cache"
           ]
         },
         "entrypoint_access": {

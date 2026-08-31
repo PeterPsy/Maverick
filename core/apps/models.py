@@ -375,6 +375,7 @@ class HttpSidecarBrowserOriginSpec:
     frame_ancestors: list[str]
     connect_src: list[str]
     immutable_asset_prefixes: list[str]
+    sandboxed_frame_resource_prefixes: list[str]
 
 
 @dataclass(frozen=True)

@@ -62,6 +62,10 @@ class NativeThinHostTests(unittest.TestCase):
         self.assertEqual(sidecar["env"]["MAVERICK_OPENDESIGN_DATA_DIR"], "${app.data_dir}")
         self.assertNotIn("root_filesystem", sidecar)
         self.assertGreaterEqual(sidecar["process_policy"]["limits"]["memory_bytes"], 32 * 1024**3)
+        self.assertEqual(
+            sidecar["browser_origin"]["sandboxed_frame_resource_prefixes"],
+            ["/api/plugins/", "/api/asset-cache"],
+        )
         self.assertTrue(contract["permissions"]["providers"]["model_proxy"])
         self.assertFalse(contract["permissions"]["providers"]["deliver_secrets_to_app"])
         self.assertEqual(contract["entrypoints"]["hooks"]["upgrade"], "hooks/install.py")

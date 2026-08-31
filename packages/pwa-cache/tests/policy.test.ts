@@ -134,4 +134,24 @@ describe("persistent payload guard", () => {
     expect(() => validatedPayloadSize({ when: new Date() })).toThrow(/plain objects/);
     expect(() => validatedPayloadSize({ content: "Bearer private-token" })).toThrow(/credential-like/);
   });
+
+  it("rejects credential URLs, generic token material, and normalized object URLs", () => {
+    for (const value of [
+      "https://user:password@example.test/private",
+      "access_token=private-token",
+      "prefix ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij suffix",
+      "  BLOB:https://maverick.test/object-id  ",
+      "\tblob :https://maverick.test/object-id",
+    ]) {
+      expect(() => validatedPayloadSize({ value })).toThrow(/credential|object|signed URL/i);
+    }
+  });
+
+  it("accepts ordinary URLs and non-credential content hashes in generic fields", () => {
+    expect(validatedPayloadSize({
+      fingerprint: `sha256:${"a".repeat(64)}`,
+      href: "https://example.test/private",
+      label: "tokenized content",
+    })).toBeGreaterThan(0);
+  });
 });

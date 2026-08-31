@@ -43,6 +43,7 @@ export type RetryCoordinatorOptions = {
 export const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const RETRYABLE_HTTP_STATUSES = new Set([429, 502, 503, 504]);
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{15,199}$/u;
+const SHA256_FINGERPRINT_PATTERN = /^sha256:[0-9a-f]{64}$/u;
 
 export class RetryCancelledError extends Error {
   constructor(message = "Retry operation was cancelled.") {
@@ -96,8 +97,8 @@ export function validateMutationContract(method: string, contract: MutationRetry
   }
   if (contract.serverDeduplicates !== true
       || !IDEMPOTENCY_KEY_PATTERN.test(contract.idempotencyKey)
-      || !contract.requestFingerprint.trim()) {
-    throw new TypeError("Mutation retry requires a stable Idempotency-Key, request fingerprint, and server deduplication.");
+      || !SHA256_FINGERPRINT_PATTERN.test(contract.requestFingerprint)) {
+    throw new TypeError("Mutation retry requires a stable Idempotency-Key, canonical SHA-256 request fingerprint, and server deduplication.");
   }
 }
 

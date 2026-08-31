@@ -11,6 +11,10 @@ function transportError(): Error {
   return Object.assign(new Error("transport"), { name: "MaverickTransportError" });
 }
 
+function fingerprint(hexDigit = "a"): string {
+  return `sha256:${hexDigit.repeat(64)}`;
+}
+
 describe("RAM retry coordinator", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -82,7 +86,7 @@ describe("RAM retry coordinator", () => {
     const coordinator = new RetryCoordinator({ random: () => 0.5 });
     const contract = {
       idempotencyKey: createIdempotencyKey(),
-      requestFingerprint: "sha256:body",
+      requestFingerprint: fingerprint(),
       serverDeduplicates: true as const,
     };
     expect(idempotencyHeaders(contract)).toEqual({ "Idempotency-Key": contract.idempotencyKey });
@@ -108,7 +112,7 @@ describe("RAM retry coordinator", () => {
     const operation = vi.fn(() => new Promise<string>((done) => { resolve = done; }));
     const mutation = {
       idempotencyKey: createIdempotencyKey(),
-      requestFingerprint: "sha256:same-body",
+      requestFingerprint: fingerprint(),
       serverDeduplicates: true as const,
     };
     const coordinator = new RetryCoordinator();
@@ -127,14 +131,14 @@ describe("RAM retry coordinator", () => {
     await coordinator.run({
       key: "first",
       method: "POST",
-      mutation: { idempotencyKey, requestFingerprint: "sha256:first", serverDeduplicates: true },
+      mutation: { idempotencyKey, requestFingerprint: fingerprint("a"), serverDeduplicates: true },
       operation: async () => "created",
     });
 
     expect(() => coordinator.run({
       key: "second",
       method: "POST",
-      mutation: { idempotencyKey, requestFingerprint: "sha256:second", serverDeduplicates: true },
+      mutation: { idempotencyKey, requestFingerprint: fingerprint("b"), serverDeduplicates: true },
       operation: async () => "created-again",
     })).toThrow(/different request fingerprint/);
   });
@@ -148,7 +152,7 @@ describe("RAM retry coordinator", () => {
       method: "PATCH",
       mutation: {
         idempotencyKey: createIdempotencyKey(),
-        requestFingerprint: "sha256:update",
+        requestFingerprint: fingerprint(),
         serverDeduplicates: true,
       },
       operation: async () => { throw error; },
@@ -157,6 +161,30 @@ describe("RAM retry coordinator", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await vi.advanceTimersByTimeAsync(2_000);
     await expect(pending).rejects.toBe(error);
+  });
+
+  it("rejects mutation retry fingerprints that are not canonical SHA-256 digests", () => {
+    const coordinator = new RetryCoordinator();
+    const operation = vi.fn(async () => "created");
+
+    for (const requestFingerprint of [
+      "sha256:body",
+      `sha256:${"g".repeat(64)}`,
+      `sha512:${"a".repeat(64)}`,
+      `sha256:${"a".repeat(63)}`,
+    ]) {
+      expect(() => coordinator.run({
+        key: "mutation:invalid-fingerprint",
+        method: "POST",
+        mutation: {
+          idempotencyKey: createIdempotencyKey(),
+          requestFingerprint,
+          serverDeduplicates: true,
+        },
+        operation,
+      })).toThrow(/SHA-256/i);
+    }
+    expect(operation).not.toHaveBeenCalled();
   });
 
   it("pauses scheduled retries while hidden and resumes on a visibility hint", async () => {

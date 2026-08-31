@@ -160,7 +160,8 @@ The conservative platform defaults are:
 
 - policy revision `maverick.local-persistence-policy.v2`;
 - a private access lease of at most 15 minutes after fresh server
-  authentication;
+  authentication; a later authoritative authentication may renew an existing
+  entry without coupling the new lease to the entry's original cache time;
 - 64 MiB global structured-cache budget, 32 MiB per app, and an explicit
   smaller resource budget;
 - no persistent write when `navigator.storage.estimate()` cannot provide both
@@ -170,8 +171,8 @@ The conservative platform defaults are:
 - automatic HTTP retry only for transport failures, timeouts, `429`, `502`,
   `503`, and `504`; and
 - at most three same-session mutation attempts, only when a stable
-  `Idempotency-Key`, request fingerprint, and declared server deduplication are
-  all present.
+  `Idempotency-Key`, canonical `sha256:<64 lowercase hex>` request fingerprint,
+  and declared server deduplication are all present.
 
 M3 does not opt any app read model into persistent storage and does not add the
 M4 OPFS file cache. Those rollouts remain separate reviewed gates.

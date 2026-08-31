@@ -23,7 +23,15 @@ const FORBIDDEN_KEYS = new Set([
 
 const CREDENTIAL_KEY_SUFFIXES = ["apikey", "credential", "password", "privatekey", "secret", "token"];
 const SIGNATURE_QUERY_KEYS = new Set(["googleaccessid", "sig", "signature", "xamzsignature", "xgoogsignature"]);
-const CREDENTIAL_VALUE = /^(?:bearer\s+\S+|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|-----BEGIN [A-Z ]*PRIVATE KEY-----)/iu;
+const CREDENTIAL_VALUES = [
+  /(?:^|[\s:])(?:bearer|basic|digest|token)\s+\S+/iu,
+  /(?:^|[^A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?=$|[^A-Za-z0-9_-])/u,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/iu,
+  /(?:^|[^A-Za-z0-9_])(?:sk|pk|rk|ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_=-]{16,}(?=$|[^A-Za-z0-9_=-])/u,
+  /(?:^|[^A-Za-z0-9_-])(?:sk-|glpat-|npm_|xox[baprs]-)[A-Za-z0-9_-]{16,}(?=$|[^A-Za-z0-9_-])/u,
+  /(?:^|[^A-Z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?=$|[^A-Z0-9])/u,
+  /(?:^|[^A-Za-z0-9_-])(?:AIza[A-Za-z0-9_-]{20,}|ya29\.[A-Za-z0-9_-]{20,})(?=$|[^A-Za-z0-9_-])/u,
+];
 const MAX_SERIALIZATION_DEPTH = 32;
 
 export function validatedPayloadSize(payload: unknown): number {
@@ -46,10 +54,11 @@ function assertPersistableValue(value: unknown, depth: number, ancestors: Set<ob
     return;
   }
   if (typeof value === "string") {
-    if (value.startsWith("blob:") || containsCredentialUrl(value)) {
+    const normalized = value.trim();
+    if (isObjectUrl(normalized) || containsCredentialUrl(normalized)) {
       throw new TypeError("PWA cache payload contains an object or signed URL.");
     }
-    if (CREDENTIAL_VALUE.test(value.trim())) {
+    if (containsCredentialMaterial(normalized)) {
       throw new TypeError("PWA cache payload contains credential-like material.");
     }
     return;
@@ -87,9 +96,6 @@ function isForbiddenKey(key: string): boolean {
 }
 
 function containsCredentialUrl(value: string): boolean {
-  if (!value.includes("?") && !value.includes("&")) {
-    return false;
-  }
   try {
     const url = new URL(value, "https://maverick.invalid/");
     if (url.username || url.password) {
@@ -102,7 +108,26 @@ function containsCredentialUrl(value: string): boolean {
       }
     }
   } catch {
-    return /(?:^|[?&])[^=]*(?:token|secret|signature|credential|password|api[_-]?key)=/iu.test(value);
+    // Generic credential material is checked separately.
+  }
+  return false;
+}
+
+function isObjectUrl(value: string): boolean {
+  return /^blob\s*:/iu.test(value);
+}
+
+function containsCredentialMaterial(value: string): boolean {
+  if (CREDENTIAL_VALUES.some((pattern) => pattern.test(value))) {
+    return true;
+  }
+  for (const match of value.matchAll(
+    /(?:^|[^A-Za-z0-9_.-])["']?([A-Za-z][A-Za-z0-9_.-]{0,63})["']?\s*[:=]\s*(?=\S)/gu,
+  )) {
+    const key = match[1] ?? "";
+    if (isForbiddenKey(key) || SIGNATURE_QUERY_KEYS.has(normalizeKey(key))) {
+      return true;
+    }
   }
   return false;
 }

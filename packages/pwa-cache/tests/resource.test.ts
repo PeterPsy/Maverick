@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  CacheLifecycleController,
   LOCAL_PERSISTENCE_POLICY_REVISION,
+  PRIVATE_ACCESS_LEASE_MAX_MS,
   PwaCacheClient,
   createPwaCacheHost,
   type ResourceCachePolicy,
@@ -357,6 +359,61 @@ describe("PWA cache resource", () => {
     }));
     await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "private" }, revision: "r1" }));
     expect(await backend.list()).toHaveLength(0);
+  });
+
+  it("keeps a private entry readable after fresh authentication renews its lease", async () => {
+    let now = 1_000;
+    const backend = new MemoryCacheBackend();
+    const cachePolicy = publicPolicy({
+      cacheApproved: true,
+      dataClass: "workspace_internal",
+      expiryTtlMs: 60 * 60_000,
+      freshTtlMs: 30 * 60_000,
+    });
+    const firstLease = { issuedAt: now, expiresAt: now + PRIVATE_ACCESS_LEASE_MAX_MS };
+    const firstClient = createPwaCacheHost({
+      appId: "docs",
+      userId: "user-a",
+      workspaceId: "default",
+    }).createClient({
+      accessLease: firstLease,
+      backend,
+      enabled: true,
+      now: () => now,
+      quotaAdapter: quota,
+    }, new CacheBus(null));
+    await firstClient.resource("records", cachePolicy).readThrough(
+      "one",
+      async () => ({ kind: "value", payload: { value: "private" }, revision: "r1" }),
+    );
+
+    now += PRIVATE_ACCESS_LEASE_MAX_MS + 1;
+    const renewedLease = { issuedAt: now, expiresAt: now + PRIVATE_ACCESS_LEASE_MAX_MS };
+    const lifecycle = new CacheLifecycleController({ backend, bus: new CacheBus(null), now: () => now });
+    await lifecycle.transition({
+      accessLease: renewedLease,
+      appId: "base-shell",
+      userId: "user-a",
+      workspaceId: "default",
+    });
+    expect((await backend.list())[0]?.accessLeaseExpiresAt).toBe(renewedLease.expiresAt);
+
+    const authenticatedClient = createPwaCacheHost({
+      appId: "docs",
+      userId: "user-a",
+      workspaceId: "default",
+    }).createClient({
+      accessLease: renewedLease,
+      backend,
+      enabled: true,
+      now: () => now,
+      quotaAdapter: quota,
+    }, new CacheBus(null));
+
+    await expect(authenticatedClient.resource("records", cachePolicy).get("one")).resolves.toMatchObject({
+      payload: { value: "private" },
+      source: "cache",
+    });
   });
 
   it("invalidates persistent private data even after its access lease expires", async () => {

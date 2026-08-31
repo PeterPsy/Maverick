@@ -56,6 +56,15 @@ before a private app resource is rolled out.
    `13bf47e1247410a92a5db9fa505ee258077afe5846c581db0dc6fc010ba0b8c4`.
    PWA-053 now has a real Base Shell/App Store mutation proof rather than only
    an SDK contract test.
+8. A private entry may receive a new bounded lease after another authoritative
+   authentication even when more than 15 minutes have passed since `cachedAt`;
+   read validation bounds the current lease instead of the original cache time.
+9. String persistence guards inspect credential-bearing URLs even without a
+   query, normalize object-URL casing and whitespace, and reject recognizable
+   credential assignments or token values under generic field names.
+10. The retry coordinator accepts mutation contracts only when
+    `requestFingerprint` is canonical `sha256:<64 lowercase hex>` rather than
+    merely non-empty.
 
 ## Closed M3 tasks
 
@@ -80,19 +89,20 @@ before a private app resource is rolled out.
 
 The exact local policy revision is
 `maverick.local-persistence-policy.v2`. Private entries need an access lease
-issued after fresh server authentication and capped at 15 minutes. Structured
-budgets default to 64 MiB global and 32 MiB per app; each resource must set
-smaller entry/scope limits. Cache writes require a usable quota estimate below
-85% projected origin usage.
+issued after fresh server authentication and capped at 15 minutes; each later
+authoritative authentication may renew that bounded lease independently of the
+entry's original cache time. Structured budgets default to 64 MiB global and
+32 MiB per app; each resource must set smaller entry/scope limits. Cache writes
+require a usable quota estimate below 85% projected origin usage.
 
 Credential-like keys (including suffix variants such as `github_token`) and
-values, credential/signed URL query parameters (including `access_token`),
-`blob:` URLs, non-plain values, cycles, excessive nesting, invalid scope, and
-non-finite numbers are rejected before persistence. `deny` never selects a
-backend; `session` selects only the client RAM backend and durably removes a
-former persistent resource. Canonical agentic apps and control-plane
-provenance remain network-only even if an adapter falsely claims public/cache
-approval.
+values, URL userinfo, credential/signed URL parameters (including
+`access_token`), normalized `blob:` URLs, non-plain values, cycles, excessive
+nesting, invalid scope, and non-finite numbers are rejected before persistence.
+`deny` never selects a backend; `session` selects only the client RAM backend
+and durably removes a former persistent resource. Canonical agentic apps and
+control-plane provenance remain network-only even if an adapter falsely claims
+public/cache approval.
 
 An expired entry is deleted and returned as a miss. A cache, quota,
 serialization, or IndexedDB failure cannot replace a valid network result.
@@ -106,13 +116,13 @@ or mounted Maverick frame is hidden.
 | Surface | Result |
 |---|---|
 | PWA cache package typecheck | passed |
-| PWA cache package | 5 files, 57 tests passed |
+| PWA cache package | 5 files, 61 tests passed |
 | Base Shell frontend | 27 files, 129 tests passed |
 | Worker/build harness | 13 tests passed |
 | App Store real idempotent mutation | 2 focused integration tests passed |
 | Focused PWA/config/assets/Settings Python selection | 44 tests, 35 passed and 9 expected slow skips |
 | Unused-import check | passed |
-| Base Shell official build | `dc05b20ce076f5df1f140a8dc76e1e0997114859ef3b2ddc6c6b7b8023dfeb42` |
+| Base Shell official build | `6133375b58c76d2c1d4122475e5bf5458e8ea04a793d86dfecead843e6bc059c` |
 | Settings official build | `48a988763948a15ca8a58826d445f6ba8d1456c20ec86415381acbd620abaa1d` |
 
 The default fast repository suite was also executed. Its main unit shard

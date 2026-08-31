@@ -94,7 +94,7 @@ function validEntryBounds<T>(metadata: CacheEntryMetadata, policy: ResourceCache
 function validPrivateAccessLease(metadata: CacheEntryMetadata, now: number): boolean {
   return Number.isSafeInteger(metadata.accessLeaseExpiresAt)
     && (metadata.accessLeaseExpiresAt ?? 0) > now
-    && (metadata.accessLeaseExpiresAt ?? 0) <= metadata.cachedAt + PRIVATE_ACCESS_LEASE_MAX_MS;
+    && (metadata.accessLeaseExpiresAt ?? 0) <= now + PRIVATE_ACCESS_LEASE_MAX_MS;
 }
 
 export function resultFromCacheHit<T>(hit: CacheHit<T>): CacheReadResult<T> {

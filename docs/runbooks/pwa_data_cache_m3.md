@@ -39,7 +39,9 @@ Persistent writes require all applicable conditions:
    control-plane exclusion;
 3. valid TTL and byte bounds;
 4. successful app-owned sanitization to bounded plain JSON;
-5. no credential-like key/value, signed URL, or `blob:` URL;
+5. no credential-like key/value, URL userinfo, signed URL, or normalized
+   `blob:` URL; recognizable credential assignments and token formats remain
+   forbidden even under generic field names;
 6. reviewed cache/privacy approvals for the canonical data class;
 7. a live access lease for non-public data; and
 8. a browser estimate containing both origin usage and quota with sufficient
@@ -139,7 +141,10 @@ Base Shell initializes one `CacheLifecycleController` and one
 `RetryCoordinator`. After a successful `/api/session`, it transitions with the
 authenticated user/workspace/app principal and a private access lease of no
 more than 15 minutes. Transitioning user or workspace clears the previous
-private scope before it becomes inactive.
+private scope before it becomes inactive. A later authoritative session
+response may renew existing private entries after the original lease expires;
+the 15-minute bound applies to each newly issued lease, not to the entry's
+original `cachedAt` timestamp.
 
 Logout, a session response with `authenticated: false`, and every `401` or
 `403` cancel RAM retries and durably clear the applicable structured-data
@@ -185,7 +190,8 @@ Base Shell can always enter its normal authentication teardown.
 Unsafe requests are attempted once unless the caller supplies all of:
 
 - a stable `Idempotency-Key` sent to the server;
-- a stable fingerprint of the exact request body/semantics; and
+- a canonical `sha256:<64 lowercase hex>` fingerprint of the exact request
+  body/semantics; and
 - `serverDeduplicates: true` backed by a real server contract.
 
 Eligible mutations have at most three attempts in the current RAM session.

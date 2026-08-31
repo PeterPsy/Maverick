@@ -150,3 +150,4 @@ artifacts, and tests must describe this decision.
 ## Normative product companion
 
 - `docs/product/pwa_cache_product_contract.md`
+- `docs/product/pwa_cache_resource_inventory.v2.json`

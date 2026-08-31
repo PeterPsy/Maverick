@@ -208,7 +208,8 @@ The original product contract was removed by M2R rather than retained as a
 compatibility surface. Its current replacement is
 `docs/product/pwa_cache_product_contract.md`.
 
-- `docs/product/pwa_cache_resource_inventory.v1.json`
+- The v1 inventory was superseded and removed by M2R; the current artifact is
+  `docs/product/pwa_cache_resource_inventory.v2.json`.
 - `docs/runbooks/pwa_cache_baseline.md`
 - `docs/runbooks/pwa_shell_v2.md`
 - `SECURITY.md`

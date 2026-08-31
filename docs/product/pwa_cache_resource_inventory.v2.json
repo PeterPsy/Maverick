@@ -1,13 +1,19 @@
 {
-  "schema": "maverick.pwa-cache-resource-inventory.v1",
-  "policy_revision": "maverick.local-persistence-policy.v1",
+  "schema": "maverick.pwa-cache-resource-inventory.v2",
+  "policy_revision": "maverick.local-persistence-policy.v2",
   "canonical_data_class_source": "core.providers.agentic_models.RuntimeDataClass",
-  "local_persistence_policy_values": ["deny", "session", "cache", "offline_opt_in"],
-  "approved_at": "2026-08-26",
+  "local_persistence_policy_values": [
+    "deny",
+    "session",
+    "cache"
+  ],
+  "approved_at": "2026-08-31",
   "unknown_classification_policy": "deny",
   "resources": [
     {
-      "app_ids": ["base-shell"],
+      "app_ids": [
+        "base-shell"
+      ],
       "resource": "shell-static",
       "owner": "base-shell",
       "read_surface": "GET /, /app/*, /apps/base-shell/*",
@@ -24,7 +30,9 @@
       "rollout": "M2"
     },
     {
-      "app_ids": ["app-store"],
+      "app_ids": [
+        "app-store"
+      ],
       "resource": "catalog",
       "owner": "app-store",
       "read_surface": "App Store backend catalog/list actions",
@@ -41,7 +49,9 @@
       "rollout": "M5"
     },
     {
-      "app_ids": ["app-store"],
+      "app_ids": [
+        "app-store"
+      ],
       "resource": "pinned-apps",
       "owner": "app-store",
       "read_surface": "pinned_apps.list",
@@ -58,7 +68,9 @@
       "rollout": "not persistent in M0-M2"
     },
     {
-      "app_ids": ["website-studio"],
+      "app_ids": [
+        "website-studio"
+      ],
       "resource": "site-snapshots",
       "owner": "website-studio",
       "read_surface": "website bootstrap/status read model",
@@ -75,7 +87,9 @@
       "rollout": "M5 reference adapter"
     },
     {
-      "app_ids": ["storage"],
+      "app_ids": [
+        "storage"
+      ],
       "resource": "file-catalog",
       "owner": "storage",
       "read_surface": "Storage list/info/reference surfaces",
@@ -92,14 +106,18 @@
       "rollout": "M5"
     },
     {
-      "app_ids": ["storage"],
+      "app_ids": [
+        "storage"
+      ],
       "resource": "preview",
       "owner": "storage",
       "read_surface": "Storage bounded preview surfaces",
       "canonical_data_class": "unclassified",
       "provenance": "attachment",
       "local_persistence_policy": "deny",
-      "policy_prerequisites": ["canonical resource data_class"],
+      "policy_prerequisites": [
+        "canonical resource data_class"
+      ],
       "fresh_ttl_seconds": 0,
       "expiry_ttl_seconds": 0,
       "revision": "file_id + source_version + preview kind/size",
@@ -110,14 +128,19 @@
       "rollout": "M5"
     },
     {
-      "app_ids": ["storage"],
-      "resource": "offline-file-bytes",
+      "app_ids": [
+        "storage"
+      ],
+      "resource": "file-bytes",
       "owner": "storage",
       "read_surface": "authenticated Storage media/file gateway",
       "canonical_data_class": "unclassified",
       "provenance": "attachment",
       "local_persistence_policy": "deny",
-      "policy_prerequisites": ["canonical resource data_class", "approved Storage offline-file resource rule", "explicit per-device user opt-in"],
+      "policy_prerequisites": [
+        "canonical resource data_class",
+        "reviewed automatic Storage file-cache resource rule"
+      ],
       "fresh_ttl_seconds": 0,
       "expiry_ttl_seconds": 0,
       "revision": "stable file_id + source_version + strong ETag",
@@ -125,10 +148,12 @@
       "max_scope_bytes": 0,
       "invalidation": "If-None-Match/source-version revalidation, access revocation, logout",
       "data_event": "files",
-      "rollout": "M4"
+      "rollout": "M4 automatic bounded cache"
     },
     {
-      "app_ids": ["storage"],
+      "app_ids": [
+        "storage"
+      ],
       "resource": "drive-connections-and-oauth",
       "owner": "storage",
       "read_surface": "Drive connection/OAuth/sync surfaces",
@@ -145,7 +170,9 @@
       "rollout": "excluded"
     },
     {
-      "app_ids": ["storage"],
+      "app_ids": [
+        "storage"
+      ],
       "resource": "temporary-archives",
       "owner": "storage",
       "read_surface": "folder ZIP file_response with delete_after_send",
@@ -162,14 +189,18 @@
       "rollout": "excluded"
     },
     {
-      "app_ids": ["chat"],
+      "app_ids": [
+        "chat"
+      ],
       "resource": "projects-and-completed-messages",
       "owner": "chat",
       "read_surface": "Chat project actions and runtime thread projection",
       "canonical_data_class": "personal_data",
       "provenance": "user_input",
       "local_persistence_policy": "session",
-      "policy_prerequisites": ["privacy-approved resource rule before widening beyond session"],
+      "policy_prerequisites": [
+        "privacy-approved resource rule before widening beyond session"
+      ],
       "fresh_ttl_seconds": 30,
       "expiry_ttl_seconds": 21600,
       "revision": "project revision plus runtime thread cursor required",
@@ -180,25 +211,31 @@
       "rollout": "M5 after privacy gate"
     },
     {
-      "app_ids": ["calendar"],
+      "app_ids": [
+        "calendar"
+      ],
       "resource": "bounded-event-window",
       "owner": "calendar",
       "read_surface": "calendar_list_events",
       "canonical_data_class": "personal_data",
       "provenance": "app_reference",
       "local_persistence_policy": "session",
-      "policy_prerequisites": ["approved resource rule before widening beyond session"],
+      "policy_prerequisites": [
+        "approved resource rule before widening beyond session"
+      ],
       "fresh_ttl_seconds": 60,
       "expiry_ttl_seconds": 21600,
       "revision": "sync cursor or interval revision required",
       "max_entry_bytes": 1048576,
       "max_scope_bytes": 16777216,
-      "invalidation": "overlapping events data event or reconnect",
+      "invalidation": "overlapping events data event or transport recovery",
       "data_event": "events",
       "rollout": "M5"
     },
     {
-      "app_ids": ["calendar"],
+      "app_ids": [
+        "calendar"
+      ],
       "resource": "connections",
       "owner": "calendar",
       "read_surface": "calendar connection/OAuth surfaces",
@@ -215,14 +252,19 @@
       "rollout": "excluded"
     },
     {
-      "app_ids": ["crm"],
+      "app_ids": [
+        "crm"
+      ],
       "resource": "lists-and-recent-records",
       "owner": "crm",
       "read_surface": "CRM search/get/filter/schema read models",
       "canonical_data_class": "regulated_or_customer_data",
       "provenance": "app_reference",
       "local_persistence_policy": "deny",
-      "policy_prerequisites": ["reviewed resource allowlist", "privacy approval", "explicit per-device user opt-in"],
+      "policy_prerequisites": [
+        "reviewed resource allowlist",
+        "privacy approval"
+      ],
       "fresh_ttl_seconds": 0,
       "expiry_ttl_seconds": 0,
       "revision": "record/schema revision required",
@@ -233,14 +275,19 @@
       "rollout": "M5 after privacy gate"
     },
     {
-      "app_ids": ["mail"],
+      "app_ids": [
+        "mail"
+      ],
       "resource": "thread-headers-snippets-and-bodies",
       "owner": "mail",
       "read_surface": "mail_list_threads/mail_get_thread/search",
       "canonical_data_class": "regulated_or_customer_data",
       "provenance": "app_reference",
       "local_persistence_policy": "deny",
-      "policy_prerequisites": ["reviewed resource allowlist", "privacy approval", "explicit per-device user opt-in"],
+      "policy_prerequisites": [
+        "reviewed resource allowlist",
+        "privacy approval"
+      ],
       "fresh_ttl_seconds": 0,
       "expiry_ttl_seconds": 0,
       "revision": "thread/message revision required",
@@ -251,7 +298,9 @@
       "rollout": "M5 after privacy gate"
     },
     {
-      "app_ids": ["mail"],
+      "app_ids": [
+        "mail"
+      ],
       "resource": "connections-and-send-authority",
       "owner": "mail",
       "read_surface": "Mail connection, OAuth, send, and approval surfaces",
@@ -268,14 +317,18 @@
       "rollout": "excluded"
     },
     {
-      "app_ids": ["fitness-coach"],
+      "app_ids": [
+        "fitness-coach"
+      ],
       "resource": "sanitized-bootstrap-and-thumbnails",
       "owner": "fitness-coach",
       "read_surface": "workout/exercise bootstrap and bounded media preview",
       "canonical_data_class": "personal_data",
       "provenance": "app_reference",
       "local_persistence_policy": "session",
-      "policy_prerequisites": ["approved resource rule before widening beyond session"],
+      "policy_prerequisites": [
+        "approved resource rule before widening beyond session"
+      ],
       "fresh_ttl_seconds": 300,
       "expiry_ttl_seconds": 86400,
       "revision": "storage app id plus workout/media version required",
@@ -286,14 +339,25 @@
       "rollout": "M5"
     },
     {
-      "app_ids": ["agents", "checklist", "docs-studio", "dynamic-views", "memory", "skills"],
+      "app_ids": [
+        "agents",
+        "checklist",
+        "docs-studio",
+        "dynamic-views",
+        "memory",
+        "skills"
+      ],
       "resource": "bounded-read-models",
       "owner": "each owning app",
       "read_surface": "app-owned list/reference/read actions",
       "canonical_data_class": "workspace_internal",
       "provenance": "app_reference",
       "local_persistence_policy": "deny",
-      "policy_prerequisites": ["per-resource canonical data_class", "bounded app adapter", "stable per-resource revision"],
+      "policy_prerequisites": [
+        "per-resource canonical data_class",
+        "bounded app adapter",
+        "stable per-resource revision"
+      ],
       "fresh_ttl_seconds": 0,
       "expiry_ttl_seconds": 0,
       "revision": "required per app resource",
@@ -304,14 +368,19 @@
       "rollout": "M5 incremental"
     },
     {
-      "app_ids": ["document-generator"],
+      "app_ids": [
+        "document-generator"
+      ],
       "resource": "generation-job-state",
       "owner": "document-generator",
       "read_surface": "document generation/transform status",
       "canonical_data_class": "workspace_internal",
       "provenance": "tool_result",
       "local_persistence_policy": "deny",
-      "policy_prerequisites": ["bounded read model", "stable resource revision"],
+      "policy_prerequisites": [
+        "bounded read model",
+        "stable resource revision"
+      ],
       "fresh_ttl_seconds": 0,
       "expiry_ttl_seconds": 0,
       "revision": "not available",
@@ -322,7 +391,9 @@
       "rollout": "not scheduled"
     },
     {
-      "app_ids": ["design-studio"],
+      "app_ids": [
+        "design-studio"
+      ],
       "resource": "next-static-assets",
       "owner": "design-studio",
       "read_surface": "isolated sidecar /_next/static/*",
@@ -339,7 +410,10 @@
       "rollout": "HTTP-only; sidecar remains online"
     },
     {
-      "app_ids": ["design-studio", "video-studio"],
+      "app_ids": [
+        "design-studio",
+        "video-studio"
+      ],
       "resource": "sidecar-html-api-and-runtime",
       "owner": "each owning app",
       "read_surface": "isolated sidecar HTML/API/runtime responses",
@@ -353,10 +427,12 @@
       "max_scope_bytes": 0,
       "invalidation": "no-store",
       "data_event": "runtime/frontend",
-      "rollout": "excluded from PWA offline"
+      "rollout": "excluded from PWA cache persistence"
     },
     {
-      "app_ids": ["settings"],
+      "app_ids": [
+        "settings"
+      ],
       "resource": "non-sensitive-ui-preferences",
       "owner": "settings/base-shell as applicable",
       "read_surface": "explicit local UI preference",
@@ -373,7 +449,9 @@
       "rollout": "existing bounded preference behavior"
     },
     {
-      "app_ids": ["settings"],
+      "app_ids": [
+        "settings"
+      ],
       "resource": "platform-provider-runtime-and-recovery-state",
       "owner": "core",
       "read_surface": "settings/provider/runtime/recovery APIs",
@@ -390,7 +468,12 @@
       "rollout": "excluded"
     },
     {
-      "app_ids": ["vault", "browser", "speech", "senses"],
+      "app_ids": [
+        "vault",
+        "browser",
+        "speech",
+        "senses"
+      ],
       "resource": "secrets-sessions-audio-and-ephemeral-sensor-state",
       "owner": "each owning app",
       "read_surface": "app backend/runtime surfaces",
@@ -407,7 +490,9 @@
       "rollout": "excluded"
     },
     {
-      "app_ids": ["developer-kit"],
+      "app_ids": [
+        "developer-kit"
+      ],
       "resource": "static-developer-ui",
       "owner": "developer-kit",
       "read_surface": "verified frontend artifact",
@@ -424,7 +509,9 @@
       "rollout": "static assets only"
     },
     {
-      "app_ids": ["core-control-plane"],
+      "app_ids": [
+        "core-control-plane"
+      ],
       "resource": "agentic-authority",
       "owner": "core",
       "read_surface": "capability/certificate/profile/binding/admission/egress/authority/confirmation/revocation APIs",

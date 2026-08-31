@@ -9,9 +9,9 @@ from core.providers.agentic_models import RuntimeDataClass
 
 
 ROOT = Path(__file__).resolve().parents[3]
-INVENTORY_PATH = ROOT / "docs" / "product" / "pwa_cache_resource_inventory.v1.json"
+INVENTORY_PATH = ROOT / "docs" / "product" / "pwa_cache_resource_inventory.v2.json"
 CANONICAL_DATA_CLASSES = set(get_args(RuntimeDataClass))
-LOCAL_PERSISTENCE_POLICIES = ("deny", "session", "cache", "offline_opt_in")
+LOCAL_PERSISTENCE_POLICIES = ("deny", "session", "cache")
 REQUIRED_FIELDS = {
     "app_ids",
     "resource",
@@ -36,8 +36,8 @@ class PwaResourceInventoryTests(unittest.TestCase):
     def test_inventory_is_versioned_complete_and_bounded(self) -> None:
         payload = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
 
-        self.assertEqual(payload["schema"], "maverick.pwa-cache-resource-inventory.v1")
-        self.assertEqual(payload["policy_revision"], "maverick.local-persistence-policy.v1")
+        self.assertEqual(payload["schema"], "maverick.pwa-cache-resource-inventory.v2")
+        self.assertEqual(payload["policy_revision"], "maverick.local-persistence-policy.v2")
         self.assertEqual(payload["canonical_data_class_source"], "core.providers.agentic_models.RuntimeDataClass")
         self.assertEqual(payload["local_persistence_policy_values"], list(LOCAL_PERSISTENCE_POLICIES))
         self.assertEqual(payload["unknown_classification_policy"], "deny")
@@ -94,6 +94,14 @@ class PwaResourceInventoryTests(unittest.TestCase):
         for resource in payload["resources"]:
             if resource["canonical_data_class"] == "unclassified":
                 self.assertEqual(resource["local_persistence_policy"], "deny")
+
+    def test_inventory_contains_no_obsolete_network_absence_policy(self) -> None:
+        text = INVENTORY_PATH.read_text(encoding="utf-8").lower()
+
+        self.assertNotIn("offline_opt_in", text)
+        self.assertNotIn("offline-file", text)
+        self.assertNotIn("user opt-in", text)
+        self.assertNotIn("outbox", text)
 
 
 if __name__ == "__main__":

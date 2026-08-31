@@ -50,8 +50,12 @@ An explicit `false`, malformed successful response, or `401`/`403` disables
 the broker and an authentication rejection also clears private cache
 authority. A config transport failure is not an explicit disable: only a
 positive decision already confirmed by that authenticated in-memory broker may
-survive it, so a ready file can still satisfy the normal viewer. A cold broker
-with no confirmed decision remains fail-closed.
+survive it. The broker may then reuse only the matching server descriptor it
+already validated and retained in its bounded RAM map, allowing the SDK to
+attempt a cache-first open without another network dependency. Descriptors are
+never persisted, are dropped on explicit denial/authentication failure, and
+are cleared with the broker. A cold broker with no confirmed decision and
+descriptor remains fail-closed.
 
 Unknown or denied policy returns `unavailable` to the Storage adapter, which
 uses its ordinary network path. The current resource inventory classifies raw

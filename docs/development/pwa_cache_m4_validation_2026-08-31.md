@@ -28,7 +28,11 @@ represented as passed by this record.
   failure hardening, tests, and official frontend builds;
 - `eb336041` — tri-state feature revalidation that preserves a previously
   confirmed same-session cache path during config transport loss, fails closed
-  on cold start, and clears authority on explicit/authentication rejection.
+  on cold start, and clears authority on explicit/authentication rejection;
+- `7663fad0` — bounded RAM retention of an exact previously validated server
+  descriptor, enabling a real cache-first retry without descriptor transport
+  while dropping it on explicit policy denial, authentication failure, scope
+  disposal, or LRU pressure.
 
 ## Closed M4 tasks
 
@@ -61,11 +65,14 @@ The broker re-reads the exact `maverick.pwa-config.v2` no-store projection for
 every open. Explicit false, malformed success, or `401`/`403` clears a prior
 positive result. A transport failure may reuse only a positive result already
 confirmed by that authenticated in-memory broker, allowing a ready cache hit
-during network loss; a cold broker remains fail-closed. Disabled, stale,
-denied, oversized, or unclassified descriptors return `unavailable`,
-preserving Storage's existing server path. The global flag is not a policy
-override: the current backend always projects raw bytes as ineligible until
-canonical classification changes through review.
+during network loss. That path may reuse only the exact matching server
+descriptor previously validated and retained in a 128-entry RAM LRU; the
+descriptor and media URL are never persisted. A cold broker remains
+fail-closed, and explicit denial/authentication failure clears retained
+authority. Disabled, stale, denied, oversized, or unclassified descriptors
+return `unavailable`, preserving Storage's existing server path. The global
+flag is not a policy override: the current backend always projects raw bytes as
+ineligible until canonical classification changes through review.
 
 Local media requests carrying the cache marker hash the current file before
 serving it, including same-size/same-mtime mutation cases. Drive uses an
@@ -97,7 +104,7 @@ blocks persistent reuse until deletion succeeds.
 |---|---|
 | PWA cache package typecheck | passed |
 | PWA cache package | 10 files, 82 tests passed |
-| Base Shell frontend | 28 files, 137 tests passed |
+| Base Shell frontend | 28 files, 138 tests passed |
 | Base Shell worker/build harness | 13 tests passed |
 | Storage frontend | 28 files, 126 tests passed |
 | Storage Python selection | 128 tests passed, 10 expected skips |
@@ -105,7 +112,7 @@ blocks persistent reuse until deletion succeeds.
 | PWA config/API/resource inventory selection | 11 tests passed |
 | Unused-import and Python/JSON syntax checks | passed |
 | Storage official build | `0062ec3f713cf1bad5df0970d792f053b4be8dbf44f4e9971619f759aaf4bde8` |
-| Base Shell official build | `64e6217bff6700da15b4f3937b388e770747e93bfed96877823697caa3f715a0` |
+| Base Shell official build | `e7ebdf3809bfe00dfa709f6a1e82c25ba462da086a12a2a11e04d38ebcee3fb1` |
 | Settings official build | `ae4ff2c315c10549af07e781fa2e28381a53dad212ebb6347db5774ec91243c9` |
 
 The default fast repository suite was executed. M4's Storage selection and

@@ -1,6 +1,6 @@
 {
-  "schema": "maverick.frontend-assets.v1",
-  "build_id": "15f6769b735e633f2570126d2ea8dd289ad61797ce8b710e15792452c35f1485",
+  "schema": "maverick.frontend-assets.v2",
+  "build_id": "072d66acdc25af6b768f25dfed862096c4598949ea7306f16f3970f7155d0844",
   "entrypoints": [
     "index.html",
     "widgets/app-shortcuts/index.html"

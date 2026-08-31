@@ -7,8 +7,7 @@ const STATIC_CACHE_PREFIX = "maverick-static-v2:";
 const STATIC_CACHE_NAME = `${STATIC_CACHE_PREFIX}${BUILD_ID}`;
 const APP_STATIC_CACHE_NAME = "maverick-app-static-v2";
 const LEGACY_STATIC_CACHE_NAMES = new Set(["maverick-base-shell-v3"]);
-const SHELL_NAVIGATION_URL = "/";
-const OFFLINE_DOCUMENT_URL = "/offline.html";
+const SHELL_NAVIGATION_URL = __MAVERICK_NAVIGATION_FALLBACK_URL__;
 const NAVIGATION_TIMEOUT_MS = 5_000;
 const PRECACHE_BY_URL = new Map(PRECACHE.map((record) => [record.url, record]));
 const IMMUTABLE_BY_URL = new Map(IMMUTABLE_SHELL_ASSETS.map((record) => [record.url, record]));
@@ -176,16 +175,15 @@ async function networkFirstPrecachedAsset(request, record) {
   }
 }
 
-async function navigationFallback(request, url) {
+async function navigationFallback(request) {
   try {
     const response = await fetchNavigationWithTimeout(request);
     if (response.status >= 500) {
       throw new Error(`Shell navigation failed with HTTP ${response.status}`);
     }
     return response;
-  } catch {
-    const fallbackUrl = isShellNavigation(url) ? SHELL_NAVIGATION_URL : OFFLINE_DOCUMENT_URL;
-    const record = PRECACHE_BY_URL.get(fallbackUrl);
+  } catch (error) {
+    const record = PRECACHE_BY_URL.get(SHELL_NAVIGATION_URL);
     if (record) {
       const cache = await caches.open(STATIC_CACHE_NAME);
       const cached = await verifiedCachedRecord(cache, record);
@@ -193,7 +191,7 @@ async function navigationFallback(request, url) {
         return cached;
       }
     }
-    return syntheticOfflineResponse();
+    throw error;
   }
 }
 
@@ -219,13 +217,6 @@ async function visitedAppStaticAsset(request) {
     await putCacheBestEffort(cache, request, response);
   }
   return response;
-}
-
-function syntheticOfflineResponse() {
-  return new Response(
-    "<!doctype html><html lang=\"it\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>Maverick — rete non disponibile</title><body><main><h1>Contenuto non disponibile sul dispositivo</h1><p>La shell offline deve essere ripristinata con una connessione prima di mostrare questo contenuto.</p></main></body></html>",
-    { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } },
-  );
 }
 
 async function deleteKnownStaticCaches({ includeRuntime = false } = {}) {
@@ -274,7 +265,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (request.mode === "navigate") {
-    event.respondWith(navigationFallback(request, url));
+    if (isShellNavigation(url)) {
+      event.respondWith(navigationFallback(request));
+    }
     return;
   }
   const immutableRecord = IMMUTABLE_BY_URL.get(url.pathname);

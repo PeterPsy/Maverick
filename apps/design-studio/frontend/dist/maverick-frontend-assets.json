@@ -1,5 +1,5 @@
 {
-  "build_id": "10dc9c21ab19c7b0edd97192e894d4fc45a4fdb8cf82ee013381438a799590fb",
+  "build_id": "a8b8d99334b0b77c57609361d9a55b0c2c044bf61d6076c75b04b9ad251f87ba",
   "entrypoints": [
     "index.html"
   ],
@@ -21,5 +21,5 @@
       "size_bytes": 432
     }
   ],
-  "schema": "maverick.frontend-assets.v1"
+  "schema": "maverick.frontend-assets.v2"
 }

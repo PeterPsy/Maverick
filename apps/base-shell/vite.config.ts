@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [
     react(),
     maverickFrontendAssets({
+      navigationFallback: "index.html",
       serviceWorkerPath: "sw.js",
       precache: {
         immutable: true,

@@ -1,6 +1,6 @@
 {
-  "schema": "maverick.frontend-assets.v1",
-  "build_id": "19024c667f5019f17b2c3e89ea3a0fe7478bf199e1d440273878ec1d3444c884",
+  "schema": "maverick.frontend-assets.v2",
+  "build_id": "c7a93519af8091101ca71161bb1f52ff7fb26d1f8d4accda20753bbd7549a42b",
   "entrypoints": [
     "index.html",
     "widgets/fitness-coach-sidebar/index.html",

@@ -7,7 +7,7 @@ import vm from "node:vm";
 
 const bodies = new Map([
   ["/", "shell"],
-  ["/offline.html", "offline-document"],
+  ["/favicon.ico", "icon"],
   ["/apps/base-shell/assets/index-testhash.js", "immutable-bundle"],
 ]);
 const records = [...bodies].map(([url, body]) => ({
@@ -22,7 +22,7 @@ test("precache installation is atomic and keeps the previous build after interru
   await harness.caches.open("maverick-static-v2:previous");
   harness.fetchImpl = async (input) => {
     const path = requestPath(input);
-    if (path === "/offline.html") throw new Error("network interrupted");
+    if (path === "/favicon.ico") throw new Error("network interrupted");
     return responseFor(path);
   };
 
@@ -46,17 +46,28 @@ test("an update waits behind the active worker until the shell explicitly accept
   assert.equal(harness.skipWaitingCalls, 1);
 });
 
-test("offline navigation reopens the shell and gives uncached apps a contextual document", async () => {
+test("network failure reopens only shell navigations from the verified standard entrypoint", async () => {
   const harness = workerHarness();
   harness.fetchImpl = async (input) => responseFor(requestPath(input));
   await harness.internals.installPrecache();
-  harness.fetchImpl = async () => { throw new TypeError("offline"); };
+  harness.fetchImpl = async () => { throw new TypeError("network unavailable"); };
 
-  const shell = await harness.internals.navigationFallback(fakeRequest("/app/chat", "navigate"), new URL("https://maverick.test/app/chat"));
-  const app = await harness.internals.navigationFallback(fakeRequest("/apps/chat/", "navigate"), new URL("https://maverick.test/apps/chat/"));
+  const shellResponse = harness.dispatchFetch(fakeRequest("/app/chat", "navigate"));
+  const appResponse = harness.dispatchFetch(fakeRequest("/apps/chat/", "navigate"));
 
-  assert.equal(await shell.text(), "shell");
-  assert.equal(await app.text(), "offline-document");
+  assert.ok(shellResponse);
+  assert.equal(await (await shellResponse).text(), "shell");
+  assert.equal(appResponse, null, "non-shell navigation must retain normal browser handling");
+});
+
+test("a first shell visit without a verified fallback rejects instead of synthesizing product HTML", async () => {
+  const harness = workerHarness();
+  harness.fetchImpl = async () => { throw new TypeError("network unavailable"); };
+
+  await assert.rejects(
+    harness.internals.navigationFallback(fakeRequest("/app/chat", "navigate")),
+    /network unavailable/,
+  );
 });
 
 test("temporary server errors use the same verified navigation fallback", async () => {
@@ -65,7 +76,7 @@ test("temporary server errors use the same verified navigation fallback", async 
   await harness.internals.installPrecache();
   harness.fetchImpl = async () => new Response("temporary failure", { status: 503 });
 
-  const response = await harness.internals.navigationFallback(fakeRequest("/", "navigate"), new URL("https://maverick.test/"));
+  const response = await harness.internals.navigationFallback(fakeRequest("/", "navigate"));
 
   assert.equal(await response.text(), "shell");
 });
@@ -92,7 +103,7 @@ test("runtime Cache API write failures never replace valid network responses", a
 
   const immutableRecord = records.find(({ url }) => url.includes("index-testhash.js"));
   const immutable = await harness.internals.cacheFirstVerifiedShellAsset(fakeRequest(immutableRecord.url), immutableRecord);
-  const revalidatedRecord = records.find(({ url }) => url === "/offline.html");
+  const revalidatedRecord = records.find(({ url }) => url === "/favicon.ico");
   const revalidated = await harness.internals.networkFirstPrecachedAsset(fakeRequest(revalidatedRecord.url), revalidatedRecord);
 
   assert.equal(await immutable.text(), bodies.get(immutableRecord.url));
@@ -119,16 +130,16 @@ test("recovery preserves verified entries when a missing entry cannot be fetched
   harness.fetchImpl = async (input) => responseFor(requestPath(input));
   await harness.internals.installPrecache();
   const cache = await harness.caches.open(harness.internals.STATIC_CACHE_NAME);
-  await cache.delete("/offline.html");
+  await cache.delete("/favicon.ico");
   harness.fetchImpl = async (input) => {
-    if (requestPath(input) === "/offline.html") throw new TypeError("offline");
+    if (requestPath(input) === "/favicon.ico") throw new TypeError("network unavailable");
     return responseFor(requestPath(input));
   };
 
-  await assert.rejects(harness.internals.recoverPrecache(), /offline/);
+  await assert.rejects(harness.internals.recoverPrecache(), /network unavailable/);
 
   assert.equal(await (await cache.match("/")).text(), "shell");
-  assert.equal(await cache.match("/offline.html"), undefined);
+  assert.equal(await cache.match("/favicon.ico"), undefined);
 });
 
 test("kill switch removes only known Maverick static caches and unregisters", async () => {
@@ -236,7 +247,8 @@ function workerHarness({ activeWorker = null } = {}) {
   source = source
     .replaceAll("__MAVERICK_BUILD_ID__", "test-build")
     .replaceAll("__MAVERICK_PRECACHE_MANIFEST__", JSON.stringify(records))
-    .replaceAll("__MAVERICK_IMMUTABLE_ASSETS__", JSON.stringify([records[2]]));
+    .replaceAll("__MAVERICK_IMMUTABLE_ASSETS__", JSON.stringify([records[2]]))
+    .replaceAll("__MAVERICK_NAVIGATION_FALLBACK_URL__", JSON.stringify("/"));
   source += `\nself.__MAVERICK_SW_INTERNALS__ = {
     APP_STATIC_CACHE_NAME,
     BUILD_ID,
@@ -282,6 +294,14 @@ function workerHarness({ activeWorker = null } = {}) {
     };
     listeners.get(type)(event);
     await pending;
+  };
+  harness.dispatchFetch = (request) => {
+    let response = null;
+    listeners.get("fetch")({
+      request,
+      respondWith(value) { response = Promise.resolve(value); },
+    });
+    return response;
   };
   return harness;
 }

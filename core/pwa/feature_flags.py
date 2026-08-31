@@ -9,8 +9,7 @@ import re
 
 MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2 = "MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2"
 MAVERICK_FEATURE_PWA_DATA_CACHE = "MAVERICK_FEATURE_PWA_DATA_CACHE"
-MAVERICK_FEATURE_PWA_STORAGE_OFFLINE_FILES = "MAVERICK_FEATURE_PWA_STORAGE_OFFLINE_FILES"
-MAVERICK_FEATURE_PWA_OFFLINE_OUTBOX = "MAVERICK_FEATURE_PWA_OFFLINE_OUTBOX"
+MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE = "MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE"
 MAVERICK_FEATURE_PWA_APP_CACHE_PREFIX = "MAVERICK_FEATURE_PWA_APP_CACHE_"
 
 _DISABLED_VALUES = frozenset({"0", "false", "no", "off"})
@@ -18,8 +17,7 @@ _ENABLED_VALUES = frozenset({"1", "true", "yes", "on"})
 _DEFAULTS = {
     MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2: True,
     MAVERICK_FEATURE_PWA_DATA_CACHE: False,
-    MAVERICK_FEATURE_PWA_STORAGE_OFFLINE_FILES: False,
-    MAVERICK_FEATURE_PWA_OFFLINE_OUTBOX: False,
+    MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE: False,
 }
 
 
@@ -57,17 +55,16 @@ def app_data_cache_enabled(app_id: str, *, environment: Mapping[str, str] | None
 def public_pwa_config(*, environment: Mapping[str, str] | None = None) -> dict[str, object]:
     """Project only redaction-safe browser rollout state for registration/recovery."""
     return {
-        "schema": "maverick.pwa-config.v1",
+        "schema": "maverick.pwa-config.v2",
         "service_worker": {
             "enabled": pwa_feature_enabled(MAVERICK_FEATURE_PWA_SERVICE_WORKER_V2, environment=environment),
             "generation": "v2",
         },
         "features": {
             "data_cache": pwa_feature_enabled(MAVERICK_FEATURE_PWA_DATA_CACHE, environment=environment),
-            "storage_offline_files": pwa_feature_enabled(
-                MAVERICK_FEATURE_PWA_STORAGE_OFFLINE_FILES,
+            "storage_file_cache": pwa_feature_enabled(
+                MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE,
                 environment=environment,
             ),
-            "offline_outbox": pwa_feature_enabled(MAVERICK_FEATURE_PWA_OFFLINE_OUTBOX, environment=environment),
         },
     }

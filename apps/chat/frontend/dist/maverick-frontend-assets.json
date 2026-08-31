@@ -1,5 +1,5 @@
 {
-  "build_id": "d60883ed434f6453ef86c1b478c86addb154159895b9100b62a422f8699ac827",
+  "build_id": "acbe9d7570530ebe0f75ec5bc9e112dd497c594fb86386e3c5f489b045916eb9",
   "entrypoints": [
     "index.html",
     "widgets/chat-floating/index.html",
@@ -156,5 +156,5 @@
       "size_bytes": 1491
     }
   ],
-  "schema": "maverick.frontend-assets.v1"
+  "schema": "maverick.frontend-assets.v2"
 }

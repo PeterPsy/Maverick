@@ -1,25 +1,24 @@
 {
-  "schema": "maverick.frontend-assets.v1",
-  "build_id": "0ad38e469e125bc7b532a8a94c0ec26ba936755d7188cb4c9439abc179c40bd9",
+  "schema": "maverick.frontend-assets.v2",
+  "build_id": "c8bddb5e3ed949442104fb4f4c9a8e02821df168e1f0a7e85d4434b820220aad",
   "entrypoints": [
-    "index.html",
-    "offline.html"
+    "index.html"
   ],
   "immutable": [
     {
-      "path": "assets/LoginPaperBackground-Gan7Efsw.js",
-      "sha256": "32ada5c9b4e045f3ec28626407dc8b734fcdd24c03cc2bf6f61e73a0c419b7d1",
+      "path": "assets/LoginPaperBackground-BUos0D7c.js",
+      "sha256": "a108559a51b19415a228efd4ef88ad8ffc88bd1e3242537e4e347600111d1cc6",
       "size_bytes": 25087
     },
     {
-      "path": "assets/index-B3FYq0tq.css",
-      "sha256": "45ad73f1e01819599cb5491e859652f4d15dfcd3cd575a6445986261447cd91f",
-      "size_bytes": 76237
+      "path": "assets/index-8bLPTgc8.css",
+      "sha256": "0d6bd20615de2b7a631c03d1c84b5db625e5c1538d5eafe01df7994fb6b73ac3",
+      "size_bytes": 70405
     },
     {
-      "path": "assets/index-DasiIg8x.js",
-      "sha256": "3e01930f3cdcd45a71e5384f423ac4772f180a02d56bf1976dfc548508a284a1",
-      "size_bytes": 291069
+      "path": "assets/index-CiSWMk0j.js",
+      "sha256": "8eaa572037e37d3fba6a5afdf67ec27c988e78d771a8f0abf9234c2eda115c76",
+      "size_bytes": 284633
     }
   ],
   "revalidated": [
@@ -35,7 +34,7 @@
     },
     {
       "path": "index.html",
-      "sha256": "71c53a13fe97c46f4a6cae7311c630b28863441b2ea25f0eaa3c85d51a554069",
+      "sha256": "41e26e0dba1c6dd45b222cacf8a40fae3b37a1d2c8e866a5f32585f805d93daf",
       "size_bytes": 1977
     },
     {
@@ -57,11 +56,6 @@
       "path": "maverick-mark.svg",
       "sha256": "443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983",
       "size_bytes": 17902
-    },
-    {
-      "path": "offline.html",
-      "sha256": "0b360ff456adb1814162c549b07344f7ab813149bb4f4aaf5cbcc8b818552cad",
-      "size_bytes": 1961
     },
     {
       "path": "pwa-apple-touch-icon.png",
@@ -95,15 +89,16 @@
     },
     {
       "path": "sw.js",
-      "sha256": "ddba2461cb13985fd10e302d5bdf9ccab6c9de1001b5905e5524a5094f6bf55f",
-      "size_bytes": 14085
+      "sha256": "4e75467f7ff47b8d9f94b1597d59d11cfe0ed9284268ba5ed1de762e54a8acd4",
+      "size_bytes": 13301
     }
   ],
+  "navigation_fallback": "index.html",
   "precache": [
     {
       "url": "/",
       "path": "index.html",
-      "sha256": "71c53a13fe97c46f4a6cae7311c630b28863441b2ea25f0eaa3c85d51a554069",
+      "sha256": "41e26e0dba1c6dd45b222cacf8a40fae3b37a1d2c8e866a5f32585f805d93daf",
       "size_bytes": 1977
     },
     {
@@ -113,21 +108,21 @@
       "size_bytes": 95846
     },
     {
-      "url": "/apps/base-shell/assets/index-B3FYq0tq.css",
-      "path": "assets/index-B3FYq0tq.css",
-      "sha256": "45ad73f1e01819599cb5491e859652f4d15dfcd3cd575a6445986261447cd91f",
-      "size_bytes": 76237
+      "url": "/apps/base-shell/assets/index-8bLPTgc8.css",
+      "path": "assets/index-8bLPTgc8.css",
+      "sha256": "0d6bd20615de2b7a631c03d1c84b5db625e5c1538d5eafe01df7994fb6b73ac3",
+      "size_bytes": 70405
     },
     {
-      "url": "/apps/base-shell/assets/index-DasiIg8x.js",
-      "path": "assets/index-DasiIg8x.js",
-      "sha256": "3e01930f3cdcd45a71e5384f423ac4772f180a02d56bf1976dfc548508a284a1",
-      "size_bytes": 291069
+      "url": "/apps/base-shell/assets/index-CiSWMk0j.js",
+      "path": "assets/index-CiSWMk0j.js",
+      "sha256": "8eaa572037e37d3fba6a5afdf67ec27c988e78d771a8f0abf9234c2eda115c76",
+      "size_bytes": 284633
     },
     {
-      "url": "/apps/base-shell/assets/LoginPaperBackground-Gan7Efsw.js",
-      "path": "assets/LoginPaperBackground-Gan7Efsw.js",
-      "sha256": "32ada5c9b4e045f3ec28626407dc8b734fcdd24c03cc2bf6f61e73a0c419b7d1",
+      "url": "/apps/base-shell/assets/LoginPaperBackground-BUos0D7c.js",
+      "path": "assets/LoginPaperBackground-BUos0D7c.js",
+      "sha256": "a108559a51b19415a228efd4ef88ad8ffc88bd1e3242537e4e347600111d1cc6",
       "size_bytes": 25087
     },
     {
@@ -195,15 +190,6 @@
       "path": "material-symbols-rounded.woff2",
       "sha256": "aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97",
       "size_bytes": 414656
-    },
-    {
-      "url": "/offline.html",
-      "path": "offline.html",
-      "sha256": "0b360ff456adb1814162c549b07344f7ab813149bb4f4aaf5cbcc8b818552cad",
-      "size_bytes": 1961
     }
-  ],
-  "offline": {
-    "path": "offline.html"
-  }
+  ]
 }

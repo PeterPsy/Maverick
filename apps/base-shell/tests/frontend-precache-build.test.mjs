@@ -21,6 +21,8 @@ test("shell build identity covers worker logic and the injected verified precach
 
   const first = await runBuild({ outDir, sourceRoot });
   const firstWorker = readFileSync(resolve(outDir, "sw.js"), "utf8");
+  assert.equal(first.schema, "maverick.frontend-assets.v2");
+  assert.equal(first.navigation_fallback, "index.html");
   assert.ok(first.precache.some(({ url }) => url === "/"));
   assert.ok(first.precache.some(({ url }) => url.startsWith("/shell/assets/")));
   assert.ok(firstWorker.includes(first.build_id));
@@ -45,7 +47,11 @@ async function runBuild({ includeAlias = false, outDir, sourceRoot }) {
     base: "/shell/",
     configFile: false,
     logLevel: "silent",
-    plugins: [maverickFrontendAssets({ serviceWorkerPath: "sw.js", precache: { immutable: true, routes } })],
+    plugins: [maverickFrontendAssets({
+      navigationFallback: "index.html",
+      serviceWorkerPath: "sw.js",
+      precache: { immutable: true, routes },
+    })],
     root: sourceRoot,
     build: { emptyOutDir: true, outDir },
   });
@@ -55,6 +61,6 @@ async function runBuild({ includeAlias = false, outDir, sourceRoot }) {
 function writeWorkerTemplate(publicRoot, version) {
   writeFileSync(
     resolve(publicRoot, "sw.js"),
-    `const VERSION = "${version}:__MAVERICK_BUILD_ID__";\nconst PRECACHE = __MAVERICK_PRECACHE_MANIFEST__;\nconst IMMUTABLE = __MAVERICK_IMMUTABLE_ASSETS__;\n`,
+    `const VERSION = "${version}:__MAVERICK_BUILD_ID__";\nconst PRECACHE = __MAVERICK_PRECACHE_MANIFEST__;\nconst IMMUTABLE = __MAVERICK_IMMUTABLE_ASSETS__;\nconst NAVIGATION_FALLBACK = __MAVERICK_NAVIGATION_FALLBACK_URL__;\n`,
   );
 }

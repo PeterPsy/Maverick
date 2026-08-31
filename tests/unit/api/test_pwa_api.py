@@ -26,7 +26,10 @@ class PwaApiTests(unittest.TestCase):
 
         self.assertEqual(captured["status"], "200 OK")
         self.assertEqual(captured["headers"]["Cache-Control"], "no-store")
-        self.assertFalse(json.loads(body)["service_worker"]["enabled"])
+        payload = json.loads(body)
+        self.assertEqual(payload["schema"], "maverick.pwa-config.v2")
+        self.assertFalse(payload["service_worker"]["enabled"])
+        self.assertEqual(payload["features"], {"data_cache": False, "storage_file_cache": False})
 
     def test_config_rejects_mutation_methods(self) -> None:
         captured: dict[str, object] = {}

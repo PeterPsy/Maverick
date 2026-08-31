@@ -63,7 +63,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
             (root / "index.html").write_bytes(b"ok")
             record = _record("index.html", b"ok")
             payload = {
-                "schema": "maverick.frontend-assets.v1",
+                "schema": "maverick.frontend-assets.v2",
                 "build_id": "a" * 64,
                 "entrypoints": ["index.html"],
                 "immutable": [],
@@ -81,7 +81,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
             (root / "index.html").write_bytes(b"ok")
             record = _record("index.html", b"ok")
             payload = {
-                "schema": "maverick.frontend-assets.v1",
+                "schema": "maverick.frontend-assets.v2",
                 "build_id": "a" * 64,
                 "entrypoints": ["index.html"],
                 "immutable": [],
@@ -99,7 +99,7 @@ class FrontendAssetsTestCase(unittest.TestCase):
             (root / "index.html").write_bytes(b"private")
             record = _record("index.html", b"private")
             payload = {
-                "schema": "maverick.frontend-assets.v1",
+                "schema": "maverick.frontend-assets.v2",
                 "build_id": "a" * 64,
                 "entrypoints": ["index.html"],
                 "immutable": [],
@@ -109,6 +109,71 @@ class FrontendAssetsTestCase(unittest.TestCase):
             (root / FRONTEND_ASSET_MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
 
             with self.assertRaisesRegex(FrontendAssetManifestError, "Unsafe frontend precache URL"):
+                load_frontend_asset_manifest(root, required=True, verify_files=True)
+
+    def test_manifest_accepts_verified_standard_entrypoint_as_navigation_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.html").write_bytes(b"shell")
+            record = _record("index.html", b"shell")
+            payload = {
+                "schema": "maverick.frontend-assets.v2",
+                "build_id": "a" * 64,
+                "entrypoints": ["index.html"],
+                "navigation_fallback": "index.html",
+                "immutable": [],
+                "revalidated": [record],
+                "precache": [{**record, "url": "/"}],
+            }
+            (root / FRONTEND_ASSET_MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
+
+            manifest = load_frontend_asset_manifest(root, required=True, verify_files=True)
+
+        self.assertIsNotNone(manifest)
+        self.assertEqual(manifest.navigation_fallback, "index.html")
+
+    def test_manifest_rejects_unselected_or_non_entrypoint_navigation_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.html").write_bytes(b"shell")
+            (root / "fallback.html").write_bytes(b"alternate")
+            index_record = _record("index.html", b"shell")
+            fallback_record = _record("fallback.html", b"alternate")
+            payload = {
+                "schema": "maverick.frontend-assets.v2",
+                "build_id": "a" * 64,
+                "entrypoints": ["index.html"],
+                "navigation_fallback": "fallback.html",
+                "immutable": [],
+                "revalidated": [index_record, fallback_record],
+                "precache": [{**fallback_record, "url": "/fallback"}],
+            }
+            (root / FRONTEND_ASSET_MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(FrontendAssetManifestError, "normal|HTML entrypoint"):
+                load_frontend_asset_manifest(root, required=True, verify_files=True)
+
+            payload["navigation_fallback"] = "index.html"
+            (root / FRONTEND_ASSET_MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(FrontendAssetManifestError, "selected for precache"):
+                load_frontend_asset_manifest(root, required=True, verify_files=True)
+
+    def test_manifest_v2_rejects_superseded_fallback_metadata_without_an_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.html").write_bytes(b"shell")
+            record = _record("index.html", b"shell")
+            payload = {
+                "schema": "maverick.frontend-assets.v2",
+                "build_id": "a" * 64,
+                "entrypoints": ["index.html"],
+                "immutable": [],
+                "revalidated": [record],
+                "offline": {"path": "index.html"},
+            }
+            (root / FRONTEND_ASSET_MANIFEST_NAME).write_text(json.dumps(payload), encoding="utf-8")
+
+            with self.assertRaisesRegex(FrontendAssetManifestError, "superseded fallback metadata"):
                 load_frontend_asset_manifest(root, required=True, verify_files=True)
 
 
@@ -124,7 +189,7 @@ def _write_manifest(
     revalidated: list[dict[str, object]] | None = None,
 ) -> None:
     payload = {
-        "schema": "maverick.frontend-assets.v1",
+        "schema": "maverick.frontend-assets.v2",
         "build_id": "a" * 64,
         "entrypoints": entrypoints or ["index.html"],
         "immutable": immutable or [],

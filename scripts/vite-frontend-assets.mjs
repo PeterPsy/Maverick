@@ -5,7 +5,7 @@ import { posix, relative, resolve, sep } from "node:path";
 import { validateHtmlAssetReferences } from "./frontend-html-asset-references.mjs";
 
 export const MAVERICK_FRONTEND_ASSET_MANIFEST = "maverick-frontend-assets.json";
-export const MAVERICK_FRONTEND_ASSET_SCHEMA = "maverick.frontend-assets.v1";
+export const MAVERICK_FRONTEND_ASSET_SCHEMA = "maverick.frontend-assets.v2";
 
 function sha256(body) {
   return createHash("sha256").update(body).digest("hex");
@@ -37,13 +37,16 @@ function recordFor(outDir, path) {
   return { path, sha256: sha256(body), size_bytes: body.byteLength };
 }
 
-function canonicalBuildPayload({ entrypoints, immutable, precache = null, revalidated }) {
+function canonicalBuildPayload({ entrypoints, immutable, navigationFallback = null, precache = null, revalidated }) {
   const payload = {
     schema: MAVERICK_FRONTEND_ASSET_SCHEMA,
     entrypoints,
     immutable,
     revalidated,
   };
+  if (navigationFallback !== null) {
+    payload.navigation_fallback = navigationFallback;
+  }
   if (precache !== null) {
     payload.precache = precache;
   }
@@ -122,7 +125,7 @@ function precacheRecords({ base, immutable, options, recordsByPath }) {
   return [...byUrl.values()].sort((left, right) => left.url.localeCompare(right.url));
 }
 
-function injectServiceWorker({ buildId, immutable, outDir, precache, serviceWorkerPath }) {
+function injectServiceWorker({ buildId, immutable, navigationFallbackUrl, outDir, precache, serviceWorkerPath }) {
   const path = resolve(outDir, serviceWorkerPath);
   const source = readFileSync(path, "utf8");
   const replacements = {
@@ -136,6 +139,9 @@ function injectServiceWorker({ buildId, immutable, outDir, precache, serviceWork
     ),
     __MAVERICK_PRECACHE_MANIFEST__: JSON.stringify(precache),
   };
+  if (navigationFallbackUrl !== null) {
+    replacements.__MAVERICK_NAVIGATION_FALLBACK_URL__ = JSON.stringify(navigationFallbackUrl);
+  }
   let generated = source;
   for (const [token, value] of Object.entries(replacements)) {
     if (!generated.includes(token)) {
@@ -198,8 +204,15 @@ export function maverickFrontendAssets(options = {}) {
         options,
         recordsByPath,
       });
-      if (options.offlinePath && !precache.some(({ path }) => path === options.offlinePath)) {
-        throw new Error(`Maverick offline shell is not selected for precache: ${options.offlinePath}`);
+      const navigationFallback = options.navigationFallback || null;
+      const navigationFallbackRecord = navigationFallback === null
+        ? null
+        : precache.find(({ path }) => path === navigationFallback) || null;
+      if (navigationFallback !== null && !entrypoints.includes(navigationFallback)) {
+        throw new Error(`Maverick navigation fallback is not an HTML entrypoint: ${navigationFallback}`);
+      }
+      if (navigationFallback !== null && navigationFallbackRecord === null) {
+        throw new Error(`Maverick navigation fallback is not selected for precache: ${navigationFallback}`);
       }
       // The generated worker embeds buildId, so hashing its final bytes would
       // be circular. Hash its placeholder bytes plus the selected precache
@@ -208,6 +221,7 @@ export function maverickFrontendAssets(options = {}) {
       const buildId = sha256(canonicalBuildPayload({
         entrypoints,
         immutable,
+        navigationFallback,
         precache: options.serviceWorkerPath ? precache : null,
         revalidated,
       }));
@@ -215,6 +229,7 @@ export function maverickFrontendAssets(options = {}) {
         injectServiceWorker({
           buildId,
           immutable: immutable.map((record) => ({ ...record, path: `${resolvedConfig.base}${record.path}`.replace(/\/+/g, "/") })),
+          navigationFallbackUrl: navigationFallbackRecord?.url || null,
           outDir,
           precache,
           serviceWorkerPath: options.serviceWorkerPath,
@@ -228,14 +243,11 @@ export function maverickFrontendAssets(options = {}) {
         immutable,
         revalidated,
       };
+      if (navigationFallback !== null) {
+        payload.navigation_fallback = navigationFallback;
+      }
       if (precache.length > 0) {
         payload.precache = precache;
-      }
-      if (options.offlinePath) {
-        if (!paths.includes(options.offlinePath)) {
-          throw new Error(`Maverick offline shell is missing: ${options.offlinePath}`);
-        }
-        payload.offline = { path: options.offlinePath };
       }
       writeFileSync(resolve(outDir, MAVERICK_FRONTEND_ASSET_MANIFEST), `${JSON.stringify(payload, null, 2)}\n`);
     },

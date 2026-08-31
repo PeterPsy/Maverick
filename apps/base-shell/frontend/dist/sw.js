@@ -1,14 +1,13 @@
 "use strict";
 
-const BUILD_ID = "0ad38e469e125bc7b532a8a94c0ec26ba936755d7188cb4c9439abc179c40bd9";
-const PRECACHE = [{"url":"/","path":"index.html","sha256":"71c53a13fe97c46f4a6cae7311c630b28863441b2ea25f0eaa3c85d51a554069","size_bytes":1977},{"url":"/apps/base-shell/app-icon-lightcolor.png","path":"app-icon-lightcolor.png","sha256":"5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0","size_bytes":95846},{"url":"/apps/base-shell/assets/index-B3FYq0tq.css","path":"assets/index-B3FYq0tq.css","sha256":"45ad73f1e01819599cb5491e859652f4d15dfcd3cd575a6445986261447cd91f","size_bytes":76237},{"url":"/apps/base-shell/assets/index-DasiIg8x.js","path":"assets/index-DasiIg8x.js","sha256":"3e01930f3cdcd45a71e5384f423ac4772f180a02d56bf1976dfc548508a284a1","size_bytes":291069},{"url":"/apps/base-shell/assets/LoginPaperBackground-Gan7Efsw.js","path":"assets/LoginPaperBackground-Gan7Efsw.js","sha256":"32ada5c9b4e045f3ec28626407dc8b734fcdd24c03cc2bf6f61e73a0c419b7d1","size_bytes":25087},{"url":"/apps/base-shell/maverick-logotype.svg","path":"maverick-logotype.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/apps/base-shell/maverick-mark.svg","path":"maverick-mark.svg","sha256":"443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983","size_bytes":17902},{"url":"/apps/base-shell/pwa-apple-touch-icon.png","path":"pwa-apple-touch-icon.png","sha256":"13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb","size_bytes":4075},{"url":"/apps/base-shell/pwa-logo-192.png","path":"pwa-logo-192.png","sha256":"d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24","size_bytes":4429},{"url":"/apps/base-shell/pwa-logo.png","path":"pwa-logo.png","sha256":"1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10","size_bytes":16936},{"url":"/apps/base-shell/pwa-maskable-logo.png","path":"pwa-maskable-logo.png","sha256":"5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031","size_bytes":17394},{"url":"/apps/base-shell/sidebar-logo-black.svg","path":"sidebar-logo-black.svg","sha256":"e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f","size_bytes":6750},{"url":"/apps/base-shell/sidebar-logo.svg","path":"sidebar-logo.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/favicon.ico","path":"favicon.ico","sha256":"fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912","size_bytes":270622},{"url":"/manifest.webmanifest","path":"manifest.webmanifest","sha256":"68094b835f2838d27849bd900f816e09370984de8c3646619c0b10ee3d5f5695","size_bytes":627},{"url":"/material-symbols-rounded.woff2","path":"material-symbols-rounded.woff2","sha256":"aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97","size_bytes":414656},{"url":"/offline.html","path":"offline.html","sha256":"0b360ff456adb1814162c549b07344f7ab813149bb4f4aaf5cbcc8b818552cad","size_bytes":1961}];
-const IMMUTABLE_SHELL_ASSETS = [{"url":"/apps/base-shell/assets/LoginPaperBackground-Gan7Efsw.js","sha256":"32ada5c9b4e045f3ec28626407dc8b734fcdd24c03cc2bf6f61e73a0c419b7d1","size_bytes":25087},{"url":"/apps/base-shell/assets/index-B3FYq0tq.css","sha256":"45ad73f1e01819599cb5491e859652f4d15dfcd3cd575a6445986261447cd91f","size_bytes":76237},{"url":"/apps/base-shell/assets/index-DasiIg8x.js","sha256":"3e01930f3cdcd45a71e5384f423ac4772f180a02d56bf1976dfc548508a284a1","size_bytes":291069}];
+const BUILD_ID = "c8bddb5e3ed949442104fb4f4c9a8e02821df168e1f0a7e85d4434b820220aad";
+const PRECACHE = [{"url":"/","path":"index.html","sha256":"41e26e0dba1c6dd45b222cacf8a40fae3b37a1d2c8e866a5f32585f805d93daf","size_bytes":1977},{"url":"/apps/base-shell/app-icon-lightcolor.png","path":"app-icon-lightcolor.png","sha256":"5d3a4f9ec4e7a25ae7b12a09c6a7c0227239dd988427b5d232597718c25388b0","size_bytes":95846},{"url":"/apps/base-shell/assets/index-8bLPTgc8.css","path":"assets/index-8bLPTgc8.css","sha256":"0d6bd20615de2b7a631c03d1c84b5db625e5c1538d5eafe01df7994fb6b73ac3","size_bytes":70405},{"url":"/apps/base-shell/assets/index-CiSWMk0j.js","path":"assets/index-CiSWMk0j.js","sha256":"8eaa572037e37d3fba6a5afdf67ec27c988e78d771a8f0abf9234c2eda115c76","size_bytes":284633},{"url":"/apps/base-shell/assets/LoginPaperBackground-BUos0D7c.js","path":"assets/LoginPaperBackground-BUos0D7c.js","sha256":"a108559a51b19415a228efd4ef88ad8ffc88bd1e3242537e4e347600111d1cc6","size_bytes":25087},{"url":"/apps/base-shell/maverick-logotype.svg","path":"maverick-logotype.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/apps/base-shell/maverick-mark.svg","path":"maverick-mark.svg","sha256":"443f449f6a75801128e8af19fd2fa29dca053c5161099d2d079f0f8704129983","size_bytes":17902},{"url":"/apps/base-shell/pwa-apple-touch-icon.png","path":"pwa-apple-touch-icon.png","sha256":"13d4ae0bc0542e428f17e78fb9692bb52c3d98b89d3b9b813dfe500b45b3e7eb","size_bytes":4075},{"url":"/apps/base-shell/pwa-logo-192.png","path":"pwa-logo-192.png","sha256":"d8e27d0f02f6f14aa7b0bfefd00390f498cfbf6a544ebdec3d7a6e73cd7cff24","size_bytes":4429},{"url":"/apps/base-shell/pwa-logo.png","path":"pwa-logo.png","sha256":"1d99b7bdf018ab1547f6f95c4bd27b857e2a488166b7569638cb70132feb9e10","size_bytes":16936},{"url":"/apps/base-shell/pwa-maskable-logo.png","path":"pwa-maskable-logo.png","sha256":"5507908977a5881cecfc719bca6168154648aaa6703ac8f5a078b57b34e18031","size_bytes":17394},{"url":"/apps/base-shell/sidebar-logo-black.svg","path":"sidebar-logo-black.svg","sha256":"e76119cb97a8066945b8fdc867767b1a7c8de1452214941308a8d1ec5058763f","size_bytes":6750},{"url":"/apps/base-shell/sidebar-logo.svg","path":"sidebar-logo.svg","sha256":"1c539a4ff4a07b2c9bdb615137d7a0bb0f38669a51e182ae100dfe13816c3003","size_bytes":6739},{"url":"/favicon.ico","path":"favicon.ico","sha256":"fd914dd9473a0d9cc495c1e1b3e31b2fddb611e28c428a8dc55ad99658f06912","size_bytes":270622},{"url":"/manifest.webmanifest","path":"manifest.webmanifest","sha256":"68094b835f2838d27849bd900f816e09370984de8c3646619c0b10ee3d5f5695","size_bytes":627},{"url":"/material-symbols-rounded.woff2","path":"material-symbols-rounded.woff2","sha256":"aa276a9d27fb7ecba87be04035fd664d0f1487f8b5638873586a795301b1cb97","size_bytes":414656}];
+const IMMUTABLE_SHELL_ASSETS = [{"url":"/apps/base-shell/assets/LoginPaperBackground-BUos0D7c.js","sha256":"a108559a51b19415a228efd4ef88ad8ffc88bd1e3242537e4e347600111d1cc6","size_bytes":25087},{"url":"/apps/base-shell/assets/index-8bLPTgc8.css","sha256":"0d6bd20615de2b7a631c03d1c84b5db625e5c1538d5eafe01df7994fb6b73ac3","size_bytes":70405},{"url":"/apps/base-shell/assets/index-CiSWMk0j.js","sha256":"8eaa572037e37d3fba6a5afdf67ec27c988e78d771a8f0abf9234c2eda115c76","size_bytes":284633}];
 const STATIC_CACHE_PREFIX = "maverick-static-v2:";
 const STATIC_CACHE_NAME = `${STATIC_CACHE_PREFIX}${BUILD_ID}`;
 const APP_STATIC_CACHE_NAME = "maverick-app-static-v2";
 const LEGACY_STATIC_CACHE_NAMES = new Set(["maverick-base-shell-v3"]);
 const SHELL_NAVIGATION_URL = "/";
-const OFFLINE_DOCUMENT_URL = "/offline.html";
 const NAVIGATION_TIMEOUT_MS = 5_000;
 const PRECACHE_BY_URL = new Map(PRECACHE.map((record) => [record.url, record]));
 const IMMUTABLE_BY_URL = new Map(IMMUTABLE_SHELL_ASSETS.map((record) => [record.url, record]));
@@ -176,16 +175,15 @@ async function networkFirstPrecachedAsset(request, record) {
   }
 }
 
-async function navigationFallback(request, url) {
+async function navigationFallback(request) {
   try {
     const response = await fetchNavigationWithTimeout(request);
     if (response.status >= 500) {
       throw new Error(`Shell navigation failed with HTTP ${response.status}`);
     }
     return response;
-  } catch {
-    const fallbackUrl = isShellNavigation(url) ? SHELL_NAVIGATION_URL : OFFLINE_DOCUMENT_URL;
-    const record = PRECACHE_BY_URL.get(fallbackUrl);
+  } catch (error) {
+    const record = PRECACHE_BY_URL.get(SHELL_NAVIGATION_URL);
     if (record) {
       const cache = await caches.open(STATIC_CACHE_NAME);
       const cached = await verifiedCachedRecord(cache, record);
@@ -193,7 +191,7 @@ async function navigationFallback(request, url) {
         return cached;
       }
     }
-    return syntheticOfflineResponse();
+    throw error;
   }
 }
 
@@ -219,13 +217,6 @@ async function visitedAppStaticAsset(request) {
     await putCacheBestEffort(cache, request, response);
   }
   return response;
-}
-
-function syntheticOfflineResponse() {
-  return new Response(
-    "<!doctype html><html lang=\"it\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>Maverick — rete non disponibile</title><body><main><h1>Contenuto non disponibile sul dispositivo</h1><p>La shell offline deve essere ripristinata con una connessione prima di mostrare questo contenuto.</p></main></body></html>",
-    { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } },
-  );
 }
 
 async function deleteKnownStaticCaches({ includeRuntime = false } = {}) {
@@ -274,7 +265,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (request.mode === "navigate") {
-    event.respondWith(navigationFallback(request, url));
+    if (isShellNavigation(url)) {
+      event.respondWith(navigationFallback(request));
+    }
     return;
   }
   const immutableRecord = IMMUTABLE_BY_URL.get(url.pathname);

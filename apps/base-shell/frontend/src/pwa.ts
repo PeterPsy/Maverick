@@ -121,7 +121,7 @@ async function serviceWorkerV2Enabled(): Promise<boolean | null> {
       return null;
     }
     const payload = (await response.json()) as { schema?: unknown; service_worker?: { enabled?: unknown; generation?: unknown } };
-    if (payload.schema !== "maverick.pwa-config.v1" || payload.service_worker?.generation !== "v2") {
+    if (payload.schema !== "maverick.pwa-config.v2" || payload.service_worker?.generation !== "v2") {
       return null;
     }
     return payload.service_worker.enabled === true;

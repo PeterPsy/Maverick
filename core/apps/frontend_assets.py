@@ -12,7 +12,7 @@ from urllib.parse import unquote, urlsplit
 
 
 FRONTEND_ASSET_MANIFEST_NAME = "maverick-frontend-assets.json"
-FRONTEND_ASSET_MANIFEST_SCHEMA = "maverick.frontend-assets.v1"
+FRONTEND_ASSET_MANIFEST_SCHEMA = "maverick.frontend-assets.v2"
 _HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _BUILD_ID = re.compile(r"^[0-9a-f]{12,64}$")
 _PRECACHE_URL = re.compile(r"^/[A-Za-z0-9._~!$&'()*+,;=:@/-]*$")
@@ -44,7 +44,7 @@ class FrontendAssetManifest:
     immutable: tuple[FrontendAssetRecord, ...]
     revalidated: tuple[FrontendAssetRecord, ...]
     precache: tuple[FrontendPrecacheRecord, ...] = ()
-    offline_path: str | None = None
+    navigation_fallback: str | None = None
 
     def immutable_record(self, path: str) -> FrontendAssetRecord | None:
         return next((record for record in self.immutable if record.path == path), None)
@@ -149,24 +149,23 @@ def _parse_manifest(payload: Any) -> FrontendAssetManifest:
         raise FrontendAssetManifestError("Frontend asset paths must be unique across cache classes.")
     if any(entrypoint not in set(declared_paths) for entrypoint in entrypoints):
         raise FrontendAssetManifestError("Every frontend entrypoint must have a verified asset record.")
-    offline = payload.get("offline")
-    offline_path = None
-    if offline is not None:
-        if not isinstance(offline, dict):
-            raise FrontendAssetManifestError("Frontend asset manifest offline metadata must be an object.")
-        offline_path = _safe_asset_path(offline.get("path"))
-        if offline_path not in set(declared_paths):
-            raise FrontendAssetManifestError("Offline shell must have a verified asset record.")
     precache = _parse_precache(payload.get("precache", []), records=(*immutable, *revalidated))
-    if offline_path is not None and not any(record.path == offline_path for record in precache):
-        raise FrontendAssetManifestError("Offline shell must be selected for precache.")
+    if "offline" in payload:
+        raise FrontendAssetManifestError("Frontend asset manifest must not declare superseded fallback metadata.")
+    navigation_fallback = None
+    if payload.get("navigation_fallback") is not None:
+        navigation_fallback = _safe_asset_path(payload.get("navigation_fallback"))
+        if navigation_fallback not in set(entrypoints):
+            raise FrontendAssetManifestError("Navigation fallback must name a verified HTML entrypoint.")
+        if not any(record.path == navigation_fallback for record in precache):
+            raise FrontendAssetManifestError("Navigation fallback must be selected for precache.")
     return FrontendAssetManifest(
         build_id=build_id,
         entrypoints=entrypoints,
         immutable=immutable,
         revalidated=revalidated,
         precache=precache,
-        offline_path=offline_path,
+        navigation_fallback=navigation_fallback,
     )
 
 

@@ -221,8 +221,41 @@ describe("Base Shell Storage file-cache broker", () => {
     await expect(nextPortMessage(disabledChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
 
     expect(featureEnabled).toHaveBeenCalledTimes(4);
-    expect(resolveDescriptor).toHaveBeenCalledTimes(2);
+    expect(resolveDescriptor).toHaveBeenCalledTimes(1);
     expect(openFile).toHaveBeenCalledTimes(2);
+    broker.dispose();
+  });
+
+  it("does not reuse a session descriptor after an explicit policy denial", async () => {
+    const resolveDescriptor = vi.fn()
+      .mockResolvedValueOnce(approvedDescriptor())
+      .mockResolvedValueOnce({ ...approvedDescriptor(), eligible: false, reason_code: "unclassified" });
+    const openFile = vi.fn(async () => ({
+      blob: new Blob(["cached"]),
+      etag: '"one"',
+      source: "cache" as const,
+    }));
+    const broker = new StorageFileCacheBroker({
+      featureEnabled: async () => true,
+      hostOrigin: "https://maverick.test",
+      openFile,
+      principal: { appId: "storage", userId: "user-one", workspaceId: "default" },
+      resolveDescriptor,
+    });
+
+    const approvedChannel = new MessageChannel();
+    const approvedAccepted = nextPortMessage(approvedChannel.port1);
+    broker.handleWindowMessage(requestEvent(approvedChannel), storageWindow);
+    await approvedAccepted;
+    await expect(nextPortMessage(approvedChannel.port1)).resolves.toMatchObject({ status: "ok" });
+
+    const deniedChannel = new MessageChannel();
+    const deniedAccepted = nextPortMessage(deniedChannel.port1);
+    broker.handleWindowMessage(requestEvent(deniedChannel, { request_id: "request-denied" }), storageWindow);
+    await deniedAccepted;
+    await expect(nextPortMessage(deniedChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
+
+    expect(openFile).toHaveBeenCalledTimes(1);
     broker.dispose();
   });
 });

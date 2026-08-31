@@ -20,11 +20,12 @@ import {
   type ParentFileCacheResultMessage,
   type PwaFileCache,
 } from "@maverick/pwa-cache";
-import { readStorageFileCacheDescriptor } from "./api";
+import { MaverickHttpError, isRetryableReadError, readStorageFileCacheDescriptor } from "./api";
 import { runShellRead, shellCacheLifecycle } from "./pwaCacheRuntime";
 import { storageFileCacheFeatureEnabled } from "./pwa";
 
 const DESCRIPTOR_SCHEMA = "maverick.storage-file-cache-descriptor.v1";
+const MAX_SESSION_DESCRIPTORS = 128;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 const DATA_CLASSES = new Set<MaverickDataClass>([
   "public",
@@ -58,6 +59,7 @@ export class StorageFileCacheBroker {
   private featureWasConfirmedEnabled = false;
   private readonly hostOrigin: string;
   private readonly openFile: NonNullable<StorageFileCacheBrokerOptions["openFile"]>;
+  private readonly resolvedFiles = new Map<string, ResolvedFile>();
   private readonly resolveDescriptor: NonNullable<StorageFileCacheBrokerOptions["resolveDescriptor"]>;
   private disposed = false;
 
@@ -127,6 +129,7 @@ export class StorageFileCacheBroker {
       port.close();
     }
     this.active.clear();
+    this.resolvedFiles.clear();
     this.cache?.dispose();
   }
 
@@ -138,19 +141,35 @@ export class StorageFileCacheBroker {
         return;
       }
       if (featureDecision === true) this.featureWasConfirmedEnabled = true;
-      else if (featureDecision === false) this.featureWasConfirmedEnabled = false;
+      else if (featureDecision === false) {
+        this.featureWasConfirmedEnabled = false;
+        this.resolvedFiles.clear();
+      }
       const featureEnabled = featureDecision === true
         || (featureDecision === null && this.featureWasConfirmedEnabled);
       if (!featureEnabled) {
         this.reply(request.request_id, "unavailable");
         return;
       }
-      const payload = await this.resolveDescriptor(request, signal).catch(() => null);
+      let resolved = featureDecision === null ? this.sessionDescriptor(request) : null;
+      if (featureDecision === true) {
+        let descriptorUnavailable = false;
+        let payload: unknown = null;
+        try {
+          payload = await this.resolveDescriptor(request, signal);
+        } catch (error) {
+          if (error instanceof MaverickHttpError && (error.status === 401 || error.status === 403)) throw error;
+          descriptorUnavailable = isRetryableReadError(error);
+        }
+        resolved = sanitizeDescriptor(payload, request, this.hostOrigin);
+        if (resolved) this.rememberDescriptor(request, resolved);
+        else if (descriptorUnavailable) resolved = this.sessionDescriptor(request);
+        else this.resolvedFiles.delete(descriptorKey(request));
+      }
       if (signal.aborted) {
         this.finish(request.request_id);
         return;
       }
-      const resolved = sanitizeDescriptor(payload, request, this.hostOrigin);
       if (!resolved) {
         this.reply(request.request_id, "unavailable");
         return;
@@ -177,12 +196,36 @@ export class StorageFileCacheBroker {
       } satisfies ParentFileCacheResultMessage);
       this.finish(request.request_id);
     } catch (error) {
-      if (error instanceof MaverickFileHttpError && (error.status === 401 || error.status === 403)) {
+      if ((error instanceof MaverickFileHttpError || error instanceof MaverickHttpError)
+          && (error.status === 401 || error.status === 403)) {
+        this.featureWasConfirmedEnabled = false;
+        this.resolvedFiles.clear();
         await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
       }
       if (!signal.aborted && !isAbortError(error)) this.reply(request.request_id, "error");
       else this.finish(request.request_id);
     }
+  }
+
+  private rememberDescriptor(request: ParentFileCacheOpenMessage, resolved: ResolvedFile): void {
+    const key = descriptorKey(request);
+    this.resolvedFiles.delete(key);
+    this.resolvedFiles.set(key, resolved);
+    while (this.resolvedFiles.size > MAX_SESSION_DESCRIPTORS) {
+      const oldest = this.resolvedFiles.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.resolvedFiles.delete(oldest);
+    }
+  }
+
+  private sessionDescriptor(request: ParentFileCacheOpenMessage): ResolvedFile | null {
+    const key = descriptorKey(request);
+    const resolved = this.resolvedFiles.get(key) ?? null;
+    if (resolved) {
+      this.resolvedFiles.delete(key);
+      this.resolvedFiles.set(key, resolved);
+    }
+    return resolved;
   }
 
   private reply(requestId: string, status: "error" | "unavailable"): void {
@@ -242,6 +285,10 @@ function sanitizeDescriptor(
     },
     url,
   };
+}
+
+function descriptorKey(request: ParentFileCacheOpenMessage): string {
+  return JSON.stringify([request.file_id, request.source_version]);
 }
 
 function validatedMediaUrl(value: unknown, request: ParentFileCacheOpenMessage, hostOrigin: string): string | null {

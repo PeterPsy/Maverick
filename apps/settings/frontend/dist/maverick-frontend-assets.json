@@ -1,5 +1,5 @@
 {
-  "build_id": "78b192d83a3a2c9e162e9d8d82317e29e0460596f7653bdbca1aec310394b7b0",
+  "build_id": "99a70035322d0984da809a568a55ad4465003c582e0a906a9a405445440d18e3",
   "entrypoints": [
     "index.html",
     "widgets/settings-sidebar/index.html"
@@ -7,14 +7,14 @@
   "immutable": [],
   "revalidated": [
     {
-      "path": "assets/app-CngQlpqu.css",
-      "sha256": "19ed8f566df72e1bd815ca6521de57dc9e82389d255d3166669bd1d5e8423a9f",
-      "size_bytes": 56439
+      "path": "assets/app-CXw0fIYA.js",
+      "sha256": "0bf55123f9ef1dd9606c911821c16231c4a0600d24cb5398dbf407c98dfb9957",
+      "size_bytes": 325070
     },
     {
-      "path": "assets/app-D3mNee3f.js",
-      "sha256": "9ac830af559c0954d37266c0740663a31960be9d9a83b7cc8b73ad5a7d051c9c",
-      "size_bytes": 308642
+      "path": "assets/app-Dpdzguy6.css",
+      "sha256": "0187f2bb7458cb15e9198cabb213ce4fb4ce6b6ed73e235c0f16d252bfe32a54",
+      "size_bytes": 57415
     },
     {
       "path": "assets/index-ZDYKsvKC.css",
@@ -22,23 +22,23 @@
       "size_bytes": 6196
     },
     {
-      "path": "assets/pages-BZUBskpf.js",
-      "sha256": "1462473a4bc5a3376149fcce48212c24970f96e860a61a88915786701f10b2fe",
-      "size_bytes": 2206
+      "path": "assets/pages-BYg8FCfy.js",
+      "sha256": "9f7cd20b75f841dd4901764a8ce853242dc70c0026f27f4dcf0c411896b7da17",
+      "size_bytes": 2328
     },
     {
-      "path": "assets/widgets/settings-sidebar/index-CzjN5Gbj.js",
-      "sha256": "5539f8fb59b61e586ebc4122958eac8fae1a834ed2ddc46f8ddfbf7b14fd0a85",
+      "path": "assets/widgets/settings-sidebar/index-DvLLpfP0.js",
+      "sha256": "c608e3c180e6b9829822e6cc2d8877c74d3ed1eb0cc5e858ef2aeeba37bf93b0",
       "size_bytes": 3729
     },
     {
       "path": "index.html",
-      "sha256": "f496a72561a6fc446f2a2d71887b7446371c19d95cc31269bf68c07c570b1f5d",
+      "sha256": "98170d89d9a67cdabf318f0c58c83a67a0101394b0ecc5be2cf1d831812c981c",
       "size_bytes": 691
     },
     {
       "path": "widgets/settings-sidebar/index.html",
-      "sha256": "35b35d3035a81225738b8071166e7f8da408f0d417aae2b084606c4e7e89e339",
+      "sha256": "e7d642156629db6352f695ffdf7804ed2c02f94013cf94250d60a5a56a74a2c9",
       "size_bytes": 751
     }
   ],

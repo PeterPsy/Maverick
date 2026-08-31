@@ -2,10 +2,13 @@ import type { AppDependenciesPayload, User, WorkspaceApp } from './adminApi';
 import type { createPersistenceController, MigrationTargetDraft } from './persistenceController';
 import { bindSettingsPanelEvents } from './settingsPanel';
 import { bindBouncyToggles } from './bouncyToggle';
+import type { createCacheDiagnosticsController } from './cacheDiagnosticsController';
 
 type PersistenceController = ReturnType<typeof createPersistenceController>;
+type CacheDiagnosticsController = ReturnType<typeof createCacheDiagnosticsController>;
 
 export function bindSettingsEvents(context: {
+  cacheDiagnosticsController: CacheDiagnosticsController;
   clearRuntimeSessionsFromPanel: (sessionIds?: string[]) => Promise<void>;
   createUser: (form: HTMLFormElement) => Promise<void>;
   deleteSelectedUser: (user: User) => Promise<void>;
@@ -66,6 +69,7 @@ export function bindSettingsEvents(context: {
   bindWorkspaceAppEvents(context);
   bindAppLinkEvents(context);
   bindPersistenceEvents(context);
+  bindCacheDiagnosticsEvents(context);
   bindSettingsPanelEvents({
     onClearAllRuntimeSessions: () => {
       context.clearRuntimeSessionsFromPanel().catch(context.showError);
@@ -97,6 +101,21 @@ export function bindSettingsEvents(context: {
     onSaveSpeechProviderSettings: () => {
       context.saveSpeechProviderSettingsFromPanel().catch(context.showError);
     },
+  });
+}
+
+function bindCacheDiagnosticsEvents(context: {
+  cacheDiagnosticsController: CacheDiagnosticsController;
+  showError: (error: unknown) => void;
+}) {
+  document.getElementById('refresh-pwa-cache')?.addEventListener('click', () => {
+    context.cacheDiagnosticsController.ensureLoaded(true).catch(context.showError);
+  });
+  document.getElementById('clear-pwa-cache')?.addEventListener('click', () => {
+    context.cacheDiagnosticsController.clear().catch(context.showError);
+  });
+  document.getElementById('cancel-clear-pwa-cache')?.addEventListener('click', () => {
+    context.cacheDiagnosticsController.cancelClear();
   });
 }
 

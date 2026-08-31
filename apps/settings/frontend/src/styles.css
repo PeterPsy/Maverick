@@ -2127,6 +2127,62 @@ button.settings-danger:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.15);
 }
 
+.settings-cache-diagnostics {
+  display: grid;
+  gap: 1rem;
+}
+
+.settings-cache-diagnostics__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.72rem;
+}
+
+.settings-cache-diagnostics__metric {
+  display: grid;
+  gap: 0.32rem;
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: 0.86rem;
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: var(--maverick-inner-edge);
+}
+
+.settings-cache-diagnostics__metric span,
+.settings-cache-diagnostics__note {
+  color: var(--maverick-text-muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.settings-cache-diagnostics__metric strong {
+  font-size: 1rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.settings-cache-diagnostics__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.58rem;
+}
+
+.settings-cache-diagnostics__actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+}
+
+.settings-cache-diagnostics__error {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0.72rem;
+  padding: 0.72rem 0.82rem;
+  color: var(--maverick-accent);
+  font-size: 0.8rem;
+}
+
 @keyframes settings-panel-enter {
   from {
     opacity: 0;
@@ -2264,6 +2320,10 @@ button.settings-danger:hover:not(:disabled) {
   }
 
   .settings-provider-usage-limits {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-cache-diagnostics__grid {
     grid-template-columns: 1fr;
   }
 

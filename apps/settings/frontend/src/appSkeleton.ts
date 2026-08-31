@@ -32,7 +32,21 @@ function activePageSkeletonHtml(page: SettingsPage): string {
   if (page.id === 'persistence') {
     return persistenceSkeletonHtml();
   }
+  if (page.id === 'cache') {
+    return cacheSkeletonHtml();
+  }
   return usersSkeletonHtml();
+}
+
+function cacheSkeletonHtml(): string {
+  return `<section class="settings-card settings-loading-skeleton__settings" aria-hidden="true">
+    ${headingSkeletonHtml(true)}
+    ${lineHtml('copy-wide')}
+    <div class="settings-loading-skeleton__rows">
+      ${repeatHtml(4, () => resultSkeletonHtml())}
+    </div>
+    ${blockHtml('button')}
+  </section>`;
 }
 
 function usersSkeletonHtml(): string {

@@ -22,18 +22,17 @@ import {
 } from './pages';
 import { settingsAppSkeletonHtml } from './appSkeleton';
 import { createAppLinksController } from './appLinksController';
-import { appLinksPageHtml } from './appLinksPage';
+import { activeSettingsPageHtml } from './activePage';
 import { bindSettingsEvents } from './bindEvents';
 import { escapeHtml } from './html';
 import { createPersistenceController } from './persistenceController';
-import { persistenceMigrationModalHtml, persistencePageHtml } from './persistencePage';
+import { persistenceMigrationModalHtml } from './persistencePage';
 import { saveActiveProviderSettings, saveHostedProviderSettings, saveSpeechProviderSettings } from './providerSettingsActions';
-import { usersPageHtml, workspaceAccessPageHtml } from './userPages';
-import { workspaceAppsPageHtml } from './workspaceAppsPage';
 import { mountUsageVisualizations, unmountUsageVisualizations } from './components/usageVisualizations';
 import { createProviderUsageController } from './providerUsageController';
 import { noticeHtml, type SettingsNotice } from './notice';
 import { createAgenticBindingController } from './agenticBindingController';
+import { createCacheDiagnosticsController } from './cacheDiagnosticsController';
 
 let users: User[] = [];
 let workspaces: Workspace[] = [];
@@ -81,6 +80,12 @@ const agenticBindingController = createAgenticBindingController({
   getSettings: () => platformSettings, render, state: settingsPanelState,
   setSettings: (settings, message) => { platformSettings = settings; notice = { tone: 'success', message }; }
 });
+const cacheDiagnosticsController = createCacheDiagnosticsController({
+  render,
+  setNotice: (nextNotice) => {
+    notice = nextNotice;
+  },
+});
 
 function selectedUser(): User | undefined { return users.find((user) => user.user_id === selectedUserId) || users[0]; }
 function userIdFromNavigationParams(params: Record<string, unknown>): string {
@@ -127,6 +132,9 @@ function applyNavigationParams(params: Record<string, unknown>) {
   if (pageId === 'platform-settings') {
     void ensureRuntimeInventoryLoaded();
     void providerUsageController.ensureLoaded();
+  }
+  if (pageId === 'cache') {
+    void cacheDiagnosticsController.ensureLoaded();
   }
 }
 
@@ -237,6 +245,9 @@ async function refresh() {
   if (selectedPageId === 'platform-settings') {
     void ensureRuntimeInventoryLoaded();
     void providerUsageController.ensureLoaded();
+  }
+  if (selectedPageId === 'cache') {
+    void cacheDiagnosticsController.ensureLoaded();
   }
 }
 
@@ -436,34 +447,6 @@ async function logoutFromSettings() {
   window.location.href = '/';
 }
 
-function activePageHtml(page: SettingsPage, user: User | undefined) {
-  if (page.id === 'users') {
-    return usersPageHtml({ pendingDeleteUserId, selectedUser: user, users });
-  }
-  if (page.id === 'workspace-access') {
-    return workspaceAccessPageHtml({ selectedUser: user, users, workspaces });
-  }
-  if (page.id === 'workspace-apps') {
-    return workspaceAppsPageHtml({ workspaceApps, workspaces });
-  }
-  if (page.id === 'app-links') {
-    const appLinks = appLinksController.viewState();
-    return appLinksPageHtml({
-      appRegistry: appLinks.appRegistry,
-      dependencies: appLinks.dependencies,
-      error: appLinks.error,
-      isLoading: appLinks.isLoading,
-      loadErrors: appLinks.loadErrors,
-      savingKeys: appLinks.savingKeys,
-      workspaceApps
-    });
-  }
-  if (page.id === 'platform-settings') {
-    return platformSettingsPageHtml();
-  }
-  return persistencePageHtml(persistenceController.viewState());
-}
-
 function platformSettingsPageHtml() {
   return settingsPanelHtml(platformSettings, settingsPanelState);
 }
@@ -488,7 +471,18 @@ function render() {
           </div>
         </header>
         ${noticeHtml(notice)}
-        ${activePageHtml(page, user)}`
+        ${activeSettingsPageHtml({
+          appLinksController,
+          cacheDiagnosticsController,
+          page,
+          pendingDeleteUserId,
+          persistenceController,
+          platformSettingsHtml: platformSettingsPageHtml,
+          selectedUser: user,
+          users,
+          workspaceApps,
+          workspaces,
+        })}`
         }
       </div>
     </section>
@@ -505,6 +499,7 @@ function render() {
 function bindEvents() {
   bindSettingsEvents({
     clearRuntimeSessionsFromPanel,
+    cacheDiagnosticsController,
     createUser,
     deleteSelectedUser,
     dismissNotice: () => {

@@ -11,6 +11,7 @@
     "dev": "vite --host 0.0.0.0"
   },
   "dependencies": {
+    "@maverick/pwa-cache": "file:../../packages/pwa-cache",
     "@tailwindcss/vite": "^4.3.3",
     "clsx": "^2.1.1",
     "react": "^19.2.8",

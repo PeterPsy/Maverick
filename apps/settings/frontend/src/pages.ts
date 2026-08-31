@@ -4,6 +4,7 @@ export type SettingsPageId =
   | 'workspace-apps'
   | 'app-links'
   | 'platform-settings'
+  | 'cache'
   | 'persistence';
 
 export type SettingsPage = {
@@ -43,6 +44,12 @@ export const SETTINGS_PAGES: SettingsPage[] = [
     title: 'Platform settings',
     summary: 'Tune the active provider model and clean runtime sessions.',
     icon: 'tune'
+  },
+  {
+    id: 'cache',
+    title: 'Cache',
+    summary: 'Inspect aggregate browser cache usage and clear disposable local data.',
+    icon: 'cached'
   },
   {
     id: 'persistence',

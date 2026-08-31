@@ -57,6 +57,7 @@ class SettingsFrontendDistTests(unittest.TestCase):
     def test_settings_sidebar_uses_page_navigation(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         main_source = (app_root / "frontend" / "src" / "main.ts").read_text(encoding="utf-8")
+        active_page_source = (app_root / "frontend" / "src" / "activePage.ts").read_text(encoding="utf-8")
         pages_source = (app_root / "frontend" / "src" / "pages.ts").read_text(encoding="utf-8")
         sidebar_source = (app_root / "frontend" / "src" / "widgets" / "settings-sidebar" / "main.ts").read_text(encoding="utf-8")
 
@@ -65,8 +66,10 @@ class SettingsFrontendDistTests(unittest.TestCase):
         self.assertIn("page_id", sidebar_source)
         self.assertNotIn("loadUsers", sidebar_source)
         self.assertIn("workspace-access", pages_source)
+        self.assertIn("id: 'cache'", pages_source)
+        self.assertIn("cacheDiagnosticsPageHtml", active_page_source)
         self.assertIn("selectedPageId", main_source)
-        self.assertIn("activePageHtml(page, user)", main_source)
+        self.assertIn("activeSettingsPageHtml", main_source)
 
     def test_app_links_copy_covers_speech_provider_interfaces(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

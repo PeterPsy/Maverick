@@ -12,6 +12,10 @@ from core.providers.models import ProviderCapabilitySet, ProviderDefinition, Run
 from core.providers.provider_codex import CodexProviderAdapter, build_codex_definition
 from core.providers.provider_codex import _codex_app_server_command
 from core.providers.codex_app_server import _turn_sandbox_policy, prewarm_codex_app_server_runtime
+from core.providers.codex_app_server_runtime_errors import (
+    codex_error_info,
+    codex_terminal_failure_reason_code,
+)
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import configure_workspace_provider
 from core.providers.store import ProviderDocumentStore, ProviderCollections
@@ -255,6 +259,63 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         )
         self.assertNotIn("Codex app-server error", repr(emitted))
         self.assertNotIn("serverOverloaded", repr(emitted))
+
+    def test_codex_cyber_policy_block_is_structured_and_redaction_safe(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        session = _session("sandbox", root=temp_dir.name, session_id="session-policy-blocked")
+        emitted = []
+
+        result = execute_runtime_turn(
+            session=session,
+            provider=build_codex_definition(),
+            input_text="review the defensive security implementation",
+            launch_spec=_launch_spec(session),
+            runtime_adapter=_codex_adapter(),
+            event_sink=emitted.append,
+            command_runner=FakeCodexCyberPolicyProcess,
+            timeout_seconds=2,
+        )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(result.output_text, "security review partially completed")
+        self.assertEqual(
+            result.failure_reason_code,
+            "provider_cybersecurity_policy_blocked",
+        )
+        self.assertIn("cybersecurity policy", result.public_error_message)
+        self.assertIn("Rephrase", result.public_error_message)
+        self.assertNotIn("chatgpt.com/cyber", result.public_error_message)
+        self.assertEqual(
+            [event.event_type for event in emitted],
+            ["runtime.output.delta"],
+        )
+        self.assertNotIn("Codex app-server error", repr(emitted))
+        self.assertNotIn("cyberPolicy", repr(emitted))
+        self.assertNotIn("chatgpt.com/cyber", repr(emitted))
+
+    def test_codex_cyber_policy_category_aliases_share_one_failure_code(self) -> None:
+        for error_info in ("cyberPolicy", "cyber_policy"):
+            with self.subTest(error_info=error_info):
+                self.assertEqual(
+                    codex_terminal_failure_reason_code(error_info),
+                    "provider_cybersecurity_policy_blocked",
+                )
+        self.assertEqual(
+            codex_terminal_failure_reason_code("unknownPrivateCategory"),
+            "provider_execution_failed",
+        )
+
+    def test_codex_error_info_accepts_both_protocol_key_spellings(self) -> None:
+        for key, value in (
+            ("codexErrorInfo", "cyberPolicy"),
+            ("codex_error_info", "cyber_policy"),
+        ):
+            with self.subTest(key=key):
+                self.assertEqual(
+                    codex_error_info({"error": {key: value}}),
+                    value,
+                )
 
     def test_codex_process_exit_before_turn_completed_unblocks_execution(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -699,6 +760,10 @@ class FakeCodexTerminalErrorProcess(FakeCodexProcess):
 
 
 class FakeCodexOverloadedStdin(FakeStdin):
+    output_text = "work already completed"
+    error_message = "Selected model is at capacity. Please try a different model."
+    error_info = "serverOverloaded"
+
     def write(self, raw: str) -> None:
         payload = json.loads(raw)
         method = payload["method"]
@@ -727,7 +792,7 @@ class FakeCodexOverloadedStdin(FakeStdin):
                     "method": "item/agentMessage/delta",
                     "params": {
                         "itemId": "item-overloaded",
-                        "delta": "work already completed",
+                        "delta": self.output_text,
                     },
                 }
             )
@@ -737,8 +802,8 @@ class FakeCodexOverloadedStdin(FakeStdin):
                     "method": "error",
                     "params": {
                         "error": {
-                            "message": "Selected model is at capacity. Please try a different model.",
-                            "codexErrorInfo": "serverOverloaded",
+                            "message": self.error_message,
+                            "codexErrorInfo": self.error_info,
                             "additionalDetails": None,
                         },
                         "willRetry": False,
@@ -763,6 +828,21 @@ class FakeCodexOverloadedProcess(FakeCodexProcess):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.stdin = FakeCodexOverloadedStdin(self.stdout)
+
+
+class FakeCodexCyberPolicyStdin(FakeCodexOverloadedStdin):
+    output_text = "security review partially completed"
+    error_message = (
+        "This content was flagged for possible cybersecurity risk. "
+        "Join the authorized program at https://chatgpt.com/cyber."
+    )
+    error_info = "cyberPolicy"
+
+
+class FakeCodexCyberPolicyProcess(FakeCodexProcess):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.stdin = FakeCodexCyberPolicyStdin(self.stdout)
 
 
 class FakeCodexDiesBeforeCompletionStdin(FakeStdin):

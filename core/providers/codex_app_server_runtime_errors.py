@@ -9,7 +9,9 @@ TERMINAL_COMPLETION_GRACE_SECONDS = 1.0
 def codex_error_info(params: dict[str, object]) -> str | None:
     """Return one bounded provider error category."""
     error = params.get("error") if isinstance(params.get("error"), dict) else {}
-    value = str(error.get("codexErrorInfo") or "").strip()
+    value = str(
+        error.get("codexErrorInfo") or error.get("codex_error_info") or ""
+    ).strip()
     if not value or len(value) > 64 or not value.replace("_", "").isalnum():
         return None
     return value
@@ -17,7 +19,11 @@ def codex_error_info(params: dict[str, object]) -> str | None:
 
 def codex_terminal_failure_reason_code(error_info: str | None) -> str:
     """Map a terminal Codex category to one provider-neutral reason code."""
-    return "provider_overloaded" if error_info == "serverOverloaded" else "provider_execution_failed"
+    if error_info == "serverOverloaded":
+        return "provider_overloaded"
+    if error_info in {"cyberPolicy", "cyber_policy"}:
+        return "provider_cybersecurity_policy_blocked"
+    return "provider_execution_failed"
 
 
 def terminal_completion_wait(runtime, *, now: float) -> tuple[bool, float]:

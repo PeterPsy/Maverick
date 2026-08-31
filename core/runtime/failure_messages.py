@@ -157,6 +157,10 @@ _PUBLIC_MESSAGES = {
         "The selected provider recipe has no endpoint preflight."
     ),
     "provider_credential_authorization_missing": "The configured provider credentials are unavailable.",
+    "provider_cybersecurity_policy_blocked": (
+        "The model provider blocked this request under its cybersecurity policy. "
+        "Rephrase the request and try again, or use provider access authorized for security work."
+    ),
     "provider_execution_failed": "The model runtime could not complete the request.",
     "provider_mixed_text_and_tool_call": "The provider returned an incompatible text and tool-call sequence.",
     "provider_no_eligible_endpoint": "No certified provider endpoint is currently available for this model.",

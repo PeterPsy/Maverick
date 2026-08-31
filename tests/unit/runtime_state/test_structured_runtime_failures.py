@@ -30,6 +30,14 @@ class StructuredRuntimeFailureTest(unittest.TestCase):
         self.assertIn("temporarily overloaded", public_message)
         self.assertIn("completed actions are preserved", public_message)
 
+    def test_provider_cybersecurity_policy_block_has_actionable_public_message(self) -> None:
+        public_message = runtime_failure_public_message(
+            "provider_cybersecurity_policy_blocked"
+        )
+
+        self.assertIn("cybersecurity policy", public_message)
+        self.assertIn("Rephrase", public_message)
+
     def test_profile_upgrade_failures_have_actionable_public_messages(self) -> None:
         self.assertIn(
             "older runtime profile",

@@ -157,15 +157,20 @@ export class PwaCacheResource<T> {
         this.telemetry({ kind: "miss", reason: "invalid" });
         return null;
       }
-      const sanitized = safeSanitize(this.policy.sanitize, entry.payload);
-      if (sanitized === null || !this.validStoredPayload(sanitized, entry.metadata.sizeBytes)) {
-        await backend.delete(key).catch(() => false);
-        this.telemetry({ kind: "miss", reason: "invalid-payload" });
-        return null;
-      }
       if (entry.metadata.expiresAt <= now) {
         await backend.delete(key).catch(() => false);
         this.telemetry({ bytes: entry.metadata.sizeBytes, kind: "expired" });
+        return null;
+      }
+      if (!this.validStoredPayload(entry.payload, entry.metadata.sizeBytes)) {
+        await backend.delete(key).catch(() => false);
+        this.telemetry({ kind: "miss", reason: "invalid-payload-size" });
+        return null;
+      }
+      const sanitized = safeSanitize(this.policy.sanitize, entry.payload);
+      if (sanitized === null || !this.validRenderedPayload(sanitized)) {
+        await backend.delete(key).catch(() => false);
+        this.telemetry({ kind: "miss", reason: "invalid-payload" });
         return null;
       }
       const freshness = entry.metadata.staleAt <= now ? "stale" : "fresh";
@@ -296,10 +301,18 @@ export class PwaCacheResource<T> {
     return this.policy.revalidateOnRead ?? "stale";
   }
 
-  private validStoredPayload(payload: T, recordedSize: number): boolean {
+  private validStoredPayload(payload: unknown, recordedSize: number): boolean {
     try {
       const actualSize = validatedPayloadSize(payload);
       return actualSize === recordedSize && actualSize <= this.policy.maxEntryBytes;
+    } catch {
+      return false;
+    }
+  }
+
+  private validRenderedPayload(payload: T): boolean {
+    try {
+      return validatedPayloadSize(payload) <= this.policy.maxEntryBytes;
     } catch {
       return false;
     }

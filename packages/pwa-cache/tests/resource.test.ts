@@ -195,6 +195,20 @@ describe("PWA cache resource", () => {
     expect(await backend.list()).toEqual([]);
   });
 
+  it("checks raw cached bytes before a sanitizer can discard injected fields", async () => {
+    const backend = new MemoryCacheBackend();
+    const resource = client({ backend, now: () => 1_000 }).resource("records", publicPolicy());
+    await resource.readThrough("one", async () => ({ kind: "value", payload: { value: "safe" }, revision: "r1" }));
+    const [metadata] = await backend.list();
+    await backend.put({
+      metadata,
+      payload: { injected: "x".repeat(2_048), value: "safe" },
+    });
+
+    expect(await resource.get("one")).toBeNull();
+    expect(await backend.list()).toEqual([]);
+  });
+
   it("rejects a payload-size mismatch before rendering", async () => {
     const backend = new MemoryCacheBackend();
     const resource = client({ backend, now: () => 1_000 }).resource("records", publicPolicy());

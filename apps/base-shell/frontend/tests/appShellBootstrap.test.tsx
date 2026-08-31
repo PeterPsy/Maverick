@@ -42,7 +42,9 @@ vi.mock("../src/api", async (importOriginal) => {
 
 vi.mock("../src/components/WorkspaceView", () => ({
   WorkspaceView: ({ activeWorkspaceId, isLoading }: { activeWorkspaceId: string; isLoading: boolean }) => (
-    <div data-loading={String(isLoading)} data-testid="workspace-view" data-workspace-id={activeWorkspaceId} />
+    <div data-loading={String(isLoading)} data-testid="workspace-view" data-workspace-id={activeWorkspaceId}>
+      <iframe data-testid="mounted-app-frame" title="Mounted app" />
+    </div>
   ),
 }));
 vi.mock("../src/components/Sidebar", () => ({
@@ -143,6 +145,7 @@ describe("AppShell bootstrap", () => {
 
     const view = container.querySelector("[data-testid='workspace-view']");
     const sidebar = container.querySelector("[data-testid='sidebar']");
+    const appFrame = container.querySelector("[data-testid='mounted-app-frame']");
 
     await act(async () => {
       recordMaverickTransportFailure();
@@ -151,6 +154,7 @@ describe("AppShell bootstrap", () => {
 
     expect(container.querySelector("[data-testid='workspace-view']")).toBe(view);
     expect(container.querySelector("[data-testid='sidebar']")).toBe(sidebar);
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBe(appFrame);
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
 

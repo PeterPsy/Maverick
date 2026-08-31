@@ -27,12 +27,21 @@ from core.runtime.provider_input_capture import (
 from core.runtime.provider_input_governed_sources import (
     generalist_context_source_chunks,
 )
+from core.runtime.public_content_authority import (
+    RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
+)
+from core.runtime.public_content_authority_store import (
+    runtime_public_content_authority_for_workspace,
+)
 
 
-RUNTIME_PROVIDER_INPUT_ADMISSION_REVISION = 4
+RUNTIME_PROVIDER_INPUT_ADMISSION_REVISION = 5
+
+
 def build_runtime_provider_input_classification_resolver(
     *,
     runtime_store,
+    workspace_store=None,
 ) -> RuntimeProviderInputClassificationResolver:
     """Resolve exact transient resources through the atomic turn capture."""
 
@@ -41,6 +50,7 @@ def build_runtime_provider_input_classification_resolver(
             observation,
             content,
             runtime_store=runtime_store,
+            workspace_store=workspace_store,
         )
 
     return resolve
@@ -51,6 +61,7 @@ def classify_admitted_runtime_provider_input(
     content: object,
     *,
     runtime_store=None,
+    workspace_store=None,
 ) -> CanonicalSourceClassification:
     """Classify only exact transient sources materialized by Core for this turn.
 
@@ -121,10 +132,12 @@ def classify_admitted_runtime_provider_input(
             observation,
             content,
             runtime_store=runtime_store,
+            workspace_store=workspace_store,
             fallback=fallback,
         )
     return _captured_source_classification(
         runtime_store,
+        workspace_store=workspace_store,
         observation=observation,
         resource_kind=RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
         resource_ref=source_ref,
@@ -141,6 +154,7 @@ def _classify_generalist_orchestration(
     content: object,
     *,
     runtime_store,
+    workspace_store,
     fallback: CanonicalSourceClassification,
 ) -> CanonicalSourceClassification:
     """Join exact persisted context sources; never classify the aggregate by id."""
@@ -160,6 +174,7 @@ def _classify_generalist_orchestration(
         sources.append(
             _captured_source_classification(
                 runtime_store,
+                workspace_store=workspace_store,
                 observation=observation,
                 resource_kind=GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND,
                 resource_ref=resource_ref,
@@ -195,6 +210,7 @@ def _classify_generalist_orchestration(
 def _captured_source_classification(
     runtime_store,
     *,
+    workspace_store,
     observation: RuntimeProviderInputObservation,
     resource_kind: str,
     resource_ref: str,
@@ -237,6 +253,25 @@ def _captured_source_classification(
         or entry.get("classification_revision")
         != RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION
     ):
+        return fallback
+    authority_id = entry.get("classification_authority_id")
+    if authority_id is not None:
+        authority = runtime_public_content_authority_for_workspace(
+            workspace_store,
+            observation.workspace_id,
+        )
+        if (
+            authority is None
+            or authority.classification_id != authority_id
+            or authority.revision
+            != entry.get("classification_authority_revision")
+            or authority.resource_digest
+            != entry.get("classification_authority_digest")
+            or entry.get("classification_authority_policy_revision")
+            != RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION
+        ):
+            return fallback
+    elif entry.get("data_class") == "public":
         return fallback
     return validated_classification(
         data_class=str(entry.get("data_class") or ""),

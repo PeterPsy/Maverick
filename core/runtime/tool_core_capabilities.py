@@ -225,6 +225,9 @@ def build_core_runtime_tool_capabilities(
                 arguments.get("mutation_scopes")
             ),
             execution_control=context.execution_control,
+            result_classification_resolver=result_classification_resolver,
+            result_context=context,
+            result_arguments=arguments,
         )
 
     base = (

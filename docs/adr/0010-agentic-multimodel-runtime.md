@@ -259,7 +259,7 @@ authoritative evidence.
 Certification follows one trust sequence: deterministic conformance, an
 operator-only synthetic live probe, behavioral conformance validation of the
 complete ordered manifest and canonical command digests, then certificate
-publication. Google and OpenRouter suite-v27 manifests contain both
+publication. Google and OpenRouter suite-v28 manifests contain both
 `fixture_contract` and `live_probe`. Repository tests may explicitly select the
 fixture step so normal CI sends no provider traffic, but an incomplete run is
 rejected by signing, verification, and publication and can never become
@@ -671,30 +671,33 @@ parameters, denies data collection, and enforces ZDR when the egress policy
 requires it. No eligible upstream means no request. Effective upstream drift is
 verified against the certificate.
 
-The contained OpenRouter candidate uses Chat Completions v1, DeepSeek V4
+The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 31
-and OpenRouter revision 30, both bound to
-`maverick-hosted-tool-loop==23`; older revisions are suspended rather than
-overwritten. Their certification manifests retain distinct deterministic
-fixture and synthetic live steps. No live probe is run by ordinary repository
-checks, and no fixture-only result is certificate evidence.
+accepted as complete. The current contained definitions are Google revision 32
+and OpenRouter revision 31, both bound to
+`maverick-hosted-tool-loop==24`; older revisions are suspended rather than
+overwritten. Their suite-28 certification manifests retain distinct
+deterministic fixture and synthetic live steps. No live probe is run by
+ordinary repository checks, and no fixture-only result is certificate evidence.
 
-These adversarial-review definitions are governed-workspace candidates, not
-Full Workspace claims. `codex-baseline-v11` requires executable create,
-replace, edit, patch, move, delete, read-after-write, shell/process, and
-CLI/MCP result behaviors rather than a mode string. The current probe proves
-the public-preimage replacement workflows and deliberately fails creation and
-variable-output workflows that have no authoritative source class. The
-profiles therefore pin `hosted-governed-result-v2`, use the distinct
-`maverick_agent_candidate` execution family, and leave
-`full_workspace_contract_revision` empty. The claim validator rejects the
-`maverick_agent` family unless profile and certificate atomically carry the
-complete contract. Adapter 23, recipe revision 10, context-compaction schema 3,
-suite 27, and TCB manifest v17 retain the composite-classification and
-rollback-safe multi-file invariants.
+`codex-baseline-v11` requires executable create, replace, edit, patch, move,
+delete, read-after-write, shell/process, and CLI/MCP result behaviors rather
+than a mode string. The executable repository gate now proves all 13 required
+behaviors. A reserved operator-owned, CAS-revisioned runtime-public
+classification policy lets Core classify an exact prompt/result identity,
+revision, and canonical-byte digest; the current authority record and its
+self-digest are revalidated at admission, and marker detection can only narrow
+the result. Certified Core CLI/MCP result contracts are a second explicit
+authority but app declarations cannot grant it. Shell/process mutations
+classify the exact private-overlay result before committing and discard the
+overlay on denial. The profiles therefore pin `codex-baseline-v11` as both the
+tool and Full Workspace contract and atomically use the `maverick_agent`
+execution family. The claim validator still rejects the family unless profile,
+certificate, and executable behavior gate are complete. Adapter 24, recipe
+revision 11, context-compaction schema 3, suite 28, and TCB manifest v18 retain
+the composite-classification and rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked
 against its complete metadata/xattr snapshot, so a later-file metadata race
@@ -709,11 +712,12 @@ rebinds the same taint. Failed
 the source before creating a destination chain. Production input capture
 conservatively classifies exact prompt/instruction/reference bytes and every
 governed source chunk into one immutable turn manifest. Sensitive markers can
-only narrow the result; marker absence is `unclassified`, never inferred
-`public`. Read-only variable tool results follow the same rule and remain
-provider-pairable only with an authoritative eligible class; denied bytes stay
-private behind a public error, while unguaranteed mutations are denied before
-execution. Skill selection retains the lexical catalog identity and rejects
+only narrow the result; marker absence is `unclassified` unless the current
+explicit runtime-public policy authorizes a new exact-byte classification.
+Variable tool results follow the same rule and remain provider-pairable only
+with an authoritative eligible class; denied bytes stay private behind a public
+error, while workspace effects remain private until exact-result admission
+succeeds. Skill selection retains the lexical catalog identity and rejects
 symlinks both at publication and confined materialization.
 Cancellation awaits all synchronous workers, and explicit process cleanup
 signals known leaders before bounded post-SIGTERM orphan sweeps. The definitions

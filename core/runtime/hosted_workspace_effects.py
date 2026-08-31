@@ -92,6 +92,8 @@ class HostedWorkspaceEffectOverlay:
         self.upper_baseline_metadata = upper_baseline_metadata
         self._closed = False
         self._recovery_required = False
+        self._prepared_changes: tuple[_ChangedFile, ...] | None = None
+        self._prepared_evidence: dict[str, object] | None = None
 
     @classmethod
     def create(
@@ -160,12 +162,38 @@ class HostedWorkspaceEffectOverlay:
         for guard in self.scope_guards:
             guard.verify_before()
 
-    def commit(self) -> dict[str, object]:
+    def preview_commit(self) -> dict[str, object]:
+        """Validate the private diff and return its exact intended public evidence."""
+        if self._closed:
+            raise RuntimeToolError("workspace_effect_overlay_closed")
+        changed = self._validated_changes()
+        evidence = self._effect_evidence(changed)
+        self._prepared_changes = changed
+        self._prepared_evidence = dict(evidence)
+        return evidence
+
+    def commit(
+        self,
+        *,
+        expected_evidence: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         """Validate the complete upper diff before crossing any effect boundary."""
         if self._closed:
             raise RuntimeToolError("workspace_effect_overlay_closed")
         try:
-            changed = self._validated_changes()
+            if expected_evidence is not None:
+                if (
+                    self._prepared_changes is None
+                    or self._prepared_evidence != expected_evidence
+                ):
+                    raise RuntimeToolError("workspace_effect_snapshot_changed")
+                changed = self._prepared_changes
+                evidence = dict(self._prepared_evidence)
+            else:
+                changed = self._validated_changes()
+                evidence = self._effect_evidence(changed)
+            if expected_evidence is not None and evidence != expected_evidence:
+                raise RuntimeToolError("workspace_effect_snapshot_changed")
             write_confined_text_batch(
                 self.filesystem,
                 tuple(
@@ -193,14 +221,7 @@ class HostedWorkspaceEffectOverlay:
                 ),
                 transaction_directory=self.transaction,
             )
-            paths = tuple(item.path for item in changed)
-            return {
-                "workspace_effects_committed": True,
-                "workspace_effect_count": len(paths),
-                "workspace_effect_paths": paths,
-                "mutation_scope_count": len(self.scopes),
-                "mutation_scope_digest": _scope_digest(self.scopes),
-            }
+            return evidence
         except RuntimeToolError as error:
             if error.reason_code == "tool_execution_unknown":
                 self._recovery_required = True
@@ -208,8 +229,23 @@ class HostedWorkspaceEffectOverlay:
         finally:
             self.discard()
 
+    def _effect_evidence(
+        self,
+        changed: tuple[_ChangedFile, ...],
+    ) -> dict[str, object]:
+        paths = tuple(item.path for item in changed)
+        return {
+            "workspace_effects_committed": True,
+            "workspace_effect_count": len(paths),
+            "workspace_effect_paths": paths,
+            "mutation_scope_count": len(self.scopes),
+            "mutation_scope_digest": _scope_digest(self.scopes),
+        }
+
     def discard(self) -> dict[str, object]:
         if not self._closed and not self._recovery_required:
+            self._prepared_changes = None
+            self._prepared_evidence = None
             # Overlayfs leaves its private work/work directory mode 000 after
             # unmount. Restore owner traversal before removing the Core-owned
             # overlay tree; never follow a command-created symlink here.

@@ -39,6 +39,12 @@ from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_preflight_resolver,
     build_hosted_tool_result_admission_resolver,
 )
+from core.runtime.public_content_classification import (
+    resolve_runtime_public_resource_classification,
+)
+from core.runtime.public_content_authority_store import (
+    runtime_public_content_authority_for_workspace,
+)
 from core.runtime.hosted_agentic_policy import authorized_core_tool_handles
 from core.runtime.hosted_runtime_registry_builder import (
     build_hosted_provider_runtime_registry,
@@ -55,7 +61,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "23"
+HOSTED_AGENTIC_ADAPTER_VERSION = "24"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -110,7 +116,7 @@ def build_hosted_agentic_engine_adapter(
     content_classifier = classifier or classify_hosted_content_fail_closed
 
     def classify_resource(observation, provenance):
-        return resource_classification_for_observation(
+        authoritative = resource_classification_for_observation(
             state.workspace_store.get_resource_classification(
                 workspace_id=observation.workspace_id,
                 resource_kind=observation.resource_kind,
@@ -123,6 +129,12 @@ def build_hosted_agentic_engine_adapter(
             resource_revision=observation.resource_revision,
             resource_digest=observation.resource_digest,
             provenance=provenance,
+        )
+        return resolve_runtime_public_resource_classification(
+            state.workspace_store,
+            observation=observation,
+            provenance=provenance,
+            authoritative=authoritative,
         )
 
     loop = HostedAgenticLoop(
@@ -241,11 +253,23 @@ def _tool_orchestrator(
     result_admission_resolver = build_hosted_tool_result_admission_resolver(
         cli_registry=cli_registry,
         mcp_registry=mcp_registry,
+        public_content_authority_resolver=lambda workspace_id: (
+            runtime_public_content_authority_for_workspace(
+                workspace_store,
+                workspace_id,
+            )
+        ),
     )
     result_preflight_resolver = build_hosted_tool_result_preflight_resolver(
         cli_registry=cli_registry,
         mcp_registry=mcp_registry,
         process_registry=process_registry,
+        public_content_authority_resolver=lambda workspace_id: (
+            runtime_public_content_authority_for_workspace(
+                workspace_store,
+                workspace_id,
+            )
+        ),
     )
 
     def classify_resource(observation, provenance):
@@ -262,6 +286,12 @@ def _tool_orchestrator(
             resource_revision=observation.resource_revision,
             resource_digest=observation.resource_digest,
             provenance=provenance,
+        )
+        authoritative = resolve_runtime_public_resource_classification(
+            workspace_store,
+            observation=observation,
+            provenance=provenance,
+            authoritative=authoritative,
         )
         return resolve_filesystem_mutation_lineage(
             observation=observation,

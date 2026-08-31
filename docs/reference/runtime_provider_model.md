@@ -97,7 +97,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v17 also
+status, workspace binding, and upstream constraint. TCB manifest v18 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -324,8 +324,8 @@ only selects the model. During OpenRouter execution, Maverick
 translates the saved per-model preference into the OpenRouter `provider`
 request object.
 
-OpenRouter also has one separate contained agentic candidate whose exact
-display label retains the historical `fake-data preview` warning. It pins
+OpenRouter also has one separate contained, uncertified Full Workspace agentic
+preview. It pins
 `deepseek/deepseek-v4-flash` to `deepinfra/fp8` through
 `openrouter-chat-completions` v1 and the shared `maverick-tool-loop`. Unlike
 plain hosted chat, this profile does not inherit workspace OpenRouter routing
@@ -581,20 +581,26 @@ resolver and its Core-owned production writer. Before dispatch, one turn CAS
 persists a revisioned content-derived manifest for the exact prompt, agent
 instruction, reference metadata, and each governed orchestration control,
 summary, task/result, and artifact chunk. Integrity-bound source ids never imply
-`public`; marker absence remains `unclassified` and the resolver accepts only
-the matching turn manifest. Governed
+`public`; marker absence remains `unclassified` unless a current operator-owned
+runtime-public classification policy explicitly authorizes Core to classify
+the exact source identity/revision/digest. Admission revalidates the policy's
+self-digest, CAS revision, workspace identity, and revocation state against the
+immutable manifest. Governed
 context restrictively joins its entries while retaining untrusted provenance.
 
 Tool results do not receive a generic public fallback. Exact resource
-observations and edit pre-images retain their taint; read-only shell/process
-streams and CLI/MCP discovery/read results are conservatively classified from
-exact bytes and remain
+observations and edit pre-images retain their taint; shell/process streams and
+CLI/MCP discovery/read results are classified from exact bytes under an active
+runtime-public policy or an explicit certified Core result contract and remain
 complete through the common compactor. A denied private result becomes only a
-public call-paired error on the next request. Unguaranteed workspace-mutating
-shell/process and mutating/destructive CLI/MCP calls are rejected before their
-handler executes. App definitions remain discoverable and cannot self-promote,
-and current hosted profiles intentionally use `maverick_agent_candidate` and
-omit the Full Workspace contract claim. Direct replacement and move propagate
+public call-paired error on the next request. Workspace-mutating shell/process
+runs classify their exact private-overlay result before commit and discard the
+overlay on denial. Mutating/destructive app CLI/MCP calls without the same
+pre-effect guarantee remain rejected; app definitions cannot self-promote.
+Current Google/OpenRouter definitions use `maverick_agent` and pin
+`codex-baseline-v11` only because the executable 13-behavior gate is complete;
+they are still uncertified, unbound, contained previews. Direct replacement
+and move propagate
 exact version-bound pre-image taint for read-after-write through authenticated
 same-session mutation records, even when the next tool step rebuilds its
 orchestrator, while creation remains unclassified without authoritative source

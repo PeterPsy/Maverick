@@ -67,24 +67,11 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
             policy=self.policy,
         )
 
-        self.assertFalse(report.complete)
+        self.assertTrue(report.complete)
+        self.assertEqual(report.missing_result_behaviors, ())
         self.assertEqual(
-            report.missing_result_behaviors,
-            tuple(
-                handle
-                for handle in FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS
-                if handle not in verified
-            ),
-        )
-        self.assertIn("core-capability:shell.run", report.missing_result_behaviors)
-        self.assertIn("core-capability:cli.run", report.missing_result_behaviors)
-        self.assertIn(
-            "core-capability:filesystem.write:create",
-            report.missing_result_behaviors,
-        )
-        self.assertIn(
-            "core-capability:filesystem.read-after-write",
-            verified,
+            tuple(verified),
+            FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS,
         )
 
     def test_result_gate_names_every_mutating_filesystem_workflow(self) -> None:
@@ -144,16 +131,26 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
             )
 
     def test_complete_requires_every_behavior_probe(self) -> None:
+        report = inspect_full_workspace_contract(
+            capabilities=self.capabilities,
+            policy=self.policy,
+        )
+        self.assertTrue(report.complete)
+
         with patch(
             "core.runtime.full_workspace_contract._hosted_tool_result_behaviors",
-            return_value=FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS,
+            return_value=FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS[:-1],
         ):
-            report = inspect_full_workspace_contract(
+            incomplete = inspect_full_workspace_contract(
                 capabilities=self.capabilities,
                 policy=self.policy,
             )
 
-        self.assertTrue(report.complete)
+        self.assertFalse(incomplete.complete)
+        self.assertEqual(
+            incomplete.missing_result_behaviors,
+            (FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS[-1],),
+        )
 
     def test_claim_requires_complete_behavior_and_exact_surface(self) -> None:
         capabilities = RuntimeCapabilitySet(
@@ -204,66 +201,53 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
             certified_capabilities=capabilities,
         )
 
-        self.assertFalse(
+        self.assertTrue(
             inspect_full_workspace_contract(
                 capabilities=capabilities,
                 policy=policy,
             ).complete
         )
+        validate_full_workspace_contract_claim(
+            profile=profile,
+            certificate=certificate,
+        )
         with self.assertRaisesRegex(
             CapabilityCertificateError,
-            "full_workspace_contract_incomplete",
+            "full_workspace_contract_live_authority_incomplete",
         ):
-            validate_full_workspace_contract_claim(
-                profile=profile,
-                certificate=certificate,
+            validate_full_workspace_live_authority(
+                revision=FULL_WORKSPACE_CONTRACT_REVISION,
+                capabilities=capabilities,
+                policy=policy,
+                allowed_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES[:-1],
             )
-
-        with patch(
-            "core.runtime.full_workspace_contract._hosted_tool_result_behaviors",
-            return_value=FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS,
-        ):
-            validate_full_workspace_contract_claim(
-                profile=profile,
-                certificate=certificate,
-            )
-            with self.assertRaisesRegex(
+        self.assertFalse(
+            inspect_full_workspace_contract(
+                capabilities=capabilities,
+                policy=replace(
+                    policy,
+                    require_confirmation_for_destructive=False,
+                ),
+            ).complete
+        )
+        for missing in ("cli", "filesystem_write", "confirmations"):
+            with self.subTest(missing=missing), self.assertRaisesRegex(
                 CapabilityCertificateError,
-                "full_workspace_contract_live_authority_incomplete",
+                "full_workspace_contract_incomplete",
             ):
-                validate_full_workspace_live_authority(
-                    revision=FULL_WORKSPACE_CONTRACT_REVISION,
-                    capabilities=capabilities,
-                    policy=policy,
-                    allowed_handles=FULL_WORKSPACE_CORE_TOOL_HANDLES[:-1],
-                )
-            self.assertFalse(
-                inspect_full_workspace_contract(
-                    capabilities=capabilities,
-                    policy=replace(
-                        policy,
-                        require_confirmation_for_destructive=False,
-                    ),
-                ).complete
-            )
-            for missing in ("cli", "filesystem_write", "confirmations"):
-                with self.subTest(missing=missing), self.assertRaisesRegex(
-                    CapabilityCertificateError,
-                    "full_workspace_contract_incomplete",
-                ):
-                    validate_full_workspace_contract_claim(
-                        profile=profile,
-                        certificate=SimpleNamespace(
-                            full_workspace_contract_revision=(
-                                FULL_WORKSPACE_CONTRACT_REVISION
-                            ),
-                            execution_family="maverick_agent",
-                            certified_capabilities=replace(
-                                capabilities,
-                                **{missing: False},
-                            ),
+                validate_full_workspace_contract_claim(
+                    profile=profile,
+                    certificate=SimpleNamespace(
+                        full_workspace_contract_revision=(
+                            FULL_WORKSPACE_CONTRACT_REVISION
                         ),
-                    )
+                        execution_family="maverick_agent",
+                        certified_capabilities=replace(
+                            capabilities,
+                            **{missing: False},
+                        ),
+                    ),
+                )
 
 
 class HostedResultPreflightExecutionTest(

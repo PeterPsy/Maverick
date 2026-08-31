@@ -31,6 +31,7 @@ from core.providers.openrouter_agentic_profile import (
     openrouter_agentic_routing_constraint,
 )
 from core.runtime.execution_binding import build_runtime_execution_binding
+from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.hosted_context_management import (
     HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION,
@@ -54,14 +55,14 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "10")
+                self.assertEqual(recipe.revision, "11")
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
                     "6",
                 )
                 self.assertEqual(
                     recipe.tool_contract_revision,
-                    "hosted-governed-result-v2",
+                    FULL_WORKSPACE_CONTRACT_REVISION,
                 )
                 self.assertEqual(recipe.context_policy.revision, "p4-context-v4")
         self.assertEqual(HOSTED_CONTEXT_COMPACTION_SCHEMA_VERSION, "3")
@@ -206,7 +207,7 @@ def _binding(recipe):
         certificate_evidence_digest="a" * 64,
         runtime_engine_id="maverick-tool-loop",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version="23",
+        adapter_version="24",
         adapter_artifact_digest="b" * 64,
         model_provider_id=recipe.model_provider_id,
         model_id=recipe.model_id,
@@ -223,7 +224,7 @@ def _binding(recipe):
         egress_policy_id="remote-agentic-contained",
         egress_policy_revision="2",
         created_at=NOW,
-        full_workspace_contract_revision="",
+        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
         execution_family="maverick_agent",
         harness_recipe_id=recipe.recipe_id,
         harness_recipe_revision=recipe.revision,

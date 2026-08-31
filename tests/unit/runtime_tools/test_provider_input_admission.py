@@ -19,6 +19,10 @@ from core.runtime.provider_input_context import (
     RuntimeProviderInputObservation,
     runtime_provider_input_sources,
 )
+from core.runtime.public_content_authority_store import (
+    issue_runtime_public_content_authority,
+    revoke_runtime_public_content_authority,
+)
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
@@ -95,7 +99,65 @@ class RuntimeProviderInputAdmissionTest(unittest.TestCase):
         )
 
         self.assertEqual(sources[0].classification.data_class, "unclassified")
-        self.assertEqual(sources[0].classification.classification_revision, 2)
+        self.assertEqual(sources[0].classification.classification_revision, 3)
+
+    def test_operator_public_authority_admits_exact_marker_free_prompt(self) -> None:
+        harness, state = self._state_with_turn(
+            input_text="Summarize the approved public workspace.",
+        )
+        authority = issue_runtime_public_content_authority(
+            state.workspace_store,
+            workspace_id=harness.session.workspace_id,
+            actor_id="operator-1",
+            expected_revision=0,
+            now=NOW,
+        )
+
+        sources = runtime_provider_input_sources(
+            state,
+            session=harness.session,
+            turn_id="turn-sensitive",
+            input_text="Summarize the approved public workspace.",
+            app_references=None,
+            attachments=None,
+        )
+
+        self.assertEqual(sources[0].classification.data_class, "public")
+        persisted = state.runtime_store.get_turn("turn-sensitive")
+        entry = persisted.provider_input_classification_manifest["sources"][
+            "runtime-turn:turn-sensitive:turn-prompt"
+        ]
+        self.assertEqual(
+            entry["classification_authority_id"],
+            authority.classification_id,
+        )
+        self.assertEqual(
+            entry["classification_authority_digest"],
+            authority.resource_digest,
+        )
+
+        revoke_runtime_public_content_authority(
+            state.workspace_store,
+            workspace_id=harness.session.workspace_id,
+            actor_id="operator-1",
+            expected_revision=1,
+            reason="approval withdrawn",
+            now=NOW,
+        )
+        resolved_after_revocation = state.runtime_input_classification_resolver(
+            self._observation(
+                harness,
+                source_id="turn-prompt",
+                provenance="user_input",
+                content_type="text/plain",
+                content="Summarize the approved public workspace.",
+            ),
+            "Summarize the approved public workspace.",
+        )
+        self.assertEqual(
+            resolved_after_revocation.data_class,
+            "unclassified",
+        )
 
     def test_content_scanning_never_promotes_benign_looking_text_to_public(
         self,

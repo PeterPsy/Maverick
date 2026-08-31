@@ -144,9 +144,10 @@ binding:
    classifications. `workspace_internal_fake` additionally requires that the
    selected policy allow that class and destination. Attestation may only narrow
    policy; no client declaration or policy id is accepted.
-5. The workspace policy is at least as restrictive as the profile: read-only
-   Core filesystem capability, bounded steps/tokens/cost, no shell or writes,
-   and confirmation retained for mutating/destructive classes.
+5. The workspace policy is at least as restrictive as the profile and retains
+   the complete `codex-baseline-v11` handle set atomically, bounded
+   steps/tokens/cost, and confirmation for mutating/destructive classes. A
+   partial read-only binding is not a Maverick Agent fallback.
 6. The complete certification manifest passes on the deployed source in the
    trust order: deterministic conformance, operator-only synthetic live probe,
    behavioral conformance validation, then certificate publication. Ordinary
@@ -171,6 +172,19 @@ use only the Core commands
 Every mutation records the authenticated actor and an append-only redaction-safe
 audit fact. Do not issue an attestation merely to exercise P3 or to bypass the
 false availability gate.
+
+Runtime-public classification is a separate authority, not an attestation.
+Trusted operators use only
+`core.providers.agentic.public-content.status`,
+`core.providers.agentic.public-content.issue` (CAS expected revision plus the
+exact `public-workspace-content-reviewed` confirmation), and
+`core.providers.agentic.public-content.revoke` (CAS expected revision plus a
+reason). Issue authorizes the server classifier; it does not make marker
+absence an authority by itself—the issued server record is the authority.
+Every resulting prompt/result classification is bound to exact canonical bytes
+and the current authority id, revision, and self-digest. Revocation invalidates
+subsequent classifications and captured input admission. Settings and Chat do
+not expose a mutation control for this authority.
 
 While containment is active, `POST /api/providers/agentic/workspace-bindings` may disable a
 remote binding but cannot enable one. No fake-data confirmation field exists.

@@ -9,8 +9,6 @@ import unittest
 from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
-from core.egress.agentic_transforms import canonical_egress_content
-from core.egress.classification import content_sha256, validated_classification
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution_binding import canonical_digest
 from core.runtime.hosted_agentic_factory import _tool_orchestrator
@@ -22,6 +20,9 @@ from core.runtime.app_reference_classification import (
     observe_runtime_app_reference,
 )
 from core.runtime.provider_input_context import runtime_provider_input_sources
+from core.runtime.public_content_authority_store import (
+    issue_runtime_public_content_authority,
+)
 from core.runtime.tool_catalog import RuntimeToolActorContext
 from core.runtime.tool_orchestrator import RuntimeToolConfirmationPolicy
 from core.runtime.tool_schema import provider_tool_name
@@ -167,11 +168,12 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                 install_builtin_apps=False,
             )
         self.assertTrue(callable(state.runtime_input_classification_resolver))
-        state = replace(
-            state,
-            runtime_input_classification_resolver=(
-                self._classify_synthetic_runtime_input
-            ),
+        issue_runtime_public_content_authority(
+            state.workspace_store,
+            workspace_id=harness.session.workspace_id,
+            actor_id="operator-fixture",
+            expected_revision=0,
+            now=NOW,
         )
         production_adapter = state.provider_registry.get_agentic_runtime_adapter(
             "maverick-tool-loop"
@@ -234,11 +236,12 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
         self.assertTrue(
             callable(state.runtime_app_reference_classification_resolver)
         )
-        state = replace(
-            state,
-            runtime_input_classification_resolver=(
-                self._classify_synthetic_runtime_input
-            ),
+        issue_runtime_public_content_authority(
+            state.workspace_store,
+            workspace_id=harness.session.workspace_id,
+            actor_id="operator-fixture",
+            expected_revision=0,
+            now=NOW,
         )
         reference = {
             "type": "entity",
@@ -395,7 +398,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             cli_result.payload["command_id"],
             "developer-context.list",
         )
-        self.assertEqual(cli_result.classification.data_class, "unclassified")
+        self.assertEqual(cli_result.classification.data_class, "public")
 
         mcp_entry = self._discover(
             surfaces["core-capability:mcp.list"],
@@ -404,7 +407,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             identity_field="tool_name",
             identity="developer-context.list",
         )
-        self.assertEqual(mcp_entry["result_data_class"], "unclassified")
+        self.assertEqual(mcp_entry["result_data_class"], "public")
         mcp_result = surfaces["core-capability:mcp.call"].handler(
             {
                 "tool_name": "developer-context.list",
@@ -415,7 +418,7 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
             None,
         )
         self.assertIn("items", mcp_result.payload)
-        self.assertEqual(mcp_result.classification.data_class, "unclassified")
+        self.assertEqual(mcp_result.classification.data_class, "public")
         self.assertIsNotNone(
             orchestrator.catalog_builder.result_classification_resolver
         )
@@ -434,23 +437,6 @@ class HostedAgenticFactoryToolsTest(unittest.TestCase):
                 harness.store.get_turn("turn-hosted"),
                 input_text=input_text,
             )
-        )
-
-    @staticmethod
-    def _classify_synthetic_runtime_input(observation, content):
-        """Supply explicit exact-byte authority only for synthetic fixtures."""
-        digest = content_sha256(canonical_egress_content(content))
-        if digest != observation.source_digest:
-            raise AssertionError("synthetic input observation digest mismatch")
-        return validated_classification(
-            data_class="public",
-            provenance=observation.provenance,
-            trust_level="trusted_actor",
-            source_ref=observation.source_ref,
-            source_revision=observation.source_revision,
-            source_digest=observation.source_digest,
-            resource_identity=observation.resource_identity,
-            classification_revision=1,
         )
 
     def _discover(

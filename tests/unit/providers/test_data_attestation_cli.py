@@ -111,6 +111,61 @@ class DataAttestationCliTestCase(unittest.TestCase):
             "operator_actor_required",
         )
 
+    def test_public_content_authority_is_operator_owned_and_revocable(self) -> None:
+        issue_definition = self.definitions[
+            "core.providers.agentic.public-content.issue"
+        ]
+        self.assertNotIn("actor_id", issue_definition.argument_schema["properties"])
+
+        missing_confirmation = self.handlers[
+            "core.providers.agentic.public-content.issue"
+        ](
+            {"expected_revision": 0},
+            self.context,
+        )
+        issued = self.handlers["core.providers.agentic.public-content.issue"](
+            {
+                "expected_revision": 0,
+                "confirmation": "public-workspace-content-reviewed",
+                "actor_id": "browser-forged",
+            },
+            self.context,
+        )
+        status = self.handlers["core.providers.agentic.public-content.status"](
+            {},
+            self.context,
+        )
+        revoked = self.handlers[
+            "core.providers.agentic.public-content.revoke"
+        ](
+            {"expected_revision": 1, "reason": "approval withdrawn"},
+            self.context,
+        )
+        revoked_status = self.handlers[
+            "core.providers.agentic.public-content.status"
+        ]({}, self.context)
+
+        self.assertEqual(
+            missing_confirmation["error"],
+            "runtime_public_content_authority_confirmation_required",
+        )
+        self.assertTrue(
+            issued["public_content_authority"]["authoritative"]
+        )
+        self.assertEqual(
+            len(issued["public_content_authority"]["authority_digest"]),
+            64,
+        )
+        self.assertEqual(status["public_content_authority"]["state"], "active")
+        self.assertEqual(
+            revoked["public_content_authority"]["state"],
+            "revoked",
+        )
+        self.assertEqual(
+            revoked_status["public_content_authority"]["state"],
+            "revoked",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

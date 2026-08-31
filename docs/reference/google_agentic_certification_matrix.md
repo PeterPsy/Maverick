@@ -1,19 +1,19 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-08-31
-Matrix revision: `2026-08-31-r27-p4-agentic-closure-tcb17`
-Rollout: candidate preview, not certified
+Matrix revision: `2026-08-31-r28-p4-full-workspace-tcb18`
+Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==23`
+Adapter: `maverick-hosted-tool-loop==24`
 
-## Candidate combination
+## Preview combination
 
 | Field | Pinned value |
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `31` (revision `30` suspended) |
-| Execution family | `maverick_agent_candidate`; `maverick_agent` requires an atomic complete Full Workspace claim |
+| Immutable profile revision | `32` (candidate revision `31` suspended) |
+| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v11` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -28,7 +28,7 @@ Adapter: `maverick-hosted-tool-loop==23`
 | Final request | exact Core finalization instruction; `tools` omitted |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | governed `hosted-governed-result-v2` surface: marker absence remains unclassified; public-preimage replace/edit/patch/move/delete/read-after-write taint is executable; creation and unauthoritatively classified variable results remain gated; denied bytes pair through a public error; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
+| Tool handles | Full Workspace `codex-baseline-v11` surface: all 13 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result contract; denied bytes pair through a public error; shell/process effects remain private until exact-result admission; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 45 days |
 
 Google documents Gemini 3.6 Flash as a stable model with a 1,048,576-token
@@ -55,11 +55,11 @@ Primary references:
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@6`; exact byte-bound classifications, lexical no-symlink skill identity, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v17 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v18 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
-| Full Workspace behavioral gate | `codex-baseline-v11` executes create, replace, edit, patch, move, delete, read-after-write, shell/process, and CLI/MCP result workflows instead of trusting declared mode strings | incomplete: creation and variable shell/process and CLI/MCP bytes lack an authoritative eligible class; revision 31 leaves the claim empty |
+| Full Workspace behavioral gate | `codex-baseline-v11` executes create, replace, edit, patch, move, delete, read-after-write, shell/process, and CLI/MCP result workflows instead of trusting declared mode strings | repository gate complete: 13/13 behaviors; signed provider certification not run |
 | Live endpoint/model preflight | official current Interactions OpenAPI operation plus authenticated exact model record prove streaming, usage, function tools, reasoning controls, model identity, and input/output limits before completion transport | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
@@ -77,10 +77,10 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r27 |
+| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r28 |
 
 The table lists the required suite coverage; it is not evidence that the suite
-ran. Bootstrap publishes only the candidate profile and never manufactures a
+ran. Bootstrap publishes only the uncertified preview profile and never manufactures a
 certificate. Certification requires deterministic fixture conformance, the
 operator-only synthetic live probe, behavioral validation of the complete
 ordered manifest and canonical command digests, and only then signing and
@@ -306,3 +306,17 @@ classification. The definition is explicitly
 Workspace. It remains uncertified, unbound, and unavailable; no live probe,
 behavioral run, provider completion, certificate, canary, or remote activation
 has been performed.
+
+Revision 32 pins adapter 24, governed recipe 11, suite 28, matrix
+`2026-08-31-r28-p4-full-workspace-tcb18`, and TCB manifest v18. The
+operator-owned runtime-public classification policy supplies explicit,
+revocable server authority for exact prompt/result identities and canonical
+digests; certified Core result contracts cover schema-owned results; and
+shell/process mutations admit the exact private-overlay result before commit.
+The executable `codex-baseline-v11` gate returns all 13 required behaviors,
+including create/read-after-create across orchestrator rebuild and CLI/MCP
+list/run/call. The immutable definition therefore atomically pins
+`execution_family=maverick_agent` and the Full Workspace contract. It remains
+uncertified, unbound, contained, and unavailable; no live probe, signed run,
+provider completion, certificate, canary, or remote activation has been
+performed.

@@ -169,15 +169,20 @@ agent-instruction, and governed-context content is likewise `unclassified`
 unless a trusted server admission resolver returns a canonical record matching
 the exact turn/source identity and digest. A Core-owned writer conservatively
 classifies the exact bytes and atomically persists one immutable manifest on
-the turn; sensitive-marker detection may narrow, but marker absence remains
-`unclassified` and source ownership alone cannot select a class. Governed context joins every
-captured control, summary, task/result, and artifact entry and stays untrusted.
+the turn. Sensitive-marker detection may narrow; marker absence becomes public
+only when a reserved operator-owned, CAS-revisioned runtime-public policy is
+active and its workspace identity, self-digest, revision, and non-revoked state
+are revalidated. The resulting classification still binds the exact source
+identity/revision/digest; source ownership alone cannot select a class. Governed
+context joins every captured control, summary, task/result, and artifact entry
+and stays untrusted.
 Non-resource CLI, MCP, shell, and process output has no generic public-content
-fallback: exact result bytes are classified, and a denied result is retained
-privately while only a public call-paired error reaches the provider. Any
-variable-result operation able to create workspace/app effects is denied before
-execution unless its egress outcome can be guaranteed. App claims are ignored
-without removing read-only discovery/use. Direct replace/edit/patch and move
+fallback: exact result bytes require the runtime-public policy or a certified
+Core result contract, and a denied result is retained privately while only a
+public call-paired error reaches the provider. Shell/process workspace effects
+remain in a private overlay until the exact result is admitted, then commit;
+denial discards them. App claims are ignored without removing read-only
+discovery/use. Direct replace/edit/patch and move
 propagate exact version-bound pre-image taint to their post-image. Authenticated
 same-session mutation results bind the exact observation across orchestrator
 rebuilds; creation has no public fallback.

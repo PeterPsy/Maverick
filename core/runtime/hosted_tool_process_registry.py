@@ -30,6 +30,7 @@ from core.runtime.process_control import (
     unregister_runtime_process,
 )
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.tool_catalog import RuntimeToolSurfaceResult
 
 
 MAX_PROCESS_STATUS_BYTES = 131_072
@@ -48,6 +49,8 @@ class _LiveHostedToolProcess:
     workspace_id: str
     effect_overlay: HostedWorkspaceEffectOverlay | None
     workspace_effects: dict[str, object] | None = None
+    result_classification_resolver: object | None = None
+    result_context: object | None = None
     lock: RLock = field(default_factory=RLock, repr=False)
 
 
@@ -72,6 +75,8 @@ class HostedToolProcessRegistry:
         environment: dict[str, str],
         timeout_seconds: int,
         mutation_scopes: tuple[HostedWorkspaceMutationScope, ...] = (),
+        result_classification_resolver=None,
+        result_context=None,
     ) -> dict[str, object]:
         process_id = f"agent-process-{uuid4().hex}"
         prepared = prepare_hosted_workspace_command(
@@ -157,6 +162,10 @@ class HostedToolProcessRegistry:
                     session_id=session_id,
                     workspace_id=workspace_id,
                     effect_overlay=prepared.effect_overlay,
+                    result_classification_resolver=(
+                        result_classification_resolver
+                    ),
+                    result_context=result_context,
                 )
             return {
                 "process_id": process_id,
@@ -467,12 +476,23 @@ class HostedToolProcessRegistry:
             if live.effect_overlay is not None:
                 if reason is None and exit_code == 0:
                     try:
+                        expected_evidence = live.effect_overlay.preview_commit()
+                        self._require_public_precommit_result(
+                            process_id=process_id,
+                            live=live,
+                            exit_code=exit_code,
+                            expected_evidence=expected_evidence,
+                        )
                         live.workspace_effects = (
                             execution_control.run_if_active(
-                                live.effect_overlay.commit
+                                lambda: live.effect_overlay.commit(
+                                    expected_evidence=expected_evidence
+                                )
                             )
                             if execution_control is not None
-                            else live.effect_overlay.commit()
+                            else live.effect_overlay.commit(
+                                expected_evidence=expected_evidence
+                            )
                         )
                     except RuntimeToolError as error:
                         effect_failure = error.reason_code
@@ -502,6 +522,53 @@ class HostedToolProcessRegistry:
             live.process.stdin.close()
         if effect_failure is not None:
             raise RuntimeToolError(effect_failure)
+
+    @staticmethod
+    def _require_public_precommit_result(
+        *,
+        process_id: str,
+        live: _LiveHostedToolProcess,
+        exit_code: int,
+        expected_evidence: dict[str, object],
+    ) -> None:
+        resolver = live.result_classification_resolver
+        if resolver is None:
+            return
+        size = os.fstat(live.output_fd).st_size
+        output = os.pread(live.output_fd, size, 0).decode(
+            "utf-8",
+            errors="replace",
+        )
+        candidate = {
+            "process_id": process_id,
+            "status": "exited",
+            "exit_code": exit_code,
+            "output": output,
+            "output_offset": 0,
+            "next_output_offset": size,
+            "output_pending": False,
+            "stdin_open": False,
+            "failure_reason": None,
+            "output_truncated": False,
+            "workspace_effects": expected_evidence,
+        }
+        try:
+            resolved = resolver(
+                "core-capability:process.status",
+                {"process_id": process_id, "output_offset": 0},
+                candidate,
+                live.result_context,
+            )
+        except Exception as error:
+            raise RuntimeToolError(
+                "tool_result_egress_not_guaranteed"
+            ) from error
+        if (
+            not isinstance(resolved, RuntimeToolSurfaceResult)
+            or resolved.payload != candidate
+            or resolved.classification.data_class != "public"
+        ):
+            raise RuntimeToolError("tool_result_egress_not_guaranteed")
 
     def _close_live(
         self,

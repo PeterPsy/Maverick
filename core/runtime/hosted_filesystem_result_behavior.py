@@ -8,13 +8,14 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 
-from core.egress.classification import (
-    fail_closed_classification,
-    validated_classification,
-)
-from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.filesystem_mutation_lineage import (
     resolve_filesystem_mutation_lineage,
+)
+from core.runtime.public_content_authority import (
+    build_runtime_public_content_authority_record,
+)
+from core.runtime.public_content_classification import (
+    classification_from_runtime_public_content_authority,
 )
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
@@ -55,30 +56,22 @@ def _inspect(workspace_root: Path) -> tuple[str, ...]:
     for relative_path, content in paths.items():
         (workspace_root / relative_path).write_text(content, encoding="utf-8")
 
-    authoritative = _authoritative_public_observations(
-        workspace_root,
-        tuple(paths),
+    authority = build_runtime_public_content_authority_record(
+        workspace_id="behavior-probe",
+        actor_id="core-behavior-probe",
+        active=True,
     )
 
     def classify(observation, provenance):
-        key = _observation_key(observation)
-        if key not in authoritative:
-            return fail_closed_classification(
-                provenance=provenance,
-                source_ref=observation.resource_ref,
-                source_revision=observation.resource_revision,
-                source_digest=observation.resource_digest,
-                resource_identity=observation.resource_identity,
-            )
-        return validated_classification(
-            data_class="public",
+        return classification_from_runtime_public_content_authority(
+            authority,
+            workspace_id=observation.workspace_id,
             provenance=provenance,
-            trust_level="trusted_actor",
+            trust_level="untrusted_tool_output",
             source_ref=observation.resource_ref,
             source_revision=observation.resource_revision,
             source_digest=observation.resource_digest,
             resource_identity=observation.resource_identity,
-            classification_revision=1,
         )
 
     capabilities = _capabilities(workspace_root, classify)
@@ -107,7 +100,17 @@ def _inspect(workspace_root: Path) -> tuple[str, ...]:
         context,
         None,
     )
-    if _public_and_pairable(created):
+    rebuilt_after_create = _capabilities(workspace_root, classify)
+    reread_created = _read(
+        rebuilt_after_create,
+        context,
+        "created.txt",
+    )
+    if (
+        _public_and_pairable(created)
+        and _public_and_pairable(reread_created)
+        and reread_created.payload.get("content") == "created by provider\n"
+    ):
         verified.add("core-capability:filesystem.write:create")
 
     replaced, reread = _replace_workflow(
@@ -323,30 +326,6 @@ class _BehaviorLedger:
         if record.invocation_id != self._record.invocation_id:
             raise KeyError(record.invocation_id)
         return dict(self._result)
-
-
-def _authoritative_public_observations(workspace_root: Path, paths):
-    filesystem = ConfinedWorkspaceFilesystem(
-        workspace_id="behavior-probe",
-        workspace_root=workspace_root,
-    )
-    try:
-        return {
-            _observation_key(filesystem.observe_file(path, provenance="tool_result")[0])
-            for path in paths
-        }
-    finally:
-        filesystem.close()
-
-
-def _observation_key(observation):
-    return (
-        observation.resource_kind,
-        observation.resource_ref,
-        observation.resource_identity,
-        observation.resource_revision,
-        observation.resource_digest,
-    )
 
 
 __all__ = [

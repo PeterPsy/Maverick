@@ -85,7 +85,10 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_tools.test_hosted_agentic_lifecycle_boundaries",
     "tests.unit.runtime_tools.test_hosted_agentic_tool_execution",
     "tests.unit.runtime_tools.test_hosted_tool_result_admission",
+    "tests.unit.runtime_tools.test_hosted_tool_result_public_authority",
+    "tests.unit.runtime_tools.test_hosted_workspace_effect_admission",
     "tests.unit.runtime_tools.test_provider_input_admission",
+    "tests.unit.runtime_tools.test_public_content_authority",
     "tests.unit.runtime_tools.test_tool_filesystem_listing",
     "tests.unit.runtime_tools.test_tool_orchestrator",
     "tests.unit.runtime_tools.test_tool_preliminary_ledger",
@@ -105,10 +108,10 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="27",
+        suite_version="28",
         provider_id=provider_id,
         matrix_path=matrix_path,
-        matrix_revision="2026-08-31-r27-p4-agentic-closure-tcb17",
+        matrix_revision="2026-08-31-r28-p4-full-workspace-tcb18",
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         tcb_structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,

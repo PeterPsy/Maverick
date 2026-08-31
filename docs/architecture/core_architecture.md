@@ -785,7 +785,10 @@ shell/process, and CLI/MCP scenarios. A declared mode string or the mere
 presence of a handle is not evidence. Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract.
+complete atomic contract. The current Google revision 32 and OpenRouter
+revision 31 definitions make that atomic claim only because the executable
+gate returns all 13 required result behaviors; they remain uncertified,
+unbound, contained previews rather than a release authorization.
 
 Hosted filesystem mutations are descriptor-relative and version-fenced.
 Replacement uses Linux atomic exchange/no-replace primitives so a final-entry
@@ -804,7 +807,7 @@ read-after-write observation. The successful mutation's private session-ledger
 result carries the exact identity/revision/digest and reconstructs that lineage
 when the hosted loop builds its next filesystem orchestrator; move rebinds it
 to the destination. A created file remains unclassified without authoritative
-source taint, and any
+source taint or an active explicit runtime-public classification policy, and any
 out-of-band version change invalidates the transient lineage. Failed writes
 remove only the empty, identity-matching parents they created. Move validates
 the exact source before opening or creating the destination chain and removes
@@ -858,30 +861,40 @@ durable terminal process status together.
 
 Transient prompt, agent-instruction, and governed-context blocks are not public
 by provenance. Production bootstrap always installs a closed Core-owned
-capture writer before provider dispatch. It conservatively classifies the exact prompt,
-agent instruction, reference metadata, and every governed-context control,
-summary, task/result, and artifact chunk, then stores the complete immutable
-manifest in the turn with one CAS. Detection of a sensitive marker may only
-narrow the result; absence of a marker remains `unclassified` and can never
-select `public`. Source ids and digests prove integrity but never select or
-widen a class. Governed context restrictively joins those exact
+capture writer before provider dispatch. It conservatively classifies the exact
+prompt, agent instruction, reference metadata, and every governed-context
+control, summary, task/result, and artifact chunk, then stores the complete
+immutable manifest in the turn with one CAS. Detection of a sensitive marker
+may only narrow the result; absence of a marker remains `unclassified` unless
+an operator has issued the reserved CAS-revisioned runtime-public
+classification policy. That policy is server-owned, self-digesting, revocable,
+and revalidated at admission; it authorizes Core to emit a new classification
+bound to the exact source identity, revision, canonical-byte digest, policy
+revision, and authority record. It is not a browser declaration or a redaction
+inference. Source ids and digests alone never select or widen a class. Governed
+context restrictively joins those exact
 entries and remains untrusted; a missing manifest, unknown source, changed byte,
 or identity mismatch stays `unclassified`. Resource-returning tools propagate
 the exact observed resource classification, and edit/patch diffs retain their
 pre-image taint.
 
 Variable hosted tool output is also conservatively classified from its exact
-canonical bytes; marker absence remains `unclassified`.
+canonical bytes; marker absence remains `unclassified` without the same active
+runtime-public authority or an exact resource/result contract.
 Read-only shell/process streams and CLI/MCP discovery/read results retain the
 complete payload through the common compactor. If their derived class is not
 allowed remotely, Core keeps the private result and sends a public, call-id
 paired `tool_result_egress_denied` error on the next provider request; it never
-silently drops pairing or relabels the bytes. Shell/process operations with
-workspace mutation scopes and mutating/destructive CLI/MCP handlers are denied
-before execution while no pre-effect result guarantee exists. App declarations
-cannot self-promote. The hosted profiles therefore do not claim the Full
-Workspace contract until its live behavior probe covers every read and mutating
-scenario. Generic serialization, hashing, or redaction never promotes content.
+silently drops pairing or relabels the bytes. Core-owned CLI/MCP definitions
+may provide an explicitly public result contract only when the definition,
+schema, and certified TCB ownership all agree; app declarations cannot
+self-promote. Shell and managed-process mutations execute first in the private
+overlay, classify the exact bounded result and intended effect evidence, and
+commit only after public-result admission. A denied result discards the
+overlay, so the effect does not precede its egress guarantee. The hosted Full
+Workspace claim is accepted only while the behavior probe covers every read and
+mutating scenario. Generic serialization, hashing, redaction, or source
+ownership never promotes content.
 
 Every semantic-envelope classification is additionally bound to the SHA-256 of
 the exact canonical bytes projected for that block. Composite sources use a

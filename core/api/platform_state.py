@@ -285,6 +285,7 @@ def bootstrap_platform_state(
         runtime_input_classification_resolver=(
             build_runtime_provider_input_classification_resolver(
                 runtime_store=runtime_store,
+                workspace_store=workspace_store,
             )
             if runtime_input_classification_resolver is None
             else runtime_input_classification_resolver

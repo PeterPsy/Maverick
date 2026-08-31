@@ -86,7 +86,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v17 records six maintained transitive dependency contracts. The
+- [x] Manifest v18 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -97,8 +97,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v27 / matrix
-  `2026-08-31-r27-p4-agentic-closure-tcb17`
+- [x] Google and OpenRouter suite v28 / matrix
+  `2026-08-31-r28-p4-full-workspace-tcb18`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -474,22 +474,26 @@ completion claim.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 23, semantic compiler revision 6, governed result contract
-  `hosted-governed-result-v2`, context-compaction schema 3, TCB manifest v17,
-  suite 27, and matrix `2026-08-31-r27-p4-agentic-closure-tcb17` create
-  immutable Google revision 31 and OpenRouter revision 30 governed-workspace
-  candidates. Historical revisions 30/29 are suspended, never promoted. The
-  candidates use `execution_family=maverick_agent_candidate` and intentionally
-  leave `full_workspace_contract_revision` empty; the central claim validator
-  rejects `execution_family=maverick_agent` unless profile and certificate
-  atomically carry a complete Full Workspace contract.
-- [ ] Admit a hosted Full Workspace `codex-baseline-v11` claim only after the
-  live behavior probe verifies complete execution, classification, egress,
-  pairing, post-image/read-after-write, and pre-effect guarantees. The gate now
-  executes replace/edit/patch/move/delete/read-after-write workflows and names
-  create explicitly; create plus variable shell/process and CLI/MCP output
-  remain incomplete without an authoritative result class. Until then those
-  unguaranteed effects are denied before execution.
+- [x] Adapter 24, semantic compiler revision 6, Full Workspace result contract
+  `codex-baseline-v11`, context-compaction schema 3, TCB manifest v18, suite 28,
+  and matrix `2026-08-31-r28-p4-full-workspace-tcb18` create immutable Google
+  revision 32 and OpenRouter revision 31 previews. Historical candidate
+  revisions 31/30 are suspended, never promoted in place. The new definitions
+  atomically use `execution_family=maverick_agent` and
+  `full_workspace_contract_revision=codex-baseline-v11`; the central validator
+  rejects that family if the profile/certificate claim or behavior gate is
+  incomplete.
+- [x] Admit the hosted Full Workspace `codex-baseline-v11` repository claim
+  only after the executable behavior probe verifies all 13 required result
+  workflows: create, replace, edit, patch, move, delete, read-after-write,
+  shell, process status, CLI list/run, and MCP list/call. A CAS-revisioned,
+  operator-owned runtime-public classification policy supplies explicit
+  server authority; each admitted prompt/result is still bound to its exact
+  identity, bytes, digest, policy revision, and current non-revoked record.
+  Marker detection can only narrow. Without that authority or an exact resource
+  record, marker-free content remains `unclassified`. Shell/process output is
+  classified from its exact private-overlay result before the workspace commit,
+  and unguaranteed effects are discarded before crossing the effect boundary.
   No live probe, signed certificate, binding, remote activation, or Codex
   profile/artifact change is part of Phase 4.
 

@@ -8,14 +8,21 @@ import re
 
 from core.egress.agentic_transforms import canonical_egress_content
 from core.runtime.content_data_classification import classify_runtime_content
+from core.runtime.public_content_authority import (
+    RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION,
+    runtime_public_content_authority_is_active,
+)
+from core.runtime.public_content_classification import (
+    classification_from_runtime_public_content_authority,
+)
 from core.runtime.provider_input_governed_sources import (
     generalist_context_source_chunks,
 )
 
 
 RUNTIME_PROVIDER_INPUT_CAPTURE_REVISION = 1
-RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION = 2
-RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID = "core-runtime-input-classifier-v2"
+RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION = 3
+RUNTIME_PROVIDER_INPUT_CLASSIFIER_ID = "core-runtime-input-classifier-v3"
 RUNTIME_PROVIDER_INPUT_RESOURCE_KIND = "runtime_input"
 GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND = "inter_agent_governed_context"
 _INDEXED_SOURCE = re.compile(r"^(app-reference|attachment):(\d+):metadata$")
@@ -47,6 +54,7 @@ def capture_runtime_provider_input_classifications(
     session_id: str,
     turn_id: str,
     sources: tuple[RuntimeProviderInputCaptureSource, ...],
+    public_content_authority=None,
 ) -> dict[str, object]:
     """Classify and persist the complete source manifest with one turn CAS."""
     turn = runtime_store.get_turn(turn_id)
@@ -94,6 +102,7 @@ def capture_runtime_provider_input_classifications(
                     content=content,
                     resource_kind=GOVERNED_CONTEXT_SOURCE_RESOURCE_KIND,
                     resource_ref=resource_ref,
+                    public_content_authority=public_content_authority,
                 )
                 _insert_unique(entries, entry)
             continue
@@ -107,6 +116,7 @@ def capture_runtime_provider_input_classifications(
             content=source.content,
             resource_kind=RUNTIME_PROVIDER_INPUT_RESOURCE_KIND,
             resource_ref=f"runtime-turn:{turn_id}:{source.source_id}",
+            public_content_authority=public_content_authority,
         )
         _insert_unique(entries, entry)
     manifest: dict[str, object] = {
@@ -136,25 +146,38 @@ def _classification_entry(
     content: object,
     resource_kind: str,
     resource_ref: str,
+    public_content_authority,
 ) -> dict[str, object]:
     encoded = canonical_egress_content(content)
     digest = hashlib.sha256(encoded).hexdigest()
-    data_class = classify_runtime_provider_input_content(
-        content,
-        content_type=content_type,
-    )
-    trust_level = (
-        "trusted_actor"
-        if provenance in {"agent_instruction", "user_input"}
-        else "untrusted_external"
-    )
     identity = (
         f"runtime-input:{workspace_id}:{session_id}:{turn_id}:"
         f"{source_id}:{digest}"
         if resource_kind == RUNTIME_PROVIDER_INPUT_RESOURCE_KIND
         else f"governed-context-source:{workspace_id}:{resource_ref}:{digest}"
     )
-    return {
+    data_class = classify_runtime_provider_input_content(
+        content,
+        content_type=content_type,
+        workspace_id=workspace_id,
+        provenance=provenance,
+        trust_level=(
+            "trusted_actor"
+            if provenance in {"agent_instruction", "user_input"}
+            else "untrusted_external"
+        ),
+        source_ref=resource_ref,
+        source_revision=digest,
+        source_digest=digest,
+        resource_identity=identity,
+        public_content_authority=public_content_authority,
+    )
+    trust_level = (
+        "trusted_actor"
+        if provenance in {"agent_instruction", "user_input"}
+        else "untrusted_external"
+    )
+    entry = {
         "resource_kind": resource_kind,
         "resource_ref": resource_ref,
         "resource_identity": identity,
@@ -164,15 +187,60 @@ def _classification_entry(
         "trust_level": trust_level,
         "classification_revision": RUNTIME_PROVIDER_INPUT_CLASSIFIER_REVISION,
     }
+    if runtime_public_content_authority_is_active(
+        public_content_authority,
+        workspace_id=workspace_id,
+    ):
+        entry.update(
+            {
+                "classification_authority_id": (
+                    public_content_authority.classification_id
+                ),
+                "classification_authority_revision": (
+                    public_content_authority.revision
+                ),
+                "classification_authority_digest": (
+                    public_content_authority.resource_digest
+                ),
+                "classification_authority_policy_revision": (
+                    RUNTIME_PUBLIC_CONTENT_AUTHORITY_POLICY_REVISION
+                ),
+            }
+        )
+    return entry
 
 
 def classify_runtime_provider_input_content(
     content: object,
     *,
     content_type: str,
+    workspace_id: str = "",
+    provenance: str = "user_input",
+    trust_level: str = "trusted_actor",
+    source_ref: str = "",
+    source_revision: str = "",
+    source_digest: str = "",
+    resource_identity: str = "",
+    public_content_authority=None,
 ) -> str:
-    """Return a conservative class selected from the exact captured bytes."""
-    return classify_runtime_content(content, content_type=content_type)
+    """Return a conservative class, promoted only by explicit authority."""
+    detected = classify_runtime_content(content, content_type=content_type)
+    authority = classification_from_runtime_public_content_authority(
+        public_content_authority,
+        workspace_id=workspace_id,
+        provenance=provenance,
+        trust_level=trust_level,
+        source_ref=source_ref,
+        source_revision=source_revision,
+        source_digest=source_digest,
+        resource_identity=resource_identity,
+        detected_data_class=detected,
+    )
+    return (
+        authority.data_class
+        if authority.classification_revision is not None
+        else detected
+    )
 
 
 def runtime_provider_input_source_contract(

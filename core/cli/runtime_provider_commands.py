@@ -7,6 +7,9 @@ from typing import Any
 
 from core.cli.core_command_helpers import OPERATOR_ONLY, WORKSPACE_SAFE, core_cli_command
 from core.cli.models import CliCommandDefinition, CliInvocationContext
+from core.cli.runtime_public_content_commands import (
+    runtime_public_content_command_specs,
+)
 from core.providers.payloads import (
     hosted_provider_selection_payload,
     provider_payload,
@@ -464,6 +467,9 @@ def runtime_provider_command_specs(
                 safe_to_retry=False,
             ),
             _workspace_attestation_revoke_handler,
+        ),
+        *runtime_public_content_command_specs(
+            workspace_store=workspace_store,
         ),
     ]
 

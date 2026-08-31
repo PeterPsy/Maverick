@@ -8,6 +8,9 @@ from core.runtime.provider_input_capture import (
     RuntimeProviderInputCaptureSource,
     capture_runtime_provider_input_classifications,
 )
+from core.runtime.public_content_authority_store import (
+    runtime_public_content_authority_for_workspace,
+)
 
 
 def persist_runtime_provider_input_capture(
@@ -84,6 +87,12 @@ def persist_runtime_provider_input_capture(
         session_id=str(getattr(session, "session_id", "") or ""),
         turn_id=str(turn_id or ""),
         sources=tuple(sources),
+        public_content_authority=(
+            runtime_public_content_authority_for_workspace(
+                getattr(state, "workspace_store", None),
+                str(getattr(session, "workspace_id", "") or ""),
+            )
+        ),
     )
 
 

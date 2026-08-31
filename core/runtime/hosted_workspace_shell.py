@@ -17,6 +17,7 @@ from core.runtime.hosted_workspace_effects import (
     HostedWorkspaceMutationScope,
 )
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.tool_catalog import RuntimeToolSurfaceResult
 
 
 _SYSTEM_DEPENDENCY_ROOTS = ("/usr", "/bin", "/lib", "/lib64")
@@ -125,7 +126,10 @@ def run_hosted_workspace_command(
     max_output_bytes: int,
     mutation_scopes: tuple[HostedWorkspaceMutationScope, ...] = (),
     execution_control=None,
-) -> dict[str, object]:
+    result_classification_resolver=None,
+    result_context=None,
+    result_arguments: dict[str, object] | None = None,
+) -> dict[str, object] | RuntimeToolSurfaceResult:
     """Run one bounded command and kill its complete process group on timeout."""
     if execution_control is not None:
         execution_control.check()
@@ -168,6 +172,7 @@ def run_hosted_workspace_command(
         prepared.filesystem.assert_shell_cwd(prepared.cwd_chain)  # type: ignore[arg-type]
         if execution_control is not None:
             execution_control.check()
+        precommitted_classification = None
         if prepared.effect_overlay is None:
             effect_evidence = {
                 "workspace_effects_committed": True,
@@ -176,20 +181,62 @@ def run_hosted_workspace_command(
                 "mutation_scope_count": 0,
             }
         elif process.returncode == 0:
+            expected_evidence = prepared.effect_overlay.preview_commit()
+            intended = {
+                "exit_code": int(process.returncode),
+                "output": output.decode("utf-8", errors="replace"),
+                "output_bytes": len(output),
+                "stream_complete": True,
+                **expected_evidence,
+            }
+            if result_classification_resolver is not None:
+                try:
+                    resolved = result_classification_resolver(
+                        "core-capability:shell.run",
+                        result_arguments or {},
+                        intended,
+                        result_context,
+                    )
+                except Exception as error:
+                    prepared.effect_overlay.discard()
+                    raise RuntimeToolError(
+                        "tool_result_egress_not_guaranteed"
+                    ) from error
+                if (
+                    not isinstance(resolved, RuntimeToolSurfaceResult)
+                    or resolved.payload != intended
+                    or resolved.classification.data_class != "public"
+                ):
+                    prepared.effect_overlay.discard()
+                    raise RuntimeToolError(
+                        "tool_result_egress_not_guaranteed"
+                    )
+                precommitted_classification = resolved.classification
             effect_evidence = (
-                execution_control.run_if_active(prepared.effect_overlay.commit)
+                execution_control.run_if_active(
+                    lambda: prepared.effect_overlay.commit(
+                        expected_evidence=expected_evidence
+                    )
+                )
                 if execution_control is not None
-                else prepared.effect_overlay.commit()
+                else prepared.effect_overlay.commit(
+                    expected_evidence=expected_evidence
+                )
             )
         else:
             effect_evidence = prepared.effect_overlay.discard()
-        return {
+        payload = {
             "exit_code": int(process.returncode),
             "output": output.decode("utf-8", errors="replace"),
             "output_bytes": len(output),
             "stream_complete": True,
             **effect_evidence,
         }
+        return (
+            RuntimeToolSurfaceResult(payload, precommitted_classification)
+            if precommitted_classification is not None
+            else payload
+        )
     except RuntimeToolError:
         raise
     except OSError as error:

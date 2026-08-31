@@ -63,6 +63,8 @@ def build_process_capabilities(
                 maximum=3_600,
             ),
             mutation_scopes=mutation_scopes,
+            result_classification_resolver=result_classification_resolver,
+            result_context=context,
         )
         _register_process_cancellation(
             registry,

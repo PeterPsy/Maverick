@@ -13,6 +13,9 @@ from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_admission_resolver,
     build_hosted_tool_result_preflight_resolver,
 )
+from core.runtime.public_content_authority import (
+    build_runtime_public_content_authority_record,
+)
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 
 
@@ -47,18 +50,40 @@ class _Processes:
 def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
     """Exercise concrete classification, pairing, and pre-effect policy behavior."""
     definitions = {
-        "fixture.read": SimpleNamespace(effect_class="read"),
-        "fixture.mutate": SimpleNamespace(effect_class="mutating"),
+        "fixture.read": SimpleNamespace(
+            effect_class="read",
+            owner_kind="core",
+            schema_public=True,
+            certified_tcb_component="tool-schema-catalog",
+            agentic_result_data_class="public",
+        ),
+        "fixture.mutate": SimpleNamespace(
+            effect_class="mutating",
+            owner_kind="core",
+            schema_public=True,
+            certified_tcb_component="tool-schema-catalog",
+            agentic_result_data_class="public",
+        ),
     }
     registry = _Definitions(definitions)
+    authority = build_runtime_public_content_authority_record(
+        workspace_id="behavior-probe",
+        actor_id="core-behavior-probe",
+        active=True,
+    )
+    authority_resolver = lambda workspace_id: (
+        authority if workspace_id == "behavior-probe" else None
+    )
     admission = build_hosted_tool_result_admission_resolver(
         cli_registry=registry,
         mcp_registry=registry,
+        public_content_authority_resolver=authority_resolver,
     )
     preflight = build_hosted_tool_result_preflight_resolver(
         cli_registry=registry,
         mcp_registry=registry,
         process_registry=_Processes(),
+        public_content_authority_resolver=authority_resolver,
     )
     context = RuntimeToolActorContext(
         workspace_id="behavior-probe",

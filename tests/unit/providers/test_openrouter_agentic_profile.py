@@ -30,8 +30,9 @@ from core.providers.openrouter_agentic_profile import (
 )
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.runtime.full_workspace_contract import (
+    FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
-    MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
+    MAVERICK_AGENT_EXECUTION_FAMILY,
 )
 from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
 from tests.support.repo import make_temp_repo_root
@@ -67,8 +68,8 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "30")
-        self.assertEqual(profile.adapter_version_constraint, "==23")
+        self.assertEqual(profile.revision, "31")
+        self.assertEqual(profile.adapter_version_constraint, "==24")
         self.assertEqual(profile.model_provider_id, "openrouter")
         self.assertEqual(profile.model_id, "deepseek/deepseek-v4-flash")
         self.assertEqual(profile.provider_protocol, "openrouter-chat-completions")
@@ -82,10 +83,13 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
         self.assertEqual(profile.egress_policy_id, "remote-agentic-contained")
         self.assertEqual(profile.egress_policy_revision, "2")
-        self.assertEqual(profile.full_workspace_contract_revision, "")
+        self.assertEqual(
+            profile.full_workspace_contract_revision,
+            FULL_WORKSPACE_CONTRACT_REVISION,
+        )
         self.assertEqual(
             profile.execution_family,
-            MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
+            MAVERICK_AGENT_EXECUTION_FAMILY,
         )
         self.assertEqual(
             profile.harness_recipe_id,
@@ -183,6 +187,14 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         self.assertTrue(certificate.certified_capabilities.filesystem_write)
         self.assertTrue(certificate.certified_capabilities.shell)
         self.assertTrue(certificate.certified_capabilities.recovery)
+        self.assertEqual(
+            certificate.full_workspace_contract_revision,
+            FULL_WORKSPACE_CONTRACT_REVISION,
+        )
+        self.assertEqual(
+            certificate.execution_family,
+            MAVERICK_AGENT_EXECUTION_FAMILY,
+        )
         self.assertEqual(certificate.harness_recipe_digest, profile.harness_recipe_digest)
         self.assertEqual(
             certificate.context_policy_revision,

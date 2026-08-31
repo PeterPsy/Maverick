@@ -23,16 +23,17 @@ from core.providers.openrouter_agentic_models import (
 )
 from core.providers.store import ProviderStore
 from core.runtime.full_workspace_contract import (
+    FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
-    MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
+    MAVERICK_AGENT_EXECUTION_FAMILY,
 )
 from core.runtime.hosted_harness_recipes import OPENROUTER_GOVERNED_WORKSPACE_RECIPE
 
 
 OPENROUTER_AGENTIC_PROFILE_ID = "agentic-profile-openrouter-deepseek-v4-flash-deepinfra-fp8"
-OPENROUTER_AGENTIC_PROFILE_REVISION = "30"
+OPENROUTER_AGENTIC_PROFILE_REVISION = "31"
 OPENROUTER_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30",
 )
 OPENROUTER_CERTIFIED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
 OPENROUTER_DEFAULT_REASONING_EFFORT = "high"
@@ -85,27 +86,27 @@ def ensure_openrouter_agentic_preview_profile(
     adapter: object,
     now: datetime | None = None,
 ) -> AgenticProfileDefinition:
-    """Publish uncertified candidate metadata without enabling a binding."""
+    """Publish an uncertified Full Workspace preview without enabling a binding."""
     timestamp = now or datetime.now(tz=UTC)
     definition = AgenticProfileDefinition(
         definition_id=OPENROUTER_AGENTIC_PROFILE_ID,
         revision=OPENROUTER_AGENTIC_PROFILE_REVISION,
-        display_name="OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · governed-workspace candidate",
+        display_name="OpenRouter DeepSeek V4 Flash · DeepInfra FP8 · Full Workspace preview",
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="openrouter",
         model_id=OPENROUTER_AGENTIC_MODEL_ID,
         provider_protocol="openrouter-chat-completions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==23",
+        adapter_version_constraint="==24",
         routing_constraint=openrouter_agentic_routing_constraint(),
         policy_ceiling=openrouter_agentic_preview_policy(),
         capability_certificate_id=OPENROUTER_AGENTIC_CERTIFICATE_ID,
         created_at=timestamp,
         egress_policy_id=REMOTE_PREVIEW_EGRESS_POLICY_ID,
         egress_policy_revision=REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
-        full_workspace_contract_revision="",
-        execution_family=MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY,
+        full_workspace_contract_revision=FULL_WORKSPACE_CONTRACT_REVISION,
+        execution_family=MAVERICK_AGENT_EXECUTION_FAMILY,
         harness_recipe_id=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.recipe_id,
         harness_recipe_revision=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.revision,
         harness_recipe_digest=OPENROUTER_GOVERNED_WORKSPACE_RECIPE.recipe_digest,

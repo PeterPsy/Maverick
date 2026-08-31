@@ -66,18 +66,19 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v17 makes the known transitive boundary executable through
+Manifest v18 makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 23 and the governed result contract
-`hosted-governed-result-v2` are bound by TCB manifest v17. The separate Full
-Workspace specification is `codex-baseline-v11`, but neither hosted profile
-claims it while the executable behavior gate reports incomplete creation and
-variable shell/process and CLI/MCP result behavior. The adapter places all
-provider-bound context in semantic-envelope schema v1/compiler revision 6,
+Hosted adapter 24 and the Full Workspace result contract
+`codex-baseline-v11` are bound by TCB manifest v18. Google revision 32 and
+OpenRouter revision 31 atomically claim that contract and the `maverick_agent`
+family because the executable result gate reports all 13 required behaviors.
+Those definitions remain uncertified, unbound, contained previews; the local
+claim is not live-provider evidence or launch authorization. The adapter places
+all provider-bound context in semantic-envelope schema v1/compiler revision 6,
 materializes scoped instructions through the confined filesystem, requires
 commit-bound instruction digests for direct mutations, and uses rollback-safe
 batch COW overlays for shell/process effects. Terminal process polling is
@@ -99,14 +100,16 @@ lexical selection identity and reject every symlink component.
 
 Production bootstrap installs a Core-owned content classifier and atomic
 turn-manifest writer for prompt, instruction, reference metadata, and each
-governed-context source chunk; composer ids cannot select a class. Non-resource
-raw output is never generically promoted: marker detection can narrow exact
-bytes but marker absence remains `unclassified`, never `public`; denied bytes
-stay private behind a call-paired public error. Unguaranteed
-workspace-mutating shell/process and
-mutating/destructive CLI/MCP calls are denied before effect. App discovery is
-not silently narrowed. Composite attachment metadata is classified separately
-and restrictively joined with the file observation; skills export exact
+governed-context source chunk; composer ids cannot select a class. Marker
+detection can narrow exact bytes but marker absence remains `unclassified`
+unless an operator-issued, CAS-revisioned runtime-public policy authorizes Core
+to classify the exact identity/revision/digest. Admission revalidates the
+server-owned policy digest and revocation state. Denied bytes stay private
+behind a call-paired public error. Core-certified CLI/MCP result declarations
+may supply explicit authority, while app declarations cannot. Mutating
+shell/process output is classified from the exact private-overlay result before
+commit and the overlay is discarded on denial. Composite attachment metadata
+is classified separately and restrictively joined with the file observation; skills export exact
 classified `SKILL.md` bytes, and every semantic class is bound to the exact
 projected digest. The runtime journals distinct source/projection evidence.
 Exact app-reference observations still resolve through revisioned workspace

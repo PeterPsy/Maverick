@@ -3,9 +3,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MaverickHttpError, MaverickTransportError } from "../src/api";
 import type { AppRegistryItem, PlatformSettings, SessionPayload, WorkspaceItem } from "../src/api";
 import { AppShell } from "../src/AppShell";
-import { recordMaverickNetworkFailure, recordMaverickNetworkSuccess } from "../src/connectivity";
+import { recordMaverickTransportFailure, recordMaverickTransportResponse } from "../src/transportRecovery";
 
 const api = vi.hoisted(() => ({
   configureActiveProvider: vi.fn(),
@@ -82,7 +83,7 @@ describe("AppShell bootstrap", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
-    recordMaverickNetworkSuccess(new Date("2026-08-26T12:00:00Z"));
+    recordMaverickTransportResponse();
     api.getSession.mockResolvedValue(sessionPayload());
     api.listApps.mockResolvedValue({ items: [app("chat")] });
     api.listPinnedApps.mockResolvedValue({ pinned_apps: ["chat"] });
@@ -144,7 +145,7 @@ describe("AppShell bootstrap", () => {
     const sidebar = container.querySelector("[data-testid='sidebar']");
 
     await act(async () => {
-      recordMaverickNetworkFailure();
+      recordMaverickTransportFailure();
       await Promise.resolve();
     });
 
@@ -153,9 +154,35 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
 
-  it("bootstraps authenticated shell state after a confirmed cold-offline reconnection", async () => {
-    recordMaverickNetworkFailure();
-    api.getSession.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  it("bootstraps authenticated shell state after confirmed transport recovery", async () => {
+    recordMaverickTransportFailure();
+    api.getSession.mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/session"));
+
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.getSession).toHaveBeenCalledOnce();
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+    expect(container.querySelector("[aria-label='Loading workspace']")).not.toBeNull();
+    expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
+
+    await act(async () => {
+      recordMaverickTransportResponse();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(api.getSession).toHaveBeenCalledTimes(2);
+    expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("default");
+    expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
+  });
+
+  it("revalidates shell state when transport recovery signals are coalesced", async () => {
+    api.getSession.mockRejectedValueOnce(new MaverickTransportError("Transport failed: /api/session"));
 
     await act(async () => {
       root.render(<AppShell />);
@@ -167,7 +194,8 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
 
     await act(async () => {
-      recordMaverickNetworkSuccess(new Date("2026-08-26T12:01:00Z"));
+      recordMaverickTransportFailure();
+      recordMaverickTransportResponse();
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -178,8 +206,8 @@ describe("AppShell bootstrap", () => {
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
 
-  it("revalidates shell state when offline and online snapshots are coalesced", async () => {
-    api.getSession.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  it("treats terminal HTTP responses as normal outcomes instead of retry waits", async () => {
+    api.getSession.mockRejectedValueOnce(new MaverickHttpError("/api/session", new Response("forbidden", { status: 403 })));
 
     await act(async () => {
       root.render(<AppShell />);
@@ -187,23 +215,12 @@ describe("AppShell bootstrap", () => {
       await Promise.resolve();
     });
 
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+    expect(container.querySelector("[aria-label='Loading workspace']")).toBeNull();
     expect(api.getSession).toHaveBeenCalledOnce();
-    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
-
-    await act(async () => {
-      recordMaverickNetworkFailure();
-      recordMaverickNetworkSuccess(new Date("2026-08-26T12:01:30Z"));
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(api.getSession).toHaveBeenCalledTimes(2);
-    expect(container.querySelector("[data-testid='workspace-view']")?.getAttribute("data-workspace-id")).toBe("default");
-    expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
   });
 
-  it("hides stale authenticated state until coalesced reconnect revalidation completes", async () => {
+  it("keeps the mounted shell while transport recovery revalidates its session", async () => {
     await act(async () => {
       root.render(<AppShell />);
       await Promise.resolve();
@@ -215,13 +232,13 @@ describe("AppShell bootstrap", () => {
     api.getSession.mockReturnValueOnce(new Promise((resolve) => { resolveSession = resolve; }));
 
     await act(async () => {
-      recordMaverickNetworkFailure();
-      recordMaverickNetworkSuccess(new Date("2026-08-26T12:02:00Z"));
+      recordMaverickTransportFailure();
+      recordMaverickTransportResponse();
       await Promise.resolve();
     });
 
     expect(api.getSession).toHaveBeenCalledTimes(2);
-    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+    expect(container.querySelector("[data-testid='workspace-view']")).not.toBeNull();
     expect(container.querySelector("[data-testid='login-screen']")).toBeNull();
 
     await act(async () => {

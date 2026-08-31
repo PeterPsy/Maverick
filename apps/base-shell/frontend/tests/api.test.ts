@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getActiveProvider, getPlatformStatus, getSession, listApps, listPinnedApps, normalizeAppRegistryPayload, savePinnedApps } from "../src/api";
+import { getActiveProvider, getPlatformStatus, getSession, isRetryableReadError, listApps, listPinnedApps, MaverickHttpError, MaverickTransportError, normalizeAppRegistryPayload, retryAfterMs, savePinnedApps } from "../src/api";
 import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
 
 describe("base-shell api normalization", () => {
@@ -69,6 +69,20 @@ describe("base-shell api normalization", () => {
     const assertion = expect(listApps()).rejects.toThrow("Request timed out after 15000 ms: /api/apps");
     await vi.advanceTimersByTimeAsync(15_000);
     await assertion;
+  });
+
+  it("classifies transport and explicitly retryable read responses without hiding terminal HTTP", () => {
+    const transport = new MaverickTransportError("transport failed");
+    const unavailable = new MaverickHttpError("/api/session", new Response(null, {
+      status: 503,
+      headers: { "Retry-After": "2" },
+    }));
+    const forbidden = new MaverickHttpError("/api/session", new Response(null, { status: 403 }));
+
+    expect(isRetryableReadError(transport)).toBe(true);
+    expect(isRetryableReadError(unavailable)).toBe(true);
+    expect(retryAfterMs(unavailable)).toBe(2_000);
+    expect(isRetryableReadError(forbidden)).toBe(false);
   });
 
   it("reads and saves ordered pinned apps through the App Store backend", async () => {

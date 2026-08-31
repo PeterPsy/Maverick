@@ -5,11 +5,13 @@ import {
   configureActiveProvider,
   getProviderSetupSettings,
   getSession,
+  isRetryableReadError,
   listApps,
   listPinnedApps,
   listWorkspaces,
   logout,
   ProviderSetupSettings,
+  retryAfterMs,
   savePinnedApps,
   SessionPayload,
   switchWorkspace,
@@ -35,7 +37,7 @@ import { applyShellThemeToDocument, createShellThemeState, readSystemColorScheme
 import type { ShellEffectiveTheme, ShellThemeMode } from "./theme";
 import { markStartupMetric, measureStartupMetric } from "./startupMetrics";
 import { getInitialMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
-import { useMaverickConnectivity } from "./connectivity";
+import { resetTransportRecoveryScope, useTransportRecoverySignal } from "./transportRecovery";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
@@ -49,6 +51,8 @@ import type { WidgetPrimaryActionState } from "./components/WidgetSlot";
 
 const MOBILE_SIDEBAR_TRANSITION_MS = 220;
 const MOBILE_CHAT_TRANSITION_MS = 240;
+const SHELL_RETRY_BASE_MS = 1_000;
+const SHELL_RETRY_CAP_MS = 30_000;
 
 export function AppShell() {
   const initialSession = useMemo(() => readShellSession(), []);
@@ -95,7 +99,7 @@ export function AppShell() {
   });
   const [mobilePrimaryActionRequestId, setMobilePrimaryActionRequestId] = useState(0);
   const isMobileLayout = useMobileLayout();
-  const connectivity = useMaverickConnectivity();
+  const transportRecovery = useTransportRecoverySignal();
   const isSidebarPinned = sidebarMode === "fixed" && !isMobileLayout;
   const isChatAppActive = activeAppId === CHAT_APP_ID;
   const isFloatingChatFixed = floatingChatMode === "fixed-right" && !isMobileLayout && !isChatAppActive;
@@ -106,7 +110,12 @@ export function AppShell() {
   const persistedPinnedAppIdsRef = useRef(pinnedAppIds);
   const persistedPinnedAppsVersionRef = useRef(0);
   const shellLoadVersionRef = useRef(0);
-  const handledReconnectRevisionRef = useRef(connectivity.reconnectRevision);
+  const shellLoadAbortRef = useRef<AbortController | null>(null);
+  const shellLoadInFlightRef = useRef(false);
+  const shellRetryAttemptRef = useRef(0);
+  const shellRetryTimerRef = useRef<number | null>(null);
+  const shellWaitingForRetryRef = useRef(false);
+  const handledRecoveryRevisionRef = useRef(transportRecovery.revision);
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;
   const hasSettingsShortcut = Boolean(settingsShortcutApp);
@@ -221,16 +230,66 @@ export function AppShell() {
     );
   }
 
-  async function loadShellState() {
+  function clearShellRetryTimer() {
+    if (shellRetryTimerRef.current !== null) {
+      window.clearTimeout(shellRetryTimerRef.current);
+      shellRetryTimerRef.current = null;
+    }
+  }
+
+  function cancelShellLoading({ resetRecovery = false } = {}) {
+    clearShellRetryTimer();
+    shellLoadAbortRef.current?.abort();
+    shellLoadAbortRef.current = null;
+    shellLoadInFlightRef.current = false;
+    shellRetryAttemptRef.current = 0;
+    shellWaitingForRetryRef.current = false;
+    shellLoadVersionRef.current += 1;
+    if (resetRecovery) {
+      resetTransportRecoveryScope();
+    }
+  }
+
+  function scheduleShellRetry(loadError: unknown) {
+    clearShellRetryTimer();
+    shellWaitingForRetryRef.current = true;
+    const attempt = shellRetryAttemptRef.current;
+    shellRetryAttemptRef.current += 1;
+    if (document.visibilityState === "hidden") {
+      return;
+    }
+    const exponential = Math.min(SHELL_RETRY_CAP_MS, SHELL_RETRY_BASE_MS * (2 ** Math.min(attempt, 5)));
+    const jittered = Math.round(exponential * (0.75 + Math.random() * 0.5));
+    const delay = Math.max(jittered, retryAfterMs(loadError) ?? 0);
+    shellRetryTimerRef.current = window.setTimeout(() => {
+      shellRetryTimerRef.current = null;
+      void loadShellState({ supersede: false });
+    }, delay);
+  }
+
+  async function loadShellState({ supersede = true }: { supersede?: boolean } = {}) {
+    if (shellLoadInFlightRef.current && !supersede) {
+      return;
+    }
+    if (supersede) {
+      clearShellRetryTimer();
+      shellLoadAbortRef.current?.abort();
+      shellLoadInFlightRef.current = false;
+      shellWaitingForRetryRef.current = false;
+    }
+    const controller = new AbortController();
+    shellLoadAbortRef.current = controller;
+    shellLoadInFlightRef.current = true;
     const loadVersion = shellLoadVersionRef.current + 1;
     shellLoadVersionRef.current = loadVersion;
     const loadStartedAt = performance.now();
+    let keepLoading = false;
     markStartupMetric("shell.bootstrap.start");
     setIsLoading(true);
     setIsWorkspacesLoading(true);
     try {
       const sessionStartedAt = performance.now();
-      const currentSession = await getSession();
+      const currentSession = await getSession(controller.signal);
       measureStartupMetric("shell.bootstrap.session", sessionStartedAt, { authenticated: currentSession.authenticated });
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
@@ -242,42 +301,64 @@ export function AppShell() {
         setSettings(null);
         setError(null);
         setIsWorkspacesLoading(false);
+        shellRetryAttemptRef.current = 0;
+        shellWaitingForRetryRef.current = false;
         measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: false });
         return;
       }
-      void loadWorkspaceState(loadVersion);
-      void loadProviderSetupState(loadVersion);
+      void loadWorkspaceState(loadVersion, controller.signal);
+      void loadProviderSetupState(loadVersion, controller.signal);
       const blockingStartedAt = performance.now();
-      const registry = await listApps();
+      const registry = await listApps(controller.signal);
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
       setApps(registry.items);
       setError(null);
+      shellRetryAttemptRef.current = 0;
+      shellWaitingForRetryRef.current = false;
       measureStartupMetric("shell.bootstrap.blocking_payloads", blockingStartedAt, {
         app_count: registry.items.length,
       });
       measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: true });
-      void loadPinnedAppsState(loadVersion);
+      void loadPinnedAppsState(loadVersion, controller.signal);
     } catch (loadError) {
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (isRetryableReadError(loadError)) {
+        keepLoading = true;
+        setError(null);
+        scheduleShellRetry(loadError);
+        measureStartupMetric("shell.bootstrap.waiting", loadStartedAt, {
+          attempt: shellRetryAttemptRef.current,
+        });
+        return;
+      }
+      shellRetryAttemptRef.current = 0;
+      shellWaitingForRetryRef.current = false;
       setError(loadError instanceof Error ? loadError.message : "Errore sconosciuto.");
       measureStartupMetric("shell.bootstrap.error", loadStartedAt, {
         message: loadError instanceof Error ? loadError.message : "unknown",
       });
     } finally {
-      if (shellLoadVersionRef.current === loadVersion) {
+      if (shellLoadAbortRef.current === controller) {
+        shellLoadAbortRef.current = null;
+        shellLoadInFlightRef.current = false;
+      }
+      if (shellLoadVersionRef.current === loadVersion && !keepLoading) {
         setIsLoading(false);
       }
     }
   }
 
-  async function loadWorkspaceState(loadVersion: number) {
+  async function loadWorkspaceState(loadVersion: number, signal?: AbortSignal) {
     const deferredStartedAt = performance.now();
     try {
-      const workspacePayload = await listWorkspaces();
+      const workspacePayload = await listWorkspaces(signal);
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
@@ -298,10 +379,10 @@ export function AppShell() {
     }
   }
 
-  async function loadProviderSetupState(loadVersion: number) {
+  async function loadProviderSetupState(loadVersion: number, signal?: AbortSignal) {
     const deferredStartedAt = performance.now();
     try {
-      const providerSetupSettings = await getProviderSetupSettings();
+      const providerSetupSettings = await getProviderSetupSettings(signal);
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
@@ -317,11 +398,11 @@ export function AppShell() {
     }
   }
 
-  async function loadPinnedAppsState(loadVersion: number) {
+  async function loadPinnedAppsState(loadVersion: number, signal?: AbortSignal) {
     const deferredStartedAt = performance.now();
     const pinnedStateVersion = pinnedAppsSaveVersionRef.current;
     try {
-      const pinnedApps = await listPinnedApps();
+      const pinnedApps = await listPinnedApps(signal);
       if (
         shellLoadVersionRef.current !== loadVersion
         || pinnedAppsSaveVersionRef.current !== pinnedStateVersion
@@ -342,20 +423,21 @@ export function AppShell() {
   }
 
   useEffect(() => {
-    loadShellState();
+    void loadShellState();
+    return () => cancelShellLoading({ resetRecovery: true });
   }, []);
 
   useEffect(() => {
-    if (
-      connectivity.status !== "online"
-      || connectivity.reconnectRevision <= handledReconnectRevisionRef.current
-    ) {
+    if (transportRecovery.revision <= handledRecoveryRevisionRef.current) {
       return;
     }
-    handledReconnectRevisionRef.current = connectivity.reconnectRevision;
-    setSession(null);
-    void loadShellState();
-  }, [connectivity.reconnectRevision, connectivity.status]);
+    handledRecoveryRevisionRef.current = transportRecovery.revision;
+    if (!shellWaitingForRetryRef.current && transportRecovery.kind !== "confirmed") {
+      return;
+    }
+    clearShellRetryTimer();
+    void loadShellState({ supersede: false });
+  }, [transportRecovery.revision]);
 
   useEffect(() => {
     applyShellThemeToDocument(shellTheme);
@@ -538,6 +620,7 @@ export function AppShell() {
     if (requestedWorkspaceId && requestedWorkspaceId !== activeWorkspaceId) {
       try {
         await switchWorkspace(requestedWorkspaceId);
+        cancelShellLoading({ resetRecovery: true });
         await loadShellState();
       } catch (switchError) {
         setError(switchError instanceof Error ? switchError.message : "Unable to switch workspace.");
@@ -594,6 +677,7 @@ export function AppShell() {
 
   async function handleLogout() {
     await logout();
+    cancelShellLoading({ resetRecovery: true });
     await loadShellState();
   }
 
@@ -683,7 +767,8 @@ export function AppShell() {
   if (!session?.authenticated) {
     return <LoginScreen onAuthenticated={(authenticatedSession) => {
       setSession(authenticatedSession);
-      loadShellState();
+      resetTransportRecoveryScope();
+      void loadShellState();
     }} />;
   }
 

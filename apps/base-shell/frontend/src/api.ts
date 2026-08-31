@@ -1,4 +1,4 @@
-import { recordMaverickNetworkFailure, recordMaverickNetworkSuccess } from "./connectivity";
+import { recordMaverickTransportFailure, recordMaverickTransportResponse } from "./transportRecovery";
 
 export type AppLogo = {
   kind: "glyph" | "image";
@@ -261,6 +261,34 @@ export type PinnedAppsPayload = {
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
+export class MaverickHttpError extends Error {
+  readonly retryAfterMs: number | null;
+  readonly status: number;
+
+  constructor(path: string, response: Response) {
+    super(`Request failed ${response.status}: ${path}`);
+    this.name = "MaverickHttpError";
+    this.status = response.status;
+    this.retryAfterMs = parseRetryAfter(response.headers.get("retry-after"));
+  }
+}
+
+export class MaverickTransportError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "MaverickTransportError";
+  }
+}
+
+export function isRetryableReadError(error: unknown): boolean {
+  return error instanceof MaverickTransportError
+    || (error instanceof MaverickHttpError && [429, 502, 503, 504].includes(error.status));
+}
+
+export function retryAfterMs(error: unknown): number | null {
+  return error instanceof MaverickHttpError ? error.retryAfterMs : null;
+}
+
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const requestController = new AbortController();
   const relayAbort = () => requestController.abort();
@@ -284,22 +312,37 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     });
     receivedResponse = true;
     if (!response.ok) {
-      throw new Error(`Request failed ${response.status}: ${path}`);
+      throw new MaverickHttpError(path, response);
     }
-    recordMaverickNetworkSuccess();
+    recordMaverickTransportResponse();
     return (await response.json()) as T;
   } catch (requestError) {
     if (!receivedResponse && !init.signal?.aborted) {
-      recordMaverickNetworkFailure();
+      recordMaverickTransportFailure();
     }
     if (didTimeout) {
-      throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS} ms: ${path}`, { cause: requestError });
+      throw new MaverickTransportError(`Request timed out after ${REQUEST_TIMEOUT_MS} ms: ${path}`, { cause: requestError });
+    }
+    if (!receivedResponse && !init.signal?.aborted) {
+      throw new MaverickTransportError(`Transport failed: ${path}`, { cause: requestError });
     }
     throw requestError;
   } finally {
     globalThis.clearTimeout(timeoutId);
     init.signal?.removeEventListener("abort", relayAbort);
   }
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(seconds * 1_000, 60_000);
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, Math.min(timestamp - Date.now(), 60_000)) : null;
 }
 
 function stringField(value: unknown, fallback = ""): string {
@@ -443,15 +486,16 @@ export function normalizeAppRegistryPayload(value: unknown): AppRegistryPayload 
   return { items };
 }
 
-export function listApps(): Promise<AppRegistryPayload> {
-  return requestJson<unknown>("/api/apps").then(normalizeAppRegistryPayload);
+export function listApps(signal?: AbortSignal): Promise<AppRegistryPayload> {
+  return requestJson<unknown>("/api/apps", { signal }).then(normalizeAppRegistryPayload);
 }
 
-export function listPinnedApps(): Promise<PinnedAppsPayload> {
+export function listPinnedApps(signal?: AbortSignal): Promise<PinnedAppsPayload> {
   return requestJson<unknown>("/api/apps/app-store/backend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "pinned_apps.list" }),
+    signal,
   }).then(normalizePinnedAppsPayload);
 }
 
@@ -477,8 +521,8 @@ export function getPlatformStatus(): Promise<PlatformStatus> {
   });
 }
 
-export function getSession(): Promise<SessionPayload> {
-  return requestJson<SessionPayload>("/api/session");
+export function getSession(signal?: AbortSignal): Promise<SessionPayload> {
+  return requestJson<SessionPayload>("/api/session", { signal });
 }
 
 export function login(username: string, password: string): Promise<SessionPayload> {
@@ -493,8 +537,8 @@ export function logout(): Promise<SessionPayload> {
   return requestJson<SessionPayload>("/api/auth/logout", { method: "POST" });
 }
 
-export function listWorkspaces(): Promise<WorkspacesPayload> {
-  return requestJson<WorkspacesPayload>("/api/workspaces");
+export function listWorkspaces(signal?: AbortSignal): Promise<WorkspacesPayload> {
+  return requestJson<WorkspacesPayload>("/api/workspaces", { signal });
 }
 
 export function createWorkspace(name: string): Promise<WorkspaceItem> {
@@ -537,8 +581,8 @@ export function getPlatformSettings(): Promise<PlatformSettings> {
   return requestJson<PlatformSettings>("/api/settings/platform");
 }
 
-export function getProviderSetupSettings(): Promise<ProviderSetupSettings> {
-  return requestJson<ProviderSetupSettings>("/api/settings/provider-setup");
+export function getProviderSetupSettings(signal?: AbortSignal): Promise<ProviderSetupSettings> {
+  return requestJson<ProviderSetupSettings>("/api/settings/provider-setup", { signal });
 }
 
 export function runtimeThreadWebSocketUrl(): string {

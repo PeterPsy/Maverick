@@ -1,13 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AppShell } from "./AppShell";
-import { startConnectivityMonitoring } from "./connectivity";
+import { startTransportRecoveryMonitoring } from "./transportRecovery";
 import { registerShellServiceWorker } from "./pwa";
 import { applyInitialShellTheme } from "./theme";
 import "./styles/main.css";
 
 applyInitialShellTheme();
-startConnectivityMonitoring();
+startTransportRecoveryMonitoring();
 registerShellServiceWorker();
 
 createRoot(document.getElementById("root") as HTMLElement).render(

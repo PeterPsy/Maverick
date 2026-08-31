@@ -17,3 +17,4 @@ Current ADR set:
 - `0009-design-studio-opendesign-incremental-cycle.md`
 - `0010-agentic-multimodel-runtime.md`
 - `0011-pwa-cache-and-offline-boundaries.md`
+- `0012-transparent-pwa-cache-and-network-resilience.md`

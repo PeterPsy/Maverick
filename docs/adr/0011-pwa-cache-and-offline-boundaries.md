@@ -4,6 +4,14 @@
 
 Accepted on 2026-08-26 as the M0 gate for the PWA cache rollout.
 
+**Superseded in its product, local-policy, and connectivity-UX decisions on
+2026-08-31 by
+[ADR-0012](0012-transparent-pwa-cache-and-network-resilience.md).** This file
+is retained as historical evidence for the M0-M2 checkpoints. Its HTTP
+validator, verified-asset, atomic-install, bounded-cleanup, and
+server-authority decisions remain applicable only where ADR-0012 preserves
+them.
+
 This decision authorizes an offline shell and verified static-asset caching. It
 does **not** authorize persistent private read models, offline files, or an
 outbox until their later milestone gates and feature flags are complete.

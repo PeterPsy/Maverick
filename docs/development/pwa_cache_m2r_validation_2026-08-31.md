@@ -2,10 +2,10 @@
 
 ## Status
 
-The M2R source, generated artifacts, contracts, and automated tests are
-implemented. Deployment activation on the shared backend and the physical
-Safari/Home Screen matrix remain explicit external release gates; they are not
-represented as passed in this record.
+The M2R source, generated artifacts, contracts, automated tests, and shared
+backend activation are implemented and verified. The physical Safari/Home
+Screen matrix remains an explicit external release gate and is not represented
+as passed in this record.
 
 This record supersedes the product conclusions, not the historical facts, in
 `pwa_cache_m2_validation_2026-08-26.md`.
@@ -93,20 +93,28 @@ Malformed values remain fail-closed.
 
 ## Deployment activation note
 
-The official `maverick app base-shell frontend build --json` invocation ran the
-new build but the already-running shared backend still had the v1 loader in
-memory and therefore rejected publication of the refresh event. Restarting that
-service at the time of this review would also terminate active agent/runtime
-children in its systemd control group, so it was deliberately not used as a
-development shortcut. After the shared sessions finish, an operator must:
+The deferred shared-backend activation was completed after the active runtime
+sessions stopped:
 
-1. restart `maverick-core.service` through the normal service procedure;
-2. verify `/health` and schema `maverick.pwa-config.v2`;
-3. rerun `maverick app base-shell frontend build --json`;
-4. run `scripts/pwa_shell_cache_smoke.mjs` against the active endpoint.
+1. `maverick-core.service` restarted successfully and has been active since
+   `2026-08-31T13:19:49Z`;
+2. `/health` returned `status: ok` and `/api/pwa/config` matched
+   `maverick.pwa-config.v2` exactly, including generation `v2` and both
+   cache-centric feature flags disabled;
+3. `maverick app base-shell frontend build --json` completed with status
+   `built`, build id
+   `bd942620ec5380adf200623b970137dd741ac87562eb7204bbf940712f488a07`,
+   three immutable assets, fourteen revalidated assets, and a published
+   `maverick.app.frontend-changed` event;
+4. `scripts/pwa_shell_cache_smoke.mjs` passed against
+   `http://127.0.0.1:8014` in Chromium at `2026-08-31T13:21:18.022Z`.
 
-This operational deferral does not change the committed artifact, but the live
-shared endpoint is not claimed as M2R-certified until those steps pass.
+The smoke result used schema `maverick.pwa-shell-cache-smoke.v2` and passed the
+online install, mounted-tree preservation, standard-shell restart without
+network, non-shell navigation bypass, excluded dynamic requests, transparent
+transport recovery, and absence of superseded mode UI. This closes the shared
+backend activation gate; it does not replace the physical-device release gate
+below.
 
 ## Physical-device matrix
 

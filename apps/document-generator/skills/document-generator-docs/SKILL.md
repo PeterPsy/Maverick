@@ -1,17 +1,25 @@
 ---
 name: document-generator-docs
-description: "Use the Document Generator app CLI or MCP tool first for workspace document operations: create DOCX, PPTX, PDF, and XLSX files, edit PDFs, transform XLSX/CSV/TSV spreadsheets, extract text, or convert documents to Markdown."
+description: "Use the Document Generator app CLI or MCP tool first for supported structured document operations: create DOCX, PPTX, PDF, and XLSX files, edit PDFs, transform XLSX/CSV/TSV spreadsheets, extract text from PDF/DOCX/PPTX/XLSX/ODT, or convert documents to Markdown. Route existing Markdown and plain-text reads to Storage."
 ---
 
 # Document Generator Docs
 
-Use this skill when a user asks an agent to create, edit, transform, inspect, read, extract from, or convert a workspace document or spreadsheet.
+Use this skill when a user asks an agent to create, edit, transform, inspect, extract from, or convert a structured workspace document or spreadsheet. For an existing Markdown or plain-text source, follow the Storage routing below instead of treating native text as a Document Generator extraction format.
 
 ## Default Document Path
 
-For files under `storage/uploaded/` or `storage/generated/`, use Document Generator before checking for or installing ad hoc packages such as `openpyxl`, `xlsxwriter`, `pandas`, `xlsx`, `xlsx2csv`, LibreOffice, or `soffice`.
+For supported structured files under `storage/uploaded/` or `storage/generated/`, use Document Generator before checking for or installing ad hoc packages such as `openpyxl`, `xlsxwriter`, `pandas`, `xlsx`, `xlsx2csv`, LibreOffice, or `soffice`.
 
-Fallback to direct libraries or temporary virtualenvs only when the official Document Generator CLI/MCP surface cannot express the requested operation, or when the Document Generator call fails with a concrete unsupported-operation error. If you fallback, state which Document Generator action was tried or why it does not apply.
+Native Markdown and plain-text access is Storage-owned:
+
+- Read an existing `.md` or plain-text file with `app.storage.storage_read_text` and continue with `next_offset` while `has_more` is true.
+- Use `app.storage.storage_preview_text` only when a bounded preview is sufficient.
+- Use `app.storage.storage_update_markdown_file` for guarded edits to an existing Markdown file.
+- Do not call `document_generator_extract_text` for `.md` or `.txt`. Its supported extraction inputs are PDF, DOCX, PPTX, XLSX, and ODT.
+- Do not call `convert_to_markdown` for an existing `.md` file. That action creates a new Markdown artifact from a supported structured source.
+
+Fallback to direct libraries or temporary virtualenvs only when the official surface owned by the relevant app cannot express the requested operation, or when that surface fails with a concrete unsupported-operation error. An `Unsupported extraction format md` response is a routing signal to use Storage, not a reason to install a local text reader. If you fallback, state which official action was tried or why it does not apply.
 
 ## App Scripts
 
@@ -42,12 +50,15 @@ Supported formats:
 - `pdf`
 - `xlsx`
 
-Text extraction supports the same modern document formats:
+Text extraction supports:
 
 - `pdf`
 - `docx`
 - `pptx`
 - `xlsx`
+- `odt`
+
+Text extraction does not accept Markdown or plain-text sources. Use `app.storage.storage_read_text` for those formats so Markdown indentation, code blocks, lists, tables, and line breaks are preserved and long content can be paged.
 
 Do not request `xls`; this app intentionally supports only `xlsx` for spreadsheets.
 
@@ -259,7 +270,7 @@ Supported spreadsheet operations:
 
 Use `app.document-generator.maverick_document_generator` with the same arguments as the CLI.
 
-For document text extraction, prefer:
+For supported PDF, DOCX, PPTX, XLSX, or ODT text extraction, prefer:
 
 - CLI command `app.document-generator.document-generator` with action `extract_text`
 - MCP tool `app.document-generator.document_generator_extract_text`
@@ -273,6 +284,8 @@ Extraction inputs should identify a workspace file under `storage/uploaded/` or 
   "max_chars": 50000
 }
 ```
+
+For an existing Markdown or plain-text input, skip this action and call `app.storage.storage_read_text` directly. Do not first invoke Document Generator merely to obtain the expected unsupported-format error.
 
 For PDF text patching, prefer:
 

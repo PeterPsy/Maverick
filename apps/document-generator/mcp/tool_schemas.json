@@ -1,7 +1,7 @@
 {
   "tools": {
     "maverick_document_generator": {
-      "description": "Generic Document Generator operations tool. Use dedicated tools for spreadsheet transforms, PDF text patching, document text extraction, Markdown conversion, references, and view-state actions when available.",
+      "description": "Generic Document Generator operations tool. Use dedicated tools for spreadsheet transforms, PDF text patching, document text extraction, Markdown conversion, references, and view-state actions when available. Extraction is limited to PDF/DOCX/PPTX/XLSX/ODT; read existing Markdown and plain-text files with app.storage.storage_read_text.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -157,7 +157,7 @@
       }
     },
     "document_generator_extract_text": {
-      "description": "Extract bounded plain text from one workspace PDF, DOCX, PPTX, XLSX, or ODT under storage/uploaded/ or storage/generated/.",
+      "description": "Extract bounded plain text from one workspace PDF, DOCX, PPTX, XLSX, or ODT under storage/uploaded/ or storage/generated/. This tool does not accept Markdown or plain-text sources; read those with app.storage.storage_read_text.",
       "input_schema": {
         "type": "object",
         "properties": {

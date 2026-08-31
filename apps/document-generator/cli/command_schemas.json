@@ -1,7 +1,7 @@
 {
   "commands": {
     "document-generator": {
-      "description": "Create DOCX, PPTX, PDF, and XLSX documents, transform XLSX/CSV/TSV spreadsheets, extract text from workspace documents, edit PDF text, convert workspace documents to agent-ready Markdown, and manage Document Generator references/view state.",
+      "description": "Create DOCX, PPTX, PDF, and XLSX documents, transform XLSX/CSV/TSV spreadsheets, extract text from PDF/DOCX/PPTX/XLSX/ODT workspace documents, edit PDF text, convert workspace documents to agent-ready Markdown, and manage Document Generator references/view state. Read existing Markdown and plain-text files with app.storage.storage_read_text.",
       "argument_schema": {
         "type": "object",
         "description": "Document Generator command arguments. With no action, generates a document from spec.",

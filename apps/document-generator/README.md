@@ -2,13 +2,20 @@
 
 Agent-facing document generation, document text extraction, Docling-backed Markdown conversion, and deterministic spreadsheet transformation app for DOCX, PPTX, PDF, XLSX, CSV, TSV, and ODT files.
 
+## Format Routing
+
+- Use `document_generator_extract_text` only for PDF, DOCX, PPTX, XLSX, and ODT sources. It parses and normalizes text from those structured formats.
+- Existing Markdown and plain-text files are already native text and remain Storage-owned. Read them with `app.storage.storage_read_text`, following `next_offset` while `has_more` is true; use `app.storage.storage_preview_text` only for a bounded preview.
+- `convert_to_markdown` converts a supported PDF, DOCX, PPTX, or XLSX source into a new Markdown artifact. It does not accept an existing `.md` file as a source. Read a generated Markdown artifact through Storage, or request bounded inline output with `return_markdown` during conversion.
+- An `Unsupported extraction format md` result therefore indicates incorrect tool routing, not a missing local parser and not a reason to install an ad hoc text-reading dependency.
+
 ## Contract Notes
 
 - Backend, CLI, MCP, and supporting frontend entrypoints are declared in `app_contract.json`; the frontend is marked `presentation.frontend_role: supporting` because document generation and conversion are primarily used through tools and app-owned data surfaces.
 - The contract declares the bundled `document-generator-docs` skill and the `document` reference entity.
 - App-owned storage lives under `data/<local_app_id>/` for state, templates, and generation jobs; the builtin install uses `data/document-generator/`.
 - Persisted `view_surfaces` cover generated document job filters and curated generated-document selections.
-- The `document-generator` CLI action `extract_text` and MCP tool `document_generator_extract_text` read workspace files under `storage/generated/` or `storage/uploaded/` and return extracted text plus extraction metadata for `pdf`, `docx`, `pptx`, `xlsx`, and `odt`. Responses include detected format, full normalized `text_length`, returned text length, `truncated`, and warning fields.
+- The `document-generator` CLI action `extract_text` and MCP tool `document_generator_extract_text` read supported structured workspace files under `storage/generated/` or `storage/uploaded/` and return extracted text plus extraction metadata for `pdf`, `docx`, `pptx`, `xlsx`, and `odt`. Responses include detected format, full normalized `text_length`, returned text length, `truncated`, and warning fields. They intentionally do not read Markdown or plain-text sources; use Storage as described above.
 - The `document-generator` CLI action `spreadsheet.transform` and MCP tool `document_generator_spreadsheet_transform` apply deterministic `lookup_and_copy`, `write_cells`, and `find_values` operations to XLSX, CSV, and TSV files, write the modified generated Storage file, and return hash before/after values plus a Markdown verification report under `storage/generated/document-generator/spreadsheet-reports/`. Spreadsheet writes use an explicit `mode=create|overwrite|versioned` policy: `create` is the default and fails if `target_file` already exists, `overwrite` requires `confirm=true` for an existing target, and `versioned` writes the next available `target.vN.<ext>` file without replacing the requested target. Write operations have a single persisted workbook: `lookup_and_copy.target.file` must reference the same workbook selected by `target_file` or `base_file`, otherwise the transform is rejected instead of reporting unsaved changes.
 - The `document-generator` CLI action `patch_pdf_text` and MCP tool `document_generator_patch_pdf_text` replace matched text in workspace PDFs, save generated outputs under `storage/generated/document-generator/pdf-edits/<job_id>/`, and return hash, match counts, and a visual crop artifact when available.
 - The `document-generator` CLI action `modify_uploaded_document` and MCP tool `document_generator_modify_uploaded_document` provide a task-level helper for simple uploaded-PDF date replacements, returning candidate dates when confirmation is required.

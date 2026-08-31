@@ -260,17 +260,27 @@ When there are multiple valid implementations, prefer the one that is:
 
 If a choice improves short-term speed but worsens the architecture, do not take it by default.
 
-## Document Operations Use Document Generator First
+## Document Operations Use The Owning App First
 
-When the user asks to create, modify, transform, read, extract, convert, or
-verify a workspace document or spreadsheet, use the Document Generator app
-(`app_id: document-generator`) official CLI/MCP surfaces before installing or
-using ad hoc local tools such as `openpyxl`, `xlsxwriter`, `pandas`, `xlsx`,
-`xlsx2csv`, LibreOffice, or `soffice`.
+When the user asks to create, modify, transform, extract from, convert, or
+verify a structured workspace document or spreadsheet, use the Document
+Generator app (`app_id: document-generator`) official CLI/MCP surfaces before
+installing or using ad hoc local tools such as `openpyxl`, `xlsxwriter`,
+`pandas`, `xlsx`, `xlsx2csv`, LibreOffice, or `soffice`.
 
-This includes DOCX, PPTX, PDF, XLSX, CSV, and TSV work under
+This includes DOCX, PPTX, PDF, XLSX, CSV, TSV, and ODT work under
 `storage/uploaded/` or `storage/generated/`. For spreadsheets, prefer
 `spreadsheet.transform` with `write_cells`, `lookup_and_copy`, or `find_values`.
-Fallback to direct libraries only when the official Document Generator surface
-cannot express the requested operation or returns a concrete unsupported/failing
-result, and state that fallback reason.
+
+Native Markdown and plain-text file access is Storage-owned instead. Read an
+existing `.md` or plain-text file with `app.storage.storage_read_text`, following
+`next_offset` while `has_more` is true. Use
+`app.storage.storage_update_markdown_file` for guarded Markdown edits. Do not
+send `.md` or `.txt` files to `document_generator_extract_text`: that tool only
+extracts from PDF, DOCX, PPTX, XLSX, and ODT. `convert_to_markdown` converts a
+supported structured source into a new Markdown artifact; it does not read an
+existing Markdown source.
+
+Fallback to direct libraries only when the official surface owned by the
+relevant app cannot express the requested operation or returns a concrete
+unsupported/failing result, and state that fallback reason.

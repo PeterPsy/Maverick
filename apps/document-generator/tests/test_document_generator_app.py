@@ -131,12 +131,17 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertTrue((APP_ROOT / "mcp" / "tool_schemas.json").is_file())
         self.assertTrue((APP_ROOT / "frontend" / "dist" / "index.html").is_file())
 
-    def test_skill_guides_agents_to_document_generator_first_for_document_work(self) -> None:
+    def test_skill_and_docs_route_native_text_reads_to_storage(self) -> None:
         skill_markdown = (APP_ROOT / "skills" / "document-generator-docs" / "SKILL.md").read_text(encoding="utf-8")
+        readme = (APP_ROOT / "README.md").read_text(encoding="utf-8")
+        agent_guide = (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
         self.assertIn("Use the Document Generator app CLI or MCP tool first", skill_markdown)
         self.assertIn("transform XLSX/CSV/TSV spreadsheets", skill_markdown)
         self.assertIn("use Document Generator before checking for or installing ad hoc packages", skill_markdown)
+        self.assertIn("app.storage.storage_read_text", skill_markdown)
+        self.assertIn("app.storage.storage_read_text", readme)
+        self.assertIn("app.storage.storage_read_text", agent_guide)
         self.assertIn("openpyxl", skill_markdown)
         self.assertIn("spreadsheet.transform", skill_markdown)
         self.assertIn("document_generator_spreadsheet_transform", skill_markdown)
@@ -148,6 +153,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         command = cli_schema["commands"]["document-generator"]
         command_properties = cli_schema["commands"]["document-generator"]["argument_schema"]["properties"]
         generic_tool = mcp_schema["tools"]["maverick_document_generator"]
+        extract_tool = mcp_schema["tools"]["document_generator_extract_text"]
         tool = mcp_schema["tools"]["document_generator_convert_to_markdown"]
         patch_tool = mcp_schema["tools"]["document_generator_patch_pdf_text"]
         workflow_tool = mcp_schema["tools"]["document_generator_modify_uploaded_document"]
@@ -156,7 +162,10 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         tool_output_properties = tool["output_schema"]["properties"]
 
         self.assertIn("transform XLSX/CSV/TSV spreadsheets", command["description"])
+        self.assertIn("PDF/DOCX/PPTX/XLSX/ODT", command["description"])
         self.assertIn("spreadsheet transforms", generic_tool["description"])
+        self.assertIn("app.storage.storage_read_text", generic_tool["description"])
+        self.assertIn("app.storage.storage_read_text", extract_tool["description"])
         self.assertIn("convert_to_markdown", command_properties["action"]["enum"])
         self.assertIn("patch_pdf_text", command_properties["action"]["enum"])
         self.assertIn("modify_uploaded_document", command_properties["action"]["enum"])

@@ -80,15 +80,18 @@ This model is still being hardened. Public documentation must not claim producti
 The current PWA cache rollout is governed by
 `docs/adr/0012-transparent-pwa-cache-and-network-resilience.md`; ADR-0011 is a
 superseded historical checkpoint. M2R persists only verified standard-shell
-assets and public branding in owned Cache API namespaces. It introduces no
-connectivity mode, private payload cache, Storage file cache, or persistent
-mutation queue. Private read models and automatic Storage file bytes remain
-disabled by default behind independent fail-closed cache gates. Credentials,
-secrets, Browser sessions, Speech audio, temporary archives, and all agentic
-authority/control-plane state are network-only and must never enter Cache API,
-IndexedDB, or OPFS. Browser-side encryption with a key available to the same
-JavaScript is not accepted as an XSS boundary. Any later private-cache rollout
-requires scoped cleanup, privacy review, bounded retention, and explicit
+assets and public branding in owned Cache API namespaces. M3 adds the shared
+scoped IndexedDB, lifecycle cleanup, aggregate diagnostics, and RAM retry
+mechanics, but the data-cache feature remains disabled by default and no app
+read model or Storage file byte is opted into persistent storage by M3.
+Credentials, secrets, signed or object URLs, Browser sessions, Speech audio,
+temporary archives, and all agentic authority/control-plane state are
+network-only and must never enter Cache API, IndexedDB, or OPFS. A private
+candidate fails closed without exact policy revision, reviewed classification,
+complete user/workspace/app/resource scope, bounded retention, sanitizer,
+quota estimate, and a fresh access lease. Browser-side encryption with a key
+available to the same JavaScript is not accepted as an XSS boundary. Any app
+private-cache rollout still requires privacy review and explicit
 physical-device evidence.
 
 App-owned HTTP sidecars that declare sandbox compatibility use the generic

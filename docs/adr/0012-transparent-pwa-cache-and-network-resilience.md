@@ -140,6 +140,36 @@ ordinary navigation failure.
 - Private cache rollout remains blocked on scoped cleanup, policy revision,
   app-owned resource contracts, privacy review, and physical-device evidence.
 
+## M3 implementation profile
+
+The shared `@maverick/pwa-cache` mechanics are implemented by M3 while the
+data-cache rollout gate remains disabled by default. The browser database is
+`maverick-pwa-data-v1`, currently at database and entry schema version 2. Entry
+identity includes user, workspace, app, resource, entity, policy revision, and
+entry schema version. Metadata and payload records are committed atomically;
+schema upgrades are transactional and durable cleanup markers resume after an
+interrupted browser lifecycle.
+
+The conservative platform defaults are:
+
+- policy revision `maverick.local-persistence-policy.v2`;
+- a private access lease of at most 15 minutes after fresh server
+  authentication;
+- 64 MiB global structured-cache budget, 32 MiB per app, and an explicit
+  smaller resource budget;
+- no persistent write when `navigator.storage.estimate()` cannot provide both
+  usage and quota, and no call to `navigator.storage.persist()`;
+- read retry starting at 1 second, capped at 30 seconds before server
+  `Retry-After`, with 0.75–1.25 jitter and a 250 ms minimum hint interval;
+- automatic HTTP retry only for transport failures, timeouts, `429`, `502`,
+  `503`, and `504`; and
+- at most three same-session mutation attempts, only when a stable
+  `Idempotency-Key`, request fingerprint, and declared server deduplication are
+  all present.
+
+M3 does not opt any app read model into persistent storage and does not add the
+M4 OPFS file cache. Those rollouts remain separate reviewed gates.
+
 ## Supersession boundary
 
 When ADR-0011 and this record conflict, this record is normative. Historical

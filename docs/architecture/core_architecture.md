@@ -1187,6 +1187,34 @@ Mounted app frames and shell controls are not removed or replaced because of a
 connectivity event. Pending retries are cancelled on unmount, logout, user or
 workspace change, and scope revision, and they are never persisted.
 
+M3 implements these shared mechanics in `packages/pwa-cache/` while the public
+`features.data_cache` projection remains fail-closed by default. The owned
+structured-data database is `maverick-pwa-data-v1`, version 2, with split
+metadata/payload stores, transactional migration, durable cleanup markers, and
+a RAM fallback. Entry identity contains user, workspace, owning app, resource,
+entity, policy revision, and schema version. The framework enforces expiry,
+least-recent eviction, 64 MiB global and 32 MiB per-app default budgets, an
+app-declared resource budget, and quota headroom from
+`navigator.storage.estimate()`; an unavailable estimate skips persistence and
+the framework never requests `navigator.storage.persist()`.
+
+Private structured entries require a fresh access lease bounded to 15 minutes.
+Base Shell renews that lease only after an authoritative session response,
+cancels RAM pending work at principal/scope boundaries, clears the applicable
+database scope on logout and `401`/`403`, and routes
+`maverick.app.data-changed` to scoped invalidation. Settings may expose only
+aggregate byte/entry/quota/backend diagnostics and a confirmed clear action;
+it cannot enumerate cached content or clear unrelated origin storage. The M3
+release does not enable an app read model or the M4 OPFS file cache.
+
+The RAM retry coordinator starts at one second, caps its exponential component
+at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval
+for early hints. Only transport/timeouts and `429/502/503/504` are retryable by
+the standard classifier. An unsafe request remains one-shot unless it carries
+a stable `Idempotency-Key`, exact request fingerprint, and a declared server
+deduplication contract; eligible mutations are capped at three attempts and
+still cross current server authorization and admission.
+
 ## Everything Above The Core Is An App
 
 The Maverick product shell should also be modeled as an app.

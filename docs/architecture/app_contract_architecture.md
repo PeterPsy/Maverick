@@ -1535,6 +1535,35 @@ normal loading state during a transient transport failure. App contracts must
 not add a network-absence mode, availability badge, pin action, or persistent
 mutation queue as an implicit consequence of cache support.
 
+The M3 shared implementation is `packages/pwa-cache/`. An adapter must create a
+client with an explicit non-empty user id, workspace id, and owning app id, then
+register each resource exactly once with policy revision
+`maverick.local-persistence-policy.v2`. The resource declaration supplies its
+canonical data class and provenance, sanitizer, stable server revision or
+ETag, fresh and absolute expiry TTLs, maximum entry bytes, maximum resource
+bytes, stale-render permission, and required privacy approvals. The framework
+derives `deny`, `session`, or `cache`; an app cannot directly promote its own
+classification. Persistent private reads additionally require a fresh bounded
+access lease issued after successful server authentication.
+
+`readThrough` returns an ordinary network result on a miss, an ordinary cached
+result on a valid hit, and an optional single-flight revalidation promise for
+an explicitly renderable stale value. Expired, malformed, wrong-scope,
+wrong-policy, wrong-schema, and lease-expired entries are misses. An adapter
+must use `not_modified` only when it already has the matching cached value, and
+must emit `maverick.app.data-changed` with the owning app and resource after a
+confirmed server mutation. Quota, IndexedDB, migration, serialization, or
+cache-write failure must never replace a successful server response.
+
+The SDK's retry coordinator is RAM-only. It automatically pauses for document
+visibility and `maverick.app.visibility-changed`, treats browser `online`,
+focus, and successful Maverick responses only as early retry hints, and
+cancels work at unmount or principal/scope change. Unsafe requests are not
+replayed without a stable `Idempotency-Key`, a request fingerprint, and an
+explicit server-deduplication contract. Even then they re-enter current server
+authorization/admission and have a bounded attempt count; no app may interpret
+the local pending state as mutation success.
+
 The `base-shell` UI/UX is the visual and interaction reference for the mounted shell.
 
 The shell should preserve the intended shell experience, layout behavior, sidebar composition, workspace/app panels, and responsive behavior where those concepts are still valid.

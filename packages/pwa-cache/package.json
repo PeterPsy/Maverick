@@ -1,0 +1,34 @@
+{
+  "name": "@maverick/pwa-cache",
+  "version": "1.0.0",
+  "description": "Framework-neutral, scope-safe browser data cache and RAM retry primitives for Maverick apps.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "module": "./src/index.ts",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "import": "./src/testing.ts"
+    }
+  },
+  "scripts": {
+    "pretest": "node ../../scripts/check-node-runtime.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "^6.2.4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.4"
+  },
+  "engines": {
+    "node": ">=24.11.0 <25"
+  }
+}

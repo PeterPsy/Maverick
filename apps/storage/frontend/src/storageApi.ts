@@ -1,4 +1,5 @@
 import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DriveLocalizePayload, DrivePreviewPayload, DriveStartOAuthPayload, DriveWritePayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
+import { stableStorageFileSourceVersion } from './storageFileCacheClient';
 
 const DEFAULT_APP_ID = 'storage';
 const extensionContentTypes: Record<string, string> = {
@@ -386,13 +387,13 @@ export function driveMediaDownloadUrl(payload: Pick<DriveLocalizePayload, 'downl
 export function storageMediaStreamUrl(file: StorageFile, options: { appId?: string; download?: boolean } = {}) {
   const params = new URLSearchParams();
   params.set('stable_storage_file_id', file.file_id || file.id);
+  const sourceVersion = stableStorageFileSourceVersion(file);
+  if (sourceVersion) params.set('source_version', sourceVersion);
   if (file.provider === 'google_drive') {
     const locator = driveFileLocator(file);
     params.set('stable_storage_file_id', locator.stable_storage_file_id || file.id);
     params.set('connection_id', locator.connection_id);
     params.set('drive_file_id', locator.drive_file_id);
-    const sourceVersion = String(file.etag_or_version || file.source_version || file.modified_at || '').trim();
-    if (sourceVersion) params.set('source_version', sourceVersion);
     const localizationId = String(file.localization_id || '').trim();
     if (localizationId) params.set('localization_id', localizationId);
     params.set('_app_secret_request', JSON.stringify(driveConnectionSecretRequest(locator.connection_id)));

@@ -9,6 +9,7 @@ import tempfile
 from typing import Any, BinaryIO
 
 from errors import StorageValidationError
+from file_cache_policy import file_cache_descriptor_payload, stable_source_version
 from drive_connection_store import append_audit, now_timestamp, resolve_connected_connection, sync_state_for_connection, update_connection_sync_state
 from drive_oauth import (
     GOOGLE_DRIVE_CLIENT_ID_SECRET,
@@ -86,6 +87,7 @@ from store import (
 from storage_provider_model import GOOGLE_DRIVE_PROVIDER, reject_remote_workspace_relative_path
 from storage_reference_resolver import StorageReferenceResolver
 from storage_mime import normalize_content_type
+from store_files_paths import hash_file
 from text_preview import extract_text_preview
 
 CATALOG_ROLES = {"all", "uploaded", "generated"}
@@ -498,6 +500,18 @@ def handle_action(
             drive_transport=drive_transport,
             request_method=media_request_method,
             streaming_response_supported=streaming_response_supported,
+        )
+    if action == "file.cache_descriptor":
+        record = _file_record_for_path_action(
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            body=body,
+        )
+        return 200, file_cache_descriptor_payload(
+            file_record=record,
+            requested_source_version=str(body.get("source_version") or ""),
+            app_id=str(body.get("_app_id") or "storage"),
         )
     if action == "folder.media_stream":
         if not media_route:
@@ -1360,6 +1374,22 @@ def _media_stream_payload(
     path = (root / relative_path).resolve()
     if role not in {"uploaded", "generated"} or root not in path.parents or not path.is_file():
         raise StorageValidationError("File path escapes the selected storage root or does not exist.", operation="file.media_stream")
+    requested_source_version = str(body.get("source_version") or "").strip()
+    current_source_version = stable_source_version(record)
+    if requested_source_version and requested_source_version != current_source_version:
+        raise StorageValidationError(
+            "Media stream URL source_version is stale; refresh the Storage file record and retry.",
+            operation="file.media_stream",
+            expected_fields=["stable_storage_file_id", "source_version"],
+        )
+    if str(body.get("_pwa_file_cache") or "") == "1" and requested_source_version.startswith("sha256:"):
+        actual_source_version = f"sha256:{hash_file(path)}"
+        if requested_source_version != actual_source_version:
+            raise StorageValidationError(
+                "Media stream URL source_version is stale; refresh the Storage file record and retry.",
+                operation="file.media_stream",
+                expected_fields=["stable_storage_file_id", "source_version"],
+            )
     return {
         "file": record,
         "file_response": {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { clampPrivateAccessLease } from "@maverick/pwa-cache";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postMaverickShellTheme, postToMaverickFrame } from "../iframePolicy";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
@@ -6,6 +7,7 @@ import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl"
 import type { ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
+import { StorageFileCacheBroker } from "../storageFileCacheBroker";
 
 type AppFrameParams = Record<string, string | boolean | null>;
 const APP_EVENTS_WS_PATH = "/api/apps/events/ws";
@@ -39,15 +41,19 @@ export function AppFrameHost({
   activeApp,
   activeAppParams,
   activeWorkspaceId,
+  cacheUserId,
   isMobileLayout,
   onOpenApp,
+  sessionExpiresAt,
   shellTheme = DEFAULT_SHELL_THEME_STATE,
 }: {
   activeApp: AppRegistryItem;
   activeAppParams: AppFrameParams;
   activeWorkspaceId: string;
+  cacheUserId: string;
   isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: AppFrameParams) => void;
+  sessionExpiresAt: string;
   shellTheme?: ShellThemeState;
 }) {
   const activeMountKey = `${activeWorkspaceId}:${activeApp.app_id}`;
@@ -64,6 +70,7 @@ export function AppFrameHost({
   const [showDelayedPendingOverlay, setShowDelayedPendingOverlay] = useState(false);
   const frameRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
   const readyFallbackTimersRef = useRef<Record<string, number>>({});
+  const fileCacheBrokerRef = useRef<StorageFileCacheBroker | null>(null);
   const latestNavigationRef = useRef<{ appId: string; params: AppFrameParams }>({
     appId: activeApp.app_id,
     params: activeAppParams,
@@ -137,6 +144,26 @@ export function AppFrameHost({
   useEffect(() => {
     dependencyCacheRef.current = dependencyCache;
   }, [dependencyCache]);
+
+  useEffect(() => {
+    const sessionExpiry = Date.parse(sessionExpiresAt);
+    const accessLease = Number.isFinite(sessionExpiry)
+      ? clampPrivateAccessLease(sessionExpiry) ?? undefined
+      : undefined;
+    const broker = new StorageFileCacheBroker({
+      accessLease,
+      principal: {
+        appId: "storage",
+        userId: cacheUserId,
+        workspaceId: activeWorkspaceId,
+      },
+    });
+    fileCacheBrokerRef.current = broker;
+    return () => {
+      if (fileCacheBrokerRef.current === broker) fileCacheBrokerRef.current = null;
+      broker.dispose();
+    };
+  }, [activeWorkspaceId, cacheUserId, sessionExpiresAt]);
 
   useEffect(() => {
     setMountedApps((current) => {
@@ -274,6 +301,12 @@ export function AppFrameHost({
 
   useEffect(() => {
     function handleAppMessage(event: MessageEvent) {
+      if (fileCacheBrokerRef.current?.handleWindowMessage(
+        event,
+        frameRefs.current.storage?.contentWindow ?? null,
+      )) {
+        return;
+      }
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
         return;
       }

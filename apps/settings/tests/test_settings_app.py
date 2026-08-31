@@ -68,6 +68,12 @@ class SettingsFrontendDistTests(unittest.TestCase):
         self.assertIn("workspace-access", pages_source)
         self.assertIn("id: 'cache'", pages_source)
         self.assertIn("cacheDiagnosticsPageHtml", active_page_source)
+        cache_page_source = (app_root / "frontend" / "src" / "cacheDiagnosticsPage.ts").read_text(encoding="utf-8")
+        self.assertIn("Structured data", cache_page_source)
+        self.assertIn("File data", cache_page_source)
+        self.assertIn("OPFS available", cache_page_source)
+        self.assertIn("does not delete server files", cache_page_source)
+        self.assertNotIn("Available offline", cache_page_source)
         self.assertIn("selectedPageId", main_source)
         self.assertIn("activeSettingsPageHtml", main_source)
 

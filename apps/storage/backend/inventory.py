@@ -11,6 +11,7 @@ from typing import Any
 
 from core.app_sdk.storage import read_json_state, update_json_state
 from errors import StorageValidationError
+from file_cache_policy import stable_source_version
 from storage_provider_model import (
     FILE_ROLES,
     GOOGLE_DRIVE_PROVIDER,
@@ -760,6 +761,7 @@ def _normalize_entry(item: dict[str, Any]) -> dict[str, Any]:
         "preview_kind": normalized_preview_kind,
         "sha256": str(item.get("sha256") or ""),
         "etag_or_version": str(item.get("etag_or_version") or item.get("source_version") or ""),
+        "source_version": str(item.get("source_version") or ""),
         "capabilities": normalize_capabilities(item.get("capabilities"), provider=provider),
         "sync_status": sync_status,
         "indexed": bool(item.get("indexed") or False),
@@ -921,6 +923,7 @@ def _public_record(item: dict[str, Any]) -> dict[str, Any]:
         "preview_kind": item["preview_kind"],
         "sha256": item.get("sha256", ""),
         "etag_or_version": item.get("etag_or_version", ""),
+        "source_version": stable_source_version(item),
         "capabilities": item.get("capabilities", normalize_capabilities({}, provider=str(item.get("provider") or LOCAL_PROVIDER))),
         "sync_status": item.get("sync_status", "synced"),
         "indexed": bool(item.get("indexed") or False),

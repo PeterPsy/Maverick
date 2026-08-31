@@ -13,6 +13,22 @@ export {
 } from "./fileCache";
 export { MaverickFileHttpError } from "./fileCacheNetwork";
 export {
+  PWA_FILE_CACHE_BROKER_ACCEPTED,
+  PWA_FILE_CACHE_BROKER_CANCEL,
+  PWA_FILE_CACHE_BROKER_OPEN,
+  PWA_FILE_CACHE_BROKER_RESULT,
+  isParentFileCacheCancelMessage,
+  isParentFileCacheOpenMessage,
+  requestParentFileCacheOpen,
+  type ParentFileCacheAcceptedMessage,
+  type ParentFileCacheCancelMessage,
+  type ParentFileCacheClientOptions,
+  type ParentFileCacheOpenMessage,
+  type ParentFileCacheOpenRequest,
+  type ParentFileCacheOpenResult,
+  type ParentFileCacheResultMessage,
+} from "./fileCacheBrokerProtocol";
+export {
   BrowserFileCacheMaintenance,
   createBrowserFileCacheMaintenance,
 } from "./fileCacheMaintenance";
@@ -30,6 +46,7 @@ export {
   isAgenticControlPlaneResource,
 } from "./policy";
 export { BrowserStorageQuotaAdapter } from "./quota";
+export { IncrementalSha256, sha256Blob } from "./sha256";
 export { DurableCacheCleanupError } from "./resilientBackend";
 export {
   RetryCancelledError,

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { disableShellServiceWorker, recoverShellStaticCache } from "../src/pwa";
+import { disableShellServiceWorker, recoverShellStaticCache, storageFileCacheFeatureEnabled } from "../src/pwa";
 
 describe("PWA client recovery", () => {
   const originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, "serviceWorker");
@@ -13,6 +13,7 @@ describe("PWA client recovery", () => {
     if (originalCaches) Object.defineProperty(window, "caches", originalCaches);
     else delete (window as { caches?: unknown }).caches;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("unregisters the shell worker and deletes only known static caches", async () => {
@@ -63,5 +64,25 @@ describe("PWA client recovery", () => {
 
     expect(recoverShellStaticCache()).toBe(true);
     expect(postMessage).toHaveBeenCalledWith({ type: "MAVERICK_RECOVER" });
+  });
+
+  it("enables the Storage broker only for the exact v2 boolean projection", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        schema: "maverick.pwa-config.v2",
+        features: { storage_file_cache: true },
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        schema: "maverick.pwa-config.v2",
+        features: { storage_file_cache: "true" },
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(storageFileCacheFeatureEnabled()).resolves.toBe(true);
+    await expect(storageFileCacheFeatureEnabled()).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledWith("/api/pwa/config", expect.objectContaining({
+      cache: "no-store",
+      credentials: "same-origin",
+    }));
   });
 });

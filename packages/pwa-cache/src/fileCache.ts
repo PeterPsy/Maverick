@@ -68,6 +68,7 @@ export class PwaFileCache {
   private readonly maxEntryBytes: number;
   private readonly maxScopeBytes: number;
   private readonly now: () => number;
+  private persistenceUnavailable = false;
   private readonly principal: CachePrincipal;
   private readonly quota: StorageQuotaAdapter;
   private readonly telemetry: NonNullable<PwaFileCacheOptions["telemetry"]>;
@@ -132,21 +133,29 @@ export class PwaFileCache {
       return this.readNetwork(request.url, signal);
     }
     return withCrossClientLock(`file:${key}`, async () => {
-      await this.initialize();
-      if (cleanupBlocksPrincipal(this.principal)) return this.readNetwork(request.url, signal);
-      const hit = await this.readReadyRecord(key, request.descriptor);
-      if (hit) return hit;
-      this.telemetry({ kind: "miss" });
-      if (!await this.canPersist(request.descriptor, key)) {
-        await this.writer?.discard(key).catch(() => undefined);
-        return this.readNetwork(request.url, signal);
+      let persist = false;
+      try {
+        await this.initialize();
+        if (!cleanupBlocksPrincipal(this.principal)) {
+          const hit = await this.readReadyRecord(key, request.descriptor);
+          if (hit) return hit;
+          this.telemetry({ kind: "miss" });
+          persist = await this.canPersist(request.descriptor, key);
+          if (!persist) await this.writer?.discard(key).catch(() => undefined);
+        }
+      } catch (error) {
+        this.persistenceUnavailable = true;
+        this.telemetry({ kind: "error", reason: cacheErrorReason(error) });
       }
-      return this.readNetworkWithCache(request, key, signal);
+      return persist
+        ? this.readNetworkWithCache(request, key, signal)
+        : this.readNetwork(request.url, signal);
     });
   }
 
   private cacheAvailable(descriptor: FileCacheDescriptor): boolean {
     return this.enabled
+      && !this.persistenceUnavailable
       && Boolean(this.manifest && this.bytes?.available())
       && descriptor.sizeBytes <= this.maxEntryBytes
       && fileCacheDescriptorIsEligible(descriptor, this.accessLease, this.now(), this.appId);
@@ -244,14 +253,29 @@ export class PwaFileCache {
       if (partial) await this.writer?.discard(key);
       return networkBlobResult(response, etag);
     }
-    const prefix = partial ? await this.writer?.readPrefix(key, partial) ?? null : null;
+    let prefix: Blob | null = null;
+    try {
+      prefix = partial ? await this.writer?.readPrefix(key, partial) ?? null : null;
+    } catch (error) {
+      this.persistenceUnavailable = true;
+      this.telemetry({ kind: "error", reason: cacheErrorReason(error) });
+      await this.writer?.discard(key).catch(() => undefined);
+      response.body.cancel().catch(() => undefined);
+      return this.readNetwork(request.url, signal);
+    }
     if (partial && !prefix) {
       response.body.cancel().catch(() => undefined);
       return this.readNetworkWithCache({ ...request, signal }, key, signal);
     }
     if (!this.writer) return networkBlobResult(response, etag);
     const active = partial ?? this.writer.create(key, request.descriptor, etag);
-    const cacheResponse = response.clone();
+    let cacheResponse: Response;
+    try {
+      cacheResponse = response.clone();
+    } catch {
+      await this.writer.discard(key).catch(() => undefined);
+      return networkBlobResult(response, etag);
+    }
     const cacheCompletion = this.writer.write(key, active, cacheResponse, signal)
       .catch((error) => {
         this.telemetry({ kind: "error", reason: cacheErrorReason(error) });

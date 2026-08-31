@@ -89,6 +89,34 @@ export async function disableShellServiceWorker(): Promise<void> {
   setUpdateState({ applying: false, available: false, buildId: null, recovery: "idle" });
 }
 
+export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Promise<boolean> {
+  const controller = new AbortController();
+  const relayAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) relayAbort();
+  else signal?.addEventListener("abort", relayAbort, { once: true });
+  const timeout = globalThis.setTimeout(() => controller.abort(), CONFIG_TIMEOUT_MS);
+  try {
+    const response = await fetch("/api/pwa/config", {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) return false;
+    const payload = (await response.json()) as {
+      features?: { storage_file_cache?: unknown };
+      schema?: unknown;
+    };
+    return payload.schema === "maverick.pwa-config.v2"
+      && payload.features?.storage_file_cache === true;
+  } catch {
+    return false;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    signal?.removeEventListener("abort", relayAbort);
+  }
+}
+
 async function configureShellServiceWorker(): Promise<void> {
   const enabled = await serviceWorkerV2Enabled();
   if (enabled === false) {

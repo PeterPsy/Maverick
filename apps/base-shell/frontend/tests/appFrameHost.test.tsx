@@ -218,8 +218,10 @@ async function renderHost(root: Root, activeApp: AppRegistryItem, activeAppParam
         activeApp={activeApp}
         activeAppParams={activeAppParams}
         activeWorkspaceId="default"
+        cacheUserId="user-test"
         isMobileLayout={true}
         onOpenApp={vi.fn()}
+        sessionExpiresAt="2099-01-01T00:00:00Z"
         shellTheme={shellTheme}
       />,
     );

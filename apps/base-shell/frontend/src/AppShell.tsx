@@ -823,10 +823,12 @@ export function AppShell() {
           activeAppParams={activeAppParams}
           activeWorkspaceId={activeWorkspaceId}
           apps={apps}
+          cacheUserId={session.user.user_id}
           error={error}
           isLoading={isLoading}
           isMobileLayout={isMobileLayout}
           onOpenApp={openApp}
+          sessionExpiresAt={session.expires_at}
           shellTheme={shellTheme}
         />
       </div>

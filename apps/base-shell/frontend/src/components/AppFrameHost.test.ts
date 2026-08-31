@@ -23,3 +23,14 @@ describe("AppFrameHost app-scoped runtime remount", () => {
     expect(source).toContain("event.owner_app_id");
   });
 });
+
+describe("AppFrameHost Storage file-cache boundary", () => {
+  it("routes Storage messages through a disposable parent-owned broker", () => {
+    const source = readFileSync(resolve(currentDir, "AppFrameHost.tsx"), "utf8");
+
+    expect(source).toContain("new StorageFileCacheBroker");
+    expect(source).toContain("fileCacheBrokerRef.current?.handleWindowMessage");
+    expect(source).toContain("frameRefs.current.storage?.contentWindow");
+    expect(source).toContain("broker.dispose()");
+  });
+});

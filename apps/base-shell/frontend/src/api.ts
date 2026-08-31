@@ -506,6 +506,24 @@ export function listPinnedApps(signal?: AbortSignal): Promise<PinnedAppsPayload>
   }).then(normalizePinnedAppsPayload);
 }
 
+export function readStorageFileCacheDescriptor(
+  fileId: string,
+  sourceVersion: string,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  return requestJson<unknown>("/api/apps/storage/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "file.cache_descriptor",
+      source_version: sourceVersion,
+      stable_storage_file_id: fileId,
+      _app_secret_request: { logical_names: [], required: false },
+    }),
+    signal,
+  });
+}
+
 export async function savePinnedApps(appIds: string[]): Promise<PinnedAppsPayload> {
   const semantics = {
     action: "pinned_apps.set",

@@ -122,10 +122,29 @@ export class BrowserFileCacheMaintenance implements FileCacheMaintenance {
       await this.bytes.delete(record.opfsPath);
       await this.manifest.delete(record.key);
     }
+    await this.cleanupObsoleteReadyVersions(await this.manifest.list());
     const retained = (await this.manifest.list()).filter((record) => record.state === "ready" || !writeLeaseExpired(record, now));
     const referenced = new Set(retained.map((record) => record.opfsPath));
     for (const path of await this.bytes.list()) {
       if (!referenced.has(path)) await this.bytes.delete(path);
+    }
+  }
+
+  private async cleanupObsoleteReadyVersions(records: FileCacheRecord[]): Promise<void> {
+    const currentByFile = new Map<string, FileCacheRecord>();
+    const ready = records
+      .filter((record) => record.state === "ready")
+      .sort((left, right) => safeTimestamp(right.cachedAt) - safeTimestamp(left.cachedAt)
+        || safeTimestamp(right.lastVerifiedAt) - safeTimestamp(left.lastVerifiedAt)
+        || right.key.localeCompare(left.key));
+    for (const record of ready) {
+      const identity = JSON.stringify([record.userId, record.workspaceId, record.appId, record.fileId]);
+      if (!currentByFile.has(identity)) {
+        currentByFile.set(identity, record);
+        continue;
+      }
+      await this.bytes.delete(record.opfsPath);
+      await this.manifest.delete(record.key);
     }
   }
 }
@@ -174,6 +193,10 @@ function writeLeaseExpired(record: FileCacheRecord, now: number): boolean {
   return typeof record.writeLeaseExpiresAt !== "number"
     || !Number.isFinite(record.writeLeaseExpiresAt)
     || record.writeLeaseExpiresAt + WRITING_LEASE_GRACE_MS <= now;
+}
+
+function safeTimestamp(value: number): number {
+  return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
 }
 
 function uniqueFilters(filters: FileCacheFilter[]): FileCacheFilter[] {

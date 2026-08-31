@@ -9,11 +9,11 @@ export function cacheDiagnosticsPageHtml(state: CacheDiagnosticsViewState): stri
     <div class="settings-heading">
       <div>
         <span class="settings-kicker">This browser</span>
-        <h3>Maverick data cache</h3>
+        <h3>Maverick cache</h3>
       </div>
       <span class="settings-pill settings-pill-muted">Disposable</span>
     </div>
-    <p class="settings-card-copy">Inspect aggregate structured-cache usage for this browser container. Cached entries are rebuildable and never authorize server actions.</p>
+    <p class="settings-card-copy">Inspect aggregate cache usage for this browser container. Cached entries and file copies are rebuildable and never authorize server actions.</p>
     ${error ? `<div class="settings-cache-diagnostics__error" role="alert">${escapeHtml(error)}</div>` : ''}
     ${diagnosticsHtml(diagnostics, isLoading)}
     <div class="settings-cache-diagnostics__actions">
@@ -27,7 +27,7 @@ export function cacheDiagnosticsPageHtml(state: CacheDiagnosticsViewState): stri
       </button>
       ${confirmClear ? `<button class="settings-secondary" id="cancel-clear-pwa-cache" type="button">Cancel</button>` : ''}
     </div>
-    <p class="settings-cache-diagnostics__note">Clear cache removes only Maverick's structured browser data cache. It does not delete server data or indiscriminately clear this origin.</p>
+    <p class="settings-cache-diagnostics__note">Clear cache removes only Maverick's structured data and versioned file cache from this browser container. It does not delete server files, static app assets, or unrelated origin storage.</p>
   </section>`;
 }
 
@@ -43,9 +43,14 @@ function diagnosticsHtml(diagnostics: CacheDiagnostics | null, isLoading: boolea
   return `<div class="settings-cache-diagnostics__grid">
     ${metricHtml('Cache data', formatBytes(diagnostics.cacheBytes))}
     ${metricHtml('Entries', diagnostics.entryCount.toLocaleString())}
+    ${metricHtml('Structured data', formatBytes(diagnostics.structuredCacheBytes))}
+    ${metricHtml('Structured entries', diagnostics.structuredEntryCount.toLocaleString())}
+    ${metricHtml('File data', formatBytes(diagnostics.fileCacheBytes))}
+    ${metricHtml('File entries', diagnostics.fileCacheEntryCount.toLocaleString())}
     ${metricHtml('Origin usage', formatOptionalBytes(diagnostics.originUsageBytes))}
     ${metricHtml('Origin quota', formatOptionalBytes(diagnostics.originQuotaBytes))}
     ${metricHtml('Backend', diagnostics.backend === 'indexeddb' ? 'IndexedDB' : 'Memory fallback')}
+    ${metricHtml('File storage', diagnostics.fileCacheAvailable ? 'OPFS available' : 'Unavailable')}
     ${metricHtml('Pending cleanup', diagnostics.pendingCleanupCount.toLocaleString())}
   </div>`;
 }

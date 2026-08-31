@@ -1036,7 +1036,8 @@ class GoogleDriveProvider:
         mime_type = normalize_content_type(item.get("mimeType"), file_name=name)
         status = "removed" if bool(item.get("trashed") or item.get("explicitlyTrashed")) else "active"
         stable_id = stable_storage_file_id(self.connection_id, drive_file_id)
-        version = str(item.get("headRevisionId") or item.get("version") or item.get("modifiedTime") or "")
+        source_version = str(item.get("headRevisionId") or item.get("version") or "")
+        version = source_version or str(item.get("modifiedTime") or "")
         extension = Path(name).suffix.lower()
         return {
             "id": stable_id,
@@ -1060,6 +1061,7 @@ class GoogleDriveProvider:
             "preview_kind": _drive_preview_kind(mime_type, extension),
             "sha256": "",
             "etag_or_version": version,
+            "source_version": source_version,
             "capabilities": _drive_capabilities(item.get("capabilities")),
             "sync_status": "removed" if status == "removed" else "synced",
             "indexed": False,
@@ -1100,6 +1102,7 @@ class GoogleDriveProvider:
             "preview_kind": "file",
             "sha256": "",
             "etag_or_version": "",
+            "source_version": "",
             "capabilities": normalize_capabilities({}, provider=GOOGLE_DRIVE_PROVIDER),
             "sync_status": "removed",
             "indexed": False,

@@ -66,24 +66,26 @@ export class FileCacheWriter {
 
   async write(key: string, partial: PartialFileWrite, response: Response, signal: AbortSignal): Promise<void> {
     if (!response.body) return;
-    const writer = await this.options.bytes.createWriter(partial.path, partial.writtenBytes);
-    let lastPersisted = partial.writtenBytes;
-    let localWriteFailed = false;
-    await this.options.manifest.put(this.writingRecord(key, partial, this.options.now()));
-    this.options.telemetry({ bytes: partial.descriptor.sizeBytes - partial.writtenBytes, kind: "write" });
     const reader = response.body.getReader();
+    let writer: Awaited<ReturnType<FileCacheByteStore["createWriter"]>> | null = null;
+    let lastPersisted = partial.writtenBytes;
+    let retainForResume = false;
     try {
+      writer = await this.options.bytes.createWriter(partial.path, partial.writtenBytes);
+      await this.options.manifest.put(this.writingRecord(key, partial, this.options.now()));
+      this.options.telemetry({ bytes: partial.descriptor.sizeBytes - partial.writtenBytes, kind: "write" });
       while (true) {
         if (signal.aborted) throw signal.reason ?? new DOMException("File cache write cancelled.", "AbortError");
-        const { done, value } = await reader.read();
-        if (done) break;
+        let chunk: ReadableStreamReadResult<Uint8Array>;
         try {
-          await writer.write(value);
+          chunk = await reader.read();
         } catch (error) {
-          localWriteFailed = true;
-          await reader.cancel(error).catch(() => undefined);
+          retainForResume = true;
           throw error;
         }
+        const { done, value } = chunk;
+        if (done) break;
+        await writer.write(value);
         partial.hash.update(value);
         partial.writtenBytes += value.byteLength;
         if (partial.writtenBytes - lastPersisted >= MANIFEST_PROGRESS_INTERVAL_BYTES) {
@@ -92,16 +94,26 @@ export class FileCacheWriter {
         }
       }
       await writer.close();
+      writer = null;
     } catch (error) {
-      await writer.close().catch(() => undefined);
-      if (isAbortError(error) || localWriteFailed) {
+      await writer?.close().catch(() => undefined);
+      if (isAbortError(error) || !retainForResume) {
+        await reader.cancel(error).catch(() => undefined);
         await this.discard(key);
       } else if (this.partials.get(key) === partial) {
         await this.options.manifest.put(this.writingRecord(key, partial, this.options.now())).catch(() => undefined);
       }
       throw error;
     }
-    await this.publishReady(key, partial);
+    try {
+      await this.publishReady(key, partial);
+    } catch (error) {
+      if (this.partials.get(key) === partial
+          && partial.writtenBytes >= partial.descriptor.sizeBytes) {
+        await this.discard(key);
+      }
+      throw error;
+    }
   }
 
   async discard(key: string): Promise<void> {

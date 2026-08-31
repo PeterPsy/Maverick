@@ -1662,8 +1662,9 @@ function App() {
     if (!selectedFile || (!previewModalOpen && !markdownEditing)) return;
     if (!canInlinePreview(selectedFile) && !canTextPreview(selectedFile)) return;
     let active = true;
+    const controller = new AbortController();
     setPreviewLoading(true);
-    loadFullPreview(selectedFile)
+    loadFullPreview(selectedFile, controller.signal)
       .then((payload) => {
         if (!active) return;
         setPreviewText(payload.text);
@@ -1677,6 +1678,7 @@ function App() {
       });
     return () => {
       active = false;
+      controller.abort();
     };
   }, [markdownEditing, previewModalOpen, selectedFile]);
 

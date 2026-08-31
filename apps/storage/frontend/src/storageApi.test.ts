@@ -415,13 +415,14 @@ describe('storage api client', () => {
       modified_at: '2026-05-28T00:00:00Z',
       content_type: 'video/mp4',
       preview_kind: 'video',
-      sha256: 'abc123'
+      sha256: 'a'.repeat(64)
     }, { appId: 'storage', download: true });
     const parsed = new URL(url, 'https://example.test');
     const secretRequest = JSON.parse(parsed.searchParams.get('_app_secret_request') || '{}');
 
     expect(parsed.pathname).toBe('/api/apps/storage/media');
     expect(parsed.searchParams.get('stable_storage_file_id')).toBe('file_123');
+    expect(parsed.searchParams.get('source_version')).toBe(`sha256:${'a'.repeat(64)}`);
     expect(parsed.searchParams.get('download')).toBe('1');
     expect(secretRequest).toEqual({ logical_names: [], required: false });
   });

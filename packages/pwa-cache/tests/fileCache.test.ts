@@ -224,6 +224,75 @@ describe("transparent PWA file cache", () => {
     expect(await runtime.manifest.list()).toEqual([]);
   });
 
+  it("falls back to the ordinary network path when OPFS initialization is denied", async () => {
+    class DeniedBytes extends MemoryFileCacheByteStore {
+      override async initialize(): Promise<void> {
+        throw new DOMException("denied", "NotAllowedError");
+      }
+    }
+    const payload = new TextEncoder().encode("network only");
+    const fetchImpl = vi.fn(async () => response(payload, 200, { ETag: '"etag"' })) as unknown as typeof fetch;
+    const runtime = cache({ bytes: new DeniedBytes(), fetchImpl });
+
+    const opened = await runtime.cache.open({ descriptor: descriptor(payload), url: "/media" });
+
+    expect(opened.source).toBe("network");
+    expect(await opened.blob.text()).toBe("network only");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards local setup failures instead of attempting a zero-byte resume", async () => {
+    class InitiallyFailingBytes extends MemoryFileCacheByteStore {
+      attempts = 0;
+
+      override async createWriter(...args: Parameters<MemoryFileCacheByteStore["createWriter"]>) {
+        this.attempts += 1;
+        if (this.attempts === 1) throw new DOMException("quota", "QuotaExceededError");
+        return super.createWriter(...args);
+      }
+    }
+    const payload = new TextEncoder().encode("network survives");
+    const ranges: Array<string | null> = [];
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      ranges.push(new Headers(init?.headers).get("Range"));
+      return response(payload, 200, { ETag: '"etag"' });
+    }) as unknown as typeof fetch;
+    const runtime = cache({ bytes: new InitiallyFailingBytes(), fetchImpl });
+    const request = { descriptor: descriptor(payload), url: "/media" };
+
+    const first = await runtime.cache.open(request);
+    await first.cacheCompletion;
+    const second = await runtime.cache.open(request);
+    await second.cacheCompletion;
+
+    expect(ranges).toEqual([null, null]);
+  });
+
+  it("removes obsolete ready versions during maintenance recovery", async () => {
+    const payload = new TextEncoder().encode("file");
+    const runtime = cache({
+      fetchImpl: (async () => response(payload, 200, { ETag: '"etag"' })) as typeof fetch,
+    });
+    const opened = await runtime.cache.open({ descriptor: descriptor(payload), url: "/media" });
+    await opened.cacheCompletion;
+    const old = (await runtime.manifest.list())[0];
+    const current = {
+      ...old,
+      cachedAt: old.cachedAt + 1,
+      key: "current-version-key",
+      lastAccessedAt: old.lastAccessedAt + 1,
+      opfsPath: "cache-current-version.bin",
+      sourceVersion: "version-two",
+    };
+    runtime.bytes.files.set(current.opfsPath, payload);
+    await runtime.manifest.put(current);
+
+    await new BrowserFileCacheMaintenance(runtime.manifest, runtime.bytes).initialize();
+
+    expect((await runtime.manifest.list()).map((record) => record.sourceVersion)).toEqual(["version-two"]);
+    expect(await runtime.bytes.list()).toEqual(["cache-current-version.bin"]);
+  });
+
   it("clears only the requested principal and its OPFS bytes", async () => {
     const payload = new TextEncoder().encode("file");
     const runtime = cache({

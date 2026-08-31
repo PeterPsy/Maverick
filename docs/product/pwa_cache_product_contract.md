@@ -115,10 +115,17 @@ mutation. Tokens, credentials, signed URLs, Browser sessions, Speech audio,
 temporary archives, and agentic control-plane state never enter persistent PWA
 stores.
 
-Private read models require a complete user/workspace/app/resource scope,
-canonical classification, stable revision, bounded TTL and byte budget,
-sanitization, invalidation, cleanup, and any required privacy approval. A
-missing or expired condition is a cache miss.
+Private read models require a top-level-host-attested user/workspace/app
+identity, complete resource scope, app-owned resource schema revision,
+canonical classification, stable server revision, bounded TTL and byte budget,
+sanitization on network and cache reads, durable invalidation/cleanup, and any
+required privacy approval. A missing, malformed, stale-disallowed, or expired
+condition is a cache miss. An incomplete durable clear is never success and
+blocks persistent cache access until deletion is confirmed.
+
+The current same-origin mounted-app sandbox is not a storage security boundary.
+No private app read model may be persisted until that app runs on an isolated
+origin or an opaque-origin frame uses a genuine parent-owned storage broker.
 
 ## Acceptance contract
 

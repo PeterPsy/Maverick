@@ -144,11 +144,17 @@ ordinary navigation failure.
 
 The shared `@maverick/pwa-cache` mechanics are implemented by M3 while the
 data-cache rollout gate remains disabled by default. The browser database is
-`maverick-pwa-data-v1`, currently at database and entry schema version 2. Entry
-identity includes user, workspace, app, resource, entity, policy revision, and
-entry schema version. Metadata and payload records are committed atomically;
-schema upgrades are transactional and durable cleanup markers resume after an
-interrupted browser lifecycle.
+`maverick-pwa-data-v1`, currently at database and entry schema version 3. Entry
+identity includes host-attested user, workspace and app identity plus resource,
+entity, policy revision, app-owned resource schema revision, and entry schema
+version. Metadata and payload records are committed atomically; schema upgrades
+are transactional. Every hit re-runs the current sanitizer and validates exact
+byte accounting and TTL timestamps before render.
+
+Security-sensitive clear operations use an independent durable barrier plus
+IndexedDB cleanup markers. They do not use the ordinary RAM performance
+fallback: incomplete deletion is reported as pending and blocks persistent
+cache access until the primary store confirms removal.
 
 The conservative platform defaults are:
 
@@ -169,6 +175,14 @@ The conservative platform defaults are:
 
 M3 does not opt any app read model into persistent storage and does not add the
 M4 OPFS file cache. Those rollouts remain separate reviewed gates.
+
+The M3 SDK lets only the top-level host bind and mint an app-scoped client; an
+embedded app cannot provide a replacement principal through client options.
+This is capability discipline, not origin isolation. Current same-origin app
+frames can still address the origin's browser storage outside the SDK, so a
+private app rollout additionally requires an isolated app origin or a genuine
+parent-mediated broker used from an opaque-origin frame. The default-off data
+gate is mandatory until that browser boundary exists.
 
 ## Supersession boundary
 

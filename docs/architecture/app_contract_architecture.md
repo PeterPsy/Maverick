@@ -1542,32 +1542,44 @@ budget, invalidation event, and sanitization rule. The local persistence policy
 is derived from that canonical classification under ADR-0012 and has only
 `deny`, `session`, and `cache` values; it is not an app-defined sensitivity
 taxonomy. Missing classification or revision remains network-only. App
-frontends cannot inspect another app's IndexedDB or OPFS scope, and cached
-platform control-plane state never authorizes an app action. An app renders a
-valid cached result through its normal component and keeps a cache miss in its
-normal loading state during a transient transport failure. App contracts must
-not add a network-absence mode, availability badge, pin action, or persistent
-mutation queue as an implicit consequence of cache support.
+frontends receive only a client capability whose user/workspace/app principal
+was bound by the top-level host; they cannot select another scope through SDK
+client options. This is not a browser-origin security boundary: today's
+`allow-same-origin` app frames can inspect origin storage outside the SDK.
+Private app persistence therefore remains disabled until the app has an
+isolated origin or an opaque-origin frame uses a genuine parent-owned broker.
+Cached platform control-plane state never authorizes an app action. An app
+renders a valid cached result through its normal component and keeps a cache
+miss in its normal loading state during a transient transport failure. App
+contracts must not add a network-absence mode, availability badge, pin action,
+or persistent mutation queue as an implicit consequence of cache support.
 
-The M3 shared implementation is `packages/pwa-cache/`. An adapter must create a
-client with an explicit non-empty user id, workspace id, and owning app id, then
-register each resource exactly once with policy revision
-`maverick.local-persistence-policy.v2`. The resource declaration supplies its
-canonical data class and provenance, sanitizer, stable server revision or
-ETag, fresh and absolute expiry TTLs, maximum entry bytes, maximum resource
-bytes, stale-render permission, and required privacy approvals. The framework
-derives `deny`, `session`, or `cache`; an app cannot directly promote its own
-classification. Persistent private reads additionally require a fresh bounded
-access lease issued after successful server authentication.
+The M3 shared implementation is `packages/pwa-cache/`. The top-level host must
+create an app-bound capability with explicit non-empty user id, workspace id,
+and owning app id; an adapter receives a client from that capability and
+registers each resource exactly once with policy revision
+`maverick.local-persistence-policy.v2` and an app-owned resource schema
+revision. The resource declaration supplies its canonical data class and
+provenance, sanitizer, stable server revision or ETag, fresh and absolute
+expiry TTLs, maximum entry bytes, maximum resource bytes, stale-render
+permission, and required privacy approvals. The framework derives `deny`,
+`session`, or `cache`; an app cannot directly promote its own classification.
+Persistent private reads additionally require a fresh bounded access lease
+issued after successful server authentication.
 
 `readThrough` returns an ordinary network result on a miss, an ordinary cached
 result on a valid hit, and an optional single-flight revalidation promise for
-an explicitly renderable stale value. Expired, malformed, wrong-scope,
-wrong-policy, wrong-schema, and lease-expired entries are misses. An adapter
-must use `not_modified` only when it already has the matching cached value, and
-must emit `maverick.app.data-changed` with the owning app and resource after a
-confirmed server mutation. Quota, IndexedDB, migration, serialization, or
-cache-write failure must never replace a successful server response.
+an explicitly renderable stale value. Expired, malformed, sanitizer-rejected,
+wrong-scope, wrong-policy, wrong-resource-schema, wrong-entry-schema,
+impossible-timestamp, size-mismatched, and lease-expired entries are misses. An
+adapter must use `not_modified` only when it already has the matching cached
+value, and must emit `maverick.app.data-changed` with the owning app and
+resource after a confirmed server mutation. Quota, IndexedDB, migration,
+serialization, or cache-write failure must never replace a successful server
+response.
+Security-sensitive deletion cannot use the RAM performance fallback as
+success: an incomplete durable clear is pending and blocks persistent cache
+access until the primary store confirms deletion.
 
 The SDK's retry coordinator is RAM-only. It automatically pauses for document
 visibility and `maverick.app.visibility-changed`, treats browser `online`,
@@ -1576,7 +1588,10 @@ cancels work at unmount or principal/scope change. Unsafe requests are not
 replayed without a stable `Idempotency-Key`, a request fingerprint, and an
 explicit server-deduplication contract. Even then they re-enter current server
 authorization/admission and have a bounded attempt count; no app may interpret
-the local pending state as mutation success.
+the local pending state as mutation success. A terminal `401` or `403` remains
+the original HTTP result even when cleanup cancels its retry scope. The M3
+end-to-end mutation proof is Base Shell's `pinned_apps.set`, whose exact
+SHA-256 fingerprint and stable key are deduplicated atomically by App Store.
 
 The `base-shell` UI/UX is the visual and interaction reference for the mounted shell.
 

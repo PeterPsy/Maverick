@@ -38,6 +38,11 @@ class PwaResourceInventoryTests(unittest.TestCase):
 
         self.assertEqual(payload["schema"], "maverick.pwa-cache-resource-inventory.v2")
         self.assertEqual(payload["policy_revision"], "maverick.local-persistence-policy.v2")
+        self.assertIs(payload["resource_schema_revision_required"], True)
+        self.assertEqual(
+            payload["private_app_origin_boundary"],
+            "isolated_origin_or_opaque_frame_parent_broker",
+        )
         self.assertEqual(payload["canonical_data_class_source"], "core.providers.agentic_models.RuntimeDataClass")
         self.assertEqual(payload["local_persistence_policy_values"], list(LOCAL_PERSISTENCE_POLICIES))
         self.assertEqual(payload["unknown_classification_policy"], "deny")

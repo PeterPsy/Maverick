@@ -88,11 +88,15 @@ Credentials, secrets, signed or object URLs, Browser sessions, Speech audio,
 temporary archives, and all agentic authority/control-plane state are
 network-only and must never enter Cache API, IndexedDB, or OPFS. A private
 candidate fails closed without exact policy revision, reviewed classification,
-complete user/workspace/app/resource scope, bounded retention, sanitizer,
-quota estimate, and a fresh access lease. Browser-side encryption with a key
-available to the same JavaScript is not accepted as an XSS boundary. Any app
-private-cache rollout still requires privacy review and explicit
-physical-device evidence.
+top-level-host-attested user/workspace/app identity, a resource schema
+revision, bounded retention, read-time sanitizer, quota estimate, and a fresh
+access lease. Failed durable cleanup remains pending and blocks persistent
+cache access; RAM fallback cannot report it as success. Browser-side encryption
+with a key available to the same JavaScript is not accepted as an XSS boundary.
+Nor is the current `allow-same-origin` iframe sandbox: app code can address
+origin storage outside the SDK. Any app private-cache rollout therefore still
+requires privacy review, an isolated origin or genuine opaque-frame parent
+broker, and explicit physical-device evidence.
 
 App-owned HTTP sidecars that declare sandbox compatibility use the generic
 fail-closed process boundary documented in

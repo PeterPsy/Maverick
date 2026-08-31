@@ -1,6 +1,8 @@
 {
   "schema": "maverick.pwa-cache-resource-inventory.v2",
   "policy_revision": "maverick.local-persistence-policy.v2",
+  "resource_schema_revision_required": true,
+  "private_app_origin_boundary": "isolated_origin_or_opaque_frame_parent_broker",
   "canonical_data_class_source": "core.providers.agentic_models.RuntimeDataClass",
   "local_persistence_policy_values": [
     "deny",

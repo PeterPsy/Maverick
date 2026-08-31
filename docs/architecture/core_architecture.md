@@ -1129,8 +1129,17 @@ reachability. Each app remains responsible for the classification,
 sanitization, revision, TTL, size budget, invalidation, and ordinary loading
 behavior of its own read models. Storage separately owns stable file identity
 and an automatic bounded file cache. Shared browser mechanics may live in a
-platform package, but that package must not import app models or permit one app
-to address another app's scope.
+platform package, but that package must not import app models. Its client
+capability is minted by the top-level host with one bound user/workspace/app
+principal; embedded app options cannot select or replace that scope.
+
+That SDK boundary is not a substitute for browser-origin isolation. Current
+mounted app frames use `allow-same-origin` and can address origin storage
+outside the SDK, so private app cache persistence remains blocked. Before such
+a rollout, the app must move to an isolated origin or an opaque-origin frame
+must use a genuine parent-owned storage broker that does not expose direct
+origin storage authority. The default-off `data_cache` flag enforces this
+boundary for M3.
 
 Cache API, IndexedDB, and OPFS hold derived copies only. They cannot become a
 source of platform authority or satisfy capability, certificate, provider
@@ -1202,11 +1211,14 @@ workspace change, and scope revision, and they are never persisted.
 
 M3 implements these shared mechanics in `packages/pwa-cache/` while the public
 `features.data_cache` projection remains fail-closed by default. The owned
-structured-data database is `maverick-pwa-data-v1`, version 2, with split
+structured-data database is `maverick-pwa-data-v1`, version 3, with split
 metadata/payload stores, transactional migration, durable cleanup markers, and
-a RAM fallback. Entry identity contains user, workspace, owning app, resource,
-entity, policy revision, and schema version. The framework enforces expiry,
-least-recent eviction, 64 MiB global and 32 MiB per-app default budgets, an
+a RAM fallback. Entry identity contains host-attested user, workspace, owning
+app, resource, entity, policy revision, app-owned resource schema revision, and
+entry schema version. Every cache hit re-runs the current sanitizer and checks
+the exact payload size and TTL timestamps before render. The framework
+enforces expiry, least-recent eviction, 64 MiB global and 32 MiB per-app
+default budgets, an
 app-declared resource budget, and quota headroom from
 `navigator.storage.estimate()`; an unavailable estimate skips persistence and
 the framework never requests `navigator.storage.persist()`.
@@ -1217,8 +1229,11 @@ cancels RAM pending work at principal/scope boundaries, clears the applicable
 database scope on logout and `401`/`403`, and routes
 `maverick.app.data-changed` to scoped invalidation. Settings may expose only
 aggregate byte/entry/quota/backend diagnostics and a confirmed clear action;
-it cannot enumerate cached content or clear unrelated origin storage. The M3
-release does not enable an app read model or the M4 OPFS file cache.
+it cannot enumerate cached content or clear unrelated origin storage.
+Security-sensitive deletion never reports RAM fallback as success: an
+incomplete durable clear remains pending and blocks persistent cache access
+until the primary store confirms removal. The M3 release does not enable an
+app read model or the M4 OPFS file cache.
 
 The RAM retry coordinator starts at one second, caps its exponential component
 at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval
@@ -1226,7 +1241,11 @@ for early hints. Only transport/timeouts and `429/502/503/504` are retryable by
 the standard classifier. An unsafe request remains one-shot unless it carries
 a stable `Idempotency-Key`, exact request fingerprint, and a declared server
 deduplication contract; eligible mutations are capped at three attempts and
-still cross current server authorization and admission.
+still cross current server authorization and admission. `401` and `403` remain
+the terminal request errors even when their cleanup changes retry scope; they
+cannot be masked as cancellation. Base Shell's `pinned_apps.set` mutation is
+the M3 end-to-end proof, backed by an atomic bounded App Store deduplication
+ledger and duplicate-event suppression.
 
 ## Everything Above The Core Is An App
 

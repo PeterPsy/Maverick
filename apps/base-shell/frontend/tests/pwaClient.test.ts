@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { disableShellServiceWorker, recoverShellStaticCache, storageFileCacheFeatureEnabled } from "../src/pwa";
+import { shellCacheLifecycle } from "../src/pwaCacheRuntime";
 
 describe("PWA client recovery", () => {
   const originalServiceWorker = Object.getOwnPropertyDescriptor(navigator, "serviceWorker");
@@ -75,14 +76,26 @@ describe("PWA client recovery", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         schema: "maverick.pwa-config.v2",
         features: { storage_file_cache: "true" },
-      }), { status: 200 }));
+      }), { status: 200 }))
+      .mockRejectedValueOnce(new TypeError("transport unavailable"));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(storageFileCacheFeatureEnabled()).resolves.toBe(true);
     await expect(storageFileCacheFeatureEnabled()).resolves.toBe(false);
+    await expect(storageFileCacheFeatureEnabled()).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledWith("/api/pwa/config", expect.objectContaining({
       cache: "no-store",
       credentials: "same-origin",
     }));
+  });
+
+  it("fails closed and clears private cache authority on an authenticated config rejection", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
+    const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure")
+      .mockResolvedValue({ pendingCleanupCount: 0, removed: 0, status: "complete" });
+
+    await expect(storageFileCacheFeatureEnabled()).resolves.toBe(false);
+
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 });

@@ -44,7 +44,7 @@ type ResolvedFile = {
 
 type StorageFileCacheBrokerOptions = {
   accessLease?: AccessLease;
-  featureEnabled?: (signal?: AbortSignal) => Promise<boolean>;
+  featureEnabled?: (signal?: AbortSignal) => Promise<boolean | null>;
   hostOrigin?: string;
   openFile?: (request: Omit<FileCacheOpenRequest, "signal">, signal: AbortSignal) => Promise<FileCacheOpenResult>;
   principal: CachePrincipal;
@@ -55,6 +55,7 @@ export class StorageFileCacheBroker {
   private readonly active = new Map<string, { controller: AbortController; port: MessagePort }>();
   private readonly cache: PwaFileCache | null;
   private readonly featureEnabled: NonNullable<StorageFileCacheBrokerOptions["featureEnabled"]>;
+  private featureWasConfirmedEnabled = false;
   private readonly hostOrigin: string;
   private readonly openFile: NonNullable<StorageFileCacheBrokerOptions["openFile"]>;
   private readonly resolveDescriptor: NonNullable<StorageFileCacheBrokerOptions["resolveDescriptor"]>;
@@ -131,19 +132,34 @@ export class StorageFileCacheBroker {
 
   private async process(request: ParentFileCacheOpenMessage, signal: AbortSignal): Promise<void> {
     try {
-      if (!await this.featureEnabled(signal).catch(() => false)) {
+      const featureDecision = await this.featureEnabled(signal).catch(() => null);
+      if (signal.aborted) {
+        this.finish(request.request_id);
+        return;
+      }
+      if (featureDecision === true) this.featureWasConfirmedEnabled = true;
+      else if (featureDecision === false) this.featureWasConfirmedEnabled = false;
+      const featureEnabled = featureDecision === true
+        || (featureDecision === null && this.featureWasConfirmedEnabled);
+      if (!featureEnabled) {
         this.reply(request.request_id, "unavailable");
         return;
       }
       const payload = await this.resolveDescriptor(request, signal).catch(() => null);
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        this.finish(request.request_id);
+        return;
+      }
       const resolved = sanitizeDescriptor(payload, request, this.hostOrigin);
       if (!resolved) {
         this.reply(request.request_id, "unavailable");
         return;
       }
       const result = await this.openFile({ descriptor: resolved.descriptor, url: resolved.url }, signal);
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        this.finish(request.request_id);
+        return;
+      }
       if (result.blob.size !== resolved.descriptor.sizeBytes
           || (resolved.descriptor.expectedSha256
             && await sha256Blob(result.blob) !== resolved.descriptor.expectedSha256)) {

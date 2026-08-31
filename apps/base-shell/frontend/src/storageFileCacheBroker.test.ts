@@ -176,9 +176,11 @@ describe("Base Shell Storage file-cache broker", () => {
     broker.dispose();
   });
 
-  it("rechecks the fail-closed feature gate for every file open", async () => {
+  it("rechecks explicit gate decisions while preserving a confirmed hit path across transport loss", async () => {
     const featureEnabled = vi.fn()
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(false);
     const resolveDescriptor = vi.fn(async () => approvedDescriptor());
     const openFile = vi.fn(async () => ({
@@ -194,21 +196,33 @@ describe("Base Shell Storage file-cache broker", () => {
       resolveDescriptor,
     });
 
+    const coldTransportLossChannel = new MessageChannel();
+    const coldTransportLossAccepted = nextPortMessage(coldTransportLossChannel.port1);
+    broker.handleWindowMessage(requestEvent(coldTransportLossChannel, { request_id: "request-cold" }), storageWindow);
+    await coldTransportLossAccepted;
+    await expect(nextPortMessage(coldTransportLossChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
+
     const enabledChannel = new MessageChannel();
     const enabledAccepted = nextPortMessage(enabledChannel.port1);
     broker.handleWindowMessage(requestEvent(enabledChannel), storageWindow);
     await enabledAccepted;
     await expect(nextPortMessage(enabledChannel.port1)).resolves.toMatchObject({ status: "ok" });
 
+    const transportLossChannel = new MessageChannel();
+    const transportLossAccepted = nextPortMessage(transportLossChannel.port1);
+    broker.handleWindowMessage(requestEvent(transportLossChannel, { request_id: "request-two" }), storageWindow);
+    await transportLossAccepted;
+    await expect(nextPortMessage(transportLossChannel.port1)).resolves.toMatchObject({ status: "ok" });
+
     const disabledChannel = new MessageChannel();
     const disabledAccepted = nextPortMessage(disabledChannel.port1);
-    broker.handleWindowMessage(requestEvent(disabledChannel, { request_id: "request-two" }), storageWindow);
+    broker.handleWindowMessage(requestEvent(disabledChannel, { request_id: "request-three" }), storageWindow);
     await disabledAccepted;
     await expect(nextPortMessage(disabledChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
 
-    expect(featureEnabled).toHaveBeenCalledTimes(2);
-    expect(resolveDescriptor).toHaveBeenCalledTimes(1);
-    expect(openFile).toHaveBeenCalledTimes(1);
+    expect(featureEnabled).toHaveBeenCalledTimes(4);
+    expect(resolveDescriptor).toHaveBeenCalledTimes(2);
+    expect(openFile).toHaveBeenCalledTimes(2);
     broker.dispose();
   });
 });

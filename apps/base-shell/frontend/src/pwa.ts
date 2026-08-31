@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { shellCacheLifecycle } from "./pwaCacheRuntime";
 
 export type ShellPwaUpdateState = {
   applying: boolean;
@@ -89,7 +90,7 @@ export async function disableShellServiceWorker(): Promise<void> {
   setUpdateState({ applying: false, available: false, buildId: null, recovery: "idle" });
 }
 
-export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Promise<boolean> {
+export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Promise<boolean | null> {
   const controller = new AbortController();
   const relayAbort = () => controller.abort(signal?.reason);
   if (signal?.aborted) relayAbort();
@@ -102,7 +103,13 @@ export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Prom
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
-    if (!response.ok) return false;
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
+        return false;
+      }
+      return null;
+    }
     const payload = (await response.json()) as {
       features?: { storage_file_cache?: unknown };
       schema?: unknown;
@@ -110,7 +117,7 @@ export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Prom
     return payload.schema === "maverick.pwa-config.v2"
       && payload.features?.storage_file_cache === true;
   } catch {
-    return false;
+    return null;
   } finally {
     globalThis.clearTimeout(timeout);
     signal?.removeEventListener("abort", relayAbort);

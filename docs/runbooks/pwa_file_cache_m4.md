@@ -43,19 +43,23 @@ Before OPFS access, the broker calls the authenticated internal
 4. bounded size and valid content type/digest;
 5. exact local-persistence policy revision, canonical data class, attachment
    provenance, and applicable cache/privacy approvals; and
-6. on every open, the tri-state decision from an exact no-store
-   `maverick.pwa-config.v2` response.
+6. before each open until terminal disable, the tri-state decision from an
+   exact no-store `maverick.pwa-config.v2` response.
 
-An explicit `false`, malformed successful response, or `401`/`403` disables
-the broker and an authentication rejection also clears private cache
-authority. A config transport failure is not an explicit disable: only a
-positive decision already confirmed by that authenticated in-memory broker may
-survive it. The broker may then reuse only the matching server descriptor it
-already validated and retained in its bounded RAM map, allowing the SDK to
-attempt a cache-first open without another network dependency. Descriptors are
-never persisted, are dropped on explicit denial/authentication failure, and
-are cleared with the broker. A cold broker with no confirmed decision and
-descriptor remains fail-closed.
+An explicit `false`, malformed successful response, non-transient HTTP error,
+or `401`/`403` terminally disables the mounted broker; an authentication
+rejection also clears private cache authority. This terminal state avoids one
+known-default-off config request per preview card. Enabling the flag afterwards
+requires an authenticated broker remount or shell reload. A transient config
+response or transport failure is not an explicit disable: only a positive
+decision already confirmed by that authenticated in-memory broker may survive
+it. Only transport failure/timeout and HTTP `408`, `425`, `429`, `500`, `502`,
+`503`, or `504` are transient. The broker may then reuse only the matching
+server descriptor it already validated and retained in its bounded RAM map,
+allowing the SDK to attempt a cache-first open without another network
+dependency. Descriptors are never persisted, are dropped on explicit
+denial/authentication failure, and are cleared with the broker. A cold broker
+with no confirmed decision and descriptor remains fail-closed.
 
 Unknown or denied policy returns `unavailable` to the Storage adapter, which
 uses its ordinary network path. The current resource inventory classifies raw
@@ -72,8 +76,9 @@ and opaque/isolated Storage frame are separate release prerequisites.
   modified time is not a file-cache fallback revision.
 - The cache-specific local media request hashes the current file before
   serving it and rejects a stale digest URL.
-- Drive media validates the requested provider version and returns a strong
-  Storage-controlled ETag.
+- A cache-marked Drive media request refreshes current Google metadata before
+  validating the requested provider version, persists the normalized revision,
+  and returns a strong Storage-controlled ETag.
 - The broker rejects a final Blob whose size or expected SHA-256 differs from
   the trusted descriptor.
 

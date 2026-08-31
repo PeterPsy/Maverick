@@ -32,7 +32,12 @@ represented as passed by this record.
 - `7663fad0` — bounded RAM retention of an exact previously validated server
   descriptor, enabling a real cache-first retry without descriptor transport
   while dropping it on explicit policy denial, authentication failure, scope
-  disposal, or LRU pressure.
+  disposal, or LRU pressure;
+- `d527e4c9` — terminal explicit-disable state for the mounted broker,
+  transient-versus-terminal config response handling, and live Google Drive
+  revision revalidation before a cache-marked media response;
+- `cd668837` — malformed successful config bodies fail closed instead of being
+  treated as transport loss, with the matching official Base Shell rebuild.
 
 ## Closed M4 tasks
 
@@ -61,23 +66,30 @@ internal descriptor action, validates identity and same-origin media URL,
 applies local-persistence policy v2, and verifies returned bytes before
 transferring the Blob.
 
-The broker re-reads the exact `maverick.pwa-config.v2` no-store projection for
-every open. Explicit false, malformed success, or `401`/`403` clears a prior
-positive result. A transport failure may reuse only a positive result already
-confirmed by that authenticated in-memory broker, allowing a ready cache hit
-during network loss. That path may reuse only the exact matching server
-descriptor previously validated and retained in a 128-entry RAM LRU; the
-descriptor and media URL are never persisted. A cold broker remains
-fail-closed, and explicit denial/authentication failure clears retained
-authority. Disabled, stale, denied, oversized, or unclassified descriptors
-return `unavailable`, preserving Storage's existing server path. The global
-flag is not a policy override: the current backend always projects raw bytes as
-ineligible until canonical classification changes through review.
+Until it receives a terminal decision, the broker re-reads the exact
+`maverick.pwa-config.v2` no-store projection for each open. Explicit false,
+malformed success, non-transient HTTP failure, or `401`/`403` clears a prior
+positive result and terminally disables that mounted broker, avoiding repeated
+config calls from preview cards while the default-off gate is known. Re-enable
+requires a new authenticated broker mount or shell reload. A transient response
+or transport failure may reuse only a positive result already confirmed by
+that authenticated in-memory broker, allowing a ready cache hit during network
+loss. That path may reuse only the exact matching server descriptor previously
+validated and retained in a 128-entry RAM LRU; the descriptor and media URL are
+never persisted. A cold broker remains fail-closed, and explicit
+denial/authentication failure clears retained authority. Disabled, stale,
+denied, oversized, or unclassified descriptors return `unavailable`,
+preserving Storage's existing server path. The global flag is not a policy
+override: the current backend always projects raw bytes as ineligible until
+canonical classification changes through review.
 
 Local media requests carrying the cache marker hash the current file before
 serving it, including same-size/same-mtime mutation cases. Drive uses an
 explicit provider revision; a modified timestamp is not accepted as a stable
-file-cache version. URLs, credentials, secret values, file names, and
+file-cache version. A cache-marked Drive media request obtains current provider
+metadata and persists that normalized revision before validating the requested
+version, so newly changed remote bytes cannot be served or published under an
+older catalog revision. URLs, credentials, secret values, file names, and
 principal identities are not persisted in OPFS names or emitted by aggregate
 diagnostics.
 
@@ -107,12 +119,12 @@ blocks persistent reuse until deletion succeeds.
 | Base Shell frontend | 28 files, 138 tests passed |
 | Base Shell worker/build harness | 13 tests passed |
 | Storage frontend | 28 files, 126 tests passed |
-| Storage Python selection | 128 tests passed, 10 expected skips |
+| Storage Python selection | 129 tests passed, 10 expected skips |
 | Settings generated frontend selection | 14 tests passed |
 | PWA config/API/resource inventory selection | 11 tests passed |
 | Unused-import and Python/JSON syntax checks | passed |
 | Storage official build | `0062ec3f713cf1bad5df0970d792f053b4be8dbf44f4e9971619f759aaf4bde8` |
-| Base Shell official build | `e7ebdf3809bfe00dfa709f6a1e82c25ba462da086a12a2a11e04d38ebcee3fb1` |
+| Base Shell official build | `b98df5a6980f61cfc9b3e6689e1ff9122754476e4f9d08b46bd079319d11c733` |
 | Settings official build | `ae4ff2c315c10549af07e781fa2e28381a53dad212ebb6347db5774ec91243c9` |
 
 The default fast repository suite was executed. M4's Storage selection and
@@ -153,8 +165,9 @@ evidence. Only then may an operator enable
 `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE`.
 
 Rollback sets that feature off and restarts Core through the normal operator
-procedure. Every mounted broker rechecks the flag per open; the next explicit
-server response disables it, while a device that cannot reach the server can
+procedure. A broker that has not already reached a terminal decision rechecks
+the flag on its next open; the explicit server response then disables that
+broker for the rest of its mount. A device that cannot reach the server can
 only use a positive decision already confirmed inside its current authenticated
 session. Existing derivatives remain disposable and can be removed by bounded
 lifecycle or Settings clear; rollback never deletes server files or clears

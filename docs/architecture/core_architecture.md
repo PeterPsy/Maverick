@@ -1257,15 +1257,21 @@ receives OPFS, IndexedDB, host capability, classification, or scope authority.
 The broker independently resolves a server-owned
 `maverick.storage-file-cache-descriptor.v1`, rejects a cross-origin or
 identity-mismatched media URL, and applies the canonical local-persistence
-policy before opening bytes. It revalidates the exact no-store feature
-projection for each open. Explicit disable, malformed success, or
-authentication rejection clears a positive decision; a transport failure may
-reuse only a positive result already confirmed in that authenticated in-memory
-broker plus the exact matching server descriptor already validated in its
-bounded RAM map. This allows a ready hit during network loss without persisting
-the media URL or policy projection; explicit denial/authentication failure and
-broker disposal clear the map, while a cold broker remains fail-closed. The
-current Storage descriptor is deliberately
+policy before opening bytes. Until a terminal decision, it revalidates the
+exact no-store feature projection for each open. Explicit disable, malformed
+success, non-transient HTTP failure, or authentication rejection clears a
+positive decision and terminally disables the mounted broker, avoiding
+repeated default-off config requests; a later enable requires a new
+authenticated broker mount or shell reload. A transient response or transport
+failure may reuse only a positive result already confirmed in that
+authenticated in-memory broker plus the exact matching server descriptor
+already validated in its bounded RAM map. This allows a ready hit during
+network loss without persisting the media URL or policy projection; explicit
+denial/authentication failure and broker disposal clear the map, while a cold
+broker remains fail-closed. Cache-marked Google Drive media refreshes current
+provider metadata before comparing the requested revision, so remotely changed
+bytes cannot be served under a stale catalog version. The current Storage
+descriptor is deliberately
 `unclassified` and ineligible unless a future reviewed canonical resource
 classification is available, so enabling the global flag alone cannot widen
 the persistence policy.

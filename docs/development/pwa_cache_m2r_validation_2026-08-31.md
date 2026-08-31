@@ -3,9 +3,15 @@
 ## Status
 
 The M2R source, generated artifacts, contracts, automated tests, and shared
-backend activation are implemented and verified. The physical Safari/Home
-Screen matrix remains an explicit external release gate and is not represented
-as passed in this record.
+backend activation are implemented and verified. On 2026-08-31 the user
+explicitly waived the physical Safari/Home Screen matrix for this development
+scope because the available environment is Ubuntu. No physical-device result
+is represented as passed in this record.
+
+The generated development plan was updated through the Storage-owned Markdown
+write surface: tasks `PWA-R01..R05`, `PWA-R10..R15`, `PWA-R20..R24`, and
+`PWA-R30..R33` are checked, and the environmental waiver is recorded without
+claiming Safari or iPhone execution.
 
 This record supersedes the product conclusions, not the historical facts, in
 `pwa_cache_m2_validation_2026-08-26.md`.
@@ -113,20 +119,23 @@ The smoke result used schema `maverick.pwa-shell-cache-smoke.v2` and passed the
 online install, mounted-tree preservation, standard-shell restart without
 network, non-shell navigation bypass, excluded dynamic requests, transparent
 transport recovery, and absence of superseded mode UI. This closes the shared
-backend activation gate; it does not replace the physical-device release gate
-below.
+backend activation gate. Physical-device evidence is waived for the current
+Ubuntu-only scope as documented below, rather than simulated or reported as a
+pass.
 
-## Physical-device matrix
+## Physical-device matrix — waived for this scope
 
 | Container | Status |
 |---|---|
-| Minimum supported Safari on macOS | pending physical execution |
-| Current Safari on supported macOS | pending physical execution |
-| macOS Dock-installed web app | pending physical execution |
-| Minimum supported Safari on iOS/iPadOS | pending physical execution |
-| Current Safari on supported iPhone | pending physical execution |
-| iPhone Home Screen web app | pending physical execution |
+| Minimum supported Safari on macOS | not run — unavailable on Ubuntu; waived |
+| Current Safari on supported macOS | not run — unavailable on Ubuntu; waived |
+| macOS Dock-installed web app | not run — unavailable on Ubuntu; waived |
+| Minimum supported Safari on iOS/iPadOS | not run — unavailable on Ubuntu; waived |
+| Current Safari on supported iPhone | not run — unavailable on Ubuntu; waived |
+| iPhone Home Screen web app | not run — unavailable on Ubuntu; waived |
 
-Each row must use the exact reviewed build and record only device model,
-OS/browser version, build id, UTC timestamp, and pass/fail. The release reviewer
-must follow `docs/runbooks/pwa_shell_v2.md`; emulation cannot close this gate.
+The waiver closes the requested M2R implementation work, not the factual gap in
+Apple-device evidence. If a future release requires physical certification,
+each row must use the exact reviewed build and record only device model,
+OS/browser version, build id, UTC timestamp, and pass/fail. The reviewer must
+follow `docs/runbooks/pwa_shell_v2.md`; emulation is still not a substitute.

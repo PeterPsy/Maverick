@@ -1,5 +1,10 @@
 # PWA Cache Development Baseline — 2026-08-26
 
+> **Historical M0 evidence.** This record intentionally preserves the
+> pre-M2 measurements and terminology used on 26 August 2026. ADR-0012 and the
+> M2R runbook supersede its product expectations; do not use this file as the
+> current acceptance contract.
+
 This is the M0 development baseline captured before the HTTP/asset and service
 worker v2 changes. It is intentionally separate from the physical-device
 release gate in `docs/runbooks/pwa_cache_baseline.md`.
@@ -43,7 +48,8 @@ profile. The browser failed the navigation with
 - absolute latency budgets remain unset until the required physical Mac/iPhone
   baseline is captured.
 
-The same probe must be repeated after M1 and M2. Expected deltas are zero body
-transfer for verified immutable assets, a zero-body `304` for the file probe,
-and a visible shell with exactly one Offline indicator after successful M2
-precache.
+The expectation in the original checkpoint was a dedicated connectivity
+indicator after M2. That expectation is retained here only as history and was
+superseded by M2R. Current evidence uses probe schema
+`maverick.pwa-cache-baseline.v2` and requires the standard shell, normal loading
+for missing network results, and zero dedicated connectivity marker or copy.

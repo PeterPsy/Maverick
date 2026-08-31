@@ -1,5 +1,12 @@
 # PWA cache M2 validation — 2026-08-26
 
+> **Historical and superseded.** This file records what was actually validated
+> for the original M2 checkpoint. Its alternative document, indicator, dialog,
+> iframe-unmounting, and action-blocking expectations are not current product
+> requirements. ADR-0012 and
+> `docs/development/pwa_cache_m2r_validation_2026-08-31.md` are normative for
+> the corrected M2R gate. The historical facts below have not been rewritten.
+
 This checkpoint records implementation and repeatable development evidence for
 the Base Shell offline container and service worker v2. It does not claim the
 physical Safari/Home Screen release gate, which remains explicitly pending in

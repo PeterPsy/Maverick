@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Capture redaction-safe cold, warm, file-revalidation, and offline PWA metrics. */
+/** Capture redaction-safe cold, warm, file-revalidation, and transport-loss PWA metrics. */
 
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -29,7 +29,7 @@ try {
   browser = await browserType.launch(launchOptions);
 } catch (error) {
   emit({
-    schema: "maverick.pwa-cache-baseline.v1",
+    schema: "maverick.pwa-cache-baseline.v2",
     skipped: true,
     reason: `browser unavailable: ${safeError(error)}`,
   });
@@ -46,7 +46,7 @@ try {
     results.push(await measureProfile(profileName, device));
   }
   emit({
-    schema: "maverick.pwa-cache-baseline.v1",
+    schema: "maverick.pwa-cache-baseline.v2",
     captured_at: new Date().toISOString(),
     engine: engineName,
     environment: "playwright-emulation",
@@ -73,8 +73,8 @@ async function measureProfile(profile, device) {
         warm.push(await measureNavigation(page, `warm-${reload}`, () => page.reload({ waitUntil: "domcontentloaded" })));
       }
       const file = fileUrl ? await measureFileRevalidation(context) : null;
-      const offline = await measureOfflineReopen(context, page);
-      samples.push({ run, cold, warm, file, offline });
+      const networkUnavailable = await measureNetworkUnavailableReopen(context, page);
+      samples.push({ run, cold, warm, file, network_unavailable_reopen: networkUnavailable });
     } finally {
       await context.close();
     }
@@ -161,7 +161,7 @@ async function measureFileRevalidation(context) {
   };
 }
 
-async function measureOfflineReopen(context, page) {
+async function measureNetworkUnavailableReopen(context, page) {
   await context.setOffline(true);
   const startedAt = performance.now();
   try {
@@ -170,7 +170,10 @@ async function measureOfflineReopen(context, page) {
     return {
       shell_visible: true,
       elapsed_ms: Math.round(performance.now() - startedAt),
-      offline_indicator_count: await page.locator('[data-maverick-connectivity="offline"]').count(),
+      standard_shell_count: await page.locator(".bs-shell").count(),
+      loading_indicator_count: await page.locator('[aria-label="Loading workspace"]').count(),
+      legacy_mode_marker_count: await page.locator('.bs-offline-indicator, .bs-offline-workspace-shell, [data-maverick-connectivity]').count(),
+      iframe_count: await page.locator("iframe").count(),
     };
   } catch (error) {
     return {

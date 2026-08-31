@@ -77,16 +77,19 @@ Maverick's intended security model is stricter than a personal-assistant trust m
 
 This model is still being hardened. Public documentation must not claim production readiness until the audit blockers are closed.
 
-The PWA cache rollout is governed by
-`docs/adr/0011-pwa-cache-and-offline-boundaries.md`. M2 persists only verified
-static shell assets and public branding. Private app read models, Storage file
-bytes, and offline writes remain disabled by default behind independent
-fail-closed switches. Credentials, secrets, Browser sessions, Speech audio,
-temporary archives, and all agentic authority/control-plane state are
-network-only and must never enter Cache API, IndexedDB, or OPFS. Browser-side
-encryption with a key available to the same JavaScript is not accepted as an
-XSS boundary. A later private-cache rollout requires scoped cleanup, privacy
-review, bounded retention, and explicit physical-device evidence.
+The current PWA cache rollout is governed by
+`docs/adr/0012-transparent-pwa-cache-and-network-resilience.md`; ADR-0011 is a
+superseded historical checkpoint. M2R persists only verified standard-shell
+assets and public branding in owned Cache API namespaces. It introduces no
+connectivity mode, private payload cache, Storage file cache, or persistent
+mutation queue. Private read models and automatic Storage file bytes remain
+disabled by default behind independent fail-closed cache gates. Credentials,
+secrets, Browser sessions, Speech audio, temporary archives, and all agentic
+authority/control-plane state are network-only and must never enter Cache API,
+IndexedDB, or OPFS. Browser-side encryption with a key available to the same
+JavaScript is not accepted as an XSS boundary. Any later private-cache rollout
+requires scoped cleanup, privacy review, bounded retention, and explicit
+physical-device evidence.
 
 App-owned HTTP sidecars that declare sandbox compatibility use the generic
 fail-closed process boundary documented in

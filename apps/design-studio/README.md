@@ -83,6 +83,12 @@ lease's workspace/app scope before the executor starts. It does not create a
 Maverick runtime session and does not add Maverick prompts, memory, Chat
 history, personas, skills, tools, planning, or model substitution.
 
+OpenDesign 0.21 also supplies a fixed Codex shell-environment policy block on
+every native run. Core admits only that exact certified block, including its
+closed `include_only` key list; an added key or altered value remains denied.
+These argv overrides govern the already bounded executor environment and do
+not create a general sidecar environment-delivery channel.
+
 Before Core publishes native readiness, the launcher reads OpenDesign's
 supported `/api/app-config` surface. An unset selection, or
 the upstream `amr` cloud selection that cannot run inside the credential-free

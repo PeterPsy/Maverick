@@ -352,6 +352,62 @@ class ModelAccessBrokerTests(unittest.TestCase):
                 sidecar_cwd="/etc",
             )
 
+    def test_codex_adapter_accepts_official_shell_environment_contract(self) -> None:
+        include_only = (
+            'shell_environment_policy.include_only=["PATH","HOME","USER","LOGNAME",'
+            '"SHELL","TMPDIR","TMP","TEMP","LANG","LC_ALL","TERM","COLORTERM",'
+            '"SYSTEMROOT","COMSPEC","PATHEXT","USERPROFILE","APPDATA","LOCALAPPDATA",'
+            '"HOMEDRIVE","HOMEPATH","OD_BIN","OD_HYPERFRAMES_BIN","OD_NODE_BIN",'
+            '"OD_DAEMON_URL","OD_TOOL_TOKEN","OD_DATA_DIR","OD_PROJECT_ID",'
+            '"OD_PROJECT_DIR","OD_TASK_INPUT_DIR"]'
+        )
+        argv = (
+            "exec",
+            "--json",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "danger-full-access",
+            "--disable",
+            "plugins",
+            "-c",
+            "allow_login_shell=false",
+            "-c",
+            'shell_environment_policy.inherit="all"',
+            "-c",
+            "shell_environment_policy.ignore_default_excludes=true",
+            "-c",
+            include_only,
+            "-C",
+            "/data/opendesign-native/project",
+            "--model",
+            "gpt-test",
+        )
+
+        translated = _validated_codex_argv(
+            argv,
+            data_root=self.data_root,
+            sidecar_cwd="/data/opendesign-native/project",
+        )
+
+        self.assertEqual(
+            translated[translated.index("-C") + 1],
+            "/workspace/opendesign-native/project",
+        )
+        with self.assertRaisesRegex(ValueError, "config option is not approved"):
+            _validated_codex_argv(
+                tuple(
+                    include_only.replace(
+                        '"OD_TASK_INPUT_DIR"]',
+                        '"OD_TASK_INPUT_DIR","AWS_SECRET_ACCESS_KEY"]',
+                    )
+                    if argument == include_only
+                    else argument
+                    for argument in argv
+                ),
+                data_root=self.data_root,
+                sidecar_cwd="/data/opendesign-native/project",
+            )
+
     def test_official_connection_probe_uses_an_isolated_workspace_mapping(self) -> None:
         cwd = "/tmp/od-conn-test-AbC_123"
         argv = (

@@ -24,6 +24,47 @@ _SAFE_CONFIG = (
     re.compile(r'^model_reasoning_effort="(?:none|minimal|low|medium|high|xhigh|max)"$'),
     re.compile(r'^sandbox_mode="(?:workspace-write|danger-full-access)"$'),
 )
+_OPENDESIGN_SHELL_ENVIRONMENT_KEYS = (
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "LANG",
+    "LC_ALL",
+    "TERM",
+    "COLORTERM",
+    "SYSTEMROOT",
+    "COMSPEC",
+    "PATHEXT",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "OD_BIN",
+    "OD_HYPERFRAMES_BIN",
+    "OD_NODE_BIN",
+    "OD_DAEMON_URL",
+    "OD_TOOL_TOKEN",
+    "OD_DATA_DIR",
+    "OD_PROJECT_ID",
+    "OD_PROJECT_DIR",
+    "OD_TASK_INPUT_DIR",
+)
+_SAFE_STATIC_CONFIG = frozenset(
+    {
+        "allow_login_shell=false",
+        'shell_environment_policy.inherit="all"',
+        "shell_environment_policy.ignore_default_excludes=true",
+        "shell_environment_policy.include_only=["
+        + ",".join(f'"{key}"' for key in _OPENDESIGN_SHELL_ENVIRONMENT_KEYS)
+        + "]",
+    }
+)
 
 
 def validated_codex_argv(
@@ -68,8 +109,10 @@ def validated_codex_argv(
             if index + 1 >= len(argv):
                 raise ValueError("Codex config option is incomplete")
             value = argv[index + 1]
-            if value != "sandbox_workspace_write.network_access=true" and not any(
-                pattern.fullmatch(value) for pattern in _SAFE_CONFIG
+            if (
+                value != "sandbox_workspace_write.network_access=true"
+                and value not in _SAFE_STATIC_CONFIG
+                and not any(pattern.fullmatch(value) for pattern in _SAFE_CONFIG)
             ):
                 raise ValueError("Codex config option is not approved")
             output.extend((argument, value))

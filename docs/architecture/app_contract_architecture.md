@@ -1023,6 +1023,14 @@ session or grants access to Maverick memory, Chat history, prompts, personas,
 skills, or tools. The sidecar may receive the technical socket and capability,
 but never a raw provider credential.
 
+The CLI transport validates the complete native-adapter argv before process
+creation. Provider configuration overrides are denied by default; a supported
+native runtime's fixed shell-environment policy may be admitted only as exact
+certified values with a closed `include_only` key list. Any changed value or
+additional key fails closed. Accepting those argv values does not forward the
+sidecar process environment: Core still constructs the bounded executor
+environment and credential mount itself.
+
 Every authorized model request receives a Core-owned cancellation fence. The
 fence linearizes revocation against the external API submission or CLI spawn:
 if revocation wins, the provider transport is never opened and the process is

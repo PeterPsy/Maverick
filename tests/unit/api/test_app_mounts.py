@@ -120,6 +120,15 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertTrue(is_public_app_static_asset("assets/app-abc123.js"))
         self.assertTrue(is_public_app_static_asset("assets/app-abc12345.js"))
 
+    def test_vite_worker_media_and_wasm_outputs_are_public(self) -> None:
+        for path in (
+            "assets/pdf.worker-contenthash.mjs",
+            "assets/count-down-contenthash.mp3",
+            "assets/decoder-contenthash.wasm",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(is_public_app_static_asset(path))
+
     def test_filename_shape_alone_never_grants_immutable_caching(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

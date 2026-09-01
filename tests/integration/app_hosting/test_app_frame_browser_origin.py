@@ -157,6 +157,29 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             self.assertEqual(asset_headers["access-control-allow-origin"], "*")
             self.assertEqual(asset_headers["cross-origin-resource-policy"], "cross-origin")
 
+            for asset_name, source, compressed in (
+                ("pdf.worker-contenthash.mjs", self._worker_source(), True),
+                ("count-down-contenthash.mp3", self._audio_source(), False),
+                ("decoder-contenthash.wasm", self._wasm_source(), True),
+            ):
+                with self.subTest(asset_name=asset_name):
+                    runtime_status, runtime_body, runtime_headers = await self._invoke(
+                        app,
+                        host=platform_host,
+                        path=f"/apps/frame-demo/assets/{asset_name}",
+                        headers={"accept-encoding": "gzip"},
+                    )
+                    self.assertEqual(runtime_status, 200)
+                    self.assertEqual(runtime_headers["cache-control"], "public, max-age=31536000, immutable")
+                    self.assertEqual(runtime_headers["access-control-allow-origin"], "*")
+                    self.assertEqual(runtime_headers["cross-origin-resource-policy"], "cross-origin")
+                    if compressed:
+                        self.assertEqual(runtime_headers["content-encoding"], "gzip")
+                        self.assertEqual(gzip.decompress(runtime_body), source)
+                    else:
+                        self.assertNotIn("content-encoding", runtime_headers)
+                        self.assertEqual(runtime_body, source)
+
             isolated_callback_status, isolated_callback_body, _isolated_callback_headers = await self._invoke(
                 app,
                 host=isolated_host,
@@ -243,6 +266,9 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
         assets_root.mkdir()
         (assets_root / "app-contenthash.js").write_bytes(AppFrameBrowserOriginIntegrationTests._asset_source())
         (assets_root / "app-contenthash.css").write_text("body { color: currentColor; }", encoding="utf-8")
+        (assets_root / "pdf.worker-contenthash.mjs").write_bytes(AppFrameBrowserOriginIntegrationTests._worker_source())
+        (assets_root / "count-down-contenthash.mp3").write_bytes(AppFrameBrowserOriginIntegrationTests._audio_source())
+        (assets_root / "decoder-contenthash.wasm").write_bytes(AppFrameBrowserOriginIntegrationTests._wasm_source())
         index_body = (
             "<!doctype html><html><head><title>frame-demo</title>"
             '<script type="module" crossorigin src="/apps/frame-demo/assets/app-contenthash.js"></script>'
@@ -255,7 +281,14 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
         )
         records = {
             relative: AppFrameBrowserOriginIntegrationTests._asset_record(frontend_root, relative)
-            for relative in ("assets/app-contenthash.css", "assets/app-contenthash.js", "index.html")
+            for relative in (
+                "assets/app-contenthash.css",
+                "assets/app-contenthash.js",
+                "assets/count-down-contenthash.mp3",
+                "assets/decoder-contenthash.wasm",
+                "assets/pdf.worker-contenthash.mjs",
+                "index.html",
+            )
         }
         (frontend_root / "maverick-frontend-assets.json").write_text(
             json.dumps(
@@ -266,6 +299,9 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
                     "immutable": [
                         records["assets/app-contenthash.css"],
                         records["assets/app-contenthash.js"],
+                        records["assets/count-down-contenthash.mp3"],
+                        records["assets/decoder-contenthash.wasm"],
+                        records["assets/pdf.worker-contenthash.mjs"],
                     ],
                     "revalidated": [records["index.html"]],
                 }
@@ -298,6 +334,18 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
     @staticmethod
     def _asset_source() -> bytes:
         return ("export const isolatedAsset = 'public-cache';\n" * 80).encode("utf-8")
+
+    @staticmethod
+    def _worker_source() -> bytes:
+        return ("self.onmessage = () => self.postMessage('ready');\n" * 80).encode("utf-8")
+
+    @staticmethod
+    def _audio_source() -> bytes:
+        return b"ID3" + bytes(range(256)) * 8
+
+    @staticmethod
+    def _wasm_source() -> bytes:
+        return b"\x00asm\x01\x00\x00\x00" + b"\x00" * 2048
 
     @staticmethod
     def _asset_record(frontend_root: Path, relative: str) -> dict[str, object]:

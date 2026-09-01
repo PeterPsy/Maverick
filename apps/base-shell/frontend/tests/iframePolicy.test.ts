@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { requestAppFrameLaunch } from "../src/components/IsolatedMaverickFrame";
+import { IsolatedMaverickFrame, requestAppFrameLaunch } from "../src/components/IsolatedMaverickFrame";
 import {
   isMaverickFrameMessage,
   postToMaverickFrame,
@@ -43,6 +45,51 @@ describe("isolated Maverick frame policy", () => {
       "https://af-session.sidecars.maverick.test",
     );
     expect(postMessage).not.toHaveBeenCalledWith(expect.anything(), "*");
+  });
+
+  it("keeps the iframe on about:blank until it submits the isolated bootstrap", async () => {
+    const isolatedOrigin = "https://af-session.sidecars.maverick.test";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      bootstrap_url: `${isolatedOrigin}/.well-known/maverick-app-frame-bootstrap`,
+      method: "POST",
+      origin: isolatedOrigin,
+      ticket: "one-shot-ticket",
+      ticket_field: "ticket",
+    }), { status: 200 })));
+    let submittedAction = "";
+    let submittedTarget = "";
+    let submittedTicket = "";
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(function submit(this: HTMLFormElement) {
+      submittedAction = this.action;
+      submittedTarget = this.target;
+      submittedTicket = this.querySelector<HTMLInputElement>('input[name="ticket"]')?.value || "";
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(IsolatedMaverickFrame, {
+        appId: "storage",
+        launchPath: "/apps/storage/",
+      }));
+    });
+    await vi.waitFor(() => expect(submittedTicket).toBe("one-shot-ticket"));
+
+    const frame = container.querySelector("iframe");
+    expect(frame?.getAttribute("src")).toBe("about:blank");
+    expect(frame?.dataset.maverickFrameOrigin).toBe(isolatedOrigin);
+    expect(submittedAction).toBe(`${isolatedOrigin}/.well-known/maverick-app-frame-bootstrap`);
+    expect(submittedTarget).toBe(frame?.name);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/app-frames/browser-launch",
+      expect.objectContaining({
+        body: JSON.stringify({ app_id: "storage", path: "/apps/storage/" }),
+        method: "POST",
+      }),
+    );
+
+    act(() => root.unmount());
   });
 
   it("rejects launch payloads that reuse the platform origin", async () => {

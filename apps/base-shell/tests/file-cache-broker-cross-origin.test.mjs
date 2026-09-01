@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { accessSync, constants, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import test from "node:test";
 import ts from "typescript";
+import {
+  browserExecutable,
+  close,
+  escapeRegExp,
+  listen,
+  runBrowser,
+  send,
+} from "./browser-contract-support.mjs";
 
 test("the Storage broker handshake reaches a parent on a distinct browser origin", async (context) => {
   const browser = browserExecutable();
@@ -122,79 +129,4 @@ function childDocument(shellOrigin) {
     type: "maverick.test.file-cache-complete",
   }, ${JSON.stringify(shellOrigin)});
 </script></body></html>`;
-}
-
-function send(response, body, contentType, status = 200) {
-  response.writeHead(status, {
-    "Cache-Control": "no-store",
-    "Content-Type": contentType,
-  });
-  response.end(body);
-}
-
-function listen(server) {
-  return new Promise((resolveOrigin, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      server.off("error", reject);
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        reject(new Error("Browser test server did not expose a TCP address."));
-        return;
-      }
-      resolveOrigin(`http://127.0.0.1:${address.port}`);
-    });
-  });
-}
-
-function close(server) {
-  return new Promise((resolveClose) => {
-    if (!server.listening) {
-      resolveClose();
-      return;
-    }
-    server.close(() => resolveClose());
-  });
-}
-
-function runBrowser(browser, args) {
-  return new Promise((resolveRun, reject) => {
-    const child = spawn(browser, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => { stdout += chunk; });
-    child.stderr.on("data", (chunk) => { stderr += chunk; });
-    child.once("error", reject);
-    const timeout = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(new Error("Cross-origin browser test timed out."));
-    }, 15_000);
-    child.once("exit", (code) => {
-      clearTimeout(timeout);
-      resolveRun({ code, stderr, stdout });
-    });
-  });
-}
-
-function browserExecutable() {
-  const candidates = [
-    process.env.MAVERICK_BROWSER_BIN,
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium-browser",
-    "/snap/bin/chromium",
-  ].filter(Boolean);
-  return candidates.find((candidate) => {
-    try {
-      accessSync(candidate, constants.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  }) || null;
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

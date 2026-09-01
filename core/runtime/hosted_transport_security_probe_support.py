@@ -12,6 +12,7 @@ from core.providers.agentic_models import (
     codex_runtime_policy,
 )
 from core.providers.capability_models import RuntimeCapabilitySet
+from core.providers.agentic_protocol import AgenticModelEvent
 from core.runtime.authority import EffectiveRuntimeAuthority
 from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.hosted_agentic_models import (
@@ -49,6 +50,22 @@ class TransportProbeClient:
         self.request_count += 1
         if False:
             yield None
+
+
+class TransportProbeEventClient:
+    def __init__(self) -> None:
+        self.request_count = 0
+        self.event_count = 0
+
+    async def create_response(self, request, *, credential):
+        del credential
+        self.request_count += 1
+        for event in (
+            AgenticModelEvent("accepted", request.request_id, 1),
+            AgenticModelEvent("completed", request.request_id, 2),
+        ):
+            self.event_count += 1
+            yield event
 
 
 async def consume_transport_probe_stream(
@@ -176,6 +193,7 @@ __all__ = [
     "PROBE_TIME",
     "PROBE_WORKSPACE_ID",
     "TransportProbeClient",
+    "TransportProbeEventClient",
     "TransportProbeDecisionStore",
     "build_transport_probe_context",
     "build_transport_probe_workspace_store",

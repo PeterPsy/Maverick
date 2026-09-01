@@ -132,7 +132,10 @@ binding:
 
 1. The profile definition and certificate endpoints show the intended immutable
    revision, active unexpired certificate, exact adapter artifact digest, model,
-   protocol, and upstream set.
+   model revision and revision policy, protocol, and upstream set. Google must
+   expose `exact` and the same authenticated live catalog version; OpenRouter
+   must expose `provider_alias` plus the pinned endpoint/upstream catalog
+   identity.
 2. The current matrices in
    `docs/reference/google_agentic_certification_matrix.md` or
    `docs/reference/openrouter_agentic_certification_matrix.md` match the
@@ -145,7 +148,7 @@ binding:
    selected policy allow that class and destination. Attestation may only narrow
    policy; no client declaration or policy id is accepted.
 5. The workspace policy is at least as restrictive as the profile and retains
-   the complete `codex-baseline-v13` handle set atomically, bounded
+   the complete `codex-baseline-v14` handle set atomically, bounded
    steps/tokens/cost, and confirmation for mutating/destructive classes. A
    partial read-only binding is not a Maverick Agent fallback.
 6. The complete certification manifest passes on the deployed source in the

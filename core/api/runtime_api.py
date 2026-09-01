@@ -212,6 +212,8 @@ def _session_payload(
             "adapter_version": binding.adapter_version,
             "model_provider_id": binding.model_provider_id,
             "model_id": binding.model_id,
+            "model_revision": binding.model_revision,
+            "model_revision_policy": binding.model_revision_policy,
             "reasoning_effort": binding.reasoning_effort,
             "certified_reasoning_efforts": binding.certified_reasoning_efforts,
             "default_reasoning_effort": binding.default_reasoning_effort,

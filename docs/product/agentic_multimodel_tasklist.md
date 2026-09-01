@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-08-29
+Status date: 2026-09-01
 
 Target: Phase 4A-D implementation closure complete; provider certification,
 security review, canary, and release gates remain open;
@@ -88,7 +88,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v20 records six maintained transitive dependency contracts. The
+- [x] Manifest v21 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -99,8 +99,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v30 / matrix
-  `2026-09-01-r30-p4-transport-effect-atomicity-tcb20`
+- [x] Google and OpenRouter suite v31 / matrix
+  `2026-09-01-r31-p4-review-closure-model-revision-tcb21`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -476,21 +476,46 @@ completion claim.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 26, semantic compiler revision 7, Full Workspace result contract
-  `codex-baseline-v13`, context-compaction schema 3, TCB manifest v20, suite 30,
-  and matrix `2026-09-01-r30-p4-transport-effect-atomicity-tcb20` create immutable Google
-  revision 34 and OpenRouter revision 33 previews. Historical revisions 33/32
+- [x] Every built-in app CLI/MCP descriptor carries an explicit conservative
+  effect class. Mixed runners additionally declare a single exact argument
+  discriminator; missing, malformed, or unknown discriminator values remain
+  `unclassified`. The certification corpus parses all 28 CLI and 383 MCP
+  surfaces and executes real read-only Storage catalog operations through both
+  registries. Mutating/destructive app operations without a certified Core
+  result guarantee remain denied before effect.
+- [x] Hosted shell and managed processes mask `.git` inside the bwrap workspace
+  for both normal repositories and worktree pointer files. Production-composed
+  probes verify that neither execution path can read a private `.git` marker;
+  the direct confined-filesystem denial remains unchanged.
+- [x] Profile, certificate, execution binding, governed recipe, provider
+  request, authority, API projection, and persistence all bind model revision
+  plus an explicit revision policy. Google uses `exact` and compares the live
+  catalog version; OpenRouter uses `provider_alias` together with its exact
+  endpoint/upstream catalog constraints. Legacy Codex documents hydrate to the
+  prior alias policy without changing the Codex profile or artifact.
+- [x] Live mutable authority is checked in every task that actually advances a
+  provider stream, including between two provider events. Revocation after the
+  first event blocks the second before the provider iterator advances.
+- [x] P4 test modules over the repository line budget are split by behavioral
+  domain, and the provider fixture manifest includes every split module plus
+  the real app-surface integration probe. Pre-existing oversized modules retain
+  frozen no-growth ceilings.
+- [x] Adapter 27, semantic compiler revision 8, Full Workspace result contract
+  `codex-baseline-v14`, context-compaction schema 3, TCB manifest v21, suite 31,
+  and matrix `2026-09-01-r31-p4-review-closure-model-revision-tcb21` create immutable Google
+  revision 35 and OpenRouter revision 34 previews. Historical revisions 34/33
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
-  `full_workspace_contract_revision=codex-baseline-v13`; the central validator
+  `full_workspace_contract_revision=codex-baseline-v14`; the central validator
   rejects that family if the profile/certificate claim or behavior gate is
   incomplete.
-- [x] Admit the hosted Full Workspace `codex-baseline-v13` repository claim
-  only after the executable behavior probe verifies all 18 required result
+- [x] Admit the hosted Full Workspace `codex-baseline-v14` repository claim
+  only after the executable behavior probe verifies all 20 required result
   workflows: 13 create/replace/edit/patch/move/delete/read-after-write,
   shell/process, and CLI/MCP paths plus marker narrowing, revoke-then-rebuild,
   revoke-before-delayed-egress, revoke-before-provider-transport, and
-  revoke-during-overlay-commit negative probes. The negative gate traverses the
+  revoke-between-provider-events, revoke-during-overlay-commit, and `.git`
+  shell/process masking negative probes. The negative gate traverses the
   production orchestrator, hosted request/stream, and real shell/process overlays rather
   than calling classification helpers with literal payloads. A CAS-revisioned,
   operator-owned runtime-public classification policy supplies explicit

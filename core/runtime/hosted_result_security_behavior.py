@@ -23,6 +23,7 @@ from core.runtime.hosted_transport_security_probe import (
     probe_hosted_transport_revocation,
 )
 from core.runtime.hosted_workspace_effect_security_probe import (
+    probe_workspace_git_metadata_masking,
     probe_workspace_effect_revocation_rollback,
 )
 from core.runtime.public_content_authority_store import (
@@ -42,7 +43,9 @@ HOSTED_RESULT_SECURITY_BEHAVIOR_IDS = (
     "security:filesystem.revoke-rebuild",
     "security:tool-result.revoke-egress",
     "security:request.revoke-transport",
+    "security:stream.revoke-advance",
     "security:workspace-effect.revoke-commit",
+    "security:workspace.git-masked",
 )
 _PROBE_TIME = datetime(2026, 8, 31, tzinfo=UTC)
 
@@ -197,8 +200,11 @@ def _inspect() -> tuple[str, ...]:
 
     if probe_hosted_transport_revocation():
         verified.add("security:request.revoke-transport")
+        verified.add("security:stream.revoke-advance")
     if probe_workspace_effect_revocation_rollback():
         verified.add("security:workspace-effect.revoke-commit")
+    if probe_workspace_git_metadata_masking():
+        verified.add("security:workspace.git-masked")
 
     return tuple(
         behavior

@@ -1,0 +1,79 @@
+{
+  "tools": {
+    "maverick_dynamic_views": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "catalog": "read",
+          "list": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating",
+          "create": "mutating",
+          "read": "read",
+          "recall": "read",
+          "delete": "destructive",
+          "health.check": "read",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read"
+        }
+      },
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "catalog",
+              "list",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "create",
+              "read",
+              "recall",
+              "delete",
+              "health.check",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize"
+            ],
+            "default": "catalog"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "dynamic_views_view_filter": {
+      "effect_class": "read"
+    },
+    "dynamic_views_set_view_filter": {
+      "effect_class": "mutating"
+    },
+    "dynamic_views_set_custom_view": {
+      "effect_class": "mutating"
+    },
+    "dynamic_views_clear_custom_view": {
+      "effect_class": "mutating"
+    },
+    "dynamic_views_reference_manifest": {
+      "effect_class": "read"
+    },
+    "dynamic_views_reference_search": {
+      "effect_class": "read"
+    },
+    "dynamic_views_reference_resolve": {
+      "effect_class": "read"
+    },
+    "dynamic_views_reference_summarize": {
+      "effect_class": "read"
+    }
+  }
+}

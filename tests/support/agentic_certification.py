@@ -101,7 +101,7 @@ def certified_test_provider_store(
             adapter_artifact_digest=binding.adapter_artifact_digest,
             model_provider_id=binding.model_provider_id,
             model_id=binding.model_id,
-            model_revision=None,
+            model_revision=binding.model_revision,
             provider_protocol=binding.provider_protocol,
             provider_api_version=binding.provider_api_version,
             certified_upstream_ids=binding.routing_constraint_snapshot.allowed_upstream_ids,
@@ -136,6 +136,7 @@ def certified_test_provider_store(
             tcb_manifest_version=evidence.tcb_manifest_version,
             tcb_structure_digest=evidence.tcb_structure_digest,
             tcb_live_digest=evidence.tcb_live_digest,
+            model_revision_policy=binding.model_revision_policy,
         ),
     )
     return store

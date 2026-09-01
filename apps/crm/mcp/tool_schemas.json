@@ -1,6 +1,7 @@
 {
   "tools": {
     "crm_search": {
+      "effect_class": "read",
       "description": "Search CRM records.",
       "input_schema": {
         "type": "object",
@@ -14,6 +15,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_get_record": {
+      "effect_class": "read",
       "description": "Read one CRM record by entity type and id.",
       "input_schema": {
         "type": "object",
@@ -27,6 +29,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_create_lead": {
+      "effect_class": "mutating",
       "description": "Create one CRM lead.",
       "input_schema": {
         "type": "object",
@@ -49,6 +52,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_website_intake": {
+      "effect_class": "mutating",
       "description": "Ingest one public website form submission into CRM, then send CRM-owned Mail notifications through the selected Mail provider.",
       "input_schema": {
         "type": "object",
@@ -72,6 +76,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_update_lead": {
+      "effect_class": "mutating",
       "description": "Update one CRM lead.",
       "input_schema": {
         "type": "object",
@@ -96,6 +101,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_convert_lead": {
+      "effect_class": "mutating",
       "description": "Convert a lead into account, contact, and optionally a deal.",
       "input_schema": {
         "type": "object",
@@ -118,6 +124,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_create_contact": {
+      "effect_class": "mutating",
       "description": "Create one CRM contact.",
       "input_schema": {
         "type": "object",
@@ -137,6 +144,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_update_contact": {
+      "effect_class": "mutating",
       "description": "Update one CRM contact.",
       "input_schema": {
         "type": "object",
@@ -158,6 +166,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_create_account": {
+      "effect_class": "mutating",
       "description": "Create one CRM account.",
       "input_schema": {
         "type": "object",
@@ -175,6 +184,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_update_account": {
+      "effect_class": "mutating",
       "description": "Update one CRM account.",
       "input_schema": {
         "type": "object",
@@ -193,6 +203,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_create_deal": {
+      "effect_class": "mutating",
       "description": "Create one CRM deal.",
       "input_schema": {
         "type": "object",
@@ -214,6 +225,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_update_deal": {
+      "effect_class": "mutating",
       "description": "Update one CRM deal.",
       "input_schema": {
         "type": "object",
@@ -236,6 +248,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_move_deal": {
+      "effect_class": "mutating",
       "description": "Move a CRM deal to another pipeline stage.",
       "input_schema": {
         "type": "object",
@@ -249,6 +262,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_create_pipeline": {
+      "effect_class": "mutating",
       "description": "Create a CRM sales pipeline.",
       "input_schema": {
         "type": "object",
@@ -263,6 +277,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_update_pipeline": {
+      "effect_class": "mutating",
       "description": "Update a CRM sales pipeline.",
       "input_schema": {
         "type": "object",
@@ -277,6 +292,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_create_pipeline_stage": {
+      "effect_class": "mutating",
       "description": "Create a CRM pipeline stage.",
       "input_schema": {
         "type": "object",
@@ -293,6 +309,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_update_pipeline_stage": {
+      "effect_class": "mutating",
       "description": "Update a CRM pipeline stage.",
       "input_schema": {
         "type": "object",
@@ -309,6 +326,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_log_activity": {
+      "effect_class": "mutating",
       "description": "Log one CRM activity.",
       "input_schema": {
         "type": "object",
@@ -330,6 +348,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_create_task": {
+      "effect_class": "mutating",
       "description": "Create one CRM task or next action.",
       "input_schema": {
         "type": "object",
@@ -352,6 +371,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_update_task": {
+      "effect_class": "mutating",
       "description": "Update one CRM task.",
       "input_schema": {
         "type": "object",
@@ -374,6 +394,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_create_note": {
+      "effect_class": "mutating",
       "description": "Create one CRM note linked to an account, contact, or deal.",
       "input_schema": {
         "type": "object",
@@ -392,6 +413,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_update_note": {
+      "effect_class": "mutating",
       "description": "Update one CRM note.",
       "input_schema": {
         "type": "object",
@@ -410,6 +432,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_archive_record": {
+      "effect_class": "destructive",
       "description": "Archive one CRM record and hide it from active lists and search.",
       "input_schema": {
         "type": "object",
@@ -424,6 +447,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_unarchive_record": {
+      "effect_class": "mutating",
       "description": "Restore one archived CRM record to active lists and search.",
       "input_schema": {
         "type": "object",
@@ -438,6 +462,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_delete_record": {
+      "effect_class": "destructive",
       "description": "Soft-delete one CRM record.",
       "input_schema": {
         "type": "object",
@@ -452,6 +477,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_tag_record": {
+      "effect_class": "mutating",
       "description": "Attach a tag to one CRM record.",
       "input_schema": {
         "type": "object",
@@ -469,6 +495,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_untag_record": {
+      "effect_class": "mutating",
       "description": "Remove a tag from one CRM record.",
       "input_schema": {
         "type": "object",
@@ -485,6 +512,17 @@
       "output_schema": { "type": "object" }
     },
     "crm_bulk_update": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "operation",
+        "omitted_effect_class": "mutating",
+        "value_effect_classes": {
+          "archive": "destructive",
+          "delete": "destructive",
+          "tag": "mutating",
+          "update": "mutating"
+        }
+      },
       "description": "Apply one archive, delete, tag, or field update operation to multiple CRM records.",
       "input_schema": {
         "type": "object",
@@ -502,6 +540,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_merge_records": {
+      "effect_class": "destructive",
       "description": "Merge duplicate lead, account, or contact records into a target record while preserving links and CRM context.",
       "input_schema": {
         "type": "object",
@@ -518,6 +557,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_timeline": {
+      "effect_class": "read",
       "description": "Return activity, task, note, and event timeline items for an account, contact, or deal.",
       "input_schema": {
         "type": "object",
@@ -532,6 +572,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_audit_log": {
+      "effect_class": "read",
       "description": "List CRM audit events with filters for entity, action, and date range.",
       "input_schema": {
         "type": "object",
@@ -550,6 +591,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_sales_reports": {
+      "effect_class": "read",
       "description": "Return native sales reports: pipeline value, weighted forecast, deal aging, lead conversion, overdue tasks, and activities by owner.",
       "input_schema": {
         "type": "object",
@@ -561,6 +603,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_filter_records": {
+      "effect_class": "read",
       "description": "List CRM records with saved-view-compatible query and structured filters.",
       "input_schema": {
         "type": "object",
@@ -575,6 +618,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_find_duplicates": {
+      "effect_class": "read",
       "description": "Find duplicate accounts, contacts, and leads by email or domain.",
       "input_schema": {
         "type": "object",
@@ -586,11 +630,13 @@
       "output_schema": { "type": "object" }
     },
     "crm_schema": {
+      "effect_class": "read",
       "description": "Return CRM schema/config discovery including standard fields, typed custom fields, pipelines, and automation rules.",
       "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
       "output_schema": { "type": "object" }
     },
     "crm_list_custom_fields": {
+      "effect_class": "read",
       "description": "List active typed CRM custom field definitions.",
       "input_schema": {
         "type": "object",
@@ -600,6 +646,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_set_custom_fields": {
+      "effect_class": "mutating",
       "description": "Set typed custom field values on one CRM record.",
       "input_schema": {
         "type": "object",
@@ -616,6 +663,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_record_enrichment": {
+      "effect_class": "mutating",
       "description": "Generate deterministic CRM enrichment suggestions and optionally create an approval proposal.",
       "input_schema": {
         "type": "object",
@@ -631,6 +679,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_intelligent_next_actions": {
+      "effect_class": "read",
       "description": "Return scored, deterministic CRM next actions with reasons.",
       "input_schema": {
         "type": "object",
@@ -640,6 +689,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_propose_workflows": {
+      "effect_class": "mutating",
       "description": "Create pending workflow proposals from deterministic CRM next-action recommendations and active automation rules.",
       "input_schema": {
         "type": "object",
@@ -652,6 +702,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_list_workflow_proposals": {
+      "effect_class": "read",
       "description": "List CRM workflow proposals by status.",
       "input_schema": {
         "type": "object",
@@ -664,6 +715,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_approve_workflow_proposal": {
+      "effect_class": "mutating",
       "description": "Approve a pending CRM workflow proposal.",
       "input_schema": {
         "type": "object",
@@ -674,6 +726,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_dismiss_workflow_proposal": {
+      "effect_class": "destructive",
       "description": "Dismiss or reject a pending or approved CRM workflow proposal without applying it.",
       "input_schema": {
         "type": "object",
@@ -689,6 +742,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_reject_workflow_proposal": {
+      "effect_class": "destructive",
       "description": "Reject a pending or approved CRM workflow proposal without applying it.",
       "input_schema": {
         "type": "object",
@@ -702,6 +756,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_apply_workflow_proposal": {
+      "effect_class": "mutating",
       "description": "Apply an approved CRM workflow proposal.",
       "input_schema": {
         "type": "object",
@@ -715,6 +770,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_link_external_ref": {
+      "effect_class": "mutating",
       "description": "Link a CRM record to an external app reference snapshot without reading the external app data store.",
       "input_schema": {
         "type": "object",
@@ -741,6 +797,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_unlink_external_ref": {
+      "effect_class": "destructive",
       "description": "Soft-unlink one external reference from CRM.",
       "input_schema": {
         "type": "object",
@@ -760,6 +817,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_list_external_refs": {
+      "effect_class": "read",
       "description": "List external reference snapshots linked to CRM records.",
       "input_schema": {
         "type": "object",
@@ -780,6 +838,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_external_timeline": {
+      "effect_class": "read",
       "description": "Return only external reference timeline items for a CRM record.",
       "input_schema": {
         "type": "object",
@@ -794,6 +853,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_list_next_actions": {
+      "effect_class": "read",
       "description": "List open CRM tasks and follow-ups.",
       "input_schema": {
         "type": "object",
@@ -806,6 +866,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_summarize_account": {
+      "effect_class": "read",
       "description": "Summarize an account with related contacts, deals, and activities.",
       "input_schema": {
         "type": "object",
@@ -818,6 +879,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_account_brief": {
+      "effect_class": "read",
       "description": "Generate a deterministic account brief from CRM data.",
       "input_schema": {
         "type": "object",
@@ -828,11 +890,13 @@
       "output_schema": { "type": "object" }
     },
     "crm_export": {
+      "effect_class": "read",
       "description": "Export the complete CRM dataset for backup or migration.",
       "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
       "output_schema": { "type": "object" }
     },
     "crm_import_preview": {
+      "effect_class": "read",
       "description": "Preview a small JSON or CSV CRM import.",
       "input_schema": {
         "type": "object",
@@ -864,6 +928,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_import_commit": {
+      "effect_class": "mutating",
       "description": "Commit a small JSON or CSV CRM import.",
       "input_schema": {
         "type": "object",
@@ -895,11 +960,13 @@
       "output_schema": { "type": "object" }
     },
     "crm_health": {
+      "effect_class": "read",
       "description": "Check CRM data health.",
       "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
       "output_schema": { "type": "object" }
     },
     "crm_view_filter": {
+      "effect_class": "read",
       "description": "Read the current CRM view state.",
       "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
       "output_schema": {
@@ -910,6 +977,7 @@
       }
     },
     "crm_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set CRM search query and entity filter view state.",
       "input_schema": {
         "type": "object",
@@ -927,6 +995,7 @@
       }
     },
     "crm_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Set CRM to a curated custom view using CRM record references.",
       "input_schema": {
         "type": "object",
@@ -957,6 +1026,7 @@
       }
     },
     "crm_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Return CRM to normal search mode.",
       "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
       "output_schema": {
@@ -967,11 +1037,13 @@
       }
     },
     "crm_reference_manifest": {
+      "effect_class": "read",
       "description": "Describe CRM reference entity support.",
       "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
       "output_schema": { "type": "object" }
     },
     "crm_reference_search": {
+      "effect_class": "read",
       "description": "Search CRM references.",
       "input_schema": {
         "type": "object",
@@ -985,6 +1057,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one CRM reference.",
       "input_schema": {
         "type": "object",
@@ -998,6 +1071,7 @@
       "output_schema": { "type": "object" }
     },
     "crm_reference_summarize": {
+      "effect_class": "read",
       "description": "Summarize one CRM reference.",
       "input_schema": {
         "type": "object",

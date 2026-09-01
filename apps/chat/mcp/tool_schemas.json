@@ -1,6 +1,7 @@
 {
   "tools": {
     "chat_operations_manifest": {
+      "effect_class": "read",
       "description": "Return the compact Chat operations manifest with supported CLI/MCP workflows, payload profiles, examples, and runtime ownership notes.",
       "input_schema": {
         "type": "object",
@@ -24,6 +25,7 @@
       }
     },
     "chat_reference_manifest": {
+      "effect_class": "read",
       "description": "Describe Chat project reference entities exposed by the Chat app.",
       "input_schema": {
         "type": "object",
@@ -42,6 +44,7 @@
       }
     },
     "chat_reference_search": {
+      "effect_class": "read",
       "description": "Search Chat project references compactly. Results never include runtime transcripts or message content.",
       "input_schema": {
         "type": "object",
@@ -65,6 +68,7 @@
       }
     },
     "chat_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one Chat project reference by explicit id.",
       "input_schema": {
         "type": "object",
@@ -97,6 +101,7 @@
       }
     },
     "chat_reference_summarize": {
+      "effect_class": "read",
       "description": "Return a token-efficient summary for one Chat project reference.",
       "input_schema": {
         "type": "object",
@@ -126,6 +131,7 @@
       }
     },
     "chat_view_filter": {
+      "effect_class": "read",
       "description": "Read the persisted Chat project/thread browse filter.",
       "input_schema": {
         "type": "object",
@@ -142,6 +148,7 @@
       }
     },
     "chat_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set Chat project/thread browse query filters.",
       "input_schema": {
         "type": "object",
@@ -163,6 +170,7 @@
       }
     },
     "chat_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Persist a curated Chat project/thread reference set for the Chat view.",
       "input_schema": {
         "type": "object",
@@ -196,6 +204,7 @@
       }
     },
     "chat_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Clear the curated Chat view and return to normal project/thread browsing.",
       "input_schema": {
         "type": "object",

@@ -29,6 +29,7 @@ from core.providers.google_agentic_profile import (
     GOOGLE_AGENTIC_PROFILE_REVISION,
     ensure_google_agentic_preview_profile,
 )
+from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
@@ -79,9 +80,11 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "34")
-        self.assertEqual(profile.adapter_version_constraint, "==26")
+        self.assertEqual(profile.revision, "35")
+        self.assertEqual(profile.adapter_version_constraint, "==27")
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
+        self.assertEqual(profile.model_revision, GOOGLE_AGENTIC_MODEL_REVISION)
+        self.assertEqual(profile.model_revision_policy, "exact")
         self.assertEqual(profile.provider_api_version, "v1")
         self.assertEqual(profile.policy_ceiling.allowed_remote_data_classes, ("public",))
         self.assertEqual(production_classification.data_class, "unclassified")

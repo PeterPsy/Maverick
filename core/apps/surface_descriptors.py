@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from core.secrets.app_delivery import AppSecretRequest
+from core.shared.tool_effects import ToolArgumentEffectMap
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class AppSurfaceExecutionMetadata:
     supports_idempotency: bool
     safe_to_retry: bool
     timeout_seconds: int | None = None
+    argument_effects: ToolArgumentEffectMap | None = None
 
 
 CLI_COMMAND_DESCRIPTOR_FIELDS = {
@@ -39,6 +41,7 @@ CLI_COMMAND_DESCRIPTOR_FIELDS = {
     "secret_selectors",
     "secret_resource_inventory",
     "effect_class",
+    "effect_class_by_argument",
     "supports_idempotency",
     "safe_to_retry",
     "timeout_seconds",
@@ -50,6 +53,7 @@ MCP_TOOL_DESCRIPTOR_FIELDS = {
     "required_secrets",
     "secret_selectors",
     "effect_class",
+    "effect_class_by_argument",
     "supports_idempotency",
     "safe_to_retry",
 }
@@ -281,8 +285,14 @@ def _app_surface_execution_metadata(
         if item is None:
             return default
         effect_class = item.get("effect_class", "unclassified")
-        if effect_class not in {"read", "mutating", "destructive", "unclassified"}:
+        if not isinstance(effect_class, str) or effect_class not in {
+            "read",
+            "mutating",
+            "destructive",
+            "unclassified",
+        }:
             raise ValueError("App surface descriptor field `effect_class` is invalid.")
+        argument_effects = _argument_effect_map(item, effect_class=effect_class)
         supports_idempotency = item.get("supports_idempotency", False)
         safe_to_retry = item.get("safe_to_retry", False)
         if not isinstance(supports_idempotency, bool) or not isinstance(safe_to_retry, bool):
@@ -297,9 +307,68 @@ def _app_surface_execution_metadata(
             or timeout_seconds > 900
         ):
             raise ValueError("App CLI timeout must be an integer from 1 through 900 seconds.")
-        return AppSurfaceExecutionMetadata(effect_class, supports_idempotency, safe_to_retry, timeout_seconds)
+        return AppSurfaceExecutionMetadata(
+            effect_class,
+            supports_idempotency,
+            safe_to_retry,
+            timeout_seconds,
+            argument_effects,
+        )
     except ValueError:
         return default
+
+
+def _argument_effect_map(
+    item: dict[str, Any],
+    *,
+    effect_class: str,
+) -> ToolArgumentEffectMap | None:
+    raw = item.get("effect_class_by_argument")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != {
+        "argument_name",
+        "omitted_effect_class",
+        "value_effect_classes",
+    }:
+        raise ValueError(
+            "App surface descriptor field `effect_class_by_argument` is invalid."
+        )
+    argument_name = raw.get("argument_name")
+    omitted = raw.get("omitted_effect_class")
+    values = raw.get("value_effect_classes")
+    allowed = {"read", "mutating", "destructive"}
+    if (
+        not isinstance(argument_name, str)
+        or not argument_name.strip()
+        or len(argument_name) > 128
+        or not isinstance(omitted, str)
+        or omitted not in allowed
+        or not isinstance(values, dict)
+        or not values
+        or any(
+            not isinstance(value, str)
+            or not value
+            or len(value) > 256
+            or not isinstance(item_effect, str)
+            or item_effect not in allowed
+            for value, item_effect in values.items()
+        )
+    ):
+        raise ValueError(
+            "App surface descriptor argument effect map is invalid."
+        )
+    severity = {"read": 0, "mutating": 1, "destructive": 2}
+    maximum = max((omitted, *values.values()), key=severity.__getitem__)
+    if effect_class != maximum:
+        raise ValueError(
+            "App surface effect class must conservatively cover every argument effect."
+        )
+    return ToolArgumentEffectMap(
+        argument_name=argument_name.strip(),
+        omitted_effect_class=omitted,
+        value_effect_classes=tuple(sorted(values.items())),
+    )
 
 
 def _app_surface_secret_selectors(

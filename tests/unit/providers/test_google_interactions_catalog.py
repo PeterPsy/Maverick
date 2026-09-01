@@ -63,6 +63,9 @@ class GoogleInteractionsCatalogTest(unittest.TestCase):
         wrong_model = _model_record()
         wrong_model["name"] = "models/gemini-3.7-flash"
         variants.append((_endpoint_schema(), wrong_model))
+        wrong_revision = _model_record()
+        wrong_revision["version"] = "unexpected-live-revision"
+        variants.append((_endpoint_schema(), wrong_revision))
         no_thinking = _model_record()
         no_thinking["thinking"] = False
         variants.append((_endpoint_schema(), no_thinking))

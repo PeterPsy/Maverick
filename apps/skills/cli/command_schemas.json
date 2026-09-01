@@ -1,0 +1,62 @@
+{
+  "commands": {
+    "skills": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "catalog": "read",
+          "list_skills": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating",
+          "get_skill": "read",
+          "create_skill": "mutating",
+          "update_skill": "mutating",
+          "delete_skill": "destructive",
+          "sync_bundled_skills": "mutating",
+          "preview_markdown": "read",
+          "health.check": "read",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read"
+        }
+      },
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "catalog",
+              "list_skills",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "get_skill",
+              "create_skill",
+              "update_skill",
+              "delete_skill",
+              "sync_bundled_skills",
+              "preview_markdown",
+              "health.check",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize"
+            ],
+            "default": "catalog"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "sync": {
+      "effect_class": "mutating"
+    }
+  }
+}

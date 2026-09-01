@@ -1,6 +1,40 @@
 {
   "commands": {
     "agents": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "catalog.compact": "read",
+          "catalog": "read",
+          "get_agent_definition": "read",
+          "upsert_agent_definition": "mutating",
+          "preview_prompt": "read",
+          "list_roles": "read",
+          "get_role": "read",
+          "create_role": "mutating",
+          "update_role": "mutating",
+          "delete_role": "destructive",
+          "list_agent_types": "read",
+          "get_agent_type": "read",
+          "create_agent_type": "mutating",
+          "update_agent_type": "mutating",
+          "delete_agent_type": "destructive",
+          "get_common_prompt": "read",
+          "set_common_prompt": "mutating",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read",
+          "health.check": "read"
+        }
+      },
       "description": "Manage workspace-owned agent roles, agent types, compact catalog reads, prompt previews, and idempotent agent definition upserts.",
       "argument_schema": {
         "type": "object",

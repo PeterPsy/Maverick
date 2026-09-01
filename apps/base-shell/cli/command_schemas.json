@@ -1,0 +1,7 @@
+{
+  "commands": {
+    "base-shell": {
+      "effect_class": "read"
+    }
+  }
+}

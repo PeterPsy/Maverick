@@ -292,6 +292,8 @@ def validate_certificate_for_binding(
         "adapter_artifact_digest": binding.adapter_artifact_digest,
         "model_provider_id": binding.model_provider_id,
         "model_id": binding.model_id,
+        "model_revision": binding.model_revision,
+        "model_revision_policy": binding.model_revision_policy,
         "provider_protocol": binding.provider_protocol,
         "provider_api_version": binding.provider_api_version,
         "evidence_digest": binding.certificate_evidence_digest,
@@ -347,6 +349,11 @@ def validate_certificate_for_binding(
 def validate_profile_certificate_execution_contract(*, profile, certificate) -> None:
     """Pin recipe, context, semantic, tool, and provider-catalog identities."""
     expected = {
+        "model_revision": str(getattr(profile, "model_revision", "") or ""),
+        "model_revision_policy": str(
+            getattr(profile, "model_revision_policy", "provider_alias")
+            or "provider_alias"
+        ),
         "execution_family": str(getattr(profile, "execution_family", "") or ""),
         "harness_recipe_id": str(getattr(profile, "harness_recipe_id", "") or ""),
         "harness_recipe_revision": str(
@@ -371,7 +378,8 @@ def validate_profile_certificate_execution_contract(*, profile, certificate) -> 
         ),
     }
     for field_name, value in expected.items():
-        if str(getattr(certificate, field_name, "") or "") != value:
+        default = "provider_alias" if field_name == "model_revision_policy" else ""
+        if str(getattr(certificate, field_name, default) or default) != value:
             raise CapabilityCertificateError(
                 f"certificate_{field_name}_mismatch"
             )
@@ -414,6 +422,14 @@ def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:
     _require_aware(certificate.expires_at, "certificate_time_invalid")
     if certificate.expires_at <= certificate.issued_at:
         raise CapabilityCertificateError("certificate_expiry_invalid")
+    normalized_model_revision = str(certificate.model_revision or "").strip() or None
+    if normalized_model_revision != certificate.model_revision or (
+        certificate.model_revision_policy not in {"exact", "provider_alias"}
+    ) or (
+        certificate.model_revision_policy == "exact"
+        and normalized_model_revision is None
+    ):
+        raise CapabilityCertificateError("certificate_model_revision_invalid")
     if len(set(certificate.certified_upstream_ids)) != len(certificate.certified_upstream_ids):
         raise CapabilityCertificateError("certificate_upstream_duplicate")
     efforts = tuple(str(value or "").strip() for value in certificate.certified_reasoning_efforts)

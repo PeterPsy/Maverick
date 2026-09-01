@@ -1,6 +1,19 @@
 {
   "commands": {
     "browser": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "status": "read",
+          "policy.preflight": "read",
+          "audit.list": "read",
+          "acceptance.smoke": "mutating",
+          "dev.smoke": "mutating"
+        }
+      },
       "description": "Inspect Browser Lab status, operation manifest, audit records, run URL policy preflight, execute the P0 acceptance smoke, or run an admin local-dev smoke.",
       "argument_schema": {
         "type": "object",

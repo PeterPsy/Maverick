@@ -1,6 +1,7 @@
 {
   "tools": {
     "mail_reference_manifest": {
+      "effect_class": "read",
       "description": "Describe Mail reference entity types.",
       "input_schema": {
         "type": "object",
@@ -10,6 +11,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_reference_search": {
+      "effect_class": "read",
       "description": "Search Mail references for threads, messages, connections, and drafts.",
       "input_schema": {
         "type": "object",
@@ -22,6 +24,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one Mail reference entity by type and id.",
       "input_schema": {
         "type": "object",
@@ -38,6 +41,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_reference_summarize": {
+      "effect_class": "read",
       "description": "Return a bounded, privacy-conscious summary for one Mail reference.",
       "input_schema": {
         "type": "object",
@@ -55,6 +59,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_view_filter": {
+      "effect_class": "read",
       "description": "Read the shared Mail view filter state.",
       "input_schema": {
         "type": "object",
@@ -64,6 +69,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set Mail search and mailbox filter state.",
       "input_schema": {
         "type": "object",
@@ -77,6 +83,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Set a custom Mail view from explicit Mail references.",
       "input_schema": {
         "type": "object",
@@ -100,6 +107,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Return Mail to the default search/filter view.",
       "input_schema": {
         "type": "object",
@@ -109,6 +117,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_list_threads": {
+      "effect_class": "read",
       "description": "List bounded mail threads by mailbox, label, query, unread state, or connection.",
       "input_schema": {
         "type": "object",
@@ -132,6 +141,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_get_thread": {
+      "effect_class": "read",
       "description": "Read one mail thread with bounded message bodies.",
       "input_schema": {
         "type": "object",
@@ -157,6 +167,7 @@
       ]
     },
     "mail_search_messages": {
+      "effect_class": "read",
       "description": "Search mail messages and subjects with bounded results.",
       "input_schema": {
         "type": "object",
@@ -170,6 +181,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_create_draft": {
+      "effect_class": "mutating",
       "description": "Create a local mail draft. This does not send email.",
       "input_schema": {
         "type": "object",
@@ -205,6 +217,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_update_draft": {
+      "effect_class": "mutating",
       "description": "Update an existing draft before sending.",
       "input_schema": {
         "type": "object",
@@ -233,6 +246,7 @@
       "output_schema": { "type": "object" }
     },
     "mail_send_draft": {
+      "effect_class": "destructive",
       "description": "Preview or send a draft. Real sending requires confirm=true.",
       "input_schema": {
         "type": "object",
@@ -269,6 +283,7 @@
       ]
     },
     "mail_send_draft_approved": {
+      "effect_class": "destructive",
       "description": "Send a draft using the latest unexpired dry-run preview. Does not accept or expose confirmation tokens.",
       "input_schema": {
         "type": "object",
@@ -298,6 +313,7 @@
       ]
     },
     "mail_send": {
+      "effect_class": "destructive",
       "description": "Create and optionally send one message. Defaults to dry-run unless confirm=true.",
       "input_schema": {
         "type": "object",
@@ -376,6 +392,7 @@
       ]
     },
     "mail_send_approved": {
+      "effect_class": "destructive",
       "description": "Send the draft produced by a prior dry-run preview using server-side approval. Does not accept or expose confirmation tokens.",
       "input_schema": {
         "type": "object",
@@ -405,6 +422,7 @@
       ]
     },
     "mail_modify_labels": {
+      "effect_class": "mutating",
       "description": "Add or remove labels on a thread.",
       "input_schema": {
         "type": "object",
@@ -435,6 +453,7 @@
       ]
     },
     "mail_mark_read": {
+      "effect_class": "mutating",
       "description": "Mark a thread read or unread.",
       "input_schema": {
         "type": "object",
@@ -464,6 +483,7 @@
       ]
     },
     "mail_get_attachment": {
+      "effect_class": "mutating",
       "description": "Resolve attachment metadata by default. Fetch bounded bytes only when metadata_only=false and max_bytes is set.",
       "input_schema": {
         "type": "object",
@@ -500,6 +520,7 @@
       ]
     },
     "mail_save_attachments": {
+      "effect_class": "mutating",
       "description": "Save matching attachments from one mail thread directly to generated Storage with filtering, dedupe, and compact Storage refs.",
       "input_schema": {
         "type": "object",
@@ -536,6 +557,7 @@
       ]
     },
     "mail_sync": {
+      "effect_class": "mutating",
       "description": "Run manual sync for one connection.",
       "input_schema": {
         "type": "object",

@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -343,19 +344,33 @@ class SensesHostedE2ETest(unittest.TestCase):
             install_builtin_apps=False,
             register_builtin_provider_definitions=False,
         )
-        for app_id in ("base-shell", "chat", "storage", "speech", "senses"):
-            source = register_app_source_from_contract(
-                state.app_store,
-                source_kind="platform",
-                source_path=str(repo_root / "apps" / app_id),
-            )
-            install_store_app(
-                state.app_store,
-                source_id=source.source_id,
-                workspace_id="default",
-                start_path=repo_root,
-                observability_store=state.observability_store,
-            )
+        speech_fixture = repo_root / "speech-health-fixture"
+        speech_fixture.mkdir()
+        whisper_binary = speech_fixture / "whisper-cli"
+        whisper_binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        whisper_binary.chmod(0o700)
+        whisper_model = speech_fixture / "model.bin"
+        whisper_model.write_bytes(b"deterministic-test-model")
+        with patch.dict(
+            os.environ,
+            {
+                "MAVERICK_SPEECH_WHISPER_CPP_BINARY": str(whisper_binary),
+                "MAVERICK_SPEECH_WHISPER_CPP_MODEL": str(whisper_model),
+            },
+        ):
+            for app_id in ("base-shell", "chat", "storage", "speech", "senses"):
+                source = register_app_source_from_contract(
+                    state.app_store,
+                    source_kind="platform",
+                    source_path=str(repo_root / "apps" / app_id),
+                )
+                install_store_app(
+                    state.app_store,
+                    source_id=source.source_id,
+                    workspace_id="default",
+                    start_path=repo_root,
+                    observability_store=state.observability_store,
+                )
         for alias in ("storage-file-content-write", "storage-file-catalog"):
             save_app_dependency_selection(
                 state.app_store,

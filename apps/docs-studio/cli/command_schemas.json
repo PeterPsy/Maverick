@@ -1,0 +1,7 @@
+{
+  "commands": {
+    "docs-studio": {
+      "effect_class": "read"
+    }
+  }
+}

@@ -75,6 +75,8 @@ class EffectiveRuntimeAuthority:
     provider_health_status: str = "healthy"
     provider_id: str = ""
     model_id: str = ""
+    model_revision: str | None = None
+    model_revision_policy: str = "provider_alias"
     provider_protocol: str = ""
     certified_upstream_ids: tuple[str, ...] = ()
     effective_upstream_ids: tuple[str, ...] = ()
@@ -224,6 +226,8 @@ def resolve_effective_runtime_authority(
         provider_health_status=health_status,
         provider_id=binding.model_provider_id,
         model_id=binding.model_id,
+        model_revision=binding.model_revision,
+        model_revision_policy=binding.model_revision_policy,
         provider_protocol=binding.provider_protocol,
         certified_upstream_ids=tuple(certificate.certified_upstream_ids),
         effective_upstream_ids=tuple(
@@ -412,6 +416,8 @@ def effective_runtime_capability_payload(
         "provider": {
             "provider_id": authority.provider_id,
             "model_id": authority.model_id,
+            "model_revision": authority.model_revision,
+            "model_revision_policy": authority.model_revision_policy,
             "protocol": authority.provider_protocol,
             "certified_upstream_ids": authority.certified_upstream_ids,
             "effective_upstream_ids": authority.effective_upstream_ids,

@@ -1,6 +1,7 @@
 {
   "commands": {
     "crm": {
+      "effect_class": "destructive",
       "description": "Run CRM operations. Omit action for the operations manifest.",
       "argument_schema": {
         "type": "object",

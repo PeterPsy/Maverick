@@ -525,6 +525,8 @@ class ProviderDocumentStore:
 
 def _agentic_profile_definition(document: dict[str, Any]) -> AgenticProfileDefinition:
     payload = dict(document)
+    payload.setdefault("model_revision", None)
+    payload.setdefault("model_revision_policy", "provider_alias")
     payload.setdefault("full_workspace_contract_revision", "")
     for field_name in (
         "execution_family",
@@ -559,6 +561,7 @@ def _migrate_legacy_agentic_profile_egress(payload: dict[str, Any]) -> None:
 
 def _capability_certificate(document: dict[str, Any]) -> CapabilityCertificate:
     payload = dict(document)
+    payload.setdefault("model_revision_policy", "provider_alias")
     payload["certified_upstream_ids"] = tuple(payload.get("certified_upstream_ids", ()))
     payload["certified_reasoning_efforts"] = tuple(
         payload.get("certified_reasoning_efforts", ())

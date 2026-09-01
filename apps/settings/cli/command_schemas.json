@@ -1,0 +1,7 @@
+{
+  "commands": {
+    "settings": {
+      "effect_class": "read"
+    }
+  }
+}

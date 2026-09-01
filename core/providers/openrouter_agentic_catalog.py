@@ -12,6 +12,7 @@ from urllib import request as urllib_request
 from core.providers.agentic_protocol import AgenticModelRequest, EphemeralCredential
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_MODEL_ID,
+    OPENROUTER_AGENTIC_MODEL_REVISION,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
     OpenRouterAgenticProtocolError,
 )
@@ -82,7 +83,11 @@ def validate_openrouter_agentic_catalog(
     zdr_catalog: object,
 ) -> OpenRouterAgenticCatalogSnapshot:
     """Require the exact active DeepInfra FP8 endpoint and every routed parameter."""
-    if request.model_id != OPENROUTER_AGENTIC_MODEL_ID:
+    if (
+        request.model_id != OPENROUTER_AGENTIC_MODEL_ID
+        or request.model_revision_policy != "provider_alias"
+        or request.model_revision != OPENROUTER_AGENTIC_MODEL_REVISION
+    ):
         raise OpenRouterAgenticProtocolError("provider_request_invalid")
     model_record = _find_model_record(model_catalog)
     zdr_record = _find_zdr_record(zdr_catalog)

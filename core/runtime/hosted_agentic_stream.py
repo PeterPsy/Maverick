@@ -203,7 +203,12 @@ async def _cancellable_events(
             except StopAsyncIteration:
                 return
             yield item
-            pending = asyncio.create_task(iterator.__anext__())
+            pending = asyncio.create_task(
+                _next_provider_event(
+                    iterator,
+                    before_transport=before_transport,
+                )
+            )
     finally:
         if not pending.done():
             pending.cancel()

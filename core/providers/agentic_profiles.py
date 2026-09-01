@@ -331,6 +331,12 @@ def build_pinned_execution_binding(
         adapter_artifact_digest=runtime_adapter_artifact_digest(adapter),
         model_provider_id=definition.model_provider_id,
         model_id=definition.model_id,
+        model_revision=getattr(definition, "model_revision", None),
+        model_revision_policy=getattr(
+            definition,
+            "model_revision_policy",
+            "provider_alias",
+        ),
         provider_protocol=definition.provider_protocol,
         provider_api_version=definition.provider_api_version,
         routing_constraint=definition.routing_constraint,

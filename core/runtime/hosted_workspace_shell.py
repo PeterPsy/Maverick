@@ -8,6 +8,7 @@ from pathlib import Path
 import selectors
 import shutil
 import signal
+import stat
 import subprocess
 import time
 
@@ -101,6 +102,7 @@ def prepare_hosted_workspace_command(
             relative_cwd=relative_cwd,
             argv=argv,
             effect_overlay=effect_overlay,
+            git_metadata_kind=_git_metadata_kind(root_fd),
         )
         return PreparedHostedWorkspaceCommand(
             command=command,
@@ -274,6 +276,7 @@ def _build_bwrap_command(
     relative_cwd: str,
     argv: list[str],
     effect_overlay: HostedWorkspaceEffectOverlay | None,
+    git_metadata_kind: str | None,
 ) -> list[str]:
     dependency_roots = [
         Path(value) for value in _SYSTEM_DEPENDENCY_ROOTS if Path(value).exists()
@@ -332,6 +335,12 @@ def _build_bwrap_command(
                 str(_SANDBOX_LOWER_ROOT),
             )
         )
+    if git_metadata_kind == "directory":
+        command.extend(("--tmpfs", str(_SANDBOX_WORKSPACE_ROOT / ".git")))
+    elif git_metadata_kind == "file":
+        command.extend(
+            ("--ro-bind", "/dev/null", str(_SANDBOX_WORKSPACE_ROOT / ".git"))
+        )
     command.extend(
         (
             "--tmpfs",
@@ -367,6 +376,18 @@ def _build_bwrap_command(
         )
     )
     return command
+
+
+def _git_metadata_kind(root_fd: int) -> str | None:
+    try:
+        metadata = os.stat(".git", dir_fd=root_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    if stat.S_ISDIR(metadata.st_mode):
+        return "directory"
+    if stat.S_ISREG(metadata.st_mode):
+        return "file"
+    raise RuntimeToolError("workspace_shell_git_metadata_unsafe")
 
 
 def _read_bounded_output(

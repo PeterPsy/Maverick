@@ -342,6 +342,13 @@ class HostedAgenticRequestBuilder:
             projected_metadata=source_metadata,
             projection_contract={
                 "provider_id": binding.model_provider_id,
+                "model_id": binding.model_id,
+                "model_revision": getattr(binding, "model_revision", None),
+                "model_revision_policy": getattr(
+                    binding,
+                    "model_revision_policy",
+                    "provider_alias",
+                ),
                 "provider_protocol": binding.provider_protocol,
                 "provider_api_version": binding.provider_api_version,
                 "request_phase": request_phase,
@@ -399,6 +406,12 @@ class HostedAgenticRequestBuilder:
             request_id=request_id,
             correlation_id=context.correlation_id,
             model_id=binding.model_id,
+            model_revision=getattr(binding, "model_revision", None),
+            model_revision_policy=getattr(
+                binding,
+                "model_revision_policy",
+                "provider_alias",
+            ),
             reasoning_effort=binding.reasoning_effort,
             content_blocks=tuple(content_blocks),
             tool_definitions=tools,

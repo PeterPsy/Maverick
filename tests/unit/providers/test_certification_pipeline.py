@@ -165,13 +165,13 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_command_digests = {
             ("google-ai-studio", "fixture_contract"): (
-                "e90ce3e828d3913224e78a7813757cd08e92934b69a5a391eec84bba14226c35"
+                "6445f0323d1e0dc5347d2033ab2f9ec124f1efbb20ebc7a5be9d99c49f9e5a10"
             ),
             ("google-ai-studio", "live_probe"): (
                 "6e87e7eedd24ced63932645004a28ff6d95142b326b984856ad27d393b039579"
             ),
             ("openrouter", "fixture_contract"): (
-                "2576e34af154093a2f2ceec04a960dd208dd2f118c76ae1953c613c21d2e1fc3"
+                "708a9bbaf46f0f785a9b2cb1c0413efb25bacd20170efd1959f95760087ebfd5"
             ),
             ("openrouter", "live_probe"): (
                 "3d92023995880fff3a1aad33cdb1a335cc6da438acb8361ee403e1b832afaccd"
@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "bda1ad4064abd5cb784b08e02f5897ccbf0e84b48106398ba249c804db09351a"
+                "cc9fe5d3ccf2d00e121dd3abd64b47dbb094bc467fea7af2390f0e573c1cd471"
             ),
             "openrouter": (
-                "4fa4cca77e114d7509f2f8fd422b5f53bd38ee5c2312d09979635cba29870044"
+                "fce23c3c44b2e3ab6a4bd6aeb0ad0cfca3f33d9c1bf0dba260707f6ae1434b04"
             ),
         }
         for manifest in (
@@ -190,10 +190,10 @@ class CertificationPipelineTest(unittest.TestCase):
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "30")
+                self.assertEqual(manifest.suite_version, "31")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-01-r30-p4-transport-effect-atomicity-tcb20",
+                    "2026-09-01-r31-p4-review-closure-model-revision-tcb21",
                 )
                 self.assertEqual(
                     manifest.digest,

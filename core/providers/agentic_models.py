@@ -23,6 +23,7 @@ ProfileRolloutStatus = Literal["disabled", "preview", "available", "suspended"]
 ContextCompactionMode = Literal["disabled", "provider_history"]
 AttachmentProjectionMode = Literal["workspace_reference", "native_or_reference"]
 SteeringDeliveryMode = Literal["provider_native", "safe_next_turn"]
+ModelRevisionPolicy = Literal["exact", "provider_alias"]
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,8 @@ class AgenticProfileDefinition:
     semantic_projection_compiler_revision: str = ""
     tool_contract_revision: str = ""
     context_policy: AgenticContextPolicy | None = None
+    model_revision: str | None = None
+    model_revision_policy: ModelRevisionPolicy = "provider_alias"
 
 
 @dataclass(frozen=True)

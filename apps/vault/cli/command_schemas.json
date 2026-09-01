@@ -1,6 +1,19 @@
 {
   "commands": {
     "vault": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "manifest": "read",
+          "diagnose": "read",
+          "connection_issues": "read",
+          "plan_fix": "read",
+          "explain_issue": "read",
+          "apply_fix": "destructive"
+        }
+      },
       "description": "Run Vault's redaction-safe agent operations for Core Secrets diagnosis, planning, explanation, and guarded grant fixes.",
       "argument_schema": {
         "type": "object",

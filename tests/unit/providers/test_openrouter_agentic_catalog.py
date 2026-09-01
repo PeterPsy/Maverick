@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from threading import Barrier
 import unittest
 from unittest.mock import patch
@@ -20,7 +21,10 @@ from core.providers.openrouter_agentic_catalog import (
     preflight_openrouter_agentic_catalog,
     validate_openrouter_agentic_catalog,
 )
-from core.providers.openrouter_agentic_models import OpenRouterAgenticProtocolError
+from core.providers.openrouter_agentic_models import (
+    OPENROUTER_AGENTIC_MODEL_REVISION,
+    OpenRouterAgenticProtocolError,
+)
 from core.providers.openrouter_agentic_profile import openrouter_agentic_routing_constraint
 from core.providers.openrouter_agentic_request import openrouter_chat_payload
 from core.providers.openrouter_agentic_state import decode_openrouter_chat_state
@@ -83,6 +87,21 @@ class OpenRouterAgenticCatalogTest(unittest.TestCase):
         self.assertEqual(snapshot.context_length, 1_048_576)
         self.assertEqual(snapshot.max_completion_tokens, 65_536)
         self.assertEqual(len(snapshot.catalog_snapshot_digest), 64)
+
+    def test_catalog_requires_the_certified_alias_policy_revision(self) -> None:
+        for request in (
+            replace(_request(), model_revision="unexpected-alias-policy"),
+            replace(_request(), model_revision_policy="exact"),
+        ):
+            with self.subTest(request=request), self.assertRaisesRegex(
+                OpenRouterAgenticProtocolError,
+                "provider_request_invalid",
+            ):
+                validate_openrouter_agentic_catalog(
+                    request,
+                    model_catalog=_model_catalog(),
+                    zdr_catalog=_zdr_catalog(),
+                )
 
     def test_every_routed_parameter_must_exist_in_both_catalogs(self) -> None:
         for catalog_name in ("model", "zdr"):
@@ -185,6 +204,8 @@ def _request() -> AgenticModelRequest:
         request_id="catalog-preflight",
         correlation_id="catalog-preflight",
         model_id="deepseek/deepseek-v4-flash",
+        model_revision=OPENROUTER_AGENTIC_MODEL_REVISION,
+        model_revision_policy="provider_alias",
         reasoning_effort="high",
         content_blocks=(
             AgenticRequestContentBlock(

@@ -1,6 +1,20 @@
 {
   "commands": {
     "senses": {
+      "effect_class": "read",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "manifest": "read",
+          "operations.manifest": "read",
+          "health": "read",
+          "health.check": "read",
+          "status": "read",
+          "reference_manifest": "read",
+          "references.manifest": "read"
+        }
+      },
       "description": "Inspect Senses Phase 8 manifest, health, and reference metadata.",
       "argument_schema": {
         "type": "object",

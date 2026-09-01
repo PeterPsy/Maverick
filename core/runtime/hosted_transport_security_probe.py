@@ -40,6 +40,7 @@ from core.runtime.hosted_transport_security_probe_support import (
     PROBE_WORKSPACE_ID,
     TransportProbeClient,
     TransportProbeDecisionStore,
+    TransportProbeEventClient,
     build_transport_probe_context,
     build_transport_probe_workspace_store,
     consume_transport_probe_stream,
@@ -215,9 +216,56 @@ async def _probe_transport_boundaries(
             context=context,
         ),
     )
-    return bool(
+    initial_advance_blocked = bool(
         reason_code == "egress_data_class_denied"
         and client.request_count == 0
+    )
+    current["record"] = issue_runtime_public_content_authority(
+        store,
+        workspace_id=PROBE_WORKSPACE_ID,
+        actor_id="core-security-probe",
+        expected_revision=current["record"].revision,
+        now=PROBE_TIME,
+    )
+    prepared = builder.prepare(**arguments)
+    request = await preflight_and_commit_hosted_request(
+        request_builder=builder,
+        prepared_request=prepared,
+        context=context,
+        request_preflight=lambda _request, _credential: SimpleNamespace(
+            snapshot_digest="f" * 64
+        ),
+        credential=None,
+        require_preflight=True,
+    )
+    event_client = TransportProbeEventClient()
+    advances = 0
+
+    def revoke_before_second_advance() -> None:
+        nonlocal advances
+        advances += 1
+        if advances == 2:
+            current["record"] = revoke_runtime_public_content_authority(
+                store,
+                workspace_id=PROBE_WORKSPACE_ID,
+                actor_id="core-security-probe",
+                expected_revision=current["record"].revision,
+                reason="negative between-event transport probe",
+                now=PROBE_TIME,
+            )
+        builder.revalidate_for_transport(prepared, context=context)
+
+    stream_reason = await consume_transport_probe_stream(
+        client=event_client,
+        request=request,
+        before_transport=revoke_before_second_advance,
+    )
+    return bool(
+        initial_advance_blocked
+        and stream_reason == "egress_data_class_denied"
+        and advances == 2
+        and event_client.request_count == 1
+        and event_client.event_count == 1
     )
 
 

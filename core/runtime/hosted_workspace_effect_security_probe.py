@@ -178,6 +178,82 @@ def probe_workspace_effect_revocation_rollback() -> bool:
         )
 
 
+def probe_workspace_git_metadata_masking() -> bool:
+    """Require real shell and managed-process sandboxes to hide Git metadata."""
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        runtime_root = root / "runtime"
+        runtime_root.mkdir()
+        git_marker = root / ".git" / "private-marker"
+        git_marker.parent.mkdir()
+        git_marker.write_text("repository-private", encoding="utf-8")
+        capabilities = {
+            surface.definition.handle: surface
+            for surface in build_core_runtime_tool_capabilities(
+                workspace_id=_WORKSPACE_ID,
+                workspace_root=root,
+                runtime_root=runtime_root,
+                process_registry=HostedToolProcessRegistry(
+                    store=_runtime_store(root, runtime_root)
+                ),
+            )
+        }
+        context = RuntimeToolActorContext(
+            workspace_id=_WORKSPACE_ID,
+            actor_id="core-security-probe",
+            agent_id="core-security-probe",
+            platform_role="admin",
+            workspace_role="owner",
+            session_id="security-probe-session",
+            execution_mode="full-access",
+        )
+        shell = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    "test ! -e /workspace/.git/private-marker && printf masked",
+                ],
+                "mutation_scopes": [],
+            },
+            context,
+            None,
+        )
+        shell_payload = getattr(shell, "payload", shell)
+        started = capabilities["core-capability:process.start"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    "test ! -e /workspace/.git/private-marker && printf masked",
+                ],
+                "mutation_scopes": [],
+            },
+            context,
+            None,
+        )
+        process_id = str(getattr(started, "payload", started)["process_id"])
+        process_payload = None
+        for _attempt in range(150):
+            status = capabilities["core-capability:process.status"].handler(
+                {"process_id": process_id},
+                context,
+                None,
+            )
+            process_payload = getattr(status, "payload", status)
+            if process_payload["status"] == "exited":
+                break
+            time.sleep(0.01)
+        return bool(
+            shell_payload["exit_code"] == 0
+            and shell_payload["output"] == "masked"
+            and process_payload is not None
+            and process_payload["status"] == "exited"
+            and process_payload["exit_code"] == 0
+            and process_payload["output"] == "masked"
+        )
+
+
 def _runtime_store(
     workspace_root: Path,
     runtime_root: Path,
@@ -215,4 +291,7 @@ def _runtime_store(
     return store
 
 
-__all__ = ["probe_workspace_effect_revocation_rollback"]
+__all__ = [
+    "probe_workspace_effect_revocation_rollback",
+    "probe_workspace_git_metadata_masking",
+]

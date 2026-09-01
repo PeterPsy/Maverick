@@ -6,7 +6,11 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
-from core.providers.agentic_models import RoutingConstraint, RuntimeDataClass
+from core.providers.agentic_models import (
+    ModelRevisionPolicy,
+    RoutingConstraint,
+    RuntimeDataClass,
+)
 
 
 AgenticMessageRole = Literal["system", "developer", "user", "assistant"]
@@ -141,6 +145,8 @@ class AgenticModelRequest:
     context_compaction_evidence_digest: str = ""
     context_compaction_applied: bool = False
     endpoint_capability_snapshot_digest: str = ""
+    model_revision: str | None = None
+    model_revision_policy: ModelRevisionPolicy = "provider_alias"
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,84 @@
 {
   "tools": {
     "maverick_storage": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "catalog": "read",
+          "file.catalog.list": "read",
+          "file_info": "read",
+          "read_file": "read",
+          "file.content.read": "read",
+          "read_text": "read",
+          "file.text.read": "read",
+          "write": "mutating",
+          "write-file": "mutating",
+          "write-content": "mutating",
+          "write_file": "mutating",
+          "file.content.write": "mutating",
+          "image.inspect": "read",
+          "image.compose_pair": "mutating",
+          "image.compose_side_by_side": "mutating",
+          "upload_file": "mutating",
+          "local_upload_session.start": "mutating",
+          "local_upload_session.status": "read",
+          "local_upload_session.chunk": "mutating",
+          "local_upload_session.cancel": "destructive",
+          "preview_text": "read",
+          "file.preview.text": "read",
+          "preview_table": "read",
+          "file.preview.table": "read",
+          "render_preview": "read",
+          "file.preview.render": "read",
+          "render_thumbnail": "read",
+          "update_markdown_file": "mutating",
+          "create_folder": "mutating",
+          "read_folder": "read",
+          "download_folder": "read",
+          "delete_folder": "destructive",
+          "move_file": "mutating",
+          "move_folder": "mutating",
+          "move_items": "mutating",
+          "delete_file": "destructive",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read",
+          "drive_connections.list": "read",
+          "drive_connections.start_oauth": "mutating",
+          "drive_connections.disconnect": "destructive",
+          "drive_list_roots": "read",
+          "drive_list_children": "read",
+          "drive_sync": "mutating",
+          "drive_search": "read",
+          "drive_read": "read",
+          "drive_preview": "read",
+          "drive_export": "read",
+          "file.localize": "mutating",
+          "file.localize_status": "read",
+          "file.localize_retry": "mutating",
+          "file.localize_cancel": "destructive",
+          "file.reconcile": "mutating",
+          "drive_index": "mutating",
+          "drive_mark_indexed": "mutating",
+          "drive_write": "mutating",
+          "drive_upload_session.start": "mutating",
+          "drive_upload_session.status": "read",
+          "drive_upload_session.chunk": "mutating",
+          "drive_upload_session.cancel": "destructive",
+          "drive_rename": "mutating",
+          "drive_move": "mutating",
+          "drive_trash": "destructive",
+          "health.check": "read"
+        }
+      },
       "description": "Generic Storage operation runner. Calling without arguments returns a compact operations manifest; use dedicated Storage tools for common read and write paths.",
       "input_schema": {
         "type": "object",
@@ -278,6 +356,7 @@
       ]
     },
     "storage_list_files": {
+      "effect_class": "read",
       "description": "List workspace Storage files and folders with compact, paginated metadata.",
       "input_schema": {
         "type": "object",
@@ -310,6 +389,7 @@
       }
     },
     "storage_file_info": {
+      "effect_class": "read",
       "description": "Resolve metadata for one Storage file by workspace_relative_path or role plus relative_path.",
       "input_schema": {
         "type": "object",
@@ -327,6 +407,7 @@
       "output_schema": {"type": "object", "properties": {"file": {"type": "object"}}}
     },
     "storage_read_file": {
+      "effect_class": "read",
       "description": "Read one Storage file as bounded base64 content or return a Storage file handle without inline bytes.",
       "input_schema": {
         "type": "object",
@@ -347,6 +428,7 @@
       "output_schema": {"type": "object", "properties": {"file": {"type": "object"}, "content_base64": {"type": "string"}, "file_handle": {"type": "object"}}}
     },
     "storage_read_text": {
+      "effect_class": "read",
       "description": "Extract one transport-safe text page for a supported Storage text, Markdown, DOCX, PPTX, XLSX, or ODT file. Continue with next_offset while has_more is true.",
       "input_schema": {
         "type": "object",
@@ -384,6 +466,7 @@
       }
     },
     "storage_preview_text": {
+      "effect_class": "read",
       "description": "Extract a bounded text preview for a text, Markdown, DOCX, PPTX, XLSX, or ODT Storage file.",
       "input_schema": {
         "type": "object",
@@ -402,6 +485,7 @@
       "output_schema": {"type": "object", "properties": {"preview_text": {"type": "string"}, "file": {"type": "object"}}}
     },
     "storage_preview_table": {
+      "effect_class": "read",
       "description": "Extract bounded tabular rows for CSV and spreadsheet Storage files.",
       "input_schema": {
         "type": "object",
@@ -421,6 +505,7 @@
       "output_schema": {"type": "object", "properties": {"sheets": {"type": "array"}, "file": {"type": "object"}}}
     },
     "storage_write_file": {
+      "effect_class": "mutating",
       "description": "Create, overwrite, upsert, or write a versioned workspace Storage file through the official Storage write path.",
       "input_schema": {
         "type": "object",
@@ -446,6 +531,7 @@
       "output_schema": {"type": "object", "properties": {"file": {"type": "object"}}}
     },
     "storage_update_markdown_file": {
+      "effect_class": "mutating",
       "description": "Atomically apply exact replacements to one Markdown file. The write succeeds only when expected_sha256 and every expected occurrence count match current content.",
       "input_schema": {
         "type": "object",
@@ -491,6 +577,7 @@
       }
     },
     "storage_image_inspect": {
+      "effect_class": "read",
       "description": "Read dimensions, display orientation, size, and SHA-256 for one or more local Storage images.",
       "input_schema": {
         "type": "object",
@@ -527,6 +614,7 @@
       "output_schema": {"type": "object", "properties": {"images": {"type": "array"}, "image_count": {"type": "integer"}}}
     },
     "storage_image_compose_pair": {
+      "effect_class": "mutating",
       "description": "Auto-rotate and compose two local Storage images side by side into storage/generated, returning the generated file metadata.",
       "input_schema": {
         "type": "object",
@@ -576,11 +664,13 @@
       "output_schema": {"type": "object", "properties": {"file": {"type": "object"}, "source_images": {"type": "array"}, "output_image": {"type": "object"}}}
     },
     "storage_drive_connections_list": {
+      "effect_class": "read",
       "description": "List Google Drive connections known to Storage without delivering Google tokens.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"connections": {"type": "array"}}}
     },
     "storage_drive_connections_start_oauth": {
+      "effect_class": "mutating",
       "description": "Start a Storage-owned Google Drive OAuth flow for a requested access mode; defaults to full_rw when omitted.",
       "input_schema": {
         "type": "object",
@@ -610,6 +700,7 @@
       ]
     },
     "storage_drive_connections_disconnect": {
+      "effect_class": "destructive",
       "description": "Locally disconnect one Storage Google Drive connection without receiving or deleting raw Google tokens.",
       "input_schema": {
         "type": "object",
@@ -624,6 +715,7 @@
       "secret_selectors": []
     },
     "storage_drive_sync": {
+      "effect_class": "mutating",
       "description": "Synchronize Google Drive metadata and change-feed state for one Storage Drive connection.",
       "input_schema": {
         "type": "object",
@@ -682,6 +774,7 @@
       ]
     },
     "storage_drive_list_roots": {
+      "effect_class": "read",
       "description": "List Google Drive roots for one Storage-owned Drive connection.",
       "input_schema": {
         "type": "object",
@@ -708,6 +801,7 @@
       ]
     },
     "storage_drive_list_children": {
+      "effect_class": "read",
       "description": "List children under one Drive parent id and return normalized Storage file and folder records.",
       "input_schema": {
         "type": "object",
@@ -741,6 +835,7 @@
       ]
     },
     "storage_drive_search": {
+      "effect_class": "read",
       "description": "Search Google Drive through Storage and return stable Storage file ids plus Drive locators.",
       "input_schema": {
         "type": "object",
@@ -769,6 +864,7 @@
       ]
     },
     "storage_drive_read": {
+      "effect_class": "read",
       "description": "Read bounded bytes from one Google Drive file through Storage without exposing Google tokens.",
       "input_schema": {
         "type": "object",
@@ -800,6 +896,7 @@
       ]
     },
     "storage_drive_preview": {
+      "effect_class": "read",
       "description": "Extract bounded preview text for a Google Drive file through Storage for agent and Memory indexing workflows.",
       "input_schema": {
         "type": "object",
@@ -832,6 +929,7 @@
       ]
     },
     "storage_drive_export": {
+      "effect_class": "read",
       "description": "Export a Google Drive or Google-native document through Storage in a bounded format.",
       "input_schema": {
         "type": "object",
@@ -864,6 +962,7 @@
       ]
     },
     "storage_file_localize": {
+      "effect_class": "mutating",
       "description": "Localize one browser-streamable Google Drive image, video, audio, or PDF into Storage's workspace-governed cache and return media stream URLs.",
       "input_schema": {
         "type": "object",
@@ -908,6 +1007,7 @@
       ]
     },
     "storage_file_localize_status": {
+      "effect_class": "read",
       "description": "Return current Google Drive localization status, progress, and retry/cancel availability.",
       "input_schema": {
         "type": "object",
@@ -938,6 +1038,7 @@
       ]
     },
     "storage_file_localize_retry": {
+      "effect_class": "mutating",
       "description": "Retry localization for a failed or canceled Google Drive media file.",
       "input_schema": {
         "type": "object",
@@ -969,6 +1070,7 @@
       ]
     },
     "storage_file_localize_cancel": {
+      "effect_class": "destructive",
       "description": "Cancel an in-progress Google Drive localization and remove incomplete cache bytes.",
       "input_schema": {
         "type": "object",
@@ -999,6 +1101,7 @@
       ]
     },
     "storage_file_reconcile": {
+      "effect_class": "mutating",
       "description": "Reconcile Storage inventory with local filesystem state or refresh one Drive metadata record.",
       "input_schema": {
         "type": "object",
@@ -1028,6 +1131,7 @@
       ]
     },
     "storage_drive_index": {
+      "effect_class": "mutating",
       "description": "Request Storage-to-Memory indexing for one Google Drive file using a stable Storage reference and source version.",
       "input_schema": {
         "type": "object",
@@ -1106,6 +1210,7 @@
       ]
     },
     "storage_drive_mark_indexed": {
+      "effect_class": "mutating",
       "description": "Acknowledge successful Memory ingest for one Drive Storage file so future Drive sync can propagate staleness only for files that actually reached Memory.",
       "input_schema": {
         "type": "object",
@@ -1137,6 +1242,7 @@
       }
     },
     "storage_drive_write": {
+      "effect_class": "mutating",
       "description": "Create or update Google Drive file content through Storage write policy.",
       "input_schema": {
         "type": "object",
@@ -1177,6 +1283,7 @@
       ]
     },
     "storage_drive_rename": {
+      "effect_class": "mutating",
       "description": "Rename one Google Drive file through Storage after capability checks.",
       "input_schema": {
         "type": "object",
@@ -1209,6 +1316,7 @@
       ]
     },
     "storage_drive_move": {
+      "effect_class": "mutating",
       "description": "Move one Google Drive file to a target Drive parent through Storage after capability checks.",
       "input_schema": {
         "type": "object",
@@ -1241,6 +1349,7 @@
       ]
     },
     "storage_drive_trash": {
+      "effect_class": "destructive",
       "description": "Trash one Google Drive file through Storage after delete capability and confirmation policy checks.",
       "input_schema": {
         "type": "object",
@@ -1273,11 +1382,13 @@
       ]
     },
     "storage_view_filter": {
+      "effect_class": "read",
       "description": "Read the current Storage UI filter without scanning workspace storage.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"state": {"type": "object"}}}
     },
     "storage_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set Storage query, role, and kind filter state.",
       "input_schema": {
         "type": "object",
@@ -1295,6 +1406,7 @@
       "output_schema": {"type": "object", "properties": {"state": {"type": "object"}}}
     },
     "storage_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Set Storage to a curated custom view using file ids and/or workspace-relative paths.",
       "input_schema": {
         "type": "object",
@@ -1315,16 +1427,19 @@
       "output_schema": {"type": "object", "properties": {"state": {"type": "object"}}}
     },
     "storage_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Return Storage to normal search mode.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"state": {"type": "object"}}}
     },
     "storage_reference_manifest": {
+      "effect_class": "read",
       "description": "Describe Storage file and folder reference entity support.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"entity_types": {"type": "array"}}}
     },
     "storage_reference_search": {
+      "effect_class": "read",
       "description": "Search Storage file or folder references for mention pickers and agents.",
       "input_schema": {
         "type": "object",
@@ -1338,6 +1453,7 @@
       "output_schema": {"type": "object", "properties": {"results": {"type": "array"}}}
     },
     "storage_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one Storage file or folder reference by entity id.",
       "input_schema": {
         "type": "object",
@@ -1351,6 +1467,7 @@
       "output_schema": {"type": "object", "properties": {"exists": {"type": "boolean"}}}
     },
     "storage_reference_summarize": {
+      "effect_class": "read",
       "description": "Return a token-efficient Storage reference summary.",
       "input_schema": {
         "type": "object",

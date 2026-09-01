@@ -1,6 +1,31 @@
 {
   "commands": {
     "document-generator": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "mutating",
+        "value_effect_classes": {
+          "generate_document": "mutating",
+          "validate_spec": "read",
+          "extract_text": "read",
+          "patch_pdf_text": "mutating",
+          "modify_uploaded_document": "mutating",
+          "spreadsheet.transform": "mutating",
+          "convert_to_markdown": "mutating",
+          "list_templates": "read",
+          "list_outputs": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read",
+          "health.check": "read"
+        }
+      },
       "description": "Create DOCX, PPTX, PDF, and XLSX documents, transform XLSX/CSV/TSV spreadsheets, extract text from PDF/DOCX/PPTX/XLSX/ODT workspace documents, edit PDF text, convert workspace documents to agent-ready Markdown, and manage Document Generator references/view state. Read existing Markdown and plain-text files with app.storage.storage_read_text.",
       "argument_schema": {
         "type": "object",

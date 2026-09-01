@@ -171,6 +171,12 @@ class HostedAgenticHarness:
             adapter_artifact_digest="b" * 64,
             model_provider_id=model_provider_id,
             model_id=model_id,
+            model_revision=(None if recipe is None else recipe.model_revision),
+            model_revision_policy=(
+                "provider_alias"
+                if recipe is None
+                else recipe.model_revision_policy
+            ),
             provider_protocol=provider_protocol,
             provider_api_version=provider_api_version,
             routing_constraint=routing_constraint or codex_routing_constraint(),

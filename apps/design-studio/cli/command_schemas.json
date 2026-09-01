@@ -1,6 +1,26 @@
 {
   "commands": {
     "design-studio": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "state": "read",
+          "delegate": "mutating",
+          "delegation_status": "read",
+          "cancel_delegation": "destructive",
+          "delegation_result": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read"
+        }
+      },
       "description": "Inspect native Design Studio or delegate one explicit brief through public OpenDesign APIs.",
       "argument_schema": {
         "type": "object",
@@ -143,6 +163,16 @@
       "secret_selectors": []
     },
     "design-studio-update": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "status": "read",
+          "apply": "mutating",
+          "recover": "mutating"
+        }
+      },
       "description": "Inspect or apply a user-selected, digest-locked official OpenDesign release.",
       "argument_schema": {
         "type": "object",
@@ -167,7 +197,6 @@
       },
       "required_secrets": [],
       "secret_selectors": [],
-      "effect_class": "mutating",
       "supports_idempotency": false,
       "safe_to_retry": false,
       "timeout_seconds": 900

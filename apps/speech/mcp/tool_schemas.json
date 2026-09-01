@@ -1,6 +1,7 @@
 {
   "tools": {
     "speech_operations_manifest": {
+      "effect_class": "read",
       "description": "Return the compact Speech operations manifest.",
       "input_schema": {
         "type": "object",
@@ -19,6 +20,7 @@
       }
     },
     "speech_reference_manifest": {
+      "effect_class": "read",
       "description": "Report the Speech reference entity manifest. Speech currently exposes no reference entities.",
       "input_schema": {
         "type": "object",
@@ -37,6 +39,7 @@
       }
     },
     "speech_transcribe_file": {
+      "effect_class": "read",
       "description": "Transcribe a bounded workspace Storage audio file. This tool does not accept live microphone streams or absolute host paths.",
       "required_secrets": ["deepgram-api-key"],
       "input_schema": {

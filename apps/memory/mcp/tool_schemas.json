@@ -1,6 +1,7 @@
 {
   "tools": {
     "memory_context": {
+      "effect_class": "read",
       "description": "Return bounded agent-compact Memory context for an agent query, including bounded query snippet/count metadata, node ids, summaries, bounded body snippets, body length counts, compact provenance, compiled wiki summaries/citations, reusable Storage references, and expansion hints.",
       "input_schema": {
         "type": "object",
@@ -14,6 +15,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_search": {
+      "effect_class": "read",
       "description": "Search Memory nodes and compiled wiki text, returning reusable Storage references for matched nodes when available.",
       "input_schema": {
         "type": "object",
@@ -26,6 +28,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_remember": {
+      "effect_class": "mutating",
       "description": "Create one durable Memory node.",
       "input_schema": {
         "type": "object",
@@ -47,6 +50,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_update_node": {
+      "effect_class": "mutating",
       "description": "Update title, summary, body, importance, or confidence for one active Memory node.",
       "input_schema": {
         "type": "object",
@@ -66,6 +70,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_soft_delete_node": {
+      "effect_class": "destructive",
       "description": "Soft-delete one Memory node and its active edges.",
       "input_schema": {
         "type": "object",
@@ -81,6 +86,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_link_nodes": {
+      "effect_class": "mutating",
       "description": "Create a typed relationship between two active Memory nodes.",
       "input_schema": {
         "type": "object",
@@ -105,6 +111,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_unlink_nodes": {
+      "effect_class": "destructive",
       "description": "Soft-delete one Memory edge.",
       "input_schema": {
         "type": "object",
@@ -118,6 +125,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_attach_file": {
+      "effect_class": "mutating",
       "description": "Attach a Storage file reference to a Memory node. For Google Drive, pass a remote_storage_file shape from Storage drive_index.memory_source; do not pass workspace_relative_path or Google tokens.",
       "input_schema": {
         "type": "object",
@@ -153,6 +161,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_ingest_source": {
+      "effect_class": "mutating",
       "description": "Ingest one generic app-owned source into Memory. Supports inline_markdown, local workspace storage_file sources, remote_storage_file Storage memory_source payloads, and app_entity snapshots through official reference surfaces. Storage-backed adapters use official Storage surfaces before Memory creates verified source document, source version, and source chunk rows; non-extractable Storage files are recorded as reference snapshots.",
       "input_schema": {
         "type": "object",
@@ -272,6 +281,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_ingest_storage_source": {
+      "effect_class": "mutating",
       "description": "Ingest one Storage drive_index.memory_source into Memory, creating or updating the target node/reference idempotently by stable Storage file id. For Google Drive, pass only Storage reference metadata and optional bounded preview_text; do not pass workspace_relative_path or Google tokens.",
       "input_schema": {
         "type": "object",
@@ -339,6 +349,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_apply_storage_staleness": {
+      "effect_class": "mutating",
       "description": "Apply one Storage drive_sync.memory_staleness payload to Memory, marking linked Storage references, compiled wiki pages, and claims stale so agents can re-index through Storage drive_index.",
       "input_schema": {
         "type": "object",
@@ -377,6 +388,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_attach_app_entity": {
+      "effect_class": "mutating",
       "description": "Attach one external app entity reference to a Memory node.",
       "input_schema": {
         "type": "object",
@@ -398,6 +410,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_inspect_node": {
+      "effect_class": "read",
       "description": "Inspect one Memory node with relationships, external references, compiled wiki, claims, citations, source links, and lint findings.",
       "input_schema": {
         "type": "object",
@@ -412,6 +425,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_compile": {
+      "effect_class": "mutating",
       "description": "Compile one Memory node into deterministic internal wiki content with sources, source versions, claims, citations, and lint findings.",
       "input_schema": {
         "type": "object",
@@ -425,6 +439,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_lint": {
+      "effect_class": "mutating",
       "description": "Refresh Memory lint findings for nodes, compiled wiki pages, and Storage-backed source freshness.",
       "input_schema": {
         "type": "object",
@@ -437,6 +452,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_wiki_query": {
+      "effect_class": "read",
       "description": "Search compiled wiki pages and claims directly for agent-facing evidence retrieval, including citation source versions and Storage preview/export references when available.",
       "input_schema": {
         "type": "object",
@@ -449,6 +465,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_source_query": {
+      "effect_class": "read",
       "description": "Search Memory source versions and verified source chunks, returning normalized source_chunk results with locators and hashes.",
       "input_schema": {
         "type": "object",
@@ -461,6 +478,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_fetch_chunks": {
+      "effect_class": "read",
       "description": "Hydrate up to 20 verified source chunks by id, reading from the Memory content store with SHA verification.",
       "input_schema": {
         "type": "object",
@@ -479,6 +497,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_inspect_source": {
+      "effect_class": "read",
       "description": "Inspect one Memory source document with versions, chunks, linked nodes, and recent ingest jobs.",
       "input_schema": {
         "type": "object",
@@ -503,6 +522,21 @@
       "output_schema": {"type": "object"}
     },
     "memory_jobs": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "operation",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "list": "read",
+          "enqueue": "mutating",
+          "claim": "mutating",
+          "complete": "mutating",
+          "fail": "mutating",
+          "cancel": "destructive",
+          "run_next": "mutating",
+          "run_until_idle": "mutating"
+        }
+      },
       "description": "Manage the app-owned Memory ingest job queue: list, enqueue, claim, complete, fail, cancel, run the next job, or drain ready jobs with a bounded runner.",
       "input_schema": {
         "type": "object",
@@ -540,6 +574,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_audit": {
+      "effect_class": "read",
       "description": "Return recent Memory audit events.",
       "input_schema": {
         "type": "object",
@@ -551,11 +586,13 @@
       "output_schema": {"type": "object"}
     },
     "memory_view_filter": {
+      "effect_class": "read",
       "description": "Read the current Memory graph view state.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object"}
     },
     "memory_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set the Memory graph keyword filter.",
       "input_schema": {
         "type": "object",
@@ -568,6 +605,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Set a curated Memory graph view using node ids or node reference payloads.",
       "input_schema": {
         "type": "object",
@@ -582,16 +620,19 @@
       "output_schema": {"type": "object"}
     },
     "memory_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Return Memory to normal graph search mode.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object"}
     },
     "memory_reference_manifest": {
+      "effect_class": "read",
       "description": "Describe Memory node reference entity support.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object"}
     },
     "memory_reference_search": {
+      "effect_class": "read",
       "description": "Search Memory node references for mention pickers and agents.",
       "input_schema": {
         "type": "object",
@@ -604,6 +645,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one Memory node reference by entity id.",
       "input_schema": {
         "type": "object",
@@ -617,6 +659,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_reference_summarize": {
+      "effect_class": "read",
       "description": "Return a token-efficient Memory node summary for an agent or mention preview.",
       "input_schema": {
         "type": "object",

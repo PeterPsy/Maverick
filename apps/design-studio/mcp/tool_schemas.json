@@ -1,6 +1,7 @@
 {
   "tools": {
     "design_studio_delegate": {
+      "effect_class": "mutating",
       "description": "Append one explicit visible brief to a native OpenDesign conversation and start one naked OpenDesign agent run.",
       "input_schema": {
         "type": "object",
@@ -93,6 +94,7 @@
       "secret_selectors": []
     },
     "design_studio_delegation_status": {
+      "effect_class": "read",
       "description": "Read bounded native OpenDesign run progress for one delegation.",
       "input_schema": {
         "type": "object",
@@ -114,6 +116,7 @@
       "secret_selectors": []
     },
     "design_studio_cancel_delegation": {
+      "effect_class": "destructive",
       "description": "Cancel the native OpenDesign run for one delegation.",
       "input_schema": {
         "type": "object",
@@ -135,6 +138,7 @@
       "secret_selectors": []
     },
     "design_studio_delegation_result": {
+      "effect_class": "read",
       "description": "Return display-safe result references and the exact native conversation link.",
       "input_schema": {
         "type": "object",
@@ -156,6 +160,7 @@
       "secret_selectors": []
     },
     "design_studio_state": {
+      "effect_class": "read",
       "description": "Return thin-host status, delegation availability, and bounded display state.",
       "input_schema": {
         "type": "object",
@@ -169,6 +174,7 @@
       "secret_selectors": []
     },
     "design_studio_view_filter": {
+      "effect_class": "read",
       "description": "Read the display-only native OpenDesign project filter.",
       "input_schema": {
         "type": "object",
@@ -182,6 +188,7 @@
       "secret_selectors": []
     },
     "design_studio_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set the display-only native OpenDesign project search filter.",
       "input_schema": {
         "type": "object",
@@ -203,6 +210,7 @@
       "secret_selectors": []
     },
     "design_studio_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Show a curated set of native OpenDesign project references.",
       "input_schema": {
         "type": "object",
@@ -238,6 +246,7 @@
       "secret_selectors": []
     },
     "design_studio_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Clear the display-only OpenDesign project filter.",
       "input_schema": {
         "type": "object",

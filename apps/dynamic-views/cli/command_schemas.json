@@ -1,0 +1,55 @@
+{
+  "commands": {
+    "dynamic-views": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "catalog": "read",
+          "list": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating",
+          "create": "mutating",
+          "read": "read",
+          "recall": "read",
+          "delete": "destructive",
+          "health.check": "read",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read"
+        }
+      },
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "catalog",
+              "list",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "create",
+              "read",
+              "recall",
+              "delete",
+              "health.check",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize"
+            ],
+            "default": "catalog"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

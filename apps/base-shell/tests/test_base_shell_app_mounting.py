@@ -451,14 +451,14 @@ class BaseShellAppMountingTests(unittest.TestCase):
     def test_shell_overlay_widget_supports_area_capture_without_app_dom_access(self) -> None:
         widget_slot_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WidgetSlot.tsx").read_text()
         shell_styles = (REPO_ROOT / "apps/base-shell/frontend/src/styles/layout.css").read_text()
-        attachment_menu_source = (REPO_ROOT / "apps/chat/frontend/src/components/AttachmentMenu.tsx").read_text()
+        composer_source = (REPO_ROOT / "apps/chat/frontend/src/components/ChatComposer.tsx").read_text()
 
         self.assertIn("maverick.shell.capture-area.start", widget_slot_source)
         self.assertIn("navigator.mediaDevices.getDisplayMedia", widget_slot_source)
         self.assertIn("maverick.widget.capture-area.complete", widget_slot_source)
         self.assertIn("new File([blob]", widget_slot_source)
         self.assertIn("bs-capture-overlay", shell_styles)
-        self.assertIn("Capture page area", attachment_menu_source)
+        self.assertIn("Capture page area", composer_source)
         self.assertNotIn("contentDocument", widget_slot_source)
         self.assertNotIn("contentWindow.document", widget_slot_source)
 

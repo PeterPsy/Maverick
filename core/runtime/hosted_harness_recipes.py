@@ -6,10 +6,14 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 
-from core.providers.agentic_models import AgenticContextPolicy
-from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_ID
+from core.providers.agentic_models import AgenticContextPolicy, ModelRevisionPolicy
+from core.providers.google_interactions_client import (
+    GOOGLE_AGENTIC_MODEL_ID,
+    GOOGLE_AGENTIC_MODEL_REVISION,
+)
 from core.providers.openrouter_agentic_models import (
     OPENROUTER_AGENTIC_MODEL_ID,
+    OPENROUTER_AGENTIC_MODEL_REVISION,
     OPENROUTER_AGENTIC_UPSTREAM_ID,
 )
 from core.runtime.full_workspace_contract import FULL_WORKSPACE_CONTRACT_REVISION
@@ -49,6 +53,8 @@ class HostedHarnessRecipeManifest:
     revision: str
     model_provider_id: str
     model_id: str
+    model_revision: str
+    model_revision_policy: ModelRevisionPolicy
     provider_protocol: str
     provider_api_version: str | None
     endpoint_id: str
@@ -67,6 +73,8 @@ class HostedHarnessRecipeManifest:
                 "revision": self.revision,
                 "model_provider_id": self.model_provider_id,
                 "model_id": self.model_id,
+                "model_revision": self.model_revision,
+                "model_revision_policy": self.model_revision_policy,
                 "provider_protocol": self.provider_protocol,
                 "provider_api_version": self.provider_api_version,
                 "endpoint_id": self.endpoint_id,
@@ -105,9 +113,11 @@ def hosted_full_context_policy() -> AgenticContextPolicy:
 
 GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-google-interactions-governed-workspace",
-    revision="13",
+    revision="14",
     model_provider_id="google-ai-studio",
     model_id=GOOGLE_AGENTIC_MODEL_ID,
+    model_revision=GOOGLE_AGENTIC_MODEL_REVISION,
+    model_revision_policy="exact",
     provider_protocol="google-interactions",
     provider_api_version="v1",
     endpoint_id="google-generativelanguage-v1-interactions",
@@ -138,9 +148,11 @@ GOOGLE_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
 
 OPENROUTER_GOVERNED_WORKSPACE_RECIPE = HostedHarnessRecipeManifest(
     recipe_id="maverick-openrouter-chat-governed-workspace",
-    revision="13",
+    revision="14",
     model_provider_id="openrouter",
     model_id=OPENROUTER_AGENTIC_MODEL_ID,
+    model_revision=OPENROUTER_AGENTIC_MODEL_REVISION,
+    model_revision_policy="provider_alias",
     provider_protocol="openrouter-chat-completions",
     provider_api_version="v1",
     endpoint_id="openrouter-chat-completions-v1",

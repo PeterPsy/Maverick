@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from core.execution_policy.models import ExecutionMode
+from core.shared.tool_effects import ToolArgumentEffectMap
 
 
 McpOwnerKind = Literal["core", "app"]
@@ -62,6 +63,7 @@ class McpToolDefinition:
     schema_public: bool = False
     certified_tcb_component: str | None = None
     agentic_result_data_class: McpAgenticResultDataClass | None = None
+    argument_effects: ToolArgumentEffectMap | None = None
 
 
 @dataclass(frozen=True)

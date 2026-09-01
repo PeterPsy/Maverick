@@ -246,6 +246,7 @@ def _workspace_app_tool_definitions(
                         effect_class=execution_metadata.effect_class,
                         supports_idempotency=execution_metadata.supports_idempotency,
                         safe_to_retry=execution_metadata.safe_to_retry,
+                        argument_effects=execution_metadata.argument_effects,
                     ),
                     lambda arguments, context, _handler=_handler: _handler(arguments, context),
                 )

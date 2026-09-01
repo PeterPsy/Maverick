@@ -20,6 +20,7 @@ from core.runtime.tool_catalog import (
     RuntimeToolResultPreflightDecision,
     RuntimeToolSurfaceResult,
 )
+from core.shared.tool_effects import resolve_tool_effect_class
 
 
 HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 3
@@ -214,6 +215,7 @@ def build_hosted_tool_result_preflight_resolver(
             )
             return _definition_preflight(
                 _cli_definition(cli_registry, command_id),
+                arguments=_surface_arguments(handle, arguments),
                 admitted_read=admitted_read,
                 admitted_public=admitted_public,
                 denied=denied,
@@ -226,6 +228,7 @@ def build_hosted_tool_result_preflight_resolver(
             )
             return _definition_preflight(
                 _mcp_definition(mcp_registry, tool_name),
+                arguments=_surface_arguments(handle, arguments),
                 admitted_read=admitted_read,
                 admitted_public=admitted_public,
                 denied=denied,
@@ -238,19 +241,32 @@ def build_hosted_tool_result_preflight_resolver(
 def _definition_preflight(
     definition,
     *,
+    arguments,
     admitted_read,
     admitted_public,
     denied,
 ):
-    if definition is None:
+    if definition is None or not isinstance(arguments, dict):
         return denied
-    if getattr(definition, "effect_class", None) == "read":
+    if resolve_tool_effect_class(definition, arguments) == "read":
         return admitted_read
     return (
         admitted_public
         if _definition_has_public_result_authority(definition)
         else denied
     )
+
+
+def _surface_arguments(
+    handle: str,
+    arguments: dict[str, object],
+) -> dict[str, object] | None:
+    if handle in {"core-capability:cli.run", "core-capability:mcp.call"}:
+        if "arguments" not in arguments:
+            return {}
+        nested = arguments.get("arguments")
+        return nested if isinstance(nested, dict) else None
+    return arguments
 
 
 def _metadata_projection(

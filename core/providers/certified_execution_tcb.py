@@ -60,7 +60,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="20",
+    manifest_version="21",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -120,6 +120,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/shared/__init__.py",
                 "core/shared/entrypoints.py",
                 "core/shared/repository.py",
+                "core/shared/tool_effects.py",
                 "core/usage",
             ),
         ),

@@ -30,6 +30,7 @@ from core.providers.google_interactions_transport import (
 
 
 GOOGLE_AGENTIC_MODEL_ID = "gemini-3.6-flash"
+GOOGLE_AGENTIC_MODEL_REVISION = "stable-2026-07"
 
 
 class GoogleInteractionsAgenticClient:

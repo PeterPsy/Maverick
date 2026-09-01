@@ -15,6 +15,55 @@ from core.apps.surface_descriptors import (
 
 
 class SurfaceDescriptorSecretSelectorTest(unittest.TestCase):
+    def test_argument_effect_map_resolves_exactly_and_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "cli").mkdir()
+            descriptor = root / "cli/command_schemas.json"
+            descriptor.write_text(
+                json.dumps(
+                    {
+                        "commands": {
+                            "storage": {
+                                "effect_class": "destructive",
+                                "effect_class_by_argument": {
+                                    "argument_name": "action",
+                                    "omitted_effect_class": "read",
+                                    "value_effect_classes": {
+                                        "catalog": "read",
+                                        "write": "mutating",
+                                        "delete": "destructive",
+                                    },
+                                },
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            metadata = app_cli_command_execution_metadata(root, "storage")
+
+            self.assertEqual(metadata.effect_class, "destructive")
+            self.assertIsNotNone(metadata.argument_effects)
+            assert metadata.argument_effects is not None
+            self.assertEqual(metadata.argument_effects.resolve({"action": "catalog"}), "read")
+            self.assertEqual(metadata.argument_effects.resolve({"action": "unknown"}), "unclassified")
+            self.assertEqual(metadata.argument_effects.resolve({}), "read")
+
+            malformed = json.loads(descriptor.read_text(encoding="utf-8"))
+            malformed["commands"]["storage"]["effect_class"] = "read"
+            descriptor.write_text(json.dumps(malformed), encoding="utf-8")
+            rejected = app_cli_command_execution_metadata(root, "storage")
+            self.assertEqual(rejected.effect_class, "unclassified")
+            self.assertIsNone(rejected.argument_effects)
+
+            malformed["commands"]["storage"]["effect_class"] = ["read"]
+            descriptor.write_text(json.dumps(malformed), encoding="utf-8")
+            type_rejected = app_cli_command_execution_metadata(root, "storage")
+            self.assertEqual(type_rejected.effect_class, "unclassified")
+            self.assertIsNone(type_rejected.argument_effects)
+
     def test_cli_command_timeout_is_bounded_and_command_specific(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

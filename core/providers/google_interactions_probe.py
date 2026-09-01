@@ -20,6 +20,7 @@ from core.providers.agentic_protocol import (
     EphemeralCredential,
     HOSTED_FINALIZATION_INSTRUCTION,
 )
+from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
 from core.providers.google_agentic_profile import (
     GOOGLE_CERTIFIED_REASONING_EFFORTS,
     google_interactions_routing_constraint,
@@ -208,6 +209,8 @@ def _probe_request(
         request_id=request_id,
         correlation_id=test_run_id_from_request(request_id),
         model_id="gemini-3.6-flash",
+        model_revision=GOOGLE_AGENTIC_MODEL_REVISION,
+        model_revision_policy="exact",
         reasoning_effort=reasoning_effort,
         content_blocks=(
             AgenticRequestContentBlock(

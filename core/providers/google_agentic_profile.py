@@ -17,6 +17,7 @@ from core.providers.agentic_workspace_policy import (
     REMOTE_PREVIEW_EGRESS_POLICY_REVISION,
 )
 from core.providers.store import ProviderStore
+from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_REVISION
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
     FULL_WORKSPACE_CORE_TOOL_HANDLES,
@@ -26,13 +27,13 @@ from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "34"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "33"
+GOOGLE_AGENTIC_PROFILE_REVISION = "35"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "34"
 GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
     "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
     "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
     "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "32", "33",
+    "32", "33", "34",
 )
 GOOGLE_CERTIFIED_REASONING_EFFORTS = ("high",)
 GOOGLE_DEFAULT_REASONING_EFFORT = "high"
@@ -93,10 +94,12 @@ def ensure_google_agentic_preview_profile(
         runtime_engine_id="maverick-tool-loop",
         model_provider_id="google-ai-studio",
         model_id="gemini-3.6-flash",
+        model_revision=GOOGLE_AGENTIC_MODEL_REVISION,
+        model_revision_policy="exact",
         provider_protocol="google-interactions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==26",
+        adapter_version_constraint="==27",
         routing_constraint=google_interactions_routing_constraint(),
         policy_ceiling=google_agentic_preview_policy(),
         capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,

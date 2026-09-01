@@ -10,7 +10,10 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 from core.providers.agentic_protocol import AgenticModelRequest, EphemeralCredential
-from core.providers.google_interactions_client import GOOGLE_AGENTIC_MODEL_ID
+from core.providers.google_interactions_client import (
+    GOOGLE_AGENTIC_MODEL_ID,
+    GOOGLE_AGENTIC_MODEL_REVISION,
+)
 from core.providers.google_interactions_models import GoogleInteractionsProtocolError
 from core.providers.google_interactions_request import google_interaction_payload
 from core.providers.google_interactions_state import decode_google_interaction_state
@@ -188,7 +191,9 @@ def validate_google_interactions_catalog(
     if (
         model_name != f"models/{request.model_id}"
         or str(record.get("baseModelId") or "") != request.model_id
-        or not model_version
+        or request.model_revision_policy != "exact"
+        or request.model_revision != GOOGLE_AGENTIC_MODEL_REVISION
+        or model_version != request.model_revision
         or not isinstance(supported_methods, list)
         or not supported_methods
         or any(not isinstance(item, str) for item in supported_methods)

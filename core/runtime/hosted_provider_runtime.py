@@ -181,6 +181,8 @@ class HostedProviderRuntimeRegistry:
             != MAVERICK_AGENT_EXECUTION_FAMILY
             or binding.model_provider_id != recipe.model_provider_id
             or binding.model_id != recipe.model_id
+            or binding.model_revision != recipe.model_revision
+            or binding.model_revision_policy != recipe.model_revision_policy
             or binding.provider_protocol != recipe.provider_protocol
             or binding.provider_api_version != recipe.provider_api_version
             or binding.routing_constraint_snapshot.endpoint_id != recipe.endpoint_id

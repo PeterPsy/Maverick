@@ -1,6 +1,17 @@
 {
   "commands": {
     "video-studio": {
+      "effect_class": "read",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "status": "read",
+          "schema": "read",
+          "health": "read",
+          "capabilities": "read"
+        }
+      },
       "description": "Inspect the installed Video Studio foundation, SQLite schema, health, and implemented checkpoint capabilities.",
       "argument_schema": {
         "type": "object",

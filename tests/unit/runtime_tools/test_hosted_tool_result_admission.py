@@ -25,6 +25,7 @@ from core.runtime.tool_catalog import (
     RuntimeToolSurfaceResult,
 )
 from core.runtime.tool_full_workspace_support import commit_text_change
+from core.shared.tool_effects import ToolArgumentEffectMap
 
 
 class HostedToolResultAdmissionTest(unittest.TestCase):
@@ -192,7 +193,6 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             ),
             lambda _arguments, _context: {},
         )
-
         resolved = self.resolve(
             "core-capability:cli.run",
             {"command_id": "core.undeclared"},
@@ -349,6 +349,27 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
             ),
             lambda _arguments, _context: {},
         )
+        self.cli.register_command(
+            CliCommandDefinition(
+                command_id="app.mixed",
+                path_segments=["app", "mixed"],
+                description="Argument-sensitive app command.",
+                argument_schema={"type": "object"},
+                owner_kind="app",
+                owner_id="fixture-app",
+                workspace_id="default",
+                exposure_scope="workspace_enabled_app",
+                invocation_policy=CliInvocationPolicy(False, None, True, True, False),
+                entrypoint_path="apps/fixture/cli.py",
+                effect_class="mutating",
+                argument_effects=ToolArgumentEffectMap(
+                    argument_name="action",
+                    omitted_effect_class="read",
+                    value_effect_classes=(("catalog", "read"), ("write", "mutating")),
+                ),
+            ),
+            lambda _arguments, _context: {},
+        )
         preflight = build_hosted_tool_result_preflight_resolver(
             cli_registry=self.cli,
             mcp_registry=self.mcp,
@@ -361,6 +382,22 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
                 self.actor,
             ).admitted_before_effect
         )
+        self.assertTrue(
+            preflight(
+                "core-capability:cli.run",
+                {"command_id": "app.mixed", "arguments": {"action": "catalog"}},
+                self.actor,
+            ).admitted_before_effect
+        )
+        for nested in ({"action": "write"}, {"action": "unknown"}, "malformed"):
+            with self.subTest(nested=nested):
+                self.assertFalse(
+                    preflight(
+                        "core-capability:cli.run",
+                        {"command_id": "app.mixed", "arguments": nested},
+                        self.actor,
+                    ).admitted_before_effect
+                )
         self.assertTrue(
             preflight(
                 "core-capability:shell.run",

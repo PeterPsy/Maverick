@@ -1,11 +1,13 @@
 {
   "tools": {
     "calendar_operations_manifest": {
+      "effect_class": "read",
       "description": "Describe Calendar CLI and MCP operations for agents.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"operations": {"type": "array"}, "tools": {"type": "array"}}}
     },
     "calendar_connections.list": {
+      "effect_class": "read",
       "description": "List Google Calendar connection records known to Calendar. Provider implementation is intentionally not included in this contract slice.",
       "input_schema": {
         "type": "object",
@@ -15,6 +17,7 @@
       "output_schema": {"type": "object", "properties": {"connections": {"type": "array"}}}
     },
     "calendar_calendars.list": {
+      "effect_class": "read",
       "description": "List known Google calendars and local sync selection for each connection.",
       "input_schema": {
         "type": "object",
@@ -26,6 +29,7 @@
       "output_schema": {"type": "object", "properties": {"calendars": {"type": "array"}}}
     },
     "calendar_calendars.select": {
+      "effect_class": "mutating",
       "description": "Enable or disable local sync selection for one known Google calendar.",
       "input_schema": {
         "type": "object",
@@ -42,6 +46,7 @@
       "output_schema": {"type": "object", "properties": {"calendar": {"type": "object"}}}
     },
     "calendar_connections.start_oauth": {
+      "effect_class": "mutating",
       "description": "Start Google Calendar OAuth for a workspace account and return an authorization URL. Provider implementation is intentionally not included in this contract slice.",
       "input_schema": {
         "type": "object",
@@ -59,6 +64,7 @@
       ]
     },
     "calendar_connections.disconnect": {
+      "effect_class": "destructive",
       "description": "Disconnect one Google Calendar connection and revoke or retire its resource-scoped refresh token. Provider implementation is intentionally not included in this contract slice.",
       "input_schema": {
         "type": "object",
@@ -78,6 +84,7 @@
       ]
     },
     "calendar_sync": {
+      "effect_class": "mutating",
       "description": "Synchronize events for one Google Calendar connection. Provider implementation is intentionally not included in this contract slice.",
       "input_schema": {
         "type": "object",
@@ -106,6 +113,7 @@
       ]
     },
     "calendar_list_events": {
+      "effect_class": "read",
       "description": "List workspace calendar events with token-efficient filters.",
       "input_schema": {
         "type": "object",
@@ -126,6 +134,7 @@
       "output_schema": {"type": "object", "properties": {"events": {"type": "array"}, "pagination": {"type": "object"}}}
     },
     "calendar_create_event": {
+      "effect_class": "mutating",
       "description": "Create one calendar event. Calendar generates the event id.",
       "input_schema": {
         "type": "object",
@@ -169,6 +178,7 @@
       ]
     },
     "calendar_update_event": {
+      "effect_class": "mutating",
       "description": "Update one calendar event by id.",
       "input_schema": {
         "type": "object",
@@ -213,6 +223,7 @@
       ]
     },
     "calendar_delete_event": {
+      "effect_class": "destructive",
       "description": "Delete one calendar event by id.",
       "input_schema": {
         "type": "object",
@@ -237,6 +248,7 @@
       ]
     },
     "calendar_move_event": {
+      "effect_class": "mutating",
       "description": "Move one event to a new start time or to the first free slot in a bounded window.",
       "input_schema": {
         "type": "object",
@@ -275,6 +287,7 @@
       ]
     },
     "calendar_check_availability": {
+      "effect_class": "read",
       "description": "Check whether a specific time window is free and return compact conflicting events.",
       "input_schema": {
         "type": "object",
@@ -291,6 +304,7 @@
       "output_schema": {"type": "object", "properties": {"available": {"type": "boolean"}, "conflicts": {"type": "array"}}}
     },
     "calendar_find_free_time": {
+      "effect_class": "read",
       "description": "Find available slots in a bounded time window.",
       "input_schema": {
         "type": "object",
@@ -309,11 +323,13 @@
       "output_schema": {"type": "object", "properties": {"slots": {"type": "array"}, "busy_count": {"type": "integer"}}}
     },
     "calendar_view_filter": {
+      "effect_class": "read",
       "description": "Read the current Calendar view state.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
     },
     "calendar_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set Calendar's query and time-window filter for the standard view surface.",
       "input_schema": {
         "type": "object",
@@ -332,6 +348,7 @@
       "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
     },
     "calendar_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Curate Calendar to a supplied list of event references.",
       "input_schema": {
         "type": "object",
@@ -348,16 +365,19 @@
       "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
     },
     "calendar_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Return Calendar to its default view state.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
     },
     "calendar_reference_manifest": {
+      "effect_class": "read",
       "description": "Describe Calendar event reference support.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"entity_types": {"type": "array"}}}
     },
     "calendar_reference_search": {
+      "effect_class": "read",
       "description": "Search calendar event references for mentions and agent context.",
       "input_schema": {
         "type": "object",
@@ -370,6 +390,7 @@
       "output_schema": {"type": "object", "properties": {"results": {"type": "array"}}}
     },
     "calendar_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one calendar event reference.",
       "input_schema": {
         "type": "object",
@@ -384,6 +405,7 @@
       "output_schema": {"type": "object", "properties": {"reference": {"type": "object"}, "event": {"type": "object"}}}
     },
     "calendar_reference_summarize": {
+      "effect_class": "read",
       "description": "Return a token-efficient summary for one calendar event reference.",
       "input_schema": {
         "type": "object",

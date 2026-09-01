@@ -1,6 +1,23 @@
 {
   "commands": {
     "chat": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "projects.list": "read",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating"
+        }
+      },
       "description": "Inspect and operate Chat app-owned project references and view state. Runtime messages and turns are core runtime operations, not Chat CLI operations.",
       "argument_schema": {
         "type": "object",

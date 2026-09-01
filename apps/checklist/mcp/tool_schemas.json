@@ -1,6 +1,31 @@
 {
   "tools": {
     "checklist_tasklist": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "list": "read",
+          "read": "read",
+          "create": "mutating",
+          "update": "mutating",
+          "delete": "destructive",
+          "add_task": "mutating",
+          "toggle_task": "mutating",
+          "set_task_status": "mutating",
+          "set_subtask_status": "mutating",
+          "next_actions": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating"
+        }
+      },
       "description": "Generic Checklist operation runner. Calling without arguments returns a compact operations manifest; use dedicated tools for common create, read, list, and status updates.",
       "input_schema": {
         "type": "object",
@@ -40,6 +65,7 @@
       "output_schema": {"type": "object"}
     },
     "checklist_list": {
+      "effect_class": "read",
       "description": "List workspace checklists with compact records by default. Set include_content only when sections and metadata are explicitly required.",
       "input_schema": {
         "type": "object",
@@ -63,6 +89,7 @@
       }
     },
     "checklist_create": {
+      "effect_class": "mutating",
       "description": "Create one workspace checklist or agent plan.",
       "input_schema": {
         "type": "object",
@@ -82,6 +109,7 @@
       "output_schema": {"type": "object", "properties": {"checklist": {"type": "object"}, "chat_render": {"type": "object"}}}
     },
     "checklist_read": {
+      "effect_class": "read",
       "description": "Read one full checklist by id, including sections, tasks, subtasks, and metadata.",
       "input_schema": {
         "type": "object",
@@ -95,6 +123,7 @@
       "output_schema": {"type": "object", "properties": {"checklist": {"type": "object"}}}
     },
     "checklist_update": {
+      "effect_class": "mutating",
       "description": "Update one checklist by id. Use payload for full updates or direct fields for small changes.",
       "input_schema": {
         "type": "object",
@@ -115,6 +144,7 @@
       "output_schema": {"type": "object", "properties": {"checklist": {"type": "object"}}}
     },
     "checklist_delete": {
+      "effect_class": "destructive",
       "description": "Delete one checklist by id.",
       "input_schema": {
         "type": "object",
@@ -125,6 +155,7 @@
       "output_schema": {"type": "object", "properties": {"status": {"type": "string"}, "deleted_id": {"type": "string"}}}
     },
     "checklist_add_task": {
+      "effect_class": "mutating",
       "description": "Add one task to a checklist section.",
       "input_schema": {
         "type": "object",
@@ -142,6 +173,7 @@
       "output_schema": {"type": "object", "properties": {"task": {"type": "object"}}}
     },
     "checklist_toggle_task": {
+      "effect_class": "mutating",
       "description": "Toggle one task between pending and completed.",
       "input_schema": {
         "type": "object",
@@ -160,6 +192,7 @@
       "output_schema": {"type": "object", "properties": {"task": {"type": "object"}}}
     },
     "checklist_set_task_status": {
+      "effect_class": "mutating",
       "description": "Set one task status for an agent plan.",
       "input_schema": {
         "type": "object",
@@ -177,6 +210,7 @@
       "output_schema": {"type": "object", "properties": {"task": {"type": "object"}}}
     },
     "checklist_set_subtask_status": {
+      "effect_class": "mutating",
       "description": "Set one subtask status for an agent plan.",
       "input_schema": {
         "type": "object",
@@ -195,16 +229,19 @@
       "output_schema": {"type": "object", "properties": {"subtask": {"type": "object"}}}
     },
     "checklist_next_actions": {
+      "effect_class": "read",
       "description": "Return up to 50 open tasks sorted by execution status and priority.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"items": {"type": "array"}}}
     },
     "checklist_reference_manifest": {
+      "effect_class": "read",
       "description": "Describe Checklist reference entity support.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"entity_types": {"type": "array"}}}
     },
     "checklist_reference_search": {
+      "effect_class": "read",
       "description": "Search checklist references for mention pickers and agent context.",
       "input_schema": {
         "type": "object",
@@ -217,6 +254,7 @@
       "output_schema": {"type": "object", "properties": {"results": {"type": "array"}}}
     },
     "checklist_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one checklist reference by entity id.",
       "input_schema": {
         "type": "object",
@@ -231,6 +269,7 @@
       "output_schema": {"type": "object", "properties": {"exists": {"type": "boolean"}, "payload": {"type": "object"}}}
     },
     "checklist_reference_summarize": {
+      "effect_class": "read",
       "description": "Return a token-efficient checklist reference summary.",
       "input_schema": {
         "type": "object",
@@ -245,11 +284,13 @@
       "output_schema": {"type": "object", "properties": {"summary": {"type": "string"}, "safe_fields": {"type": "object"}}}
     },
     "checklist_view_filter": {
+      "effect_class": "read",
       "description": "Read the current Checklist board view state.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
     },
     "checklist_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set the Checklist board query filter.",
       "input_schema": {
         "type": "object",
@@ -259,6 +300,7 @@
       "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
     },
     "checklist_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Show a curated set of checklist references on the board.",
       "input_schema": {
         "type": "object",
@@ -272,6 +314,7 @@
       "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
     },
     "checklist_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Return Checklist to its default board mode.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
       "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}

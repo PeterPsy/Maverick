@@ -21,9 +21,10 @@ from core.runtime.public_content_authority import (
     build_runtime_public_content_authority_record,
 )
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
+from core.shared.tool_effects import ToolArgumentEffectMap
 
 
-HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 4
+HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 5
 HOSTED_REQUIRED_RESULT_BEHAVIOR_HANDLES = (
     *FILESYSTEM_RESULT_BEHAVIOR_IDS,
     "core-capability:shell.run",
@@ -55,19 +56,21 @@ class _Processes:
 def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
     """Exercise concrete classification, pairing, and pre-effect policy behavior."""
     definitions = {
-        "fixture.read": SimpleNamespace(
-            effect_class="read",
-            owner_kind="core",
-            schema_public=True,
-            certified_tcb_component="tool-schema-catalog",
-            agentic_result_data_class="public",
-        ),
-        "fixture.mutate": SimpleNamespace(
-            effect_class="mutating",
-            owner_kind="core",
-            schema_public=True,
-            certified_tcb_component="tool-schema-catalog",
-            agentic_result_data_class="public",
+        "fixture.app-mixed": SimpleNamespace(
+            effect_class="destructive",
+            owner_kind="app",
+            schema_public=False,
+            certified_tcb_component=None,
+            agentic_result_data_class=None,
+            argument_effects=ToolArgumentEffectMap(
+                argument_name="action",
+                omitted_effect_class="read",
+                value_effect_classes=(
+                    ("catalog", "read"),
+                    ("write", "mutating"),
+                    ("delete", "destructive"),
+                ),
+            ),
         ),
     }
     registry = _Definitions(definitions)
@@ -112,13 +115,39 @@ def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
         ),
         "core-capability:cli.list": ({},),
         "core-capability:cli.run": (
-            {"command_id": "fixture.read"},
-            {"command_id": "fixture.mutate"},
+            {
+                "command_id": "fixture.app-mixed",
+                "arguments": {"action": "catalog"},
+            },
         ),
         "core-capability:mcp.list": ({},),
         "core-capability:mcp.call": (
-            {"tool_name": "fixture.read"},
-            {"tool_name": "fixture.mutate"},
+            {
+                "tool_name": "fixture.app-mixed",
+                "arguments": {"action": "catalog"},
+            },
+        ),
+    }
+    denied_app_effects = {
+        "core-capability:cli.run": (
+            {
+                "command_id": "fixture.app-mixed",
+                "arguments": {"action": "write"},
+            },
+            {
+                "command_id": "fixture.app-mixed",
+                "arguments": {"action": "unknown"},
+            },
+        ),
+        "core-capability:mcp.call": (
+            {
+                "tool_name": "fixture.app-mixed",
+                "arguments": {"action": "delete"},
+            },
+            {
+                "tool_name": "fixture.app-mixed",
+                "arguments": {"action": "unknown"},
+            },
         ),
     }
     variable_results = tuple(
@@ -135,6 +164,10 @@ def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
                 preflight=preflight,
             )
             for arguments in scenario_arguments
+        )
+        and all(
+            not preflight(handle, arguments, context).admitted_before_effect
+            for arguments in denied_app_effects.get(handle, ())
         )
     )
     return (

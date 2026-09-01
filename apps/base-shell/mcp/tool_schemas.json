@@ -1,0 +1,16 @@
+{
+  "tools": {
+    "base_shell_reference_manifest": {
+      "effect_class": "read"
+    },
+    "base_shell_reference_search": {
+      "effect_class": "read"
+    },
+    "base_shell_reference_resolve": {
+      "effect_class": "read"
+    },
+    "base_shell_reference_summarize": {
+      "effect_class": "read"
+    }
+  }
+}

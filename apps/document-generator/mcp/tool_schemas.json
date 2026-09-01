@@ -1,6 +1,31 @@
 {
   "tools": {
     "maverick_document_generator": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "mutating",
+        "value_effect_classes": {
+          "generate_document": "mutating",
+          "validate_spec": "read",
+          "extract_text": "read",
+          "patch_pdf_text": "mutating",
+          "modify_uploaded_document": "mutating",
+          "spreadsheet.transform": "mutating",
+          "convert_to_markdown": "mutating",
+          "list_templates": "read",
+          "list_outputs": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read",
+          "health.check": "read"
+        }
+      },
       "description": "Generic Document Generator operations tool. Use dedicated tools for spreadsheet transforms, PDF text patching, document text extraction, Markdown conversion, references, and view-state actions when available. Extraction is limited to PDF/DOCX/PPTX/XLSX/ODT; read existing Markdown and plain-text files with app.storage.storage_read_text.",
       "input_schema": {
         "type": "object",
@@ -96,6 +121,7 @@
       }
     },
     "document_generator_convert_to_markdown": {
+      "effect_class": "mutating",
       "description": "Convert one workspace PDF, DOCX, PPTX, or XLSX under storage/uploaded/ or storage/generated/ into an agent-ready Markdown artifact using Docling.",
       "input_schema": {
         "type": "object",
@@ -157,6 +183,7 @@
       }
     },
     "document_generator_extract_text": {
+      "effect_class": "read",
       "description": "Extract bounded plain text from one workspace PDF, DOCX, PPTX, XLSX, or ODT under storage/uploaded/ or storage/generated/. This tool does not accept Markdown or plain-text sources; read those with app.storage.storage_read_text.",
       "input_schema": {
         "type": "object",
@@ -186,6 +213,7 @@
       }
     },
     "document_generator_spreadsheet_transform": {
+      "effect_class": "mutating",
       "description": "Apply deterministic spreadsheet transforms to XLSX, CSV, or TSV files and return a modified Storage file plus structured audit/report metadata.",
       "input_schema": {
         "type": "object",
@@ -233,6 +261,7 @@
       }
     },
     "document_generator_patch_pdf_text": {
+      "effect_class": "mutating",
       "description": "Replace matched text in one workspace PDF, save a generated PDF under storage/generated/document-generator/pdf-edits/, and return verification counts plus a visual crop artifact when available.",
       "input_schema": {
         "type": "object",
@@ -293,6 +322,7 @@
       }
     },
     "document_generator_modify_uploaded_document": {
+      "effect_class": "mutating",
       "description": "Task-level helper for common uploaded PDF edits. If match_text is omitted, it extracts date candidates and patches automatically only when exactly one candidate is found.",
       "input_schema": {
         "type": "object",
@@ -321,6 +351,30 @@
           "visual_diff_artifact": {"type": "string"}
         }
       }
+    },
+    "document_generator_view_filter": {
+      "effect_class": "read"
+    },
+    "document_generator_set_view_filter": {
+      "effect_class": "mutating"
+    },
+    "document_generator_set_custom_view": {
+      "effect_class": "mutating"
+    },
+    "document_generator_clear_custom_view": {
+      "effect_class": "mutating"
+    },
+    "document_generator_reference_manifest": {
+      "effect_class": "read"
+    },
+    "document_generator_reference_search": {
+      "effect_class": "read"
+    },
+    "document_generator_reference_resolve": {
+      "effect_class": "read"
+    },
+    "document_generator_reference_summarize": {
+      "effect_class": "read"
     }
   }
 }

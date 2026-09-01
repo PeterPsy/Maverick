@@ -28,6 +28,7 @@ from core.providers.openrouter_agentic_profile import (
     OPENROUTER_AGENTIC_PROFILE_REVISION,
     ensure_openrouter_agentic_preview_profile,
 )
+from core.providers.openrouter_agentic_models import OPENROUTER_AGENTIC_MODEL_REVISION
 from core.providers.agentic_models import AgenticProfileDefinitionStatus
 from core.runtime.full_workspace_contract import (
     FULL_WORKSPACE_CONTRACT_REVISION,
@@ -68,10 +69,12 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "33")
-        self.assertEqual(profile.adapter_version_constraint, "==26")
+        self.assertEqual(profile.revision, "34")
+        self.assertEqual(profile.adapter_version_constraint, "==27")
         self.assertEqual(profile.model_provider_id, "openrouter")
         self.assertEqual(profile.model_id, "deepseek/deepseek-v4-flash")
+        self.assertEqual(profile.model_revision, OPENROUTER_AGENTIC_MODEL_REVISION)
+        self.assertEqual(profile.model_revision_policy, "provider_alias")
         self.assertEqual(profile.provider_protocol, "openrouter-chat-completions")
         routing = profile.routing_constraint
         self.assertEqual(routing.allowed_upstream_ids, ("deepinfra/fp8",))

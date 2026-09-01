@@ -86,7 +86,8 @@ without creating a provider thread.
 
 Agentic execution is fail-closed behind an immutable
 `CapabilityCertificate`. The certificate identifies the exact engine, adapter
-id/version/source digest, model provider, model, protocol, routing digest,
+id/version/source digest, model provider, model, model revision and revision
+policy, protocol, routing digest,
 certified upstream set, capability set, evidence suite, certified-execution TCB
 manifest/digest, and expiry. Evidence
 metadata and optional content-addressed blobs are installation-owned; neither
@@ -97,7 +98,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v20 also
+status, workspace binding, and upstream constraint. TCB manifest v21 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -597,8 +598,13 @@ public call-paired error on the next request. Workspace-mutating shell/process
 runs classify their exact private-overlay result before commit and discard the
 overlay on denial. Mutating/destructive app CLI/MCP calls without the same
 pre-effect guarantee remain rejected; app definitions cannot self-promote.
+Built-in app definitions carry conservative effect metadata, and mixed runners
+resolve one declared argument discriminator; unknown values fail closed. Real
+Storage catalog reads execute through both app registries. The hosted bwrap
+projection also masks `.git` for shell and managed processes, including a
+worktree pointer file.
 Current Google/OpenRouter definitions use `maverick_agent` and pin
-`codex-baseline-v13` only because the executable 18-behavior gate is complete;
+`codex-baseline-v14` only because the executable 20-behavior gate is complete;
 they are still uncertified, unbound, contained previews. Direct replacement
 and move propagate exact version-bound pre-image taint for read-after-write
 through authenticated same-session mutation records, even when the next tool
@@ -606,13 +612,19 @@ step rebuilds its orchestrator, while creation remains unclassified without
 authoritative source taint. Mutable classification authority is stored as the
 exact id, kind, ref, revision, digest, and policy revision on tool and
 provider-state lineage, then checked against the current audit-backed authority
-before result reuse, continuation, request commit, and actual lazy-stream
-transport. Filesystem reads classify the bounded complete raw resource before
+before result reuse, continuation, request commit, and every actual lazy-stream
+advance. Filesystem reads classify the bounded complete raw resource before
 base64 projection and retain that class on every version-bound chunk. Mutating
 shell/process overlays revalidate exact result authority around the batch and
 roll back on drift. Sensitive markers can only narrow the class. Large artifact
 summaries carry a digest of their exact provider-visible bytes while retaining
 the original result class/trust/identity separately.
+
+Google profile/binding/certificate/request identity uses the `exact` revision
+policy and must match the authenticated catalog `version`. OpenRouter uses the
+explicit `provider_alias` policy while separately pinning the endpoint,
+upstream, routing controls, and catalog digest. Revision or policy drift rejects
+binding or transport rather than silently following a different model.
 
 The complete decision metadata is inserted first into the session-owned
 `egress_decisions.json`; only then may transformed bytes be used. Its audit

@@ -1,0 +1,40 @@
+{
+  "tools": {
+    "docs_studio_docs_manifest": {
+      "effect_class": "read"
+    },
+    "docs_studio_docs_search": {
+      "effect_class": "read"
+    },
+    "docs_studio_docs_read": {
+      "effect_class": "read"
+    },
+    "docs_studio_reference_manifest": {
+      "effect_class": "read"
+    },
+    "docs_studio_reference_search": {
+      "effect_class": "read"
+    },
+    "docs_studio_reference_resolve": {
+      "effect_class": "read"
+    },
+    "docs_studio_reference_summarize": {
+      "effect_class": "read"
+    },
+    "docs_studio_view_filter": {
+      "effect_class": "read"
+    },
+    "docs_studio_set_view_filter": {
+      "effect_class": "mutating"
+    },
+    "docs_studio_set_custom_view": {
+      "effect_class": "mutating"
+    },
+    "docs_studio_clear_custom_view": {
+      "effect_class": "mutating"
+    },
+    "docs_studio_state": {
+      "effect_class": "read"
+    }
+  }
+}

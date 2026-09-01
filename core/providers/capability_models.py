@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from core.providers.agentic_models import ModelRevisionPolicy
+
 
 @dataclass(frozen=True)
 class RuntimeCapabilitySet:
@@ -96,6 +98,7 @@ class CapabilityCertificate:
     semantic_projection_compiler_revision: str = ""
     tool_contract_revision: str = ""
     context_policy_revision: str = ""
+    model_revision_policy: ModelRevisionPolicy = "provider_alias"
 
 
 @dataclass(frozen=True)

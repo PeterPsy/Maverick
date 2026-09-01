@@ -1,6 +1,33 @@
 {
   "commands": {
     "calendar": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "describe": "read",
+          "status": "read",
+          "calendar_connections.list": "read",
+          "calendar_calendars.list": "read",
+          "calendar_calendars.select": "mutating",
+          "calendar_connections.start_oauth": "mutating",
+          "calendar_connections.disconnect": "destructive",
+          "calendar_sync": "mutating",
+          "list": "read",
+          "create": "mutating",
+          "update": "mutating",
+          "delete": "destructive",
+          "move": "mutating",
+          "check_availability": "read",
+          "find_free_time": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating"
+        }
+      },
       "description": "Manage workspace calendar events and availability. Calling without arguments returns a compact operations manifest.",
       "argument_schema": {
         "type": "object",
@@ -218,6 +245,17 @@
       ]
     },
     "calendar-reference": {
+      "effect_class": "read",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read"
+        }
+      },
       "description": "Search, resolve, and summarize workspace calendar event references.",
       "argument_schema": {
         "type": "object",

@@ -1,6 +1,30 @@
 {
   "commands": {
     "checklist": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "describe": "read",
+          "list": "read",
+          "read": "read",
+          "get": "read",
+          "recall": "read",
+          "create": "mutating",
+          "create_plan": "mutating",
+          "update": "mutating",
+          "delete": "destructive",
+          "add_task": "mutating",
+          "add_item": "mutating",
+          "toggle_task": "mutating",
+          "toggle_item": "mutating",
+          "set_task_status": "mutating",
+          "set_subtask_status": "mutating",
+          "next_actions": "read"
+        }
+      },
       "description": "Manage workspace checklists and agent plans. Calling without arguments returns a compact operations manifest.",
       "argument_schema": {
         "type": "object",
@@ -108,6 +132,17 @@
       }
     },
     "checklist-reference": {
+      "effect_class": "read",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read"
+        }
+      },
       "description": "Search, resolve, and summarize workspace checklist references for mentions and agent context.",
       "argument_schema": {
         "type": "object",
@@ -132,6 +167,17 @@
       }
     },
     "checklist-view": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating"
+        }
+      },
       "description": "Read or update the Checklist board view state and curated checklist selections.",
       "argument_schema": {
         "type": "object",

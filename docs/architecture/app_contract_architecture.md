@@ -2506,8 +2506,15 @@ These sidecars are optional metadata for the generic core hosts. They do not add
 
 The descriptor files must stay app-owned and declarative:
 
-- CLI descriptors use a top-level `commands` object keyed by declared command name, with optional `description`, `argument_schema`, `required_secrets`, and `secret_selectors`.
-- MCP descriptors use a top-level `tools` object keyed by declared tool name, with optional `description`, `input_schema`, `output_schema`, `required_secrets`, and `secret_selectors`.
+- CLI descriptors use a top-level `commands` object keyed by declared command name, with optional `description`, `argument_schema`, `required_secrets`, `secret_selectors`, execution timeout/retry metadata, and effect metadata.
+- MCP descriptors use a top-level `tools` object keyed by declared tool name, with optional `description`, `input_schema`, `output_schema`, `required_secrets`, `secret_selectors`, retry metadata, and effect metadata.
+- Executable app surfaces declare a conservative `effect_class` of `read`,
+  `mutating`, or `destructive`. A mixed surface may additionally declare
+  `effect_class_by_argument` with one top-level `argument_name`, an explicit
+  `omitted_effect_class`, and an exact `value_effect_classes` map. The static
+  class must equal the maximum mapped severity. Invalid metadata, an unknown
+  discriminator value, or a malformed argument payload resolves to
+  `unclassified`; it never inherits a read classification.
 - `required_secrets` is a list of non-resource logical names declared in `permissions.secrets.read`; the core ignores undeclared names and delivers no CLI/MCP secrets when a command or tool omits both `required_secrets` and `secret_selectors`.
 - `secret_selectors` is a list of declarative selector objects with `required_secrets`, optional `when` argument matches, optional `resource_type`, optional `resource_id_argument`, and optional app-mediated `resource_lookup`. The core may call the same app entrypoint with `surface=secret_selector` and no delivered secrets so the app can map opaque app-owned ids such as thread, draft, message, or attachment ids to a platform resource id before the core resolves a resource-scoped grant. A lookup result gates whether a selector is needed, but it scopes delivery only when that selector explicitly declares `resource_type`; workspace-wide logical names remain non-resource requests even when the same lookup returns a resource id for another selector.
 - Apps with resource-scoped secret needs may also opt in to a read-only `surface=secret_resource_inventory` entrypoint call by setting `secret_resource_inventory: true` on one declared CLI command descriptor. The platform sends no secrets and expects only redaction-safe resources such as `logical_name`, `resource_type`, `resource_id`, optional label, provider, and status. Core Secrets recommendation surfaces use this inventory to show concrete grant issues before a grant exists; if an app does not opt in or does not implement the surface, the core falls back to existing grants and descriptor resource types.
@@ -2566,6 +2573,13 @@ bound invocation token. Invocation without that token fails; invocation with
 it still re-enters the official CLI/MCP runner and rechecks policy. The same
 path exposes Core collaboration/inter-agent commands and tools when authorized,
 without granting them merely because their schema was discovered.
+
+Before executing an app-owned wrapper call, the hosted runtime resolves its
+exact declared effect against the nested invocation arguments. Read-only calls
+may proceed and remain subject to exact-result classification and egress
+policy. Mutating, destructive, or unclassified app calls are denied unless a
+future Core-certified pre-effect contract explicitly governs them; an app
+descriptor cannot self-promote a result to public or mint mutation authority.
 
 The runtime must invoke the selected app through its declared, platform-hosted
 CLI, MCP, backend, or app-interface surface. It must not import an app module,

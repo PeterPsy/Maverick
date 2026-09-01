@@ -785,12 +785,14 @@ shell/process, and CLI/MCP scenarios. A declared mode string or the mere
 presence of a handle is not evidence. Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 34 and OpenRouter
-revision 33 definitions make that atomic claim only because the executable
-gate returns all 18 required result behaviors, including raw/base64/chunk
-marker narrowing, revoke-then-rebuild, delayed-egress-after-revocation,
-post-preflight transport revocation, and overlay-commit rollback probes; they remain uncertified,
-unbound, contained previews rather than a release authorization.
+complete atomic contract. The current Google revision 35 and OpenRouter
+revision 34 definitions make that atomic claim only because the executable
+gate returns all 20 required result behaviors, including real app-owned
+CLI/MCP reads with conservative effect metadata, raw/base64/chunk marker
+narrowing, revoke-then-rebuild, delayed-egress-after-revocation, transport
+revocation before the first and every subsequent provider-stream advance,
+overlay-commit rollback, and shell/process `.git` masking probes. They remain
+uncertified, unbound, contained previews rather than a release authorization.
 
 Hosted filesystem mutations are descriptor-relative and version-fenced.
 Replacement uses Linux atomic exchange/no-replace primitives so a final-entry
@@ -860,10 +862,10 @@ the same private overlay until a successful terminal status. Terminal
 it commits that overlay; commit failure crosses the mutation boundary and is
 reported with ambiguous-execution semantics while the batch itself is restored.
 Timeout, process failure, interrupt, or invalid diff discards the overlay.
-Platform `runtime/` is masked, HOME and TMP are ephemeral, host
-absolute paths are not exposed, system tooling is read-only, and the network
-namespace is disconnected. Synchronous output is drained under a hard byte
-ceiling. Long commands use session-owned process handles with bounded streaming
+Platform `runtime/` and workspace Git metadata are masked, HOME and TMP are
+ephemeral, host absolute paths are not exposed, system tooling is read-only,
+and the network namespace is disconnected. Synchronous output is drained under
+a hard byte ceiling. Long commands use session-owned process handles with bounded streaming
 output, stdin, interrupt, timeout, process-group cleanup, durable redacted
 records, and the common orphan reaper. Cancellation is carried into synchronous
 Core surfaces: shell and managed-process execution terminate complete process
@@ -942,7 +944,16 @@ re-enters the official runner, which rechecks current authority. Enabled app
 surfaces and collaboration/inter-agent commands therefore remain app/Core
 owned rather than being copied into a shadow registry. All tool results pass
 through the same bounded result compactor used by the Codex route before
-provider egress.
+provider egress. Every installed app surface must declare a conservative
+static effect class; a mixed surface may additionally declare one exact
+top-level argument discriminator whose static class is the maximum severity of
+all enumerated values. Omitted discriminator behavior is explicit, while an
+unknown value, malformed nested argument payload, invalid declaration, or
+missing declaration is `unclassified` and denied before execution. Read-only
+app calls may proceed through the production wrapper but their exact result
+bytes still require ordinary classification and egress admission; app-owned
+metadata cannot mint a certified public-result contract or authorize a
+mutation.
 
 ### 8. Secret management
 
@@ -2166,6 +2177,19 @@ The sanitized runtime config must remove inherited MCP server and plugin section
 The Codex adapter owns Maverick's managed Codex model selection for runtime agents. It should discover the visible Codex model catalog through the configured Codex binary, expose the viable model and reasoning-effort options through generic provider settings, and write the workspace-selected `model` plus the session-selected `model_reasoning_effort` into each runtime-scoped Codex config instead of inheriting those values from the operator home. Reasoning is not workspace-default authority. The fallback model is `gpt-5.6-sol`. New sessions default to the deepest supported single-agent reasoning effort: `max` when the model exposes it, otherwise the next deepest advertised effort. Codex `ultra` is a multi-agent execution mode rather than a reasoning effort and must not appear in the reasoning selector. Persisted model catalogs are normalized to this contract without requiring code changes when Codex adds or removes visible models.
 
 Persisted execution-binding digest compatibility remains fail closed. A newly materialized default may be excluded from legacy digest validation only as part of an explicit atomic schema-extension group; validation checks the bounded combinations of those groups rather than the power set of individual fields.
+
+Every agentic model identity carries a revision policy in addition to provider
+and model id. `exact` requires a non-empty revision copied unchanged through
+the immutable profile, capability certificate, execution binding, governed
+recipe, provider request, and effective authority; authenticated live catalog
+preflight must compare the provider's returned revision with that exact value
+before transport. `provider_alias` is the explicit alternative for providers
+whose public id is an alias: the policy and its certified catalog identity are
+still pinned through those records, and the endpoint, resolved model, upstream,
+and fallback constraints remain fail closed. Certificate/binding or
+profile/certificate disagreement prevents authority creation. A legacy record
+may hydrate only to the explicit `provider_alias` default as one atomic
+digest-compatible schema extension; it does not become an exact revision claim.
 
 Selectable agentic profiles bind their supported reasoning efforts and default into the immutable capability certificate and copy that exact contract into the session execution binding. `/api/providers` may use provider model metadata only for labels and descriptions; selectable values come from the active certificate. Chat renders a per-session reasoning selector only when that certified list is non-empty and does not recover missing choices from mutable model metadata. Before session creation and on every live certificate validation, Core rejects a requested effort outside the certified tuple or any mismatch between the certificate and binding. A behavior-changing built-in Codex adapter update publishes a new immutable profile revision and certificate, publishes a corresponding current binding for every enabled historical binding of the same model without rewriting the old binding, and suspends prior revisions whose adapter artifact digest is no longer current. A continuation selects the current enabled binding for the source profile/model; it must not silently move a historical non-default-model chat to the workspace default model. The declared Codex artifact bundle includes every app-server transport, thread, protocol, notification, steering, state, skill-input, configuration-policy, hook, reasoning, wrapper, sandbox, continuation-home, and legacy bridge module that can change provider behavior. Its revision-to-digest manifest is append-only: a historical digest may never be rewritten, and changing any declared artifact without adding a revision fails bootstrap and CI with `profile_revision_artifact_mismatch`. Codex profile revision 7 is the first revision certified against the expanded app-server bundle; revision 8 adds continuation-lineage ownership of the physical Codex conversation store and typed missing-thread failures; revision 9 adds admission/process fencing, live handoff revalidation, lineage snapshots, and sandbox-home identity; revision 10 binds orchestration decisions to live catalog snapshots; revision 11 adds remote-agentic containment gates at turn-queue admission and provider-start handoff; revision 12 binds turn-queue admission to the persisted provider-step quarantine/pairing gate without changing Codex execution semantics; revision 13 classifies terminal app-server overloads, drains the authoritative turn completion before detaching the event sink, and propagates the structured failure through the legacy bridge; revision 14 classifies terminal cybersecurity-policy blocks without exposing raw provider errors. In Chat's model menu each row presents the model label as its title, the provider label as its only subtitle, and the reasoning control inline at the right; rollout, certificate, tool-count, and technical profile badges do not belong in this compact picker.
 

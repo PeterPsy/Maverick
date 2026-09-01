@@ -55,10 +55,10 @@ class HostedHarnessRecipeTest(unittest.TestCase):
             OPENROUTER_GOVERNED_WORKSPACE_RECIPE,
         ):
             with self.subTest(recipe_id=recipe.recipe_id):
-                self.assertEqual(recipe.revision, "13")
+                self.assertEqual(recipe.revision, "14")
                 self.assertEqual(
                     recipe.semantic_projection_compiler_revision,
-                    "7",
+                    "8",
                 )
                 self.assertEqual(
                     recipe.tool_contract_revision,
@@ -207,10 +207,12 @@ def _binding(recipe):
         certificate_evidence_digest="a" * 64,
         runtime_engine_id="maverick-tool-loop",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version="26",
+        adapter_version="27",
         adapter_artifact_digest="b" * 64,
         model_provider_id=recipe.model_provider_id,
         model_id=recipe.model_id,
+        model_revision=recipe.model_revision,
+        model_revision_policy=recipe.model_revision_policy,
         provider_protocol=recipe.provider_protocol,
         provider_api_version=recipe.provider_api_version,
         routing_constraint=routing,
@@ -244,6 +246,8 @@ def _request(recipe, *, final: bool) -> AgenticModelRequest:
         request_id=f"recipe-request-{'final' if final else 'explore'}",
         correlation_id="recipe-turn",
         model_id=recipe.model_id,
+        model_revision=recipe.model_revision,
+        model_revision_policy=recipe.model_revision_policy,
         reasoning_effort=recipe.support_flags.reasoning_efforts[-1],
         content_blocks=(
             AgenticRequestContentBlock(

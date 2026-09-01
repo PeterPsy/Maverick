@@ -1,6 +1,7 @@
 {
   "tools": {
     "senses_operations_manifest": {
+      "effect_class": "read",
       "description": "Describe Senses Phase 8 backend surfaces, dependency requirements, frontend, and runtime routing work.",
       "input_schema": {
         "type": "object",
@@ -8,6 +9,7 @@
       }
     },
     "senses_reference_manifest": {
+      "effect_class": "read",
       "description": "Report the Senses reference surface. Capture reference search remains deferred after Phase 8 routing.",
       "input_schema": {
         "type": "object",
@@ -15,6 +17,7 @@
       }
     },
     "senses_view_filter": {
+      "effect_class": "read",
       "description": "Read the current Senses workspace-shared frontend view state. Requires an authenticated Maverick actor.",
       "input_schema": {
         "type": "object",
@@ -22,6 +25,7 @@
       }
     },
     "senses_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set Senses tab, query, and status filters. Requires workspace-admin authority because the state is workspace-shared.",
       "input_schema": {
         "type": "object",
@@ -49,6 +53,7 @@
       }
     },
     "senses_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Set a curated Senses custom view. Requires workspace-admin authority because the state is workspace-shared.",
       "input_schema": {
         "type": "object",
@@ -64,6 +69,7 @@
       }
     },
     "senses_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Return Senses to normal browsing. Requires workspace-admin authority because the state is workspace-shared.",
       "input_schema": {
         "type": "object",

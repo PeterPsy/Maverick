@@ -1,6 +1,33 @@
 {
   "commands": {
     "fitness-coach": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "status": "read",
+          "workouts.list": "read",
+          "workout.get": "read",
+          "workout.create": "mutating",
+          "workout.update": "mutating",
+          "workout.duplicate": "mutating",
+          "workout.delete": "destructive",
+          "workout.validate": "read",
+          "exercises.list": "read",
+          "exercise.get": "read",
+          "exercise.create": "mutating",
+          "exercise.update": "mutating",
+          "exercise.delete": "destructive",
+          "runs.list": "read",
+          "references.manifest": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating"
+        }
+      },
       "description": "Run Fitness Coach operations. Omit action for the operations manifest.",
       "argument_schema": {
         "type": "object",

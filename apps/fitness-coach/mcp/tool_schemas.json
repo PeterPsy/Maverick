@@ -1,6 +1,7 @@
 {
   "tools": {
     "fitness_coach_list_workouts": {
+      "effect_class": "read",
       "description": "List Fitness Coach workouts with optional query filtering.",
       "input_schema": {
         "type": "object",
@@ -12,6 +13,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_get_workout": {
+      "effect_class": "read",
       "description": "Read one workout by id.",
       "input_schema": {
         "type": "object",
@@ -28,6 +30,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_create_workout": {
+      "effect_class": "mutating",
       "description": "Create one workout. Blocks may be supplied as structured WorkoutBlock objects.",
       "input_schema": {
         "type": "object",
@@ -44,6 +47,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_update_workout": {
+      "effect_class": "mutating",
       "description": "Update one workout by id or by workout.id.",
       "input_schema": {
         "type": "object",
@@ -62,6 +66,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_duplicate_workout": {
+      "effect_class": "mutating",
       "description": "Duplicate one workout and keep block snapshots.",
       "input_schema": {
         "type": "object",
@@ -79,6 +84,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_delete_workout": {
+      "effect_class": "destructive",
       "description": "Delete one workout by id. Agents should confirm ambiguous deletes before calling this tool.",
       "input_schema": {
         "type": "object",
@@ -95,6 +101,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_validate_workout": {
+      "effect_class": "read",
       "description": "Validate whether a workout can be started.",
       "input_schema": {
         "type": "object",
@@ -111,6 +118,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_list_exercises": {
+      "effect_class": "read",
       "description": "List exercise library records with optional query and tag filters.",
       "input_schema": {
         "type": "object",
@@ -123,6 +131,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_get_exercise": {
+      "effect_class": "read",
       "description": "Read one exercise by id.",
       "input_schema": {
         "type": "object",
@@ -139,6 +148,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_create_exercise": {
+      "effect_class": "mutating",
       "description": "Create one reusable exercise with Storage media references.",
       "input_schema": {
         "type": "object",
@@ -156,6 +166,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_update_exercise": {
+      "effect_class": "mutating",
       "description": "Update one exercise by id or by exercise.id.",
       "input_schema": {
         "type": "object",
@@ -174,6 +185,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_delete_exercise": {
+      "effect_class": "destructive",
       "description": "Delete one exercise library record by id. Existing workout snapshots keep their saved exercise copy. Agents should confirm ambiguous deletes before calling this tool.",
       "input_schema": {
         "type": "object",
@@ -190,6 +202,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_list_runs": {
+      "effect_class": "read",
       "description": "List recent bounded workout run summaries.",
       "input_schema": {
         "type": "object",
@@ -202,6 +215,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_reference_manifest": {
+      "effect_class": "read",
       "description": "Describe Fitness Coach reference entity support. V1 returns no reference entity types.",
       "input_schema": {
         "type": "object",
@@ -211,6 +225,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_view_filter": {
+      "effect_class": "read",
       "description": "Read the shared Fitness Coach view filter state.",
       "input_schema": {
         "type": "object",
@@ -220,6 +235,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set Fitness Coach query, setup tab, or selected workout state.",
       "input_schema": {
         "type": "object",
@@ -234,6 +250,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Set a custom Fitness Coach view from explicit workout or exercise ids.",
       "input_schema": {
         "type": "object",
@@ -247,6 +264,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Clear a custom Fitness Coach view and return to normal search mode.",
       "input_schema": {
         "type": "object",

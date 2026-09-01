@@ -1,6 +1,27 @@
 {
   "tools": {
     "maverick_agents_app": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "catalog.compact": "read",
+          "catalog": "read",
+          "get_agent_definition": "read",
+          "upsert_agent_definition": "mutating",
+          "preview_prompt": "read",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating"
+        }
+      },
       "description": "Generic Agents app operations tool. With no arguments, returns operations.manifest; use dedicated tools for compact catalog reads and upserts.",
       "input_schema": {
         "type": "object",
@@ -61,6 +82,7 @@
       }
     },
     "agents_catalog_compact": {
+      "effect_class": "read",
       "description": "List workspace agent roles and agent types compactly without common prompt or role instruction content.",
       "input_schema": {
         "type": "object",
@@ -97,6 +119,7 @@
       }
     },
     "agents_get_agent_definition": {
+      "effect_class": "read",
       "description": "Read one full agent definition by agent type id; long prompt content is returned only for that explicit record.",
       "input_schema": {
         "type": "object",
@@ -127,6 +150,7 @@
       }
     },
     "agents_upsert_agent_definition": {
+      "effect_class": "mutating",
       "description": "Create or update an agent role prompt and agent type in one idempotent workspace-scoped write.",
       "input_schema": {
         "type": "object",
@@ -231,11 +255,13 @@
       }
     },
     "agents_view_filter": {
+      "effect_class": "read",
       "description": "Read the persisted Agents catalog view filter state.",
       "input_schema": {"type": "object", "additionalProperties": false},
       "output_schema": {"type": "object"}
     },
     "agents_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Set the persisted Agents catalog search query and entity type filter.",
       "input_schema": {
         "type": "object",
@@ -249,6 +275,7 @@
       "output_schema": {"type": "object"}
     },
     "agents_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Show a curated Agents view from explicit agent_type or role_prompt references.",
       "input_schema": {
         "type": "object",
@@ -275,16 +302,19 @@
       "output_schema": {"type": "object"}
     },
     "agents_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Clear a curated Agents view and return to normal catalog browsing.",
       "input_schema": {"type": "object", "additionalProperties": false},
       "output_schema": {"type": "object"}
     },
     "agents_reference_manifest": {
+      "effect_class": "read",
       "description": "Describe Agents reference entity types for app references.",
       "input_schema": {"type": "object", "additionalProperties": false},
       "output_schema": {"type": "object"}
     },
     "agents_reference_search": {
+      "effect_class": "read",
       "description": "Search agent_type or role_prompt references compactly.",
       "input_schema": {
         "type": "object",
@@ -303,6 +333,7 @@
       "output_schema": {"type": "object"}
     },
     "agents_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one agent_type or role_prompt reference by id.",
       "input_schema": {
         "type": "object",
@@ -321,6 +352,7 @@
       "output_schema": {"type": "object"}
     },
     "agents_reference_summarize": {
+      "effect_class": "read",
       "description": "Return a token-efficient summary for one agent_type or role_prompt reference.",
       "input_schema": {
         "type": "object",

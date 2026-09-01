@@ -14,6 +14,7 @@ from core.execution_policy.models import ExecutionMode
 from core.providers.agentic_models import (
     AgenticContextPolicy,
     AgenticRuntimePolicy,
+    ModelRevisionPolicy,
     RoutingConstraint,
 )
 
@@ -66,6 +67,8 @@ class RuntimeExecutionBinding:
     semantic_projection_compiler_revision: str = ""
     tool_contract_revision: str = ""
     context_policy_snapshot: AgenticContextPolicy | None = None
+    model_revision: str | None = None
+    model_revision_policy: ModelRevisionPolicy = "provider_alias"
 
 
 @dataclass(frozen=True)
@@ -108,6 +111,9 @@ _LEGACY_SCHEMA_FIELD_GROUPS = (
             "tool_contract_revision",
             "context_policy_snapshot",
         ),
+    ),
+    _LegacySchemaFieldGroup(
+        binding_fields=("model_revision", "model_revision_policy"),
     ),
 )
 
@@ -155,6 +161,8 @@ def build_runtime_execution_binding(
     semantic_projection_compiler_revision: str = "",
     tool_contract_revision: str = "",
     context_policy: AgenticContextPolicy | None = None,
+    model_revision: str | None = None,
+    model_revision_policy: ModelRevisionPolicy = "provider_alias",
 ) -> RuntimeExecutionBinding:
     """Build one self-digesting immutable execution binding."""
     if (
@@ -192,6 +200,11 @@ def build_runtime_execution_binding(
     normalized_reasoning = str(reasoning_effort or "").strip() or None
     if normalized_reasoning is not None and normalized_reasoning not in normalized_efforts:
         raise ValueError("Runtime execution binding reasoning effort is not certified.")
+    normalized_model_revision = str(model_revision or "").strip() or None
+    if model_revision_policy not in {"exact", "provider_alias"} or (
+        model_revision_policy == "exact" and normalized_model_revision is None
+    ):
+        raise ValueError("Runtime execution binding model revision policy is invalid.")
     policy_digest = canonical_digest(workspace_policy_ceiling)
     record = RuntimeExecutionBinding(
         execution_binding_id=f"runtime-binding-{uuid4().hex}",
@@ -240,6 +253,8 @@ def build_runtime_execution_binding(
         ),
         tool_contract_revision=tool_contract_revision,
         context_policy_snapshot=context_policy,
+        model_revision=normalized_model_revision,
+        model_revision_policy=model_revision_policy,
     )
     return replace(record, binding_digest=canonical_digest(record))
 
@@ -307,6 +322,8 @@ def execution_binding_from_document(document: dict[str, Any]) -> RuntimeExecutio
     payload.setdefault("provider_capability_catalog_digest", "")
     payload.setdefault("semantic_projection_compiler_revision", "")
     payload.setdefault("tool_contract_revision", "")
+    payload.setdefault("model_revision", None)
+    payload.setdefault("model_revision_policy", "provider_alias")
     payload["context_policy_snapshot"] = _context_policy_from_document(
         payload.get("context_policy_snapshot")
     )
@@ -377,6 +394,10 @@ def _legacy_binding_field_has_fail_closed_default(
         return payload[field_name] is None
     if field_name == "context_policy_snapshot":
         return payload[field_name] is None
+    if field_name == "model_revision":
+        return payload[field_name] is None
+    if field_name == "model_revision_policy":
+        return payload[field_name] == "provider_alias"
     return payload[field_name] == ""
 
 

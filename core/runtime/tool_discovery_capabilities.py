@@ -28,10 +28,18 @@ from core.runtime.tool_discovery_support import (
     required_string as _required_string,
 )
 from core.runtime.tool_errors import RuntimeToolError
+from core.shared.tool_effects import ToolArgumentEffectMap
 
 
 _DISCOVERY_TOKEN_KEY = secrets.token_bytes(32)
 _DISCOVERY_TOKEN_DOMAIN = b"maverick.runtime-tool-discovery.v1\0"
+
+
+def _argument_effect_payload(definition) -> dict[str, object]:
+    effect_map = getattr(definition, "argument_effects", None)
+    if not isinstance(effect_map, ToolArgumentEffectMap):
+        return {}
+    return {"effect_class_by_argument": effect_map.as_discovery_payload()}
 
 
 class RuntimeToolDiscoveryBroker:
@@ -76,6 +84,7 @@ class RuntimeToolDiscoveryBroker:
                         item.command_id,
                         context.session_id,
                     ),
+                    **_argument_effect_payload(item),
                 }
                 for item in page
             ],
@@ -169,6 +178,7 @@ class RuntimeToolDiscoveryBroker:
                         item.tool_name,
                         context.session_id,
                     ),
+                    **_argument_effect_payload(item),
                 }
                 for item in page
             ],

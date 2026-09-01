@@ -29,9 +29,9 @@ from core.runtime.full_workspace_contract import validate_full_workspace_contrac
 
 
 GOOGLE_CERTIFICATION_SUITE_ID = "maverick-google-interactions-agentic-contract"
-GOOGLE_CERTIFICATION_SUITE_VERSION = "30"
+GOOGLE_CERTIFICATION_SUITE_VERSION = "31"
 GOOGLE_CERTIFICATION_MATRIX_REVISION = (
-    "2026-09-01-r30-p4-transport-effect-atomicity-tcb20"
+    "2026-09-01-r31-p4-review-closure-model-revision-tcb21"
 )
 GOOGLE_CERTIFICATION_VALIDITY_DAYS = 45
 
@@ -70,14 +70,14 @@ def publish_google_preview_certificate(
     )
     certificate = CapabilityCertificate(
         certificate_id=definition.capability_certificate_id,
-        schema_version="4",
+        schema_version="5",
         runtime_engine_id=definition.runtime_engine_id,
         adapter_id=str(getattr(adapter, "adapter_id", definition.adapter_id)),
         adapter_version=str(getattr(adapter, "adapter_version", "")),
         adapter_artifact_digest=run.adapter_artifact_digest,
         model_provider_id=definition.model_provider_id,
         model_id=definition.model_id,
-        model_revision="stable-2026-07",
+        model_revision=definition.model_revision,
         provider_protocol=definition.provider_protocol,
         provider_api_version=definition.provider_api_version,
         certified_upstream_ids=(),
@@ -113,6 +113,7 @@ def publish_google_preview_certificate(
         context_policy_revision=(
             "" if definition.context_policy is None else definition.context_policy.revision
         ),
+        model_revision_policy=definition.model_revision_policy,
     )
     validate_full_workspace_contract_claim(
         profile=definition,

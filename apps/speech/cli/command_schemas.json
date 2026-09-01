@@ -1,6 +1,22 @@
 {
   "commands": {
     "speech": {
+      "effect_class": "mutating",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "operations.manifest": "read",
+          "list_engines": "read",
+          "engine_health": "read",
+          "get_settings": "read",
+          "worker_status": "read",
+          "prewarm_synthesis_worker": "mutating",
+          "prewarm_worker": "mutating",
+          "set_engine": "mutating",
+          "transcribe_file": "read"
+        }
+      },
       "description": "Configure workspace Speech engine/language preferences, inspect health/settings, prewarm persistent workers, and transcribe bounded workspace Storage audio files. Live microphone streaming, inline audio payloads, and worker stop/reload are not exposed through CLI.",
       "secret_selectors": [
         {

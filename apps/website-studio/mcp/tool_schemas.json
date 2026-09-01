@@ -1,14 +1,17 @@
 {
   "tools": {
     "website_manifest": {
+      "effect_class": "read",
       "description": "Return Website Studio health, schema, and implementation phase information.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
     },
     "website_sites_list": {
+      "effect_class": "read",
       "description": "List Website Studio site records in the workspace.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
     },
     "website_bootstrap": {
+      "effect_class": "read",
       "description": "Return lightweight first-paint Website Studio state: sites, selected site, routes-only sitemap, and current preview reference.",
       "input_schema": {
         "type": "object",
@@ -20,10 +23,12 @@
       }
     },
     "website_site_status": {
+      "effect_class": "read",
       "description": "Return counts, revision ids, and working diff status for one site.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
     "website_site_create": {
+      "effect_class": "mutating",
       "description": "Create a new manual Website Studio site with starter static source.",
       "input_schema": {
         "type": "object",
@@ -38,14 +43,17 @@
       }
     },
     "website_site_archive": {
+      "effect_class": "destructive",
       "description": "Archive one Website Studio site without deleting its source or history.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
     "website_site_restore": {
+      "effect_class": "mutating",
       "description": "Restore one archived Website Studio site to draft status.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
     "website_site_rename": {
+      "effect_class": "mutating",
       "description": "Rename a Website Studio site and optionally update slug or primary domain.",
       "input_schema": {
         "type": "object",
@@ -60,6 +68,7 @@
       }
     },
     "website_site_duplicate": {
+      "effect_class": "mutating",
       "description": "Duplicate one Website Studio site's current source tree into a new draft site.",
       "input_schema": {
         "type": "object",
@@ -73,10 +82,12 @@
       }
     },
     "website_site_set_active": {
+      "effect_class": "mutating",
       "description": "Select the active Website Studio site for workspace navigation and contextual agent surfaces.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
     "website_git_connections_list": {
+      "effect_class": "read",
       "description": "List redaction-safe GitHub repository connections prepared for Website Studio.",
       "input_schema": {
         "type": "object",
@@ -85,6 +96,7 @@
       }
     },
     "website_git_connection_prepare": {
+      "effect_class": "mutating",
       "description": "Prepare a GitHub repository connection and return Vault/Core Secrets grant requirements without receiving raw secret values.",
       "input_schema": {
         "type": "object",
@@ -102,6 +114,7 @@
       }
     },
     "website_git_connection_activate": {
+      "effect_class": "mutating",
       "description": "Mark a prepared GitHub connection as backed by a Vault/Core Secrets grant without receiving raw token values.",
       "input_schema": {
         "type": "object",
@@ -115,6 +128,7 @@
       }
     },
     "website_environments_list": {
+      "effect_class": "read",
       "description": "List configured preview/staging/production environments for one Website Studio site.",
       "input_schema": {
         "type": "object",
@@ -124,6 +138,7 @@
       }
     },
     "website_environment_configure": {
+      "effect_class": "mutating",
       "description": "Create or update a site environment and approval requirement.",
       "input_schema": {
         "type": "object",
@@ -140,6 +155,7 @@
       }
     },
     "website_publish_targets_list": {
+      "effect_class": "read",
       "description": "List configured Website Studio publish targets for one site.",
       "input_schema": {
         "type": "object",
@@ -149,6 +165,7 @@
       }
     },
     "website_publish_target_configure": {
+      "effect_class": "mutating",
       "description": "Configure a managed static or Git pull-request publish target for one site environment.",
       "input_schema": {
         "type": "object",
@@ -164,6 +181,7 @@
       }
     },
     "website_import_git": {
+      "effect_class": "mutating",
       "description": "Import a public GitHub HTTPS repository or app-local Git repository into a new or existing site source tree.",
       "input_schema": {
         "type": "object",
@@ -184,6 +202,7 @@
       ]
     },
     "website_import_zip": {
+      "effect_class": "mutating",
       "description": "Safely import a base64 ZIP into a new or existing site source tree.",
       "input_schema": {
         "type": "object",
@@ -198,6 +217,7 @@
       }
     },
     "website_sync_source": {
+      "effect_class": "mutating",
       "description": "Sync a Git-backed site from its retained source reference. Blocks when unpublished local changes exist unless confirm=true is supplied after review.",
       "input_schema": {
         "type": "object",
@@ -217,6 +237,7 @@
       ]
     },
     "website_sitemap": {
+      "effect_class": "read",
       "description": "Return the indexed static HTML sitemap for one site. Use mode=routes-only for first-paint route/page selection without asset inventory.",
       "input_schema": {
         "type": "object",
@@ -229,10 +250,12 @@
       }
     },
     "website_navigation_analyze": {
+      "effect_class": "read",
       "description": "Return visual site navigation with pages, sections, anchors, component candidates, preview status, analysis coverage, and warnings while excluding source inventory files.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
     "website_search": {
+      "effect_class": "read",
       "description": "Search sites and indexed pages.",
       "input_schema": {
         "type": "object",
@@ -241,6 +264,7 @@
       }
     },
     "website_read_file": {
+      "effect_class": "read",
       "description": "Read one UTF-8 text file from a selected site's source tree.",
       "input_schema": {
         "type": "object",
@@ -250,6 +274,7 @@
       }
     },
     "website_write_file": {
+      "effect_class": "mutating",
       "description": "Write one UTF-8 text file in a selected site's source tree, guarded by an expected hash. Use expected_hash=new for new files.",
       "input_schema": {
         "type": "object",
@@ -264,6 +289,7 @@
       }
     },
     "website_apply_patch": {
+      "effect_class": "mutating",
       "description": "Replace the first matching text segment in one site file, guarded by an expected hash.",
       "input_schema": {
         "type": "object",
@@ -279,10 +305,12 @@
       }
     },
     "website_diff": {
+      "effect_class": "read",
       "description": "Return a unified diff between the active revision snapshot and the working source tree.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
     "website_list_changes": {
+      "effect_class": "read",
       "description": "List bounded working diff entries, changesets, publish requests, revisions, builds, sync runs, and deployments for one site.",
       "input_schema": {
         "type": "object",
@@ -299,6 +327,7 @@
       }
     },
     "website_build_validate": {
+      "effect_class": "mutating",
       "description": "Record a deterministic build validation, preparing bounded static/PHP/Node preview artifacts and rendered route records when supported.",
       "input_schema": {
         "type": "object",
@@ -308,6 +337,7 @@
       }
     },
     "website_builds_list": {
+      "effect_class": "read",
       "description": "List bounded recorded build validation attempts for one site.",
       "input_schema": {
         "type": "object",
@@ -322,6 +352,7 @@
       }
     },
     "website_maintenance_prune": {
+      "effect_class": "destructive",
       "description": "Prune old Website Studio build, preview, runtime session records, and unreferenced build artifacts according to a bounded retention policy.",
       "input_schema": {
         "type": "object",
@@ -336,6 +367,7 @@
       }
     },
     "website_build_preview": {
+      "effect_class": "read",
       "description": "Return the preview contract for one indexed route, including preview HTML, isolated preview_url, runtime status, warnings, and missing runtime requirements.",
       "input_schema": {
         "type": "object",
@@ -345,6 +377,7 @@
       }
     },
     "website_preview_document": {
+      "effect_class": "read",
       "description": "Return one prepared Website Studio preview document by preview id for the isolated preview runtime frontend.",
       "input_schema": {
         "type": "object",
@@ -354,6 +387,7 @@
       }
     },
     "website_preview_report": {
+      "effect_class": "mutating",
       "description": "Create a bounded preview observability report with source mapping, local asset coverage, acceptance checks, and browser probe contract.",
       "input_schema": {
         "type": "object",
@@ -369,6 +403,7 @@
       }
     },
     "website_runtime_status": {
+      "effect_class": "read",
       "description": "Return bounded runtime health, latest build, latest preview, and missing requirements for one Website Studio site.",
       "input_schema": {
         "type": "object",
@@ -378,6 +413,7 @@
       }
     },
     "website_publish_request": {
+      "effect_class": "mutating",
       "description": "Create a guarded publish request for a site's current working diff.",
       "input_schema": {
         "type": "object",
@@ -387,6 +423,7 @@
       }
     },
     "website_approval_record": {
+      "effect_class": "mutating",
       "description": "Record an explicit approval event for a pending publish request or rollback target.",
       "input_schema": {
         "type": "object",
@@ -403,6 +440,7 @@
       }
     },
     "website_approvals_list": {
+      "effect_class": "read",
       "description": "List Website Studio approval events, optionally scoped to one site.",
       "input_schema": {
         "type": "object",
@@ -411,6 +449,7 @@
       }
     },
     "website_publish": {
+      "effect_class": "destructive",
       "description": "Publish an approved working diff into an immutable Website Studio revision and deployment record.",
       "input_schema": {
         "type": "object",
@@ -430,6 +469,7 @@
       ]
     },
     "website_rollback": {
+      "effect_class": "destructive",
       "description": "Restore a selected revision into the working tree after explicit approval.",
       "input_schema": {
         "type": "object",
@@ -444,6 +484,7 @@
       }
     },
     "website_active_context": {
+      "effect_class": "read",
       "description": "Return bounded site/page context for the active Website Studio view.",
       "input_schema": {
         "type": "object",
@@ -452,6 +493,7 @@
       }
     },
     "website_page_context": {
+      "effect_class": "read",
       "description": "Return bounded visual site/page/component context, sanitized runtime report summary, and rendered visual_assets; full inventory is opt-in with include_inventory=true.",
       "input_schema": {
         "type": "object",
@@ -474,10 +516,12 @@
       }
     },
     "website_reference_manifest": {
+      "effect_class": "read",
       "description": "Return Website Studio reference entity metadata.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
     },
     "website_reference_search": {
+      "effect_class": "read",
       "description": "Search Website Studio reference entities.",
       "input_schema": {
         "type": "object",
@@ -486,6 +530,7 @@
       }
     },
     "website_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one Website Studio reference entity.",
       "input_schema": {
         "type": "object",
@@ -496,6 +541,7 @@
       }
     },
     "website_reference_summarize": {
+      "effect_class": "read",
       "description": "Summarize one Website Studio reference entity.",
       "input_schema": {
         "type": "object",
@@ -506,10 +552,12 @@
       }
     },
     "website_studio_reference_manifest": {
+      "effect_class": "read",
       "description": "Return Website Studio reference entity metadata.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
     },
     "website_studio_reference_search": {
+      "effect_class": "read",
       "description": "Search Website Studio reference entities.",
       "input_schema": {
         "type": "object",
@@ -518,6 +566,7 @@
       }
     },
     "website_studio_reference_resolve": {
+      "effect_class": "read",
       "description": "Resolve one Website Studio reference entity.",
       "input_schema": {
         "type": "object",
@@ -528,6 +577,7 @@
       }
     },
     "website_studio_reference_summarize": {
+      "effect_class": "read",
       "description": "Summarize one Website Studio reference entity.",
       "input_schema": {
         "type": "object",
@@ -538,10 +588,12 @@
       }
     },
     "website_studio_view_filter": {
+      "effect_class": "read",
       "description": "Read persisted Website Studio view filter state.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
     },
     "website_studio_set_view_filter": {
+      "effect_class": "mutating",
       "description": "Persist Website Studio search/filter view state.",
       "input_schema": {
         "type": "object",
@@ -550,6 +602,7 @@
       }
     },
     "website_studio_set_custom_view": {
+      "effect_class": "mutating",
       "description": "Persist an explicit custom Website Studio view selection.",
       "input_schema": {
         "type": "object",
@@ -558,6 +611,7 @@
       }
     },
     "website_studio_clear_custom_view": {
+      "effect_class": "mutating",
       "description": "Clear the custom Website Studio view state.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
     }

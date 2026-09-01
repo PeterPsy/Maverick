@@ -1,0 +1,61 @@
+{
+  "commands": {
+    "app-store": {
+      "effect_class": "destructive",
+      "effect_class_by_argument": {
+        "argument_name": "action",
+        "omitted_effect_class": "read",
+        "value_effect_classes": {
+          "catalog": "read",
+          "state": "read",
+          "public_store.url": "read",
+          "public_submissions.identity": "read",
+          "public_submissions.create": "destructive",
+          "public_submissions.read": "read",
+          "view_filter": "read",
+          "set_view_filter": "mutating",
+          "set_custom_view": "mutating",
+          "clear_custom_view": "mutating",
+          "pinned_apps.list": "read",
+          "pinned_apps.set": "mutating",
+          "pinned_apps.toggle": "mutating",
+          "remember_install": "mutating",
+          "references.manifest": "read",
+          "references.search": "read",
+          "references.resolve": "read",
+          "references.summarize": "read"
+        }
+      },
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "catalog",
+              "state",
+              "public_store.url",
+              "public_submissions.identity",
+              "public_submissions.create",
+              "public_submissions.read",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "pinned_apps.list",
+              "pinned_apps.set",
+              "pinned_apps.toggle",
+              "remember_install",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize"
+            ],
+            "default": "catalog"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  }
+}

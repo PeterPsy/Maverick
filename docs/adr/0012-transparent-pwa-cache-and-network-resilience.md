@@ -107,6 +107,13 @@ requests remain bypassed. Atomic install, digest and size verification,
 candidate rollback, recovery, waiting-worker coordination, namespace
 ownership, and the server-side kill switch are preserved.
 
+App and widget documents use distinct browser origins, so they are not clients
+of the shell-origin worker. Their generated `/apps/<app_id>/assets/...`
+references are served from absolute public platform-origin URLs with verified
+HTTP cache policy, CORS/CORP, and compression. The former
+`maverick-app-static-v2` Cache API path is retained only as an exact legacy name
+for bounded deletion; it is not part of normal app loading.
+
 ### 6. Rollout configuration is cache-centric
 
 The browser projection uses `maverick.pwa-config.v2`. It retains the service

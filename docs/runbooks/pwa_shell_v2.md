@@ -11,8 +11,10 @@ agent, tool, capability, authority record, or persistent outbox.
 - Generated worker: `apps/base-shell/frontend/dist/sw.js`
 - Standard navigation fallback: verified `index.html`
 - Versioned shell cache: `maverick-static-v2:<build_id>`
-- Visited verified app assets: `maverick-app-static-v2`
-- Exact migratable legacy cache: `maverick-base-shell-v3`
+- App/widget bundles: public platform-origin HTTP cache with verified manifest
+  policy, CORS/CORP, and gzip/Brotli
+- Exact migratable legacy caches: `maverick-app-static-v2` and
+  `maverick-base-shell-v3`
 
 There is no alternative HTML document, synthetic product response, or global
 transport-status UI. No operation in this runbook may clear the whole origin.
@@ -28,6 +30,7 @@ npm --prefix apps/base-shell test
 npm --prefix apps/base-shell run test:service-worker
 python3 -m unittest discover -s tests/unit/apps -p 'test_frontend_assets.py'
 python3 -m unittest discover -s tests/unit/pwa -p 'test_feature_flags.py'
+python3 -m unittest tests.integration.app_hosting.test_app_frame_browser_origin
 PYTHONPATH=. MAVERICK_TEST_LEVEL=slow python3 \
   apps/base-shell/tests/test_builtin_apps.py \
   BuiltinAppsTestCase.test_platform_host_serves_root_shell_pwa_assets_without_session
@@ -79,8 +82,11 @@ replace the physical Safari gate.
 - Non-shell navigations: no service-worker fallback.
 - Immutable shell assets: cache-first only after size/SHA-256 verification.
 - Other selected static assets: network-first, then verified cached bytes.
-- Visited app assets: cache only responses that Core marked public, one-year,
-  immutable, same-origin, non-HTML static bytes.
+- App/widget HTML: Core rewrites quoted `/apps/<app_id>/assets/...` `src`/`href`
+  values to the exact public platform origin.
+- App/widget assets: browser HTTP cache; only manifest-verified immutable bytes
+  receive one-year immutable policy, and public CORS/CORP plus compression are
+  preserved. The shell worker does not intercept these isolated-client loads.
 - API, SSE, WebSocket, backend, sidecar, range, non-GET, cross-origin, and
   `/sw.js`: complete bypass.
 
@@ -102,8 +108,8 @@ the browser; it must never receive generated fallback HTML.
    An explicit operator test may send `MAVERICK_SKIP_WAITING`; it is not a
    transport-recovery action.
 7. Confirm activation removes only obsolete `maverick-static-v2:*` caches and
-   the exact legacy cache. The visited-app cache, unrelated Cache API entries,
-   IndexedDB, and OPFS remain.
+   the two exact legacy caches. Unrelated Cache API entries, IndexedDB, and OPFS
+   remain.
 
 ## Corruption and recovery drill
 
@@ -172,8 +178,8 @@ timestamp, and pass/fail. Reject the row if:
 - API/SSE/WebSocket/backend/sidecar/range traffic is intercepted;
 - `401`/`403` remains in retry/loading or uses a stale authorization result;
 - an interrupted update harms the prior worker/cache; or
-- activation, recovery, or rollback removes IndexedDB, OPFS, visited-app assets
-  during ordinary activation, or an unrelated Cache API entry.
+- activation, recovery, or rollback removes IndexedDB, OPFS, or an unrelated
+  Cache API entry.
 
 Also open the build once in Safari private browsing. Denied or ephemeral storage
 is supported server-first degradation: rendering must not crash, claim durable

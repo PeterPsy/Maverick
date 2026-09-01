@@ -1194,9 +1194,17 @@ alias for the superseded fallback-document field.
 The root worker owns only these Cache API namespaces:
 
 - `maverick-static-v2:<build_id>` for an atomically installed, verified shell;
-- `maverick-app-static-v2` for static assets of visited apps that Core served
-  with the verified `public, max-age=31536000, immutable` contract;
-- the exact legacy `maverick-base-shell-v3` name for bounded migration cleanup.
+- the exact legacy `maverick-app-static-v2` and `maverick-base-shell-v3` names
+  solely for bounded migration cleanup.
+
+App and widget documents run on an isolated origin and therefore are not
+controlled clients of the shell-origin service worker. Core rewrites generated
+HTML `src` and `href` references below `/apps/<app_id>/assets/` to the exact
+public platform origin. Those requests use the browser HTTP cache, not a shell
+Cache API namespace: Core preserves compression, emits the public CORS/CORP
+contract, and grants one-year immutable caching only to bytes verified against
+the app's frontend manifest. The obsolete `maverick-app-static-v2` runtime path
+must not be presented as the normal app-loading cache.
 
 Navigation is network-first with a bounded timeout. Only `/`, `/app`, and
 `/app/...` may fall back to the verified normal Base Shell entrypoint. Other
@@ -1204,17 +1212,18 @@ navigations keep ordinary browser/network behavior and receive no alternative
 product document or synthetic response from the worker. Generated immutable
 shell assets are cache-first only after digest and size verification. Other
 pre-cached public assets are revalidated and fall back only to matching
-verified bytes. API, SSE, WebSocket, backend, sidecar, service-worker, non-GET,
-cross-origin, and range requests are never answered by the worker.
+verified bytes. Public app bundles and API, SSE, WebSocket, backend, sidecar,
+service-worker, non-GET, cross-origin, and range requests are never answered by
+the worker.
 
 Install failure deletes only the incomplete cache for the candidate build and
 leaves the active build untouched. A waiting worker activates through its
 normal lifecycle or an explicit release action that is independent from
 transport state; controller change reloads already controlled clients so an
 old shell does not continue under an incompatible worker. Activation removes
-only obsolete known shell-cache names, never the app static runtime cache,
-IndexedDB, OPFS, or unrelated Cache API entries. Kill-switch cleanup adds the
-known app static cache and unregisters the root worker, while recovery repairs
+only obsolete known shell-cache names, including the two exact legacy names,
+never IndexedDB, OPFS, or unrelated Cache API entries. Kill-switch cleanup uses
+the same bounded names and unregisters the root worker, while recovery repairs
 missing or corrupt entries in place without discarding entries that still
 verify.
 

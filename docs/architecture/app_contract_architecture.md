@@ -1568,12 +1568,17 @@ revalidated. Any public app artifact is served with a restrictive document CSP
 or mislabeled bytes from becoming app-controlled platform-origin documents.
 Gzip or Brotli content encoding and cross-origin headers allow isolated app and
 widget frames plus Vite-generated `crossorigin` module/style tags to load
-bundles without platform session cookies on every asset request. Source maps
-and source-like extensions such as `.ts`, `.tsx`, `.jsx`, `.vue`, `.svelte`,
-`.py`, and `.env` must not be treated as public static assets or SPA fallback
-routes. Workspace-local editable backend entrypoints are additionally
-workspace-admin gated until a dedicated app backend sandbox/governance model is
-available.
+bundles without platform session cookies on every asset request. When Core
+serves an isolated HTML document, it converts quoted `src` and `href` references
+below `/apps/<app_id>/assets/` into absolute URLs on the exact platform origin;
+API and navigation references remain on the isolated proxy. This is the
+normative browser-cache path for app bundles. The shell service worker cannot
+control a document on another origin, so app artifacts use their verified HTTP
+cache policy rather than a shell-owned runtime Cache API entry. Source maps and
+source-like extensions such as `.ts`, `.tsx`, `.jsx`, `.vue`, `.svelte`, `.py`,
+and `.env` must not be treated as public static assets or SPA fallback routes.
+Workspace-local editable backend entrypoints are additionally workspace-admin
+gated until a dedicated app backend sandbox/governance model is available.
 
 Browser persistence does not change app ownership. An app that later opts a
 read model into the shared PWA SDK must declare a canonical Maverick

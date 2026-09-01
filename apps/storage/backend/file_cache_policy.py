@@ -20,6 +20,7 @@ from storage_provider_model import GOOGLE_DRIVE_PROVIDER
 FILE_CACHE_DESCRIPTOR_SCHEMA = "maverick.storage-file-cache-descriptor.v1"
 LOCAL_PERSISTENCE_POLICY_REVISION = "maverick.local-persistence-policy.v2"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+MAX_BROWSER_FILE_CACHE_ENTRY_BYTES = 64 * 1024 * 1024
 
 
 def stable_source_version(file_record: dict[str, Any]) -> str:
@@ -39,9 +40,10 @@ def file_cache_descriptor_payload(
     *,
     file_record: dict[str, Any],
     requested_source_version: str,
+    approval: dict[str, Any] | None = None,
     app_id: str = "storage",
 ) -> dict[str, Any]:
-    """Project trusted identity while keeping unclassified bytes network-only."""
+    """Project trusted identity and an exact-version, fail-closed approval."""
     file_id = str(file_record.get("file_id") or file_record.get("id") or "").strip()
     source_version = stable_source_version(file_record)
     requested = str(requested_source_version or "").strip()
@@ -67,11 +69,14 @@ def file_cache_descriptor_payload(
             operation="file.cache_descriptor",
             expected_fields=["stable_storage_file_id", "source_version"],
         )
+    approved = _valid_approval(approval, file_id=file_id, source_version=source_version)
+    too_large = max(0, int(file_record.get("size_bytes") or 0)) > MAX_BROWSER_FILE_CACHE_ENTRY_BYTES
     return _descriptor(
         file_record=file_record,
         file_id=file_id,
         source_version=source_version,
-        reason_code="unclassified",
+        reason_code="entry_too_large" if approved and too_large else ("approved_exact_version" if approved else "approval_required"),
+        approval=approval if approved and not too_large else None,
         app_id=app_id,
     )
 
@@ -83,20 +88,21 @@ def _descriptor(
     source_version: str,
     reason_code: str,
     app_id: str,
+    approval: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     digest = str(file_record.get("sha256") or "").strip().lower()
     expected_sha256 = digest if SHA256_PATTERN.fullmatch(digest) else ""
     return {
         "schema": FILE_CACHE_DESCRIPTOR_SCHEMA,
-        "eligible": False,
+        "eligible": approval is not None,
         "reason_code": reason_code,
         "policy": {
             "policy_revision": LOCAL_PERSISTENCE_POLICY_REVISION,
-            "data_class": "unclassified",
+            "data_class": str(approval.get("data_class") or "unclassified") if approval else "unclassified",
             "provenance": "attachment",
-            "cache_approved": False,
-            "privacy_approved": False,
-            "regulated_allowlisted": False,
+            "cache_approved": bool(approval.get("cache_approved")) if approval else False,
+            "privacy_approved": bool(approval.get("privacy_approved")) if approval else False,
+            "regulated_allowlisted": bool(approval.get("regulated_allowlisted")) if approval else False,
         },
         "file": {
             "file_id": file_id,
@@ -112,6 +118,18 @@ def _descriptor(
             ),
         },
     }
+
+
+def _valid_approval(approval: dict[str, Any] | None, *, file_id: str, source_version: str) -> bool:
+    return (
+        isinstance(approval, dict)
+        and str(approval.get("file_id") or "").strip() == file_id
+        and str(approval.get("source_version") or "").strip() == source_version
+        and str(approval.get("data_class") or "").strip() == "workspace_internal"
+        and approval.get("cache_approved") is True
+        and approval.get("privacy_approved") is False
+        and approval.get("regulated_allowlisted") is False
+    )
 
 
 def _media_url(*, app_id: str, file_record: dict[str, Any], file_id: str, source_version: str) -> str:

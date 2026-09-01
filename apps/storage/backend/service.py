@@ -8,7 +8,13 @@ from pathlib import Path
 import tempfile
 from typing import Any, BinaryIO
 
-from errors import StorageValidationError
+from errors import StorageAuthorizationError, StorageValidationError
+from file_cache_approval_store import (
+    approval_for_version,
+    approve_version,
+    public_approval,
+    revoke_approval,
+)
 from file_cache_policy import file_cache_descriptor_payload, stable_source_version
 from drive_connection_store import append_audit, now_timestamp, resolve_connected_connection, sync_state_for_connection, update_connection_sync_state
 from drive_oauth import (
@@ -124,6 +130,8 @@ DATA_CHANGED_RESOURCES = {
     "file.content.write": "files",
     "image.compose_pair": "files",
     "image.compose_side_by_side": "files",
+    "file.cache_policy.approve": "files",
+    "file.cache_policy.revoke": "files",
     "drive_connections.start_oauth": "drive-connections",
     "drive_connections.complete_oauth": "drive-connections",
     "drive_connections.disconnect": "drive-connections",
@@ -511,8 +519,57 @@ def handle_action(
         return 200, file_cache_descriptor_payload(
             file_record=record,
             requested_source_version=str(body.get("source_version") or ""),
+            approval=approval_for_version(
+                data_root,
+                file_id=str(record.get("file_id") or record.get("id") or ""),
+                source_version=stable_source_version(record),
+            ),
             app_id=str(body.get("_app_id") or "storage"),
         )
+    if action == "file.cache_policy.approve":
+        _require_file_cache_approval_authority(body)
+        _require_explicit_confirmation(body, operation=action)
+        record = _file_record_for_path_action(
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            body=body,
+        )
+        file_id = str(record.get("file_id") or record.get("id") or "").strip()
+        source_version = stable_source_version(record)
+        requested_version = str(body.get("source_version") or "").strip()
+        if not source_version or requested_version != source_version:
+            raise StorageValidationError(
+                "Storage file cache approval requires the current exact source_version.",
+                operation=action,
+                expected_fields=["stable_storage_file_id", "source_version", "confirm"],
+            )
+        approval = approve_version(
+            data_root,
+            file_id=file_id,
+            source_version=source_version,
+            approved_by_user_id=str(body.get("_actor_user_id") or ""),
+        )
+        return 200, {
+            "approval": public_approval(approval),
+            "descriptor": file_cache_descriptor_payload(
+                file_record=record,
+                requested_source_version=source_version,
+                approval=approval,
+                app_id=str(body.get("_app_id") or "storage"),
+            ),
+        }
+    if action == "file.cache_policy.revoke":
+        _require_file_cache_approval_authority(body)
+        _require_explicit_confirmation(body, operation=action)
+        record = _file_record_for_path_action(
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            body=body,
+        )
+        file_id = str(record.get("file_id") or record.get("id") or "").strip()
+        return 200, {"file_id": file_id, "revoked": revoke_approval(data_root, file_id=file_id)}
     if action == "folder.media_stream":
         if not media_route:
             raise StorageValidationError(
@@ -1857,6 +1914,27 @@ def _require_delete_confirmation(body: dict[str, Any]) -> None:
         operation="drive_trash",
         expected_fields=["confirm"],
         allowed_values={"delete_policy": ["user_confirmed", "workspace_policy", "explicit_policy"]},
+    )
+
+
+def _require_file_cache_approval_authority(body: dict[str, Any]) -> None:
+    workspace_role = str(body.get("_workspace_role") or "").strip().lower()
+    platform_role = str(body.get("_platform_role") or "").strip().lower()
+    if workspace_role == "admin" or platform_role == "admin":
+        return
+    raise StorageAuthorizationError(
+        "Workspace administrator authority is required to approve browser persistence of file bytes.",
+        operation="file.cache_policy",
+    )
+
+
+def _require_explicit_confirmation(body: dict[str, Any], *, operation: str) -> None:
+    if body.get("confirm") is True:
+        return
+    raise StorageValidationError(
+        "Storage file cache policy changes require confirm=true.",
+        operation=operation,
+        expected_fields=["confirm"],
     )
 
 

@@ -51,6 +51,15 @@ class StorageConflictError(RuntimeError):
         self.actual_occurrences = actual_occurrences
 
 
+class StorageAuthorizationError(PermissionError):
+    """Raised when an authenticated actor lacks authority for an operation."""
+
+    def __init__(self, detail: str, *, operation: str = "") -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.operation = operation
+
+
 def validation_error_payload(error: StorageValidationError) -> dict[str, Any]:
     """Return a machine-correctable validation error payload."""
     payload: dict[str, Any] = {
@@ -87,4 +96,12 @@ def conflict_error_payload(error: StorageConflictError) -> dict[str, Any]:
         payload["expected_occurrences"] = error.expected_occurrences
     if error.actual_occurrences is not None:
         payload["actual_occurrences"] = error.actual_occurrences
+    return payload
+
+
+def authorization_error_payload(error: StorageAuthorizationError) -> dict[str, Any]:
+    """Return a redaction-safe authorization error payload."""
+    payload = {"error": "forbidden", "detail": error.detail}
+    if error.operation:
+        payload["operation"] = error.operation
     return payload

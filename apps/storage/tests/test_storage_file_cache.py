@@ -17,6 +17,7 @@ BACKEND_ROOT = APP_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from drive_connection_store import replace_connection  # noqa: E402
+from errors import StorageAuthorizationError  # noqa: E402
 from file_cache_policy import stable_source_version  # noqa: E402
 from google_drive_provider import stable_storage_file_id  # noqa: E402
 from inventory import upsert_remote_file_records  # noqa: E402
@@ -62,7 +63,7 @@ class StorageFileCacheContractTest(unittest.TestCase):
             self.assertEqual(descriptor_status, 200)
             self.assertEqual(descriptor["schema"], "maverick.storage-file-cache-descriptor.v1")
             self.assertFalse(descriptor["eligible"])
-            self.assertEqual(descriptor["reason_code"], "unclassified")
+            self.assertEqual(descriptor["reason_code"], "approval_required")
             self.assertEqual(descriptor["file"]["expected_sha256"], expected_sha256)
             self.assertEqual(descriptor["file"]["source_version"], file_record["source_version"])
             stream_query = parse_qs(urlparse(descriptor["file"]["media_url"]).query)
@@ -114,6 +115,112 @@ class StorageFileCacheContractTest(unittest.TestCase):
             )
             self.assertEqual(media_status, 200)
             self.assertEqual(media["file_response"]["etag"], expected_sha256)
+
+    def test_admin_exact_version_approval_produces_and_revokes_an_eligible_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            uploaded_root.mkdir(parents=True)
+            generated_root.mkdir(parents=True)
+            content = b"approved offline bytes"
+
+            _status, uploaded = handle_action(
+                data_root,
+                uploaded_root,
+                generated_root,
+                {
+                    "action": "upload_file",
+                    "role": "uploaded",
+                    "file_name": "approved.txt",
+                    "content_base64": b64encode(content).decode("ascii"),
+                },
+            )
+            file_record = uploaded["file"]
+            approval_request = {
+                "action": "file.cache_policy.approve",
+                "stable_storage_file_id": file_record["file_id"],
+                "source_version": file_record["source_version"],
+                "confirm": True,
+            }
+
+            with self.assertRaises(StorageAuthorizationError):
+                handle_action(data_root, uploaded_root, generated_root, approval_request)
+
+            status, approved = handle_action(
+                data_root,
+                uploaded_root,
+                generated_root,
+                {
+                    **approval_request,
+                    "_workspace_role": "admin",
+                    "_actor_user_id": "user-admin",
+                },
+            )
+
+            self.assertEqual(status, 200)
+            self.assertNotIn("approved_by_user_id", approved["approval"])
+            self.assertEqual(approved["approval"]["source_version"], file_record["source_version"])
+            self.assertTrue(approved["descriptor"]["eligible"])
+            self.assertEqual(approved["descriptor"]["reason_code"], "approved_exact_version")
+            self.assertEqual(approved["descriptor"]["policy"]["data_class"], "workspace_internal")
+            self.assertTrue(approved["descriptor"]["policy"]["cache_approved"])
+
+            descriptor_status, descriptor = handle_action(
+                data_root,
+                uploaded_root,
+                generated_root,
+                {
+                    "action": "file.cache_descriptor",
+                    "stable_storage_file_id": file_record["file_id"],
+                    "source_version": file_record["source_version"],
+                },
+            )
+            self.assertEqual(descriptor_status, 200)
+            self.assertTrue(descriptor["eligible"])
+
+            media_status, media = handle_action(
+                data_root,
+                uploaded_root,
+                generated_root,
+                {
+                    "action": "file.media_stream",
+                    "stable_storage_file_id": file_record["file_id"],
+                    "source_version": file_record["source_version"],
+                    "_pwa_file_cache": "1",
+                },
+                media_route=True,
+                media_request_method="HEAD",
+            )
+            self.assertEqual(media_status, 200)
+            self.assertEqual(media["file_response"]["etag"], hashlib.sha256(content).hexdigest())
+
+            revoke_status, revoked = handle_action(
+                data_root,
+                uploaded_root,
+                generated_root,
+                {
+                    "action": "file.cache_policy.revoke",
+                    "stable_storage_file_id": file_record["file_id"],
+                    "confirm": True,
+                    "_workspace_role": "admin",
+                },
+            )
+            self.assertEqual(revoke_status, 200)
+            self.assertTrue(revoked["revoked"])
+            _status, denied = handle_action(
+                data_root,
+                uploaded_root,
+                generated_root,
+                {
+                    "action": "file.cache_descriptor",
+                    "stable_storage_file_id": file_record["file_id"],
+                    "source_version": file_record["source_version"],
+                },
+            )
+            self.assertFalse(denied["eligible"])
+            self.assertEqual(denied["reason_code"], "approval_required")
 
     def test_drive_files_publish_provider_versions_in_cache_descriptors(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -226,6 +333,7 @@ class StorageFileCacheContractTest(unittest.TestCase):
                     },
                     drive_transport=_DriveRevisionTransport(),
                     media_route=True,
+                    media_request_method="HEAD",
                     streaming_response_supported=True,
                 )
 

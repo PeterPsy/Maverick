@@ -6,7 +6,14 @@ import json
 from pathlib import Path
 import sys
 
-from errors import StorageConflictError, StorageValidationError, conflict_error_payload, validation_error_payload
+from errors import (
+    StorageAuthorizationError,
+    StorageConflictError,
+    StorageValidationError,
+    authorization_error_payload,
+    conflict_error_payload,
+    validation_error_payload,
+)
 from operations_manifest import STORAGE_ACTION_ALIASES
 from service import app_events_for_result, handle_action, prepare_media_response_body, secret_lookup_for_drive_action, stream_prepared_media_response_body
 
@@ -27,6 +34,9 @@ def main() -> None:
         "_dependency_alias": str(payload.get("dependency_alias") or ""),
         "_surface": str(payload.get("surface") or "backend"),
         "_effective_mode": str(payload.get("effective_mode") or "sandbox"),
+        "_platform_role": str(payload.get("platform_role") or ""),
+        "_workspace_role": str(payload.get("workspace_role") or ""),
+        "_actor_user_id": str(payload.get("user_id") or ""),
     }
     requested_action = str(body.get("action") or "catalog")
     action = STORAGE_ACTION_ALIASES.get(requested_action, requested_action)
@@ -57,6 +67,9 @@ def main() -> None:
         )
     except StorageConflictError as error:
         _response(409, conflict_error_payload(error))
+        return
+    except StorageAuthorizationError as error:
+        _response(403, authorization_error_payload(error))
         return
     except StorageValidationError as error:
         _response(400, validation_error_payload(error))

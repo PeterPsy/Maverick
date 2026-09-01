@@ -177,7 +177,7 @@ describe('Storage integration API', () => {
           folder_relative_path: 'workout'
         }
       },
-      'http://localhost'
+      '*'
     );
   });
 
@@ -201,7 +201,7 @@ describe('Storage integration API', () => {
           display_path: '/My Drive/workout'
         }
       },
-      'http://localhost'
+      '*'
     );
   });
 
@@ -240,7 +240,7 @@ describe('Storage integration API', () => {
           picker_return_app_id: 'fitness-coach'
         }
       },
-      'http://localhost'
+      '*'
     );
   });
 

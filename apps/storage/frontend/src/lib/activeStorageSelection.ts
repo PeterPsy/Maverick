@@ -23,7 +23,7 @@ export function notifyActiveStorageSelection(file: StorageFile, options: NotifyO
   if (!parentWindow || parentWindow === currentWindow) {
     return false;
   }
-  const origin = options.origin ?? (typeof window === 'undefined' ? '*' : window.location.origin);
+  const origin = options.origin ?? '*';
   parentWindow.postMessage(
     {
       type: 'maverick.app.selection-changed',
@@ -44,7 +44,7 @@ export function notifyActiveStorageFolderSelection(folder: StorageFolder, option
   if (!parentWindow || parentWindow === currentWindow) {
     return false;
   }
-  const origin = options.origin ?? (typeof window === 'undefined' ? '*' : window.location.origin);
+  const origin = options.origin ?? '*';
   const selection = folder.provider === 'google_drive'
     ? {
       provider: 'google_drive',

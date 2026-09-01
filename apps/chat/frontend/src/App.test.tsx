@@ -763,7 +763,7 @@ describe("App thread navigation", () => {
           owner_app_id: "chat",
           type: "maverick.chat.active-thread-changed",
         }),
-        window.location.origin,
+        "*",
       );
     });
   });
@@ -815,7 +815,7 @@ describe("App thread navigation", () => {
           owner_app_id: "chat",
           type: "maverick.chat.active-thread-changed",
         }),
-        window.location.origin,
+        "*",
       );
     });
 
@@ -836,7 +836,7 @@ describe("App thread navigation", () => {
         owner_app_id: "chat",
         type: "maverick.chat.active-thread-changed",
       }),
-      window.location.origin,
+      "*",
     );
   });
 

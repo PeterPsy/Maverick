@@ -169,7 +169,7 @@ export function useChatComposerContext({
         widget_id: "chat-floating",
         navigation_scope: navigationScope,
       },
-      window.location.origin,
+      "*",
     );
   }
 

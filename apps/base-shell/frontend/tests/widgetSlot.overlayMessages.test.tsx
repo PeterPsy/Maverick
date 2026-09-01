@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWidgetContext, listWidgets, type WidgetRegistryItem } from "../src/api";
 import { WidgetSlot } from "../src/components/WidgetSlot";
+import { setMaverickFrameOrigin } from "../src/iframePolicy";
 
 vi.mock("../src/api", () => ({
   createWidgetContext: vi.fn(),
@@ -32,6 +33,8 @@ describe("WidgetSlot overlay widget messages", () => {
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     interceptHappyDomIframeFetch();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(isolatedLaunchResponse());
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => undefined);
     vi.mocked(listWidgets).mockResolvedValue({ items: [overlayWidget()] });
     vi.mocked(createWidgetContext).mockResolvedValue({ context: {}, context_token: "context-token" });
     container = document.createElement("div");
@@ -43,6 +46,7 @@ describe("WidgetSlot overlay widget messages", () => {
     act(() => root.unmount());
     container.remove();
     clearHappyDomFetchInterceptor();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -173,10 +177,14 @@ async function waitForIframe(parent: HTMLElement): Promise<HTMLIFrameElement> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const iframe = parent.querySelector("iframe");
     if (iframe instanceof HTMLIFrameElement) {
+      if (!iframe.dataset.maverickFrameOrigin) {
+        setMaverickFrameOrigin(iframe, "https://af-widget.sidecars.maverick.test");
+      }
+      iframe.dataset.maverickFrameBootstrapArmed = "true";
       return iframe;
     }
     await act(async () => {
-      await Promise.resolve();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
     });
   }
   throw new Error("Widget iframe was not mounted.");
@@ -208,7 +216,7 @@ async function dispatchResize(source: MessageEventSource, width: string, height:
           widget_id: widgetId,
           width,
         },
-        origin: window.location.origin,
+        origin: messageOrigin(source),
         source,
       }),
     );
@@ -226,10 +234,27 @@ async function dispatchActiveThreadChanged(source: MessageEventSource, activeThr
           owner_app_id: ownerAppId,
           type: "maverick.chat.active-thread-changed",
         },
-        origin: window.location.origin,
+        origin: messageOrigin(source),
         source,
       }),
     );
     await Promise.resolve();
   });
+}
+
+function messageOrigin(source: MessageEventSource): string {
+  if (source === window) return window.location.origin;
+  const frame = [...document.querySelectorAll("iframe")]
+    .find((candidate) => candidate.contentWindow === source);
+  return frame?.dataset.maverickFrameOrigin || "https://foreign-frame.invalid";
+}
+
+function isolatedLaunchResponse(): Response {
+  return new Response(JSON.stringify({
+    bootstrap_url: "https://af-widget.sidecars.maverick.test/.well-known/maverick-app-frame-bootstrap",
+    method: "POST",
+    origin: "https://af-widget.sidecars.maverick.test",
+    ticket: "test-ticket",
+    ticket_field: "ticket",
+  }), { headers: { "Content-Type": "application/json" }, status: 200 });
 }

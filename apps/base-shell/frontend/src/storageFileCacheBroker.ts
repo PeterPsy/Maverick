@@ -23,6 +23,7 @@ import {
 import { MaverickHttpError, isRetryableReadError, readStorageFileCacheDescriptor } from "./api";
 import { runShellRead, shellCacheLifecycle } from "./pwaCacheRuntime";
 import { storageFileCacheFeatureEnabled } from "./pwa";
+import { isMaverickFrameMessage } from "./iframePolicy";
 
 const DESCRIPTOR_SCHEMA = "maverick.storage-file-cache-descriptor.v1";
 const MAX_SESSION_DESCRIPTORS = 128;
@@ -85,11 +86,10 @@ export class StorageFileCacheBroker {
     }
   }
 
-  handleWindowMessage(event: MessageEvent, storageFrameWindow: Window | null): boolean {
+  handleWindowMessage(event: MessageEvent, storageFrame: HTMLIFrameElement | null): boolean {
     const raw = messageRecord(event.data);
     if (raw?.type !== PWA_FILE_CACHE_BROKER_OPEN) return false;
-    if (!storageFrameWindow || event.source !== storageFrameWindow) return false;
-    if (event.origin !== this.hostOrigin && event.origin !== "null") return false;
+    if (!isMaverickFrameMessage(event, storageFrame)) return false;
     if (!isParentFileCacheOpenMessage(event.data)) return true;
     const port = event.ports.length === 1 ? event.ports[0] : null;
     if (!port || this.disposed) return true;

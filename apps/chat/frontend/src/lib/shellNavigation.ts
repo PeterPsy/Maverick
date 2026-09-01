@@ -73,7 +73,7 @@ export function openContextAppParamsInShell(
   if (!parentWindow || parentWindow === currentWindow) {
     return false;
   }
-  const origin = options.origin ?? (typeof window === "undefined" ? "*" : window.location.origin);
+  const origin = options.origin ?? "*";
   parentWindow.postMessage(
     {
       type: "maverick.widget.open-app",
@@ -132,7 +132,7 @@ function postAppRouteToShell(appId: string, params: ShellRouteParams, options: S
   if (!parentWindow || parentWindow === currentWindow) {
     return false;
   }
-  const origin = options.origin ?? (typeof window === "undefined" ? "*" : window.location.origin);
+  const origin = options.origin ?? "*";
   parentWindow.postMessage(
     {
       type: "maverick.app.open-app",

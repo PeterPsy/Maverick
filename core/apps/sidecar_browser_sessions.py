@@ -36,6 +36,8 @@ class SidecarBrowserBinding:
     clean_path: str
     secure: bool
     content_security_policy: str
+    surface_kind: str = "sidecar"
+    platform_session_id: str = ""
 
 
 @dataclass(frozen=True)

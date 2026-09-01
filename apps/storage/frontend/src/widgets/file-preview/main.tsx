@@ -85,7 +85,7 @@ function openStorage(file?: StorageFile) {
       app_id: 'storage',
       params: file ? { workspace_relative_path: file.workspace_relative_path } : {}
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -108,7 +108,7 @@ function postWidgetResize(element: HTMLElement, scrollElement?: HTMLElement | nu
       height: `${height}px`,
       width: '100%'
     },
-    window.location.origin
+    "*"
   );
 }
 

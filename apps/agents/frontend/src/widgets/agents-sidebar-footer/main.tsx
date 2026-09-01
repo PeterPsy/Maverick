@@ -16,7 +16,7 @@ function createAgentInShell(appId: string) {
         new_agent_request_id: crypto.randomUUID()
       }
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -29,7 +29,7 @@ function postPrimaryActionState(appId: string) {
       available: true,
       label: PRIMARY_ACTION_LABEL
     },
-    window.location.origin
+    "*"
   );
 }
 

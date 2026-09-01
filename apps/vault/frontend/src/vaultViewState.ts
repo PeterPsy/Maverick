@@ -51,7 +51,7 @@ export function notifyVaultViewStateChanged() {
       owner_app_id: 'vault',
       resource: 'view-state'
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -62,7 +62,7 @@ export function notifyVaultDataChanged() {
       owner_app_id: 'vault',
       resource: 'state'
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -81,7 +81,7 @@ export function writeVaultActionRequest(action: VaultActionRequest['action']) {
       owner_app_id: 'vault',
       resource: 'action-request'
     },
-    window.location.origin
+    "*"
   );
 }
 

@@ -34,7 +34,7 @@ export function useShellSidebarCloseSwipe(enabled: boolean) {
     function handleTouchEnd(event: TouchEvent) {
       currentPoint = pointFromTouch(event) || currentPoint;
       if (shouldCloseSidebarFromSwipe(startPoint, currentPoint)) {
-        window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+        window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
       }
       reset();
     }

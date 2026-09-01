@@ -1,12 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { clampPrivateAccessLease } from "@maverick/pwa-cache";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
-import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postMaverickShellTheme, postToMaverickFrame } from "../iframePolicy";
+import {
+  MAVERICK_IFRAME_SANDBOX,
+  isMaverickFrameMessage,
+  isShellWindowMessage,
+  postMaverickFrameVisibility,
+  postMaverickShellTheme,
+  postToMaverickFrame,
+} from "../iframePolicy";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
 import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl";
 import type { ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
+import { IsolatedMaverickFrame } from "./IsolatedMaverickFrame";
 import { StorageFileCacheBroker } from "../storageFileCacheBroker";
 
 type AppFrameParams = Record<string, string | boolean | null>;
@@ -77,6 +85,7 @@ export function AppFrameHost({
   });
   const latestDependenciesRef = useRef<AppDependenciesPayload | null>(null);
   const dependencyCacheRef = useRef<DependencyCache>(dependencyCache);
+  const frameBootstrapMobileLayoutsRef = useRef<Record<string, boolean>>({});
   const frameBootstrapThemesRef = useRef<Record<string, ShellThemeState>>({});
   const readyDeliveredNavigationSignaturesRef = useRef<Record<string, string>>({});
   const paramsSignature = JSON.stringify(activeAppParams);
@@ -216,6 +225,11 @@ export function AppFrameHost({
         delete frameBootstrapThemesRef.current[frameKey];
       }
     });
+    Object.keys(frameBootstrapMobileLayoutsRef.current).forEach((frameKey) => {
+      if (!mountedFrameKeys.has(frameKey)) {
+        delete frameBootstrapMobileLayoutsRef.current[frameKey];
+      }
+    });
     Object.keys(readyFallbackTimersRef.current).forEach((frameKey) => {
       if (!mountedFrameKeys.has(frameKey)) {
         clearReadyFallbackTimer(frameKey);
@@ -303,11 +317,13 @@ export function AppFrameHost({
     function handleAppMessage(event: MessageEvent) {
       if (fileCacheBrokerRef.current?.handleWindowMessage(
         event,
-        frameRefs.current.storage?.contentWindow ?? null,
+        frameRefs.current.storage ?? null,
       )) {
         return;
       }
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+      const senderFrame = Object.values(frameRefs.current)
+        .find((frame) => isMaverickFrameMessage(event, frame));
+      if ((!senderFrame && !isShellWindowMessage(event)) || !event.data || typeof event.data !== "object") {
         return;
       }
       const payload = event.data as AppReadyMessage;
@@ -330,7 +346,7 @@ export function AppFrameHost({
         }
         return;
       }
-      const senderIsMountedApp = Object.values(frameRefs.current).some((frame) => frame?.contentWindow === event.source);
+      const senderIsMountedApp = Boolean(senderFrame);
       if (payload.type === "maverick.app.external-url") {
         if (!senderIsMountedApp) {
           return;
@@ -436,9 +452,10 @@ export function AppFrameHost({
           const frameKey = appFrameInstanceKey(mountKey, revision);
           const isDisplayed = frameKey === visibleFrameKey;
           return (
-            <iframe
+            <IsolatedMaverickFrame
               allow="fullscreen; microphone"
               allowFullScreen
+              appId={app.app_id}
               aria-hidden={!isDisplayed}
               className={`bs-workspace-app-frame ${isDisplayed ? "is-active" : "is-hidden"}`}
               key={frameKey}
@@ -460,7 +477,16 @@ export function AppFrameHost({
                 frameRefs.current[app.app_id] = frame;
               }}
               sandbox={MAVERICK_IFRAME_SANDBOX}
-              src={appFrameSrc(app.frontend_mount, revision, bootstrapThemeForFrame(frameBootstrapThemesRef.current, frameKey, shellTheme))}
+              launchPath={appFrameSrc(
+                app.frontend_mount,
+                revision,
+                bootstrapThemeForFrame(frameBootstrapThemesRef.current, frameKey, shellTheme),
+                bootstrapMobileLayoutForFrame(
+                  frameBootstrapMobileLayoutsRef.current,
+                  frameKey,
+                  isMobileLayout,
+                ),
+              )}
               title={`${app.name} viewport`}
             />
           );
@@ -545,8 +571,14 @@ function normalizeParams(params: AppFrameParams): Record<string, string | boolea
   ) as Record<string, string | boolean>;
 }
 
-function appFrameSrc(frontendMount: string, revision: number, shellTheme: ShellThemeState): string {
+function appFrameSrc(
+  frontendMount: string,
+  revision: number,
+  shellTheme: ShellThemeState,
+  isMobileLayout: boolean,
+): string {
   const themedUrl = urlWithShellThemeSearchParams(frontendMount, shellTheme);
+  themedUrl.searchParams.set("maverick_mobile_layout", isMobileLayout ? "1" : "0");
   const themedMount = `${themedUrl.pathname}${themedUrl.search}${themedUrl.hash}`;
   if (revision <= 0) {
     return themedMount;
@@ -561,6 +593,15 @@ function bootstrapThemeForFrame(
 ): ShellThemeState {
   themesByFrameKey[frameKey] = themesByFrameKey[frameKey] || shellTheme;
   return themesByFrameKey[frameKey];
+}
+
+function bootstrapMobileLayoutForFrame(
+  layoutsByFrameKey: Record<string, boolean>,
+  frameKey: string,
+  isMobileLayout: boolean,
+): boolean {
+  if (!(frameKey in layoutsByFrameKey)) layoutsByFrameKey[frameKey] = isMobileLayout;
+  return layoutsByFrameKey[frameKey];
 }
 
 function mountUrlWithParam(frontendMount: string, name: string, value: string): string {

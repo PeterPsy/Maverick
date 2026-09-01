@@ -46,7 +46,7 @@ export function useShellSidebarCloseSwipe(enabled: boolean) {
       if (isSidebarCloseSwipe(start, current)) {
         event.preventDefault();
         event.stopPropagation();
-        window.parent?.postMessage(CLOSE_SIDEBAR_MESSAGE, window.location.origin);
+        window.parent?.postMessage(CLOSE_SIDEBAR_MESSAGE, "*");
         resetSwipe();
       }
     }

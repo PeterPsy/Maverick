@@ -19,6 +19,7 @@ import {
   calendarOAuthCallbackFromLocation,
   eventIdFromParams,
   mergeReloadMode,
+  maverickPlatformOrigin,
   runtimeAppIdFromPathname,
   scalarString,
   type CalendarOAuthCallback,
@@ -86,14 +87,18 @@ export function App() {
   }
 
   useEffect(() => {
-    const oauthCallback = calendarOAuthCallbackFromLocation(window.location.pathname, window.location.search, window.location.origin);
+    const oauthCallback = calendarOAuthCallbackFromLocation(
+      window.location.pathname,
+      window.location.search,
+      maverickPlatformOrigin(),
+    );
     if (oauthCallback) {
       adoptRuntimeAppId(oauthCallback.appId);
       void handleOAuthCallback(oauthCallback);
     } else {
       void load();
     }
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: runtimeAppIdRef.current }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: runtimeAppIdRef.current }, "*");
     return () => window.clearTimeout(reloadTimer.current);
   }, []);
 
@@ -287,7 +292,7 @@ export function App() {
           event_id: event.id
         }
       },
-      window.location.origin
+      "*"
     );
   }
 
@@ -329,7 +334,7 @@ export function App() {
 }
 
 function notifyCalendarDataChanged(appId: string) {
-  window.parent?.postMessage({ type: 'maverick.app.data-changed', owner_app_id: appId, resource: 'events' }, window.location.origin);
+  window.parent?.postMessage({ type: 'maverick.app.data-changed', owner_app_id: appId, resource: 'events' }, "*");
 }
 
 function operationalErrorMessage(error: unknown, fallback: string) {

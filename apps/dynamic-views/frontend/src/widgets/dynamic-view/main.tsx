@@ -47,7 +47,7 @@ function openDynamicViews(instanceId?: string) {
       app_id: 'dynamic-views',
       params: instanceId ? { app_page: `views/${encodeURIComponent(instanceId)}`, instance_id: instanceId, view_id: instanceId } : {}
     },
-    window.location.origin
+    "*"
   );
 }
 

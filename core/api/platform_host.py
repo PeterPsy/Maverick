@@ -19,6 +19,7 @@ from core.api.app_mounts import (
 )
 from core.api.app_references_api import handle_app_references_api
 from core.api.app_registry import enabled_app_items
+from core.api.app_frame_browser import handle_app_frame_browser_launch, handle_app_frame_oauth_relay
 from core.api.app_sdk_api import handle_app_sdk_api
 from core.api.app_store_api import handle_app_store_api
 from core.api.http import HttpRequestError, StartResponse, enforce_same_origin_for_unsafe_request, json_response, text_response
@@ -80,6 +81,16 @@ class PlatformHost:
             context = resolve_request_session(self.state, environ)
             workspace_id = context.workspace_id if context is not None else self.workspace_id
             user = context.user if context is not None else None
+
+            routed = handle_app_frame_browser_launch(
+                self.state,
+                context,
+                environ,
+                start_response,
+                start_path=self.start_path,
+            )
+            if routed is not None:
+                return routed
 
             routed = handle_sidecar_browser_launch(
                 self.state,
@@ -182,6 +193,15 @@ class PlatformHost:
                     start_response,
                     {"items": enabled_app_items(self.state, workspace_id=workspace_id, start_path=self.start_path, user=user)},
                 )
+            routed = handle_app_frame_oauth_relay(
+                self.state,
+                context,
+                environ,
+                start_response,
+                start_path=self.start_path,
+            )
+            if routed is not None:
+                return routed
             if path in _ROOT_SHELL_STATIC_ASSETS:
                 return handle_root_shell_static_asset(
                     self.state,
@@ -206,6 +226,13 @@ class PlatformHost:
                 app_id, _, subpath = app_path.partition("/")
                 public_static_asset = is_public_app_static_asset(subpath)
                 allow_unauthenticated_frontend = app_id == self.state.root_shell_app_id
+                isolated_app_frame = environ.get("maverick.app_frame_proxy") is True
+                if not allow_unauthenticated_frontend and not public_static_asset and not isolated_app_frame:
+                    return json_response(
+                        start_response,
+                        {"error": "app_frame_isolation_required"},
+                        status="403 Forbidden",
+                    )
                 if context is None and not public_static_asset and not allow_unauthenticated_frontend:
                     return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
                 return handle_app_frontend(

@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { CalendarPlus, Plus } from 'lucide-react';
 import { startGoogleOAuth } from '../../api';
 import { notifyCalendarUiStateChanged, writeCalendarUiState } from '../../calendar-ui-state';
-import { calendarOAuthRedirectUri, runtimeAppIdFromPathname } from '../../runtime';
+import { calendarOAuthRedirectUri, maverickPlatformOrigin, runtimeAppIdFromPathname } from '../../runtime';
 import './styles.css';
 
 const PRIMARY_ACTION_LABEL = 'New event';
@@ -72,7 +72,7 @@ function postPrimaryActionState(appId: string) {
       label: PRIMARY_ACTION_LABEL,
       preferred_surface: 'sidebar',
     },
-    window.location.origin,
+    "*",
   );
 }
 
@@ -81,7 +81,7 @@ async function connectAccount(appId: string, setIsConnecting: (value: boolean) =
   setIsConnecting(true);
   setError('');
   try {
-    const started = await startGoogleOAuth(appId, { redirectUri: calendarOAuthRedirectUri(appId, window.location.origin) });
+    const started = await startGoogleOAuth(appId, { redirectUri: calendarOAuthRedirectUri(appId, maverickPlatformOrigin()) });
     openAuthorizationUrl(started.authorization_url, authorizationWindow);
   } catch (connectError) {
     closeAuthorizationWindow(authorizationWindow);
@@ -119,7 +119,7 @@ function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
     return;
   }
   if (window.top && window.top !== window) {
-    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, window.location.origin);
+    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, "*");
     return;
   }
   window.location.assign(authorizationUrl);

@@ -85,7 +85,7 @@ function App() {
   }, [selectedId]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'dynamic-views' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'dynamic-views' }, "*");
   }, []);
 
   useEffect(() => {

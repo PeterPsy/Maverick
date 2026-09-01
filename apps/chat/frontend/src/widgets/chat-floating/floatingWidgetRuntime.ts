@@ -93,7 +93,7 @@ export function postWidgetSize(windows: FloatingChatWindow[]) {
       owner_app_id: "chat",
       widget_id: "chat-floating",
     },
-    window.location.origin,
+    "*",
   );
 }
 
@@ -104,7 +104,7 @@ export function postDockClose(widgetId = "chat-floating-dock") {
       owner_app_id: "chat",
       widget_id: widgetId,
     },
-    window.location.origin,
+    "*",
   );
 }
 

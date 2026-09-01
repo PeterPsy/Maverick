@@ -38,6 +38,11 @@ const GMAIL_REFRESH_SECRET = 'gmail-refresh-token';
 const IMAP_SMTP_SECRET = 'mailbox-password';
 const THREADS_PAGE_SIZE = 50;
 const INLINE_IMAGE_MAX_BYTES = 2_000_000;
+
+function maverickPlatformOrigin(): string {
+  const value = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
+  return typeof value === 'string' && /^https?:\/\//u.test(value) ? value : window.location.origin;
+}
 const READER_TEXT_BODY_CHARS = 12_000;
 const READER_FULL_TEXT_BODY_CHARS = 50_000;
 const READER_HTML_BODY_CHARS = 250_000;
@@ -165,7 +170,7 @@ function openVaultIssues() {
       app_id: 'vault',
       params: { tab: 'issues', query: 'mail' }
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -176,7 +181,7 @@ function notifySelection(selection: Record<string, string | boolean | null | und
       owner_app_id: 'mail',
       selection
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -341,7 +346,7 @@ function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
     return;
   }
   if (window.top && window.top !== window) {
-    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, window.location.origin);
+    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, "*");
     return;
   }
   window.location.assign(authorizationUrl);
@@ -1161,7 +1166,7 @@ export function App() {
       const payload = await callBackend<{ status: string; authorization_url?: string; detail?: string }>({
         action: MAIL_BACKEND_ACTIONS.connectionsStartOAuth,
         provider: 'gmail',
-        redirect_uri: `${window.location.origin}/apps/mail/oauth/callback`,
+        redirect_uri: `${maverickPlatformOrigin()}/apps/mail/oauth/callback`,
         _app_secret_request: {
           logical_names: GMAIL_OAUTH_START_SECRETS,
           required: true

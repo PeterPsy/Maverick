@@ -36,7 +36,7 @@ function notifyShell(appId: string, projectId: string | null) {
         project_id: projectId,
       },
     },
-    window.location.origin,
+    "*",
   );
 }
 
@@ -230,7 +230,7 @@ function postPrimaryActionStateWithLabel(appId: string, available: boolean, labe
       available,
       label,
     },
-    window.location.origin,
+    "*",
   );
 }
 
@@ -242,7 +242,7 @@ function postWidgetHeight(appId: string, height: string) {
       widget_id: WIDGET_ID,
       height,
     },
-    window.location.origin,
+    "*",
   );
 }
 

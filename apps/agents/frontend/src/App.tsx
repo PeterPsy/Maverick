@@ -118,7 +118,7 @@ export function App() {
   }, [selectedAgentTypeId]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'agents' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'agents' }, "*");
   }, []);
 
   useEffect(() => {

@@ -77,7 +77,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'vault' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'vault' }, "*");
   }, []);
 
   useEffect(() => {
@@ -159,7 +159,7 @@ function App() {
     const currentState = readVaultViewState();
     writeVaultViewState({ ...currentState, credentialPanel: 'edit', metricFilter: null, selectedSecretId: secretId, tab: 'credentials' });
     notifyVaultViewStateChanged();
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.open' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.shell.sidebar.open' }, "*");
   }
 
   return (

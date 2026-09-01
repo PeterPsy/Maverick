@@ -188,7 +188,7 @@ export function useFloatingWindows() {
           thread_id: selectedWindow.threadId,
         },
       },
-      window.location.origin,
+      "*",
     );
     setWindows([{ ...selectedWindow, isCollapsed: false }]);
   }

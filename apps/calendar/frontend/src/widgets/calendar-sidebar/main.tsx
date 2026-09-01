@@ -362,7 +362,7 @@ function accountName(connection: CalendarConnection) {
 }
 
 function notifyCalendarDataChanged(appId: string, resource: string) {
-  window.parent?.postMessage({ type: 'maverick.app.data-changed', owner_app_id: appId, resource }, window.location.origin);
+  window.parent?.postMessage({ type: 'maverick.app.data-changed', owner_app_id: appId, resource }, "*");
 }
 
 createRoot(document.getElementById('calendar-sidebar-root') as HTMLElement).render(<CalendarSidebarWidget />);

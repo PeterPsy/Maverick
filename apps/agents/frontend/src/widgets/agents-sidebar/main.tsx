@@ -67,10 +67,10 @@ function openAgentInShell(agentTypeId: string) {
         agent_type_id: agentTypeId
       }
     },
-    window.location.origin
+    "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
   }
 }
 

@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem } from "../src/api";
 import { AppFrameHost } from "../src/components/AppFrameHost";
+import { setMaverickFrameOrigin } from "../src/iframePolicy";
 import type { ShellThemeState } from "../src/theme";
 
 type AppFrameParams = Record<string, string | boolean | null>;
@@ -66,6 +67,8 @@ describe("AppFrameHost app frame readiness", () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.useFakeTimers();
     vi.stubGlobal("WebSocket", MockWebSocket);
+    vi.stubGlobal("fetch", vi.fn(async () => isolatedLaunchResponse()));
+    vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(() => undefined);
     interceptHappyDomIframeFetch();
     container = document.createElement("div");
     document.body.append(container);
@@ -78,6 +81,7 @@ describe("AppFrameHost app frame readiness", () => {
     clearHappyDomFetchInterceptor();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -172,7 +176,7 @@ describe("AppFrameHost app frame readiness", () => {
 
   it("posts live shell theme changes without remounting the app frame", async () => {
     await renderHost(root, chat);
-    const frame = frameByTitle(container, "Chat viewport");
+    const frame = await waitForFrame(container, "Chat viewport");
     const initialSrc = frame.getAttribute("src");
     const postMessageSpy = vi.spyOn(frame.contentWindow!, "postMessage");
 
@@ -193,7 +197,7 @@ describe("AppFrameHost app frame readiness", () => {
     const openedWindow = { focus: vi.fn(), opener: window } as unknown as Window;
     const openSpy = vi.spyOn(window, "open").mockReturnValue(openedWindow);
     await renderHost(root, chat);
-    const frame = frameByTitle(container, "Chat viewport");
+    const frame = await waitForFrame(container, "Chat viewport");
     const frameWindow = frame.contentWindow;
     if (!frameWindow) {
       throw new Error("Expected iframe contentWindow.");
@@ -233,10 +237,15 @@ async function waitForFrame(parent: HTMLElement, title: string): Promise<HTMLIFr
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const frame = parent.querySelector(`iframe[title="${title}"]`);
     if (frame instanceof HTMLIFrameElement) {
+      if (!frame.dataset.maverickFrameOrigin) {
+        setMaverickFrameOrigin(frame, "https://af-test.sidecars.maverick.test");
+      }
+      frame.dataset.maverickFrameBootstrapArmed = "true";
       return frame;
     }
     await act(async () => {
       await Promise.resolve();
+      vi.advanceTimersByTime(0);
     });
   }
   throw new Error(`Frame ${title} was not mounted.`);
@@ -287,7 +296,7 @@ async function dispatchAppReady(frame: HTMLIFrameElement, appId: string) {
           app_id: appId,
           type: "maverick.app.ready",
         },
-        origin: window.location.origin,
+        origin: frame.dataset.maverickFrameOrigin,
         source: frame.contentWindow,
       }),
     );
@@ -303,12 +312,29 @@ async function dispatchExternalUrl(source: MessageEventSource, url: string) {
           type: "maverick.app.external-url",
           url,
         },
-        origin: window.location.origin,
+        origin: messageOrigin(source),
         source,
       }),
     );
     await Promise.resolve();
   });
+}
+
+function messageOrigin(source: MessageEventSource): string {
+  if (source === window) return window.location.origin;
+  const frame = [...document.querySelectorAll("iframe")]
+    .find((candidate) => candidate.contentWindow === source);
+  return frame?.dataset.maverickFrameOrigin || "https://foreign-frame.invalid";
+}
+
+function isolatedLaunchResponse(): Response {
+  return new Response(JSON.stringify({
+    bootstrap_url: "https://af-test.sidecars.maverick.test/.well-known/maverick-app-frame-bootstrap",
+    method: "POST",
+    origin: "https://af-test.sidecars.maverick.test",
+    ticket: "test-ticket",
+    ticket_field: "ticket",
+  }), { headers: { "Content-Type": "application/json" }, status: 200 });
 }
 
 function interceptHappyDomIframeFetch() {

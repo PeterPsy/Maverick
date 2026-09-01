@@ -7,6 +7,11 @@ import {
 import { StorageFileCacheBroker } from "./storageFileCacheBroker";
 
 const storageWindow = {} as Window;
+const storageFrameOrigin = "https://af-storage.sidecars.maverick.test";
+const storageFrame = {
+  contentWindow: storageWindow,
+  dataset: { maverickFrameOrigin: storageFrameOrigin },
+} as unknown as HTMLIFrameElement;
 
 function requestEvent(
   channel: MessageChannel,
@@ -21,7 +26,7 @@ function requestEvent(
       type: PWA_FILE_CACHE_BROKER_OPEN,
       ...overrides,
     },
-    origin: "https://maverick.test",
+    origin: storageFrameOrigin,
     ports: [channel.port2],
     source: storageWindow,
   } as unknown as MessageEvent;
@@ -76,7 +81,7 @@ describe("Base Shell Storage file-cache broker", () => {
     const channel = new MessageChannel();
     const accepted = nextPortMessage(channel.port1);
 
-    expect(broker.handleWindowMessage(requestEvent(channel), storageWindow)).toBe(true);
+    expect(broker.handleWindowMessage(requestEvent(channel), storageFrame)).toBe(true);
     await expect(accepted).resolves.toMatchObject({
       request_id: "request-one",
       type: PWA_FILE_CACHE_BROKER_ACCEPTED,
@@ -93,7 +98,10 @@ describe("Base Shell Storage file-cache broker", () => {
     }), expect.any(AbortSignal));
 
     const foreignChannel = new MessageChannel();
-    expect(broker.handleWindowMessage(requestEvent(foreignChannel), {} as Window)).toBe(false);
+    expect(broker.handleWindowMessage(requestEvent(foreignChannel), {
+      contentWindow: {} as Window,
+      dataset: { maverickFrameOrigin: storageFrameOrigin },
+    } as unknown as HTMLIFrameElement)).toBe(false);
     broker.dispose();
   });
 
@@ -108,7 +116,7 @@ describe("Base Shell Storage file-cache broker", () => {
     });
     const deniedChannel = new MessageChannel();
     const accepted = nextPortMessage(deniedChannel.port1);
-    denied.handleWindowMessage(requestEvent(deniedChannel), storageWindow);
+    denied.handleWindowMessage(requestEvent(deniedChannel), storageFrame);
     await accepted;
     await expect(nextPortMessage(deniedChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
     expect(openFile).not.toHaveBeenCalled();
@@ -125,7 +133,7 @@ describe("Base Shell Storage file-cache broker", () => {
     });
     const malformedChannel = new MessageChannel();
     const malformedAccepted = nextPortMessage(malformedChannel.port1);
-    malformed.handleWindowMessage(requestEvent(malformedChannel), storageWindow);
+    malformed.handleWindowMessage(requestEvent(malformedChannel), storageFrame);
     await malformedAccepted;
     await expect(nextPortMessage(malformedChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
     expect(openFile).not.toHaveBeenCalled();
@@ -147,7 +155,7 @@ describe("Base Shell Storage file-cache broker", () => {
     });
     const channel = new MessageChannel();
     const accepted = nextPortMessage(channel.port1);
-    broker.handleWindowMessage(requestEvent(channel), storageWindow);
+    broker.handleWindowMessage(requestEvent(channel), storageFrame);
     await accepted;
     await vi.waitFor(() => expect(operationSignal).not.toBeNull());
 
@@ -169,7 +177,7 @@ describe("Base Shell Storage file-cache broker", () => {
     });
     const channel = new MessageChannel();
     const accepted = nextPortMessage(channel.port1);
-    broker.handleWindowMessage(requestEvent(channel), storageWindow);
+    broker.handleWindowMessage(requestEvent(channel), storageFrame);
     await accepted;
 
     await expect(nextPortMessage(channel.port1)).resolves.toMatchObject({ status: "error" });
@@ -198,31 +206,31 @@ describe("Base Shell Storage file-cache broker", () => {
 
     const coldTransportLossChannel = new MessageChannel();
     const coldTransportLossAccepted = nextPortMessage(coldTransportLossChannel.port1);
-    broker.handleWindowMessage(requestEvent(coldTransportLossChannel, { request_id: "request-cold" }), storageWindow);
+    broker.handleWindowMessage(requestEvent(coldTransportLossChannel, { request_id: "request-cold" }), storageFrame);
     await coldTransportLossAccepted;
     await expect(nextPortMessage(coldTransportLossChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
 
     const enabledChannel = new MessageChannel();
     const enabledAccepted = nextPortMessage(enabledChannel.port1);
-    broker.handleWindowMessage(requestEvent(enabledChannel), storageWindow);
+    broker.handleWindowMessage(requestEvent(enabledChannel), storageFrame);
     await enabledAccepted;
     await expect(nextPortMessage(enabledChannel.port1)).resolves.toMatchObject({ status: "ok" });
 
     const transportLossChannel = new MessageChannel();
     const transportLossAccepted = nextPortMessage(transportLossChannel.port1);
-    broker.handleWindowMessage(requestEvent(transportLossChannel, { request_id: "request-two" }), storageWindow);
+    broker.handleWindowMessage(requestEvent(transportLossChannel, { request_id: "request-two" }), storageFrame);
     await transportLossAccepted;
     await expect(nextPortMessage(transportLossChannel.port1)).resolves.toMatchObject({ status: "ok" });
 
     const disabledChannel = new MessageChannel();
     const disabledAccepted = nextPortMessage(disabledChannel.port1);
-    broker.handleWindowMessage(requestEvent(disabledChannel, { request_id: "request-three" }), storageWindow);
+    broker.handleWindowMessage(requestEvent(disabledChannel, { request_id: "request-three" }), storageFrame);
     await disabledAccepted;
     await expect(nextPortMessage(disabledChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
 
     const stillDisabledChannel = new MessageChannel();
     const stillDisabledAccepted = nextPortMessage(stillDisabledChannel.port1);
-    broker.handleWindowMessage(requestEvent(stillDisabledChannel, { request_id: "request-four" }), storageWindow);
+    broker.handleWindowMessage(requestEvent(stillDisabledChannel, { request_id: "request-four" }), storageFrame);
     await stillDisabledAccepted;
     await expect(nextPortMessage(stillDisabledChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
 
@@ -251,13 +259,13 @@ describe("Base Shell Storage file-cache broker", () => {
 
     const approvedChannel = new MessageChannel();
     const approvedAccepted = nextPortMessage(approvedChannel.port1);
-    broker.handleWindowMessage(requestEvent(approvedChannel), storageWindow);
+    broker.handleWindowMessage(requestEvent(approvedChannel), storageFrame);
     await approvedAccepted;
     await expect(nextPortMessage(approvedChannel.port1)).resolves.toMatchObject({ status: "ok" });
 
     const deniedChannel = new MessageChannel();
     const deniedAccepted = nextPortMessage(deniedChannel.port1);
-    broker.handleWindowMessage(requestEvent(deniedChannel, { request_id: "request-denied" }), storageWindow);
+    broker.handleWindowMessage(requestEvent(deniedChannel, { request_id: "request-denied" }), storageFrame);
     await deniedAccepted;
     await expect(nextPortMessage(deniedChannel.port1)).resolves.toMatchObject({ status: "unavailable" });
 

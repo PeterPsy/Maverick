@@ -95,7 +95,7 @@ function openCrm(page = '') {
       app_id: 'crm',
       params: page ? { app_page: page } : {}
     },
-    window.location.origin
+    "*"
   );
 }
 

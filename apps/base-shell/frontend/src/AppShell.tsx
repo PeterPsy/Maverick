@@ -43,6 +43,7 @@ import {
   shellRetryCoordinator,
 } from "./pwaCacheRuntime";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
+import { isRegisteredMaverickFrameMessage, isShellWindowMessage } from "./iframePolicy";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
 import { MobileShellHeader } from "./components/MobileShellHeader";
@@ -481,7 +482,11 @@ export function AppShell() {
 
   useEffect(() => {
     function handleAppDataChanged(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+      if (
+        (!isShellWindowMessage(event) && !isRegisteredMaverickFrameMessage(event))
+        || !event.data
+        || typeof event.data !== "object"
+      ) {
         return;
       }
       const payload = event.data as { entity_id?: string; owner_app_id?: string; resource?: string; type?: string };
@@ -510,7 +515,11 @@ export function AppShell() {
 
   useEffect(() => {
     function handleShellCommand(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+      if (
+        (!isShellWindowMessage(event) && !isRegisteredMaverickFrameMessage(event))
+        || !event.data
+        || typeof event.data !== "object"
+      ) {
         return;
       }
       const payload = event.data as { type?: string };

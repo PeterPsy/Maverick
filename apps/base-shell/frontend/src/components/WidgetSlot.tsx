@@ -1,12 +1,20 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
-import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postMaverickShellTheme, postToMaverickFrame } from "../iframePolicy";
+import {
+  MAVERICK_IFRAME_SANDBOX,
+  isRegisteredMaverickFrameMessage,
+  isShellWindowMessage,
+  postMaverickFrameVisibility,
+  postMaverickShellTheme,
+  postToMaverickFrame,
+} from "../iframePolicy";
 import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl";
 import { widgetSelectionChangedMessage } from "../lib/widgetSelectionMessages";
 import { measureStartupMetric } from "../startupMetrics";
 import type { ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
+import { IsolatedMaverickFrame } from "./IsolatedMaverickFrame";
 
 export type PrimaryActionPreferredSurface = "app" | "sidebar";
 
@@ -269,7 +277,11 @@ export function WidgetSlot({
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+      if (
+        (!isShellWindowMessage(event) && !isRegisteredMaverickFrameMessage(event))
+        || !event.data
+        || typeof event.data !== "object"
+      ) {
         return;
       }
       const payload = event.data as WidgetMessagePayload;
@@ -601,9 +613,10 @@ export function WidgetSlot({
         aria-label={label}
         style={slotStyle}
       >
-        <iframe
+        <IsolatedMaverickFrame
           allow={widgetAllowPolicy}
           allowFullScreen
+          appId={widget.owner_app_id}
           className="bs-widget-slot__frame"
           key={widgetFrameKey}
           onLoad={() => {
@@ -613,7 +626,7 @@ export function WidgetSlot({
           }}
           ref={widgetFrameRef}
           sandbox={MAVERICK_IFRAME_SANDBOX}
-          src={src}
+          launchPath={src}
           title={label}
         />
         {isWidgetFrameLoading ? (

@@ -76,7 +76,7 @@ function Widget() {
           widget_id: WIDGET_ID,
           height: `${nextHeight}px`
         },
-        window.location.origin
+        "*"
       );
     };
     resize();

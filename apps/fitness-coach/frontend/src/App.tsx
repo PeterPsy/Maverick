@@ -257,7 +257,7 @@ export function App() {
         owner_app_id: 'fitness-coach',
         selection: { workout_id: selectedWorkout.id, app_page: `workouts/${selectedWorkout.id}`, setup_tab: setupTab }
       },
-      window.location.origin
+      "*"
     );
   }, [selectedWorkout?.id, setupTab]);
 

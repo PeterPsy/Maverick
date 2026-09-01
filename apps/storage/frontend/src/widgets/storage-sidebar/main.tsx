@@ -505,10 +505,10 @@ function openFolderInShell(node: FolderTreeNode, appId: string, ancestors: Folde
       app_id: appId,
       params
     },
-    window.location.origin
+    "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
   }
 }
 
@@ -783,7 +783,7 @@ function StorageSidebarWidget() {
       .then((payload) => {
         const nextFilter = payload.state.view_filter;
         applyViewFilter(nextFilter);
-        window.parent?.postMessage(storageViewFilterChangedMessage(storageAppId, nextFilter), window.location.origin);
+        window.parent?.postMessage(storageViewFilterChangedMessage(storageAppId, nextFilter), "*");
         setError(null);
       })
       .catch((saveError: Error) => {

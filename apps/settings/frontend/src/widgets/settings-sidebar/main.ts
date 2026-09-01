@@ -49,10 +49,10 @@ function openPageInShell(pageId: SettingsPageId) {
         page_id: pageId
       }
     },
-    window.location.origin
+    "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
   }
 }
 
@@ -191,7 +191,7 @@ function installShellSidebarCloseSwipe() {
     if (deltaX <= -72 && deltaY <= 48) {
       event.preventDefault();
       event.stopPropagation();
-      window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+      window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
       start = null;
     }
   }, { passive: false });

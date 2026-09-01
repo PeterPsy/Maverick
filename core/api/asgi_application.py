@@ -12,6 +12,11 @@ import os
 from typing import Any, Awaitable, Callable, Iterable, Iterator
 
 from core.api.app_events import APP_EVENTS_WS_PATH, stream_app_events
+from core.api.app_frame_browser import (
+    handle_app_frame_browser_origin,
+    handle_app_frame_browser_websocket,
+    is_reserved_app_frame_browser_host,
+)
 from core.api.backend_recovery import start_backend_restart_recovery
 from core.api.background_hooks import start_background_hook_scheduler
 from core.api.http import max_json_body_bytes
@@ -86,6 +91,22 @@ class PlatformAsgiHost:
         raise RuntimeError(f"Unsupported ASGI scope type: {scope_type}")
 
     async def _handle_websocket(self, scope: dict[str, Any], receive: AsgiReceive, send: AsgiSend) -> None:
+        if is_reserved_app_frame_browser_host(scope):
+            await handle_app_frame_browser_websocket(
+                self.state,
+                scope=scope,
+                receive=receive,
+                send=send,
+                start_path=self.state.repository_root,
+                forward=self._handle_platform_websocket,
+            )
+            return
+        if is_reserved_sidecar_browser_host(scope):
+            await send({"type": "websocket.close", "code": 4404})
+            return
+        await self._handle_platform_websocket(scope, receive, send)
+
+    async def _handle_platform_websocket(self, scope: dict[str, Any], receive: AsgiReceive, send: AsgiSend) -> None:
         path = str(scope.get("path") or "")
         if path == JOB_EVENTS_WS_PATH:
             context = resolve_request_session(self.state, _websocket_environ(scope))
@@ -160,6 +181,16 @@ class PlatformAsgiHost:
             raise RuntimeError(f"Unsupported ASGI lifespan event: {message_type}")
 
     async def _handle_http(self, scope: dict[str, Any], receive: AsgiReceive, send: AsgiSend) -> None:
+        if is_reserved_app_frame_browser_host(scope):
+            await handle_app_frame_browser_origin(
+                self.state,
+                scope=scope,
+                receive=receive,
+                send=send,
+                start_path=self.state.repository_root,
+                forward=self._handle_platform_http,
+            )
+            return
         if is_reserved_sidecar_browser_host(scope):
             await handle_sidecar_browser_origin(
                 self.state,
@@ -170,6 +201,9 @@ class PlatformAsgiHost:
                 shutdown_controller=self.shutdown_controller,
             )
             return
+        await self._handle_platform_http(scope, receive, send)
+
+    async def _handle_platform_http(self, scope: dict[str, Any], receive: AsgiReceive, send: AsgiSend) -> None:
         if scope.get("path") == "/health":
             await _send_direct_json_response(send, b'{\n  "status": "ok",\n  "service": "maverick-core"\n}')
             return
@@ -371,6 +405,8 @@ def _wsgi_environ(scope: dict[str, Any], body: bytes) -> dict[str, Any]:
             environ[name] = value
         else:
             environ[f"HTTP_{name}"] = value
+    if scope.get("maverick.app_frame_proxy") is True:
+        environ["maverick.app_frame_proxy"] = True
     return environ
 
 

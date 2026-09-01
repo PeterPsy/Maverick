@@ -13,6 +13,11 @@ import "./styles/main.css";
 const LOADING_DELAY_MS = 300;
 const BOOTSTRAP_STATUS_POLL_MS = 200;
 
+function maverickPlatformOrigin(): string {
+  const value = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
+  return typeof value === "string" && /^https?:\/\//u.test(value) ? value : window.location.origin;
+}
+
 export function App() {
   const appId = currentDesignStudioAppId();
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -30,12 +35,12 @@ export function App() {
   const [errorCode, setErrorCode] = useState("");
 
   useEffect(() => {
-    window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, window.location.origin);
+    window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, "*");
   }, [appId]);
 
   useEffect(() => {
     function handleShellNavigation(event: MessageEvent) {
-      if (event.origin !== window.location.origin || event.source !== window.parent || !isRecord(event.data)) {
+      if (event.origin !== window.location.origin || event.source !== window || !isRecord(event.data)) {
         return;
       }
       if (event.data.type !== "maverick.app.navigate" || (event.data.app_id && event.data.app_id !== appId)) {
@@ -67,7 +72,7 @@ export function App() {
     setErrorCode("");
     const loadingTimer = window.setTimeout(() => setLoadingVisible(true), LOADING_DELAY_MS);
 
-    void requestOpenDesignLaunch(appId, nativePath, window.location.origin, abort.signal)
+    void requestOpenDesignLaunch(appId, nativePath, maverickPlatformOrigin(), abort.signal)
       .then((launch) => {
         if (abort.signal.aborted) return;
         const frame = frameRef.current;

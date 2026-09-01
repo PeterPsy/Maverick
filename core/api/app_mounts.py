@@ -249,8 +249,14 @@ def serve_frontend(
                 [
                     ("Access-Control-Allow-Origin", "*"),
                     ("Cross-Origin-Resource-Policy", "cross-origin"),
+                    ("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'"),
+                    ("X-Content-Type-Options", "nosniff"),
                 ]
             )
+            # Any public app artifact may be navigated as a platform-origin
+            # document. Sandbox that document interpretation (not its normal
+            # subresource use) so a mislabeled file or script-capable SVG can
+            # never become an app-controlled shell-origin execution context.
         timing.update(
             {
                 "bytes": len(body),

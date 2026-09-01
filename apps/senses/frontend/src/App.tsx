@@ -725,7 +725,7 @@ export function App() {
   }, [nativeHost.status?.capture?.busy, nativeHost.status?.updated_at, pendingNativeCommand]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'senses' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'senses' }, "*");
   }, []);
 
   useEffect(() => {
@@ -986,10 +986,10 @@ function postNativeCommand(command: NativeCommand, extra: Record<string, unknown
   }
   window.postMessage(message, window.location.origin);
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage(message, window.location.origin);
+    window.parent.postMessage(message, "*");
   }
   if (window.top && window.top !== window && window.top !== window.parent) {
-    window.top.postMessage(message, window.location.origin);
+    window.top.postMessage(message, "*");
   }
   return requestId;
 }
@@ -1001,7 +1001,7 @@ function emitViewStateChanged(viewFilter: ViewFilterState) {
       owner_app_id: 'senses',
       selection: { tab: viewFilter.tab, app_page: viewFilter.tab, view_filter: viewFilter },
     },
-    window.location.origin,
+    "*",
   );
   window.parent?.postMessage(
     {
@@ -1010,7 +1010,7 @@ function emitViewStateChanged(viewFilter: ViewFilterState) {
       resource: 'view-state',
       view_state: viewFilter,
     },
-    window.location.origin,
+    "*",
   );
 }
 

@@ -472,7 +472,7 @@ function openApp(appId, workspaceId = null) {
     message.workspace_id = workspaceId;
     message.params = { workspace_id: workspaceId };
   }
-  window.parent?.postMessage(message, window.location.origin);
+  window.parent?.postMessage(message, "*");
 }
 
 function notifyPinnedAppsChanged() {
@@ -482,7 +482,7 @@ function notifyPinnedAppsChanged() {
       owner_app_id: "app-store",
       resource: "pinned-apps",
     },
-    window.location.origin,
+    "*",
   );
 }
 

@@ -60,10 +60,10 @@ function openChecklistInShell(checklistId: string) {
         checklist_id: checklistId
       }
     },
-    window.location.origin
+    "*"
   );
   if (isMobileLayoutViewport()) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
   }
 }
 

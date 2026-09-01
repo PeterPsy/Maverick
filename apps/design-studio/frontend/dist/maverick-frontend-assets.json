@@ -1,5 +1,5 @@
 {
-  "build_id": "a8b8d99334b0b77c57609361d9a55b0c2c044bf61d6076c75b04b9ad251f87ba",
+  "build_id": "53572662bed74d009297f4e86d422ed14789208723b171395f8539371fce81c6",
   "entrypoints": [
     "index.html"
   ],
@@ -11,13 +11,13 @@
       "size_bytes": 1104
     },
     {
-      "path": "assets/app-DqqdcGTV.js",
-      "sha256": "400a5966b07ef6f03f9b843c287798d109268c47acba332f8841c1aab5b17353",
-      "size_bytes": 199230
+      "path": "assets/app-nJi6dIgt.js",
+      "sha256": "bb88477b4f70d68760771ab44479447e46a6b4edd28eee25260dfbd39397a1df",
+      "size_bytes": 199318
     },
     {
       "path": "index.html",
-      "sha256": "0bf2fc929e1cd4a159b43e39bb2e737594a408de2ab6a79762f393434ab76fb7",
+      "sha256": "2f75e02d24340d82fd708a35843614fffcee40ae227d5fe4713bba135add04e8",
       "size_bytes": 432
     }
   ],

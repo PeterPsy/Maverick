@@ -180,29 +180,41 @@ class WidgetsTestCase(unittest.TestCase):
         self.assertNotIn("source_root", payload["items"][0])
         self.assertNotIn("source_path", payload["items"][0])
 
-    def test_widget_frontend_static_assets_are_public_for_sandboxed_iframes(self) -> None:
+    def test_widget_frontend_assets_require_the_isolated_authenticated_proxy(self) -> None:
         repo_root, state = self.install_widget_app()
         app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
 
         status_html, html_body, _html_headers = self.invoke(app, path="/api/apps/widgets/checklists/design-checklist/frontend/")
-        status_css, css_body, css_headers = self.invoke(app, path="/api/apps/widgets/checklists/design-checklist/frontend/styles.css")
+        status_css, css_body, css_headers = self.invoke(
+            app,
+            path="/api/apps/widgets/checklists/design-checklist/frontend/styles.css",
+            cookie=cookie,
+            extra_headers={"maverick.app_frame_proxy": True},
+        )
         status_css_head, _css_head_body, css_head_headers = self.invoke(
             app,
             path="/api/apps/widgets/checklists/design-checklist/frontend/styles.css",
             method="HEAD",
+            cookie=cookie,
+            extra_headers={"maverick.app_frame_proxy": True},
         )
-        status_js, js_body, js_headers = self.invoke(app, path="/api/apps/widgets/checklists/design-checklist/frontend/main.js")
+        status_js, js_body, js_headers = self.invoke(
+            app,
+            path="/api/apps/widgets/checklists/design-checklist/frontend/main.js",
+            cookie=cookie,
+            extra_headers={"maverick.app_frame_proxy": True},
+        )
 
         self.assertEqual(status_html, 401)
         self.assertIn(b"authentication_required", html_body)
         self.assertEqual(status_css, 200)
-        self.assertEqual(css_headers["Access-Control-Allow-Origin"], "*")
-        self.assertEqual(css_headers["Cross-Origin-Resource-Policy"], "cross-origin")
+        self.assertNotIn("Access-Control-Allow-Origin", css_headers)
         self.assertIn(b"color: red", css_body)
         self.assertEqual(status_css_head, 200)
-        self.assertEqual(css_head_headers["Access-Control-Allow-Origin"], "*")
+        self.assertNotIn("Access-Control-Allow-Origin", css_head_headers)
         self.assertEqual(status_js, 200)
-        self.assertEqual(js_headers["Access-Control-Allow-Origin"], "*")
+        self.assertNotIn("Access-Control-Allow-Origin", js_headers)
         self.assertIn(b"widgetLoaded", js_body)
 
     def test_disabled_app_widgets_are_not_listed(self) -> None:
@@ -279,12 +291,20 @@ class WidgetsTestCase(unittest.TestCase):
         app = PlatformHost(state, start_path=repo_root)
         cookie = self.login(app)
 
-        status, body, _headers = self.invoke(
+        direct_status, direct_body, _direct_headers = self.invoke(
             app,
             path="/api/apps/widgets/checklists/design-checklist/frontend/",
             cookie=cookie,
         )
+        status, body, _headers = self.invoke(
+            app,
+            path="/api/apps/widgets/checklists/design-checklist/frontend/",
+            cookie=cookie,
+            extra_headers={"maverick.app_frame_proxy": True},
+        )
 
+        self.assertEqual(direct_status, 403)
+        self.assertIn(b"app_frame_isolation_required", direct_body)
         self.assertEqual(status, 200)
         self.assertIn(b"Checklist widget", body)
 
@@ -310,6 +330,7 @@ class WidgetsTestCase(unittest.TestCase):
             app,
             path="/api/apps/widgets/checklists/design-checklist/frontend/missing-route",
             cookie=cookie,
+            extra_headers={"maverick.app_frame_proxy": True},
         )
 
         self.assertEqual(status, 404)
@@ -420,7 +441,12 @@ class WidgetsTestCase(unittest.TestCase):
             query_string="host=widget-host&content_kind=checklist.design",
             cookie=cookie,
         )
-        self.invoke(app, path="/api/apps/widgets/checklists/design-checklist/frontend/", cookie=cookie)
+        self.invoke(
+            app,
+            path="/api/apps/widgets/checklists/design-checklist/frontend/",
+            cookie=cookie,
+            extra_headers={"maverick.app_frame_proxy": True},
+        )
 
         event_types = [event.event_type for event in state.observability_store.list_events(workspace_id="default")]
         self.assertIn("apps.widgets.lookup", event_types)

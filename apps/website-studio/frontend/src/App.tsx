@@ -784,6 +784,6 @@ function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset
         app_page: appPage
       }
     },
-    window.location.origin
+    "*"
   );
 }

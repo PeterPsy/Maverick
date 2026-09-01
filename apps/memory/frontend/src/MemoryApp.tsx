@@ -193,7 +193,7 @@ export function MemoryApp() {
   }, []);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, window.location.origin);
+    window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, "*");
   }, [appId]);
 
   useEffect(() => {

@@ -46,7 +46,7 @@ export function useChatShellMessages({
   transcriptionProviderAppId,
 }: UseChatShellMessagesParams) {
   useEffect(() => {
-    window.parent?.postMessage({ type: "maverick.app.ready", app_id: "chat" }, window.location.origin);
+    window.parent?.postMessage({ type: "maverick.app.ready", app_id: "chat" }, "*");
   }, []);
 
   useEffect(() => {

@@ -30,7 +30,8 @@ describe("AppFrameHost Storage file-cache boundary", () => {
 
     expect(source).toContain("new StorageFileCacheBroker");
     expect(source).toContain("fileCacheBrokerRef.current?.handleWindowMessage");
-    expect(source).toContain("frameRefs.current.storage?.contentWindow");
+    expect(source).toContain("frameRefs.current.storage ?? null");
+    expect(source).toContain("isMaverickFrameMessage");
     expect(source).toContain("broker.dispose()");
   });
 });

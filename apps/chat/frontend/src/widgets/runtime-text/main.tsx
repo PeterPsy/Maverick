@@ -143,7 +143,7 @@ function RuntimeTextWidget() {
         height,
         width: "100%",
       },
-      window.location.origin,
+      "*",
     );
   }, [contextError, runtimeError, messages.length, snapshotLoaded]);
 

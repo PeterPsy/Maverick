@@ -156,12 +156,12 @@ function openMail(params: Record<string, string | boolean | null>) {
       app_id: 'mail',
       params
     },
-    window.location.origin
+    "*"
   );
 }
 
 function closeShellSidebar() {
-  window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+  window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
 }
 
 function MailSidebarWidget() {

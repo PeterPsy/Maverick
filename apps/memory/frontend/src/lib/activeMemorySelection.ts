@@ -27,7 +27,7 @@ export function notifyActiveMemorySelection(nodeId: string, options: NotifyOptio
   if (!parentWindow || parentWindow === currentWindow) {
     return false;
   }
-  const origin = options.origin ?? (typeof window === "undefined" ? "*" : window.location.origin);
+  const origin = options.origin ?? "*";
   const ownerAppId = options.ownerAppId || "memory";
   parentWindow.postMessage(
     {

@@ -55,7 +55,7 @@ export function notifyCalendarUiStateChanged(appId: string, detail: Record<strin
       resource: CALENDAR_UI_STATE_RESOURCE,
       detail,
     },
-    window.location.origin,
+    "*",
   );
 }
 

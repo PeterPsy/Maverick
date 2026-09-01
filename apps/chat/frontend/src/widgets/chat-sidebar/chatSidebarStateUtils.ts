@@ -20,7 +20,7 @@ export function notifyShell(thread?: ChatThread, params: Record<string, string |
         ? { app_page: `threads/${thread.thread_id}` }
         : { new_chat: true, new_chat_request_id: crypto.randomUUID(), ...params },
     },
-    window.location.origin,
+    "*",
   );
 }
 

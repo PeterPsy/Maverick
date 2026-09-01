@@ -149,7 +149,7 @@ function publishSelectedPage(page: SettingsPage) {
       owner_app_id: 'settings',
       selection: { page_id: page.id }
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -164,7 +164,7 @@ function publishSelectedUser(user: User | undefined) {
       owner_app_id: 'settings',
       selection: { user_id: user.user_id }
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -178,7 +178,7 @@ function publishUserDataChanged() {
       owner_app_id: 'settings',
       resource: 'users'
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -409,7 +409,7 @@ function publishRuntimeCleanupChanged(payload: RuntimeCleanupPayload) {
       owner_app_id: 'chat',
       resource: 'threads'
     },
-    window.location.origin
+    "*"
   );
   payload.deleted_thread_ids.forEach((threadId) => {
     window.parent.postMessage(
@@ -419,7 +419,7 @@ function publishRuntimeCleanupChanged(payload: RuntimeCleanupPayload) {
         resource: 'threads',
         deleted_thread_id: threadId
       },
-      window.location.origin
+      "*"
     );
   });
 }
@@ -434,13 +434,13 @@ function publishAppDependenciesChanged(consumerAppId: string, dependencies: AppD
       app_id: consumerAppId,
       status: dependencies.status
     },
-    window.location.origin
+    "*"
   );
 }
 
 async function logoutFromSettings() {
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage({ type: 'maverick.shell.logout' }, window.location.origin);
+    window.parent.postMessage({ type: 'maverick.shell.logout' }, "*");
     return;
   }
   await logout();
@@ -584,6 +584,6 @@ window.addEventListener('message', (event) => {
   }
 });
 
-window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'settings' }, window.location.origin);
+window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'settings' }, "*");
 
 refresh().catch(showError);

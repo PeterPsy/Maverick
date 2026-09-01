@@ -7,7 +7,7 @@ import { roleLabels } from '../../storageMeta';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
 import { applyStorageFoldersDelta } from '../../lib/storageCatalogDelta';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
-import { storageOAuthRedirectUri } from '../../lib/storageOAuthRuntime';
+import { maverickPlatformOrigin, storageOAuthRedirectUri } from '../../lib/storageOAuthRuntime';
 import type { FileRole, StorageFile, StorageFolder } from '../../types';
 import '../../styles/sidebar-widget.css';
 
@@ -127,7 +127,7 @@ function openFolderInShell(appId: string, target: FolderActionTarget) {
         role: target.role
       }
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -143,7 +143,7 @@ function openDriveFolderInShell(appId: string, target: DriveFolderActionTarget) 
         display_path: target.displayPath
       }
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -156,7 +156,7 @@ function openFileInShell(appId: string, file: StorageFile) {
         workspace_relative_path: file.workspace_relative_path
       }
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -167,7 +167,7 @@ function postStorageFilesChanged(appId: string) {
       owner_app_id: appId,
       resource: 'files'
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -181,7 +181,7 @@ function postPrimaryActionState(appId: string, available: boolean) {
       label: PRIMARY_ACTION_LABEL,
       preferred_surface: 'sidebar'
     },
-    window.location.origin
+    "*"
   );
 }
 
@@ -322,7 +322,7 @@ function StorageSidebarFooterWidget() {
     setIsConnectingDrive(true);
     setStatus('');
     try {
-      const payload = await startDriveOAuth({ redirectUri: storageOAuthRedirectUri(appId, window.location.origin) });
+      const payload = await startDriveOAuth({ redirectUri: storageOAuthRedirectUri(appId, maverickPlatformOrigin()) });
       if (payload.status === 'not_configured') {
         closeAuthorizationWindow(authorizationWindow);
         setStatus('Google Drive OAuth is not configured');
@@ -547,7 +547,7 @@ function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
     return;
   }
   if (window.top && window.top !== window) {
-    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, window.location.origin);
+    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, "*");
     return;
   }
   window.location.assign(authorizationUrl);

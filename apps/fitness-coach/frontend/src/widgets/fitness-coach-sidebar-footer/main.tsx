@@ -17,12 +17,12 @@ function postPrimaryActionState(available: boolean) {
       label: PRIMARY_ACTION_LABEL,
       preferred_surface: 'sidebar'
     },
-    window.location.origin
+    "*"
   );
 }
 
 function openApp(params: Record<string, unknown>) {
-  window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: APP_ID, params }, window.location.origin);
+  window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: APP_ID, params }, "*");
 }
 
 function Footer() {

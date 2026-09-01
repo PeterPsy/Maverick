@@ -54,10 +54,10 @@ function openWorkout(workoutId: string, isMobile: boolean) {
       app_id: 'fitness-coach',
       params: { app_page: `workouts/${workoutId}`, workout_id: workoutId }
     },
-    window.location.origin
+    "*"
   );
   if (isMobile) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
   }
 }
 
@@ -69,10 +69,10 @@ function openSetupTab(setupTab: SetupTab, isMobile: boolean) {
       app_id: 'fitness-coach',
       params: { setup_tab: setupTab }
     },
-    window.location.origin
+    "*"
   );
   if (isMobile) {
-    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
   }
 }
 

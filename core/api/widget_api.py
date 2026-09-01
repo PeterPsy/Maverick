@@ -163,6 +163,12 @@ def handle_widget_api(
         return json_response(start_response, {"context": payload})
 
     if path.startswith("/api/apps/widgets/") and "/frontend" in path and method in {"GET", "HEAD"}:
+        if not public_widget_static_asset and environ.get("maverick.app_frame_proxy") is not True:
+            return json_response(
+                start_response,
+                {"error": "app_frame_isolation_required"},
+                status="403 Forbidden",
+            )
         remainder = path.removeprefix("/api/apps/widgets/")
         owner_app_id, _, tail = remainder.partition("/")
         widget_id, _, subpath = tail.partition("/frontend")

@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "c7a93519af8091101ca71161bb1f52ff7fb26d1f8d4accda20753bbd7549a42b",
+  "build_id": "1fb8108f26b1838e9e2c24f48e1dceae2d478fcc1a45a475d0707d80ba9cf1be",
   "entrypoints": [
     "index.html",
     "widgets/fitness-coach-sidebar/index.html",
@@ -8,19 +8,19 @@
   ],
   "immutable": [
     {
-      "path": "assets/api-DXBWx-jI.js",
-      "sha256": "f79697d848d26e362fa7b019d7edfc9873f94ce82e737665be1c1cbe8ea6a4c4",
-      "size_bytes": 6601
-    },
-    {
-      "path": "assets/app-BCZIxCEs.js",
-      "sha256": "155af9dff8fb51d6bfb15cf39fbcd2eb5324a927aaa59a396e0923815064f577",
-      "size_bytes": 74586
+      "path": "assets/api-Bfya-YRT.js",
+      "sha256": "3cbfff927be5c2cc4287f4226ef320e2aaf812afc9b16f1bc2c7d3d4e3e9ab0b",
+      "size_bytes": 6582
     },
     {
       "path": "assets/app-CJl-fSM1.css",
       "sha256": "bac8e10b7ce2c870537af3de9a6cc25bd5a81e439da5e6f85f542fe80ad5b4dd",
       "size_bytes": 34989
+    },
+    {
+      "path": "assets/app-DYsTmwyG.js",
+      "sha256": "29dd8ad786f5c58e3f4a5145fdbb84acdd48da598e4873861b7334b860839c81",
+      "size_bytes": 74567
     },
     {
       "path": "assets/count-down-fitness-coach-AWlrmdI5.mp3",
@@ -53,30 +53,30 @@
       "size_bytes": 9032
     },
     {
-      "path": "assets/widgets/fitness-coach-sidebar/index-BkfZWyOj.js",
-      "sha256": "5e0770026432f71324039b53e958d695b2ccbed406cbed59bfb8dcc5c2877044",
-      "size_bytes": 4655
+      "path": "assets/widgets/fitness-coach-sidebar/index-s_gWlKpb.js",
+      "sha256": "660977dadca5f81c29aa3c42e037eff7e8dc6e0d79d15dbfbcc82efd312e6938",
+      "size_bytes": 4579
     },
     {
-      "path": "assets/widgets/fitness-coach-sidebar-footer/index-UBSPXvN5.js",
-      "sha256": "80741d1ff102aada217cdc75f5d972e1756ef7281018dde2319bc354da6afcde",
-      "size_bytes": 1720
+      "path": "assets/widgets/fitness-coach-sidebar-footer/index-D4BFof8l.js",
+      "sha256": "4f83d7709184a843b5e4374665259d52477211f8b10dc0ff3db43c05049cb1ac",
+      "size_bytes": 1682
     }
   ],
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "3ef05398f1a22ff9a1d56634be5a3e5d9879c55a1b4ca6bbfdac6256d144a8bb",
+      "sha256": "6e30f4e3a07510bdecd316222cb5b5a05a86cbe47c37c58fe5d17dc4dc51bec2",
       "size_bytes": 717
     },
     {
       "path": "widgets/fitness-coach-sidebar/index.html",
-      "sha256": "a6f934ad00f97091ad072952fb079549b35bcfce4bb846e532ebefb945cb2999",
+      "sha256": "4c242ab3383cebe945c8bc900db8d1b00659c4127fcf3d38661a798255136083",
       "size_bytes": 687
     },
     {
       "path": "widgets/fitness-coach-sidebar-footer/index.html",
-      "sha256": "30bf3979aa63a37d8fe88396b94a5e4f5a15cca8c26fc5c2e64e44eed5782ec8",
+      "sha256": "9d9c9593dd4382fa959e1678e51d4554e9b60cfe75a46c760476ff5f30194be6",
       "size_bytes": 709
     }
   ]

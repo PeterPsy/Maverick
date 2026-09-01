@@ -20,7 +20,7 @@ import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requ
 import { sortStorageFiles, type FileSortKey } from './lib/storageFileSort';
 import { folderTargetFromMissingFileTarget, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storagePickerAcceptsFile, storagePickerContextFromParams, storagePickerResultForFile, type StoragePickerContext } from './lib/storagePicker';
-import { storageOAuthCallbackFromLocation, type StorageOAuthCallback } from './lib/storageOAuthRuntime';
+import { maverickPlatformOrigin, storageOAuthCallbackFromLocation, type StorageOAuthCallback } from './lib/storageOAuthRuntime';
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
 import { storageViewFilterFromMessage } from './lib/storageViewFilterEvents';
 import { loadFullPreview } from './previewCache';
@@ -880,7 +880,11 @@ function App() {
   }
 
   useEffect(() => {
-    const oauthCallback = storageOAuthCallbackFromLocation(window.location.pathname, window.location.search, window.location.origin);
+    const oauthCallback = storageOAuthCallbackFromLocation(
+      window.location.pathname,
+      window.location.search,
+      maverickPlatformOrigin(),
+    );
     const initialTarget = oauthCallback ? null : pendingNavigationTargetRef.current;
     const initialLoad = oauthCallback
       ? handleDriveOAuthCallback(oauthCallback)
@@ -950,7 +954,7 @@ function App() {
   }, [driveTarget]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'storage' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'storage' }, "*");
   }, []);
 
   useEffect(() => {
@@ -1214,7 +1218,7 @@ function App() {
           storage_picker_result: JSON.stringify(result)
         }
       },
-      window.location.origin
+      "*"
     );
     closePreviewModal();
     setDetailsOpen(false);

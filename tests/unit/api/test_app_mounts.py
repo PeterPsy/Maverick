@@ -46,6 +46,24 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(headers["Cache-Control"], "public, max-age=31536000, immutable")
         self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(headers["Cross-Origin-Resource-Policy"], "cross-origin")
+        self.assertEqual(headers["Content-Security-Policy"], "sandbox; default-src 'none'; style-src 'unsafe-inline'")
+        self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
+
+    def test_cross_origin_svg_assets_cannot_execute_as_platform_documents(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            asset_dir = root / "assets"
+            asset_dir.mkdir()
+            (asset_dir / "logo.svg").write_text(
+                '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.origin)</script></svg>',
+                encoding="utf-8",
+            )
+
+            status, headers = _serve(root, "/assets/logo.svg", cross_origin=True)
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(headers["Content-Security-Policy"], "sandbox; default-src 'none'; style-src 'unsafe-inline'")
+        self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
 
     def test_static_assets_use_gzip_when_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

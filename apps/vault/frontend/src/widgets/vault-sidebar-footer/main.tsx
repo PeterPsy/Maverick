@@ -128,7 +128,7 @@ function VaultSidebarFooterWidget() {
       writeVaultViewState({ ...readVaultViewState(), credentialPanel: '', metricFilter: null, selectedSecretId: '', tab: 'credentials' });
       notifyVaultDataChanged();
       notifyVaultViewStateChanged();
-      window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: appId, params: { tab: 'credentials' } }, window.location.origin);
+      window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: appId, params: { tab: 'credentials' } }, "*");
     }
     setImportFailures(failures);
     setImportStatus(`Imported ${created} of ${rowsToCreate.length} selected secrets.`);
@@ -269,7 +269,7 @@ function runPrimaryAction(_appId: string, _tab: Tab) {
   writeVaultViewState({ ...currentState, credentialPanel: 'new', metricFilter: null, selectedSecretId: '' });
   notifyVaultViewStateChanged();
   writeVaultActionRequest('new-credential');
-  window.parent?.postMessage({ type: 'maverick.shell.sidebar.open' }, window.location.origin);
+  window.parent?.postMessage({ type: 'maverick.shell.sidebar.open' }, "*");
 }
 
 function primaryActionFor(_tab: Tab): { label: string; params: Record<string, string> } {
@@ -286,7 +286,7 @@ function postPrimaryActionState(appId: string, label: string) {
       label,
       preferred_surface: 'sidebar'
     },
-    window.location.origin
+    "*"
   );
 }
 

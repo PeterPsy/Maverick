@@ -87,7 +87,7 @@ export function App() {
   }, [notice]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'docs-studio' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'docs-studio' }, "*");
   }, []);
 
   useEffect(() => {

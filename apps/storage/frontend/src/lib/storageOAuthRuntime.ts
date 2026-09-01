@@ -11,6 +11,11 @@ export function storageOAuthRedirectUri(appId: string, origin: string) {
   return `${normalizedOrigin}/apps/${encodeURIComponent(appId)}/oauth/callback`;
 }
 
+export function maverickPlatformOrigin(): string {
+  const value = (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__;
+  return typeof value === 'string' && /^https?:\/\//u.test(value) ? value : window.location.origin;
+}
+
 export function storageOAuthCallbackFromLocation(pathname: string, search: string, origin: string): StorageOAuthCallback | null {
   const match = pathname.match(/^\/apps\/([^/?#]+)\/oauth\/callback\/?$/);
   if (!match?.[1]) {

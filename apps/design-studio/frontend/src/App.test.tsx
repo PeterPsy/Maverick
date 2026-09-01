@@ -112,7 +112,7 @@ describe("Design Studio native OpenDesign host", () => {
     await act(async () => {
       window.dispatchEvent(new MessageEvent("message", {
         origin: window.location.origin,
-        source: window.parent,
+        source: window,
         data: {
           type: "maverick.app.navigate",
           app_id: "design-studio",

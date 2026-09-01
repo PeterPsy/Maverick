@@ -54,6 +54,7 @@ class StorageWidgetTestCase(unittest.TestCase):
         method: str = "GET",
         body: dict | None = None,
         cookie: str | None = None,
+        isolated_proxy: bool = False,
         query_string: str = "",
     ) -> tuple[int, dict | bytes, dict[str, str]]:
         payload = b"" if body is None else json.dumps(body).encode("utf-8")
@@ -68,6 +69,8 @@ class StorageWidgetTestCase(unittest.TestCase):
         }
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
+        if isolated_proxy:
+            environ["maverick.app_frame_proxy"] = True
 
         def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
             headers.update(dict(response_headers))
@@ -108,6 +111,7 @@ class StorageWidgetTestCase(unittest.TestCase):
             app,
             path="/api/apps/widgets/storage/file-preview/frontend/",
             cookie=cookie,
+            isolated_proxy=True,
         )
 
         self.assertEqual(registry_status, 200)
@@ -134,6 +138,7 @@ class StorageWidgetTestCase(unittest.TestCase):
             app,
             path="/api/apps/widgets/storage/storage-sidebar/frontend/",
             cookie=cookie,
+            isolated_proxy=True,
         )
 
         self.assertEqual(registry_status, 200)

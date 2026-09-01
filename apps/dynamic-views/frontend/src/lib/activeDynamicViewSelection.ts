@@ -24,7 +24,7 @@ export function notifyActiveDynamicViewSelection(viewId: string, options: Notify
   if (!parentWindow || parentWindow === currentWindow) {
     return false;
   }
-  const origin = options.origin ?? (typeof window === 'undefined' ? '*' : window.location.origin);
+  const origin = options.origin ?? '*';
   parentWindow.postMessage(
     {
       type: 'maverick.app.selection-changed',

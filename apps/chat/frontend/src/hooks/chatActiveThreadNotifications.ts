@@ -25,6 +25,6 @@ export function postActiveThreadChanged({
       active_thread_id: activeThreadId,
       ...(navigationScope ? { navigation_scope: navigationScope } : {}),
     },
-    window.location.origin,
+    "*",
   );
 }

@@ -49,7 +49,7 @@ function appIcon(app) {
 }
 
 function openApp(appId) {
-  window.parent?.postMessage({ type: "maverick.widget.open-app", app_id: appId }, window.location.origin);
+  window.parent?.postMessage({ type: "maverick.widget.open-app", app_id: appId }, "*");
 }
 
 function notifyPinnedAppsChanged() {
@@ -59,7 +59,7 @@ function notifyPinnedAppsChanged() {
       owner_app_id: "app-store",
       resource: "pinned-apps",
     },
-    window.location.origin,
+    "*",
   );
 }
 

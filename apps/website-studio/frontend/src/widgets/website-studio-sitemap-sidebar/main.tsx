@@ -212,7 +212,7 @@ function WebsiteSitemapSidebarWidget() {
       return;
     }
     await backend({ action: 'site_set_active', site_id: siteId }).catch(() => null);
-    window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { site_id: siteId } }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { site_id: siteId } }, "*");
     await load(siteId);
   }
 
@@ -488,8 +488,8 @@ function openNode(node: TreeItem, activeSiteId: string) {
     if (kind === 'section') params.section_id = id;
     if (kind === 'anchor') params.anchor_id = id;
   }
-  window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params }, window.location.origin);
-  window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+  window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params }, "*");
+  window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, "*");
 }
 
 function WebsiteTreeSkeleton() {

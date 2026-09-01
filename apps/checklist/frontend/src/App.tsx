@@ -94,7 +94,7 @@ export function App() {
   }, [viewMode]);
 
   useEffect(() => {
-    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'checklist' }, window.location.origin);
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'checklist' }, "*");
   }, []);
 
   useEffect(() => {
@@ -199,7 +199,7 @@ export function App() {
           checklist_id: item.id
         }
       },
-      window.location.origin
+      "*"
     );
   }
 

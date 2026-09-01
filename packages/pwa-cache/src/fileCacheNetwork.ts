@@ -1,5 +1,14 @@
 import type { FileCacheOpenResult } from "./fileCacheTypes";
 
+export type FileCacheRevalidationResult = "unavailable" | "verified";
+
+export class MaverickFileRevalidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MaverickFileRevalidationError";
+  }
+}
+
 export class MaverickFileHttpError extends Error {
   readonly retryAfterMs?: number;
   readonly status: number;
@@ -29,6 +38,44 @@ export async function fetchFileResponse(
     if (isAbortError(error) || signal.aborted) throw error;
     throw transportError("Storage file transport failed.", error);
   }
+}
+
+export async function revalidateFileResponse(
+  fetchImpl: typeof fetch,
+  url: string,
+  signal: AbortSignal,
+  expectedEtag: string,
+  expectedSize: number,
+): Promise<FileCacheRevalidationResult> {
+  const headers = new Headers({ "If-None-Match": expectedEtag });
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers,
+      method: "HEAD",
+      signal,
+    });
+  } catch (error) {
+    if (isAbortError(error) || signal.aborted) throw error;
+    return "unavailable";
+  }
+  if (retryableFileStatus(response.status)) return "unavailable";
+  if (response.status !== 200 && response.status !== 304) {
+    throw new MaverickFileHttpError(response);
+  }
+  const etag = response.headers.get("ETag")?.trim() ?? "";
+  if (!isExactStrongEtag(etag, expectedEtag)) {
+    throw new MaverickFileRevalidationError("Storage returned a different file validator during cache revalidation.");
+  }
+  if (response.status === 200) {
+    const contentLength = Number(response.headers.get("Content-Length"));
+    if (!Number.isSafeInteger(contentLength) || contentLength < 0 || contentLength !== expectedSize) {
+      throw new MaverickFileRevalidationError("Storage returned a different file size during cache revalidation.");
+    }
+  }
+  return "verified";
 }
 
 export async function networkBlobResult(response: Response, etag: string): Promise<FileCacheOpenResult> {
@@ -87,6 +134,11 @@ export function cacheErrorReason(error: unknown): string {
 
 export function isAbortError(error: unknown): boolean {
   return Boolean(error) && typeof error === "object" && (error as { name?: unknown }).name === "AbortError";
+}
+
+function isExactStrongEtag(value: string, expected: string): boolean {
+  const pattern = /^"[^"\u0000-\u001f\u007f]+"$/u;
+  return pattern.test(value) && pattern.test(expected) && value === expected;
 }
 
 function parseContentRange(value: string | null): { end: number; start: number; total: number } | null {

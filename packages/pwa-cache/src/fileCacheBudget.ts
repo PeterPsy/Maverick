@@ -30,9 +30,8 @@ export async function enforceFileCacheBudget(options: {
   globalBytes += incoming;
   scopeBytes += incoming;
   const victims = records
-    .filter((record) => !protectedKeys.has(record.key))
-    .sort((left, right) => statePriority(left) - statePriority(right)
-      || left.lastAccessedAt - right.lastAccessedAt
+    .filter((record) => record.state === "ready" && !protectedKeys.has(record.key))
+    .sort((left, right) => left.lastAccessedAt - right.lastAccessedAt
       || left.cachedAt - right.cachedAt
       || left.key.localeCompare(right.key));
   for (const victim of victims) {
@@ -47,7 +46,9 @@ export async function enforceFileCacheBudget(options: {
 }
 
 function recordBytes(record: FileCacheRecord): number {
-  return record.state === "ready" ? record.sizeBytes : record.writtenBytes;
+  // A writing record is a durable reservation for its complete declared size.
+  // Counting only bytes already streamed makes concurrent budget checks race.
+  return record.state === "ready" || record.state === "writing" ? record.sizeBytes : record.writtenBytes;
 }
 
 function samePrincipal(record: FileCacheRecord, principal: CachePrincipal): boolean {
@@ -58,8 +59,4 @@ function samePrincipal(record: FileCacheRecord, principal: CachePrincipal): bool
 
 function sameFile(record: FileCacheRecord, principal: CachePrincipal, fileId: string): boolean {
   return samePrincipal(record, principal) && record.fileId === fileId;
-}
-
-function statePriority(record: FileCacheRecord): number {
-  return record.state === "ready" ? 1 : 0;
 }

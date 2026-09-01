@@ -2,6 +2,7 @@ import type {
   FileCacheCleanupMarker,
   FileCacheFilter,
   FileCacheManifestStore,
+  FileCachePublishResult,
   FileCacheRecord,
 } from "./fileCacheTypes";
 
@@ -9,6 +10,14 @@ export const PWA_FILE_CACHE_DATABASE_NAME = "maverick-pwa-file-v1";
 export const PWA_FILE_CACHE_DATABASE_VERSION = 1;
 const RECORD_STORE = "files";
 const METADATA_STORE = "metadata";
+const STATE_ID = "file-cache-state";
+
+type FileCacheStateMetadata = {
+  cleanupEpoch: number;
+  id: typeof STATE_ID;
+  kind: "file-cache-state";
+  nextWriteGeneration: number;
+};
 
 export type IndexedDbFileCacheManifestStoreOptions = {
   databaseName?: string;
@@ -49,6 +58,101 @@ export class IndexedDbFileCacheManifestStore implements FileCacheManifestStore {
     await transactionDone(transaction);
   }
 
+  async getCleanupEpoch(): Promise<number> {
+    const database = await this.database();
+    const transaction = database.transaction(METADATA_STORE, "readonly");
+    const state = await requestValue<unknown>(transaction.objectStore(METADATA_STORE).get(STATE_ID));
+    await transactionDone(transaction);
+    return fileCacheState(state).cleanupEpoch;
+  }
+
+  async reserveWriting(record: FileCacheRecord, expectedCleanupEpoch: number): Promise<FileCacheRecord | null> {
+    const database = await this.database();
+    const transaction = database.transaction([RECORD_STORE, METADATA_STORE], "readwrite");
+    const records = transaction.objectStore(RECORD_STORE);
+    const metadata = transaction.objectStore(METADATA_STORE);
+    const [stateValue, metadataValues, current, allRecords] = await Promise.all([
+      requestValue<unknown>(metadata.get(STATE_ID)),
+      requestValue<unknown[]>(metadata.getAll()),
+      requestValue<FileCacheRecord | undefined>(records.get(record.key)),
+      requestValue<FileCacheRecord[]>(records.getAll()),
+    ]);
+    const state = fileCacheState(stateValue);
+    if (state.cleanupEpoch !== expectedCleanupEpoch
+        || metadataValues.some((value) => isCleanupMarker(value) && fileCacheFilterMatches(record, value.filter))
+        || (current && !sameWritingReservation(current, record))) {
+      await transactionDone(transaction);
+      return null;
+    }
+    if (current) {
+      await transactionDone(transaction);
+      return structuredClone(current);
+    }
+    const reserved: FileCacheRecord = {
+      ...structuredClone(record),
+      cleanupEpoch: state.cleanupEpoch,
+      writeGeneration: allRecords.reduce(
+        (highest, candidate) => Math.max(highest, safeWriteGeneration(candidate)),
+        state.nextWriteGeneration,
+      ) + 1,
+    };
+    records.put(reserved);
+    metadata.put({ ...state, nextWriteGeneration: reserved.writeGeneration });
+    await transactionDone(transaction);
+    return reserved;
+  }
+
+  async updateWriting(record: FileCacheRecord): Promise<boolean> {
+    return this.updateRecord(record, "writing");
+  }
+
+  async updateReady(record: FileCacheRecord): Promise<boolean> {
+    return this.updateRecord(record, "ready");
+  }
+
+  async deleteWriting(record: FileCacheRecord): Promise<boolean> {
+    const database = await this.database();
+    const transaction = database.transaction(RECORD_STORE, "readwrite");
+    const store = transaction.objectStore(RECORD_STORE);
+    const current = await requestValue<FileCacheRecord | undefined>(store.get(record.key));
+    if (current?.state === "writing" && sameRecordGeneration(current, record)) {
+      store.delete(record.key);
+      await transactionDone(transaction);
+      return true;
+    }
+    await transactionDone(transaction);
+    return false;
+  }
+
+  async publishReady(record: FileCacheRecord): Promise<FileCachePublishResult> {
+    const database = await this.database();
+    const transaction = database.transaction([RECORD_STORE, METADATA_STORE], "readwrite");
+    const recordsStore = transaction.objectStore(RECORD_STORE);
+    const metadataStore = transaction.objectStore(METADATA_STORE);
+    const [stateValue, metadataValues, current, allRecords] = await Promise.all([
+      requestValue<unknown>(metadataStore.get(STATE_ID)),
+      requestValue<unknown[]>(metadataStore.getAll()),
+      requestValue<FileCacheRecord | undefined>(recordsStore.get(record.key)),
+      requestValue<FileCacheRecord[]>(recordsStore.getAll()),
+    ]);
+    const state = fileCacheState(stateValue);
+    const sameIdentityRecords = allRecords.filter((candidate) => sameFileIdentity(candidate, record));
+    const superseded = sameIdentityRecords.some((candidate) => candidate.writeGeneration > record.writeGeneration);
+    if (state.cleanupEpoch !== record.cleanupEpoch
+        || metadataValues.some((value) => isCleanupMarker(value) && fileCacheFilterMatches(record, value.filter))
+        || current?.state !== "writing"
+        || !sameRecordGeneration(current, record)
+        || superseded) {
+      await transactionDone(transaction);
+      return { obsoleteRecords: [], published: false };
+    }
+    const obsoleteRecords = sameIdentityRecords.filter((candidate) => candidate.key !== record.key);
+    recordsStore.put(structuredClone(record));
+    obsoleteRecords.forEach((candidate) => recordsStore.delete(candidate.key));
+    await transactionDone(transaction);
+    return { obsoleteRecords: structuredClone(obsoleteRecords), published: true };
+  }
+
   async delete(key: string): Promise<boolean> {
     const database = await this.database();
     const transaction = database.transaction(RECORD_STORE, "readwrite");
@@ -68,15 +172,19 @@ export class IndexedDbFileCacheManifestStore implements FileCacheManifestStore {
   }
 
   async createCleanupMarker(filter: FileCacheFilter): Promise<FileCacheCleanupMarker> {
+    const database = await this.database();
+    const transaction = database.transaction(METADATA_STORE, "readwrite");
+    const store = transaction.objectStore(METADATA_STORE);
+    const state = fileCacheState(await requestValue<unknown>(store.get(STATE_ID)));
     const marker: FileCacheCleanupMarker = {
+      cleanupEpoch: state.cleanupEpoch + 1,
       createdAt: this.now(),
       filter: structuredClone(filter),
       id: globalThis.crypto?.randomUUID?.() ?? `file-cleanup-${this.now()}-${Math.random().toString(16).slice(2)}`,
       kind: "file-cache-cleanup",
     };
-    const database = await this.database();
-    const transaction = database.transaction(METADATA_STORE, "readwrite");
-    transaction.objectStore(METADATA_STORE).put(marker);
+    store.put({ ...state, cleanupEpoch: marker.cleanupEpoch });
+    store.put(marker);
     await transactionDone(transaction);
     return marker;
   }
@@ -99,6 +207,29 @@ export class IndexedDbFileCacheManifestStore implements FileCacheManifestStore {
   private database(): Promise<IDBDatabase> {
     if (!this.databasePromise) this.databasePromise = this.openDatabase();
     return this.databasePromise;
+  }
+
+  private async updateRecord(record: FileCacheRecord, expectedState: "ready" | "writing"): Promise<boolean> {
+    const database = await this.database();
+    const transaction = database.transaction([RECORD_STORE, METADATA_STORE], "readwrite");
+    const records = transaction.objectStore(RECORD_STORE);
+    const metadata = transaction.objectStore(METADATA_STORE);
+    const [stateValue, metadataValues, current] = await Promise.all([
+      requestValue<unknown>(metadata.get(STATE_ID)),
+      requestValue<unknown[]>(metadata.getAll()),
+      requestValue<FileCacheRecord | undefined>(records.get(record.key)),
+    ]);
+    const state = fileCacheState(stateValue);
+    if ((expectedState === "writing" && state.cleanupEpoch !== record.cleanupEpoch)
+        || metadataValues.some((value) => isCleanupMarker(value) && fileCacheFilterMatches(record, value.filter))
+        || current?.state !== expectedState
+        || !sameRecordGeneration(current, record)) {
+      await transactionDone(transaction);
+      return false;
+    }
+    records.put(structuredClone(record));
+    await transactionDone(transaction);
+    return true;
   }
 
   private openDatabase(): Promise<IDBDatabase> {
@@ -155,6 +286,54 @@ function isCleanupMarker(value: unknown): value is FileCacheCleanupMarker {
   const marker = value as Partial<FileCacheCleanupMarker>;
   return marker.kind === "file-cache-cleanup"
     && typeof marker.id === "string"
+    && Number.isSafeInteger(marker.cleanupEpoch)
+    && Number(marker.cleanupEpoch) >= 1
     && Boolean(marker.filter)
     && typeof marker.filter === "object";
+}
+
+function fileCacheState(value: unknown): FileCacheStateMetadata {
+  if (value && typeof value === "object") {
+    const state = value as Partial<FileCacheStateMetadata>;
+    if (state.id === STATE_ID
+        && state.kind === "file-cache-state"
+        && Number.isSafeInteger(state.cleanupEpoch)
+        && Number(state.cleanupEpoch) >= 0
+        && Number.isSafeInteger(state.nextWriteGeneration)
+        && Number(state.nextWriteGeneration) >= 0) {
+      return state as FileCacheStateMetadata;
+    }
+  }
+  return {
+    cleanupEpoch: 0,
+    id: STATE_ID,
+    kind: "file-cache-state",
+    nextWriteGeneration: 0,
+  };
+}
+
+function sameWritingReservation(left: FileCacheRecord, right: FileCacheRecord): boolean {
+  return left.state === "writing"
+    && right.state === "writing"
+    && left.writerSessionId === right.writerSessionId
+    && left.opfsPath === right.opfsPath;
+}
+
+function sameRecordGeneration(left: FileCacheRecord, right: FileCacheRecord): boolean {
+  return left.key === right.key
+    && left.cleanupEpoch === right.cleanupEpoch
+    && left.writeGeneration === right.writeGeneration
+    && left.writerSessionId === right.writerSessionId
+    && left.opfsPath === right.opfsPath;
+}
+
+function sameFileIdentity(left: FileCacheRecord, right: FileCacheRecord): boolean {
+  return left.userId === right.userId
+    && left.workspaceId === right.workspaceId
+    && left.appId === right.appId
+    && left.fileId === right.fileId;
+}
+
+function safeWriteGeneration(record: FileCacheRecord): number {
+  return Number.isSafeInteger(record.writeGeneration) && record.writeGeneration >= 0 ? record.writeGeneration : 0;
 }

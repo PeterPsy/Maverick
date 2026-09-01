@@ -16,11 +16,13 @@ const WRITE_LEASE_MS = 10 * 60_000;
 const MANIFEST_PROGRESS_INTERVAL_BYTES = 1024 * 1024;
 
 export type PartialFileWrite = {
+  cleanupEpoch: number;
   descriptor: FileCacheDescriptor;
   etag: string;
   hash: IncrementalSha256;
   path: string;
   writtenBytes: number;
+  writeGeneration: number;
 };
 
 export class FileCacheWriter {
@@ -43,14 +45,33 @@ export class FileCacheWriter {
     return this.partials.get(key);
   }
 
-  create(key: string, descriptor: FileCacheDescriptor, etag: string): PartialFileWrite {
+  async reserve(key: string, descriptor: FileCacheDescriptor): Promise<PartialFileWrite | undefined> {
+    const existing = this.partials.get(key);
+    if (existing) {
+      const retained = await this.options.manifest.updateWriting(
+        this.writingRecord(key, existing, this.options.now()),
+      ).catch(() => false);
+      if (retained) return existing;
+      await this.discard(key, existing);
+      return undefined;
+    }
+    const cleanupEpoch = await this.options.manifest.getCleanupEpoch();
     const partial = {
+      cleanupEpoch,
       descriptor,
-      etag,
+      etag: "",
       hash: new IncrementalSha256(),
       path: opaqueFileCachePath(),
       writtenBytes: 0,
+      writeGeneration: 0,
     };
+    const reserved = await this.options.manifest.reserveWriting(
+      this.writingRecord(key, partial, this.options.now()),
+      cleanupEpoch,
+    );
+    if (!reserved) return undefined;
+    partial.cleanupEpoch = reserved.cleanupEpoch;
+    partial.writeGeneration = reserved.writeGeneration;
     this.partials.set(key, partial);
     return partial;
   }
@@ -67,12 +88,17 @@ export class FileCacheWriter {
   async write(key: string, partial: PartialFileWrite, response: Response, signal: AbortSignal): Promise<void> {
     if (!response.body) return;
     const reader = response.body.getReader();
+    const cancelReader = () => { void reader.cancel(signal.reason).catch(() => undefined); };
+    signal.addEventListener("abort", cancelReader, { once: true });
     let writer: Awaited<ReturnType<FileCacheByteStore["createWriter"]>> | null = null;
     let lastPersisted = partial.writtenBytes;
     let retainForResume = false;
     try {
+      if (signal.aborted) throw signal.reason ?? new DOMException("File cache write cancelled.", "AbortError");
+      if (!await this.options.manifest.updateWriting(this.writingRecord(key, partial, this.options.now()))) {
+        throw new DOMException("File cache write was superseded or invalidated by cleanup.", "AbortError");
+      }
       writer = await this.options.bytes.createWriter(partial.path, partial.writtenBytes);
-      await this.options.manifest.put(this.writingRecord(key, partial, this.options.now()));
       this.options.telemetry({ bytes: partial.descriptor.sizeBytes - partial.writtenBytes, kind: "write" });
       while (true) {
         if (signal.aborted) throw signal.reason ?? new DOMException("File cache write cancelled.", "AbortError");
@@ -83,48 +109,55 @@ export class FileCacheWriter {
           retainForResume = true;
           throw error;
         }
+        if (signal.aborted) throw signal.reason ?? new DOMException("File cache write cancelled.", "AbortError");
         const { done, value } = chunk;
         if (done) break;
         await writer.write(value);
         partial.hash.update(value);
         partial.writtenBytes += value.byteLength;
         if (partial.writtenBytes - lastPersisted >= MANIFEST_PROGRESS_INTERVAL_BYTES) {
-          await this.options.manifest.put(this.writingRecord(key, partial, this.options.now()));
+          if (!await this.options.manifest.updateWriting(this.writingRecord(key, partial, this.options.now()))) {
+            throw new DOMException("File cache write was superseded or invalidated by cleanup.", "AbortError");
+          }
           lastPersisted = partial.writtenBytes;
         }
       }
       await writer.close();
       writer = null;
     } catch (error) {
+      signal.removeEventListener("abort", cancelReader);
       await writer?.close().catch(() => undefined);
       if (isAbortError(error) || !retainForResume) {
-        await reader.cancel(error).catch(() => undefined);
-        await this.discard(key);
+        void reader.cancel(error).catch(() => undefined);
+        await this.discard(key, partial);
       } else if (this.partials.get(key) === partial) {
-        await this.options.manifest.put(this.writingRecord(key, partial, this.options.now())).catch(() => undefined);
+        const retained = await this.options.manifest.updateWriting(
+          this.writingRecord(key, partial, this.options.now()),
+        ).catch(() => false);
+        if (!retained) await this.discard(key, partial);
       }
       throw error;
     }
+    signal.removeEventListener("abort", cancelReader);
     try {
       await this.publishReady(key, partial);
     } catch (error) {
       if (this.partials.get(key) === partial
           && partial.writtenBytes >= partial.descriptor.sizeBytes) {
-        await this.discard(key);
+        await this.discard(key, partial);
       }
       throw error;
     }
   }
 
-  async discard(key: string): Promise<void> {
+  async discard(key: string, expected?: PartialFileWrite): Promise<void> {
     const partial = this.partials.get(key);
+    if (!partial || (expected && partial !== expected)) return;
     this.partials.delete(key);
     if (partial) await this.options.bytes.delete(partial.path).catch(() => undefined);
-    const record = await this.options.manifest.get(key).catch(() => null);
-    if (record?.state === "writing") {
-      await this.options.bytes.delete(record.opfsPath).catch(() => undefined);
-      await this.options.manifest.delete(key).catch(() => false);
-    }
+    await this.options.manifest.deleteWriting(
+      this.writingRecord(key, partial, this.options.now()),
+    ).catch(() => false);
   }
 
   async deleteRecord(record: FileCacheRecord): Promise<void> {
@@ -133,12 +166,13 @@ export class FileCacheWriter {
   }
 
   dispose(): void {
-    this.partials.clear();
+    // The owning cache aborts active write signals. Keep reservations reachable
+    // until their finally paths have discarded or retained them deterministically.
   }
 
   private async publishReady(key: string, partial: PartialFileWrite): Promise<void> {
     if (partial.writtenBytes !== partial.descriptor.sizeBytes) {
-      await this.options.manifest.put(this.writingRecord(key, partial, this.options.now()));
+      await this.options.manifest.updateWriting(this.writingRecord(key, partial, this.options.now()));
       throw transportError("Storage file response ended before the declared size.");
     }
     const digest = partial.hash.hexDigest();
@@ -151,6 +185,7 @@ export class FileCacheWriter {
       ...this.options.principal,
       ...this.accessLeaseMetadata(partial.descriptor),
       cachedAt: readyAt,
+      cleanupEpoch: partial.cleanupEpoch,
       contentType: partial.descriptor.contentType,
       dataClass: partial.descriptor.dataClass,
       etag: partial.etag,
@@ -167,10 +202,16 @@ export class FileCacheWriter {
       sourceVersion: partial.descriptor.sourceVersion,
       state: "ready",
       writtenBytes: partial.writtenBytes,
+      writeGeneration: partial.writeGeneration,
+      writerSessionId: this.sessionId,
     };
-    await this.options.manifest.put(ready);
+    const published = await this.options.manifest.publishReady(ready);
+    if (!published.published) {
+      throw new DOMException("File cache write was superseded or invalidated by cleanup.", "AbortError");
+    }
     this.partials.delete(key);
-    await this.removeObsoleteVersions(ready);
+    await Promise.all(published.obsoleteRecords.map((record) =>
+      this.options.bytes.delete(record.opfsPath).catch(() => undefined)));
     this.options.telemetry({ bytes: ready.sizeBytes, kind: "ready" });
   }
 
@@ -179,6 +220,7 @@ export class FileCacheWriter {
       ...this.options.principal,
       ...this.accessLeaseMetadata(partial.descriptor),
       cachedAt: now,
+      cleanupEpoch: partial.cleanupEpoch,
       contentType: partial.descriptor.contentType,
       dataClass: partial.descriptor.dataClass,
       etag: partial.etag,
@@ -195,6 +237,7 @@ export class FileCacheWriter {
       sourceVersion: partial.descriptor.sourceVersion,
       state: "writing",
       writtenBytes: partial.writtenBytes,
+      writeGeneration: partial.writeGeneration,
       writeLeaseExpiresAt: now + WRITE_LEASE_MS,
       writerSessionId: this.sessionId,
     };
@@ -204,15 +247,4 @@ export class FileCacheWriter {
     return descriptor.dataClass === "public" ? {} : { accessLeaseExpiresAt: this.options.getAccessLease()?.expiresAt };
   }
 
-  private async removeObsoleteVersions(ready: FileCacheRecord): Promise<void> {
-    const records = await this.options.manifest.list({
-      appId: ready.appId,
-      fileId: ready.fileId,
-      userId: ready.userId,
-      workspaceId: ready.workspaceId,
-    });
-    for (const record of records) {
-      if (record.key !== ready.key) await this.deleteRecord(record);
-    }
-  }
 }

@@ -7,7 +7,7 @@ import type {
   StorageQuotaAdapter,
 } from "./types";
 
-export const PWA_FILE_CACHE_SCHEMA_VERSION = 1;
+export const PWA_FILE_CACHE_SCHEMA_VERSION = 2;
 export const PWA_FILE_CACHE_POLICY_REVISION = "maverick.local-persistence-policy.v2";
 export const DEFAULT_PWA_FILE_CACHE_MAX_ENTRY_BYTES = 64 * 1024 * 1024;
 export const DEFAULT_PWA_FILE_CACHE_SCOPE_BUDGET_BYTES = 128 * 1024 * 1024;
@@ -31,6 +31,7 @@ export type FileCacheDescriptor = {
 export type FileCacheRecord = CachePrincipal & {
   accessLeaseExpiresAt?: number;
   cachedAt: number;
+  cleanupEpoch: number;
   contentType: string;
   dataClass: MaverickDataClass;
   etag: string;
@@ -47,6 +48,7 @@ export type FileCacheRecord = CachePrincipal & {
   sourceVersion: string;
   state: FileCacheState;
   writtenBytes: number;
+  writeGeneration: number;
   writeLeaseExpiresAt?: number;
   writerSessionId?: string;
 };
@@ -56,21 +58,33 @@ export type FileCacheFilter = Partial<Pick<FileCacheRecord,
 >>;
 
 export type FileCacheCleanupMarker = {
+  cleanupEpoch: number;
   createdAt: number;
   filter: FileCacheFilter;
   id: string;
   kind: "file-cache-cleanup";
 };
 
+export type FileCachePublishResult = {
+  obsoleteRecords: FileCacheRecord[];
+  published: boolean;
+};
+
 export interface FileCacheManifestStore {
   createCleanupMarker(filter: FileCacheFilter): Promise<FileCacheCleanupMarker>;
   delete(key: string): Promise<boolean>;
   deleteCleanupMarker(id: string): Promise<void>;
+  deleteWriting(record: FileCacheRecord): Promise<boolean>;
   get(key: string): Promise<FileCacheRecord | null>;
+  getCleanupEpoch(): Promise<number>;
   initialize(): Promise<void>;
   list(filter?: FileCacheFilter): Promise<FileCacheRecord[]>;
   listCleanupMarkers(): Promise<FileCacheCleanupMarker[]>;
+  publishReady(record: FileCacheRecord): Promise<FileCachePublishResult>;
   put(record: FileCacheRecord): Promise<void>;
+  reserveWriting(record: FileCacheRecord, expectedCleanupEpoch: number): Promise<FileCacheRecord | null>;
+  updateReady(record: FileCacheRecord): Promise<boolean>;
+  updateWriting(record: FileCacheRecord): Promise<boolean>;
 }
 
 export interface FileCacheByteWriter {

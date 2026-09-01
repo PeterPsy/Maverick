@@ -4,6 +4,7 @@ import {
   resolveFileCacheCleanup,
 } from "./fileCleanupBarrier";
 import { IndexedDbFileCacheManifestStore } from "./fileManifestStore";
+import { cancelAndDrainFileCacheWriters } from "./fileCacheWriteCoordination";
 import { OpfsFileCacheByteStore } from "./opfsByteStore";
 import type {
   FileCacheByteStore,
@@ -12,6 +13,10 @@ import type {
   FileCacheMaintenance,
   FileCacheManifestStore,
   FileCacheRecord,
+} from "./fileCacheTypes";
+import {
+  PWA_FILE_CACHE_POLICY_REVISION,
+  PWA_FILE_CACHE_SCHEMA_VERSION,
 } from "./fileCacheTypes";
 import type { AccessLease, CacheCleanupResult, CachePrincipal } from "./types";
 
@@ -37,6 +42,7 @@ export class BrowserFileCacheMaintenance implements FileCacheMaintenance {
     try {
       await this.manifest.initialize();
       markerId = (await this.manifest.createCleanupMarker(filter)).id;
+      await cancelAndDrainFileCacheWriters(filter);
       const removed = await this.deleteRecords(filter);
       await this.manifest.deleteCleanupMarker(markerId);
       resolveFileCacheCleanup(filter);
@@ -80,13 +86,20 @@ export class BrowserFileCacheMaintenance implements FileCacheMaintenance {
     const records = await this.manifest.list(principal);
     await Promise.all(records
       .filter((record) => record.state === "ready" && record.dataClass !== "public")
-      .map((record) => this.manifest.put({ ...record, accessLeaseExpiresAt: lease.expiresAt })));
+      .map((record) => this.manifest.updateReady({ ...record, accessLeaseExpiresAt: lease.expiresAt })));
   }
 
   private async resumeCleanups(): Promise<void> {
-    const markers = await this.manifest.listCleanupMarkers();
-    const pending = [...markers.map((marker) => marker.filter), ...pendingFileCacheCleanupFilters()];
+    const initialMarkers = await this.manifest.listCleanupMarkers();
+    const pending = [...initialMarkers.map((marker) => marker.filter), ...pendingFileCacheCleanupFilters()];
     for (const filter of uniqueFilters(pending)) {
+      markFileCacheCleanupPending(filter);
+      let markers = await this.manifest.listCleanupMarkers();
+      if (!markers.some((marker) => filterCovers(marker.filter, filter))) {
+        await this.manifest.createCleanupMarker(filter);
+        markers = await this.manifest.listCleanupMarkers();
+      }
+      await cancelAndDrainFileCacheWriters(filter);
       await this.deleteRecords(filter);
       for (const marker of markers) {
         if (filterCovers(filter, marker.filter)) await this.manifest.deleteCleanupMarker(marker.id);
@@ -116,8 +129,14 @@ export class BrowserFileCacheMaintenance implements FileCacheMaintenance {
   private async cleanupAbandonedWritesAndOrphans(): Promise<void> {
     if (!this.bytes.available()) return;
     const records = await this.manifest.list();
+    const incompatible = records.filter((record) => !currentRecordSchema(record));
+    for (const record of incompatible) {
+      await this.bytes.delete(record.opfsPath);
+      await this.manifest.delete(record.key);
+    }
+    const compatible = records.filter(currentRecordSchema);
     const now = this.now();
-    const abandoned = records.filter((record) => record.state !== "ready" && writeLeaseExpired(record, now));
+    const abandoned = compatible.filter((record) => record.state !== "ready" && writeLeaseExpired(record, now));
     for (const record of abandoned) {
       await this.bytes.delete(record.opfsPath);
       await this.manifest.delete(record.key);
@@ -134,7 +153,8 @@ export class BrowserFileCacheMaintenance implements FileCacheMaintenance {
     const currentByFile = new Map<string, FileCacheRecord>();
     const ready = records
       .filter((record) => record.state === "ready")
-      .sort((left, right) => safeTimestamp(right.cachedAt) - safeTimestamp(left.cachedAt)
+      .sort((left, right) => safeGeneration(right.writeGeneration) - safeGeneration(left.writeGeneration)
+        || safeTimestamp(right.cachedAt) - safeTimestamp(left.cachedAt)
         || safeTimestamp(right.lastVerifiedAt) - safeTimestamp(left.lastVerifiedAt)
         || right.key.localeCompare(left.key));
     for (const record of ready) {
@@ -195,8 +215,21 @@ function writeLeaseExpired(record: FileCacheRecord, now: number): boolean {
     || record.writeLeaseExpiresAt + WRITING_LEASE_GRACE_MS <= now;
 }
 
+function currentRecordSchema(record: FileCacheRecord): boolean {
+  return record.schemaVersion === PWA_FILE_CACHE_SCHEMA_VERSION
+    && record.policyRevision === PWA_FILE_CACHE_POLICY_REVISION
+    && Number.isSafeInteger(record.cleanupEpoch)
+    && record.cleanupEpoch >= 0
+    && Number.isSafeInteger(record.writeGeneration)
+    && record.writeGeneration >= 0;
+}
+
 function safeTimestamp(value: number): number {
   return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+}
+
+function safeGeneration(value: number): number {
+  return Number.isSafeInteger(value) && value >= 0 ? value : Number.NEGATIVE_INFINITY;
 }
 
 function uniqueFilters(filters: FileCacheFilter[]): FileCacheFilter[] {

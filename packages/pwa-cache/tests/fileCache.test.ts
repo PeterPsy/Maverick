@@ -53,7 +53,13 @@ describe("transparent PWA file cache", () => {
   it("publishes verified streamed bytes and opens a subsequent request cache-first", async () => {
     const payload = new TextEncoder().encode("cached file");
     const expectedSha256 = await sha256Blob(new Blob([payload]));
-    const fetchImpl = vi.fn(async () => response(payload, 200, { ETag: '"etag-one"' })) as unknown as typeof fetch;
+    const methods: string[] = [];
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      methods.push(init?.method ?? "GET");
+      return init?.method === "HEAD"
+        ? new Response(null, { headers: { ETag: '"etag-one"' }, status: 304 })
+        : response(payload, 200, { ETag: '"etag-one"' });
+    }) as unknown as typeof fetch;
     const runtime = cache({ fetchImpl });
     const request = {
       descriptor: descriptor(payload, { expectedSha256 }),
@@ -69,7 +75,48 @@ describe("transparent PWA file cache", () => {
     const second = await runtime.cache.open(request);
     expect(second.source).toBe("cache");
     expect(await second.blob.text()).toBe("cached file");
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(methods).toEqual(["GET", "HEAD"]);
+  });
+
+  it("evicts cached bytes when authoritative HEAD revalidation rejects their version", async () => {
+    const payload = new TextEncoder().encode("cached file");
+    let stale = false;
+    const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "HEAD") {
+        return stale
+          ? new Response(null, { status: 400 })
+          : new Response(null, { headers: { ETag: '"etag-one"' }, status: 304 });
+      }
+      return response(payload, 200, { ETag: '"etag-one"' });
+    }) as typeof fetch;
+    const runtime = cache({ fetchImpl });
+    const request = { descriptor: descriptor(payload), url: "/media?_pwa_file_cache=1" };
+    const first = await runtime.cache.open(request);
+    await first.cacheCompletion;
+
+    stale = true;
+    await expect(runtime.cache.open(request)).rejects.toMatchObject({ status: 400 });
+    expect(await runtime.manifest.list()).toEqual([]);
+    expect(await runtime.bytes.list()).toEqual([]);
+  });
+
+  it("uses physically verified cached bytes when live revalidation is temporarily unavailable", async () => {
+    const payload = new TextEncoder().encode("offline cache");
+    let offline = false;
+    const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "HEAD" && offline) throw new TypeError("offline");
+      if (init?.method === "HEAD") return new Response(null, { headers: { ETag: '"etag-one"' }, status: 304 });
+      return response(payload, 200, { ETag: '"etag-one"' });
+    }) as typeof fetch;
+    const runtime = cache({ fetchImpl });
+    const request = { descriptor: descriptor(payload), url: "/media?_pwa_file_cache=1" };
+    const first = await runtime.cache.open(request);
+    await first.cacheCompletion;
+
+    offline = true;
+    const opened = await runtime.cache.open(request);
+    expect(opened.source).toBe("cache");
+    expect(await opened.blob.text()).toBe("offline cache");
   });
 
   it("resumes an interrupted same-session stream with Range and strong If-Range", async () => {
@@ -161,11 +208,11 @@ describe("transparent PWA file cache", () => {
     class GatedManifest extends MemoryFileCacheManifestStore {
       release: (() => void) | null = null;
 
-      override async put(record: Parameters<MemoryFileCacheManifestStore["put"]>[0]) {
+      override async publishReady(record: Parameters<MemoryFileCacheManifestStore["publishReady"]>[0]) {
         if (record.state === "ready" && record.sourceVersion === "version-two") {
           await new Promise<void>((resolve) => { this.release = resolve; });
         }
-        return super.put(record);
+        return super.publishReady(record);
       }
     }
     const firstBytes = new TextEncoder().encode("one!");
@@ -211,6 +258,95 @@ describe("transparent PWA file cache", () => {
 
     expect(await runtime.manifest.list()).toHaveLength(1);
     expect((await runtime.manifest.list())[0].fileId).toBe("file-two");
+  });
+
+  it("reserves the global budget across concurrent file writes", async () => {
+    const firstPayload = new TextEncoder().encode("111111");
+    const secondPayload = new TextEncoder().encode("222222");
+    let closeFirst!: () => void;
+    const fetchImpl = (async (url: RequestInfo | URL) => {
+      const isFirst = String(url) === "/one";
+      const payload = isFirst ? firstPayload : secondPayload;
+      const network = response(payload, 200, { ETag: isFirst ? '"one"' : '"two"' });
+      if (isFirst) {
+        let cacheController!: ReadableStreamDefaultController<Uint8Array>;
+        const cacheStream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            cacheController = controller;
+            controller.enqueue(firstPayload);
+          },
+        });
+        closeFirst = () => cacheController.close();
+        Object.defineProperty(network, "clone", {
+          value: () => new Response(cacheStream, { headers: network.headers, status: 200 }),
+        });
+      }
+      return network;
+    }) as typeof fetch;
+    const manifest = new MemoryFileCacheManifestStore();
+    const bytes = new MemoryFileCacheByteStore();
+    const firstRuntime = cache({ bytes, fetchImpl, globalBudgetBytes: 6, manifest, maxScopeBytes: 6 });
+    const secondRuntime = cache({ bytes, fetchImpl, globalBudgetBytes: 6, manifest, maxScopeBytes: 6 });
+
+    const first = await firstRuntime.cache.open({ descriptor: descriptor(firstPayload), url: "/one" });
+    await until(() => [...bytes.files.values()].some((value) => value.byteLength === 6));
+    const second = await secondRuntime.cache.open({
+      descriptor: descriptor(secondPayload, { fileId: "file-two", sourceVersion: "version-two" }),
+      url: "/two",
+    });
+    await second.cacheCompletion;
+    closeFirst();
+    await first.cacheCompletion;
+
+    const ready = await manifest.list({ state: "ready" });
+    expect(ready).toHaveLength(1);
+    expect(ready.reduce((total, record) => total + record.sizeBytes, 0)).toBe(6);
+    expect(await bytes.list()).toHaveLength(1);
+  });
+
+  it("prevents a late older source version from replacing a newer ready version", async () => {
+    const firstPayload = new TextEncoder().encode("oldold");
+    const secondPayload = new TextEncoder().encode("newnew");
+    let finishOld!: () => void;
+    const fetchImpl = (async (url: RequestInfo | URL) => {
+      const old = String(url) === "/old";
+      const payload = old ? firstPayload : secondPayload;
+      const network = response(payload, 200, { ETag: old ? '"old"' : '"new"' });
+      if (old) {
+        let controller!: ReadableStreamDefaultController<Uint8Array>;
+        const cacheStream = new ReadableStream<Uint8Array>({
+          start(value) {
+            controller = value;
+            value.enqueue(firstPayload.subarray(0, 3));
+          },
+        });
+        finishOld = () => {
+          controller.enqueue(firstPayload.subarray(3));
+          controller.close();
+        };
+        Object.defineProperty(network, "clone", {
+          value: () => new Response(cacheStream, { headers: network.headers, status: 200 }),
+        });
+      }
+      return network;
+    }) as typeof fetch;
+    const manifest = new MemoryFileCacheManifestStore();
+    const bytes = new MemoryFileCacheByteStore();
+    const oldRuntime = cache({ bytes, fetchImpl, manifest });
+    const currentRuntime = cache({ bytes, fetchImpl, manifest });
+    const old = await oldRuntime.cache.open({ descriptor: descriptor(firstPayload), url: "/old" });
+    await until(() => [...bytes.files.values()].some((value) => value.byteLength === 3));
+    const current = await currentRuntime.cache.open({
+      descriptor: descriptor(secondPayload, { sourceVersion: "version-two" }),
+      url: "/new",
+    });
+    await until(() => [...manifest.records.values()].some((record) => record.sourceVersion === "version-two"));
+    finishOld();
+    await Promise.all([old.cacheCompletion, current.cacheCompletion]);
+
+    expect(await manifest.list()).toHaveLength(1);
+    expect((await manifest.list())[0]).toMatchObject({ sourceVersion: "version-two", state: "ready" });
+    expect([...bytes.files.values()].map((value) => new TextDecoder().decode(value))).toEqual(["newnew"]);
   });
 
   it("falls back to the ordinary network path when OPFS is unavailable", async () => {
@@ -311,6 +447,37 @@ describe("transparent PWA file cache", () => {
     await expect(maintenance.clear({ userId: "user-a" })).resolves.toMatchObject({ status: "complete", removed: 1 });
     expect((await runtime.manifest.list()).map((record) => record.userId)).toEqual(["user-b"]);
     expect(await runtime.bytes.list()).toEqual(["cache-other.bin"]);
+  });
+
+  it("cancels and drains an active scoped writer before cleanup completes", async () => {
+    const payload = new TextEncoder().encode("abcdef");
+    let cacheStreamCancelled = false;
+    const fetchImpl = (async () => {
+      const network = response(payload, 200, { ETag: '"etag"' });
+      const cacheStream = new ReadableStream<Uint8Array>({
+        cancel() {
+          cacheStreamCancelled = true;
+        },
+        start(controller) {
+          controller.enqueue(payload.subarray(0, 3));
+        },
+      });
+      Object.defineProperty(network, "clone", {
+        value: () => new Response(cacheStream, { headers: network.headers, status: 200 }),
+      });
+      return network;
+    }) as typeof fetch;
+    const runtime = cache({ fetchImpl });
+    const opened = await runtime.cache.open({ descriptor: descriptor(payload), url: "/media" });
+    await until(() => [...runtime.bytes.files.values()].some((value) => value.byteLength === 3));
+
+    const maintenance = new BrowserFileCacheMaintenance(runtime.manifest, runtime.bytes);
+    await expect(maintenance.clear({ userId: "user-a" })).resolves.toMatchObject({ status: "complete" });
+    await opened.cacheCompletion;
+
+    expect(cacheStreamCancelled).toBe(true);
+    expect(await runtime.manifest.list()).toEqual([]);
+    expect(await runtime.bytes.list()).toEqual([]);
   });
 });
 

@@ -47,14 +47,44 @@ export class CacheBus {
   }
 }
 
-export async function withCrossClientLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
-  const locks = globalThis.navigator && "locks" in globalThis.navigator
+const localLockTails = new Map<string, Promise<void>>();
+
+export function nativeCrossClientLocksAvailable(): boolean {
+  const locks = typeof globalThis.navigator !== "undefined" && "locks" in globalThis.navigator
     ? (globalThis.navigator as Navigator & { locks?: LockManager }).locks
     : undefined;
-  if (!locks || typeof locks.request !== "function") {
-    return operation();
+  return Boolean(locks && typeof locks.request === "function");
+}
+
+export async function withCrossClientLock<T>(
+  key: string,
+  operation: () => Promise<T>,
+  options: { mode?: "exclusive" | "shared"; nativeOnly?: boolean } = {},
+): Promise<T> {
+  const name = `maverick-pwa-cache:${stableHash(key)}`;
+  const locks = nativeCrossClientLocksAvailable()
+    ? (globalThis.navigator as Navigator & { locks: LockManager }).locks
+    : null;
+  if (locks) {
+    return locks.request(name, { mode: options.mode ?? "exclusive" }, operation);
   }
-  return locks.request(`maverick-pwa-cache:${stableHash(key)}`, operation);
+  if (options.nativeOnly) return operation();
+  return withLocalLock(name, operation);
+}
+
+async function withLocalLock<T>(name: string, operation: () => Promise<T>): Promise<T> {
+  const previous = localLockTails.get(name) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  const tail = previous.catch(() => undefined).then(() => current);
+  localLockTails.set(name, tail);
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (localLockTails.get(name) === tail) localLockTails.delete(name);
+  }
 }
 
 function defaultChannelFactory(): ((name: string) => BroadcastChannel) | null {

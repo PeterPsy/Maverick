@@ -10,11 +10,13 @@ import {
 import { BrowserFileCacheMaintenance } from "./fileCacheMaintenance";
 import {
   MaverickFileHttpError,
+  MaverickFileRevalidationError,
   cacheErrorReason,
   combinedSignal,
   fetchFileResponse,
   isAbortError,
   networkBlobResult,
+  revalidateFileResponse,
   retryableFileStatus,
   transportError,
   typedBlob,
@@ -23,6 +25,11 @@ import {
 import { pendingFileCacheCleanupFilters } from "./fileCleanupBarrier";
 import { IndexedDbFileCacheManifestStore } from "./fileManifestStore";
 import { FileCacheWriter } from "./fileCacheWriter";
+import type { PartialFileWrite } from "./fileCacheWriter";
+import {
+  fileCacheCrossClientCoordinationAvailable,
+  runCoordinatedFileCacheWrite,
+} from "./fileCacheWriteCoordination";
 import { OpfsFileCacheByteStore } from "./opfsByteStore";
 import { sha256Blob } from "./sha256";
 import { BrowserStorageQuotaAdapter } from "./quota";
@@ -109,10 +116,23 @@ export class PwaFileCache {
     const key = fileCacheKey(this.principal, descriptor);
     const existing = this.inFlight.get(key);
     if (existing) return existing;
-    const promise = this.openCoordinated(normalizedRequest, key)
-      .finally(() => {
-        if (this.inFlight.get(key) === promise) this.inFlight.delete(key);
-      });
+    let promise!: Promise<FileCacheOpenResult>;
+    const removeInFlight = () => {
+      if (this.inFlight.get(key) === promise) this.inFlight.delete(key);
+    };
+    promise = this.openCoordinated(normalizedRequest, key).then(
+      (result) => {
+        if (result.cacheCompletion) {
+          return { ...result, cacheCompletion: result.cacheCompletion.finally(removeInFlight) };
+        }
+        removeInFlight();
+        return result;
+      },
+      (error) => {
+        removeInFlight();
+        throw error;
+      },
+    );
     this.inFlight.set(key, promise);
     return promise;
   }
@@ -137,13 +157,15 @@ export class PwaFileCache {
       try {
         await this.initialize();
         if (!cleanupBlocksPrincipal(this.principal)) {
-          const hit = await this.readReadyRecord(key, request.descriptor);
+          const hit = await this.readReadyRecord(key, request, signal);
           if (hit) return hit;
           this.telemetry({ kind: "miss" });
-          persist = await this.canPersist(request.descriptor, key);
-          if (!persist) await this.writer?.discard(key).catch(() => undefined);
+          persist = Boolean(await this.reserveForPersistence(request.descriptor, key));
         }
       } catch (error) {
+        if (isAbortError(error)
+            || error instanceof MaverickFileHttpError
+            || error instanceof MaverickFileRevalidationError) throw error;
         this.persistenceUnavailable = true;
         this.telemetry({ kind: "error", reason: cacheErrorReason(error) });
       }
@@ -157,6 +179,7 @@ export class PwaFileCache {
     return this.enabled
       && !this.persistenceUnavailable
       && Boolean(this.manifest && this.bytes?.available())
+      && fileCacheCrossClientCoordinationAvailable()
       && descriptor.sizeBytes <= this.maxEntryBytes
       && fileCacheDescriptorIsEligible(descriptor, this.accessLease, this.now(), this.appId);
   }
@@ -170,8 +193,13 @@ export class PwaFileCache {
     await this.initializePromise;
   }
 
-  private async readReadyRecord(key: string, descriptor: FileCacheDescriptor): Promise<FileCacheOpenResult | null> {
+  private async readReadyRecord(
+    key: string,
+    request: FileCacheOpenRequest,
+    signal: AbortSignal,
+  ): Promise<FileCacheOpenResult | null> {
     if (!this.manifest || !this.bytes) return null;
+    const descriptor = request.descriptor;
     const record = await this.manifest.get(key);
     if (!record) return null;
     if (record.state === "writing") return null;
@@ -186,8 +214,27 @@ export class PwaFileCache {
       this.telemetry({ kind: "error", reason: "bytes-invalid" });
       return null;
     }
+    let revalidation: "unavailable" | "verified";
+    try {
+      revalidation = await revalidateFileResponse(
+        this.fetchImpl,
+        request.url,
+        signal,
+        record.etag,
+        record.sizeBytes,
+      );
+    } catch (error) {
+      await this.writer?.deleteRecord(record).catch(() => undefined);
+      this.telemetry({ kind: "error", reason: "revalidation-rejected" });
+      throw error;
+    }
     const now = this.now();
-    await this.manifest.put({ ...record, lastAccessedAt: now, lastVerifiedAt: now }).catch(() => undefined);
+    const retained = await this.manifest.updateReady({
+      ...record,
+      lastAccessedAt: now,
+      lastVerifiedAt: revalidation === "verified" ? now : record.lastVerifiedAt,
+    });
+    if (!retained) return null;
     this.telemetry({ bytes: record.sizeBytes, kind: "hit" });
     return {
       blob: typedBlob(blob, descriptor.contentType),
@@ -196,21 +243,31 @@ export class PwaFileCache {
     };
   }
 
-  private async canPersist(descriptor: FileCacheDescriptor, key: string): Promise<boolean> {
-    if (!this.manifest || !this.bytes) return false;
+  private async reserveForPersistence(
+    descriptor: FileCacheDescriptor,
+    key: string,
+  ): Promise<PartialFileWrite | undefined> {
+    if (!this.manifest || !this.bytes) return undefined;
     const partial = this.writer?.partial(key);
     const additionalBytes = Math.max(0, descriptor.sizeBytes - (partial?.writtenBytes ?? 0));
-    if (!await this.quota.canWrite(additionalBytes)) return false;
-    if (!this.writer) return false;
-    return enforceFileCacheBudget({
-      deleteRecord: (record) => this.writer?.deleteRecord(record) ?? Promise.resolve(),
-      descriptor,
-      globalBudgetBytes: this.globalBudgetBytes,
-      manifest: this.manifest,
-      maxScopeBytes: this.maxScopeBytes,
-      principal: this.principal,
-      targetKey: key,
-      telemetry: this.telemetry,
+    if (!await this.quota.canWrite(additionalBytes)) return undefined;
+    if (!this.writer) return undefined;
+    return withCrossClientLock("file-cache:budget", async () => {
+      const reservation = await this.writer?.reserve(key, descriptor);
+      if (!reservation) return undefined;
+      const withinBudget = await enforceFileCacheBudget({
+        deleteRecord: (record) => this.writer?.deleteRecord(record) ?? Promise.resolve(),
+        descriptor,
+        globalBudgetBytes: this.globalBudgetBytes,
+        manifest: this.manifest!,
+        maxScopeBytes: this.maxScopeBytes,
+        principal: this.principal,
+        targetKey: key,
+        telemetry: this.telemetry,
+      });
+      if (withinBudget) return reservation;
+      await this.writer?.discard(key, reservation);
+      return undefined;
     });
   }
 
@@ -220,63 +277,86 @@ export class PwaFileCache {
     signal: AbortSignal,
   ): Promise<FileCacheOpenResult> {
     let partial = this.writer?.partial(key);
+    let resuming = Boolean(partial && partial.writtenBytes > 0 && isStrongEtag(partial.etag));
     const headers = new Headers();
-    if (partial) {
+    if (resuming && partial) {
       headers.set("Range", `bytes=${partial.writtenBytes}-`);
       headers.set("If-Range", partial.etag);
     }
-    let response = await fetchFileResponse(this.fetchImpl, request.url, signal, headers);
-    if (partial && response.status === 206) {
+    let response: Response;
+    try {
+      response = await fetchFileResponse(this.fetchImpl, request.url, signal, headers);
+    } catch (error) {
+      if (partial && !resuming) await this.writer?.discard(key, partial);
+      throw error;
+    }
+    if (resuming && partial && response.status === 206) {
       if (!validResumeResponse(response, partial, request.descriptor.sizeBytes)) {
-        await this.writer?.discard(key);
-        partial = undefined;
+        await this.writer?.discard(key, partial);
+        partial = await this.reserveForPersistence(request.descriptor, key);
+        resuming = false;
+        void response.body?.cancel().catch(() => undefined);
         response = await fetchFileResponse(this.fetchImpl, request.url, signal);
       }
-    } else if (partial && response.status === 200) {
-      await this.writer?.discard(key);
-      partial = undefined;
-    } else if (partial && (response.status === 412 || response.status === 416)) {
-      await this.writer?.discard(key);
-      partial = undefined;
+    } else if (resuming && partial && response.status === 200) {
+      await this.writer?.discard(key, partial);
+      partial = await this.reserveForPersistence(request.descriptor, key);
+      resuming = false;
+    } else if (resuming && partial && (response.status === 412 || response.status === 416)) {
+      await this.writer?.discard(key, partial);
+      partial = await this.reserveForPersistence(request.descriptor, key);
+      resuming = false;
+      void response.body?.cancel().catch(() => undefined);
       response = await fetchFileResponse(this.fetchImpl, request.url, signal);
-    } else if (partial && !retryableFileStatus(response.status)) {
-      await this.writer?.discard(key);
+    } else if (partial && !response.ok && !retryableFileStatus(response.status)) {
+      await this.writer?.discard(key, partial);
       partial = undefined;
+      resuming = false;
     }
-    if (!response.ok) throw new MaverickFileHttpError(response);
-    if (response.status === 206 && !partial) {
+    if (!response.ok) {
+      if (partial && !resuming) await this.writer?.discard(key, partial);
+      throw new MaverickFileHttpError(response);
+    }
+    if (response.status === 206 && !resuming) {
+      if (partial) await this.writer?.discard(key, partial);
       throw transportError("Storage returned an unsolicited partial file response.");
     }
 
     const etag = response.headers.get("ETag")?.trim() ?? "";
     if (!isStrongEtag(etag) || !response.body) {
-      if (partial) await this.writer?.discard(key);
+      if (partial) await this.writer?.discard(key, partial);
       return networkBlobResult(response, etag);
     }
+    if (partial && !resuming) partial.etag = etag;
     let prefix: Blob | null = null;
     try {
-      prefix = partial ? await this.writer?.readPrefix(key, partial) ?? null : null;
+      prefix = resuming && partial ? await this.writer?.readPrefix(key, partial) ?? null : null;
     } catch (error) {
       this.persistenceUnavailable = true;
       this.telemetry({ kind: "error", reason: cacheErrorReason(error) });
-      await this.writer?.discard(key).catch(() => undefined);
+      if (partial) await this.writer?.discard(key, partial).catch(() => undefined);
       response.body.cancel().catch(() => undefined);
       return this.readNetwork(request.url, signal);
     }
-    if (partial && !prefix) {
+    if (resuming && partial && !prefix) {
       response.body.cancel().catch(() => undefined);
       return this.readNetworkWithCache({ ...request, signal }, key, signal);
     }
     if (!this.writer) return networkBlobResult(response, etag);
-    const active = partial ?? this.writer.create(key, request.descriptor, etag);
+    const active = partial;
+    if (!active) return networkBlobResult(response, etag);
     let cacheResponse: Response;
     try {
       cacheResponse = response.clone();
     } catch {
-      await this.writer.discard(key).catch(() => undefined);
+      await this.writer.discard(key, active).catch(() => undefined);
       return networkBlobResult(response, etag);
     }
-    const cacheCompletion = this.writer.write(key, active, cacheResponse, signal)
+    const writeFilter = { ...this.principal, fileId: request.descriptor.fileId, sourceVersion: request.descriptor.sourceVersion };
+    const cacheCompletion = runCoordinatedFileCacheWrite(writeFilter, signal, (writeSignal) =>
+      withCrossClientLock(fileIdentityLockKey(this.principal, request.descriptor.fileId), () =>
+        this.writer!.write(key, active, cacheResponse, writeSignal)))
+      .then(() => this.enforcePostPublishBudget(request.descriptor, key))
       .catch((error) => {
         this.telemetry({ kind: "error", reason: cacheErrorReason(error) });
       });
@@ -292,6 +372,28 @@ export class PwaFileCache {
       this.telemetry({ kind: "error", reason: "network-size-mismatch" });
     }
     return { blob, cacheCompletion, etag, source: "network" };
+  }
+
+  private async enforcePostPublishBudget(descriptor: FileCacheDescriptor, key: string): Promise<void> {
+    if (!this.manifest || !this.writer) return;
+    await withCrossClientLock("file-cache:budget", async () => {
+      const record = await this.manifest?.get(key);
+      if (!record || record.state !== "ready") return;
+      const withinBudget = await enforceFileCacheBudget({
+        deleteRecord: (victim) => this.writer?.deleteRecord(victim) ?? Promise.resolve(),
+        descriptor,
+        globalBudgetBytes: this.globalBudgetBytes,
+        manifest: this.manifest!,
+        maxScopeBytes: this.maxScopeBytes,
+        principal: this.principal,
+        targetKey: key,
+        telemetry: this.telemetry,
+      });
+      if (!withinBudget) {
+        await this.writer?.deleteRecord(record);
+        this.telemetry({ bytes: record.sizeBytes, count: 1, kind: "evict", reason: "post-publish-budget" });
+      }
+    });
   }
 
   private async readNetwork(url: string, signal: AbortSignal): Promise<FileCacheOpenResult> {
@@ -330,6 +432,10 @@ function cleanupBlocksPrincipal(principal: CachePrincipal): boolean {
     (filter.userId === undefined || filter.userId === principal.userId)
     && (filter.workspaceId === undefined || filter.workspaceId === principal.workspaceId)
     && (filter.appId === undefined || filter.appId === principal.appId));
+}
+
+function fileIdentityLockKey(principal: CachePrincipal, fileId: string): string {
+  return `file-identity:${JSON.stringify([principal.userId, principal.workspaceId, principal.appId, fileId])}`;
 }
 
 function positiveBudget(value: number | undefined, fallback: number): number {

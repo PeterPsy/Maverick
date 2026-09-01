@@ -12,13 +12,19 @@ from core.runtime.classification_authority import (
     revalidate_canonical_classification,
 )
 from core.runtime.confined_filesystem import FilesystemResourceObservation
-from core.runtime.content_data_classification import (
-    narrow_runtime_content_classification,
-)
 from core.runtime.filesystem_mutation_lineage import (
     resolve_filesystem_mutation_lineage,
 )
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
+from core.runtime.hosted_tool_security_probes import (
+    probe_production_filesystem_marker_narrowing,
+)
+from core.runtime.hosted_transport_security_probe import (
+    probe_hosted_transport_revocation,
+)
+from core.runtime.hosted_workspace_effect_security_probe import (
+    probe_workspace_effect_revocation_rollback,
+)
 from core.runtime.public_content_authority_store import (
     issue_runtime_public_content_authority,
     revoke_runtime_public_content_authority,
@@ -35,13 +41,15 @@ HOSTED_RESULT_SECURITY_BEHAVIOR_IDS = (
     "security:filesystem.marker-narrowing",
     "security:filesystem.revoke-rebuild",
     "security:tool-result.revoke-egress",
+    "security:request.revoke-transport",
+    "security:workspace-effect.revoke-commit",
 )
 _PROBE_TIME = datetime(2026, 8, 31, tzinfo=UTC)
 
 
 @lru_cache(maxsize=1)
 def inspect_hosted_result_security_behavior() -> tuple[str, ...]:
-    """Run marker, reconstructed-lineage, and delayed-egress denials."""
+    """Run production-composed marker, revocation, and rollback denials."""
     try:
         return _inspect()
     except Exception:
@@ -71,43 +79,7 @@ def _inspect() -> tuple[str, ...]:
     )
     verified: set[str] = set()
 
-    sensitive_payloads = (
-        {"content": "customer SSN 123-45-6789\n"},
-        {
-            "instructions": [
-                {"content": "instruction SSN 123-45-6789\n"}
-            ]
-        },
-        {
-            "matches": [
-                {"text": "search result SSN 123-45-6789"}
-            ]
-        },
-    )
-    marker_results = []
-    for payload in sensitive_payloads:
-        narrowed = narrow_runtime_content_classification(
-            classification,
-            payload,
-            content_type="application/json",
-        )
-        marker_results.append(
-            (
-                narrowed,
-                pairing_safe_tool_result(
-                    payload,
-                    is_error=False,
-                    result_data_class=narrowed.data_class,
-                    allowed_remote_data_classes=("public",),
-                ),
-            )
-        )
-    if all(
-        narrowed.data_class == "regulated_or_customer_data"
-        and narrowed.classification_authority_id == issued.classification_id
-        and paired == ({"error": "tool_result_egress_denied"}, True)
-        for narrowed, paired in marker_results
-    ):
+    if probe_production_filesystem_marker_narrowing(store, issued):
         verified.add("security:filesystem.marker-narrowing")
 
     observation = FilesystemResourceObservation(
@@ -222,6 +194,11 @@ def _inspect() -> tuple[str, ...]:
         and "REVOCATION_PRIVATE_MARKER" not in repr(paired_delayed)
     ):
         verified.add("security:tool-result.revoke-egress")
+
+    if probe_hosted_transport_revocation():
+        verified.add("security:request.revoke-transport")
+    if probe_workspace_effect_revocation_rollback():
+        verified.add("security:workspace-effect.revoke-commit")
 
     return tuple(
         behavior

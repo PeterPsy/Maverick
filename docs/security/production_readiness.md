@@ -66,22 +66,28 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v19 makes the known transitive boundary executable through
+Manifest v20 makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 25 and the Full Workspace result contract
-`codex-baseline-v12` are bound by TCB manifest v19. Google revision 33 and
-OpenRouter revision 32 atomically claim that contract and the `maverick_agent`
-family because the executable result gate reports all 16 required behaviors.
-The final three behaviors are negative security probes for sensitive filesystem
-marker narrowing, revoke-then-rebuild filesystem lineage, and delayed tool
-result egress after revocation. Tool records and provider-state generations
+Hosted adapter 26 and the Full Workspace result contract
+`codex-baseline-v13` are bound by TCB manifest v20. Google revision 34 and
+OpenRouter revision 33 atomically claim that contract and the `maverick_agent`
+family because the executable result gate reports all 18 required behaviors.
+The final five behaviors are production-composed negative security probes for
+sensitive raw/base64/chunked filesystem marker narrowing, revoke-then-rebuild
+filesystem lineage, delayed tool-result egress after revocation,
+post-preflight provider transport, and revocation during a real overlay commit.
+Tool records and provider-state generations
 retain exact mutable-authority id/revision/digest lineage, and Core revalidates
-it immediately before reuse, continuation, and egress. Runtime-public
-issue/revoke state is accepted only with matching deterministic audit evidence.
+it immediately before reuse, continuation, request commit, and lazy provider
+stream advance. Runtime-public issue/revoke state is accepted only after its
+pending audit and classification CAS are terminalized coherently; a CAS loss is
+never recorded as success. Raw filesystem bytes are scanned before base64 and
+the complete-resource class is retained across chunks. Shell/process overlay
+batches revalidate before and after materialization and roll back on drift.
 Those definitions remain uncertified, unbound, contained previews; the local
 claim is not live-provider evidence or launch authorization. The adapter places
 all provider-bound context in semantic-envelope schema v1/compiler revision 7,

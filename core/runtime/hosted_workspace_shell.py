@@ -16,6 +16,9 @@ from core.runtime.hosted_workspace_effects import (
     HostedWorkspaceEffectOverlay,
     HostedWorkspaceMutationScope,
 )
+from core.runtime.hosted_result_authority_guard import (
+    HostedResultAuthorityGuard,
+)
 from core.runtime.tool_errors import RuntimeToolError
 from core.runtime.tool_catalog import RuntimeToolSurfaceResult
 
@@ -173,6 +176,7 @@ def run_hosted_workspace_command(
         if execution_control is not None:
             execution_control.check()
         precommitted_classification = None
+        result_authority_guard = None
         if prepared.effect_overlay is None:
             effect_evidence = {
                 "workspace_effects_committed": True,
@@ -212,15 +216,25 @@ def run_hosted_workspace_command(
                         "tool_result_egress_not_guaranteed"
                     )
                 precommitted_classification = resolved.classification
+                result_authority_guard = HostedResultAuthorityGuard(
+                    resolver=result_classification_resolver,
+                    handle="core-capability:shell.run",
+                    arguments=result_arguments or {},
+                    payload=intended,
+                    context=result_context,
+                    expected_classification=resolved.classification,
+                )
             effect_evidence = (
                 execution_control.run_if_active(
                     lambda: prepared.effect_overlay.commit(
-                        expected_evidence=expected_evidence
+                        expected_evidence=expected_evidence,
+                        result_authority_guard=result_authority_guard,
                     )
                 )
                 if execution_control is not None
                 else prepared.effect_overlay.commit(
-                    expected_evidence=expected_evidence
+                    expected_evidence=expected_evidence,
+                    result_authority_guard=result_authority_guard,
                 )
             )
         else:

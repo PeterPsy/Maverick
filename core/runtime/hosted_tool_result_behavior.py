@@ -23,7 +23,7 @@ from core.runtime.public_content_authority import (
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 
 
-HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 3
+HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 4
 HOSTED_REQUIRED_RESULT_BEHAVIOR_HANDLES = (
     *FILESYSTEM_RESULT_BEHAVIOR_IDS,
     "core-capability:shell.run",

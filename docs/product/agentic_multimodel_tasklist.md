@@ -88,7 +88,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v19 records six maintained transitive dependency contracts. The
+- [x] Manifest v20 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -99,8 +99,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v29 / matrix
-  `2026-08-31-r29-p4-authority-revalidation-tcb19`
+- [x] Google and OpenRouter suite v30 / matrix
+  `2026-09-01-r30-p4-transport-effect-atomicity-tcb20`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -476,30 +476,36 @@ completion claim.
 - [x] OpenRouter replaces request-scoped system/developer authority on every
   continuation, persists the same messages actually sent, and delivers new
   governed user blocks after mandatory tool pairing.
-- [x] Adapter 25, semantic compiler revision 7, Full Workspace result contract
-  `codex-baseline-v12`, context-compaction schema 3, TCB manifest v19, suite 29,
-  and matrix `2026-08-31-r29-p4-authority-revalidation-tcb19` create immutable Google
-  revision 33 and OpenRouter revision 32 previews. Historical revisions 32/31
+- [x] Adapter 26, semantic compiler revision 7, Full Workspace result contract
+  `codex-baseline-v13`, context-compaction schema 3, TCB manifest v20, suite 30,
+  and matrix `2026-09-01-r30-p4-transport-effect-atomicity-tcb20` create immutable Google
+  revision 34 and OpenRouter revision 33 previews. Historical revisions 33/32
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
-  `full_workspace_contract_revision=codex-baseline-v12`; the central validator
+  `full_workspace_contract_revision=codex-baseline-v13`; the central validator
   rejects that family if the profile/certificate claim or behavior gate is
   incomplete.
-- [x] Admit the hosted Full Workspace `codex-baseline-v12` repository claim
-  only after the executable behavior probe verifies all 16 required result
+- [x] Admit the hosted Full Workspace `codex-baseline-v13` repository claim
+  only after the executable behavior probe verifies all 18 required result
   workflows: 13 create/replace/edit/patch/move/delete/read-after-write,
   shell/process, and CLI/MCP paths plus marker narrowing, revoke-then-rebuild,
-  and revoke-before-delayed-egress negative probes. A CAS-revisioned,
+  revoke-before-delayed-egress, revoke-before-provider-transport, and
+  revoke-during-overlay-commit negative probes. The negative gate traverses the
+  production orchestrator, hosted request/stream, and real shell/process overlays rather
+  than calling classification helpers with literal payloads. A CAS-revisioned,
   operator-owned runtime-public classification policy supplies explicit
   server authority; each admitted prompt/result is still bound to its exact
   identity, bytes, digest, policy revision, and current non-revoked record.
-  Issue/revoke records become authoritative only with their exact deterministic
-  audit evidence, and every result reuse, continuation, and egress revalidates
-  the live authority tuple. Marker detection over original and projected bytes
-  can only narrow. Without that authority or an exact resource
+  Issue/revoke records become authoritative only after a pending audit, the
+  classification CAS, and a coherent terminal audit CAS; losing races are
+  recorded as failure, never success. Every result reuse, continuation, request
+  commit, and actual provider-stream advance revalidates the live authority
+  tuple. Filesystem reads scan bounded raw bytes before base64 and attach the
+  complete-resource class to every version-bound chunk. Without that authority or an exact resource
   record, marker-free content remains `unclassified`. Shell/process output is
-  classified from its exact private-overlay result before the workspace commit,
-  and unguaranteed effects are discarded before crossing the effect boundary.
+  classified from its exact private-overlay result before the workspace commit;
+  an exact-result guard surrounds the rollback-safe batch and restores every
+  pre-image if authority changes during commit.
   No live probe, signed certificate, binding, remote activation, or Codex
   profile/artifact change is part of Phase 4. This closes the P4 review
   findings only; P5 has not started.

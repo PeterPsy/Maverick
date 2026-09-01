@@ -14,6 +14,7 @@ from core.runtime.confined_filesystem import (
     MAX_CONFINED_LIST_ENTRIES,
     MAX_CONFINED_PATH_COMPONENTS,
     ConfinedWorkspaceFilesystem,
+    FilesystemMutationGuard,
 )
 from core.runtime.confined_filesystem_batch import (
     ConfinedTextBatchWrite,
@@ -176,6 +177,7 @@ class HostedWorkspaceEffectOverlay:
         self,
         *,
         expected_evidence: dict[str, object] | None = None,
+        result_authority_guard: FilesystemMutationGuard | None = None,
     ) -> dict[str, object]:
         """Validate the complete upper diff before crossing any effect boundary."""
         if self._closed:
@@ -220,6 +222,7 @@ class HostedWorkspaceEffectOverlay:
                     for item in changed
                 ),
                 transaction_directory=self.transaction,
+                commit_guard=result_authority_guard,
             )
             return evidence
         except RuntimeToolError as error:

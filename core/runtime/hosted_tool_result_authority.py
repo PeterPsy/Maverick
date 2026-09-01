@@ -15,7 +15,7 @@ from core.runtime.public_content_classification import (
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 
 
-HOSTED_TOOL_RESULT_ADMISSION_REVISION = 6
+HOSTED_TOOL_RESULT_ADMISSION_REVISION = 7
 _CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
 
 

@@ -785,10 +785,11 @@ shell/process, and CLI/MCP scenarios. A declared mode string or the mere
 presence of a handle is not evidence. Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 33 and OpenRouter
-revision 32 definitions make that atomic claim only because the executable
-gate returns all 16 required result behaviors, including marker narrowing,
-revoke-then-rebuild, and delayed-egress-after-revocation probes; they remain uncertified,
+complete atomic contract. The current Google revision 34 and OpenRouter
+revision 33 definitions make that atomic claim only because the executable
+gate returns all 18 required result behaviors, including raw/base64/chunk
+marker narrowing, revoke-then-rebuild, delayed-egress-after-revocation,
+post-preflight transport revocation, and overlay-commit rollback probes; they remain uncertified,
 unbound, contained previews rather than a release authorization.
 
 Hosted filesystem mutations are descriptor-relative and version-fenced.

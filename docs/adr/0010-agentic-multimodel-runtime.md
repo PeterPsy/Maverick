@@ -675,33 +675,42 @@ The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 33
-and OpenRouter revision 32, both bound to
-`maverick-hosted-tool-loop==25`; older revisions are suspended rather than
-overwritten. Their suite-29 certification manifests retain distinct
+accepted as complete. The current contained definitions are Google revision 34
+and OpenRouter revision 33, both bound to
+`maverick-hosted-tool-loop==26`; older revisions are suspended rather than
+overwritten. Their suite-30 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
-`codex-baseline-v12` requires executable create, replace, edit, patch, move,
+`codex-baseline-v13` requires executable create, replace, edit, patch, move,
 delete, read-after-write, shell/process, and CLI/MCP result behaviors rather
-than a mode string. The executable repository gate now proves all 16 required
+than a mode string. The executable repository gate now proves all 18 required
 behaviors: the 13 positive result workflows plus sensitive-marker narrowing,
-revoke-then-orchestrator-rebuild, and revoke-before-delayed-egress probes. A
+revoke-then-orchestrator-rebuild, revoke-before-delayed-egress,
+revoke-before-provider-transport, and revoke-during-overlay-commit probes. A
 reserved operator-owned, CAS-revisioned runtime-public
 classification policy lets Core classify an exact prompt/result identity,
 revision, and canonical-byte digest; the current authority record and its
 self-digest and deterministic audit evidence are revalidated at admission.
+Issue/revoke first prepares a non-authoritative audit, CASes the classification,
+then CAS-terminalizes the same audit as success or failure, so concurrency can
+never leave a false successful record.
 Exact authority id/revision/digest lineage survives tool records and
 provider-private continuations and is revalidated again before every reuse and
-egress; marker detection over original and projected bytes can only narrow the
-result. Certified Core CLI/MCP result contracts are a second explicit
+egress. Prepared provider requests are revalidated after endpoint preflight and
+again in the task that advances the lazy provider stream. Filesystem reads scan
+the complete bounded raw resource before base64 projection and retain that
+classification on every version-bound chunk, so neither encoding nor a chunk
+boundary can split a marker. Certified Core CLI/MCP result contracts are a second explicit
 authority but app declarations cannot grant it. Shell/process mutations
-classify the exact private-overlay result before committing and discard the
-overlay on denial. The profiles therefore pin `codex-baseline-v12` as both the
+classify the exact private-overlay result before committing, revalidate the
+exact result before and after the rollback-safe batch boundary, and restore the
+complete pre-image if authority changes. The profiles therefore pin
+`codex-baseline-v13` as both the
 tool and Full Workspace contract and atomically use the `maverick_agent`
 execution family. The claim validator still rejects the family unless profile,
-certificate, and executable behavior gate are complete. Adapter 25, recipe
-revision 12, context-compaction schema 3, suite 29, and TCB manifest v19 retain
+certificate, and executable behavior gate are complete. Adapter 26, recipe
+revision 13, context-compaction schema 3, suite 30, and TCB manifest v20 retain
 the composite-classification and rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked

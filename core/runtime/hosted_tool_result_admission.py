@@ -22,7 +22,7 @@ from core.runtime.tool_catalog import (
 )
 
 
-HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 2
+HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 3
 
 _ACTION_METADATA_FIELDS: dict[str, tuple[str, ...]] = {
     "core-capability:process.start": (

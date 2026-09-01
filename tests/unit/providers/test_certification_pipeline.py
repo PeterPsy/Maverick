@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "6a1003db3e938ac0b7ab8e77c76fabf3f6ff9fba21a3d3c9df960167829e5784"
+                "bda1ad4064abd5cb784b08e02f5897ccbf0e84b48106398ba249c804db09351a"
             ),
             "openrouter": (
-                "a0204e7e12619dae99664ddc621b06a3340e6d62af82b7a2a1d46559cbc0c7d6"
+                "4fa4cca77e114d7509f2f8fd422b5f53bd38ee5c2312d09979635cba29870044"
             ),
         }
         for manifest in (
@@ -190,10 +190,10 @@ class CertificationPipelineTest(unittest.TestCase):
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "29")
+                self.assertEqual(manifest.suite_version, "30")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-08-31-r29-p4-authority-revalidation-tcb19",
+                    "2026-09-01-r30-p4-transport-effect-atomicity-tcb20",
                 )
                 self.assertEqual(
                     manifest.digest,

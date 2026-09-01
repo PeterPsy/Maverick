@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from uuid import NAMESPACE_URL, uuid5
 
@@ -134,6 +135,7 @@ def runtime_public_content_authority_record_for_workspace(
             expected_revision=record.revision - 1,
             action=action,
             reason_code=reason_code,
+            outcome="succeeded",
         )
         else None
     )
@@ -194,23 +196,56 @@ def _persist_with_audit(
     action,
     reason_code,
 ) -> WorkspaceResourceClassification:
-    """Publish audit first so authority is never visible without its evidence."""
-    audit = _audit_record(
+    """Prepare evidence, CAS the authority, then terminalize the same audit."""
+    pending = _audit_record(
         record,
         actor_id=actor_id,
         expected_revision=expected_revision,
         action=action,
+        reason_code="runtime_public_content_authority_persistence_pending",
+        outcome="pending",
+    )
+    succeeded = replace(
+        pending,
+        outcome="succeeded",
         reason_code=reason_code,
     )
     try:
-        store.append_data_governance_audit(audit)
+        store.append_data_governance_audit(pending)
     except Exception:
-        if _load_audit(store, audit.audit_id) != audit:
+        existing_audit = _load_audit(store, pending.audit_id)
+        if (
+            existing_audit == succeeded
+            and _load_record(store, record.workspace_id) == record
+        ):
+            return record
+        if existing_audit != pending:
             raise
-    return store.save_resource_classification(
-        record,
-        expected_revision=expected_revision,
-    )
+    try:
+        saved = store.save_resource_classification(
+            record,
+            expected_revision=expected_revision,
+        )
+    except Exception:
+        if _load_record(store, record.workspace_id) == record:
+            _terminalize_audit(store, succeeded)
+            return record
+        failed = replace(
+            pending,
+            outcome="failed",
+            reason_code=(
+                "runtime_public_content_authority_persistence_failed"
+            ),
+        )
+        try:
+            _terminalize_audit(store, failed)
+        except Exception:
+            # A pending audit is deliberately non-authoritative and truthful
+            # when its terminal CAS is itself unavailable.
+            pass
+        raise
+    _terminalize_audit(store, succeeded)
+    return saved
 
 
 def _audit_record(
@@ -220,6 +255,7 @@ def _audit_record(
     expected_revision,
     action,
     reason_code,
+    outcome="succeeded",
 ) -> WorkspaceDataGovernanceAudit:
     return WorkspaceDataGovernanceAudit(
         audit_id=_audit_id(record, action),
@@ -229,7 +265,7 @@ def _audit_record(
         actor_id=actor_id,
         expected_revision=expected_revision,
         resulting_revision=record.revision,
-        outcome="succeeded",
+        outcome=outcome,
         reason_code=reason_code,
         occurred_at=record.updated_at,
     )
@@ -273,6 +309,19 @@ def _load_audit(store, audit_id: str):
         return loader(audit_id)
     except Exception:
         return None
+
+
+def _terminalize_audit(store, audit: WorkspaceDataGovernanceAudit) -> None:
+    transition = getattr(store, "transition_data_governance_audit", None)
+    if not callable(transition):
+        raise WorkspaceDataGovernanceError(
+            "data_governance_audit_transition_unavailable"
+        )
+    try:
+        transition(audit, expected_outcome="pending")
+    except Exception:
+        if _load_audit(store, audit.audit_id) != audit:
+            raise
 
 
 def _valid_identity(value: object) -> bool:

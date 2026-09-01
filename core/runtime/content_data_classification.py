@@ -23,13 +23,14 @@ _PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:\+?\d{1,3}[ .-]?)?(?:\(?\d{3}\)?[ .-]?)\d{3}[ .-]\d{4}(?!\d)"
 )
 _PAYMENT_CARD_CANDIDATE = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
+MAX_RUNTIME_CONTENT_CLASSIFICATION_BYTES = 1_500_000
 
 
 def classify_runtime_content(
     content: object,
     *,
     content_type: str,
-    max_bytes: int = 1_500_000,
+    max_bytes: int = MAX_RUNTIME_CONTENT_CLASSIFICATION_BYTES,
 ) -> str:
     """Classify exact transient bytes without promoting from source ownership."""
     encoded = canonical_egress_content(content)
@@ -38,7 +39,13 @@ def classify_runtime_content(
     try:
         text = encoded.decode("utf-8")
     except UnicodeDecodeError:
-        return "unclassified"
+        if content_type != "application/octet-stream":
+            return "unclassified"
+        # Binary filesystem reads still need marker detection over the original
+        # bytes before their base64 transport projection. Replacement decoding
+        # preserves every ASCII marker while refusing to interpret the payload
+        # as structured text.
+        text = encoded.decode("utf-8", errors="replace")
     if content_type == "application/json":
         try:
             structured = json.loads(text)
@@ -115,6 +122,7 @@ def _luhn_valid(value: str) -> bool:
 
 
 __all__ = [
+    "MAX_RUNTIME_CONTENT_CLASSIFICATION_BYTES",
     "classify_runtime_content",
     "narrow_runtime_content_classification",
 ]

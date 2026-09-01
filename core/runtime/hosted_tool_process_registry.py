@@ -17,6 +17,9 @@ from core.runtime.hosted_workspace_effects import (
     HostedWorkspaceEffectOverlay,
     HostedWorkspaceMutationScope,
 )
+from core.runtime.hosted_result_authority_guard import (
+    HostedResultAuthorityGuard,
+)
 from core.runtime.hosted_process_output import HostedProcessOutputCapture
 from core.runtime.lifecycle_service_turns import (
     create_runtime_process,
@@ -477,7 +480,7 @@ class HostedToolProcessRegistry:
                 if reason is None and exit_code == 0:
                     try:
                         expected_evidence = live.effect_overlay.preview_commit()
-                        self._require_public_precommit_result(
+                        result_authority_guard = self._public_precommit_guard(
                             process_id=process_id,
                             live=live,
                             exit_code=exit_code,
@@ -486,12 +489,16 @@ class HostedToolProcessRegistry:
                         live.workspace_effects = (
                             execution_control.run_if_active(
                                 lambda: live.effect_overlay.commit(
-                                    expected_evidence=expected_evidence
+                                    expected_evidence=expected_evidence,
+                                    result_authority_guard=(
+                                        result_authority_guard
+                                    ),
                                 )
                             )
                             if execution_control is not None
                             else live.effect_overlay.commit(
-                                expected_evidence=expected_evidence
+                                expected_evidence=expected_evidence,
+                                result_authority_guard=result_authority_guard,
                             )
                         )
                     except RuntimeToolError as error:
@@ -524,16 +531,16 @@ class HostedToolProcessRegistry:
             raise RuntimeToolError(effect_failure)
 
     @staticmethod
-    def _require_public_precommit_result(
+    def _public_precommit_guard(
         *,
         process_id: str,
         live: _LiveHostedToolProcess,
         exit_code: int,
         expected_evidence: dict[str, object],
-    ) -> None:
+    ) -> HostedResultAuthorityGuard | None:
         resolver = live.result_classification_resolver
         if resolver is None:
-            return
+            return None
         size = os.fstat(live.output_fd).st_size
         output = os.pread(live.output_fd, size, 0).decode(
             "utf-8",
@@ -569,6 +576,14 @@ class HostedToolProcessRegistry:
             or resolved.classification.data_class != "public"
         ):
             raise RuntimeToolError("tool_result_egress_not_guaranteed")
+        return HostedResultAuthorityGuard(
+            resolver=resolver,
+            handle="core-capability:process.status",
+            arguments={"process_id": process_id, "output_offset": 0},
+            payload=candidate,
+            context=live.result_context,
+            expected_classification=resolved.classification,
+        )
 
     def _close_live(
         self,

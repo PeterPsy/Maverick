@@ -1,6 +1,6 @@
 # Agentic certification evidence procedure
 
-Status date: 2026-08-31
+Status date: 2026-09-01
 
 Scope: trusted CI or operator-controlled certification worker
 
@@ -11,7 +11,7 @@ Phase-4 repository closure executes only the explicitly selected deterministic
 `live_probe`, produce behavioral evidence, sign/publish a remote certificate,
 or make any provider HTTP/SSE request.
 
-Suite 29 retains the P2 crash/pairing/outbox matrix and P3 finalization
+Suite 30 retains the P2 crash/pairing/outbox matrix and P3 finalization
 coverage, including durable step/tool/output/cost/time reservation, complete
 terminal-request cost projections, tool-less provider payloads, staged
 request-specific preflight, and request-scoped instructions. It also verifies
@@ -22,7 +22,7 @@ journal-evidence, atomic Full Workspace contract, descriptor-confined mutation,
 fixed-path shell, managed-process, discovery-first CLI/MCP, compaction, and
 orphan-cleanup fixtures.
 It additionally binds recipe/catalog identity, compiler revision 7,
-the `codex-baseline-v12` behavioral Full Workspace gate, the hosted governed
+the `codex-baseline-v13` behavioral Full Workspace gate, the hosted governed
 result contract, mandatory commit-bound instruction digests and governed
 rollback-safe shell/process effect transactions, semantic compaction schema 3, artifact-backed
 large results, UTF-8/base64 attachment
@@ -50,14 +50,17 @@ quiescence, post-SIGTERM explicit-session managed-process sweeping, and
 full-request-triggered compaction. It also covers lexical skill symlink
 rejection, direct edit metadata fidelity, rollback of created parents, and
 public-preimage post-image taint through read-after-write. The executable Full
-Workspace behavior probe now returns all 16 required workflows, including
+Workspace behavior probe now returns all 18 required workflows, including
 create/read-after-create after orchestrator rebuild and shell/process plus
-CLI/MCP result paths. The three added negative probes require sensitive markers
-in filesystem/instruction/search output to narrow a public result, require an
-issue-write-revoke-rebuild-read sequence to fail closed, and require a delayed
-persisted tool result to pair only a public error after revocation. The suite
-also verifies exact authority lineage across provider-state generations and
-deterministic audit-bound runtime-public issue/revoke visibility.
+CLI/MCP result paths. Its five negative probes require raw/base64/chunked
+filesystem markers to narrow a public result, require an
+issue-write-revoke-rebuild-read sequence to fail closed, require a delayed
+persisted tool result to pair only a public error after revocation, deny a
+prepared request when authority changes during endpoint preflight or before the
+  lazy provider stream advances, and roll back real shell/process overlays when
+  authority changes after their first batch write. The suite also verifies exact authority
+lineage across provider-state generations and pending/CAS/terminal audit
+coherence for runtime-public issue/revoke under failure and concurrency.
 These fixtures are conformance checks only: `live_probe_selected=false` remains
 mandatory for this repository closure and cannot yield certificate evidence.
 
@@ -74,8 +77,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v29 matrix revision
-  `2026-08-31-r29-p4-authority-revalidation-tcb19` declared by the provider
+- the dated suite-v30 matrix revision
+  `2026-09-01-r30-p4-transport-effect-atomicity-tcb20` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -110,7 +113,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 29 \
+  --suite-version 30 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -119,9 +122,9 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `29`, matrix revision
-`2026-08-31-r29-p4-authority-revalidation-tcb19`, and the OpenRouter manifest.
-The Google suite uses version `29` and the same matrix revision. The
+version `30`, matrix revision
+`2026-09-01-r30-p4-transport-effect-atomicity-tcb20`, and the OpenRouter manifest.
+The Google suite uses version `30` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.

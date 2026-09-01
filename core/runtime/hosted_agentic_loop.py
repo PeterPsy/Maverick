@@ -23,6 +23,7 @@ import core.runtime.hosted_agentic_request as hosted_agentic_request_module
 import core.runtime.hosted_agentic_recovery as hosted_agentic_recovery_module
 import core.runtime.hosted_agentic_state as hosted_agentic_state_module
 import core.runtime.hosted_agentic_stream as hosted_agentic_stream_module
+import core.runtime.hosted_agentic_transport as hosted_agentic_transport_module
 import core.runtime.hosted_agentic_tool_execution as hosted_agentic_tool_execution_module
 import core.runtime.hosted_context_management as hosted_context_management_module
 import core.runtime.hosted_harness_recipes as hosted_harness_recipes_module
@@ -97,6 +98,9 @@ from core.runtime.hosted_agentic_state import HostedAgenticStateBridge
 from core.runtime.hosted_agentic_stream import (
     HostedProviderStep,
     consume_hosted_provider_step,
+)
+from core.runtime.hosted_agentic_transport import (
+    preflight_and_commit_hosted_request,
 )
 from core.runtime.hosted_agentic_tool_results import make_agentic_tool_result
 from core.runtime.hosted_agentic_tool_execution import (
@@ -176,6 +180,7 @@ class HostedAgenticLoop:
             hosted_agentic_recovery_module,
             hosted_agentic_state_module,
             hosted_agentic_stream_module,
+            hosted_agentic_transport_module,
             hosted_agentic_tool_execution_module,
             hosted_agentic_tool_results_module,
             hosted_context_management_module,
@@ -505,46 +510,13 @@ class HostedAgenticLoop:
                         phase = "finalization"
                         continue
                     raise
-                endpoint_snapshot_digest = ""
-                if provider_runtime.request_preflight is not None:
-                    try:
-                        endpoint_snapshot = await asyncio.to_thread(
-                            provider_runtime.request_preflight,
-                            request,
-                            credential,
-                        )
-                    except Exception as error:
-                        raise HostedAgenticLoopError(
-                            str(
-                                getattr(
-                                    error,
-                                    "reason_code",
-                                    "provider_endpoint_preflight_failed",
-                                )
-                            )
-                        ) from error
-                    endpoint_snapshot_digest = str(
-                        getattr(endpoint_snapshot, "snapshot_digest", "") or ""
-                    )
-                    if (
-                        len(endpoint_snapshot_digest) != 64
-                        or any(
-                            character not in "0123456789abcdef"
-                            for character in endpoint_snapshot_digest
-                        )
-                    ):
-                        raise HostedAgenticLoopError(
-                            "provider_endpoint_preflight_invalid"
-                        )
-                elif provider_runtime.recipe is not None:
-                    raise HostedAgenticLoopError(
-                        "provider_endpoint_preflight_unavailable"
-                    )
-                request = replace(
-                    self.request_builder.commit(prepared_request),
-                    endpoint_capability_snapshot_digest=(
-                        endpoint_snapshot_digest
-                    ),
+                request = await preflight_and_commit_hosted_request(
+                    request_builder=self.request_builder,
+                    prepared_request=prepared_request,
+                    context=effective_context,
+                    request_preflight=provider_runtime.request_preflight,
+                    credential=credential,
+                    require_preflight=provider_runtime.recipe is not None,
                 )
                 request_control_digest = hosted_request_control_digest(request)
                 break
@@ -728,6 +700,12 @@ class HostedAgenticLoop:
                     budget=budget,
                     cancellation=cancellation,
                     destination_upstream_id=destination_upstream_id,
+                    before_transport=lambda: (
+                        self.request_builder.revalidate_for_transport(
+                            prepared_request,
+                            context=effective_context,
+                        )
+                    ),
                     on_accepted=accepted,
                     on_tool_call=observe,
                     on_private_state=stage,

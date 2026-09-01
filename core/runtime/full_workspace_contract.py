@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from core.providers.errors import CapabilityCertificateError
 
 
-FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v12"
+FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v13"
 MAVERICK_AGENT_EXECUTION_FAMILY = "maverick_agent"
 MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY = "maverick_agent_candidate"
 
@@ -49,6 +49,8 @@ FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS = (
     "security:filesystem.marker-narrowing",
     "security:filesystem.revoke-rebuild",
     "security:tool-result.revoke-egress",
+    "security:request.revoke-transport",
+    "security:workspace-effect.revoke-commit",
 )
 
 

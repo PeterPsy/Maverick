@@ -201,7 +201,8 @@ class HostedAgenticRequestBuilder:
                     context_compaction_evidence_digest
                 ),
                 context_compaction_applied=context_compaction_applied,
-            )
+            ),
+            context=context,
         )
 
     def prepare(
@@ -435,13 +436,48 @@ class HostedAgenticRequestBuilder:
             egress_decisions=tuple(egress_decisions),
         )
 
-    def commit(self, prepared: HostedAgenticPreparedRequest) -> AgenticModelRequest:
-        """Commit every decision only after request-specific budget eligibility."""
+    def commit(
+        self,
+        prepared: HostedAgenticPreparedRequest,
+        *,
+        context=None,
+    ) -> AgenticModelRequest:
+        """Revalidate and commit only after request-specific preflight eligibility."""
+        self.revalidate_for_transport(prepared, context=context)
         self._commit_egress_decisions(
             workspace_id=prepared.workspace_id,
             decisions=prepared.egress_decisions,
         )
         return prepared.request
+
+    def revalidate_for_transport(
+        self,
+        prepared: HostedAgenticPreparedRequest,
+        *,
+        context,
+    ) -> None:
+        """Recheck every source at the last synchronous boundary before transport."""
+        if self.classification_revalidator is None:
+            if any(
+                _metadata_requires_live_authority(metadata)
+                for metadata in prepared.request.source_metadata
+            ):
+                raise HostedAgenticLoopError(
+                    "classification_authority_unavailable"
+                )
+            return
+        if context is None:
+            raise HostedAgenticLoopError("classification_authority_unavailable")
+        for metadata in prepared.request.source_metadata:
+            snapshot = _metadata_classification(metadata)
+            try:
+                current = self.classification_revalidator(context, snapshot)
+            except Exception as error:
+                raise HostedAgenticLoopError(
+                    "classification_authority_unavailable"
+                ) from error
+            if not _same_transport_classification(snapshot, current):
+                raise HostedAgenticLoopError("egress_data_class_denied")
 
     def _commit_egress_decisions(
         self,
@@ -953,4 +989,37 @@ def _metadata_classification(
         classification_authority_bound=(
             metadata.classification_authority_bound
         ),
+    )
+
+
+def _same_transport_classification(left, right) -> bool:
+    """Require the exact authority-bearing classification prepared for egress."""
+    fields = (
+        "data_class",
+        "trust_level",
+        "source_ref",
+        "source_revision",
+        "resource_identity",
+        "classification_revision",
+        "content_digest",
+        "classification_authority_id",
+        "classification_authority_kind",
+        "classification_authority_ref",
+        "classification_authority_revision",
+        "classification_authority_digest",
+        "classification_authority_policy_revision",
+        "classification_authority_bound",
+    )
+    return all(getattr(left, field) == getattr(right, field) for field in fields)
+
+
+def _metadata_requires_live_authority(metadata: AgenticSourceMetadata) -> bool:
+    return bool(
+        metadata.classification_authority_bound is not False
+        or metadata.classification_authority_id
+        or metadata.classification_authority_kind
+        or metadata.classification_authority_ref
+        or metadata.classification_authority_revision is not None
+        or metadata.classification_authority_digest
+        or metadata.classification_authority_policy_revision
     )

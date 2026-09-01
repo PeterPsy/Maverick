@@ -8,7 +8,6 @@ from pathlib import Path
 from core.authorization.errors import AuthorizationError
 from core.cli.models import CliInvocationContext
 from core.egress.agentic_transforms import canonical_egress_content
-from core.egress.classification import CanonicalSourceClassification
 from core.mcp.models import McpInvocationContext
 from core.providers.agentic_protocol import EphemeralCredential
 from core.providers.errors import CapabilityCertificateError, ProviderError
@@ -22,7 +21,7 @@ from core.runtime.filesystem_mutation_lineage import (
     resolve_filesystem_mutation_lineage,
 )
 from core.runtime.classification_authority import (
-    revalidate_canonical_classification,
+    revalidate_hosted_content_classification,
 )
 from core.runtime.hosted_agentic_engine import (
     HostedAgenticEngineAdapter,
@@ -55,7 +54,6 @@ from core.runtime.hosted_runtime_registry_builder import (
 )
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
 from core.runtime.semantic_envelope import HostedSemanticEnvelopeCompiler
-from core.runtime.semantic_envelope_models import canonical_classification
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolCatalogBuilder
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
@@ -66,7 +64,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "25"
+HOSTED_AGENTIC_ADAPTER_VERSION = "26"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -126,43 +124,10 @@ def build_hosted_agentic_engine_adapter(
             or getattr(context, "workspace_id", "")
             or ""
         )
-        canonical = CanonicalSourceClassification(
-            data_class=classification.data_class,
-            provenance=str(getattr(classification, "provenance", "tool_result")),
-            trust_level=classification.trust_level,  # type: ignore[arg-type]
-            source_ref=classification.source_ref,
-            source_revision=classification.source_revision,
-            source_digest=classification.content_digest,
-            resource_identity=classification.resource_identity,
-            classification_revision=classification.classification_revision,
-            classification_authority_id=(
-                classification.classification_authority_id
-            ),
-            classification_authority_kind=(
-                classification.classification_authority_kind
-            ),
-            classification_authority_ref=(
-                classification.classification_authority_ref
-            ),
-            classification_authority_revision=(
-                classification.classification_authority_revision
-            ),
-            classification_authority_digest=(
-                classification.classification_authority_digest
-            ),
-            classification_authority_policy_revision=(
-                classification.classification_authority_policy_revision
-            ),
-            classification_authority_bound=(
-                classification.classification_authority_bound
-            ),
-        )
-        return canonical_classification(
-            revalidate_canonical_classification(
-                state.workspace_store,
-                workspace_id=workspace_id,
-                classification=canonical,
-            )
+        return revalidate_hosted_content_classification(
+            state.workspace_store,
+            workspace_id=workspace_id,
+            classification=classification,
         )
 
     def classify_resource(observation, provenance):

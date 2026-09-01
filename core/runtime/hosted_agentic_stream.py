@@ -41,6 +41,16 @@ class HostedProviderStepEmission:
     response: HostedProviderStep | None = None
 
 
+def open_hosted_provider_response_stream(
+    *,
+    client: AgenticModelProviderClient,
+    request,
+    credential: EphemeralCredential | None,
+):
+    """Create the lazy provider stream; no remote byte may move at this call."""
+    return client.create_response(request, credential=credential)
+
+
 async def consume_hosted_provider_step(
     *,
     client: AgenticModelProviderClient,
@@ -49,6 +59,7 @@ async def consume_hosted_provider_step(
     budget: HostedAgenticBudget,
     cancellation: RuntimeCancellationSignal,
     destination_upstream_id: str | None,
+    before_transport: Callable[[], None],
     on_accepted: Callable[[AgenticModelEvent], None] | None = None,
     on_tool_call: Callable[[AgenticModelEvent], dict[str, object]] | None = None,
     on_private_state: Callable[[AgenticModelEvent], None] | None = None,
@@ -63,8 +74,17 @@ async def consume_hosted_provider_step(
     usage_seen = False
     last_ordinal = 0
     try:
-        stream = client.create_response(request, credential=credential)
-        async for provider_event in _cancellable_events(stream, cancellation, budget):
+        stream = open_hosted_provider_response_stream(
+            client=client,
+            request=request,
+            credential=credential,
+        )
+        async for provider_event in _cancellable_events(
+            stream,
+            cancellation,
+            budget,
+            before_transport=before_transport,
+        ):
             _validate_provider_event(provider_event, request.request_id, last_ordinal)
             last_ordinal = provider_event.ordinal
             if provider_event.event_type == "accepted":
@@ -161,9 +181,16 @@ async def _cancellable_events(
     stream,
     cancellation: RuntimeCancellationSignal,
     budget: HostedAgenticBudget,
+    *,
+    before_transport: Callable[[], None],
 ):
     iterator = stream.__aiter__()
-    pending = asyncio.create_task(iterator.__anext__())
+    pending = asyncio.create_task(
+        _next_provider_event(
+            iterator,
+            before_transport=before_transport,
+        )
+    )
     try:
         while True:
             done, _pending = await asyncio.wait({pending}, timeout=0.05)
@@ -186,6 +213,16 @@ async def _cancellable_events(
         if callable(close):
             with suppress(RuntimeError):
                 await close()
+
+
+async def _next_provider_event(
+    iterator,
+    *,
+    before_transport: Callable[[], None],
+) -> object:
+    """Run the live guard in the task that advances the lazy client stream."""
+    before_transport()
+    return await iterator.__anext__()
 
 
 def _validate_provider_event(event: AgenticModelEvent, request_id: str, last_ordinal: int) -> None:

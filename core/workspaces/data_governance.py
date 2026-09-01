@@ -134,7 +134,7 @@ class WorkspaceResourceClassification:
 
 @dataclass(frozen=True)
 class WorkspaceDataGovernanceAudit:
-    """Append-only redaction-safe mutation evidence."""
+    """Redaction-safe evidence, prepared once then CAS-terminalized when needed."""
 
     audit_id: str
     workspace_id: str
@@ -163,6 +163,13 @@ class WorkspaceDataGovernanceStore(Protocol):
     def append_data_governance_audit(
         self,
         record: WorkspaceDataGovernanceAudit,
+    ) -> WorkspaceDataGovernanceAudit: ...
+
+    def transition_data_governance_audit(
+        self,
+        record: WorkspaceDataGovernanceAudit,
+        *,
+        expected_outcome: str,
     ) -> WorkspaceDataGovernanceAudit: ...
 
 

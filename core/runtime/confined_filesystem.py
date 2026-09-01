@@ -28,6 +28,10 @@ from core.egress.classification import (
     validated_classification,
 )
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.content_data_classification import (
+    MAX_RUNTIME_CONTENT_CLASSIFICATION_BYTES,
+    narrow_runtime_content_classification,
+)
 from core.runtime.confined_filesystem_metadata import (
     ConfinedPathMetadata,
     apply_preserved_file_metadata,
@@ -233,6 +237,11 @@ class ConfinedWorkspaceFilesystem:
                 valid = _utf8_prefix(raw)
                 if raw and not valid:
                     raise RuntimeToolError("filesystem_utf8_chunk_too_small")
+                classification = self._classification_for_complete_file(
+                    fd,
+                    before,
+                    observation,
+                )
                 after = os.fstat(fd)
                 self._assert_same_version(before, after, "filesystem_resource_changed")
                 self._assert_final_link(chain.leaf_fd, components[-1], after)
@@ -251,7 +260,7 @@ class ConfinedWorkspaceFilesystem:
                 }
                 return ConfinedFilesystemResult(
                     payload,
-                    self._classification(observation, "tool_result"),
+                    classification,
                 )
             except OSError as error:
                 raise RuntimeToolError("filesystem_read_failed") from error
@@ -298,6 +307,11 @@ class ConfinedWorkspaceFilesystem:
                     min(max_bytes, max(0, before.st_size - offset)),
                     offset,
                 )
+                classification = self._classification_for_complete_file(
+                    fd,
+                    before,
+                    observation,
+                )
                 after = os.fstat(fd)
                 self._assert_same_version(before, after, "filesystem_resource_changed")
                 self._assert_final_link(chain.leaf_fd, components[-1], after)
@@ -317,7 +331,7 @@ class ConfinedWorkspaceFilesystem:
                 }
                 return ConfinedFilesystemResult(
                     payload,
-                    self._classification(observation, "tool_result"),
+                    classification,
                 )
             except OSError as error:
                 raise RuntimeToolError("filesystem_read_failed") from error
@@ -1387,6 +1401,31 @@ class ConfinedWorkspaceFilesystem:
                 classification_authority_bound=authority[6],
             )
         return normalized
+
+    def _classification_for_complete_file(
+        self,
+        fd: int,
+        observed: os.stat_result,
+        observation: FilesystemResourceObservation,
+    ) -> CanonicalSourceClassification:
+        """Narrow every chunk from one bounded scan of the exact raw resource."""
+        classification = self._classification(observation, "tool_result")
+        if observed.st_size > MAX_RUNTIME_CONTENT_CLASSIFICATION_BYTES:
+            return fail_closed_classification(
+                provenance="tool_result",
+                source_ref=observation.resource_ref,
+                source_revision=observation.resource_revision,
+                source_digest=observation.resource_digest,
+                resource_identity=observation.resource_identity,
+            )
+        complete = os.pread(fd, observed.st_size + 1, 0)
+        if len(complete) != observed.st_size:
+            raise RuntimeToolError("filesystem_resource_changed")
+        return narrow_runtime_content_classification(
+            classification,
+            complete,
+            content_type="application/octet-stream",
+        )
 
     @staticmethod
     def _observation_key(

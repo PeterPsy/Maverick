@@ -109,6 +109,57 @@ def revalidate_canonical_classification(
     )
 
 
+def revalidate_hosted_content_classification(
+    store,
+    *,
+    workspace_id: str,
+    classification,
+):
+    """Apply the canonical live-authority check to one hosted classification."""
+    # Imported lazily because hosted models depend on the tool orchestrator,
+    # whose persisted-result path imports this module.
+    from core.runtime.semantic_envelope_models import canonical_classification
+
+    canonical = CanonicalSourceClassification(
+        data_class=classification.data_class,
+        provenance=str(getattr(classification, "provenance", "tool_result")),
+        trust_level=classification.trust_level,
+        source_ref=classification.source_ref,
+        source_revision=classification.source_revision,
+        source_digest=classification.content_digest,
+        resource_identity=classification.resource_identity,
+        classification_revision=classification.classification_revision,
+        classification_authority_id=(
+            classification.classification_authority_id
+        ),
+        classification_authority_kind=(
+            classification.classification_authority_kind
+        ),
+        classification_authority_ref=(
+            classification.classification_authority_ref
+        ),
+        classification_authority_revision=(
+            classification.classification_authority_revision
+        ),
+        classification_authority_digest=(
+            classification.classification_authority_digest
+        ),
+        classification_authority_policy_revision=(
+            classification.classification_authority_policy_revision
+        ),
+        classification_authority_bound=(
+            classification.classification_authority_bound
+        ),
+    )
+    return canonical_classification(
+        revalidate_canonical_classification(
+            store,
+            workspace_id=workspace_id,
+            classification=canonical,
+        )
+    )
+
+
 def _lineage(value) -> tuple[str, str, str, int | None, str, str]:
     return (
         str(getattr(value, "classification_authority_id", "") or ""),
@@ -147,4 +198,5 @@ def _lineage_is_well_formed(
 __all__ = [
     "classification_authority_is_current",
     "revalidate_canonical_classification",
+    "revalidate_hosted_content_classification",
 ]

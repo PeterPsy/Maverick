@@ -75,6 +75,7 @@ def write_confined_text_batch(
     writes: tuple[ConfinedTextBatchWrite, ...],
     *,
     transaction_directory: Path,
+    commit_guard: FilesystemMutationGuard | None = None,
 ) -> tuple[ConfinedFilesystemResult, ...]:
     """Commit every exact text write or restore the complete prior namespace."""
     if len({item.path for item in writes}) != len(writes):
@@ -86,10 +87,14 @@ def write_confined_text_batch(
         for request in writes:
             staged.append(_stage_write(filesystem, transaction_fd, request))
         _verify_staged(filesystem, staged)
+        if commit_guard is not None:
+            commit_guard.verify_before()
         for item in staged:
             _commit_staged(filesystem, transaction_fd, item)
         for item in staged:
             _verify_committed(filesystem, item)
+        if commit_guard is not None:
+            commit_guard.verify_after()
         results = tuple(_result(filesystem, item) for item in staged)
         _release_backups(transaction_fd, staged)
         return results

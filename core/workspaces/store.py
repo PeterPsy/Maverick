@@ -142,6 +142,14 @@ class WorkspaceStore(Protocol):
     ) -> WorkspaceDataGovernanceAudit | None:
         ...
 
+    def transition_data_governance_audit(
+        self,
+        record: WorkspaceDataGovernanceAudit,
+        *,
+        expected_outcome: str,
+    ) -> WorkspaceDataGovernanceAudit:
+        ...
+
 
 @dataclass(frozen=True)
 class WorkspaceCollections:
@@ -376,6 +384,41 @@ class WorkspaceDocumentStore:
             if document is None
             else WorkspaceDataGovernanceAudit(**document)
         )
+
+    def transition_data_governance_audit(
+        self,
+        record: WorkspaceDataGovernanceAudit,
+        *,
+        expected_outcome: str,
+    ) -> WorkspaceDataGovernanceAudit:
+        """Terminalize one prepared audit without changing its mutation identity."""
+        if (
+            expected_outcome != "pending"
+            or record.outcome not in {"succeeded", "failed"}
+        ):
+            raise WorkspaceDataGovernanceError(
+                "data_governance_audit_transition_invalid"
+            )
+        collection = self._data_governance_collection("data_governance_audits")
+        immutable_query = {
+            "audit_id": record.audit_id,
+            "workspace_id": record.workspace_id,
+            "action": record.action,
+            "record_id": record.record_id,
+            "actor_id": record.actor_id,
+            "expected_revision": record.expected_revision,
+            "resulting_revision": record.resulting_revision,
+            "occurred_at": record.occurred_at,
+            "outcome": expected_outcome,
+        }
+        if not collection.compare_and_set(
+            immutable_query,
+            {"$set": asdict(record)},
+        ):
+            raise WorkspaceDataGovernanceError(
+                "data_governance_audit_transition_conflict"
+            )
+        return record
 
     def list_data_governance_audits(
         self,

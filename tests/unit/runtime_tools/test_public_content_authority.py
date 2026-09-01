@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -24,6 +26,7 @@ from core.runtime.public_content_authority_store import (
     runtime_public_content_authority_record_for_workspace,
 )
 from core.workspaces.store import WorkspaceCollections, WorkspaceDocumentStore
+from core.workspaces.errors import WorkspaceDataGovernanceError
 from tests.support.collections import FakeCollection
 
 
@@ -304,6 +307,112 @@ class RuntimePublicContentAuthorityTest(unittest.TestCase):
                 self.store,
                 "workspace-1",
             )
+        )
+        audits = self.store.list_data_governance_audits(
+            workspace_id="workspace-1"
+        )
+        self.assertEqual(len(audits), 1)
+        self.assertEqual(audits[0].outcome, "failed")
+        self.assertEqual(
+            audits[0].reason_code,
+            "runtime_public_content_authority_persistence_failed",
+        )
+
+    def test_pending_audit_keeps_cas_result_non_authoritative(self) -> None:
+        with patch.object(
+            self.store,
+            "transition_data_governance_audit",
+            side_effect=RuntimeError("audit transition unavailable"),
+        ), self.assertRaisesRegex(
+            RuntimeError,
+            "audit transition unavailable",
+        ):
+            issue_runtime_public_content_authority(
+                self.store,
+                workspace_id="workspace-1",
+                actor_id="operator-1",
+                expected_revision=0,
+                now=NOW,
+            )
+
+        self.assertIsNotNone(
+            self.store.get_resource_classification(
+                workspace_id="workspace-1",
+                resource_kind=RUNTIME_PUBLIC_CONTENT_AUTHORITY_KIND,
+                resource_ref=RUNTIME_PUBLIC_CONTENT_AUTHORITY_REF,
+            )
+        )
+        self.assertIsNone(
+            runtime_public_content_authority_for_workspace(
+                self.store,
+                "workspace-1",
+            )
+        )
+        audits = self.store.list_data_governance_audits(
+            workspace_id="workspace-1"
+        )
+        self.assertEqual(len(audits), 1)
+        self.assertEqual(audits[0].outcome, "pending")
+        self.assertEqual(
+            audits[0].reason_code,
+            "runtime_public_content_authority_persistence_pending",
+        )
+
+    def test_concurrent_issue_has_coherent_success_and_failure_audits(self) -> None:
+        append = self.store.append_data_governance_audit
+        barrier = Barrier(2)
+
+        def synchronized_append(record):
+            try:
+                return append(record)
+            finally:
+                barrier.wait(timeout=2)
+
+        def issue():
+            return issue_runtime_public_content_authority(
+                self.store,
+                workspace_id="workspace-1",
+                actor_id="operator-1",
+                expected_revision=0,
+                now=NOW,
+            )
+
+        with patch.object(
+            self.store,
+            "append_data_governance_audit",
+            side_effect=synchronized_append,
+        ), ThreadPoolExecutor(max_workers=2) as executor:
+            futures = tuple(executor.submit(issue) for _index in range(2))
+            records = []
+            errors = []
+            for future in futures:
+                try:
+                    records.append(future.result())
+                except WorkspaceDataGovernanceError as error:
+                    errors.append(error)
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("resource_classification_revision_conflict", str(errors[0]))
+        self.assertEqual(
+            runtime_public_content_authority_for_workspace(
+                self.store,
+                "workspace-1",
+            ),
+            records[0],
+        )
+        audits = self.store.list_data_governance_audits(
+            workspace_id="workspace-1"
+        )
+        self.assertEqual(len(audits), 2)
+        self.assertEqual(
+            sorted(audit.outcome for audit in audits),
+            ["failed", "succeeded"],
+        )
+        failed = next(audit for audit in audits if audit.outcome == "failed")
+        self.assertEqual(
+            failed.reason_code,
+            "runtime_public_content_authority_persistence_failed",
         )
 
 

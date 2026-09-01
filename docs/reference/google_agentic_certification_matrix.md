@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
-Status date: 2026-08-31
-Matrix revision: `2026-08-31-r29-p4-authority-revalidation-tcb19`
+Status date: 2026-09-01
+Matrix revision: `2026-09-01-r30-p4-transport-effect-atomicity-tcb20`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==25`
+Adapter: `maverick-hosted-tool-loop==26`
 
 ## Preview combination
 
@@ -12,8 +12,8 @@ Adapter: `maverick-hosted-tool-loop==25`
 | --- | --- |
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
-| Immutable profile revision | `33` (revision `32` suspended) |
-| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v12` |
+| Immutable profile revision | `34` (revision `33` suspended) |
+| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v13` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -28,7 +28,7 @@ Adapter: `maverick-hosted-tool-loop==25`
 | Final request | exact Core finalization instruction; `tools` omitted |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | Full Workspace `codex-baseline-v12` surface: all 16 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result contract; denied bytes pair through a public error; shell/process effects remain private until exact-result admission; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
+| Tool handles | Full Workspace `codex-baseline-v13` surface: all 18 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result contract; raw/base64/chunked reads retain complete-resource taint, denied bytes pair through a public error, provider transport revalidates live authority, and shell/process effects remain rollbackable until exact-result authority survives commit; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 45 days |
 
 Google documents Gemini 3.6 Flash as a stable model with a 1,048,576-token
@@ -55,11 +55,11 @@ Primary references:
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@7`; exact byte-bound classifications, lexical no-symlink skill identity, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v19 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, full-workspace confinement/process/discovery/effect-overlay/batch/metadata surface, codec, transport, journal/recovery, store, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v20 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, request/transport revalidation, full-workspace confinement/process/discovery/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
-| Full Workspace behavioral gate | `codex-baseline-v12` executes 13 positive result workflows plus marker narrowing, revoke-then-rebuild, and delayed-egress-after-revocation probes instead of trusting declared mode strings | repository gate complete: 16/16 behaviors; signed provider certification not run |
+| Full Workspace behavioral gate | `codex-baseline-v13` executes 13 positive result workflows plus production-composed raw/base64/chunk marker narrowing, revoke-then-rebuild, delayed-egress-after-revocation, post-preflight transport revocation, and overlay-commit rollback probes instead of trusting declared mode strings or isolated helpers | repository gate complete: 18/18 behaviors; signed provider certification not run |
 | Live endpoint/model preflight | official current Interactions OpenAPI operation plus authenticated exact model record prove streaming, usage, function tools, reasoning controls, model identity, and input/output limits before completion transport | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
@@ -77,7 +77,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r29 |
+| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r30 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -321,3 +321,17 @@ delayed-egress denial after revocation. The immutable definition therefore atomi
 uncertified, unbound, contained, and unavailable; no live probe, signed run,
 provider completion, certificate, canary, or remote activation has been
 performed.
+
+Revision 34 pins adapter 26, governed recipe 13, suite 30, matrix
+`2026-09-01-r30-p4-transport-effect-atomicity-tcb20`, and TCB manifest v20.
+Prepared request authority is revalidated after endpoint preflight and in the
+task that advances the lazy provider stream. Filesystem results scan bounded
+complete raw bytes before base64 and retain their class across version-bound
+chunks. Shell/process overlay batches revalidate exact-result authority before
+and after materialization and restore every pre-image on drift. Runtime-public
+issue/revoke uses pending audit, classification CAS, and terminal audit CAS, so
+a losing concurrent mutation is recorded as failure rather than success. The
+production-composed `codex-baseline-v13` gate returns all 18 required behaviors.
+The immutable definition remains uncertified, unbound, contained, and
+unavailable; no live probe, signed run, provider completion, certificate,
+canary, or remote activation has been performed.

@@ -1,18 +1,19 @@
 # PWA Storage file cache M4 operations and acceptance
 
 This runbook covers the automatic, transparent Storage file cache implemented
-by M4. It does not authorize a cache-residency product surface, an alternative
-application mode, or persistence of unclassified file content. The global
-feature gate remains off until the classification, frame-isolation, privacy,
-and physical-device gates are complete.
+by M4. It does not authorize a cache-residency product surface or an alternative
+application mode. Unclassified and unapproved file content remains denied. The
+global feature gate remains off until the exact-resource approval, privacy, and
+physical-device rollout gates are complete.
 
 ## Owned browser state
 
 - package: `@maverick/pwa-cache`;
-- manifest database: `maverick-pwa-file-v1`, version 1;
+- manifest database: `maverick-pwa-file-v1`, IndexedDB version 1, record schema
+  version 2;
 - manifest stores: `files` and `metadata`;
 - byte directory: `maverick-pwa-file-cache-v1` in OPFS;
-- OPFS file names: opaque flat SHA-256-derived names ending in `.bin`;
+- OPFS file names: opaque flat random UUID-derived names ending in `.bin`;
 - cleanup barrier: `maverick-pwa-file-cache-cleanup-barrier-v1`;
 - policy revision: `maverick.local-persistence-policy.v2`;
 - default maximum entry: 64 MiB;
@@ -62,11 +63,23 @@ denial/authentication failure, and are cleared with the broker. A cold broker
 with no confirmed decision and descriptor remains fail-closed.
 
 Unknown or denied policy returns `unavailable` to the Storage adapter, which
-uses its ordinary network path. The current resource inventory classifies raw
-file bytes as `unclassified`; the backend therefore returns `eligible: false`
-and the feature flag defaults to false. Do not change either gate merely to
-exercise the implementation. A reviewed canonical resource classification
-and opaque/isolated Storage frame are separate release prerequisites.
+uses its ordinary network path. Raw file bytes default to `unclassified` and
+the backend therefore returns `eligible: false`. A platform/workspace admin may
+approve only the exact current file id and source version through the internal
+`file.cache_policy.approve` action with `confirm: true`; the durable approval
+projects that one representation as `workspace_internal`, while
+`file.cache_policy.revoke` removes it. Both actions are host-role-attested,
+their public response redacts actor identity, and a version change fails closed
+until separately approved. Entries above 64 MiB are never eligible. These
+actions are not a device consent or a reason to enable the global flag, which
+continues to default to false.
+
+Every app and widget document is served through an authenticated per-app,
+per-session isolated origin. Direct non-shell app-document navigation on the
+platform origin is rejected, and public app artifacts are sandboxed when
+interpreted as documents. The shell accepts messages only from the registered
+frame window and its exact isolated origin; apps never receive platform-origin
+IndexedDB or OPFS authority.
 
 ## Stable version contract
 
@@ -89,9 +102,14 @@ or published under another identity.
 
 ## Read, write, and resume behavior
 
-On a valid ready hit, the package reads the OPFS Blob, verifies exact size and
-recomputes SHA-256, updates least-recent access, and returns the ordinary
-Storage viewer result without a network request.
+On a candidate ready hit, the package reads the OPFS Blob, verifies exact size,
+recomputes SHA-256, then performs an authoritative conditional `HEAD` against
+the descriptor media URL. Only an exact current strong ETag and size can
+confirm the hit. Local Storage re-hashes the live file; Drive refreshes the
+provider revision before answering. Stale/authentication responses evict or
+reject the candidate. A transient revalidation failure may reuse only the
+matching descriptor and positive gate already validated in the same bounded
+authenticated broker session; a cold session remains fail-closed.
 
 On a miss, the network response remains authoritative. If OPFS, quota
 headroom, strong ETag, policy, lease, size, and stream support are all valid,
@@ -125,18 +143,24 @@ state, file list, or manual per-file action.
 
 Initialization resumes durable cleanup markers, removes expired abandoned
 writes after their grace period, deletes OPFS orphans, and prunes obsolete
-versions. Before a new write, expired/non-ready records are removed and ready
-records are evicted in least-recent order until both the 128 MiB scope and
-256 MiB global limits fit. The current ready version is protected while a
-replacement is in flight.
+versions. Writers take a common origin-budget lock, reserve their full declared
+size before streaming, coordinate through a file-identity generation rather
+than only file-plus-version, and recheck both budget and generation at
+publication. A post-publication budget pass is mandatory. This prevents two
+concurrent 6-byte reservations from fitting a 6-byte budget and prevents a
+late older version from replacing a newer ready version. Ready records are
+evicted in least-recent order within the 128 MiB scope and 256 MiB global
+limits.
 
 Logout, `401`/`403`, user change, and workspace change durably clear the
-applicable structured and file-cache scope. An interrupted clear remains
-`pending` in an independent local barrier and blocks persistent reuse until
-the manifest and OPFS deletion complete. Settings **Clear cache** clears only
-the owned structured entries, file manifest, and referenced OPFS bytes. It
-never calls a Storage delete/Drive trash action and never clears the entire
-origin.
+applicable structured and file-cache scope. Cleanup advances a durable epoch,
+cancels matching writers across tabs, waits for their lock/drain
+acknowledgement, and checks the tombstone again immediately before every
+publication. The marker remains `pending` until writers are drained and the
+manifest and OPFS deletion complete, so an old writer cannot republish after a
+successful clear. Settings **Clear cache** clears only the owned structured
+entries, file manifest, and referenced OPFS bytes. It never calls a Storage
+delete/Drive trash action and never clears the entire origin.
 
 Settings may display only aggregate total/structured/file bytes and entries,
 origin usage/quota, structured backend, OPFS availability, and pending cleanup
@@ -185,6 +209,9 @@ npm --prefix apps/base-shell test
 npm --prefix apps/base-shell run test:service-worker
 npm --prefix apps/storage test
 python3 -m unittest apps.storage.tests.test_storage_file_cache
+MAVERICK_TEST_LEVEL=integration python3 -m unittest \
+  tests.integration.app_hosting.test_app_frame_browser_origin \
+  tests.integration.app_hosting.test_widgets
 python3 -m unittest apps.settings.tests.test_settings_app.SettingsFrontendDistTests
 maverick app storage frontend build --json
 maverick app base-shell frontend build --json
@@ -204,10 +231,11 @@ The runtime projection must remain:
 {"schema":"maverick.pwa-config.v2","features":{"storage_file_cache":false}}
 ```
 
-until canonical classification, privacy review, opaque/isolated Storage frame,
-and physical Safari/Home Screen/Dock evidence are approved. Afterwards, the
-operator gate is `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE`. Invalid values fail
-closed.
+until reviewed exact-version approvals, privacy review, and physical
+Safari/Home Screen/Dock evidence are approved. The isolated app-frame boundary
+is implemented but remains part of the physical validation matrix. Afterwards,
+the operator gate is `MAVERICK_FEATURE_PWA_STORAGE_FILE_CACHE`. Invalid values
+fail closed.
 
 Rollback sets that feature to `off` and restarts Core through the normal
 operator procedure. Disabled requests use the ordinary server path. Rollback

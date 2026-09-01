@@ -71,13 +71,21 @@ Mounted app frontends have a canonical user-facing shell route:
 
 This route belongs to the base shell and is served by the configured root shell app. It selects an enabled workspace app binding by its local app id and forwards the optional app-owned page segment to the mounted iframe as `params.app_page` in the `maverick.app.navigate` message.
 
-The direct frontend mount remains:
+The frontend mount namespace remains:
 
 ```text
 /apps/<mount_app_id>/
 ```
 
-That direct mount is an internal asset and iframe serving surface. It must remain available for app frontend assets, SPA fallback, widgets, and direct app availability checks, but it is not the canonical browser URL for workspace navigation.
+Core uses that namespace as the upstream route behind an authenticated isolated
+app-frame proxy. Direct non-shell HTML/SPA documents at the platform origin are
+rejected; the only callback exception is a Core-owned no-store OAuth relay that
+immediately bootstraps the isolated callback document. App and widget documents
+are otherwise available only after a one-shot launch ticket establishes the
+per-app, per-login-session isolated origin. Public immutable/static
+subresources remain available at the platform namespace, but
+are sandboxed and `nosniff` when interpreted as documents. The namespace is not
+the canonical browser URL for workspace navigation.
 
 The public app id declared by the app artifact and the local app id used for one workspace binding are separate identities:
 
@@ -93,7 +101,9 @@ Apps own the structure and meaning of `<app_page>`. The platform must not hardco
 
 The root shell owns the user's shell theme preference, and mounted app iframes remain responsible for rendering their own dark and light tokens.
 
-For every mounted app iframe and shell-hosted widget iframe, the shell must include these URL parameters on the iframe document URL before the frontend bundle executes:
+For every mounted app iframe and shell-hosted widget iframe, the shell must
+include these URL parameters in the isolated launch path before the frontend
+bundle executes:
 
 - `maverick_theme`: the effective visual theme, `dark` or `light`
 - `maverick_theme_mode`: the user's preference, `dark`, `light`, or `system`
@@ -115,7 +125,11 @@ The shell also posts live theme updates without remounting iframe documents:
 ```
 
 Mounted apps may also receive the same `theme` object on `maverick.app.navigate`. Widgets may receive it in `context.content.shell_theme` on `maverick.widget.context-changed`.
-Apps and widgets must ignore `theme` fields on unrelated same-origin messages so app-owned UI state messages cannot accidentally change document theme.
+Apps and widgets must ignore `theme` fields on unrelated messages so app-owned
+UI state messages cannot accidentally change document theme. Shell-to-frame
+messages are accepted only through the exact-parent relay bound to the platform
+origin; the relay re-emits them inside the app's isolated origin for existing
+app listeners.
 
 ## App Distribution Sources
 
@@ -1533,7 +1547,33 @@ The build source remains app-owned and must not introduce framework-specific ass
 
 For the first frontend build operation, the core supports app sources that declare a frontend entrypoint and contain a `package.json` with a real `build` script either at the app root or at the frontend source root. The core runs the build from that package root only through an authenticated full-access or operator-authorized host path. If `node_modules` is absent, the package root must contain `package-lock.json`; the official build operation runs `npm ci` before `npm run build` so a clean checkout can reproduce the build deterministically. Every successful build must produce `maverick-frontend-assets.json` using schema `maverick.frontend-assets.v2`. A build-aware bundler plugin may classify generated content-hashed outputs as `immutable`; a conservative post-build fallback classifies every artifact as `revalidated`. The optional `navigation_fallback` field names a verified normal HTML entrypoint and is valid only when that same path is selected by a verified precache record; it never declares an alternative product shell. The build-aware plugin rejects local static resource references in emitted HTML when the referenced file is absent from the built artifact; navigation links and external or embedded URLs are not artifact references. Core verifies safe relative paths, file presence, byte size, and SHA-256 before publishing `maverick.app.frontend-changed`. A hash-looking filename without a matching verified manifest record is never evidence of immutability.
 
-Mounted app registry, frontend documents, and backend routes are authenticated workspace surfaces. Anonymous requests may load the root shell, the configured root-shell app document, and session endpoints, but `/api/status`, `/api/apps`, direct non-shell app document mounts such as `/apps/<app_id>/`, and `/api/apps/<app_id>/backend` require a valid user session. App and widget frontend HTML documents must be served with `Cache-Control: no-store` because they point at the current built asset hashes and must not pin clients to obsolete bundles after an official frontend rebuild. Static built frontend assets under `/apps/<app_id>/assets/...` and non-HTML static files emitted into the frontend artifact root are public artifacts and must not contain user, workspace, secret, or app-data payloads. Only bytes matching an `immutable` record in the generated manifest receive `public, max-age=31536000, immutable`; other public static files remain revalidated. Gzip or Brotli content encoding and cross-origin headers allow sandboxed iframes, widget iframes, and Vite-generated `crossorigin` module/style tags to load bundles without session cookies on every asset request. Source maps and source-like extensions such as `.ts`, `.tsx`, `.jsx`, `.vue`, `.svelte`, `.py`, and `.env` must not be treated as public static assets or SPA fallback routes. Workspace-local editable backend entrypoints are additionally workspace-admin gated until a dedicated app backend sandbox/governance model is available.
+Mounted app registry, frontend documents, and backend routes are authenticated
+workspace surfaces. Anonymous requests may load the root shell, the configured
+root-shell app document, and session endpoints, but `/api/status`, `/api/apps`,
+and `/api/apps/<app_id>/backend` require a valid user session. A direct non-shell
+app or widget document at the platform origin is rejected even with a session;
+the Core-owned OAuth callback relay is no-store and contains no app bundle.
+Core serves the actual app document only through a host-bound app-frame session
+on the app's isolated origin. App and widget frontend HTML documents use
+`Cache-Control: no-store` because they point at the current built asset hashes
+and must not pin clients
+to obsolete bundles after an official frontend rebuild. Static built frontend
+assets under `/apps/<app_id>/assets/...` and non-HTML static files emitted into
+the frontend artifact root are public artifacts and must not contain user,
+workspace, secret, or app-data payloads. Only bytes matching an `immutable`
+record in the generated manifest receive
+`public, max-age=31536000, immutable`; other public static files remain
+revalidated. Any public app artifact is served with a restrictive document CSP
+(`sandbox`) and `X-Content-Type-Options: nosniff`, preventing script-capable SVG
+or mislabeled bytes from becoming app-controlled platform-origin documents.
+Gzip or Brotli content encoding and cross-origin headers allow isolated app and
+widget frames plus Vite-generated `crossorigin` module/style tags to load
+bundles without platform session cookies on every asset request. Source maps
+and source-like extensions such as `.ts`, `.tsx`, `.jsx`, `.vue`, `.svelte`,
+`.py`, and `.env` must not be treated as public static assets or SPA fallback
+routes. Workspace-local editable backend entrypoints are additionally
+workspace-admin gated until a dedicated app backend sandbox/governance model is
+available.
 
 Browser persistence does not change app ownership. An app that later opts a
 read model into the shared PWA SDK must declare a canonical Maverick
@@ -1544,10 +1584,15 @@ is derived from that canonical classification under ADR-0012 and has only
 taxonomy. Missing classification or revision remains network-only. App
 frontends receive only a client capability whose user/workspace/app principal
 was bound by the top-level host; they cannot select another scope through SDK
-client options. This is not a browser-origin security boundary: today's
-`allow-same-origin` app frames can inspect origin storage outside the SDK.
-Private app persistence therefore remains disabled until the app has an
-isolated origin or an opaque-origin frame uses a genuine parent-owned broker.
+client options. Every app and widget document now runs on an authenticated
+per-app, per-login-session isolated origin. Direct non-shell documents on the
+platform origin are blocked, and retaining iframe `allow-same-origin` grants an
+app access only to its own isolated-origin storage. It cannot inspect Base
+Shell IndexedDB/OPFS or another app's origin. Private app persistence remains
+disabled by default until its resource, privacy, lifecycle, and physical
+rollout gates are approved; isolation is necessary but does not itself grant
+cache policy.
+
 Cached platform control-plane state never authorizes an app action. An app
 renders a valid cached result through its normal component and keeps a cache
 miss in its normal loading state during a transient transport failure. App
@@ -1663,15 +1708,44 @@ The readiness message means the mounted frontend has reached its first useful re
 This avoids losing navigation requests when an app iframe is freshly mounted after login, logout, refresh, or recovery and the host message arrives before the app has installed its listener.
 - the host may know the target `app_id`, but must not know app-private storage or route internals
 - the receiving app owns interpretation of `params`
-- the receiving app must ignore messages from unexpected origins
+- the receiving app must ignore messages that do not come through the
+  exact-parent relay bound to the platform origin
 
-The initial iframe URL remains the registry-provided `frontend_mount`.
+The physical iframe starts at `about:blank`. Base Shell posts the registry
+`frontend_mount` (including frozen initial theme and mobile-layout parameters)
+to `/api/app-frames/browser-launch`, validates the returned distinct exact
+origin, and submits the body-only one-shot ticket to that origin in a hidden
+form targeted at the iframe. The ticket is never placed in a URL. Core binds
+the resulting host-only `HttpOnly`, `SameSite=Strict` cookie to actor,
+workspace, app generation, platform login session, and exact host; logout or a
+stale binding revokes it.
 
 During shell app switches, a host may keep the previously visible app frame on screen while the newly requested iframe loads hidden. If a third-party app does not yet emit `maverick.app.ready`, the host may use a bounded post-load fallback to reveal the frame, but it should avoid exposing the browser's initial blank iframe canvas during normal cold mounts.
 
-Shell-mounted app and widget iframes may use browser sandboxing, but they must preserve access to their own mounted frontend assets. The shell sandbox must include `allow-same-origin` so app documents can behave as same-origin clients for core APIs. Without that token, the browser assigns the iframe an opaque `null` origin, authenticated same-origin API calls fail as CORS/401 errors, and targeted `postMessage` delivery to the mounted app or widget can fail. Mounted app and widget iframes must also allow the browser `fullscreen` feature so app-owned preview surfaces can request real fullscreen from a user gesture while still falling back to in-frame fullscreen when the browser denies it. The static asset route still needs to tolerate opaque `null` origins because old mounted frames, widget frames, or browser module/style CORS behavior may request `/apps/<mount_app_id>/assets/...` without session cookies; those asset responses should be cross-origin readable and must never carry user-specific data.
+Shell-mounted app and widget iframes preserve access to their own mounted
+frontend and API routes through the isolated proxy. The sandbox includes
+`allow-same-origin`, but "same origin" now means the exact per-app isolated
+host, never the platform or another app origin. Core isolates that host into an
+origin agent cluster and permits only the platform/self frame ancestor. Unsafe
+proxied HTTP methods require the exact isolated `Origin` and browser
+`Sec-Fetch-Site: same-origin`; WebSockets require the exact isolated origin.
+Mounted app and widget iframes also allow the browser `fullscreen` feature so
+app-owned preview surfaces can request real fullscreen from a user gesture
+while still falling back to in-frame fullscreen when the browser denies it.
+Public static assets remain cross-origin readable and must never carry
+user-specific data, but their document interpretation is sandboxed and
+`nosniff`.
 
-On mobile, the shell may render transparent chrome above mounted app iframes. To let app content scroll visually underneath that chrome while keeping the first app content below it, the shell exposes host layout CSS variables on same-origin mounted app documents. `--maverick-shell-mobile-content-top-offset` is the top inset that app-owned scroll containers should add to their own top padding. The shell must not crop the mounted iframe below its mobile header, because that prevents app content from appearing behind the transparent mobile header chrome.
+On mobile, the shell may render transparent chrome above mounted app iframes.
+To let app content scroll visually underneath that chrome while keeping the
+first app content below it, the isolated document bootstrap applies the initial
+layout from `maverick_mobile_layout` and then accepts exact-parent
+`maverick.shell.layout-changed` messages. It sets
+`--maverick-shell-mobile-content-top-offset` and the related status/header
+variables inside the isolated document; the shell never reaches through the
+cross-origin DOM. The shell must not crop the mounted iframe below its mobile
+header, because that prevents app content from appearing behind the transparent
+mobile header chrome.
 
 The shell must notify mounted app and widget iframes when their host surface becomes visible or hidden by sending `maverick.app.visibility-changed`. App frontends must treat hidden as a signal to suspend nonessential intervals, runtime replay, and background refresh. Hidden iframes may keep state in memory, but they must not continue live polling as if they were the active work surface.
 

@@ -1147,13 +1147,18 @@ platform package, but that package must not import app models. Its client
 capability is minted by the top-level host with one bound user/workspace/app
 principal; embedded app options cannot select or replace that scope.
 
-That SDK boundary is not a substitute for browser-origin isolation. Current
-mounted app frames use `allow-same-origin` and can address origin storage
-outside the SDK, so private app cache persistence remains blocked. Before such
-a rollout, the app must move to an isolated origin or an opaque-origin frame
-must use a genuine parent-owned storage broker that does not expose direct
-origin storage authority. The default-off `data_cache` flag enforces this
-boundary for M3.
+The SDK boundary is reinforced by browser-origin isolation. Core issues a
+one-shot body-only launch ticket for every app or widget document and serves it
+from an authenticated per-app, per-login-session host under the reserved
+app-frame namespace. Direct non-shell app documents on the platform origin are
+rejected; the Core-owned no-store OAuth callback relay contains no app bundle
+and bootstraps the actual callback on the isolated origin. `allow-same-origin`
+therefore preserves normal app behavior only
+inside the app's distinct origin and does not expose shell-owned IndexedDB or
+OPFS. Base Shell validates both the exact registered frame window and origin
+for inbound messages and never broadens host-to-frame delivery to `*`. The
+default-off `data_cache` flag still enforces the separate resource, privacy,
+and physical-rollout gates for M3.
 
 Cache API, IndexedDB, and OPFS hold derived copies only. They cannot become a
 source of platform authority or satisfy capability, certificate, provider
@@ -1269,43 +1274,59 @@ authenticated in-memory broker plus the exact matching server descriptor
 already validated in its bounded RAM map. This allows a ready hit during
 network loss without persisting the media URL or policy projection; explicit
 denial/authentication failure and broker disposal clear the map, while a cold
-broker remains fail-closed. Cache-marked Google Drive media refreshes current
-provider metadata before comparing the requested revision, so remotely changed
-bytes cannot be served under a stale catalog version. The current Storage
-descriptor is deliberately
-`unclassified` and ineligible unless a future reviewed canonical resource
-classification is available, so enabling the global flag alone cannot widen
-the persistence policy.
+broker remains fail-closed. Raw Storage bytes default to `unclassified`. An
+internal, host-role-attested `file.cache_policy.approve` action can durably
+approve only one exact current file id/source version as `workspace_internal`;
+`file.cache_policy.revoke`, a version change, an oversized entry, or a missing
+approval makes the descriptor ineligible. Public action results redact the
+approving actor. Enabling the global flag alone therefore cannot widen the
+persistence policy.
 
-The owned file manifest is `maverick-pwa-file-v1`, version 1, and the byte
-directory is `maverick-pwa-file-cache-v1` in OPFS. Keys bind user, workspace,
-app, stable file id, source version, policy revision, and schema version;
-opaque flat OPFS names reveal none of those values. A writer streams chunks to
-an unpublished path, records progress separately, and publishes `ready` only
-after exact size, strong ETag, source version, and SHA-256 verification.
+The owned file manifest is `maverick-pwa-file-v1`, at IndexedDB version 1 with
+record schema 2, and the byte directory is `maverick-pwa-file-cache-v1` in
+OPFS. Keys bind user, workspace, app, stable file id, source version, policy
+revision, and schema version; random UUID-derived flat OPFS names reveal none
+of those values. A writer streams chunks to an unpublished path, records
+progress separately, and publishes `ready` only after exact size, strong ETag,
+source version, SHA-256, cleanup epoch, identity generation, and budget checks.
 Interrupted bytes may resume only in the same browser session with `Range` and
 a strong `If-Range`; a changed validator or version discards the partial and
-starts a full request. Cache hits re-hash the complete Blob before use.
+starts a full request.
+
+Candidate hits re-hash the complete physical Blob and make an authoritative
+conditional `HEAD` to the media URL. Local Storage hashes the live file and
+Drive refreshes the current provider revision before returning its strong ETag;
+only exact ETag and size confirmation permits reuse. A transient revalidation
+failure may use only the exact positive gate and descriptor already trusted in
+the same bounded authenticated broker session; stale or authentication results
+evict or reject the candidate, and cold sessions fail closed.
 
 File-cache defaults are 64 MiB per entry, 128 MiB per authenticated Storage
 scope, and 256 MiB across the origin, subordinate to the existing quota
-headroom check. Expired write leases, orphan paths, superseded versions, and
-least-recently used victims are removed without invoking a Storage server
-mutation. Missing OPFS, missing quota information, corruption, and local write
-failure degrade to the ordinary network result. Storage routes eligible
+headroom check. A shared origin-budget Web Lock reserves the full declared
+write size, publication rechecks the budget, and a file-identity generation
+ensures that a late older-version writer cannot replace a newer ready version.
+Expired write leases, orphan paths, superseded versions, and least-recently
+used victims are removed without invoking a Storage server mutation. Missing
+OPFS, missing quota information, corruption, and local write failure degrade to
+the ordinary network result. Storage routes eligible
 image, PDF, text, and markdown preview reads through the broker while video
 and audio keep their normal streaming path. Both paths render the same viewer
 and loading state, with no cache-residency UI.
 
 Authentication failure, logout, user/workspace transition, and Settings
 **Clear cache** use the same durable cleanup barrier across structured entries,
-the file manifest, and owned OPFS bytes. Diagnostics expose only aggregate
-structured/file bytes and entry counts, quota, backend, OPFS availability, and
-pending cleanup. The broker is present before opaque-frame rollout, but the
-same-origin frame sandbox still permits direct origin-storage access; private
-file persistence therefore remains release-blocked until Storage uses an
-opaque-origin or isolated-origin boundary and completes physical-device and
-classification review.
+the file manifest, and owned OPFS bytes. File cleanup advances a durable epoch,
+cancels affected writers across tabs, waits for their lock/drain
+acknowledgement, and leaves the tombstone pending until no old writer can
+publish. Diagnostics expose only aggregate structured/file bytes and entry
+counts, quota, backend, OPFS availability, and pending cleanup.
+
+All app and widget documents, including Storage, use the isolated app-frame
+origin described above. The browser-storage security blocker is therefore
+closed at the implementation level. Private file-cache rollout remains blocked
+by the default-off flag and by approval/privacy/physical-device evidence, not
+by a same-origin shell frame.
 
 The RAM retry coordinator starts at one second, caps its exponential component
 at 30 seconds, applies 0.75–1.25 jitter, and enforces a 250 ms minimum interval

@@ -113,10 +113,12 @@ same loading and server path. It adds no residency label or management list.
 Settings may show only aggregate structured/file byte and entry counts plus a
 single bounded clear action. The adapter and its parent-owned broker are
 implemented behind `features.storage_file_cache`; the flag remains off and the
-server returns an ineligible descriptor for unclassified bytes. A future
-rollout must complete canonical per-resource classification and the
-opaque/isolated-frame boundary rather than interpreting the feature flag as a
-policy override.
+server returns an ineligible descriptor for unclassified or unapproved bytes.
+A host-attested platform/workspace admin can approve only one exact current
+file/version as `workspace_internal`; revocation, version change, oversize, or
+missing approval fails closed. A future rollout must select reviewed
+exact-resource approvals and complete privacy and physical-device evidence
+rather than interpreting the feature flag as a policy override.
 
 ## Authority and privacy
 
@@ -134,9 +136,14 @@ required privacy approval. A missing, malformed, stale-disallowed, or expired
 condition is a cache miss. An incomplete durable clear is never success and
 blocks persistent cache access until deletion is confirmed.
 
-The current same-origin mounted-app sandbox is not a storage security boundary.
-No private app read model may be persisted until that app runs on an isolated
-origin or an opaque-origin frame uses a genuine parent-owned storage broker.
+Mounted app and widget documents run on authenticated per-app, per-session
+isolated origins. Direct non-shell app documents on the platform origin are
+blocked, public app artifacts are sandboxed when interpreted as documents, and
+the shell accepts frame messages only from the registered window plus its exact
+isolated origin. `allow-same-origin` grants access to the app's isolated origin,
+not to the shell's browser storage. Private persistence still requires the
+resource, privacy, lifecycle, and rollout gates above; origin isolation alone
+does not authorize caching.
 
 ## Acceptance contract
 
@@ -153,7 +160,9 @@ Automated and physical-device checks must prove:
 7. worker update, corruption recovery, and kill-switch cleanup affect only
    owned static-cache namespaces;
 8. no cached control-plane value is used as authority;
-9. the same behavior holds in supported Safari and installed Home Screen/Dock
+9. app frames cannot address shell-owned IndexedDB/OPFS or impersonate another
+   registered app-frame message source; and
+10. the same behavior holds in supported Safari and installed Home Screen/Dock
    containers, assessed separately.
 
 The release record contains only device/browser/build/time and pass/fail or

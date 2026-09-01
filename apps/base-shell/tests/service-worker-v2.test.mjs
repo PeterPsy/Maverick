@@ -95,7 +95,7 @@ test("a corrupted verified shell entry is deleted and repaired from the network"
   assert.equal(await (await cache.match(record.url)).text(), bodies.get(record.url));
 });
 
-test("runtime Cache API write failures never replace valid network responses", async () => {
+test("shell Cache API write failures never replace valid network responses", async () => {
   const harness = workerHarness();
   harness.fetchImpl = async (input) => responseFor(requestPath(input));
   const shellCache = await harness.caches.open(harness.internals.STATIC_CACHE_NAME);
@@ -108,21 +108,6 @@ test("runtime Cache API write failures never replace valid network responses", a
 
   assert.equal(await immutable.text(), bodies.get(immutableRecord.url));
   assert.equal(await revalidated.text(), bodies.get(revalidatedRecord.url));
-
-  const appRequest = fakeRequest("/apps/chat/assets/app-contenthash.js");
-  const appCache = await harness.caches.open(harness.internals.APP_STATIC_CACHE_NAME);
-  await appCache.put(appRequest, new Response("poisoned-html", { status: 200, headers: { "Content-Type": "text/html" } }));
-  appCache.writeError = quotaError();
-  harness.fetchImpl = async () => new Response("app-bundle", {
-    status: 200,
-    headers: {
-      "Cache-Control": "public, max-age=31536000, immutable",
-      "Content-Type": "application/javascript",
-    },
-  });
-
-  const appResponse = await harness.internals.visitedAppStaticAsset(appRequest);
-  assert.equal(await appResponse.text(), "app-bundle");
 });
 
 test("recovery preserves verified entries when a missing entry cannot be fetched", async () => {
@@ -176,35 +161,14 @@ test("API, SSE, backend, sidecar and worker requests are never intercepted", () 
   assert.equal(harness.internals.isExcludedRequest(rangeRequest, new URL(rangeRequest.url)), true, "range request");
 });
 
-test("visited app runtime cache accepts only core-verified immutable static responses", async () => {
+test("app assets use the public HTTP cache instead of an unreachable shell Cache API", () => {
   const harness = workerHarness();
-  let fetches = 0;
-  harness.fetchImpl = async () => {
-    fetches += 1;
-    return new Response("app-bundle", {
-      status: 200,
-      headers: {
-        "Cache-Control": "public, max-age=31536000, immutable",
-        "Content-Type": "application/javascript",
-      },
-    });
-  };
   const request = fakeRequest("/apps/chat/assets/app-contenthash.js");
 
-  assert.equal(await (await harness.internals.visitedAppStaticAsset(request)).text(), "app-bundle");
-  assert.equal(await (await harness.internals.visitedAppStaticAsset(request)).text(), "app-bundle");
-  assert.equal(fetches, 1);
-
-  const cache = await harness.caches.open(harness.internals.APP_STATIC_CACHE_NAME);
-  await cache.put(request, new Response("poisoned-html", { status: 200, headers: { "Content-Type": "text/html" } }));
-  assert.equal(await (await harness.internals.visitedAppStaticAsset(request)).text(), "app-bundle");
-  assert.equal(fetches, 2);
-
-  const mutable = new Response("mutable", { status: 200, headers: { "Cache-Control": "public, max-age=60" } });
-  assert.equal(harness.internals.responseCanEnterAppStaticCache(mutable), false);
+  assert.equal(harness.dispatchFetch(request), null);
 });
 
-test("activation cleans obsolete static builds without touching runtime or unrelated caches", async () => {
+test("activation cleans obsolete shell and app-static caches without touching unrelated caches", async () => {
   const harness = workerHarness();
   await Promise.all([
     harness.caches.open(harness.internals.STATIC_CACHE_NAME),
@@ -216,7 +180,7 @@ test("activation cleans obsolete static builds without touching runtime or unrel
 
   await harness.dispatchExtendable("activate");
 
-  assert.deepEqual((await harness.caches.keys()).sort(), [harness.internals.STATIC_CACHE_NAME, "maverick-app-static-v2", "unrelated-cache"].sort());
+  assert.deepEqual((await harness.caches.keys()).sort(), [harness.internals.STATIC_CACHE_NAME, "unrelated-cache"].sort());
   assert.equal(harness.claimCalls, 1);
 });
 
@@ -250,7 +214,6 @@ function workerHarness({ activeWorker = null } = {}) {
     .replaceAll("__MAVERICK_IMMUTABLE_ASSETS__", JSON.stringify([records[2]]))
     .replaceAll("__MAVERICK_NAVIGATION_FALLBACK_URL__", JSON.stringify("/"));
   source += `\nself.__MAVERICK_SW_INTERNALS__ = {
-    APP_STATIC_CACHE_NAME,
     BUILD_ID,
     STATIC_CACHE_NAME,
     cacheFirstVerifiedShellAsset,
@@ -260,9 +223,7 @@ function workerHarness({ activeWorker = null } = {}) {
     navigationFallback,
     networkFirstPrecachedAsset,
     recoverPrecache,
-    responseCanEnterAppStaticCache,
     responseMatchesRecord,
-    visitedAppStaticAsset,
   };\n`;
   vm.runInNewContext(source, {
     AbortController,

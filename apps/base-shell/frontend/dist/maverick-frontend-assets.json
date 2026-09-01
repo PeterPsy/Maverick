@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "24c3a62ce9332ba9d4ffec2f55e4bf3b09098bd7771909a1fb2fb7c89ab9516a",
+  "build_id": "54096f6d1fe7faf99d28bbabdd80a68e74e96ef5ed139aafe15bab708cc29722",
   "entrypoints": [
     "index.html"
   ],
@@ -89,8 +89,8 @@
     },
     {
       "path": "sw.js",
-      "sha256": "314d1de23deec6f4067fb679cb4a9e654e962f9cd7268f84743a74b8633d051c",
-      "size_bytes": 13301
+      "sha256": "0ea218e564a37cc05304bb5ae663badda74870754741be7d9baf2f8e6090231f",
+      "size_bytes": 11770
     }
   ],
   "navigation_fallback": "index.html",

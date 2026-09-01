@@ -5,8 +5,7 @@ const PRECACHE = __MAVERICK_PRECACHE_MANIFEST__;
 const IMMUTABLE_SHELL_ASSETS = __MAVERICK_IMMUTABLE_ASSETS__;
 const STATIC_CACHE_PREFIX = "maverick-static-v2:";
 const STATIC_CACHE_NAME = `${STATIC_CACHE_PREFIX}${BUILD_ID}`;
-const APP_STATIC_CACHE_NAME = "maverick-app-static-v2";
-const LEGACY_STATIC_CACHE_NAMES = new Set(["maverick-base-shell-v3"]);
+const LEGACY_STATIC_CACHE_NAMES = new Set(["maverick-app-static-v2", "maverick-base-shell-v3"]);
 const SHELL_NAVIGATION_URL = __MAVERICK_NAVIGATION_FALLBACK_URL__;
 const NAVIGATION_TIMEOUT_MS = 5_000;
 const PRECACHE_BY_URL = new Map(PRECACHE.map((record) => [record.url, record]));
@@ -29,25 +28,6 @@ function isExcludedRequest(request, url) {
 
 function isShellNavigation(url) {
   return url.pathname === "/" || url.pathname === "/app" || url.pathname.startsWith("/app/");
-}
-
-function isVisitedAppStaticAsset(url) {
-  return url.pathname.startsWith("/apps/") && url.pathname.includes("/assets/") && !url.pathname.startsWith("/apps/base-shell/");
-}
-
-function responseCanEnterAppStaticCache(response) {
-  const cacheControl = response.headers.get("cache-control") || "";
-  const contentType = response.headers.get("content-type") || "";
-  return (
-    response.status === 200 &&
-    !response.redirected &&
-    (!response.url || new URL(response.url).origin === self.location.origin) &&
-    ["basic", "default"].includes(response.type) &&
-    !contentType.toLowerCase().includes("text/html") &&
-    /(?:^|,)\s*public\b/i.test(cacheControl) &&
-    /(?:^|,)\s*immutable\b/i.test(cacheControl) &&
-    /(?:^|,)\s*max-age=31536000\b/i.test(cacheControl)
-  );
 }
 
 async function sha256Hex(body) {
@@ -205,24 +185,10 @@ async function fetchNavigationWithTimeout(request) {
   }
 }
 
-async function visitedAppStaticAsset(request) {
-  const cache = await openCacheBestEffort(APP_STATIC_CACHE_NAME);
-  const cached = cache ? await matchCacheBestEffort(cache, request) : null;
-  if (cached && responseCanEnterAppStaticCache(cached)) {
-    return cached;
-  }
-  if (cached && cache) await deleteCacheEntryBestEffort(cache, request);
-  const response = await fetch(request);
-  if (responseCanEnterAppStaticCache(response)) {
-    await putCacheBestEffort(cache, request, response);
-  }
-  return response;
-}
-
-async function deleteKnownStaticCaches({ includeRuntime = false } = {}) {
+async function deleteKnownStaticCaches() {
   const keys = await caches.keys();
   const deletions = keys
-    .filter((key) => key.startsWith(STATIC_CACHE_PREFIX) || LEGACY_STATIC_CACHE_NAMES.has(key) || (includeRuntime && key === APP_STATIC_CACHE_NAME))
+    .filter((key) => key.startsWith(STATIC_CACHE_PREFIX) || LEGACY_STATIC_CACHE_NAMES.has(key))
     .map((key) => caches.delete(key));
   await Promise.all(deletions);
 }
@@ -280,9 +246,6 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(networkFirstPrecachedAsset(request, precacheRecord));
     return;
   }
-  if (isVisitedAppStaticAsset(url)) {
-    event.respondWith(visitedAppStaticAsset(request));
-  }
 });
 
 self.addEventListener("message", (event) => {
@@ -298,7 +261,7 @@ self.addEventListener("message", (event) => {
   if (payload.type === "MAVERICK_DISABLE") {
     event.waitUntil(
       (async () => {
-        await deleteKnownStaticCaches({ includeRuntime: true });
+        await deleteKnownStaticCaches();
         await self.registration.unregister();
         await broadcast({ type: "MAVERICK_SW_DISABLED", build_id: BUILD_ID });
       })(),

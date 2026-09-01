@@ -11,6 +11,7 @@ import re
 from typing import Any, Awaitable, Callable
 from urllib.parse import parse_qs, urlsplit
 
+from core.api.app_frame_assets import rewrite_public_app_asset_urls
 from core.api.app_registry import resolve_app_surface, user_can_mount_app
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
@@ -582,6 +583,7 @@ def _inject_message_relay(body: bytes, platform_origin: str) -> bytes:
         html = body.decode("utf-8")
     except UnicodeDecodeError:
         return body
+    html = rewrite_public_app_asset_urls(html, platform_origin)
     origin = json.dumps(platform_origin, ensure_ascii=True)
     script = (
         "<script>"

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -125,11 +127,35 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             self.assertIn(b"maverick.shell.layout-changed", html_body)
             self.assertIn(b"--maverick-shell-mobile-content-top-offset", html_body)
             self.assertIn(platform_origin.encode(), html_body)
+            self.assertIn(
+                f'src="{platform_origin}/apps/frame-demo/assets/app-contenthash.js"'.encode(),
+                html_body,
+            )
+            self.assertIn(
+                f'href="{platform_origin}/apps/frame-demo/assets/app-contenthash.css"'.encode(),
+                html_body,
+            )
+            self.assertNotIn(b'src="/apps/frame-demo/assets/', html_body)
+            self.assertNotIn(b'href="/apps/frame-demo/assets/', html_body)
             self.assertNotIn("content-encoding", html_headers)
             self.assertEqual(html_headers["cache-control"], "private, no-store")
             self.assertEqual(html_headers["cross-origin-resource-policy"], "same-origin")
             self.assertEqual(html_headers["origin-agent-cluster"], "?1")
             self.assertIn(f"frame-ancestors 'self' {platform_origin}", html_headers["content-security-policy"])
+
+            asset_status, asset_body, asset_headers = await self._invoke(
+                app,
+                host=platform_host,
+                path="/apps/frame-demo/assets/app-contenthash.js",
+                headers={"accept-encoding": "gzip"},
+            )
+            self.assertEqual(asset_status, 200)
+            self.assertEqual(gzip.decompress(asset_body), self._asset_source())
+            self.assertEqual(asset_headers["content-encoding"], "gzip")
+            self.assertEqual(asset_headers["vary"], "Accept-Encoding")
+            self.assertEqual(asset_headers["cache-control"], "public, max-age=31536000, immutable")
+            self.assertEqual(asset_headers["access-control-allow-origin"], "*")
+            self.assertEqual(asset_headers["cross-origin-resource-policy"], "cross-origin")
 
             isolated_callback_status, isolated_callback_body, _isolated_callback_headers = await self._invoke(
                 app,
@@ -213,8 +239,37 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
         app_root = repo_root / "apps" / "frame-demo"
         frontend_root = app_root / "frontend" / "dist"
         frontend_root.mkdir(parents=True)
+        assets_root = frontend_root / "assets"
+        assets_root.mkdir()
+        (assets_root / "app-contenthash.js").write_bytes(AppFrameBrowserOriginIntegrationTests._asset_source())
+        (assets_root / "app-contenthash.css").write_text("body { color: currentColor; }", encoding="utf-8")
+        index_body = (
+            "<!doctype html><html><head><title>frame-demo</title>"
+            '<script type="module" crossorigin src="/apps/frame-demo/assets/app-contenthash.js"></script>'
+            '<link rel="stylesheet" crossorigin href="/apps/frame-demo/assets/app-contenthash.css">'
+            "</head><body>frame-demo</body></html>"
+        )
         (frontend_root / "index.html").write_text(
-            "<!doctype html><html><head><title>frame-demo</title></head><body>frame-demo</body></html>",
+            index_body,
+            encoding="utf-8",
+        )
+        records = {
+            relative: AppFrameBrowserOriginIntegrationTests._asset_record(frontend_root, relative)
+            for relative in ("assets/app-contenthash.css", "assets/app-contenthash.js", "index.html")
+        }
+        (frontend_root / "maverick-frontend-assets.json").write_text(
+            json.dumps(
+                {
+                    "schema": "maverick.frontend-assets.v2",
+                    "build_id": "a" * 64,
+                    "entrypoints": ["index.html"],
+                    "immutable": [
+                        records["assets/app-contenthash.css"],
+                        records["assets/app-contenthash.js"],
+                    ],
+                    "revalidated": [records["index.html"]],
+                }
+            ),
             encoding="utf-8",
         )
         parsed = build_parsed_app_contract(
@@ -239,3 +294,16 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             observability_store=state.observability_store,
         )
         return state
+
+    @staticmethod
+    def _asset_source() -> bytes:
+        return ("export const isolatedAsset = 'public-cache';\n" * 80).encode("utf-8")
+
+    @staticmethod
+    def _asset_record(frontend_root: Path, relative: str) -> dict[str, object]:
+        body = (frontend_root / relative).read_bytes()
+        return {
+            "path": relative,
+            "sha256": hashlib.sha256(body).hexdigest(),
+            "size_bytes": len(body),
+        }

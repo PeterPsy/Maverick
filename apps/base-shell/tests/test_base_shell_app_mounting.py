@@ -35,10 +35,9 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("maverick.app.ready", host_source)
         self.assertIn("postMessage", host_source)
         self.assertIn("syncAppFrameShellLayout", host_source)
-        self.assertIn(
-            "src={appFrameSrc(app.frontend_mount, revision, bootstrapThemeForFrame(frameBootstrapThemesRef.current, frameKey, shellTheme))}",
-            host_source,
-        )
+        self.assertIn("<IsolatedMaverickFrame", host_source)
+        self.assertIn("launchPath={appFrameSrc(", host_source)
+        self.assertIn("bootstrapMobileLayoutForFrame(", host_source)
         self.assertIn("currentShellAppRoute", (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text())
         self.assertIn("pushShellAppRoute", (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text())
         self.assertIn("replaceShellAppRoute", (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text())
@@ -79,7 +78,8 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("visible: frameKey === visibleFrameKey", host_source)
         self.assertIn("postMaverickFrameVisibility(event.currentTarget", host_source)
         self.assertIn("postWidgetVisibility()", widget_source)
-        self.assertIn('postMessage(message, "*")', iframe_policy_source)
+        self.assertIn("frame.contentWindow.postMessage(message, targetOrigin)", iframe_policy_source)
+        self.assertNotIn('frame.contentWindow.postMessage(message, "*")', iframe_policy_source)
         self.assertIn("activeWorkspaceId={activeWorkspaceId}", sidebar_source)
         self.assertIn("activeWorkspaceId={activeWorkspaceId}", floating_host_source)
         self.assertIn("activeWorkspaceId: string", widget_source)
@@ -181,7 +181,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         session_source = (REPO_ROOT / "apps/base-shell/frontend/src/session.ts").read_text()
         widget_slot_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WidgetSlot.tsx").read_text()
         sidebar_styles = (REPO_ROOT / "apps/base-shell/frontend/src/styles/sidebar.css").read_text()
-        shortcut_source = (REPO_ROOT / "apps/app-store/frontend/dist/widgets/app-shortcuts/main.js").read_text()
+        shortcut_source = (REPO_ROOT / "apps/app-store/frontend/src/widgets/app-shortcuts/main.js").read_text()
 
         self.assertIn('contentKind="shell.sidebar.primary"', sidebar_source)
         self.assertNotIn('contentKind="shell.sidebar.apps"', sidebar_source)

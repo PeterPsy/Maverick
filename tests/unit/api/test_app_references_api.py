@@ -287,7 +287,7 @@ class AppReferencesApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             cookie = self._login(app)
 
             registry_status, registry_payload, _headers = self._invoke(app, path="/api/apps", cookie=cookie)
-            frontend_status, frontend_body, _headers = self._invoke_raw(
+            direct_frontend_status, direct_frontend_body, _headers = self._invoke_raw(
                 app,
                 path="/apps/records-mount/",
                 cookie=cookie,
@@ -302,8 +302,11 @@ class AppReferencesApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(registry_item["frontend_mount"], "/apps/records-mount/")
         self.assertEqual(registry_item["frontend_role"], "workspace")
         self.assertTrue(registry_item["frontend_launchable"])
-        self.assertEqual(frontend_status, 200)
-        self.assertIn(b"Vendor Records", frontend_body)
+        self.assertEqual(direct_frontend_status, 403)
+        self.assertEqual(
+            direct_frontend_body,
+            b'{\n  "error": "app_frame_isolation_required"\n}',
+        )
         self.assertEqual(cli_item["public_app_id"], "vendor-records")
         self.assertEqual(cli_item["mount_app_id"], "records-mount")
         self.assertEqual(cli_item["capabilities"]["frontend"], {"mounted": True, "role": "workspace", "launchable": True})

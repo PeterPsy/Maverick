@@ -405,12 +405,27 @@ class SensesHostedE2ETest(unittest.TestCase):
         shell_status, shell_payload, _headers = self._invoke(stack.app, path=deep_link, cookie=stack.cookie)
         self.assertEqual(shell_status, 200, shell_payload)
 
-        chat_status, chat_payload, _headers = self._invoke(
+        direct_status, direct_payload, _headers = self._invoke(
             stack.app,
             path=f"/apps/chat/threads/{runtime_session_id}",
             cookie=stack.cookie,
         )
-        self.assertEqual(chat_status, 200, chat_payload)
+        self.assertEqual(direct_status, 403, direct_payload)
+        self.assertEqual(direct_payload["error"], "app_frame_isolation_required")
+
+        launch_status, launch_payload, _headers = self._invoke(
+            stack.app,
+            path="/api/app-frames/browser-launch",
+            method="POST",
+            body={
+                "app_id": "chat",
+                "path": f"/apps/chat/threads/{runtime_session_id}",
+            },
+            cookie=stack.cookie,
+        )
+        self.assertEqual(launch_status, 200, launch_payload)
+        self.assertNotEqual(launch_payload["origin"], "http://maverick.localhost")
+        self.assertTrue(launch_payload["bootstrap_url"].startswith(launch_payload["origin"]))
 
     def _pair_device(self, stack: HostedSensesStack) -> dict[str, object]:
         status, started = self._post_senses(stack, {"action": "pairing.start"})
@@ -467,9 +482,13 @@ class SensesHostedE2ETest(unittest.TestCase):
             "REQUEST_METHOD": method,
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
+            "HTTP_HOST": "maverick.localhost",
             "QUERY_STRING": "",
+            "wsgi.url_scheme": "http",
             "wsgi.input": BytesIO(payload),
         }
+        if method not in {"GET", "HEAD", "OPTIONS"}:
+            environ["HTTP_ORIGIN"] = "http://maverick.localhost"
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
 

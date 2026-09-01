@@ -28,6 +28,8 @@ Use the official app build so mounted clients receive the refresh event:
 maverick app base-shell frontend build --json
 npm --prefix apps/base-shell test
 npm --prefix apps/base-shell run test:service-worker
+# Includes a real Chrome two-origin Vite build and verifies lazy/worker/media
+# routing, compressed transfer, and HTTP-cache reuse across two document loads.
 python3 -m unittest discover -s tests/unit/apps -p 'test_frontend_assets.py'
 python3 -m unittest discover -s tests/unit/pwa -p 'test_feature_flags.py'
 python3 -m unittest tests.integration.app_hosting.test_app_frame_browser_origin
@@ -84,8 +86,13 @@ replace the physical Safari gate.
 - Other selected static assets: network-first, then verified cached bytes.
 - App/widget HTML: Core rewrites quoted `/apps/<app_id>/assets/...` `src`/`href`
   values to the exact public platform origin.
-- App/widget assets: browser HTTP cache; only manifest-verified immutable bytes
-  receive one-year immutable policy, and public CORS/CORP plus compression are
+- Vite runtime URLs: lazy preload, worker, and imported-media references must be
+  module-relative (`import.meta.url`) through
+  `scripts/vite-isolated-frame-assets.mjs`; generated JavaScript must contain no
+  root-relative `/apps/<app_id>/assets/` runtime base.
+- App/widget assets: browser HTTP cache; safe `.mjs`, media, font, PDF, and WASM
+  outputs are public cross-origin artifacts, but only manifest-verified
+  immutable bytes receive one-year policy. Public CORS/CORP and compression are
   preserved. The shell worker does not intercept these isolated-client loads.
 - API, SSE, WebSocket, backend, sidecar, range, non-GET, cross-origin, and
   `/sw.js`: complete bypass.

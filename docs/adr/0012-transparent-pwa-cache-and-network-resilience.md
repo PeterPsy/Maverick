@@ -108,9 +108,13 @@ candidate rollback, recovery, waiting-worker coordination, namespace
 ownership, and the server-side kill switch are preserved.
 
 App and widget documents use distinct browser origins, so they are not clients
-of the shell-origin worker. Their generated `/apps/<app_id>/assets/...`
-references are served from absolute public platform-origin URLs with verified
-HTTP cache policy, CORS/CORP, and compression. The former
+of the shell-origin worker. Core makes initial HTML asset references absolute
+on the public platform origin. Vite-generated JavaScript resolves lazy preload,
+worker, and imported-media URLs relative to the already public module URL via
+`import.meta.url`; it never uses the isolated document as their base. Safe
+module, media, font, PDF, and WebAssembly build outputs are public cross-origin
+artifacts, while immutable caching remains conditional on exact manifest
+verification. All such responses retain CORS/CORP and compression. The former
 `maverick-app-static-v2` Cache API path is retained only as an exact legacy name
 for bounded deletion; it is not part of normal app loading.
 

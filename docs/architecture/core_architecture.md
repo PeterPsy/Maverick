@@ -1211,11 +1211,19 @@ The root worker owns only these Cache API namespaces:
 App and widget documents run on an isolated origin and therefore are not
 controlled clients of the shell-origin service worker. Core rewrites generated
 HTML `src` and `href` references below `/apps/<app_id>/assets/` to the exact
-public platform origin. Those requests use the browser HTTP cache, not a shell
-Cache API namespace: Core preserves compression, emits the public CORS/CORP
-contract, and grants one-year immutable caching only to bytes verified against
-the app's frontend manifest. The obsolete `maverick-app-static-v2` runtime path
-must not be presented as the normal app-loading cache.
+public platform origin. Vite builds that emit asset URLs from JavaScript use the
+shared isolated-frame URL plugin: HTML and CSS retain the public app mount,
+while lazy-preload dependencies, workers, and imported media are emitted
+relative to the JavaScript module (`import.meta.url`). Because that module was
+loaded from the platform origin, runtime-created URLs cannot fall back to the
+isolated document origin. Safe build outputs such as `.mjs`, audio/video, font,
+PDF, and `.wasm` assets may be read cross-origin without a platform cookie;
+source-like files and maps remain private. Those requests use the browser HTTP
+cache, not a shell Cache API namespace: Core preserves compression, emits the
+public CORS/CORP contract, and grants one-year immutable caching only to bytes
+verified against the app's frontend manifest. The obsolete
+`maverick-app-static-v2` runtime path must not be presented as the normal
+app-loading cache.
 
 Navigation is network-first with a bounded timeout. Only `/`, `/app`, and
 `/app/...` may fall back to the verified normal Base Shell entrypoint. Other

@@ -1571,12 +1571,19 @@ widget frames plus Vite-generated `crossorigin` module/style tags to load
 bundles without platform session cookies on every asset request. When Core
 serves an isolated HTML document, it converts quoted `src` and `href` references
 below `/apps/<app_id>/assets/` into absolute URLs on the exact platform origin;
-API and navigation references remain on the isolated proxy. This is the
-normative browser-cache path for app bundles. The shell service worker cannot
-control a document on another origin, so app artifacts use their verified HTTP
-cache policy rather than a shell-owned runtime Cache API entry. Source maps and
-source-like extensions such as `.ts`, `.tsx`, `.jsx`, `.vue`, `.svelte`, `.py`,
-and `.env` must not be treated as public static assets or SPA fallback routes.
+API and navigation references remain on the isolated proxy. Vite app builds
+that create URLs from JavaScript must use the shared isolated-frame asset URL
+plugin. It leaves HTML/CSS on the declared `/apps/<app_id>/` mount and emits
+lazy module-preload dependencies, worker URLs, and imported media relative to
+the platform-origin module through `import.meta.url`, never relative to the
+isolated document. Public build outputs include safe script/module, style,
+image, audio/video, font, PDF, and WebAssembly types; one-year immutability still
+requires an exact manifest record. This is the normative browser-cache path for
+app bundles. The shell service worker cannot control a document on another
+origin, so app artifacts use their verified HTTP cache policy rather than a
+shell-owned runtime Cache API entry. Source maps and source-like extensions such
+as `.ts`, `.tsx`, `.jsx`, `.vue`, `.svelte`, `.py`, and `.env` must not be
+treated as public static assets or SPA fallback routes.
 Workspace-local editable backend entrypoints are additionally workspace-admin
 gated until a dedicated app backend sandbox/governance model is available.
 

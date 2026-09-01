@@ -62,10 +62,14 @@ export function requestParentFileCacheOpen(
   if (!parentWindow) return Promise.resolve(null);
   if (options.signal?.aborted) return Promise.reject(abortError(options.signal));
 
+  const parentOrigin = options.parentOrigin === undefined
+    ? defaultParentOrigin()
+    : exactHttpOrigin(options.parentOrigin);
+  if (!parentOrigin) return Promise.resolve(null);
+
   const channel = (options.createMessageChannel ?? (() => new MessageChannel()))();
   const requestId = requestIdentity();
   const acceptanceTimeoutMs = positiveTimeout(options.acceptanceTimeoutMs);
-  const parentOrigin = options.parentOrigin ?? defaultParentOrigin();
   const message: ParentFileCacheOpenMessage = {
     app_id: "storage",
     file_id: fileId,
@@ -160,12 +164,26 @@ function defaultParentWindow(): Pick<Window, "postMessage"> | null {
   return window.parent;
 }
 
-function defaultParentOrigin(): string {
-  if (typeof window === "undefined") return "*";
+function defaultParentOrigin(): string | null {
+  if (typeof window === "undefined") return null;
+  const platformOrigin = exactHttpOrigin(
+    (window as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown }).__MAVERICK_PLATFORM_ORIGIN__,
+  );
+  const frameOrigin = exactHttpOrigin(window.location.origin);
+  return platformOrigin && frameOrigin && platformOrigin !== frameOrigin
+    ? platformOrigin
+    : null;
+}
+
+function exactHttpOrigin(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
   try {
-    return new URL(window.location.href).origin;
+    const parsed = new URL(value);
+    return parsed.origin === value && (parsed.protocol === "http:" || parsed.protocol === "https:")
+      ? parsed.origin
+      : null;
   } catch {
-    return window.location.origin || "*";
+    return null;
   }
 }
 

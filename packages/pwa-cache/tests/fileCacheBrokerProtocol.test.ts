@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PWA_FILE_CACHE_BROKER_OPEN,
   requestParentFileCacheOpen,
@@ -15,6 +15,8 @@ function parentThat(
 }
 
 describe("parent-mediated file-cache protocol", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("returns a brokered blob only after the parent accepts the request", async () => {
     const parent = parentThat((message, port) => {
       expect(message).toMatchObject({
@@ -67,7 +69,10 @@ describe("parent-mediated file-cache protocol", () => {
     await expect(requestParentFileCacheOpen({
       fileId: "file-one",
       sourceVersion: "version-one",
-    }, { parentWindow: unavailableParent })).resolves.toBeNull();
+    }, {
+      parentOrigin: "https://maverick.test",
+      parentWindow: unavailableParent,
+    })).resolves.toBeNull();
 
     const silentParent = parentThat(() => undefined);
     await expect(requestParentFileCacheOpen({
@@ -75,6 +80,7 @@ describe("parent-mediated file-cache protocol", () => {
       sourceVersion: "version-one",
     }, {
       acceptanceTimeoutMs: 5,
+      parentOrigin: "https://maverick.test",
       parentWindow: silentParent,
     })).resolves.toBeNull();
   });
@@ -99,9 +105,69 @@ describe("parent-mediated file-cache protocol", () => {
       fileId: "file-one",
       sourceVersion: "version-one",
     }, {
+      parentOrigin: "https://maverick.test",
       parentWindow: parent,
       signal: controller.signal,
     })).rejects.toMatchObject({ name: "AbortError" });
     await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+  });
+
+  it("targets the exact injected platform origin from an isolated frame", async () => {
+    const platformOrigin = "https://maverick.test";
+    const frameOrigin = "https://af-storage.sidecars.maverick.test";
+    const parent = parentThat((message, port) => {
+      port.postMessage({
+        app_id: "storage",
+        request_id: message.request_id,
+        type: "maverick.storage.file-cache.accepted.v1",
+      });
+      port.postMessage({
+        app_id: "storage",
+        request_id: message.request_id,
+        status: "unavailable",
+        type: "maverick.storage.file-cache.result.v1",
+      });
+    });
+    vi.stubGlobal("window", {
+      __MAVERICK_PLATFORM_ORIGIN__: platformOrigin,
+      location: { href: `${frameOrigin}/apps/storage/`, origin: frameOrigin },
+      parent,
+    } as unknown as Window);
+
+    await expect(requestParentFileCacheOpen({
+      fileId: "file-one",
+      sourceVersion: "version-one",
+    })).resolves.toBeNull();
+
+    expect(parent.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: PWA_FILE_CACHE_BROKER_OPEN }),
+      platformOrigin,
+      expect.any(Array),
+    );
+  });
+
+  it.each([
+    [undefined, "https://af-storage.sidecars.maverick.test"],
+    ["*", "https://af-storage.sidecars.maverick.test"],
+    ["https://maverick.test/path", "https://af-storage.sidecars.maverick.test"],
+    ["https://user@maverick.test", "https://af-storage.sidecars.maverick.test"],
+    ["https://maverick.test", "https://maverick.test"],
+  ])("fails closed without a distinct exact platform origin (%s)", async (platformOrigin, frameOrigin) => {
+    const postMessage = vi.fn();
+    const createMessageChannel = vi.fn(() => new MessageChannel());
+    const frameWindow = {
+      location: { href: `${frameOrigin}/apps/storage/`, origin: frameOrigin },
+      parent: { postMessage },
+    } as unknown as Window & { __MAVERICK_PLATFORM_ORIGIN__?: unknown };
+    frameWindow.__MAVERICK_PLATFORM_ORIGIN__ = platformOrigin;
+    vi.stubGlobal("window", frameWindow);
+
+    await expect(requestParentFileCacheOpen({
+      fileId: "file-one",
+      sourceVersion: "version-one",
+    }, { createMessageChannel })).resolves.toBeNull();
+
+    expect(createMessageChannel).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
   });
 });

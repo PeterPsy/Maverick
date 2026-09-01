@@ -11,7 +11,7 @@
     "dev": "vite --host 0.0.0.0",
     "pretest": "node ../../scripts/check-node-runtime.mjs",
     "test": "vitest run",
-    "test:service-worker": "node --test tests/service-worker-v2.test.mjs tests/frontend-precache-build.test.mjs"
+    "test:service-worker": "node --test tests/service-worker-v2.test.mjs tests/frontend-precache-build.test.mjs tests/file-cache-broker-cross-origin.test.mjs"
   },
   "dependencies": {
     "@maverick/pwa-cache": "file:../../packages/pwa-cache",

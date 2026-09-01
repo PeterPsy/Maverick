@@ -49,7 +49,11 @@ Storage client submits only stable file id and source version, while Base Shell
 independently resolves classification, media URL, size, digest, and policy.
 The port supports RAM-only cancellation and returns either an ordinary Blob or
 an unavailable result that preserves the app's existing network path. It never
-exposes a cache host or browser-storage handle to the frame.
+exposes a cache host or browser-storage handle to the frame. The isolated
+document must receive Core's exact `__MAVERICK_PLATFORM_ORIGIN__`; the client
+validates that it is a distinct canonical HTTP(S) origin and otherwise declines
+the broker immediately instead of using a wildcard or waiting for a handshake
+that cannot arrive.
 
 Conservative M3 defaults are a 64 MiB structured-cache budget, 32 MiB per app,
 an app-declared resource budget, and a maximum 15-minute private access lease
@@ -65,9 +69,9 @@ authenticated Storage scope, and 256 MiB across the origin, all subordinate to
 the existing 85% quota-headroom check. Settings diagnostics and lifecycle clear
 aggregate the structured and file caches but never enumerate cached content.
 
-The current same-origin iframe sandbox is not a browser security boundary:
-embedded app code could address origin storage directly outside this SDK. M4
-implements the genuine parent-owned broker, but Storage has not yet moved to an
-opaque or isolated origin. Both global cache rollouts therefore remain
-disabled, and a private app cache must not be enabled until that remaining
-browser boundary and its resource classification review are complete.
+Every app and widget document, including Storage, now runs on a per-app,
+per-login-session origin distinct from Base Shell. This closes direct access to
+shell-owned IndexedDB and OPFS while preserving the parent-owned broker. Both
+global cache rollouts remain disabled until their separate resource/privacy and
+physical-device release gates are complete; origin isolation alone never grants
+local-persistence policy.

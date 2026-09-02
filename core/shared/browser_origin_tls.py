@@ -194,9 +194,10 @@ def _ensure_directories(settings: BrowserOriginTlsSettings) -> None:
         (settings.served_root / "releases", 0o750),
         (settings.acme_webroot, 0o755),
     ):
-        path.mkdir(parents=True, exist_ok=True)
-        special_bits = path.stat().st_mode & 0o7000
-        path.chmod(special_bits | mode)
+        if path.exists():
+            continue
+        path.mkdir(parents=True, exist_ok=True, mode=mode)
+        path.chmod(mode)
 
 
 def _issue_and_publish(

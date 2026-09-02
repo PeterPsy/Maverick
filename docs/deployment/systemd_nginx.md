@@ -128,6 +128,10 @@ most 100 names); sidecar names use a separate cumulative lineage. Certificate
 renewal occurs on an authorized launch before the exact host is returned. This
 mode is appropriate for controlled or modest self-hosted use, not unbounded
 multi-tenant login volume: CA order/domain limits remain an availability gate.
+Public CAs also publish exact certificate names to Certificate Transparency
+logs. Maverick labels remain opaque hashes and never encode user, workspace, or
+app identifiers, but issuance volume is still observable metadata. Use the
+external wildcard mode when that metadata disclosure is unacceptable.
 Use external wildcard TLS or an explicitly reviewed CA capacity agreement for
 larger deployments. An issuance failure returns `503` and leaves direct app
 documents blocked.

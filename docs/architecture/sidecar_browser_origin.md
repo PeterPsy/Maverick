@@ -248,6 +248,11 @@ larger or high-login deployments must use the external wildcard mode or an
 explicitly reviewed CA capacity agreement. Hitting that boundary fails launch
 closed and is never grounds for a same-origin fallback.
 
+Exact public names are visible in Certificate Transparency logs. Their labels
+are opaque hashes and do not directly encode a user, workspace, app, or session
+identifier, but the number and timing of issuances remain observable metadata.
+Deployments that cannot accept that metadata use `external_wildcard`.
+
 The installer renders the four core environment values above and adds a
 dedicated Nginx wildcard router without `X-Frame-Options`.
 Post-apply health verification opens reserved `sc-<opaque>` and `af-<opaque>`

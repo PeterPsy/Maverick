@@ -16,53 +16,20 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from core.shared.installer import (
-    InstallerConfig,
     check_health,
-    default_install_env_path,
-    default_live_nginx_conf_path,
-    default_live_nginx_enabled_path,
-    default_live_systemd_dir,
-    default_nginx_conf_path,
-    default_output_root,
-    default_systemd_dir,
     preflight_check,
     render_install_plan,
     render_nginx_config,
     write_install_plan,
 )
 from scripts.install_maverick import build_config, main as installer_main, parse_args
+from tests.e2e.install.installer_test_support import make_installer_config
 
 
 class InstallerRenderingTestCase(unittest.TestCase):
-    def make_config(self, repo_root: Path, *, hostname: str | None, local_only: bool) -> InstallerConfig:
-        output_root = default_output_root(repo_root)
-        return InstallerConfig(
-            repository_root=repo_root,
-            install_root=repo_root,
-            output_root=output_root,
-            service_user="ubuntu",
-            service_group="ubuntu",
-            bind_host="127.0.0.1",
-            hostname=hostname,
-            public_scheme="https",
-            core_port=8014,
-            rescue_port=8015,
-            bootstrap=False,
-            verify=False,
-            local_only=local_only,
-            acme_root=None if hostname is None else Path("/var/www") / hostname,
-            systemd_dir=default_systemd_dir(output_root),
-            nginx_conf_path=None if hostname is None else default_nginx_conf_path(output_root, hostname=hostname),
-            install_env_path=default_install_env_path(repo_root),
-            live_systemd_dir=default_live_systemd_dir(),
-            live_nginx_conf_path=None if hostname is None else default_live_nginx_conf_path(hostname=hostname),
-            live_nginx_enabled_path=None if hostname is None else default_live_nginx_enabled_path(hostname=hostname),
-            build_frontends=False,
-        )
-
     def test_render_install_plan_renders_custom_hostname_and_units(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
-        config = self.make_config(repo_root, hostname="maverick.example.test", local_only=False)
+        config = make_installer_config(repo_root, hostname="maverick.example.test", local_only=False)
 
         rendered = render_install_plan(config)
 
@@ -107,7 +74,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
 
     def test_render_install_plan_can_select_mongo_control_store(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
-        config = self.make_config(repo_root, hostname="maverick.example.test", local_only=False)
+        config = make_installer_config(repo_root, hostname="maverick.example.test", local_only=False)
         config = replace(config, control_store="mongo")
 
         rendered = render_install_plan(config)
@@ -119,7 +86,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
 
     def test_render_nginx_config_can_force_https_after_certificate_request(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
-        config = self.make_config(repo_root, hostname="maverick.example.test", local_only=False)
+        config = make_installer_config(repo_root, hostname="maverick.example.test", local_only=False)
 
         nginx_conf = render_nginx_config(config, force_https=True)
 
@@ -130,7 +97,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
 
     def test_render_install_plan_can_force_https_nginx_for_externally_managed_tls(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
-        config = self.make_config(repo_root, hostname="maverick.example.test", local_only=False)
+        config = make_installer_config(repo_root, hostname="maverick.example.test", local_only=False)
 
         rendered = render_install_plan(config, force_https_nginx=True)
         nginx_conf = rendered[config.nginx_conf_path]
@@ -141,7 +108,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
     def test_hosted_sidecars_render_wildcard_vhost_and_core_environment(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         config = replace(
-            self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+            make_installer_config(repo_root, hostname="maverick.example.test", local_only=False),
             hosted_sidecars=True,
             sidecar_tls_cert_path="/run/tls/sidecars-fullchain.pem",
             sidecar_tls_key_path="/run/tls/sidecars-privkey.pem",
@@ -166,7 +133,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
     def test_hosted_sidecars_fail_live_preflight_without_wildcard_tls_files(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         config = replace(
-            self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+            make_installer_config(repo_root, hostname="maverick.example.test", local_only=False),
             hosted_sidecars=True,
             sidecar_tls_cert_path="/missing/sidecars-fullchain.pem",
             sidecar_tls_key_path="/missing/sidecars-privkey.pem",
@@ -187,7 +154,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
             certificate_path.write_text("not a certificate\n", encoding="utf-8")
             private_key_path.write_text("not a private key\n", encoding="utf-8")
             config = replace(
-                self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+                make_installer_config(repo_root, hostname="maverick.example.test", local_only=False),
                 hosted_sidecars=True,
                 sidecar_tls_cert_path=str(certificate_path),
                 sidecar_tls_key_path=str(private_key_path),
@@ -231,7 +198,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
                 dns_names=["*.sidecars.maverick.example.test"],
             )
             config = replace(
-                self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+                make_installer_config(repo_root, hostname="maverick.example.test", local_only=False),
                 hosted_sidecars=True,
                 sidecar_tls_cert_path=str(certificate_path),
                 sidecar_tls_key_path=str(private_key_path),
@@ -260,7 +227,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
 
     def test_render_install_plan_skips_nginx_for_local_only_mode(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
-        config = self.make_config(repo_root, hostname=None, local_only=True)
+        config = make_installer_config(repo_root, hostname=None, local_only=True)
 
         rendered = render_install_plan(config)
 
@@ -269,7 +236,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
 
     def test_check_health_retries_until_public_url_is_ready(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
-        config = self.make_config(repo_root, hostname="maverick.example.test", local_only=False)
+        config = make_installer_config(repo_root, hostname="maverick.example.test", local_only=False)
         sleeps: list[float] = []
 
         with patch(
@@ -289,28 +256,27 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertEqual(sleeps, [0.25, 0.25])
 
     def test_check_health_probes_sidecar_and_app_frame_origin_shapes(self) -> None:
-        repo_root = Path(__file__).resolve().parents[3]
         config = replace(
-            self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+            make_installer_config(
+                Path(__file__).resolve().parents[3],
+                hostname="maverick.example.test",
+                local_only=False,
+            ),
             hosted_sidecars=True,
         )
-
         with patch("core.shared.installer._url_is_healthy", return_value=True), patch(
             "core.shared.installer_tls.hosted_browser_origin_is_healthy",
             return_value=True,
         ) as mocked_sidecar_probe:
             result = check_health(config, attempts=1)
-
-        sidecar_url = "https://sc-000000000000000000000000.sidecars.maverick.example.test/"
-        app_frame_url = "https://af-000000000000000000000000.sidecars.maverick.example.test/"
-        self.assertEqual(result[sidecar_url], True)
-        self.assertEqual(result[app_frame_url], True)
+        probe_urls = (
+            "https://sc-000000000000000000000000.sidecars.maverick.example.test/",
+            "https://af-000000000000000000000000.sidecars.maverick.example.test/",
+        )
+        self.assertTrue(all(result[url] for url in probe_urls))
         self.assertEqual(
             mocked_sidecar_probe.call_args_list,
-            [
-                call(sidecar_url, timeout_seconds=5.0),
-                call(app_frame_url, timeout_seconds=5.0),
-            ],
+            [call(url, timeout_seconds=5.0) for url in probe_urls],
         )
 
 

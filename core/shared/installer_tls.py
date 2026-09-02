@@ -13,6 +13,8 @@ from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
 
+from core.shared.browser_origin_tls import managed_certificate_paths
+
 
 SIDECAR_TLS_PROBE_LABEL = "sc-000000000000000000000000"
 APP_FRAME_TLS_PROBE_LABEL = "af-000000000000000000000000"
@@ -94,6 +96,72 @@ def sidecar_tls_probe_url(hostname: str) -> str:
 
 def app_frame_tls_probe_url(hostname: str) -> str:
     return f"https://{APP_FRAME_TLS_PROBE_LABEL}.sidecars.{hostname}/"
+
+
+def managed_browser_origin_tls_errors(*, hostname: str, tls_root_value: str) -> list[str]:
+    """Validate both exact probe certificates published for dynamic Nginx TLS."""
+    served_root = Path(tls_root_value) / "served"
+    errors: list[str] = []
+    for label in (SIDECAR_TLS_PROBE_LABEL, APP_FRAME_TLS_PROBE_LABEL):
+        host = f"{label}.sidecars.{hostname}"
+        certificate_path, private_key_path = managed_certificate_paths(served_root, host)
+        errors.extend(
+            _managed_exact_pair_errors(
+                host=host,
+                certificate_path=certificate_path,
+                private_key_path=private_key_path,
+            )
+        )
+    return errors
+
+
+def _managed_exact_pair_errors(
+    *,
+    host: str,
+    certificate_path: Path,
+    private_key_path: Path,
+) -> list[str]:
+    errors: list[str] = []
+    certificate_available = _regular_file_available(certificate_path)
+    private_key_available = _regular_file_available(private_key_path)
+    if not certificate_available:
+        errors.append(f"managed browser-origin TLS certificate not found for {host}: {certificate_path}")
+    if not private_key_available:
+        errors.append(f"managed browser-origin TLS private key not found for {host}: {private_key_path}")
+    if not certificate_available or not private_key_available:
+        return errors
+    try:
+        certificates = x509.load_pem_x509_certificates(certificate_path.read_bytes())
+        certificate = certificates[0]
+        names = {
+            name.rstrip(".").lower()
+            for name in certificate.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            ).value.get_values_for_type(x509.DNSName)
+        }
+    except (IndexError, OSError, ValueError, x509.ExtensionNotFound):
+        return [f"managed browser-origin TLS certificate is invalid for {host}: {certificate_path}"]
+    if host not in names:
+        errors.append(f"managed browser-origin TLS certificate SAN does not include exact host: {host}")
+    now = datetime.now(timezone.utc)
+    if certificate.not_valid_before_utc > now or certificate.not_valid_after_utc < now:
+        errors.append(f"managed browser-origin TLS certificate is not currently valid for {host}")
+    try:
+        private_key = serialization.load_pem_private_key(private_key_path.read_bytes(), password=None)
+        certificate_key = certificate.public_key().public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        private_public_key = private_key.public_key().public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+    except (OSError, TypeError, ValueError, UnsupportedAlgorithm):
+        errors.append(f"managed browser-origin TLS private key is invalid for {host}: {private_key_path}")
+    else:
+        if not secrets.compare_digest(certificate_key, private_public_key):
+            errors.append(f"managed browser-origin TLS certificate and private key do not match for {host}")
+    return errors
 
 
 def hosted_browser_origin_becomes_healthy(

@@ -12,7 +12,7 @@ from typing import Any, Awaitable, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from core.api.app_frame_assets import rewrite_public_app_asset_urls
-from core.api.app_registry import resolve_app_surface, user_can_mount_app
+from core.api.app_registry import enabled_app_items, resolve_app_surface, user_can_mount_app
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, SESSION_COOKIE
@@ -25,6 +25,11 @@ from core.apps.sidecar_browser_sessions import (
     SidecarBrowserSession,
 )
 from core.identity.errors import SessionNotFoundError, UserNotFoundError
+from core.shared.browser_origin_tls import (
+    BrowserOriginTlsError,
+    ensure_browser_origin_tls,
+    managed_browser_origin_tls_enabled,
+)
 from core.workspaces.service import resolve_active_workspace_for_user
 
 
@@ -94,6 +99,22 @@ def handle_app_frame_browser_launch(
             start_response,
             {"error": "app_frame_unavailable", "detail": str(error)},
             status="404 Not Found",
+            headers=_launch_headers(),
+        )
+    try:
+        _ensure_app_frame_tls(
+            state,
+            context=context,
+            environ=environ,
+            start_path=start_path,
+            platform_origin=platform_origin,
+            requested_host=host,
+        )
+    except BrowserOriginTlsError:
+        return json_response(
+            start_response,
+            {"error": "app_frame_tls_unavailable"},
+            status="503 Service Unavailable",
             headers=_launch_headers(),
         )
     generation_id = _app_generation_id(binding)
@@ -634,6 +655,58 @@ def _app_frame_label(
         (actor_user_id, workspace_id, app_id, generation_id, platform_session_id)
     ).encode("utf-8")
     return f"af-{sha256(identity).hexdigest()[:24]}"
+
+
+def _ensure_app_frame_tls(
+    state: PlatformState,
+    *,
+    context: RequestSession,
+    environ: dict[str, Any],
+    start_path: Path,
+    platform_origin: str,
+    requested_host: str,
+) -> None:
+    if not managed_browser_origin_tls_enabled():
+        return
+    if os.environ.get("MAVERICK_SIDECAR_ORIGIN_MODE", "local").strip().lower() != "hosted":
+        raise BrowserOriginTlsError("Managed browser-origin TLS requires hosted origins.")
+    hosts = {requested_host}
+    for item in enabled_app_items(
+        state,
+        workspace_id=context.workspace_id,
+        start_path=start_path,
+        user=context.user,
+    ):
+        if item.get("frontend_launchable") is not True:
+            continue
+        app_id = str(item.get("app_id") or "")
+        try:
+            binding, _source_root, _parsed = _authorized_app_surface(
+                state,
+                actor_user_id=context.user.user_id,
+                workspace_id=context.workspace_id,
+                app_id=app_id,
+                start_path=start_path,
+            )
+            _origin, candidate_host, _secure = _isolated_origin(
+                environ,
+                label=_app_frame_label(
+                    actor_user_id=context.user.user_id,
+                    workspace_id=context.workspace_id,
+                    app_id=binding.app_id,
+                    generation_id=_app_generation_id(binding),
+                    platform_session_id=context.session.session_id,
+                ),
+                platform_origin=platform_origin,
+            )
+        except (AppHostingError, UserNotFoundError, WorkspaceAppBindingNotFoundError):
+            continue
+        hosts.add(candidate_host)
+    ensure_browser_origin_tls(
+        sorted(hosts),
+        group_key=f"app-frame-session:{context.session.session_id}",
+        repository_root=state.repository_root,
+    )
 
 
 def _clean_app_launch_path(value: object, *, local_app_id: str, mount_app_id: str) -> str:

@@ -200,9 +200,12 @@ are complete.
 
 This is a fail-closed invariant rather than a deployment toggle. Maverick does
 not provide a same-platform-origin launch fallback for executable app or widget
-documents. Hosted app-frame and sidecar hosts both require the exact
-`*.sidecars.<installation-domain>` TLS wildcard; a certificate containing only
-currently observed opaque hosts cannot satisfy the boundary.
+documents. Hosted app-frame and sidecar hosts require either the exact
+`*.sidecars.<installation-domain>` TLS wildcard or the managed-exact HTTP-01
+lifecycle. Managed-exact issuance is restricted to Core-derived names and must
+complete before the corresponding one-shot ticket is returned; a manually
+frozen certificate containing only currently observed opaque hosts cannot
+satisfy the boundary.
 
 ## M4 implementation profile
 

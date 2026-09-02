@@ -28,7 +28,7 @@ from core.apps.service import install_store_app, register_app_source_from_contra
 class SidecarBrowserOriginTestSupport:
     """Reusable helpers; concrete unittest classes supply assertion methods."""
 
-    async def _login(self, app: PlatformAsgiHost, *, host: str) -> str:
+    async def _login(self, app: PlatformAsgiHost, *, host: str, scheme: str = "http") -> str:
         status, _body, headers = await self._invoke(
             app,
             host=host,
@@ -36,6 +36,7 @@ class SidecarBrowserOriginTestSupport:
             method="POST",
             body=json.dumps({"username": "admin", "password": "maverick"}).encode("utf-8"),
             headers={"content-type": "application/json"},
+            scheme=scheme,
         )
         self.assertEqual(status, 200)
         return headers["set-cookie"].split(";", 1)[0]
@@ -47,6 +48,7 @@ class SidecarBrowserOriginTestSupport:
         platform_cookie: str,
         host: str,
         origin: str,
+        scheme: str = "http",
     ) -> tuple[int, dict, dict[str, str]]:
         status, body, headers = await self._invoke(
             app,
@@ -61,6 +63,7 @@ class SidecarBrowserOriginTestSupport:
                 "cookie": platform_cookie,
                 "origin": origin,
             },
+            scheme=scheme,
         )
         return status, json.loads(body.decode("utf-8")), headers
 
@@ -104,6 +107,7 @@ class SidecarBrowserOriginTestSupport:
         body: bytes = b"",
         headers: dict[str, str] | None = None,
         raw_path: bytes | None = None,
+        scheme: str = "http",
     ) -> tuple[int, bytes, dict[str, str]]:
         messages: list[dict] = []
         await self._invoke_streaming(
@@ -114,6 +118,7 @@ class SidecarBrowserOriginTestSupport:
             body=body,
             headers=headers,
             raw_path=raw_path,
+            scheme=scheme,
             messages=messages,
             queue=None,
         )
@@ -141,6 +146,7 @@ class SidecarBrowserOriginTestSupport:
         body: bytes = b"",
         headers: dict[str, str] | None,
         raw_path: bytes | None = None,
+        scheme: str = "http",
         messages: list[dict],
         queue: asyncio.Queue[dict] | None,
     ) -> None:
@@ -151,7 +157,7 @@ class SidecarBrowserOriginTestSupport:
             "type": "http",
             "http_version": "1.1",
             "method": method,
-            "scheme": "http",
+            "scheme": scheme,
             "path": path,
             "query_string": b"",
             "headers": [

@@ -115,7 +115,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--hosted-sidecars",
         action="store_true",
-        help="Enable isolated hosted sidecar origins; requires externally provisioned wildcard TLS.",
+        help="Enable isolated hosted sidecar and app-frame origins.",
+    )
+    parser.add_argument(
+        "--browser-origin-tls-mode",
+        choices=("external_wildcard", "managed_exact"),
+        default="external_wildcard",
+        help="Use external DNS-01 wildcard TLS or Core-managed exact HTTP-01 certificates.",
     )
     parser.add_argument(
         "--sidecar-tls-cert",
@@ -126,6 +132,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--sidecar-tls-key",
         default="",
         help="Wildcard sidecar private-key path (defaults to the Certbot <hostname>-sidecars lineage).",
+    )
+    parser.add_argument(
+        "--browser-origin-tls-root",
+        default="",
+        help="Private/published certificate root for managed_exact mode.",
+    )
+    parser.add_argument(
+        "--browser-origin-acme-webroot",
+        default="",
+        help="HTTP-01 webroot for managed_exact mode.",
+    )
+    parser.add_argument(
+        "--browser-origin-acme-ca",
+        default="",
+        help="Optional ACME directory override for managed_exact mode.",
+    )
+    parser.add_argument(
+        "--browser-origin-tls-nginx-group",
+        default="www-data",
+        help="Nginx worker group allowed to read published managed keys.",
     )
     parser.add_argument("--skip-health-check", action="store_true", help="Skip final post-apply health checks.")
     parser.add_argument("--render-only", action="store_true", help="Only render files, do not offer live apply.")
@@ -179,14 +205,6 @@ def main(argv: list[str] | None = None) -> int:
         print("Rendered files were written, but systemd/nginx may be partially updated. Fix the reported command error and re-run the installer.")
         return LIVE_APPLY_FAILED_EXIT_CODE
 
-    if not args.skip_health_check:
-        health = check_health(config)
-        _print_health(health)
-        if not all(health.values()):
-            print("Install applied, but at least one required health check failed.")
-            _print_summary(config, live_applied=True, tls_status="not requested")
-            return 3
-
     tls_status = "not requested"
     should_request_tls = (
         not args.skip_tls
@@ -205,9 +223,19 @@ def main(argv: list[str] | None = None) -> int:
         else:
             tls_status = "requested"
 
-    _print_summary(config, live_applied=True, tls_status=tls_status)
     if tls_status == "failed":
+        _print_summary(config, live_applied=True, tls_status=tls_status)
         return TLS_FAILED_EXIT_CODE
+
+    if not args.skip_health_check:
+        health = check_health(config)
+        _print_health(health)
+        if not all(health.values()):
+            print("Install applied, but at least one required health check failed.")
+            _print_summary(config, live_applied=True, tls_status=tls_status)
+            return 3
+
+    _print_summary(config, live_applied=True, tls_status=tls_status)
     return 0
 
 
@@ -538,6 +566,11 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
         hosted_sidecars=bool(args.hosted_sidecars),
         sidecar_tls_cert_path=str(args.sidecar_tls_cert or "").strip(),
         sidecar_tls_key_path=str(args.sidecar_tls_key or "").strip(),
+        browser_origin_tls_mode=str(args.browser_origin_tls_mode).strip(),
+        browser_origin_tls_root=str(args.browser_origin_tls_root or "").strip(),
+        browser_origin_acme_webroot=str(args.browser_origin_acme_webroot or "").strip(),
+        browser_origin_acme_ca=str(args.browser_origin_acme_ca or "").strip(),
+        browser_origin_tls_nginx_group=str(args.browser_origin_tls_nginx_group or "").strip(),
     )
 
 
@@ -669,6 +702,8 @@ def _print_plan(config: InstallerConfig) -> None:
     print(f"- Core bind: {config.bind_host}:{config.core_port}")
     print(f"- Rescue bind: {config.bind_host}:{config.rescue_port}")
     print(f"- Control store: {config.control_store}")
+    if config.hosted_sidecars:
+        print(f"- Browser-origin TLS: {config.browser_origin_tls_mode}")
     print(f"- Rendered systemd dir: {config.systemd_dir}")
     print(f"- Service env file: {config.install_env_path}")
     if config.nginx_conf_path is not None:

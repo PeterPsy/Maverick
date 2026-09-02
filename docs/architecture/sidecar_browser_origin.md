@@ -3,6 +3,7 @@
 Date: 2026-08-03
 Status: Accepted (G1), implemented by WP2 and WP3
 Owners: Maverick Core app hosting and app contract domains
+Amended: 2026-09-02 to add managed exact HTTP-01 TLS without weakening origin isolation
 
 ## Context
 
@@ -30,10 +31,12 @@ host such as `maverick.localhost`; the label is placed beneath
 `sidecars.maverick.localhost` and uses the core listener's port. Keeping the
 platform and sidecar hosts under the same named `.localhost` site preserves the
 `SameSite=Strict` main-session boundary. Bare `localhost` and IP-literal
-platform hosts fail closed. Hosted installations
-must provision wildcard DNS and TLS for `*.sidecars.<installation-domain>`.
-Core fails closed when the declared isolated origin cannot be constructed or
-served securely.
+platform hosts fail closed. Hosted installations must route the dynamic
+`*.sidecars.<installation-domain>` DNS namespace to the proxy. TLS may use
+either an externally provisioned wildcard certificate or managed exact
+certificates obtained with HTTP-01 after Core authorizes an internally derived
+host. Core fails closed when the declared isolated origin cannot be constructed
+or served securely.
 
 The sidecar origin routes `/`, `/_next`, `/api`, `/artifacts`, and `/frames`
 through the generic sidecar policy. It does not mount Maverick API routes and
@@ -210,26 +213,51 @@ with:
 MAVERICK_SIDECAR_ORIGIN_MODE=hosted
 MAVERICK_SIDECAR_INSTALLATION_DOMAIN=<installation-domain>
 MAVERICK_SIDECAR_PLATFORM_ORIGIN=https://<platform-host>
+MAVERICK_BROWSER_ORIGIN_TLS_MODE=external_wildcard|managed_exact
 ```
 
-The hosted listener must terminate wildcard TLS and route
-`*.sidecars.<installation-domain>` to the same ASGI application. Missing,
+The hosted listener must terminate valid TLS for the exact requested name and
+route `*.sidecars.<installation-domain>` to the same ASGI application. Missing,
 invalid, non-HTTPS, or request-mismatched configuration fails closed before a
 ticket is issued.
 
 The self-hosted installer exposes this boundary explicitly through
-`--hosted-sidecars`. Live preflight parses the externally provisioned DNS-01
-certificate and unencrypted private key, requires a currently valid leaf SAN
-for the exact `*.sidecars.<installation-domain>` wildcard, and verifies that
-the public keys match. File existence or a certificate for one opaque hostname
-is not sufficient. The installer renders the three core environment values
-above and adds a dedicated Nginx wildcard server without `X-Frame-Options`.
+`--hosted-sidecars`. `external_wildcard` remains the default and the scalable
+choice: live preflight parses the externally provisioned DNS-01 certificate and
+unencrypted private key, requires a currently valid leaf SAN for the exact
+`*.sidecars.<installation-domain>` wildcard, and verifies that the public keys
+match.
+
+`managed_exact` is the supported alternative when the wildcard DNS record
+already routes to Maverick but the operator cannot perform DNS-01. The
+installer prepares a service-private ACME account area, an HTTP-01 webroot, and
+a setgid Nginx-readable publication area. It obtains exact certificates only
+for the reserved `sc-<24 hex>` and `af-<24 hex>` namespace. Core batches all
+launchable app-frame names for one platform login into one SAN lineage; stable
+sidecar names accumulate in a separate installation lineage. It validates SAN,
+validity, and key equality and swaps a per-host `current` symlink atomically
+before returning the one-shot ticket. The Nginx SNI map rejects names outside
+the reserved shape, while a valid-looking name without published material
+fails its TLS handshake. ACME account keys are never Nginx-readable.
+
+Managed exact mode is intended for demos, controlled review, and modest
+self-hosted traffic. One certificate contains at most 100 identifiers, and a
+new app-frame lineage is required for each platform login that opens an app.
+The configured CA's issuance limits are therefore an availability boundary;
+larger or high-login deployments must use the external wildcard mode or an
+explicitly reviewed CA capacity agreement. Hitting that boundary fails launch
+closed and is never grounds for a same-origin fallback.
+
+The installer renders the four core environment values above and adds a
+dedicated Nginx wildcard router without `X-Frame-Options`.
 Post-apply health verification opens reserved `sc-<opaque>` and `af-<opaque>`
 origins with the normal system trust store and requires Core's unauthenticated
-session denial from each; this checks wildcard DNS, hostname validation, TLS
-termination, Nginx routing, and both Core host routers together. A failure does
-not fall back to executable documents on the platform origin. The platform
-server may retain
+session denial from each; this checks dynamic DNS, hostname validation, TLS
+termination, Nginx routing, and both Core host routers together. A manually
+frozen exact-host certificate is not a lifecycle: external mode must cover the
+wildcard, while managed mode must authorize and publish new names before use. A
+failure does not fall back to executable documents on the platform origin. The
+platform server may retain
 `X-Frame-Options: SAMEORIGIN`; that header must never be inherited by the
 distinct sidecar server.
 

@@ -35,6 +35,7 @@ from core.apps.sidecar_browser_sessions import (
 from core.identity.errors import UserNotFoundError
 from core.observability.service import record_platform_audit
 from core.observability.startup_performance import record_startup_timing
+from core.shared.browser_origin_tls import BrowserOriginTlsError, ensure_browser_origin_tls
 from core.shared.entrypoints import EntrypointShutdownController
 
 
@@ -96,13 +97,21 @@ def handle_sidecar_browser_launch(
     try:
         launch_started = time.monotonic()
         origin, host, platform_origin, secure = _resolve_origin_configuration(environ, target=target)
+        ensure_browser_origin_tls(
+            [host],
+            group_key=(
+                "sidecar-installation:"
+                + os.environ.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")
+            ),
+            repository_root=state.repository_root,
+        )
         running = ensure_authorized_sidecar_running(
             target,
             start_path=start_path,
             shutdown_controller=shutdown_controller,
             verify_existing_health=True,
         )
-    except AppHostingError as error:
+    except (AppHostingError, BrowserOriginTlsError) as error:
         return json_response(
             start_response,
             sidecar_error_payload(error, default_code="sidecar_origin_unavailable"),

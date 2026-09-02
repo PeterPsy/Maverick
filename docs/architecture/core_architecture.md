@@ -1184,12 +1184,15 @@ and physical-rollout gates for M3.
 This isolation boundary is mandatory. Core has no same-platform-origin app or
 widget launch mode: invalid or unavailable isolated-origin routing fails the
 launch closed and never makes direct documents available as a fallback. A
-hosted deployment must terminate a currently valid certificate whose SAN
-contains the exact `*.sidecars.<installation-domain>` wildcard; certificates
-for a finite set of `sc-*` or `af-*` hosts are insufficient because both host
-families are derived dynamically. Installer health checks exercise reserved
-hosts from both families with normal hostname verification before the hosted
-boundary is accepted.
+hosted deployment may terminate either a currently valid externally managed
+`*.sidecars.<installation-domain>` wildcard or Core-managed exact certificates.
+The latter uses HTTP-01 only for internally derived `sc-*` and `af-*` names,
+batches every launchable app name for one login session into one SAN lineage,
+publishes validated key pairs atomically for Nginx, and fails ticket issuance
+until the exact host is ready. It does not accept a manually frozen list of
+observed origins. Installer health checks exercise reserved hosts from both
+families with normal hostname verification before the hosted boundary is
+accepted.
 
 Cache API, IndexedDB, and OPFS hold derived copies only. They cannot become a
 source of platform authority or satisfy capability, certificate, provider

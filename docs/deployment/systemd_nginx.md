@@ -55,12 +55,19 @@ The backend watchdog also loads `.env.maverick`, but rescue authority comes from
 
 For a first-time HTTPS install, the installer initially writes an HTTP nginx config that can pass `nginx -t` without existing certificates and serve the ACME challenge.
 After certbot obtains the certificate, the installer rewrites nginx with the final HTTPS config and reloads it.
-The installer runs the local core health check before requesting TLS, so bind/port failures are reported even when Certbot is blocked by DNS, port `80`, or another active Certbot process.
+The installer requests TLS before the final public health pass, so hostname
+validation is never tested against an intentionally incomplete certificate.
+Certbot failure is reported separately and stops before public-origin probes.
 When an operator passes `--skip-tls` for a public HTTPS install, the installer assumes TLS is externally managed or already provisioned and renders the final HTTPS nginx config immediately.
 
 Browser-visible HTTP sidecars need a second, isolated hosted origin. For a
-public hostname such as `maverick.example.com`, provision wildcard DNS and a
-certificate for `*.sidecars.maverick.example.com` before live apply, then run:
+public hostname such as `maverick.example.com`, first route wildcard DNS for
+`*.sidecars.maverick.example.com` to this proxy. Choose one of the following
+TLS lifecycles.
+
+### External wildcard TLS
+
+Provision a wildcard certificate with DNS-01 before live apply, then run:
 
 ```bash
 python3.12 scripts/install_maverick.py \
@@ -84,16 +91,57 @@ origin. Nginx renders a separate wildcard virtual host that proxies to the same
 ASGI core, disables response buffering for SSE, and deliberately omits
 `X-Frame-Options`; core supplies the exact CSP `frame-ancestors` policy.
 
+### Managed exact TLS without DNS-01
+
+When wildcard DNS already routes to this host but DNS-provider credentials are
+not available, use the managed exact lifecycle:
+
+```bash
+python3.12 scripts/install_maverick.py \
+  --hostname maverick.example.com \
+  --hosted-sidecars \
+  --browser-origin-tls-mode managed_exact
+```
+
+This mode needs no Namecheap, Route 53, or other DNS API. Nginx serves HTTP-01
+under every routed sidecar hostname. Before Core returns a browser launch
+ticket, it asks Certbot for a public certificate containing only exact
+Core-derived `af-*` or `sc-*` names, validates the SAN/validity/key pair, and
+atomically publishes the pair under
+`/var/lib/maverick/browser-origin-tls/served`. Private ACME state remains below
+the service-only `private` directory; Nginx receives group read access only to
+published keys. The installer obtains both reserved probe names before its
+final Nginx reload and public health pass.
+
+Override the storage paths only when the service user and Nginx worker can
+retain the same permission boundary:
+
+```bash
+  --browser-origin-tls-root /var/lib/maverick/browser-origin-tls \
+  --browser-origin-acme-webroot /var/lib/maverick/browser-origin-acme \
+  --browser-origin-tls-nginx-group www-data
+```
+
+App-frame names remain per app and per login session. The first app launch in a
+session batches every currently launchable app into one SAN certificate (at
+most 100 names); sidecar names use a separate cumulative lineage. Certificate
+renewal occurs on an authorized launch before the exact host is returned. This
+mode is appropriate for controlled or modest self-hosted use, not unbounded
+multi-tenant login volume: CA order/domain limits remain an availability gate.
+Use external wildcard TLS or an explicitly reviewed CA capacity agreement for
+larger deployments. An issuance failure returns `503` and leaves direct app
+documents blocked.
+
 After live apply, the mandatory health pass connects with the normal system
 trust store to reserved `sc-<opaque>.sidecars.<installation-domain>` and
 `af-<opaque>.sidecars.<installation-domain>` hosts and requires Core's expected
 unauthenticated session response from both routers. This is a single gate for
-wildcard DNS, certificate hostname validation, Nginx routing, sidecar routing,
+dynamic DNS, certificate hostname validation, Nginx routing, sidecar routing,
 and app-frame routing. A certificate for one or more already-known opaque hosts
-is never an accepted recovery mode: a workspace, app, generation, or login
-session change produces a different hostname. Do not set a same-origin
-app-frame override to recover availability; executable app/widget documents
-remain isolated or fail closed.
+is never an accepted manual recovery mode: external mode must cover the
+wildcard, while managed mode must authorize and publish names before tickets
+are issued. Do not set a same-origin app-frame override to recover availability;
+executable app/widget documents remain isolated or fail closed.
 
 Use `--render-only` to stop after rendering.
 

@@ -26,7 +26,7 @@ class InstallerTlsFlowTestCase(unittest.TestCase):
         password_file.write_text("install-admin-password\n", encoding="utf-8")
         return ["--admin-password-file", str(password_file)]
 
-    def test_installer_main_reports_tls_failure_after_health_check(self) -> None:
+    def test_installer_main_reports_tls_failure_before_public_health_check(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
             output_root = Path(temp_dir) / "install"
             live_systemd_dir = Path(temp_dir) / "live-systemd"
@@ -65,5 +65,5 @@ class InstallerTlsFlowTestCase(unittest.TestCase):
                 )
 
         self.assertEqual(exit_code, TLS_FAILED_EXIT_CODE)
-        mocked_health.assert_called_once()
+        mocked_health.assert_not_called()
         mocked_tls.assert_called_once()

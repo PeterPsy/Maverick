@@ -82,11 +82,13 @@ frame window and its exact isolated origin; apps never receive platform-origin
 IndexedDB or OPFS authority.
 
 There is no same-platform-origin availability fallback. Hosted rollout requires
-the exact `*.sidecars.<installation-domain>` DNS-01 certificate and successful
-normal-trust probes of both reserved `sc-*` and `af-*` hosts. A finite SAN list
-of observed opaque hosts is invalid. If either route or TLS validation fails,
-keep `data_cache` and `storage_file_cache` off, keep direct documents blocked,
-and repair DNS/TLS before retesting OAuth and the parent broker.
+either the exact `*.sidecars.<installation-domain>` DNS-01 certificate or the
+installer's `managed_exact` HTTP-01 lifecycle, plus successful normal-trust
+probes of both reserved `sc-*` and `af-*` hosts. A manually frozen SAN list of
+observed opaque hosts is invalid; managed mode authorizes and publishes each
+Core-derived name before returning its ticket. If either route or TLS
+validation fails, keep `data_cache` and `storage_file_cache` off, keep direct
+documents blocked, and repair TLS before retesting OAuth and the parent broker.
 
 ## Stable version contract
 

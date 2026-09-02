@@ -1608,10 +1608,13 @@ cache policy.
 There is no same-platform-origin compatibility mode for executable app or
 widget documents. If the isolated browser origin cannot be created or reached,
 Core fails launch closed and keeps direct platform-origin documents blocked.
-Hosted installations must provision the exact
-`*.sidecars.<installation-domain>` TLS wildcard used by both dynamically
-derived `sc-*` sidecar hosts and `af-*` app-frame hosts; enumerating currently
-known hosts is not a valid substitute.
+Hosted installations must provision either the exact
+`*.sidecars.<installation-domain>` TLS wildcard or the managed-exact HTTP-01
+mode used by both dynamically derived `sc-*` sidecar hosts and `af-*`
+app-frame hosts. Managed-exact mode authorizes only Core-derived names, obtains
+the certificate before issuing a browser ticket, and atomically publishes it
+to the restricted Nginx key directory. A manually maintained finite SAN list
+is not a substitute for either supported lifecycle.
 
 Cached platform control-plane state never authorizes an app action. An app
 renders a valid cached result through its normal component and keeps a cache

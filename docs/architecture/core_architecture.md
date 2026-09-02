@@ -785,13 +785,13 @@ shell/process, and CLI/MCP scenarios. A declared mode string or the mere
 presence of a handle is not evidence. Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 35 and OpenRouter
-revision 34 definitions make that atomic claim only because the executable
+complete atomic contract. The current Google revision 36 and OpenRouter
+revision 35 definitions make that atomic claim only because the executable
 gate returns all 20 required result behaviors, including real app-owned
-CLI/MCP reads with conservative effect metadata, raw/base64/chunk marker
+CLI/MCP reads with Core-audited conservative effect metadata, raw/base64/chunk marker
 narrowing, revoke-then-rebuild, delayed-egress-after-revocation, transport
 revocation before the first and every subsequent provider-stream advance,
-overlay-commit rollback, and shell/process `.git` masking probes. They remain
+overlay-commit rollback, and recursive shell/process `.git` masking probes. They remain
 uncertified, unbound, contained previews rather than a release authorization.
 
 Hosted filesystem mutations are descriptor-relative and version-fenced.
@@ -862,9 +862,14 @@ the same private overlay until a successful terminal status. Terminal
 it commits that overlay; commit failure crosses the mutation boundary and is
 reported with ambiguous-execution semantics while the batch itself is restored.
 Timeout, process failure, interrupt, or invalid diff discards the overlay.
-Platform `runtime/` and workspace Git metadata are masked, HOME and TMP are
-ephemeral, host absolute paths are not exposed, system tooling is read-only,
-and the network namespace is disconnected. Synchronous output is drained under
+Platform `runtime/` is masked. Before bubblewrap starts, Core performs a
+bounded descriptor-relative, no-symlink traversal and locates every workspace
+component named `.git`. Each discovered Git directory is replaced by an empty
+tmpfs and each worktree pointer file by `/dev/null`, including nested
+repositories, for both read-only and private-overlay shell/managed-process
+mounts. An unsafe entry, traversal limit, or concurrent directory change fails
+closed. HOME and TMP are ephemeral, host absolute paths are not exposed, system
+tooling is read-only, and the network namespace is disconnected. Synchronous output is drained under
 a hard byte ceiling. Long commands use session-owned process handles with bounded streaming
 output, stdin, interrupt, timeout, process-group cleanup, durable redacted
 records, and the common orphan reaper. Cancellation is carried into synchronous
@@ -950,10 +955,15 @@ top-level argument discriminator whose static class is the maximum severity of
 all enumerated values. Omitted discriminator behavior is explicit, while an
 unknown value, malformed nested argument payload, invalid declaration, or
 missing declaration is `unclassified` and denied before execution. Read-only
-app calls may proceed through the production wrapper but their exact result
-bytes still require ordinary classification and egress admission; app-owned
-metadata cannot mint a certified public-result contract or authorize a
-mutation.
+app calls may proceed through the production wrapper only when their platform
+source identity, live descriptor digest, and reparsed metadata match the exact
+Core-owned built-in effect audit. Workspace-local and external app descriptors
+cannot self-authorize hosted execution. Exact result bytes still require
+ordinary classification and egress admission; app-owned metadata cannot mint a
+certified public-result contract or authorize a mutation. Website Studio's
+`build_preview` and `preview_document` are consequently classified as
+mutating, while persistent SQLite/file pre/post tests cover every remaining
+Website Studio CLI/MCP read action.
 
 ### 8. Secret management
 

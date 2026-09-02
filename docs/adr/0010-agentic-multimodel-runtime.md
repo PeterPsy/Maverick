@@ -675,14 +675,14 @@ The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 35
-and OpenRouter revision 34, both bound to
-`maverick-hosted-tool-loop==27`; older revisions are suspended rather than
-overwritten. Their suite-31 certification manifests retain distinct
+accepted as complete. The current contained definitions are Google revision 36
+and OpenRouter revision 35, both bound to
+`maverick-hosted-tool-loop==28`; older revisions are suspended rather than
+overwritten. Their suite-32 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
-`codex-baseline-v14` requires executable create, replace, edit, patch, move,
+`codex-baseline-v15` requires executable create, replace, edit, patch, move,
 delete, read-after-write, shell/process, and CLI/MCP result behaviors rather
 than a mode string. The executable repository gate now proves all 20 required
 behaviors: the 13 positive result workflows plus sensitive-marker narrowing,
@@ -707,11 +707,15 @@ authority but app declarations cannot grant it. Shell/process mutations
 classify the exact private-overlay result before committing, revalidate the
 exact result before and after the rollback-safe batch boundary, and restore the
 complete pre-image if authority changes. App CLI/MCP descriptors carry a
-conservative effect class and, for mixed runners, an argument discriminator;
-unknown discriminators stay `unclassified`, real read-only app operations are
-admitted, and app mutations without a certified Core result guarantee are
-denied before effect. Shell and managed processes mask both `.git` directories
-and worktree pointer files.
+conservative effect class and, for mixed runners, an argument discriminator. A
+read is admitted only when the exact platform-built-in descriptor matches the
+Core-owned effect audit; workspace or external app metadata cannot
+self-authorize. Unknown discriminators stay `unclassified`, and app mutations
+without a certified Core result guarantee are denied before effect. Website
+Studio preview construction/document caching is classified as mutating, and
+every remaining Website read is checked against pre/post persistent state.
+Shell and managed processes recursively mask every `.git` directory and
+worktree pointer file in both read-only and overlay modes.
 
 The profiles, certificates, execution bindings, governed recipes, requests,
 and authority projections also bind model revision and revision policy. Google
@@ -719,11 +723,11 @@ uses `exact` and compares the authenticated live catalog version. OpenRouter
 uses the explicit `provider_alias` policy in addition to its endpoint,
 upstream, quantization, and router constraints. Revision or policy drift is a
 pre-execution failure. The profiles therefore pin
-`codex-baseline-v14` as both the
+`codex-baseline-v15` as both the
 tool and Full Workspace contract and atomically use the `maverick_agent`
 execution family. The claim validator still rejects the family unless profile,
-certificate, and executable behavior gate are complete. Adapter 27, recipe
-revision 14, context-compaction schema 3, suite 31, and TCB manifest v21 retain
+certificate, and executable behavior gate are complete. Adapter 28, recipe
+revision 15, context-compaction schema 3, suite 32, and TCB manifest v22 retain
 the composite-classification and rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked

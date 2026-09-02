@@ -1,6 +1,6 @@
 # Agentic certification evidence procedure
 
-Status date: 2026-09-01
+Status date: 2026-09-02
 
 Scope: trusted CI or operator-controlled certification worker
 
@@ -22,7 +22,7 @@ journal-evidence, atomic Full Workspace contract, descriptor-confined mutation,
 fixed-path shell, managed-process, discovery-first CLI/MCP, compaction, and
 orphan-cleanup fixtures.
 It additionally binds recipe/catalog identity, compiler revision 8,
-the `codex-baseline-v14` behavioral Full Workspace gate, the hosted governed
+the `codex-baseline-v15` behavioral Full Workspace gate, the hosted governed
 result contract, mandatory commit-bound instruction digests and governed
 rollback-safe shell/process effect transactions, semantic compaction schema 3, artifact-backed
 large results, UTF-8/base64 attachment
@@ -58,13 +58,16 @@ issue-write-revoke-rebuild-read sequence to fail closed, require a delayed
 persisted tool result to pair only a public error after revocation, deny a
 prepared request when authority changes during endpoint preflight, deny a
 second provider event after revocation, roll back real shell/process overlays
-when authority changes after their first batch write, and mask `.git` for both
-shell and managed-process execution. The suite also verifies exact authority
+when authority changes after their first batch write, and recursively mask
+root/nested `.git` directories and worktree pointer files for shell and managed
+processes in both read-only and mutation-overlay modes. The suite also verifies exact authority
 lineage across provider-state generations and pending/CAS/terminal audit
 coherence for runtime-public issue/revoke under failure and concurrency.
 It parses every installed built-in app CLI/MCP surface, requires a conservative
 effect declaration (plus a fail-closed argument discriminator for mixed
-runners), and executes real Storage catalog reads through both registries.
+runners), verifies the exact Core-owned descriptor audit, executes real Storage
+catalog reads through both registries, and checks Website Studio read actions
+against persistent SQLite/file pre/post state.
 Google certificates bind the exact live catalog model version; OpenRouter
 certificates bind the explicit provider-alias revision policy and existing
 endpoint/upstream catalog identity.
@@ -84,8 +87,8 @@ Run from a clean checkout of the exact commit to certify. The worker must have:
   public key is installed in the certificate publisher trust set;
 - a synthetic-only provider credential delivered only to the operator-controlled
   live-probe worker;
-- the dated suite-v31 matrix revision
-  `2026-09-01-r31-p4-review-closure-model-revision-tcb21` declared by the provider
+- the dated suite-v32 matrix revision
+  `2026-09-02-r32-p4-git-effect-authority-tcb22` declared by the provider
   certificate module;
 - the exact adapter artifact digest and the code-owned certified-execution TCB
   manifest in `core/providers/certified_execution_tcb.py`; callers do not
@@ -120,7 +123,7 @@ completed-run validation and can never be certificate evidence.
 ```bash
 python3 scripts/run_agentic_certification.py \
   --suite-id maverick-google-interactions-agentic-contract \
-  --suite-version 31 \
+  --suite-version 32 \
   --adapter-artifact-digest "$ADAPTER_ARTIFACT_SHA256" \
   --evidence-ref "$PLATFORM_EVIDENCE_REF" \
   --signer-key-id "$CERTIFICATION_SIGNER_KEY_ID" \
@@ -129,9 +132,9 @@ python3 scripts/run_agentic_certification.py \
 ```
 
 For OpenRouter use suite id `maverick-openrouter-agentic-contract`, suite
-version `31`, matrix revision
-`2026-09-01-r31-p4-review-closure-model-revision-tcb21`, and the OpenRouter manifest.
-The Google suite uses version `31` and the same matrix revision. The
+version `32`, matrix revision
+`2026-09-02-r32-p4-git-effect-authority-tcb22`, and the OpenRouter manifest.
+The Google suite uses version `32` and the same matrix revision. The
 canonical matrices, artifact bundles, commands, and live-probe entrypoints live
 in `core/providers/certification_manifests.py`. Do not reuse a Google artifact
 bundle, result, live probe, or evidence reference.

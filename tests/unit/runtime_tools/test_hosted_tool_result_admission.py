@@ -382,7 +382,7 @@ class HostedToolResultAdmissionTest(unittest.TestCase):
                 self.actor,
             ).admitted_before_effect
         )
-        self.assertTrue(
+        self.assertFalse(
             preflight(
                 "core-capability:cli.run",
                 {"command_id": "app.mixed", "arguments": {"action": "catalog"}},

@@ -184,6 +184,10 @@ class RepositoryConventionsTestCase(unittest.TestCase):
             "codex_profile_artifacts.json",
             pyproject["tool"]["setuptools"]["package-data"]["core.providers"],
         )
+        self.assertIn(
+            "hosted_builtin_app_effect_audit.json",
+            pyproject["tool"]["setuptools"]["package-data"]["core.runtime"],
+        )
 
     def test_root_tests_are_layered_not_flat(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root

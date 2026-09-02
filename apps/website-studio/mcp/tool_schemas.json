@@ -367,7 +367,7 @@
       }
     },
     "website_build_preview": {
-      "effect_class": "read",
+      "effect_class": "mutating",
       "description": "Return the preview contract for one indexed route, including preview HTML, isolated preview_url, runtime status, warnings, and missing runtime requirements.",
       "input_schema": {
         "type": "object",
@@ -377,7 +377,7 @@
       }
     },
     "website_preview_document": {
-      "effect_class": "read",
+      "effect_class": "mutating",
       "description": "Return one prepared Website Studio preview document by preview id for the isolated preview runtime frontend.",
       "input_schema": {
         "type": "object",

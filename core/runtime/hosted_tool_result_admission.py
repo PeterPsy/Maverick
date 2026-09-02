@@ -5,6 +5,9 @@ from __future__ import annotations
 from typing import Callable
 
 from core.egress.classification import CanonicalSourceClassification
+from core.runtime.hosted_app_effect_authority import (
+    app_read_effect_has_core_audit_authority,
+)
 from core.runtime.hosted_tool_result_authority import (
     HOSTED_TOOL_RESULT_ADMISSION_REVISION,
     _admitted_surface,
@@ -23,7 +26,7 @@ from core.runtime.tool_catalog import (
 from core.shared.tool_effects import resolve_tool_effect_class
 
 
-HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 3
+HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 4
 
 _ACTION_METADATA_FIELDS: dict[str, tuple[str, ...]] = {
     "core-capability:process.start": (
@@ -216,6 +219,7 @@ def build_hosted_tool_result_preflight_resolver(
             return _definition_preflight(
                 _cli_definition(cli_registry, command_id),
                 arguments=_surface_arguments(handle, arguments),
+                surface="cli",
                 admitted_read=admitted_read,
                 admitted_public=admitted_public,
                 denied=denied,
@@ -229,6 +233,7 @@ def build_hosted_tool_result_preflight_resolver(
             return _definition_preflight(
                 _mcp_definition(mcp_registry, tool_name),
                 arguments=_surface_arguments(handle, arguments),
+                surface="mcp",
                 admitted_read=admitted_read,
                 admitted_public=admitted_public,
                 denied=denied,
@@ -242,6 +247,7 @@ def _definition_preflight(
     definition,
     *,
     arguments,
+    surface,
     admitted_read,
     admitted_public,
     denied,
@@ -249,7 +255,15 @@ def _definition_preflight(
     if definition is None or not isinstance(arguments, dict):
         return denied
     if resolve_tool_effect_class(definition, arguments) == "read":
-        return admitted_read
+        if getattr(definition, "owner_kind", None) == "core":
+            return admitted_read
+        if app_read_effect_has_core_audit_authority(
+            definition,
+            arguments,
+            surface=surface,
+        ):
+            return admitted_read
+        return denied
     return (
         admitted_public
         if _definition_has_public_result_authority(definition)

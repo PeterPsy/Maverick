@@ -1,6 +1,6 @@
 # Agentic multimodel runtime epic
 
-Status date: 2026-09-01
+Status date: 2026-09-02
 
 Target: Phase 4A-D implementation closure complete; provider certification,
 security review, canary, and release gates remain open;
@@ -88,7 +88,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v21 records six maintained transitive dependency contracts. The
+- [x] Manifest v22 records six maintained transitive dependency contracts. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -99,8 +99,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v31 / matrix
-  `2026-09-01-r31-p4-review-closure-model-revision-tcb21`
+- [x] Google and OpenRouter suite v32 / matrix
+  `2026-09-02-r32-p4-git-effect-authority-tcb22`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -479,14 +479,21 @@ completion claim.
 - [x] Every built-in app CLI/MCP descriptor carries an explicit conservative
   effect class. Mixed runners additionally declare a single exact argument
   discriminator; missing, malformed, or unknown discriminator values remain
-  `unclassified`. The certification corpus parses all 28 CLI and 383 MCP
-  surfaces and executes real read-only Storage catalog operations through both
-  registries. Mutating/destructive app operations without a certified Core
-  result guarantee remain denied before effect.
-- [x] Hosted shell and managed processes mask `.git` inside the bwrap workspace
-  for both normal repositories and worktree pointer files. Production-composed
-  probes verify that neither execution path can read a private `.git` marker;
-  the direct confined-filesystem denial remains unchanged.
+  `unclassified`. Hosted reads additionally require an exact platform source
+  and live descriptor digest present in the Core-owned audit; workspace-local,
+  external, or drifted app metadata cannot self-authorize. The certification
+  corpus parses all 28 CLI and 383 MCP surfaces, verifies the audit inventory,
+  and executes real read-only Storage catalog operations through both
+  registries. Website Studio classifies preview creation and document caching
+  as mutating, while pre/post SQLite and file snapshots prove every remaining
+  declared Website CLI/MCP read is state-pure. Mutating/destructive app
+  operations without a certified Core result guarantee remain denied before
+  effect.
+- [x] Hosted shell and managed processes recursively mask every `.git` inside
+  the bwrap workspace, including nested repository directories and worktree
+  pointer files. Production-composed and contract probes cover both execution
+  paths with and without mutation overlays; the direct confined-filesystem
+  denial remains unchanged.
 - [x] Profile, certificate, execution binding, governed recipe, provider
   request, authority, API projection, and persistence all bind model revision
   plus an explicit revision policy. Google uses `exact` and compares the live
@@ -500,22 +507,22 @@ completion claim.
   domain, and the provider fixture manifest includes every split module plus
   the real app-surface integration probe. Pre-existing oversized modules retain
   frozen no-growth ceilings.
-- [x] Adapter 27, semantic compiler revision 8, Full Workspace result contract
-  `codex-baseline-v14`, context-compaction schema 3, TCB manifest v21, suite 31,
-  and matrix `2026-09-01-r31-p4-review-closure-model-revision-tcb21` create immutable Google
-  revision 35 and OpenRouter revision 34 previews. Historical revisions 34/33
+- [x] Adapter 28, semantic compiler revision 8, Full Workspace result contract
+  `codex-baseline-v15`, context-compaction schema 3, TCB manifest v22, suite 32,
+  and matrix `2026-09-02-r32-p4-git-effect-authority-tcb22` create immutable Google
+  revision 36 and OpenRouter revision 35 previews. Historical revisions 35/34
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
-  `full_workspace_contract_revision=codex-baseline-v14`; the central validator
+  `full_workspace_contract_revision=codex-baseline-v15`; the central validator
   rejects that family if the profile/certificate claim or behavior gate is
   incomplete.
-- [x] Admit the hosted Full Workspace `codex-baseline-v14` repository claim
+- [x] Admit the hosted Full Workspace `codex-baseline-v15` repository claim
   only after the executable behavior probe verifies all 20 required result
   workflows: 13 create/replace/edit/patch/move/delete/read-after-write,
   shell/process, and CLI/MCP paths plus marker narrowing, revoke-then-rebuild,
   revoke-before-delayed-egress, revoke-before-provider-transport, and
-  revoke-between-provider-events, revoke-during-overlay-commit, and `.git`
-  shell/process masking negative probes. The negative gate traverses the
+  revoke-between-provider-events, revoke-during-overlay-commit, and recursive
+  `.git` shell/process masking negative probes. The negative gate traverses the
   production orchestrator, hosted request/stream, and real shell/process overlays rather
   than calling classification helpers with literal payloads. A CAS-revisioned,
   operator-owned runtime-public classification policy supplies explicit

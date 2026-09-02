@@ -98,7 +98,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v21 also
+status, workspace binding, and upstream constraint. TCB manifest v22 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance. Package initializers and the exact generalist orchestration-context
@@ -599,12 +599,16 @@ runs classify their exact private-overlay result before commit and discard the
 overlay on denial. Mutating/destructive app CLI/MCP calls without the same
 pre-effect guarantee remain rejected; app definitions cannot self-promote.
 Built-in app definitions carry conservative effect metadata, and mixed runners
-resolve one declared argument discriminator; unknown values fail closed. Real
-Storage catalog reads execute through both app registries. The hosted bwrap
-projection also masks `.git` for shell and managed processes, including a
-worktree pointer file.
+resolve one declared argument discriminator; unknown values fail closed. A
+hosted app read additionally needs an exact platform source and descriptor
+digest from the Core-owned audit, so workspace/external metadata is never its
+sole authority. Real Storage catalog reads execute through both app registries;
+Website Studio preview creation/cache operations are mutating and persistent
+pre/post tests cover all of its remaining reads. The hosted bwrap projection
+recursively masks nested `.git` directories and worktree pointer files for
+shell and managed processes, with or without a mutation overlay.
 Current Google/OpenRouter definitions use `maverick_agent` and pin
-`codex-baseline-v14` only because the executable 20-behavior gate is complete;
+`codex-baseline-v15` only because the executable 20-behavior gate is complete;
 they are still uncertified, unbound, contained previews. Direct replacement
 and move propagate exact version-bound pre-image taint for read-after-write
 through authenticated same-session mutation records, even when the next tool

@@ -66,24 +66,26 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v21 makes the known transitive boundary executable through
+Manifest v22 makes the known transitive boundary executable through
 six static import contracts. Package initializers, the generalist input-context
 projection closure, continuation/recovery, app-entrypoint, audit, and usage
 dependencies must all resolve to hashed artifacts; a newly reached local module
 outside the manifest prevents TCB identity calculation.
 
-Hosted adapter 27 and the Full Workspace result contract
-`codex-baseline-v14` are bound by TCB manifest v21. Google revision 35 and
-OpenRouter revision 34 atomically claim that contract and the `maverick_agent`
+Hosted adapter 28 and the Full Workspace result contract
+`codex-baseline-v15` are bound by TCB manifest v22. Google revision 36 and
+OpenRouter revision 35 atomically claim that contract and the `maverick_agent`
 family because the executable result gate reports all 20 required behaviors.
 The final seven behaviors are production-composed negative security probes for
 sensitive raw/base64/chunked filesystem marker narrowing, revoke-then-rebuild
 filesystem lineage, delayed tool-result egress after revocation,
 post-preflight provider transport, revocation between two provider events,
 revocation during a real overlay commit, and `.git` masking in both shell and
-managed processes. The bwrap workspace projection masks either a `.git`
-directory or a worktree pointer file; the direct filesystem boundary continues
-to reject the same metadata path.
+managed processes. Before either bwrap mode starts, a bounded descriptor-only
+scan finds every root or nested `.git`; directories are replaced by empty tmpfs
+mounts and worktree pointer files by `/dev/null`. The read-only and mutation-
+overlay probes both cover shell and managed processes. The direct filesystem
+boundary continues to reject the same metadata paths.
 Tool records and provider-state generations
 retain exact mutable-authority id/revision/digest lineage, and Core revalidates
 it immediately before reuse, continuation, request commit, and every actual
@@ -95,9 +97,14 @@ batches revalidate before and after materialization and roll back on drift.
 Every built-in app CLI and MCP descriptor now carries a conservative static
 effect class; mixed operation runners also carry an exact argument-discriminator
 map whose missing, malformed, or unknown value resolves to `unclassified`.
-Production-composed Storage probes discover and execute real read-only CLI/MCP
-operations, while mutating and destructive app operations remain denied before
-effect unless Core can supply the certified result guarantee.
+Hosted reads require the exact platform source and descriptor bytes recorded in
+the Core-owned audit; workspace-local, external, or drifted metadata cannot
+self-authorize. Production-composed Storage probes discover and execute real
+read-only CLI/MCP operations. Website Studio preview construction and document
+caching are mutating, and state snapshots prove every remaining declared read
+leaves its SQLite database and files unchanged. Other mutating and destructive
+app operations remain denied before effect unless Core can supply the certified
+result guarantee.
 The profile, certificate, execution binding, provider request, recipe, and
 authority snapshot also bind `model_revision` and its policy. Google uses an
 exact catalog revision and compares the live `version`; OpenRouter uses the

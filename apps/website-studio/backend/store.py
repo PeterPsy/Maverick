@@ -217,7 +217,7 @@ def workspace_snapshot(
 ) -> dict[str, object]:
     """Return the compact, versioned UI read model shared by app and widgets.
 
-    Navigation and working state are materialized per source version. Operational
+    Navigation and working state are assembled from indexed rows. Operational
     summaries remain cheap SQL reads so builds and previews do not invalidate the
     source-dependent segments.
     """
@@ -245,7 +245,7 @@ def workspace_snapshot(
     if not selected:
         payload["project"] = None
         return payload
-    read_model = _materialized_project_read_model(data_root, selected)
+    read_model = _project_read_model(data_root, selected)
     route_text = str(route or "").strip() or str((read_model["navigation"].get("pages") or [{}])[0].get("route") or "/")
     payload["project"] = {
         "site": _compact_site(selected),
@@ -293,18 +293,14 @@ def _snapshot_versions(data_root: Path, site: dict[str, object] | None) -> dict[
     }
 
 
-def _materialized_project_read_model(data_root: Path, site: dict[str, object]) -> dict[str, object]:
+def _project_read_model(data_root: Path, site: dict[str, object]) -> dict[str, object]:
     site_id = str(site["id"])
-    source_version = _source_version_for_site(site)
     with connect(data_root) as db:
         draft = db.execute(
             "SELECT files_changed_count FROM changesets WHERE site_id = ? AND status = 'draft' ORDER BY updated_at DESC LIMIT 1",
             (site_id,),
         ).fetchone()
         working = {"changed_files_count": int(draft["files_changed_count"] if draft else 0)}
-        cached = db.execute("SELECT * FROM project_read_models WHERE site_id = ?", (site_id,)).fetchone()
-        if cached and cached["source_version"] == source_version:
-            return {"navigation": json.loads(cached["navigation_json"]), "working_state": working}
         pages = [_page_row(row) for row in db.execute(
             "SELECT * FROM pages WHERE site_id = ? AND deleted_at IS NULL ORDER BY route", (site_id,),
         ).fetchall()]
@@ -324,11 +320,6 @@ def _materialized_project_read_model(data_root: Path, site: dict[str, object]) -
             "routes": routes,
             "inventory_summary": {"page_count": counts["pages"], "route_count": counts["routes"], "asset_count": counts["assets"], "source_inventory_hidden": True},
         }
-        db.execute(
-            "INSERT INTO project_read_models(site_id, source_version, navigation_json, working_state_json, updated_at) VALUES (?, ?, ?, ?, ?) "
-            "ON CONFLICT(site_id) DO UPDATE SET source_version=excluded.source_version, navigation_json=excluded.navigation_json, working_state_json=excluded.working_state_json, updated_at=excluded.updated_at",
-            (site_id, source_version, json.dumps(navigation, sort_keys=True), json.dumps(working, sort_keys=True), now_timestamp()),
-        )
     return {"navigation": navigation, "working_state": working}
 
 
@@ -4445,7 +4436,6 @@ def clear_custom_view(data_root: Path) -> dict[str, object]:
 
 def list_environments(data_root: Path, site_id: object) -> list[dict[str, object]]:
     site = get_site(data_root, site_id)
-    _ensure_default_environment(data_root, str(site["id"]))
     with connect(data_root) as db:
         rows = db.execute("SELECT * FROM environments WHERE site_id = ? ORDER BY kind, name", (site["id"],)).fetchall()
     return [_environment_row(row) for row in rows]
@@ -4793,13 +4783,9 @@ def _cached_source_profile(
 ) -> dict[str, object]:
     cached = site.get("source_profile") if isinstance(site.get("source_profile"), dict) else {}
     if cached:
-        if not str(site.get("source_version") or "").strip():
-            _refresh_site_source_metadata(data_root, site["id"], cached, bump_version=False)
         return dict(cached)
     root = source_root or _source_root(data_root, str(site["id"]))
-    profile = source_profile(root)
-    _refresh_site_source_metadata(data_root, site["id"], profile, bump_version=False)
-    return profile
+    return source_profile(root)
 
 
 def _refresh_site_source_metadata(

@@ -110,6 +110,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_tools.test_tool_preliminary_ledger",
     "tests.unit.runtime_tools.test_tool_store",
     "tests.unit.runtime_tools.test_tool_catalog_security",
+    "apps.website-studio.tests.test_effect_classification",
     "tests.integration.cli_mcp.test_builtin_surface_effects",
     "tests.unit.workspace.test_data_governance",
 )
@@ -125,11 +126,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="31",
+        suite_version="32",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-01-r31-p4-review-closure-model-revision-tcb21"
+            "2026-09-02-r32-p4-git-effect-authority-tcb22"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

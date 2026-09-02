@@ -9,8 +9,8 @@ from core.runtime.full_workspace_contract import (
 
 
 class FullWorkspaceSecurityContractTest(unittest.TestCase):
-    def test_v14_requires_product_boundary_revocation_probes(self) -> None:
-        self.assertEqual(FULL_WORKSPACE_CONTRACT_REVISION, "codex-baseline-v14")
+    def test_v15_requires_product_boundary_revocation_probes(self) -> None:
+        self.assertEqual(FULL_WORKSPACE_CONTRACT_REVISION, "codex-baseline-v15")
         self.assertEqual(len(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS), 20)
         self.assertTrue(
             {

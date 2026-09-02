@@ -480,6 +480,10 @@ instruction-file or unsupported effect, non-zero exit, timeout, or interrupt
 discards the overlay before it can affect workspace data. Effects cannot appear
 later after a turn cancellation: the execution lease kills complete shell and
 managed-process groups and waits for bounded workers to quiesce before returning.
+Both the read-only and overlay projections first traverse the pinned workspace
+descriptor without following symlinks and mask every root or nested `.git`
+directory/worktree pointer for shell and managed processes; an unsafe entry,
+scan bound, or concurrent directory change denies command preparation.
 Adapter-owned session cleanup also terminates managed processes, closes capture
 descriptors, discards their overlays, and persists a terminal record before the
 generic orphan scan. Newly-created

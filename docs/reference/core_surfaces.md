@@ -205,6 +205,31 @@ read surfaces. Missing or invalid metadata is `unclassified` and therefore
 unavailable to the agentic tool catalog, while the ordinary CLI/MCP surface
 remains backward compatible.
 
+A mixed command or tool may add `effect_class_by_argument` with exactly these
+fields:
+
+- `argument_name`: one top-level string discriminator in the nested invocation
+  arguments;
+- `omitted_effect_class`: the class used only when that discriminator is
+  absent; and
+- `value_effect_classes`: a non-empty exact string-value-to-class map.
+
+The surface-level `effect_class` must be the maximum severity represented by
+the omitted and mapped classes. A non-string or unknown discriminator value, a
+malformed nested argument object, or an incomplete map resolves to
+`unclassified`; it never falls back to `read`.
+
+For hosted execution, an app declaration is a claim rather than execution
+authority. A built-in app read is admitted before effect only when the app id,
+namespaced surface, platform source path, live descriptor bytes, and parsed
+effect metadata match the exact Core-owned audit inventory. Workspace-local or
+external app metadata cannot self-authorize. Mutating, destructive, and
+unclassified app calls still require a separate certified Core pre-effect
+contract. The inventory is versioned at
+`core/runtime/hosted_builtin_app_effect_audit.json` and is part of the certified
+runtime package/TCB. These hosted checks do not change ordinary human/operator
+CLI or MCP invocation behavior.
+
 Do not infer app capabilities from the filesystem alone.
 
 Use:

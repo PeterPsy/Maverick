@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import hashlib
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -23,6 +24,9 @@ from core.mcp.runner import McpRunner
 from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_preflight_resolver,
 )
+from core.runtime.hosted_app_effect_authority import (
+    audited_builtin_app_effect_descriptor_digests,
+)
 from core.runtime.tool_discovery_capabilities import RuntimeToolDiscoveryBroker
 from core.runtime.tool_catalog import RuntimeToolActorContext
 from tests.support.surfaces import SurfaceTestBase
@@ -33,6 +37,27 @@ EFFECT_CLASSES = {"read", "mutating", "destructive"}
 
 
 class BuiltinSurfaceEffectsTest(SurfaceTestBase):
+    def test_builtin_effect_descriptors_match_core_audit_inventory(self) -> None:
+        observed: dict[str, dict[str, str]] = {}
+        for app_root in sorted((REPOSITORY_ROOT / "apps").iterdir()):
+            if not (app_root / "app_contract.json").is_file():
+                continue
+            digests = {}
+            for surface, relative_path in (
+                ("cli", "cli/command_schemas.json"),
+                ("mcp", "mcp/tool_schemas.json"),
+            ):
+                path = app_root / relative_path
+                if path.is_file():
+                    digests[surface] = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digests:
+                observed[app_root.name] = digests
+
+        self.assertEqual(
+            audited_builtin_app_effect_descriptor_digests(),
+            observed,
+        )
+
     def test_every_builtin_app_surface_has_valid_effect_metadata(self) -> None:
         counts = {"cli": 0, "mcp": 0}
         argument_sensitive = 0
@@ -207,6 +232,24 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
                 preflight("core-capability:mcp.call", mcp_arguments, actor)
                 .admitted_before_effect
             )
+            original_read_bytes = Path.read_bytes
+            storage_cli_descriptor = (
+                REPOSITORY_ROOT / "apps" / "storage" / "cli" / "command_schemas.json"
+            ).resolve()
+
+            def tampered_descriptor(path: Path) -> bytes:
+                payload = original_read_bytes(path)
+                return (
+                    payload + b"\n"
+                    if path.resolve() == storage_cli_descriptor
+                    else payload
+                )
+
+            with patch.object(Path, "read_bytes", tampered_descriptor):
+                self.assertFalse(
+                    preflight("core-capability:cli.run", cli_arguments, actor)
+                    .admitted_before_effect
+                )
             self.assertFalse(
                 preflight(
                     "core-capability:cli.run",

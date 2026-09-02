@@ -179,7 +179,7 @@ def probe_workspace_effect_revocation_rollback() -> bool:
 
 
 def probe_workspace_git_metadata_masking() -> bool:
-    """Require real shell and managed-process sandboxes to hide Git metadata."""
+    """Hide root and nested Git metadata in read-only and overlay sandboxes."""
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         runtime_root = root / "runtime"
@@ -187,6 +187,15 @@ def probe_workspace_git_metadata_masking() -> bool:
         git_marker = root / ".git" / "private-marker"
         git_marker.parent.mkdir()
         git_marker.write_text("repository-private", encoding="utf-8")
+        nested_marker = root / "project" / ".git" / "private-marker"
+        nested_marker.parent.mkdir(parents=True)
+        nested_marker.write_text("nested-repository-private", encoding="utf-8")
+        worktree_pointer = root / "worktree" / ".git"
+        worktree_pointer.parent.mkdir(parents=True)
+        worktree_pointer.write_text(
+            "gitdir: /platform/private/worktree\n",
+            encoding="utf-8",
+        )
         capabilities = {
             surface.definition.handle: surface
             for surface in build_core_runtime_tool_capabilities(
@@ -207,50 +216,75 @@ def probe_workspace_git_metadata_masking() -> bool:
             session_id="security-probe-session",
             execution_mode="full-access",
         )
-        shell = capabilities["core-capability:shell.run"].handler(
-            {
-                "argv": [
-                    "/bin/sh",
-                    "-c",
-                    "test ! -e /workspace/.git/private-marker && printf masked",
-                ],
-                "mutation_scopes": [],
-            },
+        instructions = capabilities[
+            "core-capability:workspace.instructions"
+        ].handler(
+            {"path": ".", "target_is_directory": True},
             context,
             None,
         )
-        shell_payload = getattr(shell, "payload", shell)
-        started = capabilities["core-capability:process.start"].handler(
-            {
-                "argv": [
-                    "/bin/sh",
-                    "-c",
-                    "test ! -e /workspace/.git/private-marker && printf masked",
-                ],
-                "mutation_scopes": [],
-            },
-            context,
-            None,
+        scopes = (
+            [],
+            [
+                {
+                    "path": ".",
+                    "instruction_scope_digest": str(
+                        instructions.payload["scope_digest"]
+                    ),
+                }
+            ],
         )
-        process_id = str(getattr(started, "payload", started)["process_id"])
-        process_payload = None
-        for _attempt in range(150):
-            status = capabilities["core-capability:process.status"].handler(
-                {"process_id": process_id},
+        command = (
+            "test ! -e /workspace/.git/private-marker && "
+            "test ! -e /workspace/project/.git/private-marker && "
+            "test ! -s /workspace/worktree/.git && printf masked"
+        )
+        shell_payloads = []
+        process_payloads = []
+        for mutation_scopes in scopes:
+            shell = capabilities["core-capability:shell.run"].handler(
+                {
+                    "argv": ["/bin/sh", "-c", command],
+                    "mutation_scopes": mutation_scopes,
+                },
                 context,
                 None,
             )
-            process_payload = getattr(status, "payload", status)
-            if process_payload["status"] == "exited":
-                break
-            time.sleep(0.01)
+            shell_payloads.append(getattr(shell, "payload", shell))
+            started = capabilities["core-capability:process.start"].handler(
+                {
+                    "argv": ["/bin/sh", "-c", command],
+                    "mutation_scopes": mutation_scopes,
+                },
+                context,
+                None,
+            )
+            process_id = str(getattr(started, "payload", started)["process_id"])
+            process_payload = None
+            for _attempt in range(150):
+                status = capabilities["core-capability:process.status"].handler(
+                    {"process_id": process_id},
+                    context,
+                    None,
+                )
+                process_payload = getattr(status, "payload", status)
+                if process_payload["status"] == "exited":
+                    break
+                time.sleep(0.01)
+            process_payloads.append(process_payload)
         return bool(
-            shell_payload["exit_code"] == 0
-            and shell_payload["output"] == "masked"
-            and process_payload is not None
-            and process_payload["status"] == "exited"
-            and process_payload["exit_code"] == 0
-            and process_payload["output"] == "masked"
+            len(shell_payloads) == len(process_payloads) == 2
+            and all(
+                payload["exit_code"] == 0 and payload["output"] == "masked"
+                for payload in shell_payloads
+            )
+            and all(
+                payload is not None
+                and payload["status"] == "exited"
+                and payload["exit_code"] == 0
+                and payload["output"] == "masked"
+                for payload in process_payloads
+            )
         )
 
 

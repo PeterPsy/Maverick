@@ -2582,11 +2582,17 @@ path exposes Core collaboration/inter-agent commands and tools when authorized,
 without granting them merely because their schema was discovered.
 
 Before executing an app-owned wrapper call, the hosted runtime resolves its
-exact declared effect against the nested invocation arguments. Read-only calls
-may proceed and remain subject to exact-result classification and egress
-policy. Mutating, destructive, or unclassified app calls are denied unless a
-future Core-certified pre-effect contract explicitly governs them; an app
-descriptor cannot self-promote a result to public or mint mutation authority.
+exact declared effect against the nested invocation arguments. The declaration
+is not authority by itself. Read-only calls may proceed only for a platform
+built-in whose app id, namespaced surface, source path, exact live descriptor
+digest, and reparsed execution metadata match the Core-owned effect audit;
+workspace-local and external bundles fail closed at this hosted preflight.
+Admitted reads remain subject to exact-result classification and egress policy.
+Mutating, destructive, or unclassified app calls are denied unless a future
+Core-certified pre-effect contract explicitly governs them; an app descriptor
+cannot self-promote a result to public or mint mutation authority. An operation
+that persists a preview record, runtime session, cache, lazy default, or read
+model is mutating even when its response resembles a read.
 
 The runtime must invoke the selected app through its declared, platform-hosted
 CLI, MCP, backend, or app-interface surface. It must not import an app module,

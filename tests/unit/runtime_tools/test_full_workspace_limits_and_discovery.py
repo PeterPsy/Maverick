@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
@@ -9,10 +12,47 @@ from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.mcp.tool_registry import McpToolRegistry
 from core.runtime.process_control import runtime_processes_alive_for_session
 from core.runtime.tool_errors import RuntimeToolError
+from core.runtime.hosted_workspace_git_metadata import (
+    scan_hosted_workspace_git_metadata,
+)
 from tests.support.cases.full_workspace_contract import FullWorkspaceContractFixture
 
 
 class FullWorkspaceLimitsAndDiscoveryTest(FullWorkspaceContractFixture, unittest.TestCase):
+    def test_git_metadata_scan_is_bounded_and_rejects_symlink_entries(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one").write_text("one", encoding="utf-8")
+            (root / "two").write_text("two", encoding="utf-8")
+            root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with patch(
+                    "core.runtime.hosted_workspace_git_metadata."
+                    "MAX_HOSTED_GIT_SCAN_ENTRIES",
+                    1,
+                ):
+                    with self.assertRaisesRegex(
+                        RuntimeToolError,
+                        "workspace_shell_git_metadata_scan_too_large",
+                    ):
+                        scan_hosted_workspace_git_metadata(root_fd)
+            finally:
+                os.close(root_fd)
+
+            (root / "one").unlink()
+            (root / "two").unlink()
+            (root / "private").mkdir()
+            (root / ".git").symlink_to(root / "private", target_is_directory=True)
+            root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                with self.assertRaisesRegex(
+                    RuntimeToolError,
+                    "workspace_shell_git_metadata_unsafe",
+                ):
+                    scan_hosted_workspace_git_metadata(root_fd)
+            finally:
+                os.close(root_fd)
+
     def test_shell_masks_git_worktree_pointer_file(self) -> None:
         (self.workspace / ".git").write_text(
             "gitdir: /platform/private/worktree\n",

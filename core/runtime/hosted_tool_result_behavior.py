@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
+from core.apps.surface_descriptors import (
+    app_cli_command_execution_metadata,
+    app_mcp_tool_execution_metadata,
+)
 from core.runtime.hosted_filesystem_result_behavior import (
     FILESYSTEM_RESULT_BEHAVIOR_IDS,
     inspect_hosted_filesystem_result_behavior,
@@ -21,10 +26,9 @@ from core.runtime.public_content_authority import (
     build_runtime_public_content_authority_record,
 )
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
-from core.shared.tool_effects import ToolArgumentEffectMap
 
 
-HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 5
+HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 6
 HOSTED_REQUIRED_RESULT_BEHAVIOR_HANDLES = (
     *FILESYSTEM_RESULT_BEHAVIOR_IDS,
     "core-capability:shell.run",
@@ -55,22 +59,35 @@ class _Processes:
 
 def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
     """Exercise concrete classification, pairing, and pre-effect policy behavior."""
+    storage_root = Path(__file__).resolve().parents[2] / "apps" / "storage"
+    cli_metadata = app_cli_command_execution_metadata(storage_root, "storage")
+    mcp_metadata = app_mcp_tool_execution_metadata(storage_root, "maverick_storage")
     definitions = {
-        "fixture.app-mixed": SimpleNamespace(
-            effect_class="destructive",
+        "app.storage.storage": SimpleNamespace(
+            effect_class=cli_metadata.effect_class,
             owner_kind="app",
+            owner_id="storage",
+            entrypoint_path=str((storage_root / "cli" / "app_cli.py").resolve()),
             schema_public=False,
             certified_tcb_component=None,
             agentic_result_data_class=None,
-            argument_effects=ToolArgumentEffectMap(
-                argument_name="action",
-                omitted_effect_class="read",
-                value_effect_classes=(
-                    ("catalog", "read"),
-                    ("write", "mutating"),
-                    ("delete", "destructive"),
-                ),
-            ),
+            supports_idempotency=cli_metadata.supports_idempotency,
+            safe_to_retry=cli_metadata.safe_to_retry,
+            argument_effects=cli_metadata.argument_effects,
+            command_id="app.storage.storage",
+        ),
+        "app.storage.maverick_storage": SimpleNamespace(
+            effect_class=mcp_metadata.effect_class,
+            owner_kind="app",
+            owner_id="storage",
+            entrypoint_path=str((storage_root / "mcp" / "server.py").resolve()),
+            schema_public=False,
+            certified_tcb_component=None,
+            agentic_result_data_class=None,
+            supports_idempotency=mcp_metadata.supports_idempotency,
+            safe_to_retry=mcp_metadata.safe_to_retry,
+            argument_effects=mcp_metadata.argument_effects,
+            tool_name="app.storage.maverick_storage",
         ),
     }
     registry = _Definitions(definitions)
@@ -116,14 +133,14 @@ def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
         "core-capability:cli.list": ({},),
         "core-capability:cli.run": (
             {
-                "command_id": "fixture.app-mixed",
+                "command_id": "app.storage.storage",
                 "arguments": {"action": "catalog"},
             },
         ),
         "core-capability:mcp.list": ({},),
         "core-capability:mcp.call": (
             {
-                "tool_name": "fixture.app-mixed",
+                "tool_name": "app.storage.maverick_storage",
                 "arguments": {"action": "catalog"},
             },
         ),
@@ -131,21 +148,21 @@ def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
     denied_app_effects = {
         "core-capability:cli.run": (
             {
-                "command_id": "fixture.app-mixed",
-                "arguments": {"action": "write"},
+                "command_id": "app.storage.storage",
+                "arguments": {"action": "write_file"},
             },
             {
-                "command_id": "fixture.app-mixed",
+                "command_id": "app.storage.storage",
                 "arguments": {"action": "unknown"},
             },
         ),
         "core-capability:mcp.call": (
             {
-                "tool_name": "fixture.app-mixed",
-                "arguments": {"action": "delete"},
+                "tool_name": "app.storage.maverick_storage",
+                "arguments": {"action": "delete_file"},
             },
             {
-                "tool_name": "fixture.app-mixed",
+                "tool_name": "app.storage.maverick_storage",
                 "arguments": {"action": "unknown"},
             },
         ),

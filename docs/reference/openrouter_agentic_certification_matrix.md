@@ -1,10 +1,10 @@
 # OpenRouter DeepSeek agentic certification matrix
 
-Status date: 2026-09-01
-Matrix revision: `2026-09-01-r31-p4-review-closure-model-revision-tcb21`
+Status date: 2026-09-02
+Matrix revision: `2026-09-02-r32-p4-git-effect-authority-tcb22`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==27`
+Adapter: `maverick-hosted-tool-loop==28`
 
 ## Preview combination
 
@@ -13,8 +13,8 @@ Adapter: `maverick-hosted-tool-loop==27`
 | Model provider | `openrouter` |
 | Model | `deepseek/deepseek-v4-flash` |
 | Model revision policy | `provider_alias`; identity `openrouter-catalog-2026-08-17`, with exact endpoint/upstream catalog constraints |
-| Immutable profile revision | `34` (revision `33` suspended) |
-| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v14` |
+| Immutable profile revision | `35` (revision `34` suspended) |
+| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v15` |
 | Protocol | OpenAI-compatible streaming Chat Completions |
 | API version | `v1` |
 | Endpoint | `https://openrouter.ai/api/v1/chat/completions` |
@@ -32,7 +32,7 @@ Adapter: `maverick-hosted-tool-loop==27`
 | Turn cost ceiling | 250,000 micro-USD; 70,000 remains protected for the two terminal attempts |
 | Final request | exact Core finalization instruction; `tools: []`; `tool_choice: none` |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | Full Workspace `codex-baseline-v14` surface: all 20 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result contract; every app CLI/MCP surface has conservative effect metadata, real Storage reads execute, unknown/mutating app operations fail closed, raw/base64/chunked reads retain complete-resource taint, provider transport revalidates live authority before every stream advance, and shell/process effects remain rollbackable with `.git` masked; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
+| Tool handles | Full Workspace `codex-baseline-v15` surface: all 20 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result contract; app reads require a Core-audited built-in descriptor, Website preview persistence is mutating, unknown/mutating app operations fail closed, raw/base64/chunked reads retain complete-resource taint, provider transport revalidates live authority before every stream advance, and shell/process effects remain rollbackable with every root/nested `.git` masked in read-only and overlay modes; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 30 days |
 
 The current OpenRouter model catalog lists `deepinfra/fp8` as active for
@@ -91,7 +91,7 @@ Primary references:
 | --- | --- | --- |
 | Exact request translation | deterministic payload, omission of unsupported `parallel_tool_calls`, and relaxed-router-control rejection fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@8`; exact byte-bound classifications, lexical no-symlink skill identity, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, and journal evidence | not certified |
-| Certified execution TCB | manifest v21 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, request/transport revalidation, full-workspace confinement/process/discovery/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v22 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/preflight/artifact surface, input/result admission, raw-resource classification, request/transport revalidation, full-workspace confinement/process/discovery/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
 | Endpoint catalog preflight | exact model and ZDR records must both support every endpoint-gated translated parameter, `tool_choice:none`, DeepInfra FP8 identity, active status, total input-plus-output context, and completion budget | not certified |
 | SSE ordering and bounds | shared bounded SSE plus OpenRouter transport fixtures | not certified |
 | Effective upstream | response identity and terminal router-metadata mismatch fixtures | not certified |
@@ -101,7 +101,7 @@ Primary references:
 | Multi-step continuation | deterministic fixtures for three sequential tool rounds followed by a final response at every reasoning effort | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, pairing-safe semantic history compaction, request-scoped authority replacement, bounded byte-correct tool-result artifacts, explicit attachment workspace references, and safe-next-turn steering fallback | not certified |
-| Full Workspace behavioral gate | `codex-baseline-v14` executes 13 positive result workflows plus production-composed raw/base64/chunk marker narrowing, revoke-then-rebuild, delayed-egress-after-revocation, post-preflight transport revocation, revoke-between-provider-events, overlay-commit rollback, and shell/process `.git` masking probes instead of trusting declared mode strings or isolated helpers | repository gate complete: 20/20 behaviors; signed provider certification not run |
+| Full Workspace behavioral gate | `codex-baseline-v15` executes 13 positive result workflows plus production-composed raw/base64/chunk marker narrowing, revoke-then-rebuild, delayed-egress-after-revocation, post-preflight transport revocation, revoke-between-provider-events, overlay-commit rollback, and recursive shell/process `.git` masking probes instead of trusting declared mode strings or isolated helpers | repository gate complete: 20/20 behaviors; signed provider certification not run |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Reasoning isolation | exact private `reasoning_details` replay and public-event leakage assertions | not certified |
 | Usage, generation id and price | success and decode-failure fixtures retain telemetry; active request reservations reconcile to reported micro-USD while missing usage remains worst-case | not certified |
@@ -117,7 +117,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r31 |
+| Live capability probe | operator-only catalog/ZDR preflight including `tool_choice:none` and total context capacity, then three sequential real-filesystem-list rounds plus one explicitly tool-less final response at every certificate-bound reasoning effort | manifest step available; not run for r32 |
 
 The table defines required coverage and does not report a completed run.
 Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -378,6 +378,17 @@ retained in the certification manifest. The production-composed
 definition remains uncertified, unbound, contained, and unavailable; no live
 probe, signed run, provider completion, certificate, canary, or remote
 activation has been performed.
+
+Revision 35 pins adapter 28, governed recipe 15, suite 32, matrix
+`2026-09-02-r32-p4-git-effect-authority-tcb22`, and TCB manifest v22. Core now
+recursively masks root and nested Git directories/worktree pointers in shell
+and managed-process read-only and overlay mounts. Hosted built-in app reads
+require the exact Core-owned descriptor audit; Website Studio preview creation
+and document caching are mutating, while persistent pre/post tests cover every
+remaining declared read. The strengthened `codex-baseline-v15` gate remains
+20/20. The immutable definition remains uncertified, unbound, contained, and
+unavailable; no live probe, signed run, provider completion, certificate,
+canary, or remote activation has been performed.
 
 ## Fail-closed conditions
 

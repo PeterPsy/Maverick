@@ -102,6 +102,15 @@ class FullWorkspaceShellContractTest(FullWorkspaceContractFixture, unittest.Test
         git_marker = self.workspace / ".git" / "private-marker"
         git_marker.parent.mkdir(parents=True, exist_ok=True)
         git_marker.write_text("repository-private", encoding="utf-8")
+        nested_git_marker = self.workspace / "project" / ".git" / "private-marker"
+        nested_git_marker.parent.mkdir(parents=True, exist_ok=True)
+        nested_git_marker.write_text("nested-repository-private", encoding="utf-8")
+        worktree_pointer = self.workspace / "worktree" / ".git"
+        worktree_pointer.parent.mkdir(parents=True, exist_ok=True)
+        worktree_pointer.write_text(
+            "gitdir: /platform/private/nested-worktree\n",
+            encoding="utf-8",
+        )
         shell = capabilities["core-capability:shell.run"].handler(
             {
                 "argv": [
@@ -112,6 +121,8 @@ class FullWorkspaceShellContractTest(FullWorkspaceContractFixture, unittest.Test
                         "test ! -e /etc/passwd && "
                         "test ! -e /workspace/runtime/private-marker && "
                         "test ! -e /workspace/.git/private-marker && "
+                        "test ! -e /workspace/project/.git/private-marker && "
+                        "test ! -s /workspace/worktree/.git && "
                         f"test ! -e {self.workspace!s} && printf confined"
                     ),
                 ],
@@ -153,6 +164,8 @@ class FullWorkspaceShellContractTest(FullWorkspaceContractFixture, unittest.Test
                     (
                         "test ! -e /workspace/runtime/private-marker && "
                         "test ! -e /workspace/.git/private-marker && "
+                        "test ! -e /workspace/project/.git/private-marker && "
+                        "test ! -s /workspace/worktree/.git && "
                         "read value; printf 'received:%s' \"$value\""
                     ),
                 ],
@@ -181,6 +194,78 @@ class FullWorkspaceShellContractTest(FullWorkspaceContractFixture, unittest.Test
         self.assertEqual(status.payload["status"], "exited")
         self.assertEqual(status.payload["output"], "received:hello")
         self.assertFalse(runtime_processes_alive_for_session("session-hosted"))
+
+    def test_shell_and_process_overlays_mask_nested_git_metadata(self) -> None:
+        (self.workspace / "AGENTS.md").write_text(
+            "Nested Git metadata must stay private.\n",
+            encoding="utf-8",
+        )
+        nested_marker = self.workspace / "project" / ".git" / "private-marker"
+        nested_marker.parent.mkdir(parents=True)
+        nested_marker.write_text("nested-private", encoding="utf-8")
+        pointer = self.workspace / "worktree" / ".git"
+        pointer.parent.mkdir(parents=True)
+        pointer.write_text(
+            "gitdir: /platform/private/worktree\n",
+            encoding="utf-8",
+        )
+        capabilities = self._capabilities(processes=True)
+        scope_digest = self._scope_digest(
+            capabilities,
+            ".",
+            target_is_directory=True,
+        )
+        mutation_scopes = [
+            {
+                "path": ".",
+                "instruction_scope_digest": scope_digest,
+            }
+        ]
+        probe = (
+            "test ! -e /workspace/project/.git/private-marker && "
+            "test ! -s /workspace/worktree/.git"
+        )
+
+        shell = capabilities["core-capability:shell.run"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    f"{probe} && printf shell > shell-overlay.txt",
+                ],
+                "mutation_scopes": mutation_scopes,
+            },
+            self.context,
+            None,
+        )
+        self.assertEqual(shell["exit_code"], 0)
+        self.assertEqual(
+            (self.workspace / "shell-overlay.txt").read_text(encoding="utf-8"),
+            "shell",
+        )
+
+        started = capabilities["core-capability:process.start"].handler(
+            {
+                "argv": [
+                    "/bin/sh",
+                    "-c",
+                    f"{probe} && printf process > process-overlay.txt",
+                ],
+                "mutation_scopes": mutation_scopes,
+            },
+            self.context,
+            None,
+        )
+        status = self._wait_for_process(
+            capabilities,
+            str(started.payload["process_id"]),
+        )
+        self.assertEqual(status.payload["status"], "exited")
+        self.assertEqual(status.payload["exit_code"], 0)
+        self.assertEqual(
+            (self.workspace / "process-overlay.txt").read_text(encoding="utf-8"),
+            "process",
+        )
 
 
 if __name__ == "__main__":

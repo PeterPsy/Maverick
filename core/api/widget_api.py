@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core.api.app_frame_browser import is_app_frame_isolation_active
 from core.api.app_mounts import is_public_app_static_asset, serve_frontend
 from core.api.http import StartResponse, json_response, query_params, read_json_body, text_response
 from core.api.platform_state import PlatformState
@@ -163,7 +164,11 @@ def handle_widget_api(
         return json_response(start_response, {"context": payload})
 
     if path.startswith("/api/apps/widgets/") and "/frontend" in path and method in {"GET", "HEAD"}:
-        if not public_widget_static_asset and environ.get("maverick.app_frame_proxy") is not True:
+        if (
+            not public_widget_static_asset
+            and environ.get("maverick.app_frame_proxy") is not True
+            and is_app_frame_isolation_active(environ)
+        ):
             return json_response(
                 start_response,
                 {"error": "app_frame_isolation_required"},

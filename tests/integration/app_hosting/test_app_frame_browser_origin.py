@@ -26,6 +26,49 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
     def test_launch_bootstrap_authority_and_document_isolation(self) -> None:
         asyncio.run(self._assert_origin_contract())
 
+    def test_same_origin_launch_mode(self) -> None:
+        asyncio.run(self._assert_same_origin_contract())
+
+    async def _assert_same_origin_contract(self) -> None:
+        import os
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(Path(temp_dir))
+            state = self._state_with_frontend(repo_root)
+            app = PlatformAsgiHost(state)
+            platform_host = "maverick.localhost:8000"
+            platform_origin = f"http://{platform_host}"
+            platform_cookie = await self._login(app, host=platform_host)
+
+            with patch.dict(os.environ, {"MAVERICK_APP_FRAME_ISOLATION_MODE": "same_origin"}):
+                launch_status, launch_body, launch_headers = await self._invoke(
+                    app,
+                    host=platform_host,
+                    path=APP_FRAME_LAUNCH_PATH,
+                    method="POST",
+                    body=json.dumps({"app_id": "frame-demo", "path": "/apps/frame-demo/"}).encode(),
+                    headers={
+                        "content-type": "application/json",
+                        "cookie": platform_cookie,
+                        "origin": platform_origin,
+                    },
+                )
+                self.assertEqual(launch_status, 200)
+                launch = json.loads(launch_body)
+                self.assertEqual(launch["mode"], "same_origin")
+                self.assertEqual(launch["origin"], platform_origin)
+                self.assertEqual(launch["launch_url"], "/apps/frame-demo/")
+
+                direct_status, direct_body, direct_headers = await self._invoke(
+                    app,
+                    host=platform_host,
+                    path="/apps/frame-demo/",
+                    headers={"cookie": platform_cookie},
+                )
+                self.assertEqual(direct_status, 200)
+                self.assertIn(b"frame-demo", direct_body)
+
     async def _assert_origin_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(Path(temp_dir))

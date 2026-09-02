@@ -11,12 +11,32 @@ import { setMaverickFrameOrigin } from "../iframePolicy";
 
 const APP_FRAME_LAUNCH_PATH = "/api/app-frames/browser-launch";
 
-type AppFrameLaunch = {
+type IsolatedAppFrameLaunch = {
   bootstrap_url: string;
   method: "POST";
+  mode?: "isolated";
   origin: string;
   ticket: string;
   ticket_field: "ticket";
+};
+
+type SameOriginAppFrameLaunch = {
+  launch_url: string;
+  mode: "same_origin";
+  origin: string;
+};
+
+type AppFrameLaunch = IsolatedAppFrameLaunch | SameOriginAppFrameLaunch;
+
+type RawLaunchPayload = {
+  bootstrap_url?: string;
+  error?: unknown;
+  launch_url?: string;
+  method?: string;
+  mode?: string;
+  origin?: string;
+  ticket?: string;
+  ticket_field?: string;
 };
 
 type IsolatedMaverickFrameProps = Omit<IframeHTMLAttributes<HTMLIFrameElement>, "name" | "src"> & {
@@ -40,11 +60,16 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
       void requestAppFrameLaunch(appId, launchPath, controller.signal)
         .then((launch) => {
           if (controller.signal.aborted || frameRef.current !== frame) return;
-          setMaverickFrameOrigin(frame, launch.origin);
-          submitBootstrapForm(frame, launch);
-          armTimer = window.setTimeout(() => {
+          setMaverickFrameOrigin(frame, launch.origin, launch.mode === "same_origin");
+          if (launch.mode === "same_origin") {
+            frame.src = launch.launch_url;
             frame.dataset.maverickFrameBootstrapArmed = "true";
-          }, 0);
+          } else {
+            submitBootstrapForm(frame, launch);
+            armTimer = window.setTimeout(() => {
+              frame.dataset.maverickFrameBootstrapArmed = "true";
+            }, 0);
+          }
         })
         .catch((error: unknown) => {
           if (controller.signal.aborted) return;
@@ -88,17 +113,28 @@ export async function requestAppFrameLaunch(
     method: "POST",
     signal,
   });
-  const payload = await response.json().catch(() => ({})) as Partial<AppFrameLaunch> & { error?: unknown };
+  const payload = (await response.json().catch(() => ({}))) as RawLaunchPayload;
   if (!response.ok) {
     throw new Error(typeof payload.error === "string" ? payload.error : "Unable to launch isolated app frame.");
   }
   const origin = exactOrigin(payload.origin);
+  if (payload.mode === "same_origin") {
+    const launchUrl = typeof payload.launch_url === "string" && payload.launch_url.startsWith("/")
+      ? payload.launch_url
+      : launchPath;
+    return {
+      launch_url: launchUrl,
+      mode: "same_origin",
+      origin: window.location.origin,
+    };
+  }
+  if (!origin || origin === window.location.origin) {
+    throw new Error("Core returned an invalid isolated app-frame launch.");
+  }
   const bootstrap = new URL(String(payload.bootstrap_url || ""));
   const ticket = String(payload.ticket || "");
   if (
-    !origin
-    || origin === window.location.origin
-    || bootstrap.origin !== origin
+    bootstrap.origin !== origin
     || payload.method !== "POST"
     || payload.ticket_field !== "ticket"
     || !ticket
@@ -110,13 +146,14 @@ export async function requestAppFrameLaunch(
   return {
     bootstrap_url: bootstrap.href,
     method: "POST",
+    mode: "isolated",
     origin,
     ticket,
     ticket_field: "ticket",
   };
 }
 
-function submitBootstrapForm(frame: HTMLIFrameElement, launch: AppFrameLaunch) {
+function submitBootstrapForm(frame: HTMLIFrameElement, launch: IsolatedAppFrameLaunch) {
   const form = document.createElement("form");
   form.action = launch.bootstrap_url;
   form.method = launch.method;

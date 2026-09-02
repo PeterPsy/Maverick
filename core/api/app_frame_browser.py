@@ -45,6 +45,22 @@ _DOMAIN_PATTERN = re.compile(
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
+def app_frame_isolation_mode(environ: dict[str, Any] | None = None) -> str:
+    """Return the configured app-frame isolation mode ('isolated' or 'same_origin')."""
+    configured = os.environ.get("MAVERICK_APP_FRAME_ISOLATION_MODE", "").strip().lower()
+    if configured in {"isolated", "same_origin"}:
+        return configured
+    sidecar_mode = os.environ.get("MAVERICK_SIDECAR_ORIGIN_MODE", "").strip().lower()
+    if sidecar_mode == "disabled":
+        return "same_origin"
+    return "isolated"
+
+
+def is_app_frame_isolation_active(environ: dict[str, Any] | None = None) -> bool:
+    """Return whether app frames require a distinct isolated browser origin."""
+    return app_frame_isolation_mode(environ) == "isolated"
+
+
 def handle_app_frame_browser_launch(
     state: PlatformState,
     context: RequestSession | None,
@@ -78,6 +94,16 @@ def handle_app_frame_browser_launch(
             mount_app_id=binding.mount_app_id or binding.app_id,
         )
         platform_origin = _request_platform_origin(environ)
+        if not is_app_frame_isolation_active(environ):
+            return json_response(
+                start_response,
+                {
+                    "mode": "same_origin",
+                    "origin": platform_origin,
+                    "launch_url": clean_path,
+                },
+                headers=_launch_headers(),
+            )
         origin, host, secure = _isolated_origin(
             environ,
             label=_app_frame_label(

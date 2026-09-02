@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives import serialization
 
 
 SIDECAR_TLS_PROBE_LABEL = "sc-000000000000000000000000"
+APP_FRAME_TLS_PROBE_LABEL = "af-000000000000000000000000"
 
 
 def hosted_sidecar_tls_errors(
@@ -91,7 +92,11 @@ def sidecar_tls_probe_url(hostname: str) -> str:
     return f"https://{SIDECAR_TLS_PROBE_LABEL}.sidecars.{hostname}/"
 
 
-def sidecar_tls_origin_becomes_healthy(
+def app_frame_tls_probe_url(hostname: str) -> str:
+    return f"https://{APP_FRAME_TLS_PROBE_LABEL}.sidecars.{hostname}/"
+
+
+def hosted_browser_origin_becomes_healthy(
     url: str,
     *,
     timeout_seconds: float,
@@ -101,15 +106,15 @@ def sidecar_tls_origin_becomes_healthy(
 ) -> bool:
     total_attempts = max(1, attempts)
     for attempt in range(total_attempts):
-        if sidecar_tls_origin_is_healthy(url, timeout_seconds=timeout_seconds):
+        if hosted_browser_origin_is_healthy(url, timeout_seconds=timeout_seconds):
             return True
         if attempt < total_attempts - 1 and delay_seconds > 0:
             sleep_func(delay_seconds)
     return False
 
 
-def sidecar_tls_origin_is_healthy(url: str, *, timeout_seconds: float) -> bool:
-    """Verify public DNS/TLS and that Core recognizes one reserved sidecar host."""
+def hosted_browser_origin_is_healthy(url: str, *, timeout_seconds: float) -> bool:
+    """Verify public DNS/TLS and one reserved hosted-browser origin route."""
     try:
         with request.urlopen(url, timeout=timeout_seconds) as response:
             return 200 <= response.status < 300

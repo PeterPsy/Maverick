@@ -24,8 +24,9 @@ from core.secrets.service import create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
 from core.shared.json_file_collection import JsonFileCollection
 from core.shared.installer_tls import (
+    app_frame_tls_probe_url,
+    hosted_browser_origin_becomes_healthy,
     hosted_sidecar_tls_errors,
-    sidecar_tls_origin_becomes_healthy,
     sidecar_tls_probe_url,
 )
 from core.shared.node_runtime import node_runtime_diagnostic
@@ -520,14 +521,17 @@ def check_health(
         for url in urls
     }
     if config.hosted_sidecars and config.hostname:
-        sidecar_url = sidecar_tls_probe_url(config.hostname)
-        results[sidecar_url] = sidecar_tls_origin_becomes_healthy(
-            sidecar_url,
-            timeout_seconds=timeout_seconds,
-            attempts=attempts,
-            delay_seconds=delay_seconds,
-            sleep_func=sleep_func,
-        )
+        for browser_origin_url in (
+            sidecar_tls_probe_url(config.hostname),
+            app_frame_tls_probe_url(config.hostname),
+        ):
+            results[browser_origin_url] = hosted_browser_origin_becomes_healthy(
+                browser_origin_url,
+                timeout_seconds=timeout_seconds,
+                attempts=attempts,
+                delay_seconds=delay_seconds,
+                sleep_func=sleep_func,
+            )
     return results
 
 

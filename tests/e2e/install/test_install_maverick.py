@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -288,7 +288,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertEqual(mocked_probe.call_count, 4)
         self.assertEqual(sleeps, [0.25, 0.25])
 
-    def test_check_health_probes_one_real_hosted_sidecar_origin_shape(self) -> None:
+    def test_check_health_probes_sidecar_and_app_frame_origin_shapes(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         config = replace(
             self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
@@ -296,14 +296,22 @@ class InstallerRenderingTestCase(unittest.TestCase):
         )
 
         with patch("core.shared.installer._url_is_healthy", return_value=True), patch(
-            "core.shared.installer_tls.sidecar_tls_origin_is_healthy",
+            "core.shared.installer_tls.hosted_browser_origin_is_healthy",
             return_value=True,
         ) as mocked_sidecar_probe:
             result = check_health(config, attempts=1)
 
         sidecar_url = "https://sc-000000000000000000000000.sidecars.maverick.example.test/"
+        app_frame_url = "https://af-000000000000000000000000.sidecars.maverick.example.test/"
         self.assertEqual(result[sidecar_url], True)
-        mocked_sidecar_probe.assert_called_once_with(sidecar_url, timeout_seconds=5.0)
+        self.assertEqual(result[app_frame_url], True)
+        self.assertEqual(
+            mocked_sidecar_probe.call_args_list,
+            [
+                call(sidecar_url, timeout_seconds=5.0),
+                call(app_frame_url, timeout_seconds=5.0),
+            ],
+        )
 
 
 class InstallerFlowTestCase(unittest.TestCase):

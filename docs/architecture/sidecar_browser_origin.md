@@ -224,10 +224,12 @@ for the exact `*.sidecars.<installation-domain>` wildcard, and verifies that
 the public keys match. File existence or a certificate for one opaque hostname
 is not sufficient. The installer renders the three core environment values
 above and adds a dedicated Nginx wildcard server without `X-Frame-Options`.
-Post-apply health verification opens a reserved `sc-<opaque>` origin with the
-normal system trust store and requires Core's unauthenticated sidecar-session
-denial; this checks wildcard DNS, hostname validation, TLS termination, Nginx
-routing, and Core host recognition together. The platform server may retain
+Post-apply health verification opens reserved `sc-<opaque>` and `af-<opaque>`
+origins with the normal system trust store and requires Core's unauthenticated
+session denial from each; this checks wildcard DNS, hostname validation, TLS
+termination, Nginx routing, and both Core host routers together. A failure does
+not fall back to executable documents on the platform origin. The platform
+server may retain
 `X-Frame-Options: SAMEORIGIN`; that header must never be inherited by the
 distinct sidecar server.
 

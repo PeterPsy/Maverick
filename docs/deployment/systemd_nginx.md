@@ -85,12 +85,15 @@ ASGI core, disables response buffering for SSE, and deliberately omits
 `X-Frame-Options`; core supplies the exact CSP `frame-ancestors` policy.
 
 After live apply, the mandatory health pass connects with the normal system
-trust store to a reserved `sc-<opaque>.sidecars.<installation-domain>` host and
-requires Core's expected unauthenticated sidecar-session response. This is a
-single gate for wildcard DNS, certificate hostname validation, Nginx routing,
-and Core host recognition. A certificate for one already-known opaque hostname
-is never an accepted recovery mode: a workspace or generation change produces
-a different hostname and would strand Design Studio again.
+trust store to reserved `sc-<opaque>.sidecars.<installation-domain>` and
+`af-<opaque>.sidecars.<installation-domain>` hosts and requires Core's expected
+unauthenticated session response from both routers. This is a single gate for
+wildcard DNS, certificate hostname validation, Nginx routing, sidecar routing,
+and app-frame routing. A certificate for one or more already-known opaque hosts
+is never an accepted recovery mode: a workspace, app, generation, or login
+session change produces a different hostname. Do not set a same-origin
+app-frame override to recover availability; executable app/widget documents
+remain isolated or fail closed.
 
 Use `--render-only` to stop after rendering.
 

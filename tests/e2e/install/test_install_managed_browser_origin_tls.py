@@ -20,6 +20,31 @@ from tests.e2e.install.installer_test_support import make_installer_config
 
 
 class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
+    def test_existing_platform_tls_keeps_managed_origin_bootstrap_http_only(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = replace(
+            make_installer_config(
+                repo_root,
+                hostname="maverick.example.test",
+                local_only=False,
+            ),
+            hosted_sidecars=True,
+            browser_origin_tls_mode="managed_exact",
+        )
+
+        with (
+            patch("core.shared.installer._tls_certificate_files_exist", return_value=True),
+            patch(
+                "core.shared.installer._managed_browser_origin_probe_files_exist",
+                return_value=False,
+            ),
+        ):
+            nginx = render_install_plan(config)[config.nginx_conf_path]
+
+        self.assertIn("server_name *.sidecars.maverick.example.test;", nginx)
+        self.assertIn("location ^~ /.well-known/acme-challenge/", nginx)
+        self.assertNotIn("$maverick_browser_origin_cert_host", nginx)
+
     def test_rendered_nginx_loads_only_validated_exact_host_certificates(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         config = replace(

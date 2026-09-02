@@ -162,6 +162,10 @@ def render_nginx_config(config: InstallerConfig, *, force_https: bool = False) -
             template_name = (
                 "maverick.sidecars.managed.example.conf"
                 if https_ready
+                and (
+                    force_https
+                    or _managed_browser_origin_probe_files_exist(config)
+                )
                 else "maverick.sidecars.managed.http.conf"
             )
             rendered += "\n" + _render_template(
@@ -749,6 +753,24 @@ def _tls_certificate_files_exist(config: InstallerConfig) -> bool:
         return Path(config.tls_certificate_path).is_file() and Path(config.tls_certificate_key_path).is_file()
     except OSError:
         return False
+
+
+def _managed_browser_origin_probe_files_exist(config: InstallerConfig) -> bool:
+    if not config.hostname:
+        return False
+    served_root = Path(config.managed_browser_origin_tls_root) / "served" / "hosts"
+    for probe_url in (
+        sidecar_tls_probe_url(config.hostname),
+        app_frame_tls_probe_url(config.hostname),
+    ):
+        host = probe_url.removeprefix("https://").removesuffix("/")
+        current = served_root / host / "current"
+        try:
+            if not (current / "fullchain.pem").is_file() or not (current / "privkey.pem").is_file():
+                return False
+        except OSError:
+            return False
+    return True
 
 
 def _read_env_file(path: Path) -> dict[str, str]:

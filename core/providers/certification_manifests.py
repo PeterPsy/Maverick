@@ -88,6 +88,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_tools.test_filesystem_mutation_lineage",
     "tests.unit.runtime_tools.test_filesystem_mutation_lineage_integration",
     "tests.unit.runtime_tools.test_full_workspace_contract",
+    "tests.unit.runtime_tools.test_full_workspace_git_snapshot_contract",
     "tests.unit.runtime_tools.test_full_workspace_instruction_scope_contract",
     "tests.unit.runtime_tools.test_full_workspace_limits_and_discovery",
     "tests.unit.runtime_tools.test_full_workspace_metadata_contract",
@@ -98,6 +99,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_tools.test_hosted_agentic_factory_dispatch",
     "tests.unit.runtime_tools.test_hosted_agentic_lifecycle_boundaries",
     "tests.unit.runtime_tools.test_hosted_agentic_tool_execution",
+    "tests.unit.runtime_tools.test_hosted_collaboration_contract",
     "tests.unit.runtime_tools.test_hosted_result_security_behavior",
     "tests.unit.runtime_tools.test_hosted_tool_result_admission",
     "tests.unit.runtime_tools.test_hosted_tool_result_public_authority",
@@ -126,11 +128,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="32",
+        suite_version="33",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-02-r32-p4-git-effect-authority-tcb22"
+            "2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

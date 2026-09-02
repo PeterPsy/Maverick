@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from core.runtime.confined_filesystem import (
     ConfinedWorkspaceFilesystem,
@@ -67,6 +68,7 @@ def build_core_runtime_tool_capabilities(
     mcp_registry=None,
     tool_ledger=None,
     result_classification_resolver=None,
+    workspace_spawn_observer: Callable[[str], None] | None = None,
 ) -> tuple[RuntimeCoreCapabilitySurface, ...]:
     """Build workspace-bound Core capabilities over one fd-relative boundary."""
     filesystem = ConfinedWorkspaceFilesystem(
@@ -228,6 +230,7 @@ def build_core_runtime_tool_capabilities(
             result_classification_resolver=result_classification_resolver,
             result_context=context,
             result_arguments=arguments,
+            spawn_observer=workspace_spawn_observer,
         )
 
     base = (

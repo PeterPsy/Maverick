@@ -179,7 +179,7 @@ def probe_workspace_effect_revocation_rollback() -> bool:
 
 
 def probe_workspace_git_metadata_masking() -> bool:
-    """Hide root and nested Git metadata in read-only and overlay sandboxes."""
+    """Snapshot-isolate Git metadata, including post-spawn create/rename races."""
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         runtime_root = root / "runtime"
@@ -196,15 +196,34 @@ def probe_workspace_git_metadata_masking() -> bool:
             "gitdir: /platform/private/worktree\n",
             encoding="utf-8",
         )
+        race = {"case": "", "observed": ""}
+
+        def create_post_spawn_git(kind: str) -> None:
+            case = race["case"]
+            if not case:
+                raise RuntimeError("workspace snapshot race case missing")
+            created = root / case / "create" / ".git"
+            created.mkdir(parents=True)
+            (created / "private-marker").write_text(
+                "LEAKED-GIT-METADATA",
+                encoding="utf-8",
+            )
+            rename_parent = root / case / "rename"
+            (rename_parent / "pending").rename(rename_parent / ".git")
+            race["observed"] = kind
+
+        process_registry = HostedToolProcessRegistry(
+            store=_runtime_store(root, runtime_root),
+            spawn_observer=create_post_spawn_git,
+        )
         capabilities = {
             surface.definition.handle: surface
             for surface in build_core_runtime_tool_capabilities(
                 workspace_id=_WORKSPACE_ID,
                 workspace_root=root,
                 runtime_root=runtime_root,
-                process_registry=HostedToolProcessRegistry(
-                    store=_runtime_store(root, runtime_root)
-                ),
+                process_registry=process_registry,
+                workspace_spawn_observer=create_post_spawn_git,
             )
         }
         context = RuntimeToolActorContext(
@@ -234,14 +253,25 @@ def probe_workspace_git_metadata_masking() -> bool:
                 }
             ],
         )
-        command = (
+        static_command = (
             "test ! -e /workspace/.git/private-marker && "
             "test ! -e /workspace/project/.git/private-marker && "
-            "test ! -s /workspace/worktree/.git && printf masked"
+            "test ! -s /workspace/worktree/.git"
         )
         shell_payloads = []
         process_payloads = []
-        for mutation_scopes in scopes:
+        for index, mutation_scopes in enumerate(scopes):
+            shell_case = f"shell-race-{index}"
+            _prepare_git_rename_race(root, shell_case)
+            race["case"] = shell_case
+            race["observed"] = ""
+            command = (
+                "sleep 0.1; "
+                f"{static_command} && "
+                f"test ! -e /workspace/{shell_case}/create/.git/private-marker && "
+                f"test ! -e /workspace/{shell_case}/rename/.git/private-marker && "
+                "printf masked"
+            )
             shell = capabilities["core-capability:shell.run"].handler(
                 {
                     "argv": ["/bin/sh", "-c", command],
@@ -251,6 +281,19 @@ def probe_workspace_git_metadata_masking() -> bool:
                 None,
             )
             shell_payloads.append(getattr(shell, "payload", shell))
+            if race["observed"] != "shell":
+                return False
+            process_case = f"process-race-{index}"
+            _prepare_git_rename_race(root, process_case)
+            race["case"] = process_case
+            race["observed"] = ""
+            command = (
+                "sleep 0.1; "
+                f"{static_command} && "
+                f"test ! -e /workspace/{process_case}/create/.git/private-marker && "
+                f"test ! -e /workspace/{process_case}/rename/.git/private-marker && "
+                "printf masked"
+            )
             started = capabilities["core-capability:process.start"].handler(
                 {
                     "argv": ["/bin/sh", "-c", command],
@@ -259,6 +302,8 @@ def probe_workspace_git_metadata_masking() -> bool:
                 context,
                 None,
             )
+            if race["observed"] != "process":
+                return False
             process_id = str(getattr(started, "payload", started)["process_id"])
             process_payload = None
             for _attempt in range(150):
@@ -286,6 +331,15 @@ def probe_workspace_git_metadata_masking() -> bool:
                 for payload in process_payloads
             )
         )
+
+
+def _prepare_git_rename_race(root: Path, case: str) -> None:
+    pending = root / case / "rename" / "pending"
+    pending.mkdir(parents=True)
+    (pending / "private-marker").write_text(
+        "LEAKED-GIT-METADATA",
+        encoding="utf-8",
+    )
 
 
 def _runtime_store(

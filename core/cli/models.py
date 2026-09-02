@@ -48,6 +48,7 @@ class CliCommandDefinition:
     schema_public: bool = False
     certified_tcb_component: str | None = None
     agentic_result_data_class: CliAgenticResultDataClass | None = None
+    agentic_result_projection: str | None = None
     argument_effects: ToolArgumentEffectMap | None = None
 
 

@@ -88,7 +88,8 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v22 records six maintained transitive dependency contracts. The
+- [x] Manifest v23 records six maintained transitive dependency contracts and
+  the exact executable roots for every admitted built-in app CLI/MCP surface. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
   `core/inter_agent/generalist_context.py` closure and both operator live-probe
@@ -99,8 +100,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v32 / matrix
-  `2026-09-02-r32-p4-git-effect-authority-tcb22`
+- [x] Google and OpenRouter suite v33 / matrix
+  `2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -480,8 +481,10 @@ completion claim.
   effect class. Mixed runners additionally declare a single exact argument
   discriminator; missing, malformed, or unknown discriminator values remain
   `unclassified`. Hosted reads additionally require an exact platform source
-  and live descriptor digest present in the Core-owned audit; workspace-local,
-  external, or drifted app metadata cannot self-authorize. The certification
+  and live descriptor plus executable-closure digest present in the Core-owned
+  audit and certified TCB. The authority is recalculated immediately at
+  dispatch, so code drift after an earlier preflight cannot execute;
+  workspace-local, external, or drifted app metadata/code cannot self-authorize. The certification
   corpus parses all 28 CLI and 383 MCP surfaces, verifies the audit inventory,
   and executes real read-only Storage catalog operations through both
   registries. Website Studio classifies preview creation and document caching
@@ -489,11 +492,18 @@ completion claim.
   declared Website CLI/MCP read is state-pure. Mutating/destructive app
   operations without a certified Core result guarantee remain denied before
   effect.
-- [x] Hosted shell and managed processes recursively mask every `.git` inside
-  the bwrap workspace, including nested repository directories and worktree
-  pointer files. Production-composed and contract probes cover both execution
+- [x] Hosted shell and managed processes use an immutable descriptor-confined
+  staged workspace rather than a live bind. The snapshot recursively omits every
+  `.git` component, including directories, worktree pointer files, and symlinks.
+  Production-composed and concurrent create/rename probes cover both execution
   paths with and without mutation overlays; the direct confined-filesystem
   denial remains unchanged.
+- [x] Every Core inter-agent CLI/MCP operation declares an operation-specific
+  effect and exact reviewed result projection. Projections drop prompts,
+  messages, events, participant output, final answers, labels, and cleanup
+  details; malformed shapes produce a fixed safe payload without content
+  fallback. The Full Workspace gate executes a real discovery-authorized CLI
+  create followed by MCP wait and verifies public projection pairing.
 - [x] Profile, certificate, execution binding, governed recipe, provider
   request, authority, API projection, and persistence all bind model revision
   plus an explicit revision policy. Google uses `exact` and compares the live
@@ -507,22 +517,24 @@ completion claim.
   domain, and the provider fixture manifest includes every split module plus
   the real app-surface integration probe. Pre-existing oversized modules retain
   frozen no-growth ceilings.
-- [x] Adapter 28, semantic compiler revision 8, Full Workspace result contract
-  `codex-baseline-v15`, context-compaction schema 3, TCB manifest v22, suite 32,
-  and matrix `2026-09-02-r32-p4-git-effect-authority-tcb22` create immutable Google
-  revision 36 and OpenRouter revision 35 previews. Historical revisions 35/34
+- [x] Adapter 29, semantic compiler revision 8, Full Workspace result contract
+  `codex-baseline-v16`, context-compaction schema 3, TCB manifest v23, suite 33,
+  and matrix `2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23` create
+  immutable Google revision 37 and OpenRouter revision 36 previews. Historical
+  revisions 36/35
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
-  `full_workspace_contract_revision=codex-baseline-v15`; the central validator
+  `full_workspace_contract_revision=codex-baseline-v16`; the central validator
   rejects that family if the profile/certificate claim or behavior gate is
   incomplete.
-- [x] Admit the hosted Full Workspace `codex-baseline-v15` repository claim
-  only after the executable behavior probe verifies all 20 required result
+- [x] Admit the hosted Full Workspace `codex-baseline-v16` repository claim
+  only after the executable behavior probe verifies all 21 required result
   workflows: 13 create/replace/edit/patch/move/delete/read-after-write,
-  shell/process, and CLI/MCP paths plus marker narrowing, revoke-then-rebuild,
+  shell/process, and CLI/MCP paths; one inter-agent CLI-create/MCP-wait path;
+  plus marker narrowing, revoke-then-rebuild,
   revoke-before-delayed-egress, revoke-before-provider-transport, and
-  revoke-between-provider-events, revoke-during-overlay-commit, and recursive
-  `.git` shell/process masking negative probes. The negative gate traverses the
+  revoke-between-provider-events, revoke-during-overlay-commit, and immutable
+  `.git`-excluding shell/process snapshot negative probes. The negative gate traverses the
   production orchestrator, hosted request/stream, and real shell/process overlays rather
   than calling classification helpers with literal payloads. A CAS-revisioned,
   operator-owned runtime-public classification policy supplies explicit

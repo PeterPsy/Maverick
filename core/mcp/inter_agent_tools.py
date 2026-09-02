@@ -32,6 +32,10 @@ from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.session_termination import terminate_runtime_session
 from core.runtime.store import RuntimeStore
+from core.runtime.hosted_tool_result_projections import (
+    INTER_AGENT_EFFECTS,
+    INTER_AGENT_RESULT_PROJECTIONS,
+)
 from core.workspaces.store import WorkspaceStore
 
 
@@ -282,6 +286,7 @@ def inter_agent_tool_specs(
                 description="Create one inter-agent run record for the active workspace.",
                 owner_id="inter_agent",
                 invocation_policy=WORKSPACE_SAFE,
+                **_hosted_contract("create"),
             ),
             _create,
         ),
@@ -291,6 +296,7 @@ def inter_agent_tool_specs(
                 description="Spawn one hidden runtime session for a child participant.",
                 owner_id="inter_agent",
                 invocation_policy=WORKSPACE_SAFE,
+                **_hosted_contract("spawn"),
             ),
             _spawn,
         ),
@@ -300,6 +306,7 @@ def inter_agent_tool_specs(
                 description="Send one runtime turn to a spawned child participant.",
                 owner_id="inter_agent",
                 invocation_policy=WORKSPACE_SAFE,
+                **_hosted_contract("send"),
             ),
             _send,
         ),
@@ -309,6 +316,7 @@ def inter_agent_tool_specs(
                 description="Execute one native MVP inter-agent run and project selected summaries to the root session.",
                 owner_id="inter_agent",
                 invocation_policy=WORKSPACE_SAFE,
+                **_hosted_contract("execute"),
             ),
             _execute,
         ),
@@ -318,6 +326,7 @@ def inter_agent_tool_specs(
                 description="Wait briefly for an inter-agent run to reach a terminal state.",
                 owner_id="inter_agent",
                 invocation_policy=WORKSPACE_SAFE,
+                **_hosted_contract("wait"),
             ),
             _wait,
         ),
@@ -327,6 +336,7 @@ def inter_agent_tool_specs(
                 description="Interrupt active child participant work for one run.",
                 owner_id="inter_agent",
                 invocation_policy=WORKSPACE_SAFE,
+                **_hosted_contract("interrupt"),
             ),
             _interrupt,
         ),
@@ -336,6 +346,7 @@ def inter_agent_tool_specs(
                 description="Resume a paused run through the hosted scheduler handoff.",
                 owner_id="inter_agent",
                 invocation_policy=WORKSPACE_SAFE,
+                **_hosted_contract("resume"),
             ),
             _resume,
         ),
@@ -345,10 +356,20 @@ def inter_agent_tool_specs(
                 description="Close one inter-agent run and clean up child runtime sessions.",
                 owner_id="inter_agent",
                 invocation_policy=WORKSPACE_SAFE,
+                **_hosted_contract("close"),
             ),
             _close,
         ),
     ]
+
+
+def _hosted_contract(operation: str) -> dict[str, object]:
+    effect_class, safe_to_retry = INTER_AGENT_EFFECTS[operation]
+    return {
+        "effect_class": effect_class,
+        "safe_to_retry": safe_to_retry,
+        "agentic_result_projection": INTER_AGENT_RESULT_PROJECTIONS[operation],
+    }
 
 
 def _cleanup_runtime_session(state: SimpleNamespace, *, session_id: str, reason: str) -> dict[str, object]:

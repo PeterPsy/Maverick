@@ -26,6 +26,10 @@ from core.runtime.hosted_tool_result_admission import (
 )
 from core.runtime.hosted_app_effect_authority import (
     audited_builtin_app_effect_descriptor_digests,
+    audited_builtin_app_execution_digests,
+)
+from core.runtime.hosted_builtin_app_execution import (
+    hosted_builtin_app_execution_digest,
 )
 from core.runtime.tool_discovery_capabilities import RuntimeToolDiscoveryBroker
 from core.runtime.tool_catalog import RuntimeToolActorContext
@@ -56,6 +60,20 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
         self.assertEqual(
             audited_builtin_app_effect_descriptor_digests(),
             observed,
+        )
+        self.assertEqual(
+            audited_builtin_app_execution_digests(),
+            {
+                app_id: {
+                    surface: hosted_builtin_app_execution_digest(
+                        app_id,
+                        surface=surface,
+                        apps_root=REPOSITORY_ROOT / "apps",
+                    )
+                    for surface in surfaces
+                }
+                for app_id, surfaces in observed.items()
+            },
         )
 
     def test_every_builtin_app_surface_has_valid_effect_metadata(self) -> None:
@@ -246,6 +264,15 @@ class BuiltinSurfaceEffectsTest(SurfaceTestBase):
                 )
 
             with patch.object(Path, "read_bytes", tampered_descriptor):
+                self.assertFalse(
+                    preflight("core-capability:cli.run", cli_arguments, actor)
+                    .admitted_before_effect
+                )
+            with patch(
+                "core.runtime.hosted_app_effect_authority."
+                "hosted_builtin_app_execution_digest",
+                return_value="0" * 64,
+            ):
                 self.assertFalse(
                     preflight("core-capability:cli.run", cli_arguments, actor)
                     .admitted_before_effect

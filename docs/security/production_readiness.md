@@ -66,26 +66,31 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v22 makes the known transitive boundary executable through
-six static import contracts. Package initializers, the generalist input-context
-projection closure, continuation/recovery, app-entrypoint, audit, and usage
-dependencies must all resolve to hashed artifacts; a newly reached local module
-outside the manifest prevents TCB identity calculation.
+Manifest v23 makes the known transitive boundary executable through six static
+import contracts and adds the exact executable roots for every built-in app
+CLI/MCP surface admitted as a hosted read. Package initializers, the generalist
+input-context projection closure, continuation/recovery, app-entrypoint, audit,
+usage, and audited app-local execution dependencies must all resolve to hashed
+artifacts; a newly reached local module or app-code drift outside the manifest
+prevents authority or TCB identity calculation.
 
-Hosted adapter 28 and the Full Workspace result contract
-`codex-baseline-v15` are bound by TCB manifest v22. Google revision 36 and
-OpenRouter revision 35 atomically claim that contract and the `maverick_agent`
-family because the executable result gate reports all 20 required behaviors.
-The final seven behaviors are production-composed negative security probes for
+Hosted adapter 29 and the Full Workspace result contract
+`codex-baseline-v16` are bound by TCB manifest v23. Google revision 37 and
+OpenRouter revision 36 atomically claim that contract and the `maverick_agent`
+family because the executable result gate reports all 21 required behaviors.
+The gate includes a production-composed inter-agent CLI-create/MCP-wait workflow
+whose operation-specific effects and safe public projections omit all message,
+prompt, event, participant-output, final-answer, label, and cleanup content. Its
+seven negative behaviors cover
 sensitive raw/base64/chunked filesystem marker narrowing, revoke-then-rebuild
 filesystem lineage, delayed tool-result egress after revocation,
 post-preflight provider transport, revocation between two provider events,
-revocation during a real overlay commit, and `.git` masking in both shell and
-managed processes. Before either bwrap mode starts, a bounded descriptor-only
-scan finds every root or nested `.git`; directories are replaced by empty tmpfs
-mounts and worktree pointer files by `/dev/null`. The read-only and mutation-
-overlay probes both cover shell and managed processes. The direct filesystem
-boundary continues to reject the same metadata paths.
+revocation during a real overlay commit, and immutable workspace snapshots in
+both shell and managed processes. The bounded descriptor-confined staging copy
+omits every root or nested `.git` component and never exposes the live workspace
+namespace. Concurrent post-spawn create and rename probes cover read-only and
+mutation-overlay modes. The direct filesystem boundary continues to reject the
+same metadata paths.
 Tool records and provider-state generations
 retain exact mutable-authority id/revision/digest lineage, and Core revalidates
 it immediately before reuse, continuation, request commit, and every actual
@@ -97,9 +102,11 @@ batches revalidate before and after materialization and roll back on drift.
 Every built-in app CLI and MCP descriptor now carries a conservative static
 effect class; mixed operation runners also carry an exact argument-discriminator
 map whose missing, malformed, or unknown value resolves to `unclassified`.
-Hosted reads require the exact platform source and descriptor bytes recorded in
-the Core-owned audit; workspace-local, external, or drifted metadata cannot
-self-authorize. Production-composed Storage probes discover and execute real
+Hosted reads require the exact platform source, descriptor bytes, and
+executable-closure digest recorded in the Core-owned audit and certified TCB;
+Core recalculates them at dispatch before the effect boundary. Workspace-local,
+external, or drifted metadata/code cannot self-authorize. Production-composed
+Storage probes discover and execute real
 read-only CLI/MCP operations. Website Studio preview construction and document
 caching are mutating, and state snapshots prove every remaining declared read
 leaves its SQLite database and files unchanged. Other mutating and destructive

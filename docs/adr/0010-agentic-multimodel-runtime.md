@@ -675,20 +675,22 @@ The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 36
-and OpenRouter revision 35, both bound to
-`maverick-hosted-tool-loop==28`; older revisions are suspended rather than
-overwritten. Their suite-32 certification manifests retain distinct
+accepted as complete. The current contained definitions are Google revision 37
+and OpenRouter revision 36, both bound to
+`maverick-hosted-tool-loop==29`; older revisions are suspended rather than
+overwritten. Their suite-33 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
-`codex-baseline-v15` requires executable create, replace, edit, patch, move,
+`codex-baseline-v16` requires executable create, replace, edit, patch, move,
 delete, read-after-write, shell/process, and CLI/MCP result behaviors rather
-than a mode string. The executable repository gate now proves all 20 required
-behaviors: the 13 positive result workflows plus sensitive-marker narrowing,
+than a mode string. The executable repository gate now proves all 21 required
+behaviors: the 13 original positive result workflows, a production-composed
+inter-agent CLI-create/MCP-wait workflow, plus sensitive-marker narrowing,
 revoke-then-orchestrator-rebuild, revoke-before-delayed-egress,
 revoke-before-provider-transport, revoke-between-provider-events,
-revoke-during-overlay-commit, and shell/process `.git` masking probes. A
+revoke-during-overlay-commit, and shell/process immutable-snapshot probes that
+race live `.git` creation and rename. A
 reserved operator-owned, CAS-revisioned runtime-public
 classification policy lets Core classify an exact prompt/result identity,
 revision, and canonical-byte digest; the current authority record and its
@@ -702,20 +704,28 @@ egress. Prepared provider requests are revalidated after endpoint preflight and
 again in every task that advances the lazy provider stream. Filesystem reads scan
 the complete bounded raw resource before base64 projection and retain that
 classification on every version-bound chunk, so neither encoding nor a chunk
-boundary can split a marker. Certified Core CLI/MCP result contracts are a second explicit
-authority but app declarations cannot grant it. Shell/process mutations
+boundary can split a marker. Certified Core CLI/MCP result contracts are a
+second explicit authority but app declarations cannot grant it. Inter-agent
+definitions carry operation-specific effects and reviewed public projections
+that omit conversation, prompt, event, result, and cleanup content; malformed
+shapes are replaced by a fixed projection rather than falling back to handler
+bytes. Shell/process mutations
 classify the exact private-overlay result before committing, revalidate the
 exact result before and after the rollback-safe batch boundary, and restore the
 complete pre-image if authority changes. App CLI/MCP descriptors carry a
 conservative effect class and, for mixed runners, an argument discriminator. A
-read is admitted only when the exact platform-built-in descriptor matches the
-Core-owned effect audit; workspace or external app metadata cannot
+read is admitted only when the exact platform-built-in descriptor and its
+executable-closure digest match the Core-owned effect audit and TCB. Core repeats
+that check immediately at dispatch, so code drift after the earlier preflight
+cannot cross the effect boundary. Workspace or external app metadata cannot
 self-authorize. Unknown discriminators stay `unclassified`, and app mutations
 without a certified Core result guarantee are denied before effect. Website
 Studio preview construction/document caching is classified as mutating, and
 every remaining Website read is checked against pre/post persistent state.
-Shell and managed processes recursively mask every `.git` directory and
-worktree pointer file in both read-only and overlay modes.
+Shell and managed processes consume a descriptor-confined immutable workspace
+snapshot that omits every `.git` component. They never bind the live workspace
+namespace, so post-spawn create/rename races remain invisible in both read-only
+and overlay modes.
 
 The profiles, certificates, execution bindings, governed recipes, requests,
 and authority projections also bind model revision and revision policy. Google
@@ -723,11 +733,11 @@ uses `exact` and compares the authenticated live catalog version. OpenRouter
 uses the explicit `provider_alias` policy in addition to its endpoint,
 upstream, quantization, and router constraints. Revision or policy drift is a
 pre-execution failure. The profiles therefore pin
-`codex-baseline-v15` as both the
+`codex-baseline-v16` as both the
 tool and Full Workspace contract and atomically use the `maverick_agent`
 execution family. The claim validator still rejects the family unless profile,
-certificate, and executable behavior gate are complete. Adapter 28, recipe
-revision 15, context-compaction schema 3, suite 32, and TCB manifest v22 retain
+certificate, and executable behavior gate are complete. Adapter 29, recipe
+revision 16, context-compaction schema 3, suite 33, and TCB manifest v23 retain
 the composite-classification and rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked

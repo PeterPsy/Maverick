@@ -21,11 +21,20 @@ from core.providers.certified_tcb_dependencies import (
 )
 from core.providers.errors import CapabilityCertificateError
 from core.runtime.execution_binding import canonical_digest
+from core.runtime.hosted_builtin_app_execution import (
+    certified_hosted_builtin_app_artifact_paths,
+)
 
 
 _DEPENDENCY_AUDIT_CACHE_LIMIT = 16
 _DEPENDENCY_AUDIT_CACHE: OrderedDict[tuple[str, str, str], None] = OrderedDict()
 _DEPENDENCY_AUDIT_CACHE_LOCK = RLock()
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+_HOSTED_BUILTIN_APP_ARTIFACT_PATHS = (
+    certified_hosted_builtin_app_artifact_paths(
+        apps_root=_REPOSITORY_ROOT / "apps",
+    )
+)
 
 
 @dataclass(frozen=True)
@@ -60,7 +69,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="22",
+    manifest_version="23",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -167,6 +176,11 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/mcp",
                 "core/skills",
             ),
+        ),
+        CertifiedTcbComponent(
+            "hosted-built-in-app-execution",
+            "Exact entrypoint and app-local executable closure admitted for hosted reads.",
+            _HOSTED_BUILTIN_APP_ARTIFACT_PATHS,
         ),
         CertifiedTcbComponent(
             "provider-codec-transport-policy",

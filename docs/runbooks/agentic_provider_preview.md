@@ -1,6 +1,6 @@
 # Agentic provider preview operations
 
-Status date: 2026-08-27
+Status date: 2026-09-02
 
 Scope: operator runbook
 
@@ -31,7 +31,7 @@ This closes material containment only; it is not release, certification,
 preview/canary, migration, or production evidence.
 
 Do not run a live Google/OpenRouter probe, certification live step, provider
-HTTP request, or another containment apply while reviewing P3. The following
+HTTP request, or another containment apply while reviewing P4. The following
 commands remain the control-plane-first rollback procedure for a future
 incident. Obtain a new redaction-safe real-store plan through the operator-only
 Core CLI:
@@ -116,14 +116,20 @@ operation.
   shared by admission, request/catalog construction, API, Chat, and Settings.
 - Remote certificates bind the canonical code-owned execution TCB. Any drift or
   missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch. Manifest v6 statically audits six maintained
+  authority refresh, or dispatch. Manifest v23 statically audits six maintained
   import closures, including package initializers and the
-  `core/inter_agent/generalist_context.py` content-composition path; a reached
-  local dependency outside the artifact set makes identity calculation fail.
+  `core/inter_agent/generalist_context.py` content-composition path, and hashes
+  the executable roots of every built-in app surface admitted as a hosted read;
+  a reached local dependency or app-code drift outside the artifact set makes
+  identity/authority calculation fail.
+- Hosted shell/process sandboxes use an immutable descriptor-confined workspace
+  snapshot that excludes every `.git` component; the live workspace namespace
+  is never bound into the sandbox. Inter-agent CLI/MCP tools carry explicit
+  effects and reviewed content-dropping projections.
 
 ## Future pre-activation gate (suspended pending certification and release review)
 
-This section is retained as future work and must not be executed as part of P3.
+This section is retained as future work and must not be executed as part of P4.
 `REMOTE_AGENTIC_ATTESTATION_AVAILABLE` remains false; feature flags alone
 cannot reopen remote agentic admission.
 
@@ -148,7 +154,7 @@ binding:
    selected policy allow that class and destination. Attestation may only narrow
    policy; no client declaration or policy id is accepted.
 5. The workspace policy is at least as restrictive as the profile and retains
-   the complete `codex-baseline-v15` handle set atomically, bounded
+   the complete `codex-baseline-v16` handle set atomically, bounded
    steps/tokens/cost, and confirmation for mutating/destructive classes. A
    partial read-only binding is not a Maverick Agent fallback.
 6. The complete certification manifest passes on the deployed source in the

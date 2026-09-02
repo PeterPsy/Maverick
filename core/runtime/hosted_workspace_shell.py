@@ -10,16 +10,14 @@ import shutil
 import signal
 import subprocess
 import time
+from typing import Callable
 
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
 from core.runtime.hosted_workspace_effects import (
     HostedWorkspaceEffectOverlay,
     HostedWorkspaceMutationScope,
 )
-from core.runtime.hosted_workspace_git_metadata import (
-    HostedWorkspaceGitMetadata,
-    scan_hosted_workspace_git_metadata,
-)
+from core.runtime.hosted_workspace_snapshot import HostedWorkspaceSnapshot
 from core.runtime.hosted_result_authority_guard import (
     HostedResultAuthorityGuard,
 )
@@ -46,6 +44,7 @@ class PreparedHostedWorkspaceCommand:
     pass_fds: tuple[int, ...]
     filesystem: ConfinedWorkspaceFilesystem
     cwd_chain: object
+    workspace_snapshot: HostedWorkspaceSnapshot
     effect_overlay: HostedWorkspaceEffectOverlay | None = None
 
     def close(self) -> None:
@@ -80,7 +79,8 @@ def prepare_hosted_workspace_command(
     if not bwrap:
         raise RuntimeToolError("workspace_shell_sandbox_unavailable")
     cwd_chain = filesystem.open_shell_cwd(cwd)
-    root_fd = filesystem.duplicate_root_fd()
+    workspace_snapshot: HostedWorkspaceSnapshot | None = None
+    root_fd: int | None = None
     effect_overlay: HostedWorkspaceEffectOverlay | None = None
     try:
         workspace = Path(os.path.abspath(os.fspath(workspace_root)))
@@ -99,26 +99,34 @@ def prepare_hosted_workspace_command(
                 runtime_root=runtime,
                 scopes=mutation_scopes,
             )
+        workspace_snapshot = HostedWorkspaceSnapshot.create(
+            filesystem,
+            runtime_root=runtime,
+        )
+        root_fd = workspace_snapshot.duplicate_root_fd()
         command = _build_bwrap_command(
             bwrap=bwrap,
             root_fd=root_fd,
             relative_cwd=relative_cwd,
             argv=argv,
             effect_overlay=effect_overlay,
-            git_metadata=scan_hosted_workspace_git_metadata(root_fd),
         )
         return PreparedHostedWorkspaceCommand(
             command=command,
             pass_fds=(root_fd,),
             filesystem=filesystem,
             cwd_chain=cwd_chain,
+            workspace_snapshot=workspace_snapshot,
             effect_overlay=effect_overlay,
         )
     except Exception:
         if effect_overlay is not None:
             effect_overlay.discard()
+        if workspace_snapshot is not None:
+            workspace_snapshot.discard()
         cwd_chain.close()
-        os.close(root_fd)
+        if root_fd is not None:
+            os.close(root_fd)
         raise
 
 
@@ -137,6 +145,7 @@ def run_hosted_workspace_command(
     result_classification_resolver=None,
     result_context=None,
     result_arguments: dict[str, object] | None = None,
+    spawn_observer: Callable[[str], None] | None = None,
 ) -> dict[str, object] | RuntimeToolSurfaceResult:
     """Run one bounded command and kill its complete process group on timeout."""
     if execution_control is not None:
@@ -162,6 +171,8 @@ def run_hosted_workspace_command(
             pass_fds=prepared.pass_fds,
             start_new_session=True,
         )
+        if spawn_observer is not None:
+            spawn_observer("shell")
         if execution_control is not None:
             execution_control.add_cancellation_callback(
                 lambda: _cancel_workspace_command(process, prepared)
@@ -269,6 +280,7 @@ def run_hosted_workspace_command(
     finally:
         if prepared.effect_overlay is not None:
             prepared.effect_overlay.discard()
+        prepared.workspace_snapshot.discard()
         prepared.close()
 
 
@@ -279,7 +291,6 @@ def _build_bwrap_command(
     relative_cwd: str,
     argv: list[str],
     effect_overlay: HostedWorkspaceEffectOverlay | None,
-    git_metadata: tuple[HostedWorkspaceGitMetadata, ...],
 ) -> list[str]:
     dependency_roots = [
         Path(value) for value in _SYSTEM_DEPENDENCY_ROOTS if Path(value).exists()
@@ -328,9 +339,9 @@ def _build_bwrap_command(
                 str(effect_overlay.upper),
                 str(effect_overlay.work),
                 str(_SANDBOX_WORKSPACE_ROOT),
-                # Consume and close the inherited live-root descriptor after
-                # overlay setup.  The temporary mount is masked below before
-                # the command starts, preventing openat(2) write bypasses.
+                # Consume and close the inherited immutable-snapshot descriptor
+                # after overlay setup. The temporary lower mount is masked
+                # below before the command starts.
                 "--dir",
                 str(_SANDBOX_LOWER_ROOT),
                 "--ro-bind-fd",
@@ -338,12 +349,6 @@ def _build_bwrap_command(
                 str(_SANDBOX_LOWER_ROOT),
             )
         )
-    for item in git_metadata:
-        sandbox_path = _SANDBOX_WORKSPACE_ROOT / item.path
-        if item.kind == "directory":
-            command.extend(("--tmpfs", str(sandbox_path)))
-        else:
-            command.extend(("--ro-bind", "/dev/null", str(sandbox_path)))
     command.extend(
         (
             "--tmpfs",

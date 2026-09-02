@@ -2596,8 +2596,14 @@ Before executing an app-owned wrapper call, the hosted runtime resolves its
 exact declared effect against the nested invocation arguments. The declaration
 is not authority by itself. Read-only calls may proceed only for a platform
 built-in whose app id, namespaced surface, source path, exact live descriptor
-digest, and reparsed execution metadata match the Core-owned effect audit;
-workspace-local and external bundles fail closed at this hosted preflight.
+digest, reparsed execution metadata, and exact executable-closure digest match
+the Core-owned effect audit. The closure covers the app contract, descriptor,
+entrypoint, app-local backend, and reviewed extra executable dependencies; its
+paths are also part of the certified-execution TCB. Core recalculates this
+authority at dispatch after validation/confirmation, so a descriptor or code
+change between discovery/preflight and entrypoint execution fails before the
+effect boundary. Workspace-local and external bundles fail closed at this
+hosted preflight.
 Admitted reads remain subject to exact-result classification and egress policy.
 Mutating, destructive, or unclassified app calls are denied unless a future
 Core-certified pre-effect contract explicitly governs them; an app descriptor
@@ -2614,6 +2620,15 @@ ledger and egress policy; protocol-private copies remain in the Core private
 state service, not in app-owned storage. This preserves the same app isolation,
 visibility, secret-delivery, and per-app degradation semantics used by ordinary
 CLI and MCP callers.
+
+Core-owned collaboration definitions use a separate reviewed contract rather
+than app metadata: each inter-agent CLI/MCP operation declares its conservative
+effect and an exact safe-result projector. Hosted projection exposes only
+bounded lifecycle status, safe platform-generated ids or hashed opaque
+references, counts, and booleans; prompts, messages, events, output, final
+answers, labels, and cleanup details are never forwarded. If a handler returns
+an invalid shape, Core emits a fixed public failure projection and never falls
+back to the original bytes.
 
 This preserves:
 

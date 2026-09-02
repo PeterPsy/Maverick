@@ -18,6 +18,10 @@ from core.runtime.hosted_tool_result_authority import (
     _mcp_definition,
     _public_authority,
 )
+from core.runtime.hosted_tool_result_projections import (
+    definition_has_certified_result_projection,
+    project_certified_tool_result,
+)
 from core.runtime.tool_catalog import (
     RuntimeToolActorContext,
     RuntimeToolResultPreflightDecision,
@@ -26,7 +30,7 @@ from core.runtime.tool_catalog import (
 from core.shared.tool_effects import resolve_tool_effect_class
 
 
-HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 4
+HOSTED_TOOL_RESULT_PREFLIGHT_REVISION = 5
 
 _ACTION_METADATA_FIELDS: dict[str, tuple[str, ...]] = {
     "core-capability:process.start": (
@@ -115,6 +119,20 @@ def build_hosted_tool_result_admission_resolver(
             definition = _cli_definition(cli_registry, command_id)
             if definition is None:
                 return None
+            projection = project_certified_tool_result(definition, dict(result))
+            if projection is not None:
+                return _admitted_surface(
+                    f"cli:{command_id}",
+                    projection,
+                    context,
+                    trust_level="trusted_platform",
+                )
+            if definition_has_certified_result_projection(definition):
+                return _invalid_projection_surface(
+                    f"cli:{command_id}",
+                    definition,
+                    context,
+                )
             return _content_derived_surface(
                 f"cli:{command_id}",
                 dict(result),
@@ -136,6 +154,20 @@ def build_hosted_tool_result_admission_resolver(
             definition = _mcp_definition(mcp_registry, tool_name)
             if definition is None:
                 return None
+            projection = project_certified_tool_result(definition, dict(result))
+            if projection is not None:
+                return _admitted_surface(
+                    f"mcp:{tool_name}",
+                    projection,
+                    context,
+                    trust_level="trusted_platform",
+                )
+            if definition_has_certified_result_projection(definition):
+                return _invalid_projection_surface(
+                    f"mcp:{tool_name}",
+                    definition,
+                    context,
+                )
             return _content_derived_surface(
                 f"mcp:{tool_name}",
                 dict(result),
@@ -254,6 +286,8 @@ def _definition_preflight(
 ):
     if definition is None or not isinstance(arguments, dict):
         return denied
+    if definition_has_certified_result_projection(definition):
+        return admitted_public
     if resolve_tool_effect_class(definition, arguments) == "read":
         if getattr(definition, "owner_kind", None) == "core":
             return admitted_read
@@ -296,6 +330,23 @@ def _metadata_projection(
         if field_name in result and _safe_metadata_value(result[field_name]):
             projection[field_name] = result[field_name]
     return projection
+
+
+def _invalid_projection_surface(
+    source_handle: str,
+    definition,
+    context: RuntimeToolActorContext,
+) -> RuntimeToolSurfaceResult:
+    """Fail closed without retaining any bytes from an invalid tool result."""
+    return _admitted_surface(
+        source_handle,
+        {
+            "projection_contract": str(definition.agentic_result_projection),
+            "outcome": "invalid_tool_result",
+        },
+        context,
+        trust_level="trusted_platform",
+    )
 
 
 def _safe_metadata_value(value: object) -> bool:

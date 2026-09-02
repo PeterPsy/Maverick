@@ -18,6 +18,10 @@ from core.runtime.hosted_result_security_behavior import (
     inspect_hosted_result_security_behavior,
 )
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
+from core.runtime.hosted_collaboration_behavior import (
+    HOSTED_COLLABORATION_BEHAVIOR_IDS,
+    inspect_hosted_collaboration_behavior,
+)
 from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_admission_resolver,
     build_hosted_tool_result_preflight_resolver,
@@ -28,7 +32,7 @@ from core.runtime.public_content_authority import (
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 
 
-HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 6
+HOSTED_TOOL_RESULT_BEHAVIOR_REVISION = 7
 HOSTED_REQUIRED_RESULT_BEHAVIOR_HANDLES = (
     *FILESYSTEM_RESULT_BEHAVIOR_IDS,
     "core-capability:shell.run",
@@ -37,6 +41,7 @@ HOSTED_REQUIRED_RESULT_BEHAVIOR_HANDLES = (
     "core-capability:cli.run",
     "core-capability:mcp.list",
     "core-capability:mcp.call",
+    *HOSTED_COLLABORATION_BEHAVIOR_IDS,
     *HOSTED_RESULT_SECURITY_BEHAVIOR_IDS,
 )
 
@@ -190,6 +195,7 @@ def inspect_hosted_tool_result_behavior() -> tuple[str, ...]:
     return (
         *inspect_hosted_filesystem_result_behavior(),
         *variable_results,
+        *inspect_hosted_collaboration_behavior(),
         *inspect_hosted_result_security_behavior(),
     )
 

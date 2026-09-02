@@ -69,8 +69,8 @@ class OpenRouterAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "35")
-        self.assertEqual(profile.adapter_version_constraint, "==28")
+        self.assertEqual(profile.revision, "36")
+        self.assertEqual(profile.adapter_version_constraint, "==29")
         self.assertEqual(profile.model_provider_id, "openrouter")
         self.assertEqual(profile.model_id, "deepseek/deepseek-v4-flash")
         self.assertEqual(profile.model_revision, OPENROUTER_AGENTIC_MODEL_REVISION)

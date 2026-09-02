@@ -13,9 +13,12 @@ from core.runtime.public_content_classification import (
     classification_from_runtime_public_content_authority,
 )
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
+from core.runtime.hosted_tool_result_projections import (
+    definition_has_certified_result_projection,
+)
 
 
-HOSTED_TOOL_RESULT_ADMISSION_REVISION = 7
+HOSTED_TOOL_RESULT_ADMISSION_REVISION = 8
 _CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT = "tool-schema-catalog"
 
 
@@ -268,6 +271,12 @@ def _discovery_has_public_authority(
             or getattr(definition, "certified_tcb_component", None)
             != _CERTIFIED_TOOL_SCHEMA_TCB_COMPONENT
             or item.get("owner_kind", "core") != "core"
+            or item.get("agentic_result_projection")
+            != getattr(definition, "agentic_result_projection", None)
+            or (
+                item.get("agentic_result_projection") is not None
+                and not definition_has_certified_result_projection(definition)
+            )
         ):
             return False
     return True

@@ -135,6 +135,14 @@ Important current core commands include:
 - `core.jobs.list`
 - `core.jobs.get`
 - `core.jobs.cancel`
+- `inter-agent.runs.create`
+- `inter-agent.runs.execute`
+- `inter-agent.runs.wait`
+- `inter-agent.runs.interrupt`
+- `inter-agent.runs.resume`
+- `inter-agent.runs.close`
+- `inter-agent.participants.spawn`
+- `inter-agent.messages.send`
 
 Core discovery also exposes dynamic per-app lifecycle commands when their
 preconditions hold. In particular, `app.<app_id>.sidecars.restart` appears only
@@ -168,6 +176,22 @@ Important current tools include:
 - `core.jobs.list`
 - `core.jobs.get`
 - `core.jobs.cancel`
+- `inter_agent_run_create`
+- `inter_agent_execute`
+- `inter_agent_wait`
+- `inter_agent_interrupt`
+- `inter_agent_resume`
+- `inter_agent_close`
+- `inter_agent_participant_spawn`
+- `inter_agent_message_send`
+
+The eight inter-agent operations have explicit hosted effects: create, spawn,
+send, execute, and resume are mutating; interrupt and close are destructive;
+wait is read-only and retry-safe. Their certified result projections expose
+only bounded lifecycle metadata, safe platform-generated ids or hashed opaque
+references, counts, and booleans. They never expose prompts, messages, events,
+participant output, final answers, labels, or cleanup details; an invalid result
+shape becomes a fixed safe failure projection without content fallback.
 
 `core.runtime.status` and `core.recovery.health` are operator-only diagnostic
 surfaces. Recovery health requests must name `target_kind` (`runtime`,
@@ -221,9 +245,11 @@ malformed nested argument object, or an incomplete map resolves to
 
 For hosted execution, an app declaration is a claim rather than execution
 authority. A built-in app read is admitted before effect only when the app id,
-namespaced surface, platform source path, live descriptor bytes, and parsed
-effect metadata match the exact Core-owned audit inventory. Workspace-local or
-external app metadata cannot self-authorize. Mutating, destructive, and
+namespaced surface, platform source path, live descriptor bytes, parsed effect
+metadata, and executable-closure digest match the exact Core-owned audit
+inventory and certified TCB. Core repeats the closure check at dispatch, after
+validation/confirmation. Workspace-local or external app metadata/code cannot
+self-authorize. Mutating, destructive, and
 unclassified app calls still require a separate certified Core pre-effect
 contract. The inventory is versioned at
 `core/runtime/hosted_builtin_app_effect_audit.json` and is part of the certified

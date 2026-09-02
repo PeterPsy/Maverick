@@ -24,10 +24,10 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
 
     def test_every_suite_derives_artifacts_and_identity_from_one_manifest(self) -> None:
         identity = certified_tcb_identity(self.root)
-        self.assertEqual(identity.manifest_version, "22")
+        self.assertEqual(identity.manifest_version, "23")
         self.assertEqual(
             identity.structure_digest,
-            "a45252c34c0a73e7468953922a76af684aa567ece3447d4e86622ff2745444b8",
+            "592689cd25b8e3be8dc01620e900c2a7982a750e9aabd632075ed42d8d3242aa",
         )
         self.assertIn(
             "scripts/run_google_interactions_probe.py",
@@ -163,6 +163,13 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
             component.component_id: component
             for component in CERTIFIED_EXECUTION_TCB.components
         }
+        hosted_app_paths = components["hosted-built-in-app-execution"].paths
+        hosted_backend = next(
+            path
+            for path in hosted_app_paths
+            if path.endswith("/backend")
+            and (self.root / path / "service.py").is_file()
+        )
         targets = {
             "runtime_api": "core/api/runtime_api.py",
             "classifier": "core/egress/classification.py",
@@ -170,6 +177,10 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
             "generalist_context": "core/inter_agent/generalist_context.py",
             "continuation_admission": "core/recovery/continuation_admission.py",
             "app_runtime_entrypoint": "core/shared/entrypoints.py",
+            "hosted_app_entrypoint": next(
+                path for path in hosted_app_paths if path.endswith("/cli/app_cli.py")
+            ),
+            "hosted_app_dependency": f"{hosted_backend}/service.py",
             "python_package_initializer": "core/__init__.py",
             "ledger": "core/runtime/tool_ledger.py",
             "runtime_store": "core/runtime/store.py",

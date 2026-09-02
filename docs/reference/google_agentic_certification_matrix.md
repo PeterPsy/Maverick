@@ -1,10 +1,10 @@
 # Google Gemini agentic certification matrix
 
 Status date: 2026-09-02
-Matrix revision: `2026-09-02-r32-p4-git-effect-authority-tcb22`
+Matrix revision: `2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23`
 Rollout: Full Workspace preview, not certified
 Runtime engine: `maverick-tool-loop`  
-Adapter: `maverick-hosted-tool-loop==28`
+Adapter: `maverick-hosted-tool-loop==29`
 
 ## Preview combination
 
@@ -13,8 +13,8 @@ Adapter: `maverick-hosted-tool-loop==28`
 | Model provider | `google-ai-studio` |
 | Model | `gemini-3.6-flash` |
 | Model revision policy | `exact`; authenticated catalog `version=stable-2026-07` |
-| Immutable profile revision | `36` (revision `35` suspended) |
-| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v15` |
+| Immutable profile revision | `37` (revision `36` suspended) |
+| Execution family | `maverick_agent`; atomically pinned to Full Workspace `codex-baseline-v16` |
 | Lifecycle | stable / generally available |
 | Protocol | `google-interactions` |
 | API version | `v1` |
@@ -29,7 +29,7 @@ Adapter: `maverick-hosted-tool-loop==28`
 | Final request | exact Core finalization instruction; `tools` omitted |
 | Thought handling | summaries disabled; signatures kept provider-private |
 | Remote data classes | `public` (Core-classified only; remote admission remains blocked) |
-| Tool handles | Full Workspace `codex-baseline-v15` surface: all 20 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result contract; app reads require a Core-audited built-in descriptor, Website preview persistence is mutating, unknown/mutating app operations fail closed, raw/base64/chunked reads retain complete-resource taint, provider transport revalidates live authority before every stream advance, and shell/process effects remain rollbackable with every root/nested `.git` masked in read-only and overlay modes; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
+| Tool handles | Full Workspace `codex-baseline-v16` surface: all 21 result behaviors execute under exact source taint, an active operator-owned runtime-public policy, or a certified Core result projection; app reads require a Core-audited descriptor plus executable closure and are rechecked at dispatch, inter-agent CLI/MCP operations have exact effects and content-dropping projections, raw/base64/chunked reads retain complete-resource taint, provider transport revalidates live authority before every stream advance, and shell/process effects remain rollbackable over an immutable `.git`-excluding snapshot in read-only and overlay modes; `artifact.read`, app discovery, all-worker quiescence, and post-SIGTERM cleanup remain covered |
 | Certificate lifetime after a successful signed run | 45 days |
 
 Google documents Gemini 3.6 Flash as a stable model with a 1,048,576-token
@@ -56,11 +56,11 @@ Primary references:
 | Request translation | deterministic stateful/stateless fixtures | not certified |
 | Semantic envelope | schema v1 and projection compiler `maverick-hosted-semantic-projection@8`; exact byte-bound classifications, lexical no-symlink skill identity, restrictive attachment metadata/file joins, production exact-resource app-reference classification, attachment-only admission without an empty prompt, complete scoped `AGENTS.md` materialization, UTF-8/base64 attachment references, provider projection digest, authority lineage revalidation, and journal evidence | not certified |
 | Harness recipe and context | exact recipe id/revision/digest plus fine-grained provider-capability catalog digest; independent complete-request reserve, one forced below-trigger compaction, semantic stateless-history compaction, bounded byte-correct tool-result artifacts, and explicit safe-next-turn steering fallback | not certified |
-| Certified execution TCB | manifest v22 plus six static import-closure contracts cover every authority/content-changing Core, Chat, Settings, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, request/transport revalidation, full-workspace confinement/process/discovery/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; drift rejects signing/verification/publication/binding/live status | not certified |
+| Certified execution TCB | manifest v23 plus six static import-closure contracts and the exact hosted built-in app execution roots cover every authority/content-changing Core, Chat, Settings, app entrypoint/dependency closure, semantic compiler, recipe/context/live-preflight/artifact surface, input/result admission, raw-resource classification, request/transport revalidation, full-workspace confinement/process/discovery/snapshot/effect-overlay/batch/metadata guard, codec, transport, journal/recovery, store/audit CAS, policy, package initializer, and generalist-context dependency; drift rejects dispatch/signing/verification/publication/binding/live status | not certified |
 | SSE event ordering and model identity | strict stream decoder fixtures | not certified |
 | Function call id/name/count | every call persisted before resolution, exact replay/divergence checks, malformed/unknown/denial accounting, ordered pairing, and full parallel-response denial | not certified |
 | Filesystem discovery | descriptor-relative race-safe listing plus provider alias → shared loop → real `filesystem.list` handler → provider result round trip | not certified |
-| Full Workspace behavioral gate | `codex-baseline-v15` executes 13 positive result workflows plus production-composed raw/base64/chunk marker narrowing, revoke-then-rebuild, delayed-egress-after-revocation, post-preflight transport revocation, revoke-between-provider-events, overlay-commit rollback, and recursive shell/process `.git` masking probes instead of trusting declared mode strings or isolated helpers | repository gate complete: 20/20 behaviors; signed provider certification not run |
+| Full Workspace behavioral gate | `codex-baseline-v16` executes 13 original positive result workflows, a production-composed inter-agent CLI-create/MCP-wait workflow, plus raw/base64/chunk marker narrowing, revoke-then-rebuild, delayed-egress-after-revocation, post-preflight transport revocation, revoke-between-provider-events, overlay-commit rollback, and concurrent shell/process `.git` snapshot probes instead of trusting declared mode strings or isolated helpers | repository gate complete: 21/21 behaviors; signed provider certification not run |
 | Live endpoint/model preflight | official current Interactions OpenAPI operation plus authenticated exact model record prove streaming, usage, function tools, reasoning controls, model identity, and input/output limits before completion transport | not certified |
 | Reasoning configuration | real tool round trips at every certificate-bound level, including immutable default `high` | not certified |
 | Stateful continuation | previous interaction id round trip | not certified |
@@ -78,7 +78,7 @@ Primary references:
 | Private-state failure | explicit quota, integrity, and recovery-reason fixtures | not certified |
 | Prompt-injection containment | untrusted tool output cannot expand materialized tools | not certified |
 | Child-agent isolation | forked immutable binding and independent private state | not certified |
-| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r32 |
+| Live capability probe | operator-only Core-managed stateless history, two sequential real-filesystem-list calls, and one explicitly tool-less final response at the certificate-bound `high` effort (three requests total) | manifest step available; not run for r33 |
 
 The table lists the required suite coverage; it is not evidence that the suite
 ran. Bootstrap publishes only the uncertified preview profile and never manufactures a
@@ -363,3 +363,15 @@ remaining declared read. The strengthened `codex-baseline-v15` gate remains
 20/20. The immutable definition remains uncertified, unbound, contained, and
 unavailable; no live probe, signed run, provider completion, certificate,
 canary, or remote activation has been performed.
+
+Revision 37 pins adapter 29, governed recipe 16, suite 33, matrix
+`2026-09-02-r33-p4-snapshot-app-closure-collaboration-tcb23`, and TCB manifest
+v23. Shell and managed processes now use an immutable descriptor-confined
+workspace snapshot that excludes `.git` and remains isolated from post-spawn
+create/rename races. Hosted built-in app reads bind descriptor metadata and the
+exact executable closure, with a second check at dispatch. Every inter-agent
+CLI/MCP operation has an exact effect and reviewed content-dropping public
+projection, and `codex-baseline-v16` adds a real CLI-create/MCP-wait workflow to
+the 21/21 behavior gate. The immutable definition remains uncertified, unbound,
+contained, and unavailable; no live probe, signed run, provider completion,
+certificate, canary, or remote activation has been performed.

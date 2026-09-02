@@ -42,6 +42,15 @@ def _argument_effect_payload(definition) -> dict[str, object]:
     return {"effect_class_by_argument": effect_map.as_discovery_payload()}
 
 
+def _result_projection_payload(definition) -> dict[str, object]:
+    projection = getattr(definition, "agentic_result_projection", None)
+    return (
+        {"agentic_result_projection": projection}
+        if isinstance(projection, str) and projection
+        else {}
+    )
+
+
 class RuntimeToolDiscoveryBroker:
     """Issue turn-local tokens that prove a command/tool was discovered first."""
 
@@ -85,6 +94,7 @@ class RuntimeToolDiscoveryBroker:
                         context.session_id,
                     ),
                     **_argument_effect_payload(item),
+                    **_result_projection_payload(item),
                 }
                 for item in page
             ],
@@ -179,6 +189,7 @@ class RuntimeToolDiscoveryBroker:
                         context.session_id,
                     ),
                     **_argument_effect_payload(item),
+                    **_result_projection_payload(item),
                 }
                 for item in page
             ],

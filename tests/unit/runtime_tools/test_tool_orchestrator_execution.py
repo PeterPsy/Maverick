@@ -6,7 +6,10 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from core.runtime.tool_catalog import RuntimeToolCatalogBuilder
+from core.runtime.tool_catalog import (
+    RuntimeToolCatalogBuilder,
+    RuntimeToolResultPreflightDecision,
+)
 from core.runtime.tool_errors import RuntimeToolError, RuntimeToolRevisionError
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_orchestrator import RuntimeToolOrchestrator
@@ -26,6 +29,41 @@ OBJECT_SCHEMA = {
 
 
 class RuntimeToolOrchestratorExecutionTest(_RuntimeToolOrchestratorFixture, unittest.TestCase):
+    def test_result_authority_is_revalidated_immediately_before_dispatch(self) -> None:
+        calls = 0
+
+        def drifting_preflight(_handle, _arguments, _context):
+            nonlocal calls
+            calls += 1
+            return RuntimeToolResultPreflightDecision(calls == 1)
+
+        orchestrator = RuntimeToolOrchestrator(
+            catalog_builder=RuntimeToolCatalogBuilder(
+                cli_registry=self.cli_registry,
+                mcp_registry=self.mcp_registry,
+                app_interface_resolver=self.app_resolver,
+                result_preflight_resolver=drifting_preflight,
+            ),
+            ledger=self.ledger,
+        )
+        outcome = orchestrator.invoke_provider_tool(
+            provider_tool_name=provider_tool_name("cli:fixture.read"),
+            provider_tool_call_id="call-preflight-dispatch-drift",
+            arguments={"value": 4},
+            authority=self.authority,
+            context=self.context,
+            turn_id="turn-tools",
+            policy=self.policy,
+        )
+
+        self.assertEqual(calls, 2)
+        self.assertEqual(outcome.invocation.state, "failed")
+        self.assertEqual(
+            outcome.invocation.failure_reason,
+            "tool_result_egress_not_guaranteed",
+        )
+        self.assertEqual(self.cli_calls, 0)
+
     def test_read_tool_executes_once_through_cli_runner(self) -> None:
         name = provider_tool_name("cli:fixture.read")
         outcome = self.orchestrator.invoke_provider_tool(

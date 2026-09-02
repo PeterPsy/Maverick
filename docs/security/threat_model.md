@@ -179,10 +179,14 @@ and stays untrusted.
 Non-resource CLI, MCP, shell, and process output has no generic public-content
 fallback: exact result bytes require the runtime-public policy or a certified
 Core result contract, and a denied result is retained privately while only a
-public call-paired error reaches the provider. Shell/process workspace effects
-remain in a private overlay until the exact result is admitted, then commit;
-denial discards them. App claims are ignored without removing read-only
-discovery/use. Direct replace/edit/patch and move
+public call-paired error reaches the provider. Core inter-agent CLI/MCP tools
+use operation-specific effects and reviewed public projectors that retain only
+bounded lifecycle metadata; invalid shapes are replaced without copying handler
+bytes. Shell/process workspace effects remain in a private overlay until the
+exact result is admitted, then commit; denial discards them. App claims are
+ignored without removing read-only discovery/use. An admitted built-in app read
+must match both its audited descriptor and executable closure in the TCB, with a
+second live check at dispatch. Direct replace/edit/patch and move
 propagate exact version-bound pre-image taint to their post-image. Authenticated
 same-session mutation results bind the exact observation across orchestrator
 rebuilds; creation has no public fallback.
@@ -473,17 +477,20 @@ descriptor chain around use/commit. Repeated Linux tests swap final symlinks,
 parents, directories, and the root during read/list/write and shell-cwd
 admission; the fail-closed result must leave no outside read or write. Hosted
 shell and managed-process writes are additionally isolated in a private overlay.
-The live workspace is mounted read-only until Core validates the complete
-bounded diff against every declared mutable scope and the actual root-to-target
+The sandbox sees an immutable staged snapshot, never the live workspace
+namespace. Core validates the complete bounded diff against every declared
+mutable scope and the actual root-to-target
 instruction digest for each changed file. A nested-scope mismatch,
 instruction-file or unsupported effect, non-zero exit, timeout, or interrupt
 discards the overlay before it can affect workspace data. Effects cannot appear
 later after a turn cancellation: the execution lease kills complete shell and
 managed-process groups and waits for bounded workers to quiesce before returning.
-Both the read-only and overlay projections first traverse the pinned workspace
-descriptor without following symlinks and mask every root or nested `.git`
-directory/worktree pointer for shell and managed processes; an unsafe entry,
-scan bound, or concurrent directory change denies command preparation.
+Both the read-only and overlay projections stage through the pinned workspace
+descriptor without following symlinks and omit every root or nested `.git`
+component regardless of type. An unsafe entry, staging bound, or concurrent
+namespace/content/metadata change denies command preparation; a `.git` created
+or renamed in the live workspace after spawn remains absent from the retained
+snapshot.
 Adapter-owned session cleanup also terminates managed processes, closes capture
 descriptors, discards their overlays, and persists a terminal record before the
 generic orphan scan. Newly-created
@@ -495,8 +502,8 @@ exchange and against every preservable field afterward. A late content or
 metadata race on any file rolls every earlier file back. File timestamps
 accompanying content changes are applied exactly, while metadata-only
 directory/root effects fail closed. Terminal `process.status` is a
-mutating, non-retry-safe boundary because it performs that commit. The retained live-root
-descriptor is consumed during mount setup and is not inherited by target code,
+mutating, non-retry-safe boundary because it performs that commit. The retained
+snapshot descriptor is consumed during mount setup and is not inherited by target code,
 preventing a direct descriptor-relative write around the overlay. Broader
 app/backend sandboxing remains a production blocker.
 

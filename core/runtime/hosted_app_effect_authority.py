@@ -13,10 +13,16 @@ from core.apps.surface_descriptors import (
     app_cli_command_execution_metadata,
     app_mcp_tool_execution_metadata,
 )
+from core.runtime.hosted_builtin_app_execution import (
+    hosted_builtin_app_execution_digest,
+)
+from core.runtime.tool_errors import RuntimeToolError
 from core.shared.tool_effects import resolve_tool_effect_class
 
 
-HOSTED_BUILTIN_APP_EFFECT_AUDIT_REVISION = "2026-09-02-p4-builtin-effects"
+HOSTED_BUILTIN_APP_EFFECT_AUDIT_REVISION = (
+    "2026-09-02-p4-builtin-effects-execution-v2"
+)
 _AUDIT_PATH = Path(__file__).with_name("hosted_builtin_app_effect_audit.json")
 _REPOSITORY_APPS_ROOT = Path(__file__).resolve().parents[2] / "apps"
 _DESCRIPTOR_PATHS = {
@@ -42,7 +48,7 @@ def app_read_effect_has_core_audit_authority(
     if resolved is None:
         return False
     app_id, surface_name, app_root = resolved
-    expected = _audited_descriptor_digests().get(app_id, {}).get(surface)
+    expected = _audited_effect_authority().get(app_id, {}).get(surface)
     descriptor_path = app_root / _DESCRIPTOR_PATHS[surface]
     if expected is None or not descriptor_path.is_file():
         return False
@@ -50,7 +56,20 @@ def app_read_effect_has_core_audit_authority(
         observed = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
     except OSError:
         return False
-    if not hmac.compare_digest(expected, observed):
+    if not hmac.compare_digest(expected["descriptor_sha256"], observed):
+        return False
+    try:
+        execution_digest = hosted_builtin_app_execution_digest(
+            app_id,
+            surface=surface,
+            apps_root=_REPOSITORY_APPS_ROOT,
+        )
+    except (OSError, UnicodeError, RuntimeToolError):
+        return False
+    if not hmac.compare_digest(
+        expected["execution_sha256"],
+        execution_digest,
+    ):
         return False
     try:
         metadata = (
@@ -74,8 +93,22 @@ def app_read_effect_has_core_audit_authority(
 def audited_builtin_app_effect_descriptor_digests() -> dict[str, dict[str, str]]:
     """Return a copy of the exact descriptor audit inventory for contract tests."""
     return {
-        app_id: dict(digests)
-        for app_id, digests in _audited_descriptor_digests().items()
+        app_id: {
+            surface: values["descriptor_sha256"]
+            for surface, values in surfaces.items()
+        }
+        for app_id, surfaces in _audited_effect_authority().items()
+    }
+
+
+def audited_builtin_app_execution_digests() -> dict[str, dict[str, str]]:
+    """Return a copy of the exact executable-closure audit inventory."""
+    return {
+        app_id: {
+            surface: values["execution_sha256"]
+            for surface, values in surfaces.items()
+        }
+        for app_id, surfaces in _audited_effect_authority().items()
     }
 
 
@@ -123,38 +156,50 @@ def _platform_builtin_surface(
 
 
 @lru_cache(maxsize=1)
-def _audited_descriptor_digests() -> dict[str, dict[str, str]]:
+def _audited_effect_authority() -> dict[str, dict[str, dict[str, str]]]:
     try:
         payload = json.loads(_AUDIT_PATH.read_text(encoding="utf-8"))
         if (
             not isinstance(payload, dict)
             or set(payload) != {"schema_version", "audit_revision", "apps"}
-            or payload.get("schema_version") != "1"
+            or payload.get("schema_version") != "2"
             or payload.get("audit_revision")
             != HOSTED_BUILTIN_APP_EFFECT_AUDIT_REVISION
             or not isinstance(payload.get("apps"), dict)
         ):
             return {}
-        audited: dict[str, dict[str, str]] = {}
-        for app_id, raw_digests in payload["apps"].items():
+        audited: dict[str, dict[str, dict[str, str]]] = {}
+        for app_id, raw_surfaces in payload["apps"].items():
             if (
                 not isinstance(app_id, str)
                 or not app_id
-                or not isinstance(raw_digests, dict)
-                or not raw_digests
-                or not set(raw_digests).issubset(_DESCRIPTOR_PATHS)
+                or not isinstance(raw_surfaces, dict)
+                or not raw_surfaces
+                or not set(raw_surfaces).issubset(_DESCRIPTOR_PATHS)
             ):
                 return {}
-            digests: dict[str, str] = {}
-            for surface, digest in raw_digests.items():
+            surfaces: dict[str, dict[str, str]] = {}
+            for surface, raw_authority in raw_surfaces.items():
                 if (
-                    not isinstance(digest, str)
-                    or len(digest) != 64
-                    or any(character not in "0123456789abcdef" for character in digest)
+                    not isinstance(raw_authority, dict)
+                    or set(raw_authority)
+                    != {"descriptor_sha256", "execution_sha256"}
                 ):
                     return {}
-                digests[surface] = digest
-            audited[app_id] = digests
+                values: dict[str, str] = {}
+                for key, digest in raw_authority.items():
+                    if (
+                        not isinstance(digest, str)
+                        or len(digest) != 64
+                        or any(
+                            character not in "0123456789abcdef"
+                            for character in digest
+                        )
+                    ):
+                        return {}
+                    values[key] = digest
+                surfaces[surface] = values
+            audited[app_id] = surfaces
         return audited
     except (OSError, json.JSONDecodeError):
         return {}
@@ -164,4 +209,5 @@ __all__ = [
     "HOSTED_BUILTIN_APP_EFFECT_AUDIT_REVISION",
     "app_read_effect_has_core_audit_authority",
     "audited_builtin_app_effect_descriptor_digests",
+    "audited_builtin_app_execution_digests",
 ]

@@ -318,11 +318,16 @@ So the distinction is:
 
 Full-workspace access never makes `runtime/` agent-owned workspace content.
 Core filesystem capabilities reject that top-level component, omit it from
-recursive listing/search, and use it only for platform-private process output
-and deletion quarantine. The hosted shell overlays `workspace_root/runtime`
-with an empty sandbox mount and uses fixed `/runtime` scratch space, so a
-workspace command cannot read or mutate control-plane records even though it
-can write ordinary workspace paths.
+recursive listing/search, and use it only for platform-private process output,
+workspace snapshots, and deletion quarantine. Hosted shell and managed-process
+commands receive a bounded descriptor-confined staged snapshot, not a bind of
+the live workspace namespace. Staging creates only an empty `runtime/` mount
+point and omits every `.git` component recursively; bubblewrap replaces both
+`/workspace/runtime` and fixed `/runtime` with private scratch mounts. The
+snapshot is retained for the process lifetime, so a live post-spawn create or
+rename cannot reveal Git or control-plane metadata. Mutation overlays remain
+private and are committed only through the ordinary live-workspace,
+instruction-bound, rollback-safe effect transaction.
 
 Provider processes that operate on workspace files should start in the workspace root.
 

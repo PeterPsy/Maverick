@@ -26,11 +26,13 @@ import core.runtime.hosted_agentic_stream as hosted_agentic_stream_module
 import core.runtime.hosted_agentic_transport as hosted_agentic_transport_module
 import core.runtime.hosted_agentic_tool_execution as hosted_agentic_tool_execution_module
 import core.runtime.hosted_app_effect_authority as hosted_app_effect_authority_module
+import core.runtime.hosted_builtin_app_execution as hosted_builtin_app_execution_module
 import core.runtime.hosted_context_management as hosted_context_management_module
 import core.runtime.hosted_harness_recipes as hosted_harness_recipes_module
 import core.runtime.hosted_tool_process_registry as hosted_tool_process_registry_module
 import core.runtime.hosted_tool_result_admission as hosted_tool_result_admission_module
-import core.runtime.hosted_workspace_git_metadata as hosted_workspace_git_metadata_module
+import core.runtime.hosted_tool_result_projections as hosted_tool_result_projections_module
+import core.runtime.hosted_workspace_snapshot as hosted_workspace_snapshot_module
 import core.runtime.hosted_workspace_shell as hosted_workspace_shell_module
 import core.runtime.hosted_process_output as hosted_process_output_module
 import core.runtime.confined_filesystem_delete as confined_filesystem_delete_module
@@ -187,11 +189,13 @@ class HostedAgenticLoop:
             hosted_agentic_tool_execution_module,
             hosted_agentic_tool_results_module,
             hosted_app_effect_authority_module,
+            hosted_builtin_app_execution_module,
             hosted_context_management_module,
             hosted_harness_recipes_module,
             hosted_tool_process_registry_module,
             hosted_tool_result_admission_module,
-            hosted_workspace_git_metadata_module,
+            hosted_tool_result_projections_module,
+            hosted_workspace_snapshot_module,
             hosted_workspace_shell_module,
             hosted_process_output_module,
             confined_filesystem_delete_module,

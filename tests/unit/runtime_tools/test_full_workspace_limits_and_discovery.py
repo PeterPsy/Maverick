@@ -12,46 +12,53 @@ from core.mcp.models import McpInvocationPolicy, McpToolDefinition
 from core.mcp.tool_registry import McpToolRegistry
 from core.runtime.process_control import runtime_processes_alive_for_session
 from core.runtime.tool_errors import RuntimeToolError
-from core.runtime.hosted_workspace_git_metadata import (
-    scan_hosted_workspace_git_metadata,
-)
+from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
+from core.runtime.hosted_workspace_snapshot import HostedWorkspaceSnapshot
 from tests.support.cases.full_workspace_contract import FullWorkspaceContractFixture
 
 
 class FullWorkspaceLimitsAndDiscoveryTest(FullWorkspaceContractFixture, unittest.TestCase):
-    def test_git_metadata_scan_is_bounded_and_rejects_symlink_entries(self) -> None:
+    def test_workspace_snapshot_is_bounded_and_excludes_git_symlinks(self) -> None:
         with TemporaryDirectory() as directory:
             root = Path(directory)
+            runtime_root = root / "runtime"
+            runtime_root.mkdir()
             (root / "one").write_text("one", encoding="utf-8")
             (root / "two").write_text("two", encoding="utf-8")
-            root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                with patch(
-                    "core.runtime.hosted_workspace_git_metadata."
-                    "MAX_HOSTED_GIT_SCAN_ENTRIES",
-                    1,
+            filesystem = ConfinedWorkspaceFilesystem(
+                workspace_id="snapshot-test",
+                workspace_root=root,
+            )
+            self.addCleanup(filesystem.close)
+            with patch(
+                "core.runtime.hosted_workspace_snapshot."
+                "MAX_HOSTED_WORKSPACE_SNAPSHOT_ENTRIES",
+                1,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeToolError,
+                    "workspace_snapshot_too_large",
                 ):
-                    with self.assertRaisesRegex(
-                        RuntimeToolError,
-                        "workspace_shell_git_metadata_scan_too_large",
-                    ):
-                        scan_hosted_workspace_git_metadata(root_fd)
-            finally:
-                os.close(root_fd)
+                    HostedWorkspaceSnapshot.create(
+                        filesystem,
+                        runtime_root=runtime_root,
+                    )
 
             (root / "one").unlink()
             (root / "two").unlink()
             (root / "private").mkdir()
             (root / ".git").symlink_to(root / "private", target_is_directory=True)
-            root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            snapshot = HostedWorkspaceSnapshot.create(
+                filesystem,
+                runtime_root=runtime_root,
+            )
             try:
-                with self.assertRaisesRegex(
-                    RuntimeToolError,
-                    "workspace_shell_git_metadata_unsafe",
-                ):
-                    scan_hosted_workspace_git_metadata(root_fd)
+                snapshot_fd = snapshot.duplicate_root_fd()
+                with self.assertRaises(FileNotFoundError):
+                    os.stat(".git", dir_fd=snapshot_fd, follow_symlinks=False)
             finally:
-                os.close(root_fd)
+                os.close(snapshot_fd)
+                snapshot.discard()
 
     def test_shell_masks_git_worktree_pointer_file(self) -> None:
         (self.workspace / ".git").write_text(

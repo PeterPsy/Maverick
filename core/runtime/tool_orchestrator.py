@@ -394,32 +394,14 @@ class RuntimeToolOrchestrator:
             preflight = self.catalog_builder.result_preflight_resolver
             if preflight is not None:
                 try:
-                    preflight_decision = preflight(
+                    self._require_result_preflight(
+                        preflight,
                         descriptor.handle,
                         arguments,
                         context,
+                        authority=authority,
                     )
-                except Exception:
-                    return self.deny_observed_tool(
-                        record,
-                        resolution_status="not_authorized",
-                        failure_reason="tool_result_egress_not_guaranteed",
-                    )
-                if (
-                    preflight_decision is not None
-                    and (
-                        not isinstance(
-                            preflight_decision,
-                            RuntimeToolResultPreflightDecision,
-                        )
-                        or not preflight_decision.admitted_before_effect
-                        or (
-                            preflight_decision.guaranteed_data_class is not None
-                            and preflight_decision.guaranteed_data_class
-                            not in authority.allowed_remote_data_classes
-                        )
-                    )
-                ):
+                except RuntimeToolError:
                     return self.deny_observed_tool(
                         record,
                         resolution_status="not_authorized",
@@ -527,6 +509,7 @@ class RuntimeToolOrchestrator:
             self._execute_started(
                 record,
                 descriptor=descriptor,
+                authority=authority,
                 context=context,
                 policy=policy,
                 control=control,
@@ -650,6 +633,7 @@ class RuntimeToolOrchestrator:
         record: ToolInvocationRecord,
         *,
         descriptor: RuntimeToolDescriptor,
+        authority: EffectiveRuntimeAuthority,
         context: RuntimeToolActorContext,
         policy: RuntimeToolConfirmationPolicy,
         control: RuntimeToolExecutionControl | None,
@@ -663,6 +647,18 @@ class RuntimeToolOrchestrator:
                 control.check()
             arguments = self.ledger.load_arguments(executing)
             validate_tool_arguments(descriptor.original_input_schema, arguments)
+            preflight = self.catalog_builder.result_preflight_resolver
+            if preflight is not None:
+                # The validation disposition is not an execution capability.
+                # Re-evaluate live app code and result authority immediately
+                # before dispatch so drift cannot cross the effect boundary.
+                self._require_result_preflight(
+                    preflight,
+                    descriptor.handle,
+                    arguments,
+                    context,
+                    authority=authority,
+                )
             if control is not None:
                 control.check()
             crossed_effect_boundary = True
@@ -817,6 +813,32 @@ class RuntimeToolOrchestrator:
         finally:
             if control is not None:
                 control.complete()
+
+    @staticmethod
+    def _require_result_preflight(
+        resolver,
+        handle: str,
+        arguments: dict[str, object],
+        context: RuntimeToolActorContext,
+        *,
+        authority: EffectiveRuntimeAuthority,
+    ) -> None:
+        try:
+            decision = resolver(handle, arguments, context)
+        except Exception as error:
+            raise RuntimeToolError("tool_result_egress_not_guaranteed") from error
+        if decision is None:
+            return
+        if (
+            not isinstance(decision, RuntimeToolResultPreflightDecision)
+            or not decision.admitted_before_effect
+            or (
+                decision.guaranteed_data_class is not None
+                and decision.guaranteed_data_class
+                not in authority.allowed_remote_data_classes
+            )
+        ):
+            raise RuntimeToolError("tool_result_egress_not_guaranteed")
 
     def _persist_execution_success(
         self,

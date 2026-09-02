@@ -26,6 +26,10 @@ def core_mcp_tool(
     invocation_policy: McpInvocationPolicy,
     input_schema: dict[str, Any] | None = None,
     agentic_result_data_class: McpAgenticResultDataClass | None = None,
+    agentic_result_projection: str | None = None,
+    effect_class: str = "unclassified",
+    supports_idempotency: bool = False,
+    safe_to_retry: bool = False,
 ) -> McpToolDefinition:
     """Build one core-owned MCP tool definition."""
     return McpToolDefinition(
@@ -39,9 +43,13 @@ def core_mcp_tool(
         exposure_scope="core_global",
         invocation_policy=invocation_policy,
         entrypoint_path=None,
+        effect_class=effect_class,  # type: ignore[arg-type]
+        supports_idempotency=supports_idempotency,
+        safe_to_retry=safe_to_retry,
         schema_public=True,
         certified_tcb_component="tool-schema-catalog",
         agentic_result_data_class=agentic_result_data_class,
+        agentic_result_projection=agentic_result_projection,
     )
 
 

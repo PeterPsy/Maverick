@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 from threading import RLock
 import time
+from typing import Callable
 from uuid import uuid4
 
 from core.runtime.confined_filesystem import ConfinedWorkspaceFilesystem
@@ -17,6 +18,7 @@ from core.runtime.hosted_workspace_effects import (
     HostedWorkspaceEffectOverlay,
     HostedWorkspaceMutationScope,
 )
+from core.runtime.hosted_workspace_snapshot import HostedWorkspaceSnapshot
 from core.runtime.hosted_result_authority_guard import (
     HostedResultAuthorityGuard,
 )
@@ -51,6 +53,7 @@ class _LiveHostedToolProcess:
     session_id: str
     workspace_id: str
     effect_overlay: HostedWorkspaceEffectOverlay | None
+    workspace_snapshot: HostedWorkspaceSnapshot
     workspace_effects: dict[str, object] | None = None
     result_classification_resolver: object | None = None
     result_context: object | None = None
@@ -60,8 +63,14 @@ class _LiveHostedToolProcess:
 class HostedToolProcessRegistry:
     """Own process handles until terminal status or session-level cleanup."""
 
-    def __init__(self, *, store) -> None:
+    def __init__(
+        self,
+        *,
+        store,
+        spawn_observer: Callable[[str], None] | None = None,
+    ) -> None:
         self.store = store
+        self.spawn_observer = spawn_observer
         self._live: dict[str, _LiveHostedToolProcess] = {}
         self._lock = RLock()
 
@@ -98,6 +107,7 @@ class HostedToolProcessRegistry:
         output_handle = None
         output_capture = None
         process: subprocess.Popen[bytes] | None = None
+        snapshot_transferred = False
         try:
             runtime_fd = filesystem.open_platform_runtime_fd(runtime_root)
             try:
@@ -142,6 +152,8 @@ class HostedToolProcessRegistry:
                 pass_fds=prepared.pass_fds,
                 start_new_session=True,
             )
+            if self.spawn_observer is not None:
+                self.spawn_observer("process")
             prepared.filesystem.assert_shell_cwd(prepared.cwd_chain)  # type: ignore[arg-type]
             output_capture = HostedProcessOutputCapture(
                 process=process,
@@ -165,11 +177,13 @@ class HostedToolProcessRegistry:
                     session_id=session_id,
                     workspace_id=workspace_id,
                     effect_overlay=prepared.effect_overlay,
+                    workspace_snapshot=prepared.workspace_snapshot,
                     result_classification_resolver=(
                         result_classification_resolver
                     ),
                     result_context=result_context,
                 )
+                snapshot_transferred = True
             return {
                 "process_id": process_id,
                 "status": "running",
@@ -178,8 +192,6 @@ class HostedToolProcessRegistry:
                 "mutation_scope_count": len(mutation_scopes),
             }
         except Exception as error:
-            if prepared.effect_overlay is not None:
-                prepared.effect_overlay.discard()
             if process is not None:
                 terminate_runtime_process(process)
                 unregister_runtime_process(session_id, process)
@@ -187,6 +199,12 @@ class HostedToolProcessRegistry:
                 output_capture.wait()
             elif output_handle is not None:
                 output_handle.close()
+            # The child may already have mounted both trees when a post-spawn
+            # setup step fails. Quiesce it before unlinking either backing view.
+            if prepared.effect_overlay is not None:
+                prepared.effect_overlay.discard()
+            if not snapshot_transferred:
+                prepared.workspace_snapshot.discard()
             if output_fd is not None:
                 os.close(output_fd)
                 output_fd = None
@@ -214,6 +232,8 @@ class HostedToolProcessRegistry:
                 os.close(output_directory_fd)
             if runtime_fd is not None:
                 os.close(runtime_fd)
+            if not snapshot_transferred:
+                prepared.workspace_snapshot.discard()
             prepared.close()
 
     def status(
@@ -597,6 +617,7 @@ class HostedToolProcessRegistry:
         capture_finished = live.output_capture.wait()
         if live.effect_overlay is not None:
             live.effect_overlay.discard()
+        live.workspace_snapshot.discard()
         if not capture_finished:
             raise RuntimeToolError("process_output_capture_failed")
         try:

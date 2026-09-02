@@ -198,6 +198,12 @@ not to shell-owned IndexedDB or OPFS. The default-off data gate remains
 mandatory until app-owned resource, privacy, and physical-device rollout gates
 are complete.
 
+This is a fail-closed invariant rather than a deployment toggle. Maverick does
+not provide a same-platform-origin launch fallback for executable app or widget
+documents. Hosted app-frame and sidecar hosts both require the exact
+`*.sidecars.<installation-domain>` TLS wildcard; a certificate containing only
+currently observed opaque hosts cannot satisfy the boundary.
+
 ## M4 implementation profile
 
 M4 adds the automatic file-cache engine without changing the product UI or

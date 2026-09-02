@@ -104,6 +104,17 @@ describe("isolated Maverick frame policy", () => {
     await expect(requestAppFrameLaunch("storage", "/apps/storage/"))
       .rejects.toThrow(/invalid isolated app-frame launch/i);
   });
+
+  it("rejects legacy same-origin launch payloads", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      launch_url: "/apps/storage/",
+      mode: "same_origin",
+      origin: window.location.origin,
+    }), { status: 200 })));
+
+    await expect(requestAppFrameLaunch("storage", "/apps/storage/"))
+      .rejects.toThrow(/invalid isolated app-frame launch/i);
+  });
 });
 
 function message(frame: HTMLIFrameElement, origin: string): MessageEvent {

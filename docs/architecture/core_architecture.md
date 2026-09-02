@@ -1181,6 +1181,16 @@ for inbound messages and never broadens host-to-frame delivery to `*`. The
 default-off `data_cache` flag still enforces the separate resource, privacy,
 and physical-rollout gates for M3.
 
+This isolation boundary is mandatory. Core has no same-platform-origin app or
+widget launch mode: invalid or unavailable isolated-origin routing fails the
+launch closed and never makes direct documents available as a fallback. A
+hosted deployment must terminate a currently valid certificate whose SAN
+contains the exact `*.sidecars.<installation-domain>` wildcard; certificates
+for a finite set of `sc-*` or `af-*` hosts are insufficient because both host
+families are derived dynamically. Installer health checks exercise reserved
+hosts from both families with normal hostname verification before the hosted
+boundary is accepted.
+
 Cache API, IndexedDB, and OPFS hold derived copies only. They cannot become a
 source of platform authority or satisfy capability, certificate, provider
 binding, admission, egress, recovery, confirmation, or revocation decisions.

@@ -6,9 +6,11 @@ import asyncio
 import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from core.api.app_frame_browser import APP_FRAME_BOOTSTRAP_PATH, APP_FRAME_LAUNCH_PATH
 from core.api.asgi_application import PlatformAsgiHost
@@ -26,13 +28,13 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
     def test_launch_bootstrap_authority_and_document_isolation(self) -> None:
         asyncio.run(self._assert_origin_contract())
 
-    def test_same_origin_launch_mode(self) -> None:
-        asyncio.run(self._assert_same_origin_contract())
+    def test_legacy_same_origin_override_cannot_disable_isolation(self) -> None:
+        asyncio.run(self._assert_legacy_same_origin_override_is_ignored())
 
-    async def _assert_same_origin_contract(self) -> None:
-        import os
-        from unittest.mock import patch
+    def test_invalid_sidecar_origin_mode_fails_closed(self) -> None:
+        asyncio.run(self._assert_invalid_sidecar_origin_mode_fails_closed())
 
+    async def _assert_legacy_same_origin_override_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(Path(temp_dir))
             state = self._state_with_frontend(repo_root)
@@ -42,7 +44,19 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             platform_cookie = await self._login(app, host=platform_host)
 
             with patch.dict(os.environ, {"MAVERICK_APP_FRAME_ISOLATION_MODE": "same_origin"}):
-                launch_status, launch_body, launch_headers = await self._invoke(
+                callback_status, callback_body, _callback_headers = await self._invoke(
+                    app,
+                    host=platform_host,
+                    path="/apps/frame-demo/oauth/callback",
+                    headers={"cookie": platform_cookie},
+                )
+                self.assertEqual(callback_status, 200)
+                self.assertIn(b"location.pathname+location.search+location.hash", callback_body)
+                self.assertIn(b"l.bootstrap_url", callback_body)
+                self.assertIn(b"l.ticket_field", callback_body)
+                self.assertIn(b"l.ticket", callback_body)
+
+                launch_status, launch_body, _launch_headers = await self._invoke(
                     app,
                     host=platform_host,
                     path=APP_FRAME_LAUNCH_PATH,
@@ -56,18 +70,72 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
                 )
                 self.assertEqual(launch_status, 200)
                 launch = json.loads(launch_body)
-                self.assertEqual(launch["mode"], "same_origin")
-                self.assertEqual(launch["origin"], platform_origin)
-                self.assertEqual(launch["launch_url"], "/apps/frame-demo/")
+                self.assertTrue(launch["origin"].startswith("http://af-"))
+                self.assertNotEqual(launch["origin"], platform_origin)
+                self.assertEqual(launch["method"], "POST")
+                self.assertEqual(launch["ticket_field"], "ticket")
+                self.assertTrue(launch["ticket"])
+                self.assertEqual(
+                    launch["bootstrap_url"],
+                    launch["origin"] + APP_FRAME_BOOTSTRAP_PATH,
+                )
+                self.assertNotIn("mode", launch)
+                self.assertNotIn("launch_url", launch)
 
-                direct_status, direct_body, direct_headers = await self._invoke(
+                direct_status, direct_body, _direct_headers = await self._invoke(
                     app,
                     host=platform_host,
                     path="/apps/frame-demo/",
                     headers={"cookie": platform_cookie},
                 )
-                self.assertEqual(direct_status, 200)
-                self.assertIn(b"frame-demo", direct_body)
+                self.assertEqual(direct_status, 403)
+                self.assertEqual(
+                    json.loads(direct_body)["error"],
+                    "app_frame_isolation_required",
+                )
+
+    async def _assert_invalid_sidecar_origin_mode_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(Path(temp_dir))
+            state = self._state_with_frontend(repo_root)
+            app = PlatformAsgiHost(state)
+            platform_host = "maverick.localhost:8000"
+            platform_origin = f"http://{platform_host}"
+            platform_cookie = await self._login(app, host=platform_host)
+
+            with patch.dict(os.environ, {"MAVERICK_SIDECAR_ORIGIN_MODE": "disabled"}):
+                os.environ.pop("MAVERICK_APP_FRAME_ISOLATION_MODE", None)
+                direct_status, direct_body, _direct_headers = await self._invoke(
+                    app,
+                    host=platform_host,
+                    path="/apps/frame-demo/",
+                    headers={"cookie": platform_cookie},
+                )
+                self.assertEqual(direct_status, 403)
+                self.assertEqual(
+                    json.loads(direct_body)["error"],
+                    "app_frame_isolation_required",
+                )
+
+                launch_status, launch_body, _launch_headers = await self._invoke(
+                    app,
+                    host=platform_host,
+                    path=APP_FRAME_LAUNCH_PATH,
+                    method="POST",
+                    body=json.dumps(
+                        {"app_id": "frame-demo", "path": "/apps/frame-demo/"}
+                    ).encode(),
+                    headers={
+                        "content-type": "application/json",
+                        "cookie": platform_cookie,
+                        "origin": platform_origin,
+                    },
+                )
+                self.assertEqual(launch_status, 404)
+                self.assertEqual(
+                    json.loads(launch_body)["error"],
+                    "app_frame_unavailable",
+                )
 
     async def _assert_origin_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -5,14 +5,14 @@ export const MAVERICK_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups
 
 const registeredFrames = new Set<HTMLIFrameElement>();
 
-export function setMaverickFrameOrigin(frame: HTMLIFrameElement, origin: string | null, allowSameOrigin = false) {
+export function setMaverickFrameOrigin(frame: HTMLIFrameElement, origin: string | null) {
   if (!origin) {
     registeredFrames.delete(frame);
     delete frame.dataset.maverickFrameOrigin;
     return;
   }
   const parsed = new URL(origin);
-  if (parsed.origin !== origin || (!allowSameOrigin && origin === window.location.origin)) {
+  if (parsed.origin !== origin || origin === window.location.origin) {
     throw new Error("Maverick app frames require a distinct exact origin.");
   }
   frame.dataset.maverickFrameOrigin = origin;

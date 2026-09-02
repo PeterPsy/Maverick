@@ -1605,6 +1605,14 @@ disabled by default until its resource, privacy, lifecycle, and physical
 rollout gates are approved; isolation is necessary but does not itself grant
 cache policy.
 
+There is no same-platform-origin compatibility mode for executable app or
+widget documents. If the isolated browser origin cannot be created or reached,
+Core fails launch closed and keeps direct platform-origin documents blocked.
+Hosted installations must provision the exact
+`*.sidecars.<installation-domain>` TLS wildcard used by both dynamically
+derived `sc-*` sidecar hosts and `af-*` app-frame hosts; enumerating currently
+known hosts is not a valid substitute.
+
 Cached platform control-plane state never authorizes an app action. An app
 renders a valid cached result through its normal component and keeps a cache
 miss in its normal loading state during a transient transport failure. App

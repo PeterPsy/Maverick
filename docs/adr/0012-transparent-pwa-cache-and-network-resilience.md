@@ -257,9 +257,11 @@ video/audio streaming and the same ordinary loading/viewer components.
 M5 adds the first app-owned structured read models without exposing the M3
 host capability to an embedded app. Base Shell owns a parent broker bound to
 the authenticated user, active workspace, and access lease. It accepts a
-private `MessageChannel` only from the registered frame window at its exact
-isolated origin and only for a fixed app/resource/schema declaration whose
-global and per-app rollout gates are both enabled. The child performs the
+private `MessageChannel` only from a registered app or widget frame window at
+its exact isolated origin. Each registration records the real owner app id;
+the broker requires that owner to match the request app id and a fixed
+app/resource/schema declaration whose global and per-app rollout gates are
+both enabled. The child performs the
 app-specific conditional HTTP/backend read and applies its exact sanitizer;
 the parent owns IndexedDB, policy derivation, TTL, quota, and lifecycle. A
 missing or disabled broker produces one ordinary server read.
@@ -276,10 +278,17 @@ and Mail remain denied pending explicit privacy approval.
 
 Legacy Website Studio snapshots and Fitness Coach bootstrap/thumbnail values
 may be offered only as sanitized migration seeds. They never paint directly
-and are removed only after the parent verifies the scoped commit. App Store
+and are removed only after the parent verifies the scoped commit. Fitness
+Coach derives the legacy bootstrap workspace and mounted-app scope from the
+immutable context injected by Core into the authenticated isolated document,
+never from mutable URL query parameters. App Store
 catalog rows remain read-only until fresh workspace, installation, pin, and
 other authority inputs arrive. Across every pilot, expired data is a miss,
-`401`/`403` triggers scoped cleanup and blocks reuse, and no cache result grants
+`maverick.app.data-changed` is accepted only from the shell or a frame whose
+registered owner exactly matches the declared owner. A `401`/`403` triggers
+scoped cleanup, notifies the shell to clear authenticated UI, and unmounts all
+app/widget frames so previously rendered private data cannot survive; a later
+authenticated session creates fresh frames. No cache result grants
 mutation, provider, capability, publication, or launch authority. Both the
 global and all per-app M5 gates remain off by default; implementation readiness
 does not replace privacy or physical Safari/Home Screen release evidence.

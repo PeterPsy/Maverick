@@ -29,13 +29,20 @@ function payload(stateVersion: string, workspaceId = 'default'): AppBootstrapPay
 }
 
 function stubFrame(parent: Pick<Window, 'postMessage'>) {
-  const frameWindow = new EventTarget() as EventTarget & Window & { __MAVERICK_PLATFORM_ORIGIN__: string };
+  const frameWindow = new EventTarget() as EventTarget & Window & {
+    __MAVERICK_APP_FRAME_CONTEXT__: Readonly<{ app_id: string; workspace_id: string }>;
+    __MAVERICK_PLATFORM_ORIGIN__: string;
+  };
   Object.assign(frameWindow, {
+    __MAVERICK_APP_FRAME_CONTEXT__: Object.freeze({
+      app_id: 'fitness-coach',
+      workspace_id: 'default'
+    }),
     __MAVERICK_PLATFORM_ORIGIN__: 'https://maverick.test',
     location: {
       origin: 'https://fitness-coach.sidecars.maverick.test',
       pathname: '/apps/fitness-coach/',
-      search: '?workspace_id=default'
+      search: ''
     },
     parent
   });

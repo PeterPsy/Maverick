@@ -1,6 +1,6 @@
 {
   "schema": "maverick.frontend-assets.v2",
-  "build_id": "09343b696dc2e16f6a51bf16cacca831d1e2b88201b6f83de87be391a1e18c19",
+  "build_id": "c97d0013b545d4c9b08a5af9a250b1e7bcf0459a4cdb504d2849fc0748338016",
   "entrypoints": [
     "index.html",
     "widgets/fitness-coach-sidebar/index.html",
@@ -13,14 +13,14 @@
       "size_bytes": 7278
     },
     {
+      "path": "assets/app-C6Lb4Lxf.js",
+      "sha256": "3350189622527b51ab30bc3efe6e2612baa1b09400f69df085fca032c8a2d53a",
+      "size_bytes": 86202
+    },
+    {
       "path": "assets/app-CJl-fSM1.css",
       "sha256": "bac8e10b7ce2c870537af3de9a6cc25bd5a81e439da5e6f85f542fe80ad5b4dd",
       "size_bytes": 34989
-    },
-    {
-      "path": "assets/app-DL18qock.js",
-      "sha256": "52f62092dca00ea93e1e74a2c0c34ca2260d72f1e2678cd2f563d0bd048e6225",
-      "size_bytes": 86053
     },
     {
       "path": "assets/count-down-fitness-coach-AWlrmdI5.mp3",
@@ -66,7 +66,7 @@
   "revalidated": [
     {
       "path": "index.html",
-      "sha256": "82a9d3469748d6c28c52c15f6b65fe4ea59ba7d889d60f85ba0e2d0ef3642621",
+      "sha256": "fae4ab84854b34fc2335f610c81280bbf34e95e388c188b72257b5962d906eea",
       "size_bytes": 717
     },
     {

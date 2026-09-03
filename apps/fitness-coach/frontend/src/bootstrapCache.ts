@@ -1,4 +1,5 @@
-import { currentStorageAppId } from './api';
+import { readMaverickAppFrameContext } from '@maverick/pwa-cache';
+import { currentStorageAppId, mountedAppIdFromPath } from './api';
 import type { AppBootstrapPayload } from './types';
 
 const BOOTSTRAP_CACHE_VERSION = 1;
@@ -25,28 +26,21 @@ function bootstrapCacheKey(scope: BootstrapCacheScope) {
   return `fitness-coach:bootstrap:${scope.workspaceId}:${scope.appId}:${scope.storageAppId}`;
 }
 
-export function bootstrapCacheScopeFromLocation(requireWorkspace: boolean): BootstrapCacheScope | null {
+export function bootstrapCacheScopeFromFrameContext(): BootstrapCacheScope | null {
   if (typeof window === 'undefined') return null;
-  const params = new URLSearchParams(window.location.search);
-  const workspaceId = params.get('workspace_id') || params.get('workspace') || '';
-  const appId = params.get('app_id') || 'fitness-coach';
-  const storageAppId = currentStorageAppId();
-  if (requireWorkspace && !workspaceId) return null;
-  return { workspaceId, appId, storageAppId };
-}
-
-function bootstrapCacheScopeFromPayload(payload: AppBootstrapPayload): BootstrapCacheScope | null {
-  if (!payload.workspace_id) return null;
+  const context = readMaverickAppFrameContext();
+  const mountedAppId = mountedAppIdFromPath(window.location.pathname, 'fitness-coach');
+  if (!context || context.appId !== mountedAppId) return null;
   return {
-    workspaceId: payload.workspace_id,
-    appId: payload.app_id || 'fitness-coach',
+    workspaceId: context.workspaceId,
+    appId: context.appId,
     storageAppId: currentStorageAppId()
   };
 }
 
 export function readBootstrapCache(): AppBootstrapPayload | null {
   if (typeof window === 'undefined') return null;
-  const scope = bootstrapCacheScopeFromLocation(true);
+  const scope = bootstrapCacheScopeFromFrameContext();
   if (!scope) return null;
   const key = bootstrapCacheKey(scope);
   try {
@@ -68,8 +62,10 @@ export function readBootstrapCache(): AppBootstrapPayload | null {
 }
 
 export function removeBootstrapCache(payload: AppBootstrapPayload) {
-  const scope = bootstrapCacheScopeFromPayload(payload);
-  if (!scope) return;
+  const scope = bootstrapCacheScopeFromFrameContext();
+  if (!scope
+      || payload.workspace_id !== scope.workspaceId
+      || payload.app_id !== scope.appId) return;
   try {
     window.sessionStorage.removeItem(bootstrapCacheKey(scope));
   } catch {

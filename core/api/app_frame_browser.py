@@ -660,7 +660,7 @@ class _IsolatedHttpResponse:
         start = self._start or {"type": "http.response.start", "status": 502, "headers": []}
         body = b"" if self._request_method == "HEAD" else _inject_message_relay(
             b"".join(self._body),
-            self._binding.platform_origin,
+            self._binding,
         )
         await self._send(self._rewritten_start(start, content_length=len(body)))
         await self._send({"type": "http.response.body", "body": body, "more_body": False})
@@ -701,18 +701,28 @@ class _IsolatedHttpResponse:
         return {**message, "headers": headers}
 
 
-def _inject_message_relay(body: bytes, platform_origin: str) -> bytes:
+def _inject_message_relay(body: bytes, binding: SidecarBrowserBinding) -> bytes:
     try:
         html = body.decode("utf-8")
     except UnicodeDecodeError:
         return body
+    platform_origin = binding.platform_origin
     html = rewrite_public_app_asset_urls(html, platform_origin)
     origin = json.dumps(platform_origin, ensure_ascii=True)
+    frame_context = json.dumps(
+        {
+            "app_id": binding.mount_app_id or binding.app_id,
+            "workspace_id": binding.workspace_id,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).replace("<", "\\u003c")
     lease_path = json.dumps(APP_FRAME_SESSION_LEASE_PATH, ensure_ascii=True)
     authorization_message = json.dumps(APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE, ensure_ascii=True)
     script = (
         "<script>"
         "(()=>{const o=" + origin + ";"
+        "const fc=Object.freeze(" + frame_context + ");"
         "const lp=" + lease_path + ",am=" + authorization_message + ";"
         "let hv=true,lt=0,lr=0,lf=false;"
         "const a=d=>{if(!d||d.type!=='maverick.shell.layout-changed'||typeof d.mobile!=='boolean')return;"
@@ -741,6 +751,8 @@ def _inject_message_relay(body: bytes, platform_origin: str) -> bytes:
         "const v=d=>{if(!d||d.type!=='maverick.app.visibility-changed'||typeof d.visible!=='boolean')return;"
         "hv=d.visible;lw();};"
         "Object.defineProperty(window,'__MAVERICK_PLATFORM_ORIGIN__',{value:o,configurable:false});"
+        "Object.defineProperty(window,'__MAVERICK_APP_FRAME_CONTEXT__',"
+        "{value:fc,writable:false,configurable:false});"
         "a({type:'maverick.shell.layout-changed',mobile:new URLSearchParams(location.search).get('maverick_mobile_layout')==='1'});"
         "window.addEventListener('message',e=>{"
         "if(e.source!==window.parent||e.origin!==o)return;"

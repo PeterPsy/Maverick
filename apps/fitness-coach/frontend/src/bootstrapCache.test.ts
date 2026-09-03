@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readBootstrapCache, sanitizeBootstrapReadModel } from './bootstrapCache';
+import { readBootstrapCache, removeBootstrapCache, sanitizeBootstrapReadModel } from './bootstrapCache';
 import type { AppBootstrapPayload } from './types';
 
 function bootstrapPayload(overrides: Partial<AppBootstrapPayload> = {}): AppBootstrapPayload {
@@ -19,7 +19,7 @@ function bootstrapPayload(overrides: Partial<AppBootstrapPayload> = {}): AppBoot
   };
 }
 
-function stubWindow(search = '') {
+function stubWindow(context?: { app_id: string; workspace_id: string }) {
   const values = new Map<string, string>();
   const sessionStorage = {
     getItem: vi.fn((key: string) => values.get(key) ?? null),
@@ -29,12 +29,16 @@ function stubWindow(search = '') {
     key: vi.fn((index: number) => Array.from(values.keys())[index] ?? null),
     get length() { return values.size; }
   } as Storage;
-  vi.stubGlobal('window', { location: { search }, sessionStorage });
+  vi.stubGlobal('window', {
+    ...(context ? { __MAVERICK_APP_FRAME_CONTEXT__: Object.freeze(context) } : {}),
+    location: { pathname: '/apps/fitness-coach/', search: '' },
+    sessionStorage
+  });
   return { values, sessionStorage };
 }
 
-function seedLegacyBootstrap(values: Map<string, string>, value: unknown) {
-  values.set('fitness-coach:bootstrap:default:fitness-coach:storage', JSON.stringify({
+function seedLegacyBootstrap(values: Map<string, string>, value: unknown, workspaceId = 'default') {
+  values.set(`fitness-coach:bootstrap:${workspaceId}:fitness-coach:storage`, JSON.stringify({
     version: 1,
     cached_at: '2026-09-03T00:00:00.000Z',
     payload: value
@@ -46,18 +50,18 @@ describe('bootstrap cache', () => {
     vi.unstubAllGlobals();
   });
 
-  it('does not read a cache scope when the current URL does not provide a workspace', () => {
-    stubWindow('');
+  it('does not read a cache scope without host-attested frame context', () => {
+    stubWindow();
 
     expect(readBootstrapCache()).toBeNull();
   });
 
-  it('does not prepaint cached workspace data after a workspace switch leaves the iframe URL unscoped', () => {
-    const { values } = stubWindow('');
+  it('does not prepaint cached workspace data after a host-attested workspace switch', () => {
+    const { values } = stubWindow({ app_id: 'fitness-coach', workspace_id: 'other' });
     seedLegacyBootstrap(values, {
       ...bootstrapPayload(),
       stream_url: 'must-not-persist'
-    });
+    }, 'other');
 
     expect(readBootstrapCache()).toBeNull();
   });
@@ -78,20 +82,31 @@ describe('bootstrap cache', () => {
     expect(serialized).toContain('Workout A');
   });
 
-  it('reads cached data only when the URL workspace matches the stored payload scope', () => {
-    const { sessionStorage, values } = stubWindow('');
+  it('reads cached data with no query scope when the host context matches the stored payload', () => {
+    const { values } = stubWindow({ app_id: 'fitness-coach', workspace_id: 'default' });
     seedLegacyBootstrap(values, bootstrapPayload());
-    vi.stubGlobal('window', { location: { search: '?workspace_id=default' }, sessionStorage });
 
     expect(readBootstrapCache()).toEqual(bootstrapPayload());
   });
 
-  it('does not read cached data when the URL workspace differs from the stored payload scope', () => {
-    const { sessionStorage, values } = stubWindow('');
-    seedLegacyBootstrap(values, bootstrapPayload());
-    vi.stubGlobal('window', { location: { search: '?workspace_id=other' }, sessionStorage });
+  it('does not read cached data when the host workspace differs from the payload scope', () => {
+    const { values } = stubWindow({ app_id: 'fitness-coach', workspace_id: 'other' });
+    seedLegacyBootstrap(values, bootstrapPayload(), 'other');
 
     expect(readBootstrapCache()).toBeNull();
+  });
+
+  it('removes only the legacy key matching the current host-attested scope', () => {
+    const { values, sessionStorage } = stubWindow({ app_id: 'fitness-coach', workspace_id: 'default' });
+    seedLegacyBootstrap(values, bootstrapPayload());
+
+    removeBootstrapCache(bootstrapPayload({ workspace_id: 'other' }));
+    expect(sessionStorage.removeItem).not.toHaveBeenCalled();
+
+    removeBootstrapCache(bootstrapPayload());
+    expect(sessionStorage.removeItem).toHaveBeenCalledWith(
+      'fitness-coach:bootstrap:default:fitness-coach:storage'
+    );
   });
 
   it('rejects a cache-poisoned bootstrap whose app records do not match the schema', () => {

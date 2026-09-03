@@ -1,4 +1,8 @@
-import { readThroughParentDataCache, type ParentDataCacheReadResult } from '@maverick/pwa-cache';
+import {
+  readMaverickAppFrameContext,
+  readThroughParentDataCache,
+  type ParentDataCacheReadResult
+} from '@maverick/pwa-cache';
 import { callBackend, currentStorageAppId, mountedAppIdFromPath } from './api';
 import { sanitizeBootstrapReadModel } from './bootstrapCache';
 import type { AppBootstrapPayload } from './types';
@@ -17,15 +21,17 @@ export async function readCachedBootstrap(
     typeof window === 'undefined' ? '' : window.location.pathname,
     'fitness-coach'
   );
+  const frameContext = readMaverickAppFrameContext();
+  const frameContextMatchesMount = !frameContext || frameContext.appId === appId;
   const storageAppId = currentStorageAppId();
-  const workspaceId = mountedWorkspaceId();
   const includeRuns = options.includeRuns === true;
   const selectedWorkoutId = String(options.selectedWorkoutId || 'active');
   const sanitize = (value: unknown) => {
     const payload = sanitizeBootstrapReadModel(value);
     if (!payload
+        || !frameContextMatchesMount
         || payload.app_id !== appId
-        || (workspaceId && payload.workspace_id !== workspaceId)) return null;
+        || (frameContext && payload.workspace_id !== frameContext.workspaceId)) return null;
     return payload;
   };
   const migrationSeed = options.migrationSeed
@@ -60,10 +66,4 @@ export async function readCachedBootstrap(
     sanitize,
     signal: options.signal
   });
-}
-
-function mountedWorkspaceId(): string {
-  if (typeof window === 'undefined') return '';
-  const params = new URLSearchParams(window.location.search);
-  return params.get('workspace_id') || params.get('workspace') || '';
 }

@@ -1609,6 +1609,13 @@ disabled by default until its resource, privacy, lifecycle, and physical
 rollout gates are approved; isolation is necessary but does not itself grant
 cache policy.
 
+Core injects a frozen, non-configurable `__MAVERICK_APP_FRAME_CONTEXT__` into
+each authenticated isolated app and widget HTML document. It contains only the
+canonical workspace id and public mounted app id from the browser-session
+binding. Apps may use this host-attested context to reject a legacy cache value
+from another scope; URL query parameters are not workspace attestation and the
+context itself does not authorize an app action.
+
 There is no same-platform-origin compatibility mode for executable app or
 widget documents. If the isolated browser origin cannot be created or reached,
 Core fails launch closed and keeps direct platform-origin documents blocked.
@@ -1629,8 +1636,10 @@ or persistent mutation queue as an implicit consequence of cache support.
 M5 app frontends use the Base Shell parent broker rather than constructing the
 host capability themselves. A child request names only its own mounted app,
 opaque entity, fixed resource, and exact resource schema revision. Base Shell
-accepts it only from that app's registered frame window and exact isolated
-origin and only when both global and per-app gates are open. The app performs
+registers every app and widget frame together with its real owner app id and
+accepts a request only when that owner matches the request, the frame window
+and exact isolated origin match, and both global and per-app gates are open.
+The app performs
 its conditional backend read when requested over the private channel and
 returns an app-sanitized model; it never receives the host principal, access
 lease, IndexedDB backend, or another resource namespace. A rejected or absent
@@ -1638,14 +1647,24 @@ broker invokes the same server read directly. Sanitized legacy state is a
 migration seed, never an independently renderable value, and may be removed
 only after the parent verifies the scoped commit.
 
+Structured invalidation messages follow that same owner registration:
+neither an app nor one of its widgets may claim another app's owner id. Declared
+resource aliases are resolved only after owner verification. If a warm read has
+already rendered and its revalidation returns `401` or `403`, the broker starts
+durable cleanup and AppShell clears authenticated UI and unmounts every app and
+widget frame. Reauthentication creates new frame documents, so private data
+from the revoked scope cannot remain in the DOM.
+
 The initial declarations are Website Studio site snapshots, Storage catalog
 metadata, the App Store catalog, and Fitness Coach bootstrap/thumbnail data.
 Their schemas, classifications, validators, TTLs, byte budgets, event aliases,
 and persistence outcomes are normative in
 `docs/product/pwa_cache_resource_inventory.v2.json`. App Store catalog data
 cannot enable an install, launch, workspace assignment, pin, or publication
-control before fresh server authority loads. Fitness Coach personal data is
-session-only until a separate privacy decision changes the resource policy;
+control before fresh server authority loads. Fitness Coach obtains the exact
+workspace/app scope for legacy bootstrap migration from Core's immutable frame
+context and never from the launch URL query. Its personal data is session-only
+until a separate privacy decision changes the resource policy;
 feature flags cannot make that promotion. Calendar, Chat, CRM, and Mail are not
 implicitly enabled by the existence of the broker.
 

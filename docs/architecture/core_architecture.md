@@ -1226,8 +1226,13 @@ inside the app's distinct origin and does not expose shell-owned IndexedDB or
 OPFS. The validated session propagates its canonical local and mount app ids as
 internal HTTP and WebSocket scope authority. Every app or widget frontend path
 must match that bound owner before routing; the proxy marker alone grants no
-document authority. Base Shell validates both the exact registered frame window
-and origin for inbound messages and never broadens host-to-frame delivery to `*`. The
+document authority. Core also injects a frozen, non-configurable
+`__MAVERICK_APP_FRAME_CONTEXT__` containing only the authenticated workspace id
+and public mounted app id into every isolated app and widget HTML document.
+Apps may use this host-attested scope to validate local migration candidates,
+but it does not grant application authority. Base Shell validates both the
+exact registered frame window and origin for inbound messages and never
+broadens host-to-frame delivery to `*`. The
 default-off `data_cache` flag still enforces the separate resource, privacy,
 and physical-rollout gates for M3.
 
@@ -1434,19 +1439,25 @@ a separate Base Shell `PwaDataCacheBroker`. The shell creates all M3 clients
 from its authenticated user/workspace/access-lease principal and keeps
 IndexedDB authority top-level. An app sends only its mounted app id, opaque
 entity id, declared resource, schema revision, and optional sanitized migration
-seed over a transferred `MessageChannel`. The broker verifies the exact
-registered frame source and origin, the fixed resource inventory, the global
-data gate, and the per-app registry gate before accepting. It then requests the
-conditional app-specific network read over the private port; no app endpoint or
-domain model moves into Core.
+seed over a transferred `MessageChannel`. The shell registers every isolated
+app and widget frame with its real owner app id. The broker verifies that owner,
+the exact registered frame source and origin, the fixed resource inventory,
+the global data gate, and the per-app registry gate before accepting. It then
+requests the conditional app-specific network read over the private port; no
+app endpoint or domain model moves into Core.
 
 The first declarations are Website Studio `site-snapshots`, Storage
 `file-catalog`, App Store `catalog`, and Fitness Coach
 `sanitized-bootstrap-and-thumbnails`. Base Shell owns only their policy
 envelopes, TTLs, and budgets; each app still owns its backend validator and
 strict sanitizer. App events are mapped from declared owner/resource aliases
-to scoped lifecycle invalidation. A `401` or `403` disables the mounted broker
-and clears the applicable structured scope. A missing broker, rejected schema,
+to scoped lifecycle invalidation only after the sender's registered owner
+matches the declared owner. A `401` or `403` disables the mounted broker,
+clears the applicable structured scope, and notifies AppShell to discard its
+authenticated state and unmount every app/widget frame; successful login then
+mounts fresh documents. Fitness Coach validates legacy bootstrap migration
+scope against Core's immutable app-frame context rather than URL search
+parameters. A missing broker, rejected schema,
 closed flag, unavailable quota/store, or failed migration preserves the normal
 server-first app path and loading UI. App Store's cached catalog is explicitly
 non-authoritative for install/launch/workspace decisions, and Fitness Coach

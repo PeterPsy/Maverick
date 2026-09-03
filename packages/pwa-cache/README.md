@@ -58,7 +58,8 @@ that cannot arrive.
 M5 adds a separate parent-mediated read-model protocol for isolated app
 documents. An app declares only its resource, canonical entity id, schema
 revision, and optional sanitized migration seed; Base Shell binds the request
-to the mounted frame and authenticated principal, owns IndexedDB, and asks the
+to the authenticated principal and an exact registered app/widget frame whose
+recorded owner matches the requested app, owns IndexedDB, and asks the
 same frame to perform conditional network reads over a private `MessagePort`.
 The child revalidates every payload with its app-owned sanitizer before render,
 never receives a storage capability, and falls back to the ordinary server path
@@ -66,6 +67,13 @@ when the broker or rollout is unavailable. Exact parent-origin checks, request
 cancellation, auth-failure cleanup, per-resource budgets, and global/per-app
 kill switches remain fail-closed. See `docs/runbooks/pwa_data_cache_m5.md` for
 the pilot inventory, rollout, recovery, and verification commands.
+
+Core exposes the authenticated isolated-document scope as the frozen,
+non-configurable `__MAVERICK_APP_FRAME_CONTEXT__` value. The exported
+`readMaverickAppFrameContext()` validates and returns its mounted app and
+workspace ids so app-owned legacy migration code can fail closed without
+treating mutable URL parameters as attestation. The value is scope evidence,
+not an authorization capability.
 
 Conservative M3 defaults are a 64 MiB structured-cache budget, 32 MiB per app,
 an app-declared resource budget, and a maximum 15-minute private access lease

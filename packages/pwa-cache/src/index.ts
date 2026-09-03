@@ -5,6 +5,10 @@ export {
   PwaCacheClient,
   createPwaCacheHost,
 } from "./client";
+export {
+  readMaverickAppFrameContext,
+  type MaverickAppFrameContext,
+} from "./appFrameContext";
 export { clearPwaDataCache, readPwaCacheDiagnostics } from "./diagnostics";
 export {
   PwaFileCache,

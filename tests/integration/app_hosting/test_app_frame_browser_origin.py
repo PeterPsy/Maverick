@@ -333,8 +333,12 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             )
             self.assertEqual(own_app_status, 200)
             self.assertIn(b"frame-demo", own_app_body)
+            self.assertIn(b"__MAVERICK_APP_FRAME_CONTEXT__", own_app_body)
+            self.assertIn(b'{"app_id":"frame-demo","workspace_id":"default"}', own_app_body)
             self.assertEqual(own_widget_status, 200)
             self.assertIn(b"frame-widget", own_widget_body)
+            self.assertIn(b"__MAVERICK_APP_FRAME_CONTEXT__", own_widget_body)
+            self.assertIn(b'{"app_id":"frame-demo","workspace_id":"default"}', own_widget_body)
 
             forwarded_scope: dict = {}
 
@@ -556,6 +560,10 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             self.assertEqual(html_status, 200)
             self.assertIn(b"frame-demo", html_body)
             self.assertIn(b"__MAVERICK_PLATFORM_ORIGIN__", html_body)
+            self.assertIn(b"__MAVERICK_APP_FRAME_CONTEXT__", html_body)
+            self.assertIn(b'{"app_id":"frame-demo","workspace_id":"default"}', html_body)
+            self.assertIn(b"Object.freeze", html_body)
+            self.assertIn(b"{value:fc,writable:false,configurable:false}", html_body)
             self.assertIn(b"maverick.shell.layout-changed", html_body)
             self.assertIn(APP_FRAME_SESSION_LEASE_PATH.encode(), html_body)
             self.assertIn(b"maverick.app-frame.authorization-required", html_body)

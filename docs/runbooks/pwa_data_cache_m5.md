@@ -14,11 +14,12 @@ are operated with `docs/runbooks/pwa_data_cache_m3.md`.
 ## Parent-mediated boundary
 
 Base Shell creates `PwaDataCacheBroker` with the freshly authenticated user,
-workspace, and bounded access lease. An isolated app frame opens one private
-`MessageChannel`; the shell accepts it only when all of these match:
+workspace, and bounded access lease. Every isolated app and widget frame is
+registered with its real owner app id and may open a private `MessageChannel`;
+the shell accepts it only when all of these match:
 
 1. the registered frame window and its exact isolated origin;
-2. the mounted app id;
+2. the registered owner app id and requested mounted app id;
 3. a fixed app/resource declaration and exact resource schema revision;
 4. the global `MAVERICK_FEATURE_PWA_DATA_CACHE` gate; and
 5. the matching `MAVERICK_FEATURE_PWA_APP_CACHE_<APP_ID>` gate.
@@ -31,9 +32,15 @@ private port. Base Shell applies policy v2, byte limits, TTL, quota, lifecycle,
 and a second plain-JSON validation before storage. A missing or disabled broker
 falls back to one normal server read.
 
-`maverick.app.data-changed` is accepted only from the shell or the exact frame
-registered for the declared owner app. Logout, user/workspace transition,
-`401`, and `403` use the M3 durable cleanup path and cancel accepted work.
+`maverick.app.data-changed` is accepted only from the shell or an exact app or
+widget frame whose registered owner matches the declared owner app. Resource
+aliases (including Storage `files`, `drive-connections`, and `view-state`) are
+mapped only after that owner check. Logout and user/workspace transition use
+the M3 durable cleanup path and cancel accepted work. A `401` or `403` from a
+brokered network read additionally tells AppShell to clear authenticated UI and
+unmount every app/widget iframe immediately; reauthentication mounts fresh
+documents after cleanup, preventing an earlier warm paint from remaining in
+memory or the DOM.
 Cached catalog or content data is never used to authorize launch, install,
 write, publish, provider, capability, or confirmation actions.
 
@@ -87,8 +94,12 @@ state. Cached rows are read-only until those authority inputs complete.
 `app.bootstrap` accepts `known_revision` and returns a minimal `not_modified`
 response. The existing scoped bootstrap `sessionStorage` entry and legacy
 thumbnail store are quarantined as migration inputs; neither can paint before
-parent confirmation. A newly captured thumbnail may render in the current page
-while it is offered to the broker, but no second local cache is written.
+parent confirmation. The bootstrap migration key and payload workspace are
+validated against Core's frozen `__MAVERICK_APP_FRAME_CONTEXT__` (authenticated
+workspace plus mounted app), not against URL query parameters; a missing or
+mismatched context disables legacy migration. A newly captured thumbnail may
+render in the current page while it is offered to the broker, but no second
+local cache is written.
 Personal data remains `session` policy until a separate privacy approval
 explicitly permits persistence.
 
@@ -111,8 +122,9 @@ Storage, App Store, then Fitness Coach. For each app:
 2. enable the global gate and only that app gate in a test workspace;
 3. reload the authenticated shell so its registry and broker use the new gate;
 4. exercise cold miss, warm fresh hit, stale hit, changed and unchanged
-   revalidation, mutation event, expiration, `401/403`, logout, user/workspace
-   switch, quota denial, IndexedDB denial, and cache clear;
+   revalidation, app- and widget-originated mutation events, cross-owner spoof
+   rejection, expiration, warm-paint `401/403` iframe teardown, logout,
+   user/workspace switch, quota denial, IndexedDB denial, and cache clear;
 5. compare normal layout and actions between equivalent cache and server
    results; and
 6. record aggregate request/byte/time results and required physical-device

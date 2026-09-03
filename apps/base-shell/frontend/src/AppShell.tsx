@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   AppRegistryItem,
@@ -43,7 +43,8 @@ import {
   shellRetryCoordinator,
 } from "./pwaCacheRuntime";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
-import { isRegisteredMaverickFrameMessage, isShellWindowMessage } from "./iframePolicy";
+import { isMaverickOwnerMessage, isRegisteredMaverickFrameMessage, isShellWindowMessage } from "./iframePolicy";
+import { usePwaDataCacheBrokerHost } from "./usePwaDataCacheBrokerHost";
 import { FloatingChatHost } from "./components/FloatingChatHost";
 import { LoginScreen } from "./components/LoginScreen";
 import { MobileShellHeader } from "./components/MobileShellHeader";
@@ -114,6 +115,37 @@ export function AppShell() {
   const shellLoadVersionRef = useRef(0);
   const shellLoadAbortRef = useRef<AbortController | null>(null);
   const shellLoadInFlightRef = useRef(false);
+  const cancelShellLoading = useCallback(({ resetRecovery = false } = {}) => {
+    shellLoadAbortRef.current?.abort();
+    shellLoadAbortRef.current = null;
+    shellLoadInFlightRef.current = false;
+    shellLoadVersionRef.current += 1;
+    if (resetRecovery) {
+      shellRetryCoordinator.cancelAll("Base Shell scope reset.");
+    }
+  }, []);
+  const clearShellUiAfterAuthorizationFailure = useCallback(() => {
+    setSession({ authenticated: false });
+    setApps([]);
+    setWorkspaces([]);
+    setSettings(null);
+    setError(null);
+    setIsLoading(false);
+    setIsWorkspacesLoading(false);
+  }, []);
+  const handleEmbeddedAuthorizationFailure = useCallback(() => {
+    cancelShellLoading({ resetRecovery: true });
+    clearShellUiAfterAuthorizationFailure();
+  }, [cancelShellLoading, clearShellUiAfterAuthorizationFailure]);
+  usePwaDataCacheBrokerHost({
+    appRegistry: apps,
+    onAuthorizationFailure: handleEmbeddedAuthorizationFailure,
+    principal: session?.authenticated ? {
+      sessionExpiresAt: session.expires_at,
+      userId: session.user.user_id,
+      workspaceId: session.workspace_id,
+    } : null,
+  });
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;
   const hasSettingsShortcut = Boolean(settingsShortcutApp);
@@ -228,25 +260,10 @@ export function AppShell() {
     );
   }
 
-  function cancelShellLoading({ resetRecovery = false } = {}) {
-    shellLoadAbortRef.current?.abort();
-    shellLoadAbortRef.current = null;
-    shellLoadInFlightRef.current = false;
-    shellLoadVersionRef.current += 1;
-    if (resetRecovery) {
-      shellRetryCoordinator.cancelAll("Base Shell scope reset.");
-    }
-  }
-
   async function clearShellAfterAuthorizationFailure(controller: AbortController) {
     controller.abort();
     await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
-    setSession({ authenticated: false });
-    setApps([]);
-    setWorkspaces([]);
-    setSettings(null);
-    setError(null);
-    setIsWorkspacesLoading(false);
+    clearShellUiAfterAuthorizationFailure();
   }
 
   async function loadShellState() {
@@ -482,26 +499,18 @@ export function AppShell() {
 
   useEffect(() => {
     function handleAppDataChanged(event: MessageEvent) {
-      if (
-        (!isShellWindowMessage(event) && !isRegisteredMaverickFrameMessage(event))
-        || !event.data
-        || typeof event.data !== "object"
-      ) {
+      if (!event.data || typeof event.data !== "object") {
         return;
       }
       const payload = event.data as { entity_id?: string; owner_app_id?: string; resource?: string; type?: string };
-      if (payload.type !== "maverick.app.data-changed") {
+      if (payload.type !== "maverick.app.data-changed"
+          || !payload.owner_app_id
+          || !payload.resource
+          || !isMaverickOwnerMessage(event, payload.owner_app_id)) {
         return;
       }
-      if (payload.owner_app_id && payload.resource) {
-        void shellCacheLifecycle.handleDataChanged({
-          ...(payload.entity_id ? { entityId: payload.entity_id } : {}),
-          ownerAppId: payload.owner_app_id,
-          resource: payload.resource,
-        });
-      }
       if (payload.owner_app_id !== "app-store"
-          || (payload.resource && payload.resource !== "pinned-apps" && payload.resource !== "state")) {
+          || (payload.resource !== "pinned-apps" && payload.resource !== "state")) {
         return;
       }
       listPinnedApps()

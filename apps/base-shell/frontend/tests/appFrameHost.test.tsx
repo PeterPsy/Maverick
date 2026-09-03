@@ -91,7 +91,7 @@ describe("AppFrameHost app frame readiness", () => {
     expect(frameByTitle(container, "Chat viewport").className).toContain("is-active");
 
     await renderHost(root, agents);
-    const agentsFrame = await waitForFrame(container, "Agents viewport");
+    const agentsFrame = await waitForFrame(container, "Agents viewport", "agents");
 
     expect(frameByTitle(container, "Chat viewport").className).toContain("is-active");
     expect(agentsFrame.className).toContain("is-hidden");
@@ -115,7 +115,7 @@ describe("AppFrameHost app frame readiness", () => {
   it("reveals a loaded target frame if it does not send ready", async () => {
     await renderHost(root, chat);
     await renderHost(root, agents);
-    const agentsFrame = await waitForFrame(container, "Agents viewport");
+    const agentsFrame = await waitForFrame(container, "Agents viewport", "agents");
 
     expect(agentsFrame.className).toContain("is-hidden");
 
@@ -135,7 +135,7 @@ describe("AppFrameHost app frame readiness", () => {
 
     await renderHost(root, chat);
     await renderHost(root, agents, appParams);
-    const agentsFrame = await waitForFrame(container, "Agents viewport");
+    const agentsFrame = await waitForFrame(container, "Agents viewport", "agents");
     const postMessageSpy = vi.spyOn(agentsFrame.contentWindow!, "postMessage");
 
     await act(async () => {
@@ -176,7 +176,7 @@ describe("AppFrameHost app frame readiness", () => {
 
   it("posts live shell theme changes without remounting the app frame", async () => {
     await renderHost(root, chat);
-    const frame = await waitForFrame(container, "Chat viewport");
+    const frame = await waitForFrame(container, "Chat viewport", "chat");
     const initialSrc = frame.getAttribute("src");
     const postMessageSpy = vi.spyOn(frame.contentWindow!, "postMessage");
 
@@ -197,7 +197,7 @@ describe("AppFrameHost app frame readiness", () => {
     const openedWindow = { focus: vi.fn(), opener: window } as unknown as Window;
     const openSpy = vi.spyOn(window, "open").mockReturnValue(openedWindow);
     await renderHost(root, chat);
-    const frame = await waitForFrame(container, "Chat viewport");
+    const frame = await waitForFrame(container, "Chat viewport", "chat");
     const frameWindow = frame.contentWindow;
     if (!frameWindow) {
       throw new Error("Expected iframe contentWindow.");
@@ -233,12 +233,12 @@ async function renderHost(root: Root, activeApp: AppRegistryItem, activeAppParam
   });
 }
 
-async function waitForFrame(parent: HTMLElement, title: string): Promise<HTMLIFrameElement> {
+async function waitForFrame(parent: HTMLElement, title: string, ownerAppId: string): Promise<HTMLIFrameElement> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const frame = parent.querySelector(`iframe[title="${title}"]`);
     if (frame instanceof HTMLIFrameElement) {
       if (!frame.dataset.maverickFrameOrigin) {
-        setMaverickFrameOrigin(frame, "https://af-test.sidecars.maverick.test");
+        setMaverickFrameOrigin(frame, "https://af-test.sidecars.maverick.test", ownerAppId);
       }
       frame.dataset.maverickFrameBootstrapArmed = "true";
       return frame;

@@ -17,7 +17,6 @@ import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearch
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
 import { IsolatedMaverickFrame } from "./IsolatedMaverickFrame";
 import { StorageFileCacheBroker } from "../storageFileCacheBroker";
-import { PwaDataCacheBroker } from "../pwaDataCacheBroker";
 
 type AppFrameParams = Record<string, string | boolean | null>;
 const APP_EVENTS_WS_PATH = "/api/apps/events/ws";
@@ -81,7 +80,6 @@ export function AppFrameHost({
   const frameRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
   const readyFallbackTimersRef = useRef<Record<string, number>>({});
   const fileCacheBrokerRef = useRef<StorageFileCacheBroker | null>(null);
-  const dataCacheBrokerRef = useRef<PwaDataCacheBroker | null>(null);
   const latestNavigationRef = useRef<{ appId: string; params: AppFrameParams }>({
     appId: activeApp.app_id,
     params: activeAppParams,
@@ -173,25 +171,6 @@ export function AppFrameHost({
     fileCacheBrokerRef.current = broker;
     return () => {
       if (fileCacheBrokerRef.current === broker) fileCacheBrokerRef.current = null;
-      broker.dispose();
-    };
-  }, [activeWorkspaceId, cacheUserId, sessionExpiresAt]);
-
-  useEffect(() => {
-    const sessionExpiry = Date.parse(sessionExpiresAt);
-    const accessLease = Number.isFinite(sessionExpiry)
-      ? clampPrivateAccessLease(sessionExpiry) ?? undefined
-      : undefined;
-    const broker = new PwaDataCacheBroker({
-      accessLease,
-      principal: {
-        userId: cacheUserId,
-        workspaceId: activeWorkspaceId,
-      },
-    });
-    dataCacheBrokerRef.current = broker;
-    return () => {
-      if (dataCacheBrokerRef.current === broker) dataCacheBrokerRef.current = null;
       broker.dispose();
     };
   }, [activeWorkspaceId, cacheUserId, sessionExpiresAt]);
@@ -337,17 +316,6 @@ export function AppFrameHost({
 
   useEffect(() => {
     function handleAppMessage(event: MessageEvent) {
-      const dataCacheEnabledAppIds = new Set(
-        mountedApps.filter(({ app }) => app.data_cache_enabled).map(({ app }) => app.app_id),
-      );
-      if (dataCacheBrokerRef.current?.handleWindowMessage(
-        event,
-        frameRefs.current,
-        dataCacheEnabledAppIds,
-      )) {
-        return;
-      }
-      dataCacheBrokerRef.current?.handleDataChangedMessage(event, frameRefs.current);
       if (fileCacheBrokerRef.current?.handleWindowMessage(
         event,
         frameRefs.current.storage ?? null,

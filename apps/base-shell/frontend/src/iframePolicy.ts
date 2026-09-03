@@ -17,9 +17,14 @@ export function widgetFrameBrowserFeaturePolicy(publicAppId: string): string {
     : "fullscreen";
 }
 
-const registeredFrames = new Set<HTMLIFrameElement>();
+const MAX_FRAME_OWNER_ID_LENGTH = 256;
+const registeredFrames = new Map<HTMLIFrameElement, string>();
 
-export function setMaverickFrameOrigin(frame: HTMLIFrameElement, origin: string | null) {
+export function setMaverickFrameOrigin(
+  frame: HTMLIFrameElement,
+  origin: string | null,
+  ownerAppId: string,
+) {
   if (!origin) {
     registeredFrames.delete(frame);
     delete frame.dataset.maverickFrameOrigin;
@@ -29,8 +34,11 @@ export function setMaverickFrameOrigin(frame: HTMLIFrameElement, origin: string 
   if (parsed.origin !== origin || origin === window.location.origin) {
     throw new Error("Maverick app frames require a distinct exact origin.");
   }
+  if (!isValidFrameOwnerId(ownerAppId)) {
+    throw new Error("Maverick app frames require one exact owner app id.");
+  }
   frame.dataset.maverickFrameOrigin = origin;
-  registeredFrames.add(frame);
+  registeredFrames.set(frame, ownerAppId);
 }
 
 export function isMaverickFrameMessage(event: MessageEvent, frame: HTMLIFrameElement | null | undefined): boolean {
@@ -44,7 +52,19 @@ export function isMaverickFrameMessage(event: MessageEvent, frame: HTMLIFrameEle
 }
 
 export function isRegisteredMaverickFrameMessage(event: MessageEvent): boolean {
-  return [...registeredFrames].some((frame) => isMaverickFrameMessage(event, frame));
+  return registeredMaverickFrameOwner(event) !== null;
+}
+
+export function registeredMaverickFrameOwner(event: MessageEvent): string | null {
+  for (const [frame, ownerAppId] of registeredFrames) {
+    if (isMaverickFrameMessage(event, frame)) return ownerAppId;
+  }
+  return null;
+}
+
+export function isMaverickOwnerMessage(event: MessageEvent, ownerAppId: string): boolean {
+  return isValidFrameOwnerId(ownerAppId)
+    && (isShellWindowMessage(event) || registeredMaverickFrameOwner(event) === ownerAppId);
 }
 
 export function isShellWindowMessage(event: MessageEvent): boolean {
@@ -85,4 +105,12 @@ export function postMaverickFrameVisibility(
 
 export function postMaverickShellTheme(frame: HTMLIFrameElement | null | undefined, theme: ShellThemeState) {
   postToMaverickFrame(frame, shellThemeMessage(theme));
+}
+
+function isValidFrameOwnerId(value: unknown): value is string {
+  return typeof value === "string"
+    && value.trim() === value
+    && value.length > 0
+    && value.length <= MAX_FRAME_OWNER_ID_LENGTH
+    && !/[\u0000-\u001f\u007f]/u.test(value);
 }

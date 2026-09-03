@@ -37,12 +37,29 @@ describe("AppFrameHost Storage file-cache boundary", () => {
 });
 
 describe("AppFrameHost structured data-cache boundary", () => {
-  it("routes only per-app enabled messages through a disposable parent broker", () => {
-    const source = readFileSync(resolve(currentDir, "AppFrameHost.tsx"), "utf8");
+  it("routes all owner-registered app and widget frames through one disposable shell broker", () => {
+    const source = readFileSync(resolve(currentDir, "../usePwaDataCacheBrokerHost.ts"), "utf8");
 
     expect(source).toContain("new PwaDataCacheBroker");
     expect(source).toContain("app.data_cache_enabled");
-    expect(source).toContain("dataCacheBrokerRef.current?.handleWindowMessage");
+    expect(source).toContain("broker.handleWindowMessage(event, enabledAppIdsRef.current)");
+    expect(source).toContain("broker.handleDataChangedMessage(event)");
     expect(source).toContain("broker.dispose()");
+  });
+
+  it("clears authenticated shell UI when the broker reports an authorization failure", () => {
+    const source = readFileSync(resolve(currentDir, "../AppShell.tsx"), "utf8");
+
+    expect(source).toContain("usePwaDataCacheBrokerHost");
+    expect(source).toContain("onAuthorizationFailure: handleEmbeddedAuthorizationFailure");
+    expect(source).toContain("clearShellUiAfterAuthorizationFailure");
+    expect(source).toContain("setSession({ authenticated: false })");
+  });
+
+  it("uses the owner-verified broker as the only structured-cache invalidation path", () => {
+    const source = readFileSync(resolve(currentDir, "../AppShell.tsx"), "utf8");
+
+    expect(source).toContain("isMaverickOwnerMessage(event, payload.owner_app_id)");
+    expect(source).not.toContain("shellCacheLifecycle.handleDataChanged(");
   });
 });

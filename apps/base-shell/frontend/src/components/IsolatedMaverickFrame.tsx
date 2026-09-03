@@ -47,7 +47,7 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
       let activeController: AbortController | null = null;
       let armTimer: number | undefined;
       bootstrapPendingRef.current = false;
-      setMaverickFrameOrigin(frame, null);
+      setMaverickFrameOrigin(frame, null, appId);
       delete frame.dataset.maverickFrameBootstrapArmed;
 
       const launchFrame = (requestedPath: string, preserveCurrentOrigin: boolean) => {
@@ -59,7 +59,7 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
             if (controller.signal.aborted || frameRef.current !== frame) return;
             if (armTimer !== undefined) window.clearTimeout(armTimer);
             delete frame.dataset.maverickFrameBootstrapArmed;
-            setMaverickFrameOrigin(frame, launch.origin);
+            setMaverickFrameOrigin(frame, launch.origin, appId);
             bootstrapPendingRef.current = true;
             try {
               submitBootstrapForm(frame, launch);
@@ -73,7 +73,7 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
           })
           .catch((error: unknown) => {
             if (controller.signal.aborted || frameRef.current !== frame) return;
-            if (!preserveCurrentOrigin) setMaverickFrameOrigin(frame, null);
+            if (!preserveCurrentOrigin) setMaverickFrameOrigin(frame, null, appId);
             onLaunchError?.(error instanceof Error ? error : new Error("Unable to launch isolated app frame."));
           })
           .finally(() => {
@@ -94,7 +94,7 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
         bootstrapPendingRef.current = false;
         if (armTimer !== undefined) window.clearTimeout(armTimer);
         delete frame.dataset.maverickFrameBootstrapArmed;
-        setMaverickFrameOrigin(frame, null);
+        setMaverickFrameOrigin(frame, null, appId);
       };
     }, [appId, launchPath, onLaunchError]);
 

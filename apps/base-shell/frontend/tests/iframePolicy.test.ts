@@ -8,6 +8,7 @@ import { IsolatedMaverickFrame, requestAppFrameLaunch } from "../src/components/
 import {
   appFrameBrowserFeaturePolicy,
   isMaverickFrameMessage,
+  registeredMaverickFrameOwner,
   postToMaverickFrame,
   setMaverickFrameOrigin,
   widgetFrameBrowserFeaturePolicy,
@@ -24,12 +25,14 @@ describe("isolated Maverick frame policy", () => {
     const frame = document.createElement("iframe");
     const foreign = document.createElement("iframe");
     document.body.append(frame, foreign);
-    setMaverickFrameOrigin(frame, "https://af-session.sidecars.maverick.test");
+    setMaverickFrameOrigin(frame, "https://af-session.sidecars.maverick.test", "storage");
 
     expect(isMaverickFrameMessage(message(frame, "https://af-session.sidecars.maverick.test"), frame)).toBe(true);
+    expect(registeredMaverickFrameOwner(message(frame, "https://af-session.sidecars.maverick.test"))).toBe("storage");
     expect(isMaverickFrameMessage(message(frame, "https://attacker.example"), frame)).toBe(false);
     expect(isMaverickFrameMessage(message(foreign, "https://af-session.sidecars.maverick.test"), frame)).toBe(false);
-    expect(() => setMaverickFrameOrigin(frame, window.location.origin)).toThrow(/distinct exact origin/i);
+    expect(() => setMaverickFrameOrigin(frame, window.location.origin, "storage")).toThrow(/distinct exact origin/i);
+    setMaverickFrameOrigin(frame, null, "storage");
   });
 
   it("posts only to the registered exact origin and never broadens the target", () => {
@@ -40,13 +43,14 @@ describe("isolated Maverick frame policy", () => {
     postToMaverickFrame(frame, { type: "ignored-before-registration" });
     expect(postMessage).not.toHaveBeenCalled();
 
-    setMaverickFrameOrigin(frame, "https://af-session.sidecars.maverick.test");
+    setMaverickFrameOrigin(frame, "https://af-session.sidecars.maverick.test", "storage");
     postToMaverickFrame(frame, { type: "accepted" });
     expect(postMessage).toHaveBeenCalledWith(
       { type: "accepted" },
       "https://af-session.sidecars.maverick.test",
     );
     expect(postMessage).not.toHaveBeenCalledWith(expect.anything(), "*");
+    setMaverickFrameOrigin(frame, null, "storage");
   });
 
   it("delegates clipboard writes only to Chat app and widget frames", () => {

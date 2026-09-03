@@ -9,6 +9,7 @@ import {
   APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE,
   IsolatedMaverickFrame,
 } from "./IsolatedMaverickFrame";
+import { registeredMaverickFrameOwner } from "../iframePolicy";
 
 type LaunchPayload = {
   bootstrap_url: string;
@@ -70,6 +71,10 @@ describe("IsolatedMaverickFrame authorization recovery", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(submissions).toHaveLength(1);
     expect(frame?.dataset.maverickFrameOrigin).toBe(origin);
+    expect(registeredMaverickFrameOwner(new MessageEvent("message", {
+      origin,
+      source: frame?.contentWindow,
+    }))).toBe("chat");
 
     window.dispatchEvent(new MessageEvent("message", {
       data: { type: APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE },

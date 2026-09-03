@@ -21,6 +21,9 @@ const api = vi.hoisted(() => ({
   savePinnedApps: vi.fn(),
   switchWorkspace: vi.fn(),
 }));
+const dataCacheBrokerHost = vi.hoisted(() => ({
+  onAuthorizationFailure: null as null | ((status: 401 | 403) => Promise<void> | void),
+}));
 
 vi.mock("../src/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/api")>();
@@ -39,6 +42,13 @@ vi.mock("../src/api", async (importOriginal) => {
     switchWorkspace: api.switchWorkspace,
   };
 });
+vi.mock("../src/usePwaDataCacheBrokerHost", () => ({
+  usePwaDataCacheBrokerHost: (options: {
+    onAuthorizationFailure: (status: 401 | 403) => Promise<void> | void;
+  }) => {
+    dataCacheBrokerHost.onAuthorizationFailure = options.onAuthorizationFailure;
+  },
+}));
 
 vi.mock("../src/components/WorkspaceView", () => ({
   WorkspaceView: ({ activeWorkspaceId, isLoading }: { activeWorkspaceId: string; isLoading: boolean }) => (
@@ -86,6 +96,7 @@ describe("AppShell bootstrap", () => {
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.clearAllMocks();
+    dataCacheBrokerHost.onAuthorizationFailure = null;
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -288,6 +299,25 @@ describe("AppShell bootstrap", () => {
     });
 
     expect(container.querySelector("[aria-label='Loading workspace']")).toBeNull();
+    expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
+    expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
+  });
+
+  it("unmounts every authenticated app frame after a warm cache revalidation loses authorization", async () => {
+    await act(async () => {
+      root.render(<AppShell />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const mountedFrame = container.querySelector("[data-testid='mounted-app-frame']");
+    expect(mountedFrame).not.toBeNull();
+    expect(dataCacheBrokerHost.onAuthorizationFailure).not.toBeNull();
+
+    await act(async () => {
+      await dataCacheBrokerHost.onAuthorizationFailure?.(403);
+    });
+
+    expect(container.querySelector("[data-testid='mounted-app-frame']")).toBeNull();
     expect(container.querySelector("[data-testid='workspace-view']")).toBeNull();
     expect(container.querySelector("[data-testid='login-screen']")).not.toBeNull();
   });

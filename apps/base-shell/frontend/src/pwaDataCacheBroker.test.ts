@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PWA_DATA_CACHE_BROKER_ACCEPTED,
   PWA_DATA_CACHE_BROKER_NETWORK_REQUEST,
@@ -8,6 +8,7 @@ import {
 } from "@maverick/pwa-cache";
 import { PwaDataCacheBroker } from "./pwaDataCacheBroker";
 import { shellCacheLifecycle } from "./pwaCacheRuntime";
+import { setMaverickFrameOrigin } from "./iframePolicy";
 
 type PortMessage = Record<string, unknown>;
 
@@ -15,8 +16,14 @@ const appWindow = {} as Window;
 const appOrigin = "https://af-app-store.sidecars.maverick.test";
 const appFrame = {
   contentWindow: appWindow,
-  dataset: { maverickFrameOrigin: appOrigin },
+  dataset: {},
 } as unknown as HTMLIFrameElement;
+const registeredFrames: HTMLIFrameElement[] = [];
+
+function registerFrame(frame: HTMLIFrameElement, origin: string, ownerAppId: string): void {
+  setMaverickFrameOrigin(frame, origin, ownerAppId);
+  registeredFrames.push(frame);
+}
 
 function requestEvent(channel: MessageChannel, overrides: Record<string, unknown> = {}): MessageEvent {
   return {
@@ -66,9 +73,13 @@ async function nextOfType(messages: ReturnType<typeof portMessages>, type: strin
   }
 }
 
-function broker(featureEnabled: () => Promise<boolean | null> = async () => true): PwaDataCacheBroker {
+function broker(
+  featureEnabled: () => Promise<boolean | null> = async () => true,
+  onAuthorizationFailure?: (status: 401 | 403) => Promise<void> | void,
+): PwaDataCacheBroker {
   return new PwaDataCacheBroker({
     featureEnabled,
+    onAuthorizationFailure,
     principal: { userId: "user-one", workspaceId: "default" },
   });
 }
@@ -76,8 +87,17 @@ function broker(featureEnabled: () => Promise<boolean | null> = async () => true
 describe("Base Shell structured data-cache broker", () => {
   const brokers: PwaDataCacheBroker[] = [];
 
+  beforeEach(() => {
+    const shellWindow = new EventTarget() as EventTarget & Window;
+    Object.assign(shellWindow, { location: { origin: "https://maverick.test" }, top: shellWindow });
+    vi.stubGlobal("window", shellWindow);
+    registerFrame(appFrame, appOrigin, "app-store");
+    vi.unstubAllGlobals();
+  });
+
   afterEach(() => {
     brokers.splice(0).forEach((item) => item.dispose());
+    registeredFrames.splice(0).forEach((frame) => setMaverickFrameOrigin(frame, null, "cleanup"));
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -88,12 +108,11 @@ describe("Base Shell structured data-cache broker", () => {
     });
     const subject = broker();
     brokers.push(subject);
-    const frames = { "app-store": appFrame };
     const enabled = new Set(["app-store"]);
 
     const firstChannel = new MessageChannel();
     const firstMessages = portMessages(firstChannel.port1);
-    expect(subject.handleWindowMessage(requestEvent(firstChannel), frames, enabled)).toBe(true);
+    expect(subject.handleWindowMessage(requestEvent(firstChannel), enabled)).toBe(true);
     await expect(firstMessages.next()).resolves.toMatchObject({ type: PWA_DATA_CACHE_BROKER_ACCEPTED });
     const network = await nextOfType(firstMessages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
     expect(network.known_revision).toBeUndefined();
@@ -116,7 +135,7 @@ describe("Base Shell structured data-cache broker", () => {
 
     const warmChannel = new MessageChannel();
     const warmMessages = portMessages(warmChannel.port1);
-    expect(subject.handleWindowMessage(requestEvent(warmChannel, { request_id: "request-two" }), frames, enabled)).toBe(true);
+    expect(subject.handleWindowMessage(requestEvent(warmChannel, { request_id: "request-two" }), enabled)).toBe(true);
     await nextOfType(warmMessages, PWA_DATA_CACHE_BROKER_ACCEPTED);
     const initial = await nextOfType(warmMessages, PWA_DATA_CACHE_BROKER_RESULT);
     expect(initial).toMatchObject({
@@ -162,7 +181,7 @@ describe("Base Shell structured data-cache broker", () => {
     subject.handleWindowMessage(requestEvent(channel, {
       migration_seed: { payload: seed, revision: "seed-revision" },
       request_id: "request-migration",
-    }), { "app-store": appFrame }, new Set(["app-store"]));
+    }), new Set(["app-store"]));
 
     await nextOfType(messages, PWA_DATA_CACHE_BROKER_ACCEPTED);
     await expect(nextOfType(messages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({
@@ -202,9 +221,10 @@ describe("Base Shell structured data-cache broker", () => {
     brokers.push(subject);
     const channel = new MessageChannel();
     const messages = portMessages(channel.port1);
-    subject.handleWindowMessage(requestEvent(channel, { request_id: "request-auth" }), {
-      "app-store": appFrame,
-    }, new Set(["app-store"]));
+    subject.handleWindowMessage(
+      requestEvent(channel, { request_id: "request-auth" }),
+      new Set(["app-store"]),
+    );
 
     await nextOfType(messages, PWA_DATA_CACHE_BROKER_ACCEPTED);
     const network = await nextOfType(messages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
@@ -225,12 +245,160 @@ describe("Base Shell structured data-cache broker", () => {
 
     const blockedChannel = new MessageChannel();
     const blockedMessages = portMessages(blockedChannel.port1);
-    subject.handleWindowMessage(requestEvent(blockedChannel, { request_id: "request-after-auth" }), {
-      "app-store": appFrame,
-    }, new Set(["app-store"]));
+    subject.handleWindowMessage(
+      requestEvent(blockedChannel, { request_id: "request-after-auth" }),
+      new Set(["app-store"]),
+    );
     await nextOfType(blockedMessages, PWA_DATA_CACHE_BROKER_ACCEPTED);
     await expect(nextOfType(blockedMessages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({
       status: "unavailable",
+    });
+  });
+
+  it("notifies the shell after a warm cached value revalidates with 403", async () => {
+    vi.stubGlobal("navigator", {
+      storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) },
+    });
+    const cleanup = vi.spyOn(shellCacheLifecycle, "authorizationFailure").mockResolvedValue({
+      pendingCleanupCount: 0,
+      removed: 1,
+      status: "complete",
+    });
+    const authorizationFailure = vi.fn();
+    const subject = broker(async () => true, authorizationFailure);
+    brokers.push(subject);
+    const entityId = `warm-auth-${crypto.randomUUID()}`;
+
+    const seedChannel = new MessageChannel();
+    const seedMessages = portMessages(seedChannel.port1);
+    subject.handleWindowMessage(requestEvent(seedChannel, {
+      entity_id: entityId,
+      request_id: "request-warm-auth-seed",
+    }), new Set(["app-store"]));
+    await nextOfType(seedMessages, PWA_DATA_CACHE_BROKER_ACCEPTED);
+    const seedNetwork = await nextOfType(seedMessages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
+    seedChannel.port1.postMessage({
+      app_id: "app-store",
+      kind: "value",
+      network_request_id: seedNetwork.network_request_id,
+      payload: { items: [], revision: "warm-revision", schema: "maverick.app-store-catalog.v1" },
+      request_id: "request-warm-auth-seed",
+      revision: "warm-revision",
+      status: "ok",
+      type: PWA_DATA_CACHE_BROKER_NETWORK_RESULT,
+    });
+    await expect(nextOfType(seedMessages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({
+      source: "network",
+      status: "ok",
+    });
+
+    const warmChannel = new MessageChannel();
+    const warmMessages = portMessages(warmChannel.port1);
+    subject.handleWindowMessage(requestEvent(warmChannel, {
+      entity_id: entityId,
+      request_id: "request-warm-auth-revalidation",
+    }), new Set(["app-store"]));
+    await nextOfType(warmMessages, PWA_DATA_CACHE_BROKER_ACCEPTED);
+    await expect(nextOfType(warmMessages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({
+      has_revalidation: true,
+      source: "cache",
+      status: "ok",
+    });
+    const revalidation = await nextOfType(warmMessages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
+    warmChannel.port1.postMessage({
+      app_id: "app-store",
+      error: { name: "MaverickHttpError", status: 403 },
+      network_request_id: revalidation.network_request_id,
+      request_id: "request-warm-auth-revalidation",
+      status: "error",
+      type: PWA_DATA_CACHE_BROKER_NETWORK_RESULT,
+    });
+
+    await expect(nextOfType(warmMessages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({
+      phase: "revalidation",
+      status: "error",
+    });
+    expect(authorizationFailure).toHaveBeenCalledOnce();
+    expect(authorizationFailure).toHaveBeenCalledWith(403);
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it("answers and serves a Storage catalog read from a separately registered widget frame", async () => {
+    const subject = broker();
+    brokers.push(subject);
+    const widgetWindow = {} as Window;
+    const widgetOrigin = "https://af-storage-widget.sidecars.maverick.test";
+    const widgetFrame = {
+      contentWindow: widgetWindow,
+      dataset: {},
+    } as unknown as HTMLIFrameElement;
+    const shellWindow = { location: { origin: "https://maverick.test" } } as unknown as Window;
+    vi.stubGlobal("window", shellWindow);
+    registerFrame(widgetFrame, widgetOrigin, "storage");
+    vi.unstubAllGlobals();
+    vi.stubGlobal("navigator", {
+      storage: { estimate: async () => ({ quota: 100_000_000, usage: 0 }) },
+    });
+    const disabledChannel = new MessageChannel();
+    const disabledMessages = portMessages(disabledChannel.port1);
+    const disabledEvent = {
+      data: {
+        app_id: "storage",
+        entity_id: "catalog:first-page",
+        request_id: "request-storage-widget-disabled",
+        resource: "file-catalog",
+        schema_revision: "storage.file-catalog.v1",
+        type: PWA_DATA_CACHE_BROKER_OPEN,
+      },
+      origin: widgetOrigin,
+      ports: [disabledChannel.port2],
+      source: widgetWindow,
+    } as unknown as MessageEvent;
+    expect(subject.handleWindowMessage(disabledEvent, new Set())).toBe(true);
+    await expect(disabledMessages.next(100)).resolves.toMatchObject({
+      app_id: "storage",
+      type: PWA_DATA_CACHE_BROKER_ACCEPTED,
+    });
+    await expect(disabledMessages.next(100)).resolves.toMatchObject({
+      status: "unavailable",
+      type: PWA_DATA_CACHE_BROKER_RESULT,
+    });
+
+    const channel = new MessageChannel();
+    const messages = portMessages(channel.port1);
+    const event = {
+      data: {
+        app_id: "storage",
+        entity_id: "catalog:first-page",
+        request_id: "request-storage-widget",
+        resource: "file-catalog",
+        schema_revision: "storage.file-catalog.v1",
+        type: PWA_DATA_CACHE_BROKER_OPEN,
+      },
+      origin: widgetOrigin,
+      ports: [channel.port2],
+      source: widgetWindow,
+    } as unknown as MessageEvent;
+
+    expect(subject.handleWindowMessage(event, new Set(["storage"]))).toBe(true);
+    await expect(messages.next(100)).resolves.toMatchObject({
+      app_id: "storage",
+      type: PWA_DATA_CACHE_BROKER_ACCEPTED,
+    });
+    const network = await nextOfType(messages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
+    channel.port1.postMessage({
+      app_id: "storage",
+      kind: "value",
+      network_request_id: network.network_request_id,
+      payload: { files: [], folders: [], revision: "catalog-revision" },
+      request_id: "request-storage-widget",
+      revision: "catalog-revision",
+      status: "ok",
+      type: PWA_DATA_CACHE_BROKER_NETWORK_RESULT,
+    });
+    await expect(nextOfType(messages, PWA_DATA_CACHE_BROKER_RESULT)).resolves.toMatchObject({
+      source: "network",
+      status: "ok",
     });
   });
 
@@ -249,8 +417,9 @@ describe("Base Shell structured data-cache broker", () => {
     const storageOrigin = "https://af-storage.sidecars.maverick.test";
     const storageFrame = {
       contentWindow: storageWindow,
-      dataset: { maverickFrameOrigin: storageOrigin },
+      dataset: {},
     } as unknown as HTMLIFrameElement;
+    registerFrame(storageFrame, storageOrigin, "storage");
 
     subject.handleDataChangedMessage({
       data: {
@@ -260,12 +429,45 @@ describe("Base Shell structured data-cache broker", () => {
       },
       origin: storageOrigin,
       source: storageWindow,
-    } as MessageEvent, { storage: storageFrame });
+    } as MessageEvent);
 
     await vi.waitFor(() => expect(invalidation).toHaveBeenCalledWith({
       ownerAppId: "storage",
       resource: "file-catalog",
     }));
+  });
+
+  it("does not let a registered widget invalidate another app owner's cache", async () => {
+    const shellWindow = { location: { origin: "https://maverick.test" } } as unknown as Window;
+    Object.assign(shellWindow, { top: shellWindow });
+    vi.stubGlobal("window", shellWindow);
+    const subject = broker();
+    brokers.push(subject);
+    const invalidation = vi.spyOn(shellCacheLifecycle, "handleDataChanged").mockResolvedValue({
+      pendingCleanupCount: 0,
+      removed: 0,
+      status: "complete",
+    });
+    const storageWindow = {} as Window;
+    const storageOrigin = "https://af-storage-widget.sidecars.maverick.test";
+    const storageFrame = {
+      contentWindow: storageWindow,
+      dataset: {},
+    } as unknown as HTMLIFrameElement;
+    registerFrame(storageFrame, storageOrigin, "storage");
+
+    subject.handleDataChangedMessage({
+      data: {
+        owner_app_id: "website-studio",
+        resource: "source",
+        type: "maverick.app.data-changed",
+      },
+      origin: storageOrigin,
+      source: storageWindow,
+    } as MessageEvent);
+    await Promise.resolve();
+
+    expect(invalidation).not.toHaveBeenCalled();
   });
 
   it("cancels an accepted read before invalidating its resource", async () => {
@@ -283,14 +485,12 @@ describe("Base Shell structured data-cache broker", () => {
     const messages = portMessages(channel.port1);
     subject.handleWindowMessage(
       requestEvent(channel, { entity_id: entityId, request_id: "request-invalidated" }),
-      { "app-store": appFrame },
       new Set(["app-store"]),
     );
     await expect(messages.next()).resolves.toMatchObject({ type: PWA_DATA_CACHE_BROKER_ACCEPTED });
     await nextOfType(messages, PWA_DATA_CACHE_BROKER_NETWORK_REQUEST);
     expect((subject as unknown as { active: Map<string, unknown> }).active.size).toBe(1);
     vi.stubGlobal("window", shellWindow);
-
     subject.handleDataChangedMessage({
       data: {
         entity_id: entityId,
@@ -300,7 +500,7 @@ describe("Base Shell structured data-cache broker", () => {
       },
       origin: shellWindow.location.origin,
       source: shellWindow,
-    } as MessageEvent, { "app-store": appFrame });
+    } as MessageEvent);
 
     expect((subject as unknown as { active: Map<string, unknown> }).active.size).toBe(0);
     await vi.waitFor(() => expect(invalidation).toHaveBeenCalledWith({
@@ -323,7 +523,6 @@ describe("Base Shell structured data-cache broker", () => {
 
     expect(perAppDisabled.handleWindowMessage(
       requestEvent(perAppChannel),
-      { "app-store": appFrame },
       new Set(),
     )).toBe(true);
     await expect(perAppMessages.next()).resolves.toMatchObject({
@@ -340,7 +539,6 @@ describe("Base Shell structured data-cache broker", () => {
     const globalMessages = portMessages(globalChannel.port1);
     globalDisabled.handleWindowMessage(
       requestEvent(globalChannel, { request_id: "request-global" }),
-      { "app-store": appFrame },
       new Set(["app-store"]),
     );
     await expect(nextOfType(globalMessages, PWA_DATA_CACHE_BROKER_ACCEPTED)).resolves.toBeTruthy();
@@ -358,7 +556,6 @@ describe("Base Shell structured data-cache broker", () => {
 
     expect(subject.handleWindowMessage(
       requestEvent(channel, { resource: "control-plane" }),
-      { "app-store": appFrame },
       new Set(["app-store"]),
     )).toBe(true);
 
@@ -375,7 +572,6 @@ describe("Base Shell structured data-cache broker", () => {
 
     expect(subject.handleWindowMessage(
       { ...requestEvent(channel), source: {} as Window } as MessageEvent,
-      { "app-store": appFrame },
       new Set(["app-store"]),
     )).toBe(false);
   });

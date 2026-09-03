@@ -20,7 +20,7 @@ import {
   type ParentDataCacheSerializedError,
   type ResourceCachePolicy,
 } from "@maverick/pwa-cache";
-import { isMaverickFrameMessage, isShellWindowMessage } from "./iframePolicy";
+import { isMaverickOwnerMessage, registeredMaverickFrameOwner } from "./iframePolicy";
 import { dataCacheFeatureEnabled } from "./pwa";
 import { runShellRead, shellCacheLifecycle } from "./pwaCacheRuntime";
 
@@ -52,10 +52,9 @@ type ActiveRead = {
 type PwaDataCacheBrokerOptions = {
   accessLease?: AccessLease;
   featureEnabled?: (signal?: AbortSignal) => Promise<boolean | null>;
+  onAuthorizationFailure?: (status: 401 | 403) => Promise<void> | void;
   principal: Omit<CachePrincipal, "appId">;
 };
-
-export type PwaDataCacheFrameRegistry = Record<string, HTMLIFrameElement | null | undefined>;
 
 const RESOURCE_DECLARATIONS: Readonly<Record<string, Readonly<Record<string, ResourceDeclaration>>>> = {
   "app-store": {
@@ -123,13 +122,16 @@ export class PwaDataCacheBroker {
   private readonly active = new Map<string, ActiveRead>();
   private readonly clients = new Map<string, ReturnType<ReturnType<typeof createPwaCacheHost>["createClient"]>>();
   private readonly featureEnabled: NonNullable<PwaDataCacheBrokerOptions["featureEnabled"]>;
+  private readonly onAuthorizationFailure: PwaDataCacheBrokerOptions["onAuthorizationFailure"];
   private featureWasConfirmedEnabled = false;
   private featureWasExplicitlyDisabled = false;
+  private authorizationFailureStarted: Promise<void> | null = null;
   private readonly resources = new Map<string, BrokerResource>();
   private disposed = false;
 
   constructor(options: PwaDataCacheBrokerOptions) {
     this.featureEnabled = options.featureEnabled ?? dataCacheFeatureEnabled;
+    this.onAuthorizationFailure = options.onAuthorizationFailure;
     for (const [appId, declarations] of Object.entries(RESOURCE_DECLARATIONS)) {
       const client = createPwaCacheHost({ ...options.principal, appId }).createClient({
         accessLease: options.accessLease,
@@ -144,7 +146,6 @@ export class PwaDataCacheBroker {
 
   handleWindowMessage(
     event: MessageEvent,
-    frames: PwaDataCacheFrameRegistry,
     enabledAppIds: ReadonlySet<string>,
   ): boolean {
     const raw = messageRecord(event.data);
@@ -154,13 +155,17 @@ export class PwaDataCacheBroker {
       return true;
     }
     const request = event.data;
-    const frame = frames[request.app_id];
-    if (!isMaverickFrameMessage(event, frame)) return false;
+    const frameOwnerAppId = registeredMaverickFrameOwner(event);
+    if (!frameOwnerAppId) return false;
     const port = event.ports.length === 1 ? event.ports[0] : null;
     const declaration = RESOURCE_DECLARATIONS[request.app_id]?.[request.resource];
     const resource = this.resources.get(resourceKey(request.app_id, request.resource));
     if (!port) return true;
-    if (!enabledAppIds.has(request.app_id) || !declaration || !resource || this.disposed) {
+    if (frameOwnerAppId !== request.app_id
+        || !enabledAppIds.has(request.app_id)
+        || !declaration
+        || !resource
+        || this.disposed) {
       sendAccepted(port, request);
       sendResult(port, request, { phase: "initial", status: "unavailable" });
       port.close();
@@ -193,16 +198,14 @@ export class PwaDataCacheBroker {
     return true;
   }
 
-  handleDataChangedMessage(event: MessageEvent, frames: PwaDataCacheFrameRegistry): void {
+  handleDataChangedMessage(event: MessageEvent): void {
     const payload = messageRecord(event.data);
     if (!payload
         || payload.type !== "maverick.app.data-changed"
         || typeof payload.owner_app_id !== "string"
         || typeof payload.resource !== "string") return;
     const ownerAppId = payload.owner_app_id;
-    const trustedSender = isShellWindowMessage(event)
-      || isMaverickFrameMessage(event, frames[ownerAppId]);
-    if (!trustedSender) return;
+    if (!isMaverickOwnerMessage(event, ownerAppId)) return;
     const declarations = RESOURCE_DECLARATIONS[ownerAppId];
     if (!declarations) return;
     for (const [resourceName, resourceDeclaration] of Object.entries(declarations)) {
@@ -419,19 +422,31 @@ export class PwaDataCacheBroker {
   }
 
   private async handleReadError(error: unknown): Promise<void> {
-    if (error && typeof error === "object"
-        && ((error as { status?: unknown }).status === 401 || (error as { status?: unknown }).status === 403)) {
-      this.featureWasExplicitlyDisabled = true;
-      this.featureWasConfirmedEnabled = false;
-      for (const active of [...this.active.values()]) {
-        this.terminateActive(
-          active,
-          "error",
-          new DOMException("PWA data-cache authorization was revoked.", "AbortError"),
-        );
-      }
-      await shellCacheLifecycle.authorizationFailure().catch(() => undefined);
+    const status = authorizationFailureStatus(error);
+    if (!status) return;
+    if (!this.authorizationFailureStarted) {
+      this.authorizationFailureStarted = this.completeAuthorizationFailure(status);
     }
+    await this.authorizationFailureStarted;
+  }
+
+  private async completeAuthorizationFailure(status: 401 | 403): Promise<void> {
+    this.featureWasExplicitlyDisabled = true;
+    this.featureWasConfirmedEnabled = false;
+    for (const active of [...this.active.values()]) {
+      this.terminateActive(
+        active,
+        "error",
+        new DOMException("PWA data-cache authorization was revoked.", "AbortError"),
+      );
+    }
+    const cleanup = shellCacheLifecycle.authorizationFailure().catch(() => undefined);
+    try {
+      await this.onAuthorizationFailure?.(status);
+    } catch {
+      // UI notification is best-effort; durable cache cleanup still completes.
+    }
+    await cleanup;
   }
 
   private reply(
@@ -526,6 +541,12 @@ function errorFromMessage(error: ParentDataCacheSerializedError | undefined): Er
   if (error.status !== undefined) result.status = error.status;
   if (error.retry_after_ms !== undefined) result.retryAfterMs = error.retry_after_ms;
   return result;
+}
+
+function authorizationFailureStatus(error: unknown): 401 | 403 | null {
+  if (!error || typeof error !== "object") return null;
+  const status = (error as { status?: unknown }).status;
+  return status === 401 || status === 403 ? status : null;
 }
 
 function sendResult(

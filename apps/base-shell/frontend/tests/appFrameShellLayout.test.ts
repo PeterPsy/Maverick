@@ -13,7 +13,7 @@ describe("app frame shell layout bridge", () => {
     expect(syncAppFrameShellLayout(iframe, true)).toBe(false);
     expect(postMessage).not.toHaveBeenCalled();
 
-    setMaverickFrameOrigin(iframe, "https://af-layout.sidecars.maverick.test");
+    setMaverickFrameOrigin(iframe, "https://af-layout.sidecars.maverick.test", "chat");
     expect(syncAppFrameShellLayout(iframe, true)).toBe(true);
     expect(postMessage).toHaveBeenLastCalledWith(
       { mobile: true, type: "maverick.shell.layout-changed" },
@@ -26,7 +26,7 @@ describe("app frame shell layout bridge", () => {
       "https://af-layout.sidecars.maverick.test",
     );
 
-    setMaverickFrameOrigin(iframe, null);
+    setMaverickFrameOrigin(iframe, null, "chat");
     iframe.remove();
   });
 });

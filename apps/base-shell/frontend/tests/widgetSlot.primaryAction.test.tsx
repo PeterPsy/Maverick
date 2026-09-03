@@ -266,7 +266,7 @@ async function waitForIframe(parent: HTMLElement): Promise<HTMLIFrameElement> {
     const iframe = parent.querySelector("iframe");
     if (iframe instanceof HTMLIFrameElement) {
       if (!iframe.dataset.maverickFrameOrigin) {
-        setMaverickFrameOrigin(iframe, "https://af-widget.sidecars.maverick.test");
+        setMaverickFrameOrigin(iframe, "https://af-widget.sidecars.maverick.test", ownerAppId);
       }
       iframe.dataset.maverickFrameBootstrapArmed = "true";
       return iframe;

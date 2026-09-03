@@ -115,7 +115,7 @@ class SemanticEnvelopeGovernanceTest(unittest.TestCase):
             second.provider_egress_projection_digest,
         )
         self.assertEqual(first.semantic_envelope_schema_version, "1")
-        self.assertEqual(first.semantic_projection_compiler_revision, "9")
+        self.assertEqual(first.semantic_projection_compiler_revision, "10")
         provenance = [block.provenance for block in first.content_blocks]
         self.assertEqual(
             provenance,

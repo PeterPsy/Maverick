@@ -23,9 +23,9 @@ from core.runtime.full_workspace_contract import validate_full_workspace_contrac
 
 
 OPENROUTER_CERTIFICATION_SUITE_ID = "maverick-openrouter-agentic-contract"
-OPENROUTER_CERTIFICATION_SUITE_VERSION = "34"
+OPENROUTER_CERTIFICATION_SUITE_VERSION = "35"
 OPENROUTER_CERTIFICATION_MATRIX_REVISION = (
-    "2026-09-03-r34-p4-last-mile-attachment-process-tcb24"
+    "2026-09-03-r35-p4-policy-credential-stream-fence-tcb25"
 )
 OPENROUTER_CERTIFICATION_VALIDITY_DAYS = 30
 

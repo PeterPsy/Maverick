@@ -7,12 +7,219 @@ from unittest.mock import patch
 
 from core.providers.agentic_protocol import EphemeralCredential
 from core.runtime.execution import execute_runtime_turn
+from core.runtime.hosted_agentic_budget import HostedAgenticBudget
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from tests.support.fake_agentic_provider import DeterministicFakeAgenticClient
 from tests.support.hosted_agentic_harness import HostedAgenticHarness
 
 
+class _Clock:
+    def __init__(self) -> None:
+        self.value = 0.0
+
+    def __call__(self) -> float:
+        return self.value
+
+
 class HostedTransportAuthorityRevocationTest(unittest.TestCase):
+    def test_live_output_policy_narrowing_during_preflight_blocks_transport(self) -> None:
+        harness = HostedAgenticHarness(self)
+        live_policy = harness.policy
+
+        def preflight(request, _credential):
+            nonlocal live_policy
+            self.assertEqual(request.max_output_tokens, 128)
+            live_policy = replace(live_policy, max_output_tokens=1)
+            return SimpleNamespace(snapshot_digest="8" * 64)
+
+        client = DeterministicFakeAgenticClient()
+        events = []
+        result = execute_runtime_turn(
+            session=harness.session,
+            provider=harness.provider,
+            input_text="Use only synthetic fixture data.",
+            agentic_adapter=harness.adapter(
+                client,
+                policy_resolver=lambda _context: live_policy,
+                request_preflight=preflight,
+            ),
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            correlation_id="turn-hosted",
+            effective_authority=harness.authority,
+            event_sink=events.append,
+        )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(client.requests, [])
+        self.assertEqual(
+            [event.payload for event in events if event.event_type == "runtime.error"],
+            [{"reason_code": "agent_output_token_limit_reached"}],
+        )
+
+    def test_preflight_cannot_consume_active_finalization_deadline_then_open_transport(self) -> None:
+        harness = HostedAgenticHarness(self)
+        clock = _Clock()
+
+        def budget_factory(policy, finalization_policy, **kwargs):
+            return HostedAgenticBudget(
+                policy,
+                finalization_policy,
+                monotonic=clock,
+                **kwargs,
+            )
+
+        def preflight(_request, _credential):
+            clock.value = 4.6
+            return SimpleNamespace(snapshot_digest="7" * 64)
+
+        client = DeterministicFakeAgenticClient()
+        events = []
+        with patch(
+            "core.runtime.hosted_agentic_loop.HostedAgenticBudget",
+            side_effect=budget_factory,
+        ):
+            result = execute_runtime_turn(
+                session=harness.session,
+                provider=harness.provider,
+                input_text="Use only synthetic fixture data.",
+                agentic_adapter=harness.adapter(
+                    client,
+                    request_preflight=preflight,
+                ),
+                provider_state=harness.store.get_provider_state(
+                    "session-hosted"
+                ),
+                correlation_id="turn-hosted",
+                effective_authority=harness.authority,
+                event_sink=events.append,
+            )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(client.requests, [])
+        self.assertEqual(
+            [event.payload for event in events if event.event_type == "runtime.error"],
+            [{"reason_code": "agent_finalization_time_reserve_reached"}],
+        )
+
+    def test_runtime_capability_projection_change_during_preflight_fails_closed(self) -> None:
+        harness = HostedAgenticHarness(self)
+        live_authority = harness.authority
+
+        def refresh(_context):
+            return live_authority
+
+        def preflight(_request, _credential):
+            nonlocal live_authority
+            live_authority = replace(
+                live_authority,
+                policy_revision_set=("workspace-live:binding-hosted:1",),
+            )
+            return SimpleNamespace(snapshot_digest="6" * 64)
+
+        client = DeterministicFakeAgenticClient()
+        events = []
+        result = execute_runtime_turn(
+            session=harness.session,
+            provider=harness.provider,
+            input_text="Use only synthetic fixture data.",
+            agentic_adapter=harness.adapter(
+                client,
+                authority_refresher=refresh,
+                request_preflight=preflight,
+            ),
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            correlation_id="turn-hosted",
+            effective_authority=harness.authority,
+            event_sink=events.append,
+        )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(client.requests, [])
+        self.assertEqual(
+            [event.payload for event in events if event.event_type == "runtime.error"],
+            [{"reason_code": "runtime_authority_projection_changed"}],
+        )
+
+    def test_preflight_credential_rotation_blocks_transport(self) -> None:
+        harness = HostedAgenticHarness(self)
+        credential_value = "credential-a"
+        preflight_values: list[str] = []
+
+        def resolve_credential(_context):
+            return EphemeralCredential(credential_value)
+
+        def preflight(_request, credential):
+            nonlocal credential_value
+            self.assertIsNotNone(credential)
+            preflight_values.append(credential.reveal())
+            credential_value = "credential-b"
+            return SimpleNamespace(snapshot_digest="5" * 64)
+
+        client = DeterministicFakeAgenticClient()
+        events = []
+        result = execute_runtime_turn(
+            session=harness.session,
+            provider=harness.provider,
+            input_text="Use only synthetic fixture data.",
+            agentic_adapter=harness.adapter(
+                client,
+                credential_resolver=resolve_credential,
+                credential_required=True,
+                request_preflight=preflight,
+            ),
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            correlation_id="turn-hosted",
+            effective_authority=harness.authority,
+            event_sink=events.append,
+        )
+
+        self.assertEqual(preflight_values, ["credential-a"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertEqual(client.requests, [])
+        self.assertEqual(
+            [event.payload for event in events if event.event_type == "runtime.error"],
+            [{"reason_code": "provider_credential_changed_after_preflight"}],
+        )
+        self.assertNotIn("credential-a", repr(events))
+        self.assertNotIn("credential-b", repr(events))
+
+    def test_full_authority_refresh_does_not_run_for_each_provider_event(self) -> None:
+        harness = HostedAgenticHarness(self)
+        refresh_calls = 0
+        revalidation_calls = 0
+
+        def refresh(_context):
+            nonlocal refresh_calls
+            refresh_calls += 1
+            return harness.authority
+
+        def revalidate(_context, authority):
+            nonlocal revalidation_calls
+            revalidation_calls += 1
+            return authority
+
+        client = DeterministicFakeAgenticClient()
+        result = execute_runtime_turn(
+            session=harness.session,
+            provider=harness.provider,
+            input_text="Use only synthetic fixture data.",
+            agentic_adapter=harness.adapter(
+                client,
+                authority_refresher=refresh,
+                authority_revalidator=revalidate,
+                request_preflight=lambda _request, _credential: SimpleNamespace(
+                    snapshot_digest="4" * 64
+                ),
+            ),
+            provider_state=harness.store.get_provider_state("session-hosted"),
+            correlation_id="turn-hosted",
+            effective_authority=harness.authority,
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(refresh_calls, 4)
+        self.assertGreaterEqual(revalidation_calls, 1)
+
     def test_live_egress_policy_narrowing_during_preflight_blocks_transport(self) -> None:
         harness = HostedAgenticHarness(self)
         remote_data_allowed = True

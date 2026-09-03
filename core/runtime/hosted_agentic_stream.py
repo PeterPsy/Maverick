@@ -59,7 +59,8 @@ async def consume_hosted_provider_step(
     budget: HostedAgenticBudget,
     cancellation: RuntimeCancellationSignal,
     destination_upstream_id: str | None,
-    before_transport: Callable[[], HostedTransportAuthorization],
+    authorize_transport: Callable[[], HostedTransportAuthorization],
+    revalidate_transport: Callable[[], object],
     on_accepted: Callable[[AgenticModelEvent], None] | None = None,
     on_tool_call: Callable[[AgenticModelEvent], dict[str, object]] | None = None,
     on_private_state: Callable[[AgenticModelEvent], None] | None = None,
@@ -79,7 +80,8 @@ async def consume_hosted_provider_step(
             request=request,
             cancellation=cancellation,
             budget=budget,
-            before_transport=before_transport,
+            authorize_transport=authorize_transport,
+            revalidate_transport=revalidate_transport,
         ):
             _validate_provider_event(provider_event, request.request_id, last_ordinal)
             last_ordinal = provider_event.ordinal
@@ -201,7 +203,8 @@ async def _cancellable_provider_events(
     request,
     cancellation: RuntimeCancellationSignal,
     budget: HostedAgenticBudget,
-    before_transport: Callable[[], HostedTransportAuthorization],
+    authorize_transport: Callable[[], HostedTransportAuthorization],
+    revalidate_transport: Callable[[], object],
 ):
     iterator_holder: list[object] = []
     async for item in _drive_cancellable_events(
@@ -210,11 +213,11 @@ async def _cancellable_provider_events(
             client=client,
             request=request,
             iterator_holder=iterator_holder,
-            before_transport=before_transport,
+            authorize_transport=authorize_transport,
         ),
         cancellation=cancellation,
         budget=budget,
-        before_transport=before_transport,
+        before_transport=revalidate_transport,
     ):
         yield item
 
@@ -264,10 +267,10 @@ async def _open_and_next_provider_event(
     client,
     request,
     iterator_holder: list[object],
-    before_transport: Callable[[], HostedTransportAuthorization],
+    authorize_transport: Callable[[], HostedTransportAuthorization],
 ) -> object:
     """Authorize, bind the fresh credential, and advance without yielding."""
-    authorization = before_transport()
+    authorization = authorize_transport()
     if not isinstance(authorization, HostedTransportAuthorization):
         raise HostedAgenticLoopError("runtime_authority_unavailable")
     stream = open_hosted_provider_response_stream(

@@ -10,14 +10,16 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 import hashlib
+import os
 from pathlib import Path
+import stat
+import struct
 from threading import RLock
 
 from core.providers.certified_tcb_dependencies import (
     CertifiedTcbDependencyContract,
     CertifiedTcbDependencyReport,
     audit_certified_tcb_dependencies as _audit_certified_tcb_dependencies,
-    collect_certified_tcb_manifest_files,
 )
 from core.providers.errors import CapabilityCertificateError
 from core.runtime.execution_binding import canonical_digest
@@ -69,7 +71,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="24",
+    manifest_version="25",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -382,11 +384,14 @@ class CertifiedTcbIdentity:
 def certified_tcb_identity(root: Path | None = None) -> CertifiedTcbIdentity:
     """Recalculate, rather than accept, the live execution identity."""
     repository_root = root or Path(__file__).resolve().parents[2]
+    live_digest, _revision_fence = _compute_certified_tcb_snapshot(
+        repository_root
+    )
     return CertifiedTcbIdentity(
         manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
         structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,
-        live_digest=compute_certified_tcb_digest(repository_root),
+        live_digest=live_digest,
     )
 
 
@@ -401,12 +406,24 @@ def audit_certified_tcb_dependencies(
 
 def compute_certified_tcb_digest(root: Path) -> str:
     """Hash the manifest structure and every regular file under its path roots."""
+    live_digest, _revision_fence = _compute_certified_tcb_snapshot(root)
+    return live_digest
+
+
+def certified_tcb_revision_fence(root: Path | None = None) -> str:
+    """Hash cheap filesystem identities for reliable live-digest invalidation."""
+    repository_root = (
+        root or Path(__file__).resolve().parents[2]
+    ).resolve(strict=True)
+    files = _collect_certified_tcb_files(repository_root)
+    return _certified_tcb_revision_fence(files)
+
+
+def _compute_certified_tcb_snapshot(root: Path) -> tuple[str, str]:
+    """Return a content digest and its stable before/after filesystem fence."""
     repository_root = root.resolve(strict=True)
-    files: dict[str, Path] = {}
-    for relative_root in CERTIFIED_EXECUTION_TCB.artifact_paths:
-        collect_certified_tcb_manifest_files(repository_root, relative_root, files)
-    if not files:
-        raise CapabilityCertificateError("certificate_tcb_artifact_empty")
+    files = _collect_certified_tcb_files(repository_root)
+    revision_fence = _certified_tcb_revision_fence(files)
     digest = hashlib.sha256()
     digest.update(b"maverick.certified-execution-tcb.v9\x00")
     digest.update(CERTIFIED_EXECUTION_TCB.structure_digest.encode("ascii"))
@@ -415,13 +432,129 @@ def compute_certified_tcb_digest(root: Path) -> str:
         digest.update(relative_path.encode("utf-8"))
         digest.update(b"\x00")
         try:
-            digest.update(files[relative_path].read_bytes())
+            digest.update(Path(files[relative_path][0]).read_bytes())
         except OSError as error:
             raise CapabilityCertificateError("certificate_tcb_artifact_unavailable") from error
         digest.update(b"\x00")
     live_digest = digest.hexdigest()
     _require_dependency_audit(repository_root, live_digest=live_digest)
-    return live_digest
+    final_files = _collect_certified_tcb_files(repository_root)
+    final_fence = _certified_tcb_revision_fence(final_files)
+    if final_fence != revision_fence:
+        raise CapabilityCertificateError(
+            "certificate_tcb_artifact_changed"
+        )
+    return live_digest, final_fence
+
+
+def _collect_certified_tcb_files(
+    repository_root: Path,
+) -> dict[str, tuple[str, os.stat_result]]:
+    """Collect exact artifacts and metadata with one non-following scan."""
+    files: dict[str, tuple[str, os.stat_result]] = {}
+    repository_root_string = os.fspath(repository_root)
+    covered_directories: list[str] = []
+    artifact_roots = sorted(
+        set(CERTIFIED_EXECUTION_TCB.artifact_paths),
+        key=lambda value: (value.count("/"), value),
+    )
+    scan_roots: list[tuple[str, str]] = []
+    for relative_root in artifact_roots:
+        if (
+            not relative_root
+            or relative_root.startswith("/")
+            or ".." in Path(relative_root).parts
+            or "\x00" in relative_root
+        ):
+            raise CapabilityCertificateError(
+                "certificate_tcb_manifest_path_invalid"
+            )
+        if any(
+            relative_root == directory
+            or relative_root.startswith(directory + "/")
+            for directory in covered_directories
+        ):
+            continue
+        candidate = os.path.join(repository_root_string, relative_root)
+        try:
+            metadata = os.lstat(candidate)
+        except OSError as error:
+            raise CapabilityCertificateError(
+                "certificate_tcb_artifact_missing"
+            ) from error
+        if stat.S_ISLNK(metadata.st_mode):
+            raise CapabilityCertificateError(
+                "certificate_tcb_artifact_symlink"
+            )
+        if stat.S_ISREG(metadata.st_mode):
+            if not relative_root.endswith((".pyc", ".pyo")):
+                files[relative_root] = (candidate, metadata)
+            continue
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise CapabilityCertificateError(
+                "certificate_tcb_artifact_invalid"
+            )
+        covered_directories.append(relative_root)
+        scan_roots.append((relative_root, candidate))
+    stack = list(reversed(scan_roots))
+    while stack:
+        relative_directory, directory = stack.pop()
+        try:
+            with os.scandir(directory) as entries:
+                children = sorted(entries, key=lambda entry: entry.name)
+        except OSError as error:
+            raise CapabilityCertificateError(
+                "certificate_tcb_artifact_unavailable"
+            ) from error
+        for entry in children:
+            if entry.name in {"__pycache__", "node_modules", ".git"}:
+                continue
+            relative_path = f"{relative_directory}/{entry.name}"
+            try:
+                metadata = entry.stat(follow_symlinks=False)
+            except OSError as error:
+                raise CapabilityCertificateError(
+                    "certificate_tcb_artifact_unavailable"
+                ) from error
+            if stat.S_ISLNK(metadata.st_mode):
+                raise CapabilityCertificateError(
+                    "certificate_tcb_artifact_symlink"
+                )
+            if stat.S_ISDIR(metadata.st_mode):
+                stack.append((relative_path, entry.path))
+            elif stat.S_ISREG(metadata.st_mode) and not entry.name.endswith(
+                (".pyc", ".pyo")
+            ):
+                files[relative_path] = (entry.path, metadata)
+    if not files:
+        raise CapabilityCertificateError("certificate_tcb_artifact_empty")
+    return files
+
+
+def _certified_tcb_revision_fence(
+    files: dict[str, tuple[str, os.stat_result]],
+) -> str:
+    digest = hashlib.sha256()
+    digest.update(b"maverick.certified-execution-tcb.revision-fence.v1\x00")
+    digest.update(CERTIFIED_EXECUTION_TCB.structure_digest.encode("ascii"))
+    digest.update(b"\x00")
+    for relative_path in sorted(files):
+        _path, metadata = files[relative_path]
+        digest.update(relative_path.encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update(
+            struct.pack(
+                "!4Q2q",
+                metadata.st_dev,
+                metadata.st_ino,
+                metadata.st_mode,
+                metadata.st_size,
+                metadata.st_mtime_ns,
+                metadata.st_ctime_ns,
+            )
+        )
+        digest.update(b"\x00")
+    return digest.hexdigest()
 
 
 def _require_dependency_audit(repository_root: Path, *, live_digest: str) -> None:
@@ -452,9 +585,37 @@ def validate_remote_tcb_identity(
     root: Path | None = None,
 ) -> CertifiedTcbIdentity:
     """Require an exact current TCB identity for any hosted remote authority."""
+    current, _revision_fence = validate_remote_tcb_identity_with_revision_fence(
+        manifest_id=manifest_id,
+        manifest_version=manifest_version,
+        structure_digest=structure_digest,
+        live_digest=live_digest,
+        root=root,
+    )
+    return current
+
+
+def validate_remote_tcb_identity_with_revision_fence(
+    *,
+    manifest_id: str,
+    manifest_version: str,
+    structure_digest: str,
+    live_digest: str,
+    root: Path | None = None,
+) -> tuple[CertifiedTcbIdentity, str]:
+    """Validate content and return the cheap fence bound to that exact read."""
     if not all((manifest_id, manifest_version, structure_digest, live_digest)):
         raise CapabilityCertificateError("certificate_tcb_identity_missing")
-    current = certified_tcb_identity(root)
+    repository_root = root or Path(__file__).resolve().parents[2]
+    current_live_digest, revision_fence = _compute_certified_tcb_snapshot(
+        repository_root
+    )
+    current = CertifiedTcbIdentity(
+        manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
+        manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,
+        structure_digest=CERTIFIED_EXECUTION_TCB.structure_digest,
+        live_digest=current_live_digest,
+    )
     if (
         manifest_id != current.manifest_id
         or manifest_version != current.manifest_version
@@ -463,7 +624,7 @@ def validate_remote_tcb_identity(
         raise CapabilityCertificateError("certificate_tcb_identity_mismatch")
     if live_digest != current.live_digest:
         raise CapabilityCertificateError("certificate_tcb_drift")
-    return current
+    return current, revision_fence
 
 
 def is_certified_tcb_component(component_id: str) -> bool:

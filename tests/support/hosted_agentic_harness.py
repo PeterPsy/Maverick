@@ -314,7 +314,9 @@ class HostedAgenticHarness:
         credential: EphemeralCredential | None = None,
         credential_resolver=None,
         cost_estimator=None,
+        policy_resolver=None,
         authority_refresher=None,
+        authority_revalidator=None,
         private_state_inspector=None,
         request_preflight=None,
         context_compactor=None,
@@ -351,14 +353,28 @@ class HostedAgenticHarness:
                 request_preflight=request_preflight,
             )
         )
+        resolved_authority_refresher = authority_refresher or (
+            lambda _context: self.authority
+        )
         loop = HostedAgenticLoop(
             provider_runtimes=runtimes,
             request_builder=self.request_builder,
             tool_orchestrator_resolver=lambda _context, _actor: self.orchestrator,
             tool_ledger=self.orchestrator.ledger,
             private_state_service=self.private_state_service,
-            policy_resolver=lambda _context: self.policy,
-            authority_refresher=authority_refresher or (lambda _context: self.authority),
+            policy_resolver=(
+                policy_resolver
+                if policy_resolver is not None
+                else lambda _context: self.policy
+            ),
+            authority_refresher=resolved_authority_refresher,
+            authority_revalidator=(
+                authority_revalidator
+                if authority_revalidator is not None
+                else lambda context, _authority: resolved_authority_refresher(
+                    context
+                )
+            ),
             actor_context_resolver=lambda _context: RuntimeToolActorContext(
                 workspace_id="default",
                 actor_id="user-1",

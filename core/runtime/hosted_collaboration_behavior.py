@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 import tempfile
 
@@ -36,6 +37,7 @@ _PROBE_TIME = datetime(2026, 9, 2, tzinfo=UTC)
 _PRIVATE_MARKER = "customer SSN 123-45-6789"
 
 
+@lru_cache(maxsize=1)
 def inspect_hosted_collaboration_behavior() -> tuple[str, ...]:
     """Create via CLI, wait via MCP, and expose only certified projections."""
     try:

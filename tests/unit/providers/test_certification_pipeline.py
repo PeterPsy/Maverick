@@ -179,10 +179,10 @@ class CertificationPipelineTest(unittest.TestCase):
         }
         expected_manifest_digests = {
             "google-ai-studio": (
-                "81334267f02ae7172a3a6528a73c1c235464a41edb0402395ee88fdca5ee07f5"
+                "dfd93bdaff3f9ee4250f8ed17887ff2f356dff6859f6cb6ed59322e6bf47d8e0"
             ),
             "openrouter": (
-                "c922fd4fe8b088f0388caed81e9290e33553e83af61a0ffbc3b85a3c9822d0d9"
+                "2c11d66219f6a10991ce9342bfb50d50079708a2cc554223957b49a7c56716ba"
             ),
         }
         for manifest in (
@@ -190,10 +190,10 @@ class CertificationPipelineTest(unittest.TestCase):
             OPENROUTER_AGENTIC_CERTIFICATION_MANIFEST,
         ):
             with self.subTest(provider_id=manifest.provider_id):
-                self.assertEqual(manifest.suite_version, "34")
+                self.assertEqual(manifest.suite_version, "35")
                 self.assertEqual(
                     manifest.matrix_revision,
-                    "2026-09-03-r34-p4-last-mile-attachment-process-tcb24",
+                    "2026-09-03-r35-p4-policy-credential-stream-fence-tcb25",
                 )
                 self.assertEqual(
                     manifest.digest,

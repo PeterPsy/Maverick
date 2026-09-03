@@ -80,6 +80,7 @@ from core.runtime.hosted_agentic_models import (
     HostedActorContextResolver,
     HostedAgenticLoopError,
     HostedAuthorityRefresher,
+    HostedAuthorityRevalidator,
     HostedCredentialResolver,
     HostedPolicyResolver,
     HostedToolOrchestratorResolver,
@@ -142,6 +143,7 @@ class HostedAgenticLoop:
         private_state_service: ProviderPrivateStateService,
         policy_resolver: HostedPolicyResolver,
         authority_refresher: HostedAuthorityRefresher,
+        authority_revalidator: HostedAuthorityRevalidator,
         actor_context_resolver: HostedActorContextResolver,
         credential_resolver: HostedCredentialResolver,
         turn_status_callback: HostedTurnStatusCallback | None = None,
@@ -156,6 +158,7 @@ class HostedAgenticLoop:
         self.private_state_service = private_state_service
         self.policy_resolver = policy_resolver
         self.authority_refresher = authority_refresher
+        self.authority_revalidator = authority_revalidator
         self.actor_context_resolver = actor_context_resolver
         self.credential_resolver = credential_resolver
         self.turn_status_callback = turn_status_callback
@@ -401,7 +404,7 @@ class HostedAgenticLoop:
             egress_policy = hosted_egress_policy(context, budget.policy)
             authority = self.authority_refresher(context)
             effective_context = replace(context, effective_authority=authority)
-            credential = self.credential_resolver(context)
+            credential = self.credential_resolver(effective_context)
             if provider_runtime.credential_required and credential is None:
                 raise HostedAgenticLoopError(
                     "provider_credential_authorization_missing"
@@ -503,9 +506,13 @@ class HostedAgenticLoop:
                     context=context,
                     prepared_request=prepared_request,
                     request_builder=self.request_builder,
+                    policy_resolver=self.policy_resolver,
+                    budget=budget,
                     authority_refresher=self.authority_refresher,
+                    authority_revalidator=self.authority_revalidator,
                     credential_resolver=self.credential_resolver,
                     credential_required=provider_runtime.credential_required,
+                    preflight_credential=credential,
                 )
                 request_lineage_digest = hosted_request_lineage_digest(request)
                 self._validate_request_pairing(
@@ -533,7 +540,6 @@ class HostedAgenticLoop:
                     request_builder=self.request_builder,
                     prepared_request=prepared_request,
                     request_preflight=provider_runtime.request_preflight,
-                    credential=credential,
                     require_preflight=provider_runtime.recipe is not None,
                     transport_guard=transport_guard,
                 )
@@ -718,7 +724,8 @@ class HostedAgenticLoop:
                     budget=budget,
                     cancellation=cancellation,
                     destination_upstream_id=destination_upstream_id,
-                    before_transport=transport_guard.authorize,
+                    authorize_transport=transport_guard.authorize_transport,
+                    revalidate_transport=transport_guard.revalidate_transport,
                     on_accepted=accepted,
                     on_tool_call=observe,
                     on_private_state=stage,

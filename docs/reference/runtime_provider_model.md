@@ -98,7 +98,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v24 also
+status, workspace binding, and upstream constraint. TCB manifest v25 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance, and hashes the exact executable roots of every built-in app surface
@@ -623,7 +623,7 @@ immutable workspace snapshot that omits every `.git` component, so post-spawn
 live create/rename races remain invisible to shell and managed processes, with
 or without a mutation overlay.
 Current Google/OpenRouter definitions use `maverick_agent` and pin
-`codex-baseline-v17` only because the executable 24-behavior gate runs 16 real
+`codex-baseline-v18` only because the executable 24-behavior gate runs 16 real
 filesystem, shell/process, and CLI/MCP capability paths, one concrete
 inter-agent workflow, and seven security probes;
 they are still uncertified, unbound, contained previews. Direct replacement

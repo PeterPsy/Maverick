@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -11,8 +12,10 @@ from core.providers.certification_manifests import (
 )
 from core.providers.certified_execution_tcb import (
     CERTIFIED_EXECUTION_TCB,
+    CertifiedTcbComponent,
     audit_certified_tcb_dependencies,
     certified_tcb_identity,
+    certified_tcb_revision_fence,
     compute_certified_tcb_digest,
 )
 from core.providers.errors import CapabilityCertificateError
@@ -24,10 +27,10 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
 
     def test_every_suite_derives_artifacts_and_identity_from_one_manifest(self) -> None:
         identity = certified_tcb_identity(self.root)
-        self.assertEqual(identity.manifest_version, "24")
+        self.assertEqual(identity.manifest_version, "25")
         self.assertEqual(
             identity.structure_digest,
-            "cd11558d35fb965d0b4f7170eebcf9ddafe96de21868eb628e034b9dfd4f9532",
+            "ba7ce4c2b59f15c43a0f7d3c77af5d09608dd50e0425ecc0b936c73fc3df31c0",
         )
         self.assertIn(
             "scripts/run_google_interactions_probe.py",
@@ -133,6 +136,39 @@ class CertifiedExecutionTcbTest(unittest.TestCase):
                 "certificate_tcb_transitive_dependency_uncovered",
             ):
                 compute_certified_tcb_digest(self.root)
+
+    def test_revision_fence_detects_same_size_replacement_without_reading_content(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            artifact = root / "core/runtime/fence.py"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_bytes(b"alpha")
+            manifest = replace(
+                CERTIFIED_EXECUTION_TCB,
+                components=(
+                    CertifiedTcbComponent(
+                        "revision-fence-test",
+                        "Synthetic revision fence fixture.",
+                        ("core/runtime",),
+                    ),
+                ),
+                dependency_contracts=(),
+            )
+            with patch(
+                "core.providers.certified_execution_tcb.CERTIFIED_EXECUTION_TCB",
+                manifest,
+            ), patch.object(
+                Path,
+                "read_bytes",
+                side_effect=AssertionError("revision fence read content"),
+            ):
+                initial = certified_tcb_revision_fence(root)
+                replacement = artifact.with_name("replacement.py")
+                replacement.write_bytes(b"bravo")
+                replacement.replace(artifact)
+                replaced = certified_tcb_revision_fence(root)
+
+        self.assertNotEqual(replaced, initial)
 
     def test_dependency_audit_rejects_a_manifest_that_drops_the_known_closure(self) -> None:
         components = tuple(

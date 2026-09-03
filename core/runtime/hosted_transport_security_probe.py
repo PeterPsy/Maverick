@@ -42,6 +42,7 @@ from core.runtime.hosted_transport_security_probe_support import (
     TransportProbeClient,
     TransportProbeDecisionStore,
     TransportProbeEventClient,
+    build_transport_probe_budget,
     build_transport_probe_context,
     build_transport_probe_workspace_store,
     consume_transport_probe_stream,
@@ -146,7 +147,8 @@ async def _probe_transport_boundaries(
 ) -> bool:
     """Compose the same production preflight/commit/stream path as the loop."""
     prepared = builder.prepare(**arguments)
-    transport_guard = _transport_guard(builder, prepared, context)
+    budget = build_transport_probe_budget()
+    transport_guard = _transport_guard(builder, prepared, context, budget)
     preflight_called = False
 
     def revoking_preflight(_request, _credential):
@@ -167,7 +169,6 @@ async def _probe_transport_boundaries(
             request_builder=builder,
             prepared_request=prepared,
             request_preflight=revoking_preflight,
-            credential=None,
             require_preflight=True,
             transport_guard=transport_guard,
         )
@@ -186,14 +187,14 @@ async def _probe_transport_boundaries(
         now=PROBE_TIME,
     )
     prepared = builder.prepare(**arguments)
-    transport_guard = _transport_guard(builder, prepared, context)
+    budget = build_transport_probe_budget()
+    transport_guard = _transport_guard(builder, prepared, context, budget)
     request = await preflight_and_commit_hosted_request(
         request_builder=builder,
         prepared_request=prepared,
         request_preflight=lambda _request, _credential: SimpleNamespace(
             snapshot_digest="e" * 64
         ),
-        credential=None,
         require_preflight=True,
         transport_guard=transport_guard,
     )
@@ -214,7 +215,9 @@ async def _probe_transport_boundaries(
     reason_code = await consume_transport_probe_stream(
         client=client,
         request=request,
-        before_transport=transport_guard.authorize,
+        budget=budget,
+        authorize_transport=transport_guard.authorize_transport,
+        revalidate_transport=transport_guard.revalidate_transport,
     )
     initial_advance_blocked = bool(
         reason_code == "egress_data_class_denied"
@@ -228,14 +231,14 @@ async def _probe_transport_boundaries(
         now=PROBE_TIME,
     )
     prepared = builder.prepare(**arguments)
-    transport_guard = _transport_guard(builder, prepared, context)
+    budget = build_transport_probe_budget()
+    transport_guard = _transport_guard(builder, prepared, context, budget)
     request = await preflight_and_commit_hosted_request(
         request_builder=builder,
         prepared_request=prepared,
         request_preflight=lambda _request, _credential: SimpleNamespace(
             snapshot_digest="f" * 64
         ),
-        credential=None,
         require_preflight=True,
         transport_guard=transport_guard,
     )
@@ -245,7 +248,7 @@ async def _probe_transport_boundaries(
     def revoke_before_second_advance():
         nonlocal advances
         advances += 1
-        if advances == 2:
+        if advances == 1:
             current["record"] = revoke_runtime_public_content_authority(
                 store,
                 workspace_id=PROBE_WORKSPACE_ID,
@@ -254,30 +257,36 @@ async def _probe_transport_boundaries(
                 reason="negative between-event transport probe",
                 now=PROBE_TIME,
             )
-        return transport_guard.authorize()
+        return transport_guard.revalidate_transport()
 
     stream_reason = await consume_transport_probe_stream(
         client=event_client,
         request=request,
-        before_transport=revoke_before_second_advance,
+        budget=budget,
+        authorize_transport=transport_guard.authorize_transport,
+        revalidate_transport=revoke_before_second_advance,
     )
     return bool(
         initial_advance_blocked
         and stream_reason == "egress_data_class_denied"
-        and advances == 2
+        and advances == 1
         and event_client.request_count == 1
         and event_client.event_count == 1
     )
 
 
-def _transport_guard(builder, prepared, context) -> HostedTransportAuthorityGuard:
+def _transport_guard(builder, prepared, context, budget) -> HostedTransportAuthorityGuard:
     return HostedTransportAuthorityGuard(
         context=context,
         prepared_request=prepared,
         request_builder=builder,
+        policy_resolver=lambda _current: budget.policy,
+        budget=budget,
         authority_refresher=lambda current: current.effective_authority,
+        authority_revalidator=lambda _current, authority: authority,
         credential_resolver=lambda _current: None,
         credential_required=False,
+        preflight_credential=None,
     )
 
 

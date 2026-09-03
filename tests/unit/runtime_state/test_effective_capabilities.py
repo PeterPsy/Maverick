@@ -9,9 +9,13 @@ from unittest.mock import Mock, patch
 import core.runtime.turn_submission_service_runtime as async_submission
 import core.runtime.turn_submission_service_submit as sync_submission
 
+from core.providers.agentic_adapter import RuntimeHealth
 from core.providers.agentic_models import codex_routing_constraint, codex_runtime_policy
 from core.providers.capability_models import RuntimeCapabilitySet
-from core.providers.certificate_service import runtime_adapter_artifact_digest
+from core.providers.certificate_service import (
+    revoke_capability_certificate,
+    runtime_adapter_artifact_digest,
+)
 from core.providers.errors import CapabilityCertificateError
 from core.runtime.authority import (
     blocked_runtime_capability_payload,
@@ -20,7 +24,11 @@ from core.runtime.authority import (
     resolve_effective_runtime_authority,
     validate_effective_context_capabilities,
 )
-from core.runtime.execution_binding import build_runtime_execution_binding
+from core.runtime.execution_binding import (
+    build_runtime_execution_binding,
+    canonical_digest,
+)
+from core.runtime.authority_service import revalidate_runtime_authority_snapshot
 from core.runtime.failure_messages import runtime_failure_public_message
 from tests.support.agentic_certification import (
     certified_test_provider_store,
@@ -208,6 +216,64 @@ class EffectiveCapabilitiesTest(unittest.TestCase):
         self.assertFalse(authority.allowed_capabilities.filesystem_read)
         self.assertFalse(authority.allowed_capabilities.filesystem_write)
         self.assertFalse(authority.allowed_capabilities.shell)
+
+    def test_lightweight_authority_revalidation_fences_tcb_and_revocation(self) -> None:
+        health = RuntimeHealth(status="healthy")
+        authority = resolve_effective_runtime_authority(
+            self.store,
+            binding=self.binding,
+            adapter=self.adapter,
+            turn_id="turn-live-fence",
+            health_revision=f"runtime-health:{canonical_digest(health)}",
+            actor_policy_revision="actor:live:1",
+            now=NOW,
+        )
+        session = SimpleNamespace(
+            execution_binding=self.binding,
+            effective_mode="full-access",
+            owner_user_id="user-1",
+            workspace_id="default",
+            agent_type_id="chat",
+        )
+        state = SimpleNamespace(provider_store=self.store)
+        arguments = {
+            "state": state,
+            "session": session,
+            "adapter": self.adapter,
+            "authority": authority,
+            "now": NOW,
+        }
+        with patch(
+            "core.runtime.authority_service.live_runtime_actor_policy",
+            return_value=(True, "actor:live:1"),
+        ), patch(
+            "core.runtime.authority_service.certified_tcb_revision_fence",
+            return_value=authority.tcb_revision_fence,
+        ), patch(
+            "core.runtime.full_workspace_contract.validate_full_workspace_live_authority",
+            side_effect=AssertionError("expensive behavior gate reran"),
+        ):
+            self.assertIs(
+                revalidate_runtime_authority_snapshot(**arguments),
+                authority,
+            )
+
+        status = self.store.get_capability_certificate_status(
+            authority.certificate_id
+        )
+        self.assertIsNotNone(status)
+        revoke_capability_certificate(
+            self.store,
+            certificate_id=authority.certificate_id,
+            expected_revision=status.revision,
+            reason="test-revocation",
+            now=NOW,
+        )
+        with self.assertRaisesRegex(
+            CapabilityCertificateError,
+            "certificate_revoked",
+        ):
+            revalidate_runtime_authority_snapshot(**arguments)
 
     def test_sandbox_execution_mode_removes_shell_from_snapshot_and_handles(self) -> None:
         authority = resolve_effective_runtime_authority(

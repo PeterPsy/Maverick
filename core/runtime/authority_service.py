@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from core.providers.agentic_adapter import AgenticRuntimeEngineAdapter, RuntimeHealthContext
 from core.providers.agentic_workspace_policy import actor_selection_allowed
+from core.providers.certified_execution_tcb import certified_tcb_revision_fence
+from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 from core.providers.service import effective_provider_registry
 from core.providers.store import ProviderStore
 from core.runtime.authority import (
     EffectiveRuntimeAuthority,
     effective_authority_audit_payload,
     resolve_effective_runtime_authority,
+    runtime_feature_flag_revision,
+    validate_live_runtime_binding_governance,
     validate_effective_context_capabilities,
 )
 from core.runtime.runtime_actor import resolve_runtime_actor_roles
@@ -92,6 +97,108 @@ def resolve_runtime_authority_snapshot(
         actor_policy_revision=actor_revision,
         adapter_artifact_digest=adapter_artifact_digest,
     )
+
+
+def revalidate_runtime_authority_snapshot(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    adapter: AgenticRuntimeEngineAdapter,
+    authority: EffectiveRuntimeAuthority,
+    provider_store: ProviderStore | None = None,
+    now: datetime | None = None,
+) -> EffectiveRuntimeAuthority:
+    """Check mutable revocation inputs without rerunning TCB/behavior proof."""
+    binding = session.execution_binding
+    if binding is None or (
+        authority.execution_binding_id != binding.execution_binding_id
+        or authority.certificate_id != binding.capability_certificate_id
+    ):
+        raise CapabilityCertificateError("runtime_authority_unavailable")
+    active_provider_store = provider_store or state.provider_store
+    try:
+        certificate = active_provider_store.get_capability_certificate(
+            binding.capability_certificate_id
+        )
+    except ProviderNotFoundError as error:
+        raise CapabilityCertificateError("certificate_missing") from error
+    status = active_provider_store.get_capability_certificate_status(
+        certificate.certificate_id
+    )
+    if status is None:
+        raise CapabilityCertificateError("certificate_status_missing")
+    if status.status != "active":
+        raise CapabilityCertificateError("certificate_revoked")
+    if not _authority_revision_matches(
+        authority,
+        f"certificate-status:{certificate.certificate_id}:{status.revision}",
+    ):
+        raise CapabilityCertificateError("certificate_status_changed")
+    timestamp = now or datetime.now(tz=UTC)
+    if (
+        authority.certificate_expires_at is None
+        or certificate.expires_at != authority.certificate_expires_at
+        or timestamp >= certificate.expires_at
+    ):
+        raise CapabilityCertificateError("certificate_expired")
+    if (
+        certificate.tcb_manifest_id != authority.tcb_manifest_id
+        or certificate.tcb_manifest_version != authority.tcb_manifest_version
+        or certificate.tcb_structure_digest != authority.tcb_structure_digest
+        or certificate.tcb_live_digest != authority.tcb_live_digest
+    ):
+        raise CapabilityCertificateError("certificate_tcb_binding_mismatch")
+    workspace_binding = validate_live_runtime_binding_governance(
+        active_provider_store,
+        binding=binding,
+    )
+    if not _authority_revision_matches(
+        authority,
+        f"workspace-live:{workspace_binding.binding_id}:{workspace_binding.revision}",
+    ):
+        raise CapabilityCertificateError("runtime_policy_changed")
+    actor_allowed, actor_revision = live_runtime_actor_policy(
+        state,
+        session=session,
+        provider_store=active_provider_store,
+    )
+    if not actor_allowed:
+        raise CapabilityCertificateError("runtime_actor_policy_denied")
+    if actor_revision != authority.actor_policy_revision:
+        raise CapabilityCertificateError("runtime_actor_policy_changed")
+    if runtime_feature_flag_revision(binding) != authority.feature_flag_revision:
+        raise CapabilityCertificateError("runtime_feature_flags_changed")
+    health = run_runtime_coroutine(
+        adapter.health(RuntimeHealthContext(binding=binding))
+    )
+    if health.status not in {"healthy", "degraded"}:
+        raise CapabilityCertificateError("runtime_health_unavailable")
+    if (
+        f"runtime-health:{canonical_digest(health)}"
+        != authority.health_revision
+    ):
+        raise CapabilityCertificateError("runtime_health_changed")
+    effective_mode = (
+        "sandbox"
+        if "sandbox" in {binding.execution_mode, session.effective_mode}
+        else "full-access"
+    )
+    if effective_mode != authority.execution_mode:
+        raise CapabilityCertificateError("runtime_execution_mode_changed")
+    if not authority.tcb_revision_fence:
+        raise CapabilityCertificateError(
+            "certificate_tcb_revision_fence_missing"
+        )
+    if certified_tcb_revision_fence() != authority.tcb_revision_fence:
+        raise CapabilityCertificateError("certificate_tcb_drift")
+    return authority
+
+
+def _authority_revision_matches(
+    authority: EffectiveRuntimeAuthority,
+    revision: str,
+) -> bool:
+    return revision in authority.policy_revision_set
 
 
 def live_runtime_actor_policy(

@@ -85,7 +85,12 @@ _PUBLIC_MESSAGES = {
     "certificate_inactive": "This model profile certificate is not active.",
     "certificate_missing": "This model profile has no capability certificate.",
     "certificate_missing_status": "This model profile certificate has no live status.",
+    "certificate_status_changed": "This model profile certificate authority changed during execution.",
+    "certificate_status_missing": "This model profile certificate has no live status.",
     "certificate_tcb_drift": "The certified execution boundary has changed.",
+    "certificate_tcb_revision_fence_missing": (
+        "The certified execution boundary cannot be revalidated safely."
+    ),
     "context_compaction_invalid": (
         "The runtime could not compact provider history without preserving its integrity."
     ),
@@ -157,6 +162,10 @@ _PUBLIC_MESSAGES = {
         "The selected provider recipe has no endpoint preflight."
     ),
     "provider_credential_authorization_missing": "The configured provider credentials are unavailable.",
+    "provider_credential_authorization_invalid": "The configured provider credentials are invalid.",
+    "provider_credential_changed_after_preflight": (
+        "The provider credential changed after endpoint verification."
+    ),
     "provider_cybersecurity_policy_blocked": (
         "The model provider blocked this request under its cybersecurity policy. "
         "Rephrase the request and try again, or use provider access authorized for security work."
@@ -198,9 +207,17 @@ _PUBLIC_MESSAGES = {
     "runtime_cancelled": "The runtime request was cancelled.",
     "runtime_health_unavailable": "The selected runtime is not currently healthy.",
     "runtime_actor_policy_denied": "The current actor is no longer authorized for this runtime profile.",
+    "runtime_actor_policy_changed": "Runtime actor policy changed during execution.",
     "runtime_authority_unavailable": (
         "The selected runtime has no effective server-side authority snapshot."
     ),
+    "runtime_authority_projection_changed": (
+        "Runtime capabilities changed after request preparation."
+    ),
+    "runtime_execution_mode_changed": "Runtime execution mode changed during execution.",
+    "runtime_feature_flags_changed": "Runtime feature authority changed during execution.",
+    "runtime_health_changed": "Runtime health authority changed during execution.",
+    "runtime_policy_changed": "Runtime policy changed during execution.",
     "runtime_profile_upgrade_required": (
         "This chat requires a compatible runtime-profile upgrade before it can continue."
     ),

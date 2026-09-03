@@ -40,6 +40,16 @@ from core.runtime.workspace_instructions import (
 MAX_SKILL_INSTRUCTION_BYTES = 1_048_576
 
 
+def runtime_capability_semantic_payload(authority) -> dict[str, object]:
+    """Return the exact authority projection embedded in hosted requests."""
+    return {
+        "execution_mode": authority.execution_mode,
+        "capabilities": asdict(authority.allowed_capabilities),
+        "allowed_tool_handles": authority.allowed_tool_handles,
+        "policy_revisions": authority.policy_revision_set,
+    }
+
+
 class SemanticContextMaterializer:
     """Materialize platform, workspace, agent, user, and skill context."""
 
@@ -100,12 +110,7 @@ class SemanticContextMaterializer:
             )
         )
         authority = context.effective_authority
-        capabilities = {
-            "execution_mode": authority.execution_mode,
-            "capabilities": asdict(authority.allowed_capabilities),
-            "allowed_tool_handles": authority.allowed_tool_handles,
-            "policy_revisions": authority.policy_revision_set,
-        }
+        capabilities = runtime_capability_semantic_payload(authority)
         blocks.append(
             make_semantic_block(
                 blocks,

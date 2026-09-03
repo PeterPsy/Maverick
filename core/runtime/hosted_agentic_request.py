@@ -42,6 +42,10 @@ from core.runtime.semantic_envelope import (
     SemanticEnvelopeBlock,
     semantic_projection_digest,
 )
+from core.runtime.semantic_context_blocks import (
+    runtime_capability_semantic_payload,
+)
+from core.runtime.semantic_envelope_models import canonical_digest
 from core.runtime.tool_catalog import RuntimeToolCatalog
 
 if TYPE_CHECKING:
@@ -63,6 +67,7 @@ class HostedAgenticPreparedRequest:
     request: AgenticModelRequest
     workspace_id: str
     egress_decisions: tuple[AgenticEgressDecision, ...]
+    runtime_capability_projection_digest: str
     tool_handles: tuple[str, ...] = ()
 
 
@@ -448,6 +453,11 @@ class HostedAgenticRequestBuilder:
             request=request,
             workspace_id=context.session.workspace_id,
             egress_decisions=tuple(egress_decisions),
+            runtime_capability_projection_digest=canonical_digest(
+                runtime_capability_semantic_payload(
+                    context.effective_authority
+                )
+            ),
             tool_handles=tuple(
                 descriptor.handle for descriptor in catalog.descriptors
             ),
@@ -480,6 +490,12 @@ class HostedAgenticRequestBuilder:
         authority = getattr(context, "effective_authority", None)
         if authority is None:
             raise HostedAgenticLoopError("runtime_authority_unavailable")
+        if prepared.runtime_capability_projection_digest != canonical_digest(
+            runtime_capability_semantic_payload(authority)
+        ):
+            raise HostedAgenticLoopError(
+                "runtime_authority_projection_changed"
+            )
         if any(
             handle not in authority.allowed_tool_handles
             for handle in prepared.tool_handles

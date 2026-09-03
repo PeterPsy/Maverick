@@ -27,13 +27,13 @@ from core.runtime.hosted_harness_recipes import GOOGLE_GOVERNED_WORKSPACE_RECIPE
 
 
 GOOGLE_AGENTIC_PROFILE_ID = "agentic-profile-google-gemini-3-6-flash"
-GOOGLE_AGENTIC_PROFILE_REVISION = "38"
-GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "37"
+GOOGLE_AGENTIC_PROFILE_REVISION = "39"
+GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISION = "38"
 GOOGLE_AGENTIC_PREVIOUS_PROFILE_REVISIONS = (
     "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
     "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
     "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
-    "32", "33", "34", "35", "36", "37",
+    "32", "33", "34", "35", "36", "37", "38",
 )
 GOOGLE_CERTIFIED_REASONING_EFFORTS = ("high",)
 GOOGLE_DEFAULT_REASONING_EFFORT = "high"
@@ -99,7 +99,7 @@ def ensure_google_agentic_preview_profile(
         provider_protocol="google-interactions",
         provider_api_version="v1",
         adapter_id="maverick-hosted-tool-loop",
-        adapter_version_constraint="==30",
+        adapter_version_constraint="==31",
         routing_constraint=google_interactions_routing_constraint(),
         policy_ceiling=google_agentic_preview_policy(),
         capability_certificate_id=GOOGLE_AGENTIC_CERTIFICATE_ID,

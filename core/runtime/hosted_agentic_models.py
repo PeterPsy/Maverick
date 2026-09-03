@@ -59,6 +59,10 @@ HostedContentClassifier = Callable[[object, str, object], HostedContentClassific
 HostedCredentialResolver = Callable[[object], EphemeralCredential | None]
 HostedPolicyResolver = Callable[[object], AgenticRuntimePolicy]
 HostedAuthorityRefresher = Callable[[object], EffectiveRuntimeAuthority]
+HostedAuthorityRevalidator = Callable[
+    [object, EffectiveRuntimeAuthority],
+    EffectiveRuntimeAuthority,
+]
 HostedActorContextResolver = Callable[[object], RuntimeToolActorContext]
 HostedToolOrchestratorResolver = Callable[
     [object, RuntimeToolActorContext], RuntimeToolOrchestrator

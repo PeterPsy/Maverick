@@ -73,8 +73,28 @@ async def consume_transport_probe_stream(
     *,
     client,
     request,
-    before_transport,
+    budget,
+    authorize_transport,
+    revalidate_transport,
 ) -> str:
+    try:
+        async for _emission in consume_hosted_provider_step(
+            client=client,
+            request=request,
+            budget=budget,
+            cancellation=RuntimeCancellationSignal(),
+            destination_upstream_id=None,
+            authorize_transport=authorize_transport,
+            revalidate_transport=revalidate_transport,
+        ):
+            pass
+    except HostedAgenticLoopError as error:
+        return error.reason_code
+    return "transport_not_denied"
+
+
+def build_transport_probe_budget() -> HostedAgenticBudget:
+    """Build the one budget shared by a probe guard and stream."""
     policy = replace(
         codex_runtime_policy(),
         max_steps_per_turn=4,
@@ -86,7 +106,7 @@ async def consume_transport_probe_stream(
         max_output_tokens=256,
         allowed_remote_data_classes=("public",),
     )
-    budget = HostedAgenticBudget(
+    return HostedAgenticBudget(
         policy,
         HostedFinalizationPolicy(
             exploration_max_output_tokens=64,
@@ -96,19 +116,6 @@ async def consume_transport_probe_stream(
             max_recovery_attempts=0,
         ),
     )
-    try:
-        async for _emission in consume_hosted_provider_step(
-            client=client,
-            request=request,
-            budget=budget,
-            cancellation=RuntimeCancellationSignal(),
-            destination_upstream_id=None,
-            before_transport=before_transport,
-        ):
-            pass
-    except HostedAgenticLoopError as error:
-        return error.reason_code
-    return "transport_not_denied"
 
 
 def build_transport_probe_context(root: Path):
@@ -196,6 +203,7 @@ __all__ = [
     "PROBE_WORKSPACE_ID",
     "TransportProbeClient",
     "TransportProbeEventClient",
+    "build_transport_probe_budget",
     "TransportProbeDecisionStore",
     "build_transport_probe_context",
     "build_transport_probe_workspace_store",

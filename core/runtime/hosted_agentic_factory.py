@@ -17,7 +17,10 @@ from core.runtime.authority import (
     intersect_runtime_policies,
 )
 from core.runtime.attachment_projection import runtime_attachment_read_fences
-from core.runtime.authority_service import resolve_runtime_authority_snapshot
+from core.runtime.authority_service import (
+    resolve_runtime_authority_snapshot,
+    revalidate_runtime_authority_snapshot,
+)
 from core.runtime.filesystem_mutation_lineage import (
     resolve_filesystem_mutation_lineage,
 )
@@ -65,7 +68,7 @@ from core.secrets.secret_resolution import resolve_secret_for_runtime
 
 HOSTED_AGENTIC_ENGINE_ID = "maverick-tool-loop"
 HOSTED_AGENTIC_ADAPTER_ID = "maverick-hosted-tool-loop"
-HOSTED_AGENTIC_ADAPTER_VERSION = "30"
+HOSTED_AGENTIC_ADAPTER_VERSION = "31"
 
 
 def build_hosted_agentic_engine_adapter(
@@ -110,6 +113,17 @@ def build_hosted_agentic_engine_adapter(
                 adapter=adapter_holder["adapter"],
                 turn_id=context.correlation_id,
                 currently_authorized_tool_handles=authorized_core_tool_handles(context.binding),
+            )
+        except CapabilityCertificateError as error:
+            raise HostedAgenticLoopError(error.reason_code) from error
+
+    def authority_revalidator(context, authority):
+        try:
+            return revalidate_runtime_authority_snapshot(
+                state,
+                session=context.session,
+                adapter=adapter_holder["adapter"],
+                authority=authority,
             )
         except CapabilityCertificateError as error:
             raise HostedAgenticLoopError(error.reason_code) from error
@@ -179,6 +193,7 @@ def build_hosted_agentic_engine_adapter(
         private_state_service=state.provider_private_state_service,
         policy_resolver=policy_resolver,
         authority_refresher=authority_refresher,
+        authority_revalidator=authority_revalidator,
         actor_context_resolver=lambda context: _actor_context(state, context),
         credential_resolver=lambda context: _credential(state, context),
         turn_status_callback=build_hosted_turn_status_callback(state.runtime_store),

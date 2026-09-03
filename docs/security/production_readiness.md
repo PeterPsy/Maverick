@@ -66,7 +66,7 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v24 makes the known transitive boundary executable through six static
+Manifest v25 makes the known transitive boundary executable through six static
 import contracts and adds the exact executable roots for every built-in app
 CLI/MCP surface admitted as a hosted read. Package initializers, the generalist
 input-context projection closure, continuation/recovery, app-entrypoint, audit,
@@ -74,9 +74,9 @@ usage, and audited app-local execution dependencies must all resolve to hashed
 artifacts; a newly reached local module or app-code drift outside the manifest
 prevents authority or TCB identity calculation.
 
-Hosted adapter 30 and the Full Workspace result contract
-`codex-baseline-v17` are bound by TCB manifest v24. Google revision 38 and
-OpenRouter revision 37 atomically claim that contract and the `maverick_agent`
+Hosted adapter 31 and the Full Workspace result contract
+`codex-baseline-v18` are bound by TCB manifest v25. Google revision 39 and
+OpenRouter revision 38 atomically claim that contract and the `maverick_agent`
 family because the executable result gate reports all 24 required behaviors:
 16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete
 inter-agent workflow, and seven security probes.
@@ -124,7 +124,7 @@ explicit `provider_alias` policy while retaining its exact endpoint/upstream
 catalog checks. A policy or revision mismatch fails before execution.
 Those definitions remain uncertified, unbound, contained previews; the local
 claim is not live-provider evidence or launch authorization. The adapter places
-all provider-bound context in semantic-envelope schema v1/compiler revision 9,
+all provider-bound context in semantic-envelope schema v1/compiler revision 10,
 materializes scoped instructions through the confined filesystem, requires
 commit-bound instruction digests for direct mutations, and uses rollback-safe
 batch COW overlays for shell/process effects. Terminal process polling is

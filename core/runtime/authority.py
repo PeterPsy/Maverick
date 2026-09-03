@@ -11,7 +11,9 @@ from core.providers.agentic_models import (
     WorkspaceAgenticProfileBinding,
 )
 from core.providers.capability_models import RuntimeCapabilitySet
-from core.providers.certificate_service import validate_certificate_for_binding
+from core.providers.certificate_service import (
+    validate_certificate_for_binding_with_revision_fence,
+)
 from core.providers.certified_execution_tcb import is_exact_codex_identity
 from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 from core.providers.provider_credentials import resolve_provider_binding
@@ -90,6 +92,7 @@ class EffectiveRuntimeAuthority:
     tcb_manifest_version: str = ""
     tcb_structure_digest: str = ""
     tcb_live_digest: str = ""
+    tcb_revision_fence: str = ""
     tcb_posture: str = "unavailable"
     full_workspace_contract_revision: str = ""
     execution_family: str = ""
@@ -120,13 +123,15 @@ def resolve_effective_runtime_authority(
 ) -> EffectiveRuntimeAuthority:
     """Intersect certified capability with every pinned and live restriction."""
     timestamp = now or datetime.now(tz=UTC)
-    certificate = validate_certificate_for_binding(
-        store,
-        binding=binding,
-        adapter=adapter,
-        observed_upstream_id=observed_upstream_id,
-        now=timestamp,
-        adapter_artifact_digest=adapter_artifact_digest,
+    certificate, tcb_revision_fence = (
+        validate_certificate_for_binding_with_revision_fence(
+            store,
+            binding=binding,
+            adapter=adapter,
+            observed_upstream_id=observed_upstream_id,
+            now=timestamp,
+            adapter_artifact_digest=adapter_artifact_digest,
+        )
     )
     if health_status not in {"healthy", "degraded"}:
         raise CapabilityCertificateError("runtime_health_unavailable")
@@ -245,6 +250,7 @@ def resolve_effective_runtime_authority(
         tcb_manifest_version=certificate.tcb_manifest_version,
         tcb_structure_digest=certificate.tcb_structure_digest,
         tcb_live_digest=certificate.tcb_live_digest,
+        tcb_revision_fence=tcb_revision_fence,
         tcb_posture=(
             "exact_local_contract"
             if is_exact_codex_identity(
@@ -676,23 +682,8 @@ def _feature_capability_ceiling(
     binding: RuntimeExecutionBinding,
     certified: RuntimeCapabilitySet,
 ) -> tuple[RuntimeCapabilitySet, str]:
-    flag_names = (
-        MAVERICK_FEATURE_AGENTIC_PROFILES,
-        MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
-        MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
-        MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
-    )
-    resolved = {name: feature_enabled(name) for name in flag_names}
+    resolved = _runtime_feature_flags(binding)
     hosted_remote = binding.runtime_engine_id == "maverick-tool-loop"
-    if hosted_remote:
-        hosted_names = (
-            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
-            MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
-        )
-        resolved.update({name: feature_enabled(name) for name in hosted_names})
-        provider_flag = provider_preview_feature(binding.model_provider_id)
-        if provider_flag is not None:
-            resolved[provider_flag[0]] = feature_enabled(provider_flag[0])
     ceiling = certified
     if not (
         resolved[MAVERICK_FEATURE_AGENTIC_PROFILES]
@@ -717,8 +708,37 @@ def _feature_capability_ceiling(
                 and resolved[MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE]
             ),
         )
-    revision = f"runtime-features:{canonical_digest(resolved)}"
-    return ceiling, revision
+    return ceiling, runtime_feature_flag_revision(binding)
+
+
+def runtime_feature_flag_revision(
+    binding: RuntimeExecutionBinding,
+) -> str:
+    """Return the cheap live feature-switch identity used by authority."""
+    return f"runtime-features:{canonical_digest(_runtime_feature_flags(binding))}"
+
+
+def _runtime_feature_flags(
+    binding: RuntimeExecutionBinding,
+) -> dict[str, bool]:
+    flag_names = (
+        MAVERICK_FEATURE_AGENTIC_PROFILES,
+        MAVERICK_FEATURE_AGENTIC_ADAPTER_CONTRACT,
+        MAVERICK_FEATURE_AGENTIC_TOOL_CONFIRMATION,
+        MAVERICK_FEATURE_PROVIDER_PRIVATE_STATE,
+    )
+    resolved = {name: feature_enabled(name) for name in flag_names}
+    hosted_remote = binding.runtime_engine_id == "maverick-tool-loop"
+    if hosted_remote:
+        hosted_names = (
+            MAVERICK_FEATURE_HOSTED_AGENT_RUNTIME,
+            MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
+        )
+        resolved.update({name: feature_enabled(name) for name in hosted_names})
+        provider_flag = provider_preview_feature(binding.model_provider_id)
+        if provider_flag is not None:
+            resolved[provider_flag[0]] = feature_enabled(provider_flag[0])
+    return resolved
 
 
 def _health_capability_ceiling(

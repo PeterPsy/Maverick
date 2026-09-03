@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.inter_agent_commands import inter_agent_command_specs
@@ -181,6 +182,22 @@ class HostedCollaborationContractTest(unittest.TestCase):
             inspect_hosted_collaboration_behavior(),
             HOSTED_COLLABORATION_BEHAVIOR_IDS,
         )
+
+    def test_behavior_gate_reuses_verified_workflow_within_one_process(self) -> None:
+        inspect_hosted_collaboration_behavior.cache_clear()
+        with patch(
+            "core.runtime.hosted_collaboration_behavior._probe_workflow",
+            return_value=True,
+        ) as workflow:
+            self.assertEqual(
+                inspect_hosted_collaboration_behavior(),
+                HOSTED_COLLABORATION_BEHAVIOR_IDS,
+            )
+            self.assertEqual(
+                inspect_hosted_collaboration_behavior(),
+                HOSTED_COLLABORATION_BEHAVIOR_IDS,
+            )
+        workflow.assert_called_once_with()
 
 
 def _operation_results() -> dict[str, dict[str, object]]:

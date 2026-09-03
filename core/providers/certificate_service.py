@@ -17,7 +17,7 @@ from core.providers.capability_models import (
 )
 from core.providers.certified_execution_tcb import (
     is_exact_codex_identity,
-    validate_remote_tcb_identity,
+    validate_remote_tcb_identity_with_revision_fence,
 )
 from core.providers.errors import CapabilityCertificateError, ProviderNotFoundError
 from core.providers.store import ProviderStore
@@ -262,6 +262,29 @@ def validate_certificate_for_binding(
     adapter_artifact_digest: str | None = None,
 ) -> CapabilityCertificate:
     """Fail closed unless live certification exactly matches the pinned combination."""
+    certificate, _revision_fence = (
+        validate_certificate_for_binding_with_revision_fence(
+            store,
+            binding=binding,
+            adapter=adapter,
+            observed_upstream_id=observed_upstream_id,
+            now=now,
+            adapter_artifact_digest=adapter_artifact_digest,
+        )
+    )
+    return certificate
+
+
+def validate_certificate_for_binding_with_revision_fence(
+    store: ProviderStore,
+    *,
+    binding: RuntimeExecutionBinding,
+    adapter: object,
+    observed_upstream_id: str | None = None,
+    now: datetime | None = None,
+    adapter_artifact_digest: str | None = None,
+) -> tuple[CapabilityCertificate, str]:
+    """Validate a certificate and return its content-bound cheap TCB fence."""
     try:
         certificate = store.get_capability_certificate(binding.capability_certificate_id)
     except ProviderNotFoundError as error:
@@ -280,7 +303,7 @@ def validate_certificate_for_binding(
     for field_name in ("suite_id", "suite_version", "test_run_id", "adapter_artifact_digest"):
         if getattr(certificate, field_name) != getattr(evidence, field_name):
             raise CapabilityCertificateError("certificate_evidence_identity_mismatch")
-    _validate_binding_tcb(certificate, binding)
+    tcb_revision_fence = _validate_binding_tcb(certificate, binding)
     validate_full_workspace_binding(certificate=certificate, binding=binding)
     timestamp = now or datetime.now(tz=UTC)
     if timestamp >= certificate.expires_at:
@@ -343,7 +366,7 @@ def validate_certificate_for_binding(
     )
     if live_adapter_digest != binding.adapter_artifact_digest:
         raise CapabilityCertificateError("adapter_artifact_mismatch")
-    return certificate
+    return certificate, tcb_revision_fence
 
 
 def validate_profile_certificate_execution_contract(*, profile, certificate) -> None:
@@ -468,34 +491,37 @@ def _validate_certificate_shape(certificate: CapabilityCertificate) -> None:
     _evidence_refs(certificate.evidence_refs)
 
 
-def _validate_certificate_tcb(certificate: CapabilityCertificate) -> None:
+def _validate_certificate_tcb(certificate: CapabilityCertificate) -> str:
     if is_exact_codex_identity(
         runtime_engine_id=certificate.runtime_engine_id,
         adapter_id=certificate.adapter_id,
         model_provider_id=certificate.model_provider_id,
         provider_protocol=certificate.provider_protocol,
     ):
-        return
-    validate_remote_tcb_identity(
-        manifest_id=certificate.tcb_manifest_id,
-        manifest_version=certificate.tcb_manifest_version,
-        structure_digest=certificate.tcb_structure_digest,
-        live_digest=certificate.tcb_live_digest,
+        return ""
+    _identity, revision_fence = (
+        validate_remote_tcb_identity_with_revision_fence(
+            manifest_id=certificate.tcb_manifest_id,
+            manifest_version=certificate.tcb_manifest_version,
+            structure_digest=certificate.tcb_structure_digest,
+            live_digest=certificate.tcb_live_digest,
+        )
     )
+    return revision_fence
 
 
 def _validate_binding_tcb(
     certificate: CapabilityCertificate,
     binding: RuntimeExecutionBinding,
-) -> None:
+) -> str:
     if is_exact_codex_identity(
         runtime_engine_id=certificate.runtime_engine_id,
         adapter_id=certificate.adapter_id,
         model_provider_id=certificate.model_provider_id,
         provider_protocol=certificate.provider_protocol,
     ):
-        return
-    _validate_certificate_tcb(certificate)
+        return ""
+    revision_fence = _validate_certificate_tcb(certificate)
     if not all(
         (
             binding.tcb_manifest_id,
@@ -513,6 +539,7 @@ def _validate_binding_tcb(
     ):
         if getattr(binding, field_name) != getattr(certificate, field_name):
             raise CapabilityCertificateError("certificate_tcb_binding_mismatch")
+    return revision_fence
 
 
 def _evidence_refs(values: tuple[str, ...]) -> tuple[str, ...]:

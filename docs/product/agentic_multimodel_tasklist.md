@@ -100,8 +100,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v34 / matrix
-  `2026-09-03-r34-p4-last-mile-attachment-process-tcb24`
+- [x] Google and OpenRouter suite v35 / matrix
+  `2026-09-03-r35-p4-policy-credential-stream-fence-tcb25`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -516,25 +516,30 @@ completion claim.
   prior alias policy without changing the Codex profile or artifact.
 - [x] Endpoint preflight is followed by one last-mile guard that refreshes the
   complete certificate, binding, feature, actor, health, policy, Full Workspace,
-  classification, and credential authority before egress commit. The same
-  guard executes in the task that opens and first advances the lazy provider
-  stream and before every later advance. Revocation after the first event
-  blocks the second before the provider iterator advances.
+  classification, and credential authority before egress commit and again in
+  the task that opens and first advances the lazy provider stream. It tightens
+  the active budget and deadline after preflight, fences the exact preflight
+  credential with a process-local redaction-safe fingerprint, and rejects any
+  semantic runtime-capability projection drift. Every later advance runs the
+  cheaper live certificate/binding/actor/feature/health/TCB-metadata,
+  classification, credential, policy, and deadline fence; it does not recompute
+  the TCB content digest or rerun Full Workspace behaviors. Revocation after the
+  first event blocks the second before the provider iterator advances.
 - [x] P4 test modules over the repository line budget are split by behavioral
   domain, and the provider fixture manifest includes every split module plus
   the real app-surface integration probe. Pre-existing oversized modules retain
   frozen no-growth ceilings.
-- [x] Adapter 30, semantic compiler revision 9, Full Workspace result contract
-  `codex-baseline-v17`, context-compaction schema 3, TCB manifest v24, suite 34,
-  and matrix `2026-09-03-r34-p4-last-mile-attachment-process-tcb24` create
-  immutable Google revision 38 and OpenRouter revision 37 previews. Historical
-  revisions 37/36
+- [x] Adapter 31, semantic compiler revision 10, Full Workspace result contract
+  `codex-baseline-v18`, context-compaction schema 3, TCB manifest v25, suite 35,
+  and matrix `2026-09-03-r35-p4-policy-credential-stream-fence-tcb25` create
+  immutable Google revision 39 and OpenRouter revision 38 previews. Historical
+  revisions 38/37
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
-  `full_workspace_contract_revision=codex-baseline-v17`; the central validator
+  `full_workspace_contract_revision=codex-baseline-v18`; the central validator
   rejects that family if the profile/certificate claim or behavior gate is
   incomplete.
-- [x] Admit the hosted Full Workspace `codex-baseline-v17` repository claim
+- [x] Admit the hosted Full Workspace `codex-baseline-v18` repository claim
   only after the executable behavior probe verifies all 24 required result
   workflows: 16 concrete filesystem, shell/process, and CLI/MCP capability
   paths; one inter-agent CLI-create/MCP-wait path; plus seven security probes

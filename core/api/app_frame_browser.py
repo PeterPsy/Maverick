@@ -44,9 +44,13 @@ AsgiForward = Callable[[dict[str, Any], AsgiReceive, AsgiSend], Awaitable[None]]
 
 APP_FRAME_LAUNCH_PATH = "/api/app-frames/browser-launch"
 APP_FRAME_BOOTSTRAP_PATH = "/.well-known/maverick-app-frame-bootstrap"
+APP_FRAME_SESSION_LEASE_PATH = "/.well-known/maverick-app-frame-session"
 APP_FRAME_COOKIE_NAME = "maverick_app_frame_session"
 APP_FRAME_SURFACE_KIND = "app-frame"
 APP_FRAME_SIDECAR_ID = "__maverick_app_frame__"
+APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE = "maverick.app-frame.authorization-required"
+_APP_FRAME_SESSION_LEASE_INTERVAL_MS = 2 * 60 * 1000
+_APP_FRAME_SESSION_LEASE_RETRY_MAX_MS = 15 * 1000
 _MAX_BOOTSTRAP_BODY_BYTES = 4096
 _DOMAIN_PATTERN = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*"
@@ -252,6 +256,16 @@ async def handle_app_frame_browser_origin(
             start_path=start_path,
         )
         return
+    if path == APP_FRAME_SESSION_LEASE_PATH:
+        await _handle_session_lease(
+            state,
+            scope=scope,
+            send=send,
+            host=host,
+            method=method,
+            start_path=start_path,
+        )
+        return
 
     resolved = await _validated_request_session(state, scope=scope, send=send, host=host, start_path=start_path)
     if resolved is None:
@@ -411,6 +425,64 @@ async def _handle_bootstrap(
             "type": "http.response.start",
             "status": 303,
             "headers": [(name.lower().encode("latin1"), value.encode("latin1")) for name, value in headers],
+        }
+    )
+    await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+
+async def _handle_session_lease(
+    state: PlatformState,
+    *,
+    scope: dict[str, Any],
+    send: AsgiSend,
+    host: str,
+    method: str,
+    start_path: Path,
+) -> None:
+    """Renew one live app-frame lease without proxying application data."""
+    if method != "POST":
+        await _send_json(send, {"error": "method_not_allowed"}, status=405, headers=_denial_headers())
+        return
+    if bytes(scope.get("query_string") or b""):
+        await _send_json(send, {"error": "session_lease_url_must_be_clean"}, status=400, headers=_denial_headers())
+        return
+    resolved = await _validated_request_session(
+        state,
+        scope=scope,
+        send=send,
+        host=host,
+        start_path=start_path,
+    )
+    if resolved is None:
+        return
+    token, session = resolved
+    if (
+        _header_values(scope, b"origin") != [session.binding.origin]
+        or _header_values(scope, b"sec-fetch-site") != ["same-origin"]
+    ):
+        await _deny(send, session.binding, "csrf_proof_required", status=403)
+        return
+    validated = state.sidecar_browser_sessions.validate_and_touch(token, host=host)
+    if validated is None or validated.session.binding.surface_kind != APP_FRAME_SURFACE_KIND:
+        await _deny(send, session.binding, "app_frame_session_expired")
+        return
+    binding = validated.session.binding
+    headers = _security_headers(binding)
+    if validated.rotated_value is not None:
+        headers.append(
+            (
+                "Set-Cookie",
+                _session_cookie(validated.rotated_value, secure=binding.secure),
+            )
+        )
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 204,
+            "headers": [
+                (name.lower().encode("latin1"), value.encode("latin1"))
+                for name, value in headers
+            ],
         }
     )
     await send({"type": "http.response.body", "body": b"", "more_body": False})
@@ -636,9 +708,13 @@ def _inject_message_relay(body: bytes, platform_origin: str) -> bytes:
         return body
     html = rewrite_public_app_asset_urls(html, platform_origin)
     origin = json.dumps(platform_origin, ensure_ascii=True)
+    lease_path = json.dumps(APP_FRAME_SESSION_LEASE_PATH, ensure_ascii=True)
+    authorization_message = json.dumps(APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE, ensure_ascii=True)
     script = (
         "<script>"
         "(()=>{const o=" + origin + ";"
+        "const lp=" + lease_path + ",am=" + authorization_message + ";"
+        "let hv=true,lt=0,lr=0,lf=false;"
         "const a=d=>{if(!d||d.type!=='maverick.shell.layout-changed'||typeof d.mobile!=='boolean')return;"
         "const r=document.documentElement,p=['--maverick-shell-mobile-status-bar-height',"
         "'--maverick-shell-mobile-header-height','--maverick-shell-mobile-content-top-offset'];"
@@ -647,13 +723,33 @@ def _inject_message_relay(body: bytes, platform_origin: str) -> bytes:
         "r.style.setProperty(p[1],'2.75rem');"
         "r.style.setProperty(p[2],'calc(env(safe-area-inset-top, 0px) + 2.75rem)');}"
         "else{r.removeAttribute('data-maverick-shell-mobile-layout');p.forEach(n=>r.style.removeProperty(n));}};"
+        "const lv=()=>hv&&document.visibilityState!=='hidden';"
+        "const ls=d=>{window.clearTimeout(lt);lt=0;if(lv())lt=window.setTimeout(lc,d);};"
+        "const lc=async()=>{if(lf||!lv())return;lf=true;let d="
+        + str(_APP_FRAME_SESSION_LEASE_INTERVAL_MS)
+        + ";try{const r=await fetch(lp,{method:'POST',credentials:'same-origin',cache:'no-store'});"
+        "if(r.status===401||r.status===403||r.status===410){lr=0;d="
+        + str(_APP_FRAME_SESSION_LEASE_RETRY_MAX_MS)
+        + ";window.parent.postMessage({type:am,path:location.pathname+location.search+location.hash},o);}"
+        "else if(r.ok){lr=0;}else{lr=Math.min(lr+1,4);d=Math.min("
+        + str(_APP_FRAME_SESSION_LEASE_RETRY_MAX_MS)
+        + ",1000*(2**lr));}}"
+        "catch(_){lr=Math.min(lr+1,4);d=Math.min("
+        + str(_APP_FRAME_SESSION_LEASE_RETRY_MAX_MS)
+        + ",1000*(2**lr));}finally{lf=false;ls(d);}};"
+        "const lw=()=>{if(lv())ls(0);else{window.clearTimeout(lt);lt=0;}};"
+        "const v=d=>{if(!d||d.type!=='maverick.app.visibility-changed'||typeof d.visible!=='boolean')return;"
+        "hv=d.visible;lw();};"
         "Object.defineProperty(window,'__MAVERICK_PLATFORM_ORIGIN__',{value:o,configurable:false});"
         "a({type:'maverick.shell.layout-changed',mobile:new URLSearchParams(location.search).get('maverick_mobile_layout')==='1'});"
         "window.addEventListener('message',e=>{"
         "if(e.source!==window.parent||e.origin!==o)return;"
-        "a(e.data);"
+        "a(e.data);v(e.data);"
         "try{window.postMessage(e.data,window.location.origin,[...e.ports]);}"
         "catch(_){window.postMessage(e.data,window.location.origin);}},true);"
+        "document.addEventListener('visibilitychange',lw);"
+        "window.addEventListener('focus',lw);window.addEventListener('online',lw);"
+        "window.addEventListener('pageshow',lw);ls(0);"
         "})();"
         "</script>"
     )

@@ -12,7 +12,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from core.api.app_frame_browser import APP_FRAME_BOOTSTRAP_PATH, APP_FRAME_LAUNCH_PATH
+from core.api.app_frame_browser import (
+    APP_FRAME_BOOTSTRAP_PATH,
+    APP_FRAME_LAUNCH_PATH,
+    APP_FRAME_SESSION_LEASE_PATH,
+)
 from core.api.app_frame_scope import (
     APP_FRAME_APP_ID_SCOPE_KEY,
     APP_FRAME_MOUNT_APP_ID_SCOPE_KEY,
@@ -28,6 +32,11 @@ from core.apps.contracts import (
     write_app_contract_file,
 )
 from core.apps.service import install_store_app, register_app_source_from_contract
+from core.apps.sidecar_browser_sessions import (
+    SESSION_IDLE_TTL_SECONDS,
+    SESSION_ROTATION_GRACE_SECONDS,
+    SESSION_ROTATION_SECONDS,
+)
 from tests.integration.app_hosting.sidecar_browser_origin_support import SidecarBrowserOriginTestSupport
 
 
@@ -43,6 +52,172 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
 
     def test_each_origin_rejects_foreign_app_and_widget_documents(self) -> None:
         asyncio.run(self._assert_each_origin_rejects_foreign_documents())
+
+    def test_session_lease_renews_and_rebootstrap_recovers_session_loss(self) -> None:
+        asyncio.run(self._assert_session_lease_and_rebootstrap_recovery())
+
+    async def _assert_session_lease_and_rebootstrap_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(Path(temp_dir))
+            state = self._state_with_frontend(repo_root)
+            clock = [10_000.0]
+            state.sidecar_browser_sessions._clock = lambda: clock[0]
+            app = PlatformAsgiHost(state)
+            platform_host = "maverick.localhost:8000"
+            platform_origin = f"http://{platform_host}"
+            platform_cookie = await self._login(app, host=platform_host)
+            frame = await self._bootstrap_app_frame(
+                app,
+                app_id="frame-demo",
+                launch_path="/apps/frame-demo/route?q=1",
+                platform_host=platform_host,
+                platform_origin=platform_origin,
+                platform_cookie=platform_cookie,
+            )
+
+            method_status, _body, _headers = await self._invoke(
+                app,
+                host=frame["host"],
+                path=APP_FRAME_SESSION_LEASE_PATH,
+                headers={"cookie": frame["cookie"]},
+            )
+            self.assertEqual(method_status, 405)
+
+            csrf_status, csrf_body, _headers = await self._invoke(
+                app,
+                host=frame["host"],
+                path=APP_FRAME_SESSION_LEASE_PATH,
+                method="POST",
+                headers={"cookie": frame["cookie"]},
+            )
+            self.assertEqual(csrf_status, 403)
+            self.assertEqual(json.loads(csrf_body), {"error": "csrf_proof_required"})
+
+            clock[0] += SESSION_ROTATION_SECONDS + 1
+            first_lease_at = clock[0]
+            lease_status, lease_body, lease_headers = await self._invoke(
+                app,
+                host=frame["host"],
+                path=APP_FRAME_SESSION_LEASE_PATH,
+                method="POST",
+                headers={
+                    "cookie": frame["cookie"],
+                    "origin": frame["origin"],
+                    "sec-fetch-site": "same-origin",
+                },
+            )
+            self.assertEqual(lease_status, 204)
+            self.assertEqual(lease_body, b"")
+            self.assertEqual(lease_headers["cache-control"], "private, no-store")
+            self.assertNotIn("content-length", lease_headers)
+            self.assertIn(f"Max-Age={SESSION_IDLE_TTL_SECONDS}", lease_headers["set-cookie"])
+            rotated_cookie = lease_headers["set-cookie"].split(";", 1)[0]
+            self.assertNotEqual(rotated_cookie, frame["cookie"])
+
+            clock[0] += SESSION_ROTATION_GRACE_SECONDS + 1
+            stale_cookie_status, _body, _headers = await self._invoke(
+                app,
+                host=frame["host"],
+                path=APP_FRAME_SESSION_LEASE_PATH,
+                method="POST",
+                headers={
+                    "cookie": frame["cookie"],
+                    "origin": frame["origin"],
+                    "sec-fetch-site": "same-origin",
+                },
+            )
+            self.assertEqual(stale_cookie_status, 401)
+
+            forwarded_scope: dict = {}
+
+            async def capture_scope(scope, _receive, send) -> None:
+                forwarded_scope.update(scope)
+                await send({"type": "websocket.close", "code": 1000})
+
+            app._handle_platform_websocket = capture_scope
+            clock[0] = first_lease_at + SESSION_IDLE_TTL_SECONDS - 1
+            websocket_messages = await self._invoke_websocket(
+                app,
+                host=frame["host"],
+                origin=frame["origin"],
+                path="/api/apps/events/ws",
+                cookie=rotated_cookie,
+            )
+            self.assertEqual(websocket_messages, [{"type": "websocket.close", "code": 1000}])
+            self.assertIs(forwarded_scope[APP_FRAME_PROXY_SCOPE_KEY], True)
+
+            renewed_status, _body, renewed_headers = await self._invoke(
+                app,
+                host=frame["host"],
+                path=APP_FRAME_SESSION_LEASE_PATH,
+                method="POST",
+                headers={
+                    "cookie": rotated_cookie,
+                    "origin": frame["origin"],
+                    "sec-fetch-site": "same-origin",
+                },
+            )
+            self.assertEqual(renewed_status, 204)
+            renewed_cookie = renewed_headers["set-cookie"].split(";", 1)[0]
+
+            clock[0] += SESSION_IDLE_TTL_SECONDS + 1
+            expired_status, _body, _headers = await self._invoke(
+                app,
+                host=frame["host"],
+                path=APP_FRAME_SESSION_LEASE_PATH,
+                method="POST",
+                headers={
+                    "cookie": renewed_cookie,
+                    "origin": frame["origin"],
+                    "sec-fetch-site": "same-origin",
+                },
+            )
+            self.assertEqual(expired_status, 401)
+
+            relaunched = await self._bootstrap_app_frame(
+                app,
+                app_id="frame-demo",
+                launch_path="/apps/frame-demo/route?q=1",
+                platform_host=platform_host,
+                platform_origin=platform_origin,
+                platform_cookie=platform_cookie,
+            )
+            self.assertEqual(relaunched["origin"], frame["origin"])
+            recovered_status, _body, _headers = await self._invoke(
+                app,
+                host=relaunched["host"],
+                path=APP_FRAME_SESSION_LEASE_PATH,
+                method="POST",
+                headers={
+                    "cookie": relaunched["cookie"],
+                    "origin": relaunched["origin"],
+                    "sec-fetch-site": "same-origin",
+                },
+            )
+            self.assertEqual(recovered_status, 204)
+
+            state.sidecar_browser_sessions.revoke_all()
+            restart_status, _body, _headers = await self._invoke(
+                app,
+                host=relaunched["host"],
+                path=APP_FRAME_SESSION_LEASE_PATH,
+                method="POST",
+                headers={
+                    "cookie": relaunched["cookie"],
+                    "origin": relaunched["origin"],
+                    "sec-fetch-site": "same-origin",
+                },
+            )
+            self.assertEqual(restart_status, 401)
+            after_restart = await self._bootstrap_app_frame(
+                app,
+                app_id="frame-demo",
+                launch_path="/apps/frame-demo/route?q=1",
+                platform_host=platform_host,
+                platform_origin=platform_origin,
+                platform_cookie=platform_cookie,
+            )
+            self.assertEqual(after_restart["origin"], frame["origin"])
 
     async def _assert_each_origin_rejects_foreign_documents(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -382,6 +557,10 @@ class AppFrameBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, uni
             self.assertIn(b"frame-demo", html_body)
             self.assertIn(b"__MAVERICK_PLATFORM_ORIGIN__", html_body)
             self.assertIn(b"maverick.shell.layout-changed", html_body)
+            self.assertIn(APP_FRAME_SESSION_LEASE_PATH.encode(), html_body)
+            self.assertIn(b"maverick.app-frame.authorization-required", html_body)
+            self.assertIn(b"maverick.app.visibility-changed", html_body)
+            self.assertIn(b"document.visibilityState", html_body)
             self.assertIn(b"--maverick-shell-mobile-content-top-offset", html_body)
             self.assertIn(platform_origin.encode(), html_body)
             self.assertIn(

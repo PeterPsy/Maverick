@@ -7,9 +7,10 @@ import {
   type Ref,
 } from "react";
 
-import { setMaverickFrameOrigin } from "../iframePolicy";
+import { isMaverickFrameMessage, setMaverickFrameOrigin } from "../iframePolicy";
 
 const APP_FRAME_LAUNCH_PATH = "/api/app-frames/browser-launch";
+export const APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE = "maverick.app-frame.authorization-required";
 
 type AppFrameLaunch = {
   bootstrap_url: string;
@@ -38,30 +39,59 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
   function IsolatedMaverickFrame({ appId, launchPath, onLoad, onLaunchError, ...iframeProps }, forwardedRef) {
     const frameRef = useRef<HTMLIFrameElement | null>(null);
     const frameNameRef = useRef(`maverick-app-frame-${crypto.randomUUID()}`);
+    const bootstrapPendingRef = useRef(false);
 
     useEffect(() => {
       const frame = frameRef.current;
       if (!frame) return;
-      const controller = new AbortController();
+      let activeController: AbortController | null = null;
       let armTimer: number | undefined;
+      bootstrapPendingRef.current = false;
       setMaverickFrameOrigin(frame, null);
       delete frame.dataset.maverickFrameBootstrapArmed;
-      void requestAppFrameLaunch(appId, launchPath, controller.signal)
-        .then((launch) => {
-          if (controller.signal.aborted || frameRef.current !== frame) return;
-          setMaverickFrameOrigin(frame, launch.origin);
-          submitBootstrapForm(frame, launch);
-          armTimer = window.setTimeout(() => {
-            frame.dataset.maverickFrameBootstrapArmed = "true";
-          }, 0);
-        })
-        .catch((error: unknown) => {
-          if (controller.signal.aborted) return;
-          setMaverickFrameOrigin(frame, null);
-          onLaunchError?.(error instanceof Error ? error : new Error("Unable to launch isolated app frame."));
-        });
+
+      const launchFrame = (requestedPath: string, preserveCurrentOrigin: boolean) => {
+        if (activeController) return;
+        const controller = new AbortController();
+        activeController = controller;
+        void requestAppFrameLaunch(appId, requestedPath, controller.signal)
+          .then((launch) => {
+            if (controller.signal.aborted || frameRef.current !== frame) return;
+            if (armTimer !== undefined) window.clearTimeout(armTimer);
+            delete frame.dataset.maverickFrameBootstrapArmed;
+            setMaverickFrameOrigin(frame, launch.origin);
+            bootstrapPendingRef.current = true;
+            try {
+              submitBootstrapForm(frame, launch);
+            } catch (error) {
+              bootstrapPendingRef.current = false;
+              throw error;
+            }
+            armTimer = window.setTimeout(() => {
+              frame.dataset.maverickFrameBootstrapArmed = "true";
+            }, 0);
+          })
+          .catch((error: unknown) => {
+            if (controller.signal.aborted || frameRef.current !== frame) return;
+            if (!preserveCurrentOrigin) setMaverickFrameOrigin(frame, null);
+            onLaunchError?.(error instanceof Error ? error : new Error("Unable to launch isolated app frame."));
+          })
+          .finally(() => {
+            if (activeController === controller) activeController = null;
+          });
+      };
+
+      const handleAuthorizationRequired = (event: MessageEvent) => {
+        if (bootstrapPendingRef.current || !isAppFrameAuthorizationRequiredMessage(event, frame)) return;
+        launchFrame(recoveryLaunchPath(event.data, launchPath), true);
+      };
+
+      window.addEventListener("message", handleAuthorizationRequired);
+      launchFrame(launchPath, false);
       return () => {
-        controller.abort();
+        window.removeEventListener("message", handleAuthorizationRequired);
+        activeController?.abort();
+        bootstrapPendingRef.current = false;
         if (armTimer !== undefined) window.clearTimeout(armTimer);
         delete frame.dataset.maverickFrameBootstrapArmed;
         setMaverickFrameOrigin(frame, null);
@@ -73,7 +103,10 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
         {...iframeProps}
         name={frameNameRef.current}
         onLoad={(event) => {
-          if (isolatedNavigationLoaded(event.currentTarget)) onLoad?.(event);
+          if (isolatedNavigationLoaded(event.currentTarget)) {
+            bootstrapPendingRef.current = false;
+            onLoad?.(event);
+          }
         }}
         ref={(frame) => {
           frameRef.current = frame;
@@ -84,6 +117,14 @@ export const IsolatedMaverickFrame = forwardRef<HTMLIFrameElement, IsolatedMaver
     );
   },
 );
+
+export function isAppFrameAuthorizationRequiredMessage(
+  event: MessageEvent,
+  frame: HTMLIFrameElement | null | undefined,
+): boolean {
+  if (!isMaverickFrameMessage(event, frame) || !event.data || typeof event.data !== "object") return false;
+  return (event.data as { type?: unknown }).type === APP_FRAME_AUTHORIZATION_REQUIRED_MESSAGE;
+}
 
 export async function requestAppFrameLaunch(
   appId: string,
@@ -161,6 +202,18 @@ function exactOrigin(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function recoveryLaunchPath(data: unknown, fallback: string): string {
+  if (!data || typeof data !== "object") return fallback;
+  const path = (data as { path?: unknown }).path;
+  return typeof path === "string"
+    && path.length <= 4096
+    && path.startsWith("/")
+    && !path.startsWith("//")
+    && !/[\\\u0000-\u001f]/u.test(path)
+    ? path
+    : fallback;
 }
 
 function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {

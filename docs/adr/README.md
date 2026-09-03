@@ -18,3 +18,4 @@ Current ADR set:
 - `0010-agentic-multimodel-runtime.md`
 - `0011-pwa-cache-and-offline-boundaries.md`
 - `0012-transparent-pwa-cache-and-network-resilience.md`
+- `0013-app-frame-session-lease-recovery.md`

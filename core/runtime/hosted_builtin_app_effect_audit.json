@@ -123,11 +123,11 @@
     "fitness-coach": {
       "cli": {
         "descriptor_sha256": "09be5843219290d65c4aa7fb4bc7553200c6fa8a939545396ba92d7dbf33cc97",
-        "execution_sha256": "7140cc8d6c62a8f03b5bfab4a7b8971fb6c077a8872eb2ed0ab4dab55747b00d"
+        "execution_sha256": "2347ef212465cdb09d058beb98ec2d90a62ebff252586f8ea039ae697999de14"
       },
       "mcp": {
         "descriptor_sha256": "878787764348fdf93d2ca13b29a5425e7ebba10e73b80b526874d550faed34e9",
-        "execution_sha256": "dfc338131f9e9050c41fc458d532ca10dbd0509b9f7d2aca9aa6c46b6f853568"
+        "execution_sha256": "c488fe8928789a415695402b34ef816faf5f1b9a0676ee165dfa6a0dd6bb8f6c"
       }
     },
     "mail": {
@@ -193,11 +193,11 @@
     "storage": {
       "cli": {
         "descriptor_sha256": "e84c92c7d17312d30e396eee1ccee0cf161f8ca4bc05293a494a33dbf3a0ce29",
-        "execution_sha256": "1a3d59ce85835928d6ef530b93180f9433d2a938808bcdf2b6805bbdfe747778"
+        "execution_sha256": "73e85b9fece3f4b9e34db5400b2168f86b05c8001967927372e104ea0a970f2e"
       },
       "mcp": {
         "descriptor_sha256": "eca3375fe27ab668e6efd23565a8e867de3d9f51024a642aefd3ff0bc101aecb",
-        "execution_sha256": "5c4f16efccdf8386069779551200c583824ec499024ce5cc99072f196f45ebcc"
+        "execution_sha256": "1bf744b8225d4aef2723920295fc4f3cb44cfa99389b3057a3fd53bcf8615615"
       }
     },
     "vault": {
@@ -223,14 +223,14 @@
     "website-studio": {
       "cli": {
         "descriptor_sha256": "fc841b515cc759a526aba923138500f1c9ce839ad26b7dc83c3362f354ecf68e",
-        "execution_sha256": "72f89ea06077f2741bbfd8631a938b787e6dfb5ae9bd836b7e6178eb088ba072"
+        "execution_sha256": "a9e85331b7d8f12d78a2a72c816794fc7408a8eb86cfdfba34dcfdf50d4033d3"
       },
       "mcp": {
         "descriptor_sha256": "1490a851baed30cfd106c83ab86dfcf5aa4e81fb7197a5139572c31c66ce4abe",
-        "execution_sha256": "36ca3bbd2b2ced05073924e483a23398603e0dc4e895200ab2ce2b518b2435ed"
+        "execution_sha256": "cd2f99845fa0d07351ec187363ff4888ceddcc94f7339e11d3b61db793d67580"
       }
     }
   },
-  "audit_revision": "2026-09-02-p4-builtin-effects-execution-v2",
+  "audit_revision": "2026-09-03-p4-builtin-effects-execution-v3",
   "schema_version": "2"
 }

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from core.providers.errors import CapabilityCertificateError
 
 
-FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v19"
+FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v20"
 MAVERICK_AGENT_EXECUTION_FAMILY = "maverick_agent"
 MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY = "maverick_agent_candidate"
 
@@ -106,6 +106,11 @@ def inspect_full_workspace_contract(
         "policy:confirm_destructive": policy.require_confirmation_for_destructive,
         "policy:core_capability_surface": (
             "core-capability" in policy.allowed_surface_kinds
+        ),
+        "policy:cli_surface": "cli" in policy.allowed_surface_kinds,
+        "policy:mcp_surface": "mcp" in policy.allowed_surface_kinds,
+        "policy:app_reference_surface": (
+            "app-interface" in policy.allowed_surface_kinds
         ),
         "policy:public_result_pairing": (
             "public" in policy.allowed_remote_data_classes

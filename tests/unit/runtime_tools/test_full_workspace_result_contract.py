@@ -58,7 +58,12 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
         self.policy = SimpleNamespace(
             require_confirmation_for_mutating=True,
             require_confirmation_for_destructive=True,
-            allowed_surface_kinds=("core-capability",),
+            allowed_surface_kinds=(
+                "cli",
+                "mcp",
+                "app-interface",
+                "core-capability",
+            ),
             allowed_remote_data_classes=("public",),
             tool_handle_mode="all_currently_authorized",
             allowed_tool_handles=(),
@@ -258,6 +263,22 @@ class FullWorkspaceResultContractTest(unittest.TestCase):
                 ),
             ).complete
         )
+        for surface in ("cli", "mcp", "app-interface", "core-capability"):
+            with self.subTest(surface=surface):
+                narrowed = replace(
+                    policy,
+                    allowed_surface_kinds=tuple(
+                        item
+                        for item in policy.allowed_surface_kinds
+                        if item != surface
+                    ),
+                )
+                self.assertFalse(
+                    inspect_full_workspace_contract(
+                        capabilities=capabilities,
+                        policy=narrowed,
+                    ).complete
+                )
         for missing in ("cli", "filesystem_write", "confirmations"):
             with self.subTest(missing=missing), self.assertRaisesRegex(
                 CapabilityCertificateError,

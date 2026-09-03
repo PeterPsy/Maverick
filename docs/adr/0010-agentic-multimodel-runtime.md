@@ -470,7 +470,12 @@ without persisting or auditing them. The provider-specific request estimate must
 fit before those decisions, the request journal, or transport are committed. An
 exploration candidate that crosses the reserve is discarded and replaced by a
 tool-less finalization candidate. Exploration also stops when its tool budget is
-empty or another resource reaches the terminal reserve. The next normalized
+empty, when its cumulative tool-result byte budget is exhausted, or when
+another resource reaches the terminal reserve. If a last-mile policy tightening
+exhausts either tool allowance after an exploration candidate was prepared,
+Core releases its uncommitted step reservation and rebuilds it as tool-less
+finalization before provider egress; tightening at the later lazy-open boundary
+fails closed before the iterator advances. The next normalized
 request has phase `finalization`, an empty catalog, and an exact trusted Core
 instruction placed after all other content. Google omits `tools`; OpenRouter
 sends `tools: []` and `tool_choice: none`, and excludes that request-scoped
@@ -675,14 +680,14 @@ The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 40
-and OpenRouter revision 39, both bound to
-`maverick-hosted-tool-loop==32`; older revisions are suspended rather than
-overwritten. Their suite-36 certification manifests retain distinct
+accepted as complete. The current contained definitions are Google revision 41
+and OpenRouter revision 40, both bound to
+`maverick-hosted-tool-loop==33`; older revisions are suspended rather than
+overwritten. Their suite-37 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
-`codex-baseline-v19` requires executable create, replace, edit, patch, move,
+`codex-baseline-v20` requires executable create, replace, edit, patch, move,
 delete, read-after-write, shell/process, and CLI/MCP result behaviors rather
 than a mode string. The executable repository gate now proves all 24 required
 behaviors: 16 concrete filesystem, shell/process, and CLI/MCP capability
@@ -708,6 +713,11 @@ and deadline, rejects changes to the semantic authority projection, explicitly
 revalidates every request data class, catalog handle, surface, and capability
 flag against the freshly read policy, and binds the preflight to the completion
 credential with a process-local keyed digest.
+The semantic comparison uses the policy-narrowed live authority, so a removed
+`app-interface`, CLI/MCP surface, or tool authority also revokes app-reference,
+skill, and runtime-capability blocks on requests with an empty catalog. A
+prepared semantic block cannot survive merely because no tool definition is
+present.
 It runs the full checks again in the task that opens and first advances the lazy
 provider stream. Every later advance uses a lightweight mutable-authority and
 TCB-filesystem fence, so certificate/binding/actor/feature/health/policy,
@@ -751,11 +761,11 @@ uses `exact` and compares the authenticated live catalog version. OpenRouter
 uses the explicit `provider_alias` policy in addition to its endpoint,
 upstream, quantization, and router constraints. Revision or policy drift is a
 pre-execution failure. The profiles therefore pin
-`codex-baseline-v19` as both the
+`codex-baseline-v20` as both the
 tool and Full Workspace contract and atomically use the `maverick_agent`
 execution family. The claim validator still rejects the family unless profile,
-certificate, and executable behavior gate are complete. Adapter 32, recipe
-revision 19, context-compaction schema 3, suite 36, and TCB manifest v26 retain
+certificate, and executable behavior gate are complete. Adapter 33, recipe
+revision 20, context-compaction schema 3, suite 37, and TCB manifest v27 retain
 the composite-classification and rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked

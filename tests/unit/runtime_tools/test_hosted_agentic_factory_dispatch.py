@@ -139,6 +139,13 @@ class HostedAgenticFactoryDispatchTest(unittest.TestCase):
 
     def test_production_app_reference_resolver_uses_exact_workspace_record(self) -> None:
         harness = HostedAgenticHarness(self)
+        harness.policy = replace(
+            harness.policy,
+            allowed_surface_kinds=(
+                *harness.policy.allowed_surface_kinds,
+                "app-interface",
+            ),
+        )
         with patch.dict(
             os.environ,
             {"MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1"},

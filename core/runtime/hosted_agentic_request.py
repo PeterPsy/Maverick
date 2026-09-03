@@ -33,6 +33,7 @@ from core.runtime.hosted_agentic_models import (
     HostedContentClassification,
     HostedContentClassifier,
 )
+from core.runtime.authority import narrow_hosted_authority_to_policy
 from core.runtime.hosted_agentic_policy import validate_hosted_request_policy
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
@@ -525,6 +526,16 @@ class HostedAgenticRequestBuilder:
                 tool_surface_bindings=prepared.tool_surface_bindings,
                 policy=policy,
             )
+            policy_authority = narrow_hosted_authority_to_policy(
+                authority,
+                policy,
+            )
+            if prepared.runtime_capability_projection_digest != canonical_digest(
+                runtime_capability_semantic_payload(policy_authority)
+            ):
+                raise HostedAgenticLoopError(
+                    "runtime_authority_projection_changed"
+                )
         if self.classification_revalidator is None:
             if any(
                 _metadata_requires_live_authority(metadata)

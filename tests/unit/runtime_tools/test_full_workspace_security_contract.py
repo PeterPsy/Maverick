@@ -12,8 +12,8 @@ from core.runtime.hosted_tool_result_behavior import (
 
 
 class FullWorkspaceSecurityContractTest(unittest.TestCase):
-    def test_v19_requires_retryable_probes_and_last_mile_policy_fencing(self) -> None:
-        self.assertEqual(FULL_WORKSPACE_CONTRACT_REVISION, "codex-baseline-v19")
+    def test_v20_requires_semantic_and_budget_complete_policy_fencing(self) -> None:
+        self.assertEqual(FULL_WORKSPACE_CONTRACT_REVISION, "codex-baseline-v20")
         self.assertEqual(HOSTED_TOOL_RESULT_BEHAVIOR_REVISION, 10)
         self.assertEqual(len(FULL_WORKSPACE_REQUIRED_RESULT_BEHAVIORS), 24)
         self.assertTrue(

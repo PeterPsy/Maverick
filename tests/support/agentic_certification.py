@@ -47,6 +47,7 @@ def certified_test_provider_store(
     evidence,
     now: datetime,
     validity_days: int = 1,
+    certified_capabilities: RuntimeCapabilitySet | None = None,
 ) -> ProviderDocumentStore:
     store = ProviderDocumentStore(
         ProviderCollections(
@@ -106,7 +107,8 @@ def certified_test_provider_store(
             provider_api_version=binding.provider_api_version,
             certified_upstream_ids=binding.routing_constraint_snapshot.allowed_upstream_ids,
             routing_constraint_digest=canonical_digest(binding.routing_constraint_snapshot),
-            certified_capabilities=RuntimeCapabilitySet(
+            certified_capabilities=certified_capabilities
+            or RuntimeCapabilitySet(
                 streaming=True,
                 tool_orchestration=True,
                 cli=True,
@@ -136,6 +138,25 @@ def certified_test_provider_store(
             tcb_manifest_version=evidence.tcb_manifest_version,
             tcb_structure_digest=evidence.tcb_structure_digest,
             tcb_live_digest=evidence.tcb_live_digest,
+            full_workspace_contract_revision=(
+                binding.full_workspace_contract_revision
+            ),
+            execution_family=binding.execution_family,
+            harness_recipe_id=binding.harness_recipe_id,
+            harness_recipe_revision=binding.harness_recipe_revision,
+            harness_recipe_digest=binding.harness_recipe_digest,
+            provider_capability_catalog_digest=(
+                binding.provider_capability_catalog_digest
+            ),
+            semantic_projection_compiler_revision=(
+                binding.semantic_projection_compiler_revision
+            ),
+            tool_contract_revision=binding.tool_contract_revision,
+            context_policy_revision=(
+                ""
+                if binding.context_policy_snapshot is None
+                else binding.context_policy_snapshot.revision
+            ),
             model_revision_policy=binding.model_revision_policy,
         ),
     )

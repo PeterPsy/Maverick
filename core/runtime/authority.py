@@ -575,6 +575,48 @@ def validate_effective_context_capabilities(
             raise CapabilityCertificateError(reason_codes[operation])
 
 
+def narrow_hosted_authority_to_policy(
+    authority: EffectiveRuntimeAuthority,
+    policy: AgenticRuntimePolicy,
+) -> EffectiveRuntimeAuthority:
+    """Apply a policy read after authority resolution as a monotonic fence."""
+    _validate_policy(policy)
+    capabilities = _narrow_capabilities(
+        authority.allowed_capabilities,
+        policy,
+    )
+    capabilities = _confirmation_capability_ceiling(capabilities, policy)
+    tool_handles = _allowed_tool_handles(
+        authority.allowed_tool_handles,
+        policy,
+    )
+    if not capabilities.tool_orchestration:
+        tool_handles = ()
+    else:
+        tool_handles = _narrow_handles_to_capabilities(
+            tool_handles,
+            capabilities,
+        )
+    capabilities = _narrow_capabilities_to_live_handles(
+        capabilities,
+        tool_handles,
+    )
+    narrowed = replace(
+        authority,
+        allowed_capabilities=capabilities,
+        allowed_tool_handles=tool_handles,
+        allowed_remote_data_classes=_tuple_intersection(
+            authority.allowed_remote_data_classes,
+            policy.allowed_remote_data_classes,
+        ),
+        authority_digest="",
+    )
+    return replace(
+        narrowed,
+        authority_digest=canonical_digest(narrowed),
+    )
+
+
 def validate_agentic_context_shape(
     *,
     invoked_skills: object = (),

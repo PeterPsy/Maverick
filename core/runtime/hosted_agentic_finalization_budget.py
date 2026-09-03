@@ -175,6 +175,7 @@ def _exploration_must_stop(budget: HostedAgenticBudget) -> bool:
     remaining_cost = budget.remaining_cost_microusd
     return (
         budget.remaining_tool_calls == 0
+        or budget.remaining_tool_result_bytes == 0
         or budget.remaining_provider_steps <= reserve.reserved_provider_steps
         or budget.remaining_output_tokens <= reserve.reserved_output_tokens
         or budget.remaining_wall_time_seconds <= reserve.reserved_time_seconds

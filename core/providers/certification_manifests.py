@@ -58,6 +58,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_state.test_hosted_agentic_egress",
     "tests.unit.runtime_state.test_hosted_agentic_final_output_recovery",
     "tests.unit.runtime_state.test_hosted_agentic_finalization",
+    "tests.unit.runtime_state.test_hosted_agentic_last_mile_budget",
     "tests.unit.runtime_state.test_hosted_agentic_authority_audit",
     "tests.unit.runtime_state.test_hosted_agentic_loop",
     "tests.unit.runtime_state.test_hosted_context_loop",
@@ -71,6 +72,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_state.test_hosted_agentic_recovery_pairing",
     "tests.unit.runtime_state.test_hosted_agentic_stream_authority",
     "tests.unit.runtime_state.test_hosted_transport_authority_revocation",
+    "tests.unit.runtime_state.test_hosted_transport_semantic_policy",
     "tests.unit.runtime_state.test_hosted_transport_revocation",
     "tests.unit.runtime_state.test_hosted_agentic_terminal_gaps",
     "tests.unit.runtime_state.test_provider_private_state",
@@ -105,6 +107,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_tools.test_hosted_agentic_tool_execution",
     "tests.unit.runtime_tools.test_hosted_behavior_probe_cache",
     "tests.unit.runtime_tools.test_hosted_collaboration_contract",
+    "tests.unit.providers.test_hosted_profile_live_authority",
     "tests.unit.runtime_tools.test_hosted_result_security_behavior",
     "tests.unit.runtime_tools.test_hosted_tool_result_admission",
     "tests.unit.runtime_tools.test_hosted_tool_result_public_authority",
@@ -133,11 +136,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="36",
+        suite_version="37",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-03-r36-p4-policy-egress-probe-cache-tcb26"
+            "2026-09-03-r37-p4-semantic-budget-authority-tcb27"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

@@ -32,6 +32,12 @@ _TOOL_POLICY_FLAG_BY_HANDLE = {
     "core-capability:process.interrupt": "allow_shell",
     "core-capability:artifact.read": "allow_filesystem_read",
 }
+_TOOL_POLICY_SURFACE_BY_HANDLE = {
+    "core-capability:cli.list": "cli",
+    "core-capability:cli.run": "cli",
+    "core-capability:mcp.list": "mcp",
+    "core-capability:mcp.call": "mcp",
+}
 
 
 def authorized_core_tool_handles(binding) -> tuple[str, ...]:
@@ -82,26 +88,32 @@ def validate_hosted_request_policy(
         handle for handle, _surface_kind in tool_surface_bindings
     ):
         raise HostedAgenticLoopError("tool_not_authorized")
-    if not tool_handles:
-        return
-    if policy.tool_handle_mode == "none":
-        raise HostedAgenticLoopError("tool_not_authorized")
-    if policy.tool_handle_mode == "exact" and any(
-        handle not in policy.allowed_tool_handles for handle in tool_handles
-    ):
-        raise HostedAgenticLoopError("tool_not_authorized")
-    if policy.tool_handle_mode not in {"exact", "all_currently_authorized"}:
-        raise HostedAgenticLoopError("tool_not_authorized")
-    allowed_surfaces = set(policy.allowed_surface_kinds)
-    if any(
-        surface_kind not in allowed_surfaces
-        for _handle, surface_kind in tool_surface_bindings
-    ):
-        raise HostedAgenticLoopError("tool_capability_denied")
-    for handle in tool_handles:
-        required_flag = _TOOL_POLICY_FLAG_BY_HANDLE.get(handle)
-        if required_flag is not None and not getattr(policy, required_flag, False):
+    if tool_handles:
+        if policy.tool_handle_mode == "none":
+            raise HostedAgenticLoopError("tool_not_authorized")
+        if policy.tool_handle_mode == "exact" and any(
+            handle not in policy.allowed_tool_handles for handle in tool_handles
+        ):
+            raise HostedAgenticLoopError("tool_not_authorized")
+        if policy.tool_handle_mode not in {"exact", "all_currently_authorized"}:
+            raise HostedAgenticLoopError("tool_not_authorized")
+        allowed_surfaces = set(policy.allowed_surface_kinds)
+        if any(
+            surface_kind not in allowed_surfaces
+            for _handle, surface_kind in tool_surface_bindings
+        ):
             raise HostedAgenticLoopError("tool_capability_denied")
+        for handle in tool_handles:
+            required_surface = _TOOL_POLICY_SURFACE_BY_HANDLE.get(handle)
+            required_flag = _TOOL_POLICY_FLAG_BY_HANDLE.get(handle)
+            if (
+                required_surface is not None
+                and required_surface not in allowed_surfaces
+            ) or (
+                required_flag is not None
+                and not getattr(policy, required_flag, False)
+            ):
+                raise HostedAgenticLoopError("tool_capability_denied")
 
 
 def hosted_tool_policy(authority, policy) -> RuntimeToolConfirmationPolicy:

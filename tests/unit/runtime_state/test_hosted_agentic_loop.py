@@ -387,6 +387,10 @@ class HostedAgenticLoopTest(unittest.TestCase):
     def test_untrusted_tool_output_cannot_expand_tool_authority(self) -> None:
         narrowed = replace(
             self.harness.authority,
+            allowed_capabilities=replace(
+                self.harness.authority.allowed_capabilities,
+                mcp=False,
+            ),
             allowed_tool_handles=("cli:fixture.read",),
             authority_digest="",
         )

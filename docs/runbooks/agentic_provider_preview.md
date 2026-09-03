@@ -101,7 +101,10 @@ operation.
   `execution_unknown` and are not replayed automatically.
 - Provider-step and tool-call budgets are distinct and restart-safe. One final
   request plus at most one recovery retain full output/cost/deadline reserves.
-  Once tools close, Google omits `tools` and OpenRouter sends `tools: []` with
+  Tool-call exhaustion and cumulative tool-result-byte exhaustion both close
+  the catalog. A last-mile tightening rebuilds an uncommitted exploration
+  request as finalization, or denies a later lazy-open race before egress. Once
+  tools close, Google omits `tools` and OpenRouter sends `tools: []` with
   `tool_choice: none`; both carry the exact Core finalization instruction.
   Whitespace is not success, and an unexpected final call is journaled and
   `budget_denied` before the single recovery.
@@ -117,14 +120,16 @@ operation.
 - Endpoint preflight is followed by full authority/policy and credential
   authorization before egress commit. The same guard runs in the task that
   opens and first advances the lazy provider stream and before every later
-  advance.
+  advance. Full checks compare the prepared semantic projection with the
+  freshly policy-narrowed authority, including app references and skills on
+  tool-less requests.
 - Attachment workspace references retain server-observed identity, revision,
   digest, and MIME-derived encoding. Core injects that immutable fence into
   every matching filesystem read, including its first chunk and equivalent
   path spellings.
 - Remote certificates bind the canonical code-owned execution TCB. Any drift or
   missing legacy TCB identity is ineligible before creation, continuation,
-  authority refresh, or dispatch. Manifest v24 statically audits six maintained
+  authority refresh, or dispatch. Manifest v27 statically audits six maintained
   import closures, including package initializers and the
   `core/inter_agent/generalist_context.py` content-composition path, and hashes
   the executable roots of every built-in app surface admitted as a hosted read;
@@ -162,7 +167,8 @@ binding:
    selected policy allow that class and destination. Attestation may only narrow
    policy; no client declaration or policy id is accepted.
 5. The workspace policy is at least as restrictive as the profile and retains
-   the complete `codex-baseline-v19` handle set atomically, bounded
+   the complete `codex-baseline-v20` handle set and all four `cli`, `mcp`,
+   `app-interface`, and `core-capability` surfaces atomically, bounded
    steps/tokens/cost, and confirmation for mutating/destructive classes. A
    partial read-only binding is not a Maverick Agent fallback.
 6. The complete certification manifest passes on the deployed source in the

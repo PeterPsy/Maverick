@@ -66,7 +66,7 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v26 makes the known transitive boundary executable through six static
+Manifest v27 makes the known transitive boundary executable through six static
 import contracts and adds the exact executable roots for every built-in app
 CLI/MCP surface admitted as a hosted read. Package initializers, the generalist
 input-context projection closure, continuation/recovery, app-entrypoint, audit,
@@ -74,14 +74,16 @@ usage, and audited app-local execution dependencies must all resolve to hashed
 artifacts; a newly reached local module or app-code drift outside the manifest
 prevents authority or TCB identity calculation.
 
-Hosted adapter 32 and the Full Workspace result contract
-`codex-baseline-v19` are bound by TCB manifest v26. Google revision 40 and
-OpenRouter revision 39 atomically claim that contract and the `maverick_agent`
+Hosted adapter 33 and the Full Workspace result contract
+`codex-baseline-v20` are bound by TCB manifest v27. Google revision 41 and
+OpenRouter revision 40 atomically claim that contract and the `maverick_agent`
 family because the executable result gate reports all 24 required behaviors:
 16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete
-inter-agent workflow, and seven security probes. The gate caches only the
-complete successful result; transient, empty, and partial probe evidence remains
-fail-closed and retryable.
+inter-agent workflow, and seven security probes. Their exact profile policies
+retain the required `cli`, `mcp`, `app-interface`, and `core-capability`
+surfaces, and a public-resolver fixture proves complete live authority. The gate
+caches only the complete successful result; transient, empty, and partial probe
+evidence remains fail-closed and retryable.
 The gate includes a production-composed inter-agent CLI-create/MCP-wait workflow
 whose operation-specific effects and safe public projections omit all message,
 prompt, event, participant-output, final-answer, label, and cleanup content. Its
@@ -102,7 +104,13 @@ policy, Full Workspace, classification, and credential authority before commit,
 then runs the same guard in the task that opens and first advances the lazy
 transport. At each boundary the prepared request's remote classes, exact catalog,
 surface kinds, and filesystem/shell flags are checked against the policy read
-after the authority refresh. Every later provider-stream advance uses the cheap
+after the authority refresh. Core also compares the prepared semantic
+projection with the freshly policy-narrowed authority, so app references,
+skills, and runtime-capability blocks cannot bypass a tool-less revalidation.
+Tool-call or cumulative tool-result-byte exhaustion closes the catalog; a
+last-mile tightening releases an uncommitted reservation and rebuilds
+finalization without tools, while a later lazy-open race is denied before
+egress. Every later provider-stream advance uses the cheap
 mutable-authority/TCB metadata, classification, credential, policy, and deadline
 fence. Runtime-public
 issue/revoke state is accepted only after its
@@ -114,7 +122,8 @@ Every built-in app CLI and MCP descriptor now carries a conservative static
 effect class; mixed operation runners also carry an exact argument-discriminator
 map whose missing, malformed, or unknown value resolves to `unclassified`.
 Hosted reads require the exact platform source, descriptor bytes, and
-executable-closure digest recorded in the Core-owned audit and certified TCB;
+executable-closure digest recorded in Core-owned audit revision
+`2026-09-03-p4-builtin-effects-execution-v3` and the certified TCB;
 Core recalculates them at dispatch before the effect boundary. Workspace-local,
 external, or drifted metadata/code cannot self-authorize. Production-composed
 Storage probes discover and execute real

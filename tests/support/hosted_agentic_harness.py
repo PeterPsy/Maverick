@@ -434,6 +434,7 @@ class HostedAgenticHarness:
                 confirmation_resume=True,
                 provider_private_state=True,
                 attachment_modalities=(),
+                confirmations=True,
             ),
             allowed_tool_handles=(
                 ("core-capability:filesystem.list",)

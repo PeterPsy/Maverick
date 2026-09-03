@@ -10,6 +10,7 @@ from unittest.mock import patch
 from core.api.platform_state import bootstrap_platform_state
 from core.egress import AgenticEgressContentBlock, public_remote_egress_policy
 from core.egress.agentic_transforms import canonical_egress_content
+from core.runtime.content_data_classification import classify_runtime_content
 from core.runtime.provider_input_capture import (
     RuntimeProviderInputCaptureSource,
     capture_runtime_provider_input_classifications,
@@ -31,6 +32,26 @@ NOW = datetime(2026, 8, 28, tzinfo=UTC)
 
 
 class RuntimeProviderInputAdmissionTest(unittest.TestCase):
+    def test_hex_digest_does_not_masquerade_as_payment_card(self) -> None:
+        digest_with_luhn_subsequence = (
+            "20914ef24928d26319dd8ac4ff04b2204cf4630440387733486e3cc0cc2084f0"
+        )
+
+        self.assertEqual(
+            classify_runtime_content(
+                {"resource_revision": digest_with_luhn_subsequence},
+                content_type="application/json",
+            ),
+            "unclassified",
+        )
+        self.assertEqual(
+            classify_runtime_content(
+                {"value": "4111111111111111"},
+                content_type="application/json",
+            ),
+            "regulated_or_customer_data",
+        )
+
     def test_production_capture_classifies_sensitive_prompt_from_exact_bytes(
         self,
     ) -> None:

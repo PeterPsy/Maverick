@@ -98,7 +98,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v26 also
+status, workspace binding, and upstream constraint. TCB manifest v27 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance, and hashes the exact executable roots of every built-in app surface
@@ -169,8 +169,11 @@ opened. After that potentially slow preflight, one last-mile guard refreshes
 full certificate, binding, feature, actor, health, policy, Full Workspace, and
 credential authorization, then validates the prepared request's remote classes,
 catalog handles, surfaces, and filesystem/shell flags against the freshly read
-policy. The full guard runs in the task that opens and first advances the lazy
-transport. Every subsequent provider event uses the cheap mutable-authority/TCB
+policy. It also rebuilds the semantic capability projection from that
+policy-narrowed authority, so app-reference, skill, and runtime-capability
+blocks are fenced even when the request is tool-less. The full guard runs in
+the task that opens and first advances the lazy transport. Every subsequent
+provider event uses the cheap mutable-authority/TCB
 metadata, classification, credential, policy, and deadline fence.
 
 The single deterministic manifest in
@@ -626,11 +629,14 @@ immutable workspace snapshot that omits every `.git` component, so post-spawn
 live create/rename races remain invisible to shell and managed processes, with
 or without a mutation overlay.
 Current Google/OpenRouter definitions use `maverick_agent` and pin
-`codex-baseline-v19` only because the executable 24-behavior gate runs 16 real
+`codex-baseline-v20` only because the executable 24-behavior gate runs 16 real
 filesystem, shell/process, and CLI/MCP capability paths, one concrete
 inter-agent workflow, and seven security probes; only a complete successful
 result is cached, while transient, empty, and partial probe evidence is retried;
-they are still uncertified, unbound, contained previews. Direct replacement
+their policy ceilings retain `cli`, `mcp`, `app-interface`, and
+`core-capability`, and the public resolver proves the complete live authority
+from each exact profile. They are still uncertified, unbound, contained
+previews. Direct replacement
 and move propagate exact version-bound pre-image taint for read-after-write
 through authenticated same-session mutation records, even when the next tool
 step rebuilds its orchestrator, while creation remains unclassified without
@@ -647,6 +653,10 @@ shell/process overlays revalidate exact result authority around the batch and
 roll back on drift. Sensitive markers can only narrow the class. Large artifact
 summaries carry a digest of their exact provider-visible bytes while retaining
 the original result class/trust/identity separately.
+Payment-card detection still requires a valid standalone Luhn candidate; a
+numeric run wholly contained in a long hexadecimal resource revision or digest
+is opaque identity metadata rather than a PAN. This exclusion never promotes
+the bytes—marker-free content still needs explicit public authority.
 
 Google profile/binding/certificate/request identity uses the `exact` revision
 policy and must match the authenticated catalog `version`. OpenRouter uses the
@@ -688,7 +698,10 @@ keeps the conservative request reservation. The controller exposes remaining
 provider steps, tool calls, output tokens, cost, wall time, and whether the
 terminal reserve is intact. Proposal and accepted tool-budget charge share one
 journal CAS, and usage is journaled before its public usage event. Live policy may
-tighten but never loosen it.
+tighten but never loosen it. Tool-call and cumulative tool-result-byte
+exhaustion each close the catalog; if a last-mile tightening crosses either
+boundary after preparation, Core releases the uncommitted reservation and
+rebuilds finalization without tools before any provider request.
 
 Each hosted adapter pins one normal finalization attempt and at most one
 recovery, including per-attempt output, cost, and deadline capacity. Google and
@@ -760,8 +773,9 @@ after a crash without another provider request; missing or conflicting identity
 enters quarantine. Public provider events are bounded JSON and recursively
 reject private-state field names.
 
-When the tool budget reaches zero—or another protected resource reaches its
-reserve—the next request has phase `finalization`, no Core tools, and one exact
+When the tool-call or cumulative tool-result-byte budget reaches zero—or
+another protected resource reaches its reserve—the next request has phase
+`finalization`, no Core tools, and one exact
 trusted finalization instruction placed last. Google omits the `tools` member;
 OpenRouter sends `tools: []` with `tool_choice: none`; its instruction is
 request-scoped wire content and is excluded from durable chat history. Both

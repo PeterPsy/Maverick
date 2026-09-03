@@ -235,6 +235,18 @@ class HostedAgenticBudgetAccountingTest(unittest.TestCase):
         with self.assertRaisesRegex(HostedAgenticLoopError, "tool_call_limit"):
             budget.tighten(replace(self.policy, max_tool_calls_per_turn=1))
 
+    def test_uncommitted_step_reservation_can_be_replaced_without_double_charge(self) -> None:
+        budget = self.budget()
+        before = budget.snapshot()
+
+        budget.begin_step(self.request, 10, phase="exploration")
+        budget.discard_uncommitted_step()
+
+        self.assertEqual(budget.snapshot(), before)
+        self.assertEqual(budget.steps, 0)
+        with self.assertRaisesRegex(ValueError, "no uncommitted step"):
+            budget.discard_uncommitted_step()
+
     def test_finalization_attempt_requires_full_output_cost_and_time_reserve(self) -> None:
         request = self.phased_request("finalization")
         for policy in (

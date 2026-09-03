@@ -106,6 +106,7 @@ from core.runtime.hosted_agentic_stream import (
     consume_hosted_provider_step,
 )
 from core.runtime.hosted_agentic_transport import (
+    HostedRequestPhaseRefreshRequired,
     HostedTransportAuthorityGuard,
     preflight_and_commit_hosted_request,
 )
@@ -536,13 +537,18 @@ class HostedAgenticLoop:
                         phase = "finalization"
                         continue
                     raise
-                request = await preflight_and_commit_hosted_request(
-                    request_builder=self.request_builder,
-                    prepared_request=prepared_request,
-                    request_preflight=provider_runtime.request_preflight,
-                    require_preflight=provider_runtime.recipe is not None,
-                    transport_guard=transport_guard,
-                )
+                try:
+                    request = await preflight_and_commit_hosted_request(
+                        request_builder=self.request_builder,
+                        prepared_request=prepared_request,
+                        request_preflight=provider_runtime.request_preflight,
+                        require_preflight=provider_runtime.recipe is not None,
+                        transport_guard=transport_guard,
+                    )
+                except HostedRequestPhaseRefreshRequired:
+                    budget.discard_uncommitted_step()
+                    phase = "finalization"
+                    continue
                 request_control_digest = hosted_request_control_digest(request)
                 break
             private_state.persist_request_identity(context, request)

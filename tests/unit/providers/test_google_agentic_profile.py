@@ -80,8 +80,12 @@ class GoogleAgenticProfileTest(unittest.TestCase):
         )
 
         self.assertEqual(status.rollout_status, "preview")
-        self.assertEqual(profile.revision, "40")
-        self.assertEqual(profile.adapter_version_constraint, "==32")
+        self.assertEqual(profile.revision, "41")
+        self.assertEqual(profile.adapter_version_constraint, "==33")
+        self.assertEqual(
+            profile.policy_ceiling.allowed_surface_kinds,
+            ("cli", "mcp", "app-interface", "core-capability"),
+        )
         self.assertEqual(profile.model_id, "gemini-3.6-flash")
         self.assertEqual(profile.model_revision, GOOGLE_AGENTIC_MODEL_REVISION)
         self.assertEqual(profile.model_revision_policy, "exact")

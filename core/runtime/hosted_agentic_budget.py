@@ -186,6 +186,21 @@ class HostedAgenticBudget:
         self._active_streamed_output_bytes = 0
         self._active_deadline = None
 
+    def discard_uncommitted_step(self) -> None:
+        """Release one reservation that never reached egress or the journal."""
+        if (
+            self.steps < 1
+            or self._active_input_reservation is None
+            or self._active_output_reservation is None
+        ):
+            raise ValueError("Hosted budget has no uncommitted step reservation.")
+        self.steps -= 1
+        self.accounted_input_tokens -= self._active_input_reservation
+        self.accounted_output_tokens -= self._active_output_reservation
+        if self._active_cost_reservation is not None:
+            self.estimated_cost_microusd -= self._active_cost_reservation
+        self.complete_step()
+
     def check_tool_call(self) -> None:
         self.check_time()
         if self.tool_calls >= self.policy.max_tool_calls_per_turn:
@@ -327,6 +342,22 @@ class HostedAgenticBudget:
     @property
     def remaining_tool_calls(self) -> int:
         return max(0, self.policy.max_tool_calls_per_turn - self.tool_calls)
+
+    @property
+    def remaining_tool_result_bytes(self) -> int:
+        return max(
+            0,
+            self.policy.max_total_tool_result_bytes
+            - self.total_tool_result_bytes,
+        )
+
+    @property
+    def tool_catalog_exhaustion_reason(self) -> str | None:
+        if self.remaining_tool_calls == 0:
+            return "agent_tool_call_limit_reached"
+        if self.remaining_tool_result_bytes == 0:
+            return "agent_tool_result_limit_reached"
+        return None
 
     @property
     def remaining_output_tokens(self) -> int:

@@ -72,6 +72,10 @@ completion claim.
 - [x] Filesystem/tool results bind classification to the exact observed resource
   identity, revision, and digest. Missing/incoherent classification becomes
   `unclassified` and cannot egress.
+- [x] PAN marker detection ignores numeric runs contained inside complete
+  hexadecimal identity/digest tokens of at least 32 characters, while standalone valid
+  Luhn candidates remain `regulated_or_customer_data`. Random filesystem
+  revisions therefore cannot make the certification corpus nondeterministic.
 - [x] Encrypted provider-private state persists only redaction-safe source
   digests/classes/trust plus exact classification-authority id, kind, ref,
   revision, digest, policy revision, and binding state. Mutable authority
@@ -88,7 +92,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v26 records six maintained transitive dependency contracts and
+- [x] Manifest v27 records six maintained transitive dependency contracts and
   the exact executable roots for every admitted built-in app CLI/MCP surface. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
@@ -100,8 +104,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v36 / matrix
-  `2026-09-03-r36-p4-policy-egress-probe-cache-tcb26`
+- [x] Google and OpenRouter suite v37 / matrix
+  `2026-09-03-r37-p4-semantic-budget-authority-tcb27`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -486,9 +490,13 @@ completion claim.
   discriminator; missing, malformed, or unknown discriminator values remain
   `unclassified`. Hosted reads additionally require an exact platform source
   and live descriptor plus executable-closure digest present in the Core-owned
-  audit and certified TCB. The authority is recalculated immediately at
-  dispatch, so code drift after an earlier preflight cannot execute;
-  workspace-local, external, or drifted app metadata/code cannot self-authorize. The certification
+  audit revision `2026-09-03-p4-builtin-effects-execution-v3` and certified
+  TCB. That revision records the reviewed read-model response-only closure
+  changes for Fitness Coach, Storage, and Website Studio without changing their
+  conservative effect classifications. The authority is recalculated
+  immediately at dispatch, so code drift after an earlier preflight cannot
+  execute; workspace-local, external, or drifted app metadata/code cannot
+  self-authorize. The certification
   corpus parses all 28 CLI and 383 MCP surfaces, verifies the audit inventory,
   and executes real read-only Storage catalog operations through both
   registries. Website Studio classifies preview creation and document caching
@@ -522,26 +530,39 @@ completion claim.
   credential with a process-local redaction-safe fingerprint, and rejects any
   semantic runtime-capability projection drift. The guard also validates every
   request data class, catalog handle, surface, and filesystem/shell policy flag
-  against the policy read after the authority refresh. Every later advance runs the
+  against the policy read after the authority refresh, then projects that policy
+  over semantic capabilities so app references and skills are fenced even when
+  the request carries no tool definitions. Every later advance runs the
   cheaper live certificate/binding/actor/feature/health/TCB-metadata,
   classification, credential, policy, and deadline fence; it does not recompute
   the TCB content digest or rerun Full Workspace behaviors. Revocation after the
   first event blocks the second before the provider iterator advances.
+- [x] Tool-call and cumulative tool-result-byte exhaustion both close the next
+  catalog. If last-mile policy tightening exhausts either residual budget after
+  an exploration request was prepared, Core releases its uncommitted
+  reservation and rebuilds a tool-less finalization request; a later lazy-open
+  race is denied before provider egress. No request carrying tools crosses the
+  transport boundary after exhaustion.
+- [x] Current Google/OpenRouter profile ceilings retain the four distinct Full
+  Workspace surface kinds (`cli`, `mcp`, `app-interface`, and
+  `core-capability`) plus the exact Core wrapper handles. A public-resolver
+  integration fixture resolves each immutable profile with the real complete
+  certificate/binding contract and fails if any required surface is absent.
 - [x] P4 test modules over the repository line budget are split by behavioral
   domain, and the provider fixture manifest includes every split module plus
   the real app-surface integration probe. Pre-existing oversized modules retain
   frozen no-growth ceilings.
-- [x] Adapter 32, semantic compiler revision 10, Full Workspace result contract
-  `codex-baseline-v19`, context-compaction schema 3, TCB manifest v26, suite 36,
-  and matrix `2026-09-03-r36-p4-policy-egress-probe-cache-tcb26` create
-  immutable Google revision 40 and OpenRouter revision 39 previews. Historical
-  revisions 39/38
+- [x] Adapter 33, semantic compiler revision 10, Full Workspace result contract
+  `codex-baseline-v20`, context-compaction schema 3, TCB manifest v27, suite 37,
+  and matrix `2026-09-03-r37-p4-semantic-budget-authority-tcb27` create
+  immutable Google revision 41 and OpenRouter revision 40 previews. Historical
+  revisions 40/39
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
-  `full_workspace_contract_revision=codex-baseline-v19`; the central validator
+  `full_workspace_contract_revision=codex-baseline-v20`; the central validator
   rejects that family if the profile/certificate claim or behavior gate is
   incomplete.
-- [x] Admit the hosted Full Workspace `codex-baseline-v19` repository claim
+- [x] Admit the hosted Full Workspace `codex-baseline-v20` repository claim
   only after the executable behavior probe verifies all 24 required result
   workflows: 16 concrete filesystem, shell/process, and CLI/MCP capability
   paths; one inter-agent CLI-create/MCP-wait path; plus seven security probes

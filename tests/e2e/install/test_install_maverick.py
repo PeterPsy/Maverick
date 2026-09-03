@@ -124,6 +124,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertIn("proxy_buffering off;", nginx_conf)
         sidecar_server = nginx_conf.split("server_name *.sidecars.maverick.example.test;", 1)[1]
         self.assertNotIn("add_header X-Frame-Options", sidecar_server)
+        self.assertIn("proxy_hide_header X-Frame-Options;", sidecar_server)
         self.assertIn("MAVERICK_SIDECAR_ORIGIN_MODE=hosted", env_file)
         self.assertIn("MAVERICK_SIDECAR_INSTALLATION_DOMAIN=maverick.example.test", env_file)
         self.assertIn("MAVERICK_SIDECAR_PLATFORM_ORIGIN=https://maverick.example.test", env_file)
@@ -276,7 +277,18 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertTrue(all(result[url] for url in probe_urls))
         self.assertEqual(
             mocked_sidecar_probe.call_args_list,
-            [call(url, timeout_seconds=5.0) for url in probe_urls],
+            [
+                call(
+                    probe_urls[0],
+                    timeout_seconds=5.0,
+                    expected_error="session_required",
+                ),
+                call(
+                    probe_urls[1],
+                    timeout_seconds=5.0,
+                    expected_error="app_frame_session_required",
+                ),
+            ],
         )
 
 

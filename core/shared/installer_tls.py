@@ -167,6 +167,7 @@ def _managed_exact_pair_errors(
 def hosted_browser_origin_becomes_healthy(
     url: str,
     *,
+    expected_error: str,
     timeout_seconds: float,
     attempts: int,
     delay_seconds: float,
@@ -174,18 +175,29 @@ def hosted_browser_origin_becomes_healthy(
 ) -> bool:
     total_attempts = max(1, attempts)
     for attempt in range(total_attempts):
-        if hosted_browser_origin_is_healthy(url, timeout_seconds=timeout_seconds):
+        if hosted_browser_origin_is_healthy(
+            url,
+            timeout_seconds=timeout_seconds,
+            expected_error=expected_error,
+        ):
             return True
         if attempt < total_attempts - 1 and delay_seconds > 0:
             sleep_func(delay_seconds)
     return False
 
 
-def hosted_browser_origin_is_healthy(url: str, *, timeout_seconds: float) -> bool:
-    """Verify public DNS/TLS and one reserved hosted-browser origin route."""
+def hosted_browser_origin_is_healthy(
+    url: str,
+    *,
+    timeout_seconds: float,
+    expected_error: str,
+) -> bool:
+    """Verify that public DNS/TLS reaches the exact reserved-origin router."""
+    if not expected_error:
+        return False
     try:
-        with request.urlopen(url, timeout=timeout_seconds) as response:
-            return 200 <= response.status < 300
+        with request.urlopen(url, timeout=timeout_seconds):
+            return False
     except error.HTTPError as exc:
         if exc.code != 401:
             return False
@@ -193,7 +205,7 @@ def hosted_browser_origin_is_healthy(url: str, *, timeout_seconds: float) -> boo
             payload = json.loads(exc.read(4096).decode("utf-8"))
         except (UnicodeDecodeError, ValueError):
             return False
-        return payload == {"error": "session_required"}
+        return payload == {"error": expected_error}
     except (error.URLError, TimeoutError, ValueError):
         return False
 

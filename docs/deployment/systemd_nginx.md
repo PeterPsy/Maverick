@@ -89,7 +89,9 @@ files are changed.
 The rendered environment enables hosted mode and binds it to the exact platform
 origin. Nginx renders a separate wildcard virtual host that proxies to the same
 ASGI core, disables response buffering for SSE, and deliberately omits
-`X-Frame-Options`; core supplies the exact CSP `frame-ancestors` policy.
+its own `X-Frame-Options`, while `proxy_hide_header` strips any value returned
+by Core or an upstream sidecar. Core supplies the exact CSP `frame-ancestors`
+policy.
 
 ### Managed exact TLS without DNS-01
 

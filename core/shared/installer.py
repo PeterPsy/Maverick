@@ -652,12 +652,13 @@ def check_health(
         for url in urls
     }
     if config.hosted_sidecars and config.hostname:
-        for browser_origin_url in (
-            sidecar_tls_probe_url(config.hostname),
-            app_frame_tls_probe_url(config.hostname),
+        for browser_origin_url, expected_error in (
+            (sidecar_tls_probe_url(config.hostname), "session_required"),
+            (app_frame_tls_probe_url(config.hostname), "app_frame_session_required"),
         ):
             results[browser_origin_url] = hosted_browser_origin_becomes_healthy(
                 browser_origin_url,
+                expected_error=expected_error,
                 timeout_seconds=timeout_seconds,
                 attempts=attempts,
                 delay_seconds=delay_seconds,

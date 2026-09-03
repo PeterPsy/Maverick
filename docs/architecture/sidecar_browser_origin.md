@@ -254,17 +254,19 @@ identifier, but the number and timing of issuances remain observable metadata.
 Deployments that cannot accept that metadata use `external_wildcard`.
 
 The installer renders the four core environment values above and adds a
-dedicated Nginx wildcard router without `X-Frame-Options`.
+dedicated Nginx wildcard router that explicitly strips any upstream
+`X-Frame-Options` value.
 Post-apply health verification opens reserved `sc-<opaque>` and `af-<opaque>`
-origins with the normal system trust store and requires Core's unauthenticated
-session denial from each; this checks dynamic DNS, hostname validation, TLS
+origins with the normal system trust store and requires the exact
+`session_required` denial from `sc-*` and `app_frame_session_required` denial
+from `af-*`; this checks dynamic DNS, hostname validation, TLS
 termination, Nginx routing, and both Core host routers together. A manually
 frozen exact-host certificate is not a lifecycle: external mode must cover the
 wildcard, while managed mode must authorize and publish new names before use. A
 failure does not fall back to executable documents on the platform origin. The
 platform server may retain
-`X-Frame-Options: SAMEORIGIN`; that header must never be inherited by the
-distinct sidecar server.
+`X-Frame-Options: SAMEORIGIN`; `proxy_hide_header` prevents that value, or one
+emitted by a proxied sidecar, from reaching the distinct browser origin.
 
 ## Residual Risk And Closure
 

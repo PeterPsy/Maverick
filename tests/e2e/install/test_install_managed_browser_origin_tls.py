@@ -76,6 +76,7 @@ class ManagedBrowserOriginTlsInstallerTestCase(unittest.TestCase):
             "$maverick_browser_origin_cert_host/current/fullchain.pem;",
             nginx,
         )
+        self.assertIn("proxy_hide_header X-Frame-Options;", nginx)
         self.assertNotIn("maverick.example.test-sidecars/fullchain.pem", nginx)
         self.assertIn("MAVERICK_BROWSER_ORIGIN_TLS_MODE=managed_exact", environment)
         self.assertIn(

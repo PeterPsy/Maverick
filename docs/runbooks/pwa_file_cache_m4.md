@@ -79,12 +79,16 @@ per-session isolated origin. Direct non-shell app-document navigation on the
 platform origin is rejected, and public app artifacts are sandboxed when
 interpreted as documents. The shell accepts messages only from the registered
 frame window and its exact isolated origin; apps never receive platform-origin
-IndexedDB or OPFS authority.
+IndexedDB or OPFS authority. The session's bound app id is preserved in the
+internal HTTP/WebSocket scope, and every app or widget frontend owner must match
+it; an origin authenticated for one app cannot serve another app's document.
 
 There is no same-platform-origin availability fallback. Hosted rollout requires
 either the exact `*.sidecars.<installation-domain>` DNS-01 certificate or the
 installer's `managed_exact` HTTP-01 lifecycle, plus successful normal-trust
-probes of both reserved `sc-*` and `af-*` hosts. A manually frozen SAN list of
+probes of both reserved `sc-*` and `af-*` hosts. The probes require the exact
+`session_required` and `app_frame_session_required` denials respectively, not
+an arbitrary `401`. A manually frozen SAN list of
 observed opaque hosts is invalid; managed mode authorizes and publishes each
 Core-derived name before returning its ticket. If either route or TLS
 validation fails, keep `data_cache` and `storage_file_cache` off, keep direct

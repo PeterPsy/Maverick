@@ -88,7 +88,7 @@ completion claim.
   composition, catalog/schema, ledger/store/private state, lifecycle/recovery
   boundary, capability projection, Chat/Settings governance, and provider
   codec/transport/live policy.
-- [x] Manifest v24 records six maintained transitive dependency contracts and
+- [x] Manifest v26 records six maintained transitive dependency contracts and
   the exact executable roots for every admitted built-in app CLI/MCP surface. The
   audit walks package initializers and the admission, input, egress, tool,
   state/lifecycle, and served-governance closures; it includes the exact
@@ -100,8 +100,8 @@ completion claim.
   recomputes it; runtime drift or legacy missing TCB identity fails before
   create, continuation, refresh, or dispatch. Exact Codex is not reclassified
   as hosted remote.
-- [x] Google and OpenRouter suite v35 / matrix
-  `2026-09-03-r35-p4-policy-credential-stream-fence-tcb25`
+- [x] Google and OpenRouter suite v36 / matrix
+  `2026-09-03-r36-p4-policy-egress-probe-cache-tcb26`
   manifests retain ordered `fixture_contract` then operator-only `live_probe`;
   ordinary checks explicitly select only the fixture step.
 
@@ -520,7 +520,9 @@ completion claim.
   the task that opens and first advances the lazy provider stream. It tightens
   the active budget and deadline after preflight, fences the exact preflight
   credential with a process-local redaction-safe fingerprint, and rejects any
-  semantic runtime-capability projection drift. Every later advance runs the
+  semantic runtime-capability projection drift. The guard also validates every
+  request data class, catalog handle, surface, and filesystem/shell policy flag
+  against the policy read after the authority refresh. Every later advance runs the
   cheaper live certificate/binding/actor/feature/health/TCB-metadata,
   classification, credential, policy, and deadline fence; it does not recompute
   the TCB content digest or rerun Full Workspace behaviors. Revocation after the
@@ -529,17 +531,17 @@ completion claim.
   domain, and the provider fixture manifest includes every split module plus
   the real app-surface integration probe. Pre-existing oversized modules retain
   frozen no-growth ceilings.
-- [x] Adapter 31, semantic compiler revision 10, Full Workspace result contract
-  `codex-baseline-v18`, context-compaction schema 3, TCB manifest v25, suite 35,
-  and matrix `2026-09-03-r35-p4-policy-credential-stream-fence-tcb25` create
-  immutable Google revision 39 and OpenRouter revision 38 previews. Historical
-  revisions 38/37
+- [x] Adapter 32, semantic compiler revision 10, Full Workspace result contract
+  `codex-baseline-v19`, context-compaction schema 3, TCB manifest v26, suite 36,
+  and matrix `2026-09-03-r36-p4-policy-egress-probe-cache-tcb26` create
+  immutable Google revision 40 and OpenRouter revision 39 previews. Historical
+  revisions 39/38
   are suspended, never promoted in place. The new definitions
   atomically use `execution_family=maverick_agent` and
-  `full_workspace_contract_revision=codex-baseline-v18`; the central validator
+  `full_workspace_contract_revision=codex-baseline-v19`; the central validator
   rejects that family if the profile/certificate claim or behavior gate is
   incomplete.
-- [x] Admit the hosted Full Workspace `codex-baseline-v18` repository claim
+- [x] Admit the hosted Full Workspace `codex-baseline-v19` repository claim
   only after the executable behavior probe verifies all 24 required result
   workflows: 16 concrete filesystem, shell/process, and CLI/MCP capability
   paths; one inter-agent CLI-create/MCP-wait path; plus seven security probes
@@ -562,6 +564,8 @@ completion claim.
   classified from its exact private-overlay result before the workspace commit;
   an exact-result guard surrounds the rollback-safe batch and restores every
   pre-image if authority changes during commit.
+  Only the complete 24/24 result is cached; transient exceptions and empty or
+  partial evidence fail closed for that evaluation and are retried later.
   No live probe, signed certificate, binding, remote activation, or Codex
   profile/artifact change is part of Phase 4. This closes the P4 review
   findings only; P5 has not started.

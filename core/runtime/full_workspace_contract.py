@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from core.providers.errors import CapabilityCertificateError
 
 
-FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v18"
+FULL_WORKSPACE_CONTRACT_REVISION = "codex-baseline-v19"
 MAVERICK_AGENT_EXECUTION_FAMILY = "maverick_agent"
 MAVERICK_AGENT_CANDIDATE_EXECUTION_FAMILY = "maverick_agent_candidate"
 

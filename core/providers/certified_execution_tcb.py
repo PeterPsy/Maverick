@@ -71,7 +71,7 @@ class CertifiedExecutionTcbManifest:
 
 CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
     manifest_id="maverick-certified-agentic-execution-tcb",
-    manifest_version="25",
+    manifest_version="26",
     components=(
         CertifiedTcbComponent(
             "data-security-boundary",
@@ -152,6 +152,7 @@ CERTIFIED_EXECUTION_TCB = CertifiedExecutionTcbManifest(
                 "core/runtime/confined_filesystem_search.py",
                 "core/runtime/filesystem_mutation_lineage.py",
                 "core/runtime/full_workspace_contract.py",
+                "core/runtime/hosted_behavior_probe_cache.py",
                 "core/runtime/hosted_filesystem_result_behavior.py",
                 "core/runtime/hosted_result_authority_guard.py",
                 "core/runtime/hosted_result_security_behavior.py",

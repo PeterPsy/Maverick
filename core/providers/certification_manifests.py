@@ -103,6 +103,7 @@ _SHARED_FIXTURE_TESTS = (
     "tests.unit.runtime_tools.test_hosted_agentic_factory_dispatch",
     "tests.unit.runtime_tools.test_hosted_agentic_lifecycle_boundaries",
     "tests.unit.runtime_tools.test_hosted_agentic_tool_execution",
+    "tests.unit.runtime_tools.test_hosted_behavior_probe_cache",
     "tests.unit.runtime_tools.test_hosted_collaboration_contract",
     "tests.unit.runtime_tools.test_hosted_result_security_behavior",
     "tests.unit.runtime_tools.test_hosted_tool_result_admission",
@@ -132,11 +133,11 @@ def _suite(
 ) -> CertificationSuiteManifest:
     return CertificationSuiteManifest(
         suite_id=suite_id,
-        suite_version="35",
+        suite_version="36",
         provider_id=provider_id,
         matrix_path=matrix_path,
         matrix_revision=(
-            "2026-09-03-r35-p4-policy-credential-stream-fence-tcb25"
+            "2026-09-03-r36-p4-policy-egress-probe-cache-tcb26"
         ),
         tcb_manifest_id=CERTIFIED_EXECUTION_TCB.manifest_id,
         tcb_manifest_version=CERTIFIED_EXECUTION_TCB.manifest_version,

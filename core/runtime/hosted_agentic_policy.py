@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from core.egress.agentic_models import AgenticEgressPolicy
+from core.providers.agentic_models import AgenticRuntimePolicy
 from core.runtime.hosted_agentic_models import HostedAgenticLoopError
 from core.runtime.full_workspace_contract import FULL_WORKSPACE_CORE_TOOL_HANDLES
 from core.runtime.tool_orchestrator import (
@@ -14,6 +15,23 @@ from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
 
 
 HOSTED_CORE_TOOL_HANDLES = FULL_WORKSPACE_CORE_TOOL_HANDLES
+_TOOL_POLICY_FLAG_BY_HANDLE = {
+    "core-capability:workspace.instructions": "allow_filesystem_read",
+    "core-capability:filesystem.list": "allow_filesystem_list",
+    "core-capability:filesystem.search": "allow_filesystem_read",
+    "core-capability:filesystem.read": "allow_filesystem_read",
+    "core-capability:filesystem.write": "allow_filesystem_write",
+    "core-capability:filesystem.edit": "allow_filesystem_write",
+    "core-capability:filesystem.patch": "allow_filesystem_write",
+    "core-capability:filesystem.move": "allow_filesystem_write",
+    "core-capability:filesystem.delete": "allow_filesystem_write",
+    "core-capability:shell.run": "allow_shell",
+    "core-capability:process.start": "allow_shell",
+    "core-capability:process.status": "allow_shell",
+    "core-capability:process.input": "allow_shell",
+    "core-capability:process.interrupt": "allow_shell",
+    "core-capability:artifact.read": "allow_filesystem_read",
+}
 
 
 def authorized_core_tool_handles(binding) -> tuple[str, ...]:
@@ -45,6 +63,45 @@ def hosted_egress_policy(context, policy) -> AgenticEgressPolicy:
         allowed_provider_ids=(binding.model_provider_id,),
         allowed_upstream_ids=binding.routing_constraint_snapshot.allowed_upstream_ids,
     )
+
+
+def validate_hosted_request_policy(
+    *,
+    source_data_classes: tuple[str, ...],
+    tool_handles: tuple[str, ...],
+    tool_surface_bindings: tuple[tuple[str, str], ...],
+    policy: AgenticRuntimePolicy,
+) -> None:
+    """Validate provider-visible bytes and catalog against one live policy."""
+    if any(
+        data_class not in policy.allowed_remote_data_classes
+        for data_class in source_data_classes
+    ):
+        raise HostedAgenticLoopError("egress_data_class_denied")
+    if tool_handles != tuple(
+        handle for handle, _surface_kind in tool_surface_bindings
+    ):
+        raise HostedAgenticLoopError("tool_not_authorized")
+    if not tool_handles:
+        return
+    if policy.tool_handle_mode == "none":
+        raise HostedAgenticLoopError("tool_not_authorized")
+    if policy.tool_handle_mode == "exact" and any(
+        handle not in policy.allowed_tool_handles for handle in tool_handles
+    ):
+        raise HostedAgenticLoopError("tool_not_authorized")
+    if policy.tool_handle_mode not in {"exact", "all_currently_authorized"}:
+        raise HostedAgenticLoopError("tool_not_authorized")
+    allowed_surfaces = set(policy.allowed_surface_kinds)
+    if any(
+        surface_kind not in allowed_surfaces
+        for _handle, surface_kind in tool_surface_bindings
+    ):
+        raise HostedAgenticLoopError("tool_capability_denied")
+    for handle in tool_handles:
+        required_flag = _TOOL_POLICY_FLAG_BY_HANDLE.get(handle)
+        if required_flag is not None and not getattr(policy, required_flag, False):
+            raise HostedAgenticLoopError("tool_capability_denied")
 
 
 def hosted_tool_policy(authority, policy) -> RuntimeToolConfirmationPolicy:

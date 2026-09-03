@@ -16,6 +16,7 @@ from core.egress.agentic_models import (
     AgenticEgressPolicy,
 )
 from core.egress.agentic_policy import AgenticEgressEvaluator
+from core.providers.agentic_models import AgenticRuntimePolicy
 from core.providers.agentic_protocol import (
     AgenticModelRequest,
     AgenticProviderPrivateState,
@@ -32,6 +33,7 @@ from core.runtime.hosted_agentic_models import (
     HostedContentClassification,
     HostedContentClassifier,
 )
+from core.runtime.hosted_agentic_policy import validate_hosted_request_policy
 from core.runtime.agentic_feature_flags import (
     MAVERICK_FEATURE_AGENTIC_EGRESS_ENFORCEMENT,
     require_agentic_feature,
@@ -46,7 +48,7 @@ from core.runtime.semantic_context_blocks import (
     runtime_capability_semantic_payload,
 )
 from core.runtime.semantic_envelope_models import canonical_digest
-from core.runtime.tool_catalog import RuntimeToolCatalog
+from core.runtime.tool_catalog import RuntimeToolCatalog, RuntimeToolSurfaceKind
 
 if TYPE_CHECKING:
     from core.runtime.provider_step_models import ProviderStepJournalRecord
@@ -69,6 +71,7 @@ class HostedAgenticPreparedRequest:
     egress_decisions: tuple[AgenticEgressDecision, ...]
     runtime_capability_projection_digest: str
     tool_handles: tuple[str, ...] = ()
+    tool_surface_bindings: tuple[tuple[str, RuntimeToolSurfaceKind], ...] = ()
 
 
 def hosted_request_lineage_digest(request: AgenticModelRequest) -> str:
@@ -461,6 +464,10 @@ class HostedAgenticRequestBuilder:
             tool_handles=tuple(
                 descriptor.handle for descriptor in catalog.descriptors
             ),
+            tool_surface_bindings=tuple(
+                (descriptor.handle, descriptor.surface_kind)
+                for descriptor in catalog.descriptors
+            ),
         )
 
     def commit(
@@ -482,6 +489,7 @@ class HostedAgenticRequestBuilder:
         prepared: HostedAgenticPreparedRequest,
         *,
         context,
+        policy: AgenticRuntimePolicy | None = None,
     ) -> None:
         """Recheck request authority at the last boundary before transport."""
         if context is None:
@@ -507,6 +515,16 @@ class HostedAgenticRequestBuilder:
             for metadata in prepared.request.source_metadata
         ):
             raise HostedAgenticLoopError("egress_data_class_denied")
+        if policy is not None:
+            validate_hosted_request_policy(
+                source_data_classes=tuple(
+                    metadata.source_data_class
+                    for metadata in prepared.request.source_metadata
+                ),
+                tool_handles=prepared.tool_handles,
+                tool_surface_bindings=prepared.tool_surface_bindings,
+                policy=policy,
+            )
         if self.classification_revalidator is None:
             if any(
                 _metadata_requires_live_authority(metadata)

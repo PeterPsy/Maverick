@@ -66,7 +66,7 @@ feature flags, and provider health and is reused by admission, dispatch, API,
 Chat, and Settings. This closes the P1-P4 repository implementation slices; it does
 not relax containment or any platform launch blocker.
 
-Manifest v25 makes the known transitive boundary executable through six static
+Manifest v26 makes the known transitive boundary executable through six static
 import contracts and adds the exact executable roots for every built-in app
 CLI/MCP surface admitted as a hosted read. Package initializers, the generalist
 input-context projection closure, continuation/recovery, app-entrypoint, audit,
@@ -74,12 +74,14 @@ usage, and audited app-local execution dependencies must all resolve to hashed
 artifacts; a newly reached local module or app-code drift outside the manifest
 prevents authority or TCB identity calculation.
 
-Hosted adapter 31 and the Full Workspace result contract
-`codex-baseline-v18` are bound by TCB manifest v25. Google revision 39 and
-OpenRouter revision 38 atomically claim that contract and the `maverick_agent`
+Hosted adapter 32 and the Full Workspace result contract
+`codex-baseline-v19` are bound by TCB manifest v26. Google revision 40 and
+OpenRouter revision 39 atomically claim that contract and the `maverick_agent`
 family because the executable result gate reports all 24 required behaviors:
 16 real filesystem, shell/process, and CLI/MCP capability paths, one concrete
-inter-agent workflow, and seven security probes.
+inter-agent workflow, and seven security probes. The gate caches only the
+complete successful result; transient, empty, and partial probe evidence remains
+fail-closed and retryable.
 The gate includes a production-composed inter-agent CLI-create/MCP-wait workflow
 whose operation-specific effects and safe public projections omit all message,
 prompt, event, participant-output, final-answer, label, and cleanup content. Its
@@ -98,7 +100,11 @@ retain exact mutable-authority id/revision/digest lineage. After endpoint
 preflight, Core refreshes complete certificate, binding, feature, actor, health,
 policy, Full Workspace, classification, and credential authority before commit,
 then runs the same guard in the task that opens and first advances the lazy
-transport and before every later provider-stream advance. Runtime-public
+transport. At each boundary the prepared request's remote classes, exact catalog,
+surface kinds, and filesystem/shell flags are checked against the policy read
+after the authority refresh. Every later provider-stream advance uses the cheap
+mutable-authority/TCB metadata, classification, credential, policy, and deadline
+fence. Runtime-public
 issue/revoke state is accepted only after its
 pending audit and classification CAS are terminalized coherently; a CAS loss is
 never recorded as success. Raw filesystem bytes are scanned before base64 and

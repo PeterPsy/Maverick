@@ -679,14 +679,15 @@ and private-field-free.
 Provider preflight is not the final authority boundary. After preflight and
 before the staged egress CAS, one shared last-mile guard re-resolves the full
 certificate/binding/feature/actor/health/Full Workspace authority, rechecks the
-prepared request against the resulting data and tool policy, tightens the live
-budget/deadline, and requires the fresh credential to match the process-local
-keyed fingerprint used by endpoint discovery. The full guard runs again in the
-task that constructs and first advances the lazy provider iterator. Every later
-advance uses a lightweight mutable-authority, TCB-filesystem, classification,
-credential, policy, and deadline fence, so revocation remains immediate without
-rehashing the complete TCB or rerunning Full Workspace behavior probes per SSE
-event.
+prepared request against both that authority and the freshly read live policy,
+including every remote data class, catalog handle, surface kind, and
+filesystem/shell capability flag. It then tightens the live budget/deadline and
+requires the fresh credential to match the process-local keyed fingerprint used
+by endpoint discovery. The full guard runs again in the task that constructs and
+first advances the lazy provider iterator. Every later advance uses a lightweight
+mutable-authority, TCB-filesystem, classification, credential, policy, and
+deadline fence, so revocation remains immediate without rehashing the complete
+TCB or rerunning Full Workspace behavior probes per SSE event.
 
 Before egress, that loop compiles a Core-owned semantic-envelope schema. Its
 ordered blocks preserve platform, runtime/capability, workspace, agent, user,
@@ -799,11 +800,14 @@ certification-suite behavior coverage for complete execution, exact-byte
 classification, egress/error pairing, post-image/read-after-write behavior,
 and pre-effect guarantees across create, replace, edit, patch, move, delete,
 shell/process, and CLI/MCP scenarios. A declared mode string or the mere
-presence of a handle is not evidence. Hosted candidates whose gate is
+presence of a handle is not evidence. Complete successful behavior evidence may
+be cached for the immutable code revision; an exception, empty result, or
+partial result is fail-closed for that evaluation and must remain retryable.
+Hosted candidates whose gate is
 incomplete must omit the Full Workspace revision and use the distinct
 `maverick_agent_candidate` family; `maverick_agent` is invalid without the
-complete atomic contract. The current Google revision 39 and OpenRouter
-revision 38 definitions make that atomic claim only because the executable
+complete atomic contract. The current Google revision 40 and OpenRouter
+revision 39 definitions make that atomic claim only because the executable
 gate returns all 24 required result behaviors, including the concrete
 `shell.run` and `process.start/status/input/interrupt` handlers, real app-owned
 CLI/MCP reads with Core-audited conservative effect metadata and executable

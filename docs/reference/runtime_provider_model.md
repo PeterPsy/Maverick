@@ -98,7 +98,7 @@ the certificate or a session binding.
 Before session binding, prewarm, continuation, authority refresh, and every
 pinned turn, Core verifies certificate identity, expiry/revocation, the current
 code-owned TCB digest, live adapter artifact, credential reference, profile
-status, workspace binding, and upstream constraint. TCB manifest v25 also
+status, workspace binding, and upstream constraint. TCB manifest v26 also
 executes six static local-import audits across admission, input composition,
 classification/egress, tool execution, provider state/lifecycle, and served
 governance, and hashes the exact executable roots of every built-in app surface
@@ -167,8 +167,11 @@ fallback when same-turn delivery is not certified. Recipe-specific endpoint
 preflight runs before staged egress is committed or the completion transport is
 opened. After that potentially slow preflight, one last-mile guard refreshes
 full certificate, binding, feature, actor, health, policy, Full Workspace, and
-credential authorization. The same guard runs in the task that opens and first
-advances the lazy transport and before every subsequent provider event.
+credential authorization, then validates the prepared request's remote classes,
+catalog handles, surfaces, and filesystem/shell flags against the freshly read
+policy. The full guard runs in the task that opens and first advances the lazy
+transport. Every subsequent provider event uses the cheap mutable-authority/TCB
+metadata, classification, credential, policy, and deadline fence.
 
 The single deterministic manifest in
 `core/providers/certified_execution_tcb.py` owns every component that can alter
@@ -623,9 +626,10 @@ immutable workspace snapshot that omits every `.git` component, so post-spawn
 live create/rename races remain invisible to shell and managed processes, with
 or without a mutation overlay.
 Current Google/OpenRouter definitions use `maverick_agent` and pin
-`codex-baseline-v18` only because the executable 24-behavior gate runs 16 real
+`codex-baseline-v19` only because the executable 24-behavior gate runs 16 real
 filesystem, shell/process, and CLI/MCP capability paths, one concrete
-inter-agent workflow, and seven security probes;
+inter-agent workflow, and seven security probes; only a complete successful
+result is cached, while transient, empty, and partial probe evidence is retried;
 they are still uncertified, unbound, contained previews. Direct replacement
 and move propagate exact version-bound pre-image taint for read-after-write
 through authenticated same-session mutation records, even when the next tool

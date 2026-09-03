@@ -5,9 +5,9 @@ from __future__ import annotations
 import tempfile
 import time
 from datetime import UTC, datetime
-from functools import lru_cache
 from pathlib import Path
 
+from core.runtime.hosted_behavior_probe_cache import cache_complete_behavior_probe
 from core.runtime.hosted_tool_process_registry import HostedToolProcessRegistry
 from core.runtime.hosted_shell_process_behavior_support import (
     behavior_payload,
@@ -32,7 +32,7 @@ _SESSION_ID = "shell-process-behavior-probe"
 _PROBE_TIME = datetime(2026, 9, 3, tzinfo=UTC)
 
 
-@lru_cache(maxsize=1)
+@cache_complete_behavior_probe(HOSTED_SHELL_PROCESS_BEHAVIOR_IDS)
 def inspect_hosted_shell_process_behavior() -> tuple[str, ...]:
     """Execute each real handler family once for this immutable code revision."""
     verified: set[str] = set()

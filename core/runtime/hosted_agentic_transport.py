@@ -88,9 +88,12 @@ class HostedTransportAuthorityGuard:
             self.context,
             effective_authority=authority,
         )
+        policy = self.policy_resolver(effective_context)
+        self.budget.tighten(policy)
         self.request_builder.revalidate_for_transport(
             self.prepared_request,
             context=effective_context,
+            policy=policy,
         )
         credential = self.credential_resolver(effective_context)
         if self.credential_required and credential is None:
@@ -104,7 +107,6 @@ class HostedTransportAuthorityGuard:
             raise HostedAgenticLoopError(
                 "provider_credential_changed_after_preflight"
             )
-        self.budget.tighten(self.policy_resolver(effective_context))
         return HostedTransportAuthorization(
             context=effective_context,
             credential=credential,

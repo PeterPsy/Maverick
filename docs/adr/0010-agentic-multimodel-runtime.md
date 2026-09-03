@@ -675,14 +675,14 @@ The contained OpenRouter preview uses Chat Completions v1, DeepSeek V4
 Flash, and the exact `deepinfra/fp8` endpoint. Request routing uses the endpoint
 tag; response verification additionally requires OpenRouter's effective
 provider identity and terminal router metadata before the continuation is
-accepted as complete. The current contained definitions are Google revision 39
-and OpenRouter revision 38, both bound to
-`maverick-hosted-tool-loop==31`; older revisions are suspended rather than
-overwritten. Their suite-35 certification manifests retain distinct
+accepted as complete. The current contained definitions are Google revision 40
+and OpenRouter revision 39, both bound to
+`maverick-hosted-tool-loop==32`; older revisions are suspended rather than
+overwritten. Their suite-36 certification manifests retain distinct
 deterministic fixture and synthetic live steps. No live probe is run by
 ordinary repository checks, and no fixture-only result is certificate evidence.
 
-`codex-baseline-v18` requires executable create, replace, edit, patch, move,
+`codex-baseline-v19` requires executable create, replace, edit, patch, move,
 delete, read-after-write, shell/process, and CLI/MCP result behaviors rather
 than a mode string. The executable repository gate now proves all 24 required
 behaviors: 16 concrete filesystem, shell/process, and CLI/MCP capability
@@ -704,13 +704,17 @@ provider-private continuations and is revalidated again before every reuse and
 egress. After endpoint preflight, the last-mile transport guard refreshes the
 complete certificate, binding, feature, actor, health, policy, Full Workspace,
 classification, and credential authority. It tightens the active reservation
-and deadline, rejects changes to the semantic authority projection, and binds
-the preflight to the completion credential with a process-local keyed digest.
+and deadline, rejects changes to the semantic authority projection, explicitly
+revalidates every request data class, catalog handle, surface, and capability
+flag against the freshly read policy, and binds the preflight to the completion
+credential with a process-local keyed digest.
 It runs the full checks again in the task that opens and first advances the lazy
 provider stream. Every later advance uses a lightweight mutable-authority and
 TCB-filesystem fence, so certificate/binding/actor/feature/health/policy,
 classification, credential, and code revocation remain immediate without
 rehashing the TCB or rerunning executable behavior workflows per SSE event.
+Only a complete successful Full Workspace behavior result is cached; empty or
+partial evidence and transient exceptions remain fail-closed and retryable.
 Attachment workspace references retain the exact server-observed resource
 identity, revision, digest, and MIME-derived encoding. Core injects those
 values into every matching `filesystem.read`, including the first chunk and
@@ -747,11 +751,11 @@ uses `exact` and compares the authenticated live catalog version. OpenRouter
 uses the explicit `provider_alias` policy in addition to its endpoint,
 upstream, quantization, and router constraints. Revision or policy drift is a
 pre-execution failure. The profiles therefore pin
-`codex-baseline-v18` as both the
+`codex-baseline-v19` as both the
 tool and Full Workspace contract and atomically use the `maverick_agent`
 execution family. The claim validator still rejects the family unless profile,
-certificate, and executable behavior gate are complete. Adapter 31, recipe
-revision 18, context-compaction schema 3, suite 35, and TCB manifest v25 retain
+certificate, and executable behavior gate are complete. Adapter 32, recipe
+revision 19, context-compaction schema 3, suite 36, and TCB manifest v26 retain
 the composite-classification and rollback-safe multi-file invariants.
 
 Every existing pre-image stays descriptor-pinned across exchange and is checked

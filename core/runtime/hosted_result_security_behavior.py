@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from functools import lru_cache
 import hashlib
 from types import SimpleNamespace
 
@@ -16,6 +15,7 @@ from core.runtime.filesystem_mutation_lineage import (
     resolve_filesystem_mutation_lineage,
 )
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
+from core.runtime.hosted_behavior_probe_cache import cache_complete_behavior_probe
 from core.runtime.hosted_tool_security_probes import (
     probe_production_filesystem_marker_narrowing,
 )
@@ -50,7 +50,7 @@ HOSTED_RESULT_SECURITY_BEHAVIOR_IDS = (
 _PROBE_TIME = datetime(2026, 8, 31, tzinfo=UTC)
 
 
-@lru_cache(maxsize=1)
+@cache_complete_behavior_probe(HOSTED_RESULT_SECURITY_BEHAVIOR_IDS)
 def inspect_hosted_result_security_behavior() -> tuple[str, ...]:
     """Run production-composed marker, revocation, and rollback denials."""
     try:

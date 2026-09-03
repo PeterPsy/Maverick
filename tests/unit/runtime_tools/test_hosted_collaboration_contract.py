@@ -199,6 +199,24 @@ class HostedCollaborationContractTest(unittest.TestCase):
             )
         workflow.assert_called_once_with()
 
+    def test_behavior_gate_retries_a_transient_probe_failure(self) -> None:
+        inspect_hosted_collaboration_behavior.cache_clear()
+        self.addCleanup(inspect_hosted_collaboration_behavior.cache_clear)
+        with patch(
+            "core.runtime.hosted_collaboration_behavior._probe_workflow",
+            side_effect=(RuntimeError("transient probe failure"), True),
+        ) as workflow:
+            self.assertEqual(inspect_hosted_collaboration_behavior(), ())
+            self.assertEqual(
+                inspect_hosted_collaboration_behavior(),
+                HOSTED_COLLABORATION_BEHAVIOR_IDS,
+            )
+            self.assertEqual(
+                inspect_hosted_collaboration_behavior(),
+                HOSTED_COLLABORATION_BEHAVIOR_IDS,
+            )
+        self.assertEqual(workflow.call_count, 2)
+
 
 def _operation_results() -> dict[str, dict[str, object]]:
     run = {

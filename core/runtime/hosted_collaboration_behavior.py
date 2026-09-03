@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from functools import lru_cache
 from pathlib import Path
 import tempfile
 
@@ -13,6 +12,7 @@ from core.inter_agent.store import build_inter_agent_document_store
 from core.mcp.inter_agent_tools import inter_agent_tool_specs
 from core.mcp.tool_registry import McpToolRegistry
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
+from core.runtime.hosted_behavior_probe_cache import cache_complete_behavior_probe
 from core.runtime.hosted_tool_result_admission import (
     build_hosted_tool_result_admission_resolver,
     build_hosted_tool_result_preflight_resolver,
@@ -37,7 +37,7 @@ _PROBE_TIME = datetime(2026, 9, 2, tzinfo=UTC)
 _PRIVATE_MARKER = "customer SSN 123-45-6789"
 
 
-@lru_cache(maxsize=1)
+@cache_complete_behavior_probe(HOSTED_COLLABORATION_BEHAVIOR_IDS)
 def inspect_hosted_collaboration_behavior() -> tuple[str, ...]:
     """Create via CLI, wait via MCP, and expose only certified projections."""
     try:

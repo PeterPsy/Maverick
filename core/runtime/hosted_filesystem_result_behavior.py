@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from functools import lru_cache
 import hashlib
 from pathlib import Path
 import tempfile
@@ -18,6 +17,7 @@ from core.runtime.public_content_classification import (
     classification_from_runtime_public_content_authority,
 )
 from core.runtime.hosted_agentic_tool_results import pairing_safe_tool_result
+from core.runtime.hosted_behavior_probe_cache import cache_complete_behavior_probe
 from core.runtime.tool_catalog import RuntimeToolActorContext, RuntimeToolSurfaceResult
 from core.runtime.tool_core_capabilities import build_core_runtime_tool_capabilities
 from core.runtime.tool_private_payloads import canonical_tool_arguments
@@ -34,7 +34,7 @@ FILESYSTEM_RESULT_BEHAVIOR_IDS = (
 )
 
 
-@lru_cache(maxsize=1)
+@cache_complete_behavior_probe(FILESYSTEM_RESULT_BEHAVIOR_IDS)
 def inspect_hosted_filesystem_result_behavior() -> tuple[str, ...]:
     """Execute version-fenced public-preimage workflows, including rereads."""
     try:

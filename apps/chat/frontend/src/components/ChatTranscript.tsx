@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "../api/client";
 import type { InterAgentApprovalRecord, InterAgentEventRecord, InterAgentRunDetail } from "../api/client";
+import { copyTextToClipboard } from "../lib/clipboard";
 import { interAgentBoardLinksByMessageId, visiblePrimaryChatMessages } from "../lib/interAgentTranscript";
 import type { MentionItem } from "../lib/mentions";
 import { isTerminalRunStatus } from "../lib/interAgentGraph";
@@ -93,12 +94,8 @@ export function ChatTranscript({
     });
   }
 
-  async function copyMessage(content: string) {
-    if (!content || !navigator.clipboard) {
-      return false;
-    }
-    await navigator.clipboard.writeText(content);
-    return true;
+  function copyMessage(content: string) {
+    return copyTextToClipboard(content);
   }
 
   function markInterAgentBoardOpened(runId: string) {

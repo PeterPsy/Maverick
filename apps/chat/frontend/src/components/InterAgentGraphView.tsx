@@ -29,6 +29,7 @@ import {
   type InterAgentVisibilityPlane,
 } from "../api/client";
 import { useInterAgentGraph } from "../hooks/useInterAgentGraph";
+import { copyTextToClipboard } from "../lib/clipboard";
 import { participantIcon, runStatusLabel } from "../lib/interAgentGraph";
 import { openAppRouteInShell, openStoragePathInShell } from "../lib/shellNavigation";
 import { storageAppPageShellHref, storageLinkTargetFromHref, storageShellHref } from "../lib/storageLinks";
@@ -406,13 +407,7 @@ function ParticipantTranscript({
     [...displayedMessages]
       .reverse()
       .find((message) => message.role === "tool" && (message.toolCalls?.length || message.toolCall))?.id || null;
-  const copyMessage = useCallback(async (content: string) => {
-    if (!content || !navigator.clipboard?.writeText) {
-      return false;
-    }
-    await navigator.clipboard.writeText(content);
-    return true;
-  }, []);
+  const copyMessage = useCallback((content: string) => copyTextToClipboard(content), []);
 
   useEffect(() => {
     setExpandedMessages(new Set());

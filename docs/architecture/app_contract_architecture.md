@@ -1758,6 +1758,9 @@ while still falling back to in-frame fullscreen when the browser denies it.
 Base Shell delegates `clipboard-write` only to app and widget frames whose
 public app owner is Chat, preserving user-initiated message copying across the
 isolated-origin boundary without granting clipboard access to unrelated apps.
+Chat retains a selection-backed document-copy fallback because browsers may
+still deny asynchronous clipboard writes after exposing the API in a delegated
+cross-origin frame; copied feedback is shown only after either path succeeds.
 Full app frames retain microphone delegation, while Chat-owned widget frames
 receive it for composer dictation.
 Public static assets remain cross-origin readable and must never carry

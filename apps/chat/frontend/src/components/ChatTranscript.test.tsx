@@ -226,6 +226,63 @@ describe("ChatTranscript message copy", () => {
       });
     }
   });
+
+  it("falls back to document copy and shows the check when async clipboard access is denied", async () => {
+    vi.useFakeTimers();
+    const writeText = vi.fn(async () => {
+      throw new DOMException("Write permission denied.", "NotAllowedError");
+    });
+    const execCommand = vi.fn(() => true);
+    const originalClipboard = navigator.clipboard;
+    const originalExecCommand = document.execCommand;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    try {
+      await act(async () => {
+        root?.render(
+          <ChatTranscript
+            error={null}
+            interAgentRuns={[]}
+            isLoading={false}
+            loadingLabel="Thinking"
+            mentionItems={[]}
+            messages={[message("agent-1", "agent", "Copy this fallback answer")]}
+          />,
+        );
+      });
+
+      const button = container.querySelector<HTMLButtonElement>(".chatapp-message-copy-row--agent button");
+      expect(button).not.toBeNull();
+
+      await act(async () => {
+        button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+
+      expect(writeText).toHaveBeenCalledWith("Copy this fallback answer");
+      expect(execCommand).toHaveBeenCalledWith("copy");
+      expect(button?.getAttribute("aria-label")).toBe("Message copied");
+      expect(button?.textContent).toContain("done");
+    } finally {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: originalClipboard,
+      });
+      Object.defineProperty(document, "execCommand", {
+        configurable: true,
+        value: originalExecCommand,
+      });
+    }
+  });
 });
 
 function interAgentStepMessage(summaryKind = "plan", id = "turn-1:step:event-1"): ChatMessage {

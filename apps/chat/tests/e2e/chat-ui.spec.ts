@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route, type WebSocketRoute } from "@playwright/test";
+import { createServer } from "node:http";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -372,6 +373,82 @@ test.describe("Chat app browser smoke", () => {
         input_text: "Summarize today's launch notes",
       }),
     );
+  });
+
+  test("copies an agent message from an isolated frame when async clipboard access is denied", async ({ page }) => {
+    const port = Number(process.env.CHAT_PLAYWRIGHT_PORT || 5188);
+    const chatUrl = `http://127.0.0.1:${port}/apps/chat/`;
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async () => {
+            throw new DOMException("Write permission denied.", "NotAllowedError");
+          },
+        },
+      });
+      document.addEventListener("copy", () => {
+        const activeElement = document.activeElement;
+        (window as Window & { __maverickCopiedText?: string }).__maverickCopiedText =
+          activeElement instanceof HTMLTextAreaElement
+            ? activeElement.value
+            : document.getSelection()?.toString() || "";
+      });
+    });
+    const state = await installChatMocks(page);
+    const copyTurn = runtimeTurn("turn-copy", RUNTIME_SESSION_ID, "completed", "Copy the browser harness answer");
+    state.threads = [chatThread({ title: "Clipboard regression", last_user_message_at: NOW })];
+    state.runtimeSessionTurns[RUNTIME_SESSION_ID] = [copyTurn];
+    state.runtimeSessionEvents[RUNTIME_SESSION_ID] = runtimeTranscriptEvents(
+      RUNTIME_SESSION_ID,
+      copyTurn.turn_id,
+      "Copy the browser harness answer",
+      "Clipboard answer from isolated frame.",
+    );
+    const parentServer = createServer((_request, response) => {
+      response.writeHead(200, {
+        "Content-Type": "text/html",
+        "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
+      });
+      response.end(
+        `<!doctype html><iframe allow="clipboard-write" sandbox="allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts" src="${chatUrl}" title="Isolated Chat"></iframe>`,
+      );
+    });
+    await new Promise<void>((resolve, reject) => {
+      parentServer.once("error", reject);
+      parentServer.listen(0, "127.0.0.1", resolve);
+    });
+    const parentAddress = parentServer.address();
+    if (!parentAddress || typeof parentAddress === "string") {
+      throw new Error("Expected an isolated clipboard parent TCP address.");
+    }
+
+    try {
+      await page.goto(`http://127.0.0.1:${parentAddress.port}/`);
+      const chatFrame = page.frameLocator('iframe[title="Isolated Chat"]');
+      const answer = chatFrame.locator(".chatapp-bubble.is-agent").filter({
+        hasText: "Clipboard answer from isolated frame.",
+      });
+      await expect(answer).toBeVisible();
+      await answer.hover();
+      const copyButton = answer.locator(
+        ".chatapp-message-mobile-footer .chatapp-message-action--copy",
+      );
+      await expect(copyButton).toHaveAttribute("aria-label", "Copy message");
+      await copyButton.click();
+
+      await expect(copyButton).toHaveAttribute("aria-label", "Message copied");
+      await expect(copyButton).toContainText("done");
+      const isolatedChatFrame = page.frames().find((frame) => frame.url() === chatUrl);
+      expect(isolatedChatFrame).toBeDefined();
+      await expect.poll(() => isolatedChatFrame?.evaluate(
+        () => (window as Window & { __maverickCopiedText?: string }).__maverickCopiedText || "",
+      )).toBe("Clipboard answer from isolated frame.");
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        parentServer.close((error) => error ? reject(error) : resolve());
+      });
+    }
   });
 
   test("sends a selected-agent multi run and opens the live graph", async ({ page }) => {

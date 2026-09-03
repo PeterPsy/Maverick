@@ -35,3 +35,14 @@ describe("AppFrameHost Storage file-cache boundary", () => {
     expect(source).toContain("broker.dispose()");
   });
 });
+
+describe("AppFrameHost structured data-cache boundary", () => {
+  it("routes only per-app enabled messages through a disposable parent broker", () => {
+    const source = readFileSync(resolve(currentDir, "AppFrameHost.tsx"), "utf8");
+
+    expect(source).toContain("new PwaDataCacheBroker");
+    expect(source).toContain("app.data_cache_enabled");
+    expect(source).toContain("dataCacheBrokerRef.current?.handleWindowMessage");
+    expect(source).toContain("broker.dispose()");
+  });
+});

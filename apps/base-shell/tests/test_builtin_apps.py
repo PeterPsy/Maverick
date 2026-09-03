@@ -639,6 +639,8 @@ class BuiltinAppsTestCase(unittest.TestCase):
             set(items["base-shell"]),
             {
                 "app_id",
+                "public_app_id",
+                "mount_app_id",
                 "name",
                 "version",
                 "description",
@@ -654,8 +656,10 @@ class BuiltinAppsTestCase(unittest.TestCase):
                 "frontend_role",
                 "frontend_launchable",
                 "backend_mount",
+                "data_cache_enabled",
             },
         )
+        self.assertFalse(items["base-shell"]["data_cache_enabled"])
 
     def test_app_registry_skips_enabled_workspace_local_app_with_missing_source(self) -> None:
         repo_root = self.make_repo_root()

@@ -92,6 +92,17 @@ export async function disableShellServiceWorker(): Promise<void> {
 }
 
 export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Promise<boolean | null> {
+  return projectedDataFeatureEnabled("storage_file_cache", signal);
+}
+
+export async function dataCacheFeatureEnabled(signal?: AbortSignal): Promise<boolean | null> {
+  return projectedDataFeatureEnabled("data_cache", signal);
+}
+
+async function projectedDataFeatureEnabled(
+  feature: "data_cache" | "storage_file_cache",
+  signal?: AbortSignal,
+): Promise<boolean | null> {
   const controller = new AbortController();
   const relayAbort = () => controller.abort(signal?.reason);
   if (signal?.aborted) relayAbort();
@@ -112,7 +123,7 @@ export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Prom
       return TRANSIENT_CONFIG_STATUSES.has(response.status) ? null : false;
     }
     let payload: {
-      features?: { storage_file_cache?: unknown };
+      features?: { data_cache?: unknown; storage_file_cache?: unknown };
       schema?: unknown;
     };
     try {
@@ -121,7 +132,7 @@ export async function storageFileCacheFeatureEnabled(signal?: AbortSignal): Prom
       return false;
     }
     return payload.schema === "maverick.pwa-config.v2"
-      && payload.features?.storage_file_cache === true;
+      && payload.features?.[feature] === true;
   } catch {
     return null;
   } finally {

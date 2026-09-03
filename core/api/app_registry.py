@@ -12,6 +12,7 @@ from core.apps.presentation import app_frontend_is_launchable
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.authorization.service import can_mount_app_visibility
 from core.identity.models import UserRecord
+from core.pwa.feature_flags import app_data_cache_enabled
 
 
 logger = logging.getLogger(__name__)
@@ -105,6 +106,7 @@ def enabled_app_items(
                 "frontend_role": parsed.contract.presentation.frontend_role,
                 "frontend_launchable": app_frontend_is_launchable(parsed.contract),
                 "backend_mount": f"/api/apps/{mount_app_id}/backend" if parsed.contract.entrypoints.backend else "",
+                "data_cache_enabled": app_data_cache_enabled(local_app_id),
             }
             if parsed.contract.visibility.platform_roles or parsed.contract.visibility.workspace_roles or parsed.contract.visibility.capabilities:
                 item["visibility"] = {

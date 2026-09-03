@@ -55,6 +55,18 @@ validates that it is a distinct canonical HTTP(S) origin and otherwise declines
 the broker immediately instead of using a wildcard or waiting for a handshake
 that cannot arrive.
 
+M5 adds a separate parent-mediated read-model protocol for isolated app
+documents. An app declares only its resource, canonical entity id, schema
+revision, and optional sanitized migration seed; Base Shell binds the request
+to the mounted frame and authenticated principal, owns IndexedDB, and asks the
+same frame to perform conditional network reads over a private `MessagePort`.
+The child revalidates every payload with its app-owned sanitizer before render,
+never receives a storage capability, and falls back to the ordinary server path
+when the broker or rollout is unavailable. Exact parent-origin checks, request
+cancellation, auth-failure cleanup, per-resource budgets, and global/per-app
+kill switches remain fail-closed. See `docs/runbooks/pwa_data_cache_m5.md` for
+the pilot inventory, rollout, recovery, and verification commands.
+
 Conservative M3 defaults are a 64 MiB structured-cache budget, 32 MiB per app,
 an app-declared resource budget, and a maximum 15-minute private access lease
 that fresh server authentication may renew independently of the original cache
